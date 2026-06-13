@@ -30,11 +30,13 @@ interface Props {
 export function Cvsq({ stage, onComplete }: Props) {
   const [freq, setFreq] = useState<(number | null)[]>(Array(16).fill(null));
   const [inten, setInten] = useState<(number | null)[]>(Array(16).fill(null));
+  const [sent, setSent] = useState(false);
 
-  const ready = freq.every((f, i) => f != null && (f === 0 || inten[i] != null));
+  const ready = freq.every((f, i) => f != null && (f === 0 || inten[i] != null)) && !sent;
 
   const submit = () => {
     if (!ready) return;
+    setSent(true);
     const frequency = freq.map((f) => f ?? 0);
     const intensity = frequency.map((f, i) => (f === 0 ? 0 : inten[i] ?? 0));
     const score = scoreCvsq(frequency, intensity);

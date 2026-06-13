@@ -40,7 +40,12 @@ const meanAbs = (xs: number[]): number => (xs.length ? xs.reduce((s, x) => s + M
 /**
  * Fit calibration from collected samples keyed by target id. Each target should have >=1 sample.
  */
-export function fitGazeCalibration(samplesByTarget: Record<string, GazeSample[]>): GazeCalibration {
+export function fitGazeCalibration(raw: Record<string, GazeSample[]>): GazeCalibration {
+  // Drop non-finite samples defensively (a dropped frame / bad landmark must not poison the fit).
+  const samplesByTarget: Record<string, GazeSample[]> = {};
+  for (const [id, arr] of Object.entries(raw)) {
+    samplesByTarget[id] = (arr ?? []).filter((s) => Number.isFinite(s.h) && Number.isFinite(s.v));
+  }
   const center = samplesByTarget['cc'] ?? [];
   const h0 = median(center.map((s) => s.h));
   const v0 = median(center.map((s) => s.v));
@@ -56,8 +61,9 @@ export function fitGazeCalibration(samplesByTarget: Record<string, GazeSample[]>
   const edgeV = meanAbs(vEdges);
 
   // Threshold = midpoint between centre spread and edge offset (clamped to a sane floor).
-  const hThreshold = Math.max(0.06, (centerSpreadH + edgeH) / 2);
-  const vThreshold = Math.max(0.06, (centerSpreadV + edgeV) / 2);
+  const safe = (x: number) => (Number.isFinite(x) ? x : 0);
+  const hThreshold = Math.max(0.06, (safe(centerSpreadH) + safe(edgeH)) / 2);
+  const vThreshold = Math.max(0.06, (safe(centerSpreadV) + safe(edgeV)) / 2);
 
   // Valid only if the edges are clearly separable from the centre on at least one axis.
   const totalSamples = Object.values(samplesByTarget).reduce((n, a) => n + a.length, 0);

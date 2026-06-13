@@ -47,7 +47,9 @@ const SQUARE = williamsSquare(N_CONDITIONS);
  * Cycles every N participants.
  */
 export function conditionOrderFor(enrolmentNumber: number): number[] {
-  const row = ((enrolmentNumber - 1) % N_CONDITIONS + N_CONDITIONS) % N_CONDITIONS;
+  // Floor + safe-modulo so non-integer/negative/NaN enrolment numbers can never index out of range.
+  const n = Number.isFinite(enrolmentNumber) ? Math.floor(enrolmentNumber) : 1;
+  const row = (((n - 1) % N_CONDITIONS) + N_CONDITIONS) % N_CONDITIONS;
   return [...SQUARE[row]];
 }
 
@@ -56,8 +58,10 @@ export function conditionOrderFor(enrolmentNumber: number): number[] {
  * Rotating offset decouples passage content from display condition.
  */
 export function passageForCondition(conditionIndex: number, enrolmentNumber: number): number {
-  const offset = ((enrolmentNumber - 1) % N_CONDITIONS + N_CONDITIONS) % N_CONDITIONS;
-  return (conditionIndex + offset) % N_CONDITIONS;
+  const n = Number.isFinite(enrolmentNumber) ? Math.floor(enrolmentNumber) : 1;
+  const c = Number.isFinite(conditionIndex) ? Math.floor(conditionIndex) : 0;
+  const offset = (((n - 1) % N_CONDITIONS) + N_CONDITIONS) % N_CONDITIONS;
+  return (((c + offset) % N_CONDITIONS) + N_CONDITIONS) % N_CONDITIONS;
 }
 
 export interface PlannedStep {

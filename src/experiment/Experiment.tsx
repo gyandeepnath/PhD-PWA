@@ -58,8 +58,20 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const conditionIds = useRef<string[]>([]);
   const writtenConditions = useRef<Set<number>>(new Set());
   const conditionStarted = useRef<Record<number, number>>({});
+  const creatingSession = useRef(false);
+  // Transition lock: ignore re-entrant advance() calls (e.g. accidental double-taps on a tablet)
+  // until the machine actually changes — prevents skipping a stage. Reset on every stage change.
+  const transitioning = useRef(false);
 
-  const advance = useCallback(() => setMachine((m) => nextState(m)), []);
+  const advance = useCallback(() => {
+    if (transitioning.current) return;
+    transitioning.current = true;
+    setMachine((m) => nextState(m));
+  }, []);
+
+  useEffect(() => {
+    transitioning.current = false;
+  }, [machine]);
 
   // --- RESUME: rehydrate an interrupted session at the next condition ---
   useEffect(() => {
@@ -98,6 +110,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
 
   // --- SESSION INIT ---
   const beginSession = useCallback(async (d: SessionInitData) => {
+    if (creatingSession.current) return; // guard against double-submit creating duplicate sessions
+    creatingSession.current = true;
     const enrol = await nextEnrolmentNumber();
     const thePlan = sessionPlan(enrol);
     conditionIds.current = thePlan.map(() => uuidv4());

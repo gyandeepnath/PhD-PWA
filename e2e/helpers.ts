@@ -1,0 +1,173 @@
+import { expect, type Page } from '@playwright/test';
+
+/** Shared E2E interaction helpers + a stage-keyed driver, reused by full-run and edge specs. */
+
+export async function stageNow(page: Page): Promise<string> {
+  return (await page.locator('[data-stage]').first().getAttribute('data-stage')) ?? '';
+}
+
+export async function waitStageChange(page: Page, from: string) {
+  await page.waitForFunction(
+    (f) => document.querySelector('[data-stage]')?.getAttribute('data-stage') !== f,
+    from,
+    { timeout: 30_000 },
+  );
+}
+
+export async function setInput(page: Page, testid: string, value: string) {
+  await page.getByTestId(testid).evaluate((el, v) => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    setter.call(el, v);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
+}
+
+export async function setAllRanges(page: Page, value: number) {
+  for (const r of await page.locator('input[type=range]').all()) {
+    await r.evaluate((el, v) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(el, String(v));
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+  }
+}
+
+export async function checkAllBoxes(page: Page) {
+  for (const box of await page.getByRole('checkbox').all()) await box.check({ force: true });
+}
+
+export async function click(page: Page, name: RegExp | string) {
+  const btn = page.getByRole('button', { name }).first();
+  await expect(btn).toBeEnabled({ timeout: 15_000 });
+  await btn.click({ force: true });
+}
+
+/** Enter the console and start a fresh experiment (data-stage appears). */
+export async function startNewExperiment(page: Page) {
+  await page.goto('/?e2e=1');
+  await page.getByRole('button', { name: /Enter Research Console/ }).click({ force: true });
+  await page.getByRole('button', { name: /New Session/ }).click({ force: true });
+  await page.waitForSelector('[data-stage]', { timeout: 20_000 });
+}
+
+/** Perform the appropriate action for the current stage. Returns true if the run is complete. */
+export async function handleStage(page: Page, stage: string): Promise<boolean> {
+  if (stage === 'EXPORT_DASHBOARD') return true;
+  await page.waitForTimeout(120);
+  switch (stage) {
+    case 'SESSION_INIT':
+      await setInput(page, 'pid', 'E2E01');
+      await setInput(page, 'lux', '350');
+      await click(page, /Begin setup/);
+      await waitStageChange(page, stage);
+      break;
+    case 'CONSENT':
+      await checkAllBoxes(page);
+      await click(page, /I consent/);
+      await waitStageChange(page, stage);
+      break;
+    case 'PARTICIPANT_PROFILE':
+      await setInput(page, 'age', '30');
+      await setInput(page, 'hours', '6');
+      await click(page, /^female$/);
+      await click(page, /^high$/);
+      await click(page, /^dim$/);
+      await click(page, /^glasses$/);
+      await click(page, /^no$/);
+      await click(page, /Continue/);
+      await waitStageChange(page, stage);
+      break;
+    case 'COLOR_VISION':
+      await page.getByRole('button', { name: '8', exact: true }).first().click({ force: true });
+      break;
+    case 'PREFLIGHT':
+      await checkAllBoxes(page);
+      await click(page, /All checks pass/);
+      await waitStageChange(page, stage);
+      break;
+    case 'CAMERA_SETUP':
+      await click(page, /Continue without camera/);
+      await waitStageChange(page, stage);
+      break;
+    case 'CALIBRATION':
+      await click(page, /Continue|Record baseline/);
+      await waitStageChange(page, stage);
+      break;
+    case 'CVSQ_BASELINE':
+    case 'CVSQ_END':
+      for (const b of await page.getByRole('button', { name: 'Never' }).all()) await b.click({ force: true });
+      await click(page, /Continue/);
+      await waitStageChange(page, stage);
+      break;
+    case 'BASELINE_FATIGUE':
+    case 'POST_FATIGUE':
+      await setAllRanges(page, 3);
+      await click(page, /Continue/);
+      await waitStageChange(page, stage);
+      break;
+    case 'READING_TASK':
+      await click(page, /Next page|Finished reading/);
+      await page.waitForTimeout(80);
+      break;
+    case 'COMPREHENSION':
+      await page.getByTestId('mcq-option').first().click({ force: true });
+      await click(page, /Submit answer/);
+      await waitStageChange(page, stage);
+      break;
+    case 'DISPLAY_PERCEPTION':
+      await setAllRanges(page, 70);
+      await click(page, /Continue/);
+      await waitStageChange(page, stage);
+      break;
+    case 'VISUAL_SEARCH':
+      await click(page, /Done searching/);
+      await waitStageChange(page, stage);
+      break;
+    case 'REACTION_TIME':
+      await click(page, /Start/);
+      await waitStageChange(page, stage);
+      break;
+    case 'ADAPTATION':
+      await waitStageChange(page, stage);
+      break;
+    case 'SESSION_COMPLETE':
+      await click(page, /view export dashboard|Continue/);
+      await waitStageChange(page, stage);
+      break;
+    default:
+      await page.waitForTimeout(100);
+  }
+  return false;
+}
+
+/** Drive the run until a target stage is reached (or completion). */
+export async function driveUntil(page: Page, target: string, maxSteps = 500): Promise<void> {
+  for (let i = 0; i < maxSteps; i++) {
+    const stage = await stageNow(page);
+    if (stage === target) return;
+    if (await handleStage(page, stage)) throw new Error(`reached completion before ${target}`);
+  }
+  throw new Error(`did not reach ${target} within ${maxSteps} steps`);
+}
+
+/** Read IndexedDB store counts from the page. */
+export async function dbCounts(page: Page, stores: string[]): Promise<Record<string, number>> {
+  return page.evaluate(async (storeNames) => {
+    const db = await new Promise<IDBDatabase>((res, rej) => {
+      const r = indexedDB.open('VisualErgonomicsDB');
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    const out: Record<string, number> = {};
+    for (const s of storeNames) {
+      out[s] = await new Promise<number>((res, rej) => {
+        const req = db.transaction(s).objectStore(s).count();
+        req.onsuccess = () => res(req.result);
+        req.onerror = () => rej(req.error);
+      });
+    }
+    return out;
+  }, stores);
+}

@@ -3,7 +3,7 @@
  * the digit via the font mask); the participant taps the digit they see. Honest framing: this is a
  * screening aid, not a clinical diagnosis.
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { makeRng } from '@/sim/rng';
 import { PLATES, isFigurePixel, scoreIshihara, type Plate, type IshiharaResult } from './ishihara';
 
@@ -57,14 +57,20 @@ interface Props {
 export function IshiharaTest({ onComplete }: Props) {
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
+  const busy = useRef(false); // guard against double-taps advancing/​completing twice
   const plate = PLATES[idx];
   const isLast = idx === PLATES.length - 1;
 
   const answer = (val: string) => {
+    if (busy.current) return;
+    busy.current = true;
     const next = { ...answers, [plate.id]: val };
     setAnswers(next);
     if (isLast) onComplete(scoreIshihara(PLATES, next));
-    else setIdx((i) => i + 1);
+    else {
+      setIdx((i) => i + 1);
+      busy.current = false; // allow the next plate's answer
+    }
   };
 
   return (

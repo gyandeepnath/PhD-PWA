@@ -22,7 +22,8 @@ export function DisplayPerceptionRating({ background, text, onComplete }: Props)
   const [clarity, setClarity] = useState(50);
   const [comfortTouched, setComfortTouched] = useState(false);
   const [clarityTouched, setClarityTouched] = useState(false);
-  const ready = comfortTouched && clarityTouched;
+  const [sent, setSent] = useState(false);
+  const ready = comfortTouched && clarityTouched && !sent;
 
   return (
     <div
@@ -56,7 +57,7 @@ export function DisplayPerceptionRating({ background, text, onComplete }: Props)
       </div>
       <button
         disabled={!ready}
-        onClick={() => onComplete({ comfort, clarity, comfortTouched, clarityTouched })}
+        onClick={() => { if (!ready) return; setSent(true); onComplete({ comfort, clarity, comfortTouched, clarityTouched }); }}
         className="mt-8 rounded-xl px-8 py-3 font-lab text-sm transition active:scale-95"
         style={{
           background: ready ? text : 'transparent',

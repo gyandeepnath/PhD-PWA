@@ -39,6 +39,7 @@ export function FatigueScale({ prompt, baselineMean, accent = '#4f8ef7', onCompl
     eye_strain: false, dryness: false, blur: false, burning: false, headache: false,
   });
 
+  const [sent, setSent] = useState(false);
   const allTouched = ITEMS.every((it) => touched[it.key]);
   const composite = mean(ITEMS.map((it) => values[it.key]));
 
@@ -82,14 +83,12 @@ export function FatigueScale({ prompt, baselineMean, accent = '#4f8ef7', onCompl
       </div>
 
       <button
-        disabled={!allTouched}
-        onClick={() =>
-          onComplete({
-            items: { ...values },
-            mean: composite,
-            touched: { ...touched },
-          })
-        }
+        disabled={!allTouched || sent}
+        onClick={() => {
+          if (!allTouched || sent) return;
+          setSent(true);
+          onComplete({ items: { ...values }, mean: composite, touched: { ...touched } });
+        }}
         className="mt-6 rounded-xl px-8 py-3 font-lab text-sm text-white transition active:scale-95"
         style={{ background: allTouched ? accent : '#cfcbc3', cursor: allTouched ? 'pointer' : 'not-allowed' }}
       >
