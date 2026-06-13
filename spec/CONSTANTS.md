@@ -128,3 +128,15 @@ SESSION_COMPLETE → EXPORT_DASHBOARD. Tracked steps = 8 setup + 8×6 = 56.
   backlight/distance) gating session start; sets preflight_complete.
 Deferred to a later phase: session manager + 30-day soft-delete bin (researcher convenience, not a
 validity item).
+
+## Offline + E2E (Phase: self-hosted MediaPipe + Playwright)
+- MediaPipe FaceMesh assets are vendored from node_modules into public/mediapipe/ (scripts/
+  copy-mediapipe.mjs, run on predev/prebuild; gitignored). The build precaches them via Workbox
+  (24 entries, ~17 MB) so eye tracking works fully offline after first load.
+- `?e2e=1` collapses long timings (reading floor 150 ms, adaptation 200/300 ms, RT 4 trials/120 ms
+  window) for fast automation; production timings are unchanged.
+- Playwright E2E (e2e/fullRun.spec.ts) drives the entire flow on the no-camera path and asserts
+  IndexedDB captured 8 conditions, 8 RT summaries, 2 CVS-Q, 9 fatigue records, then the dashboard.
+  Run: `npm run test:e2e` (uses a pre-installed Chromium when the browser download is blocked).
+- StrictMode removed from main.tsx (dev double-invoke double-requested the camera / re-ran FaceMesh
+  init; the original build was production with no StrictMode). Production behaviour unchanged.

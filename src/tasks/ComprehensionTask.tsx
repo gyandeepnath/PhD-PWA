@@ -61,6 +61,7 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
         {q.options.map((opt, i) => (
           <button
             key={i}
+            data-testid="mcq-option"
             disabled={submitted}
             onClick={() => setSelected(i)}
             style={{

@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "sim": "tsx src/sim/runSimulation.ts"
+    "sim": "tsx src/sim/runSimulation.ts",
+    "predev": "node scripts/copy-mediapipe.mjs",
+    "prebuild": "node scripts/copy-mediapipe.mjs"
   },
   "dependencies": {
     "@mediapipe/face_mesh": "0.4.1633559619",

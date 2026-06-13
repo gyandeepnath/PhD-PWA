@@ -36,10 +36,10 @@ export function SessionInit({ onSubmit }: { onSubmit: (d: SessionInitData) => vo
         <h1 className="mt-2 font-serif text-5xl font-light">New Session</h1>
         <div className="mt-8 space-y-4">
           <Field label="Participant ID (letters, digits, - or _, ≤20)">
-            <input className="vl-input" value={pid} onChange={(e) => setPid(e.target.value)} placeholder="P001" />
+            <input data-testid="pid" className="vl-input" value={pid} onChange={(e) => setPid(e.target.value)} placeholder="P001" />
           </Field>
           <Field label="Ambient illumination (lux, 0–200000) — measure with a lux meter">
-            <input className="vl-input" inputMode="numeric" value={lux} onChange={(e) => setLux(e.target.value)} placeholder="350" />
+            <input data-testid="lux" className="vl-input" inputMode="numeric" value={lux} onChange={(e) => setLux(e.target.value)} placeholder="350" />
           </Field>
           <Field label="Measured white-screen luminance (cd/m², optional)">
             <input className="vl-input" inputMode="numeric" value={lum} onChange={(e) => setLum(e.target.value)} placeholder="120" />
@@ -97,9 +97,9 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
       <h1 className="font-serif text-4xl font-light">Participant profile</h1>
       <p className="mt-1 font-lab text-xs text-[#5a5a7a]">Eligibility: ages 18–80.</p>
       <div className="mt-6 space-y-4" style={{ maxWidth: 640 }}>
-        <Field label="Age (18–80)"><input className="vl-input" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} /></Field>
+        <Field label="Age (18–80)"><input data-testid="age" className="vl-input" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} /></Field>
         <Pick label="Gender" value={gender} set={setGender} opts={['male', 'female', 'non-binary', 'prefer not to say']} />
-        <Field label="Daily screen hours"><input className="vl-input" inputMode="numeric" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="6" /></Field>
+        <Field label="Daily screen hours"><input data-testid="hours" className="vl-input" inputMode="numeric" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="6" /></Field>
         <Pick label="Device familiarity" value={fam} set={(v) => setFam(v as ProfileData['deviceFamiliarity'])} opts={['low', 'moderate', 'high']} />
         <Pick label="Typical lighting" value={light} set={(v) => setLight(v as ProfileData['lightingHabit'])} opts={['bright', 'moderate', 'dim']} />
         <Pick label="Vision correction" value={corr} set={(v) => setCorr(v as ProfileData['correctionType'])} opts={['none', 'glasses', 'contacts']} />

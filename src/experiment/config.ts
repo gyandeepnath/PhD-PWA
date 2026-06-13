@@ -5,7 +5,7 @@
  * (longer adaptation on polarity switch; neutral RT background; reading as a per-page minimum
  * floor rather than a hard cutoff). All are centralised here so a protocol change is one edit.
  */
-export const CONFIG = {
+const BASE_CONFIG = {
   // Reading: per-page minimum dwell (rAF-gated). The Next button unlocks after this; the
   // participant may take longer (self-paced). reading_time_ms is recorded.
   READING_PAGE_MIN_MS: 20000,
@@ -50,7 +50,35 @@ export const CONFIG = {
 
   // Touch target minimum.
   MIN_TOUCH_TARGET_PX: 48,
-} as const;
+};
+
+/** True when running under the E2E harness (?e2e=1) — collapses long waits for fast tests. */
+function isE2E(): boolean {
+  try {
+    return typeof location !== 'undefined' && new URLSearchParams(location.search).has('e2e');
+  } catch {
+    return false;
+  }
+}
+
+/** Shortened timings/trial counts for E2E. Identical structure to BASE_CONFIG. */
+const E2E_OVERRIDES: Partial<typeof BASE_CONFIG> = {
+  READING_PAGE_MIN_MS: 150,
+  COMPREHENSION_FEEDBACK_MS: 120,
+  VS_TIME_LIMIT_MS: 5000,
+  RT_TRIALS_PER_CONDITION: 4,
+  RT_RESPONSE_WINDOW_MS: 120,
+  RT_FIXATION_MIN_MS: 30,
+  RT_FIXATION_MAX_MS: 40,
+  RT_DELAY_MIN_MS: 30,
+  RT_DELAY_MAX_MS: 50,
+  RT_ITI_MIN_MS: 20,
+  RT_ITI_MAX_MS: 30,
+  ADAPTATION_SAME_POLARITY_MS: 200,
+  ADAPTATION_SWITCH_POLARITY_MS: 300,
+};
+
+export const CONFIG = isE2E() ? { ...BASE_CONFIG, ...E2E_OVERRIDES } : BASE_CONFIG;
 
 /** Number of measured sub-stages per condition (excludes ADAPTATION). */
 export const TASKS_PER_CONDITION = 6;

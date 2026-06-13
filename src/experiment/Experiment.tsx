@@ -354,9 +354,9 @@ export default function Experiment() {
   }
 
   return (
-    <>
+    <div data-stage={machine.stage} style={{ height: '100%' }}>
       {showProgress && <ExperimentProgress percent={percent} label={machine.stage.replace(/_/g, ' ').toLowerCase()} />}
       {view}
-    </>
+    </div>
   );
 }
