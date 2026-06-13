@@ -102,3 +102,15 @@ checksums.
 - FCE = mean_RT(incongruent hits) − mean_RT(congruent hits).
 - search_efficiency = hits / (search_seconds / 60); accuracy = (found + correct_rej)/total.
 - Population SD (÷N) for frame-level descriptives (intentional).
+
+## Simulation & power (Phase: simulation)
+`npm run sim [N] [seed]` generates synthetic participants with injected ground-truth effects
+(effects.ts) pushed through the real scoring code, then recovers them via OLS and runs a
+Monte-Carlo power curve. Validation results (N=40, seed 20260613):
+- log-contrast→RT recovered −26.8 ms/log-unit (true −28); negative-polarity +23 (true +18);
+  session-position +4.0 (true +4); fatigue: position +0.36 (true 0.35), below-AA +0.88 (true 0.9).
+- Mean per-condition d′ SE ≈ 0.54 (> 0.30) — confirms 24-signal-trial instability; aggregate d′
+  across conditions for inference.
+- Power for the log-contrast RT effect: N=8 → 0.50, **N=16 → 0.90**, N≥24 → ~1.0.
+Authoritative inference uses the linear mixed models in `src/analysis/analysis_template.{R,py}`
+(random intercept per participant); OLS here is only for pipeline validation.
