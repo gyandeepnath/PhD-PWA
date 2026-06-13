@@ -1,32 +1,58 @@
 # VisuLab — Visual Ergonomics Experiment (reconstructed source)
 
-A tablet PWA for a within-subjects visual-ergonomics study: per display condition it runs
+A tablet PWA for a within-subjects visual-ergonomics study. Per display condition it runs
 reading-comprehension, visual-search and Eriksen-flanker reaction-time tasks while a webcam
-(MediaPipe FaceMesh + Eye-Aspect-Ratio) estimates blink/gaze/head-pose metrics, plus pre/post
-fatigue scales. Data is stored in IndexedDB and exported as CSV + JSON for analysis in R/Python.
+(MediaPipe FaceMesh + Eye-Aspect-Ratio) estimates blink/gaze/head-pose metrics, with validated
+fatigue questionnaires. Data is stored in IndexedDB and exported as CSV + JSON for analysis in
+R/Python.
 
 This is a maintainable **Vite + React + TypeScript** reconstruction of the original single-file
-build, with scientific refinements verified against the literature. The original compiled bundle
-and the developer's architecture log are preserved under `reference/` as the parity oracle.
+build, with scientific refinements verified against the literature. The original compiled bundle and
+the developer's architecture log are preserved under `reference/` as the parity oracle.
 
-## Status
-Phased reconstruction in progress. See `spec/CONSTANTS.md` for the extracted source-of-truth
-constants and the planned refinements.
+## Quick start
 
-## Scripts
-- `npm run dev` — dev server
-- `npm run build` — typecheck + production build (PWA)
-- `npm test` — unit/property tests (Vitest)
-- `npm run test:e2e` — end-to-end tests (Playwright, fake camera)
-- `npm run sim` — Monte-Carlo simulation harness
+```bash
+npm install
+npm run dev        # dev server (vendors MediaPipe assets first)
+npm run build      # typecheck + production PWA build
+npm test           # unit/property tests (Vitest)
+npm run test:e2e   # end-to-end tests (Playwright, fake camera)
+npm run sim        # Monte-Carlo simulation + power analysis
+npm run fuzz       # fuzz/stress harness (degenerate-input soak)
+```
 
-## Key design decisions (literature-grounded)
-- Locked condition hex values are never changed; **contrast is recorded as a covariate**
-  (C4 yellow-on-white is only 2.39:1, below WCAG AA).
+The app opens on a **landing page → session manager**. Start a **New Session** to run the protocol,
+**Resume** an interrupted one, or **Open** a completed session in the analysis dashboard. A 30-day
+recycle bin holds soft-deleted sessions.
+
+## How it works
+
+- **Protocol & workflow**: see [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — the authoritative stage
+  sequence, scientific rationale, the workflow-logic cross-check, researcher run instructions, and
+  limitations to disclose.
+- **Constants & provenance**: see [`spec/CONSTANTS.md`](spec/CONSTANTS.md) — values extracted from
+  the original bundle, the data schema (IndexedDB v7), and every refinement made.
+- **Analysis**: exported data is analysed with the mixed-model templates in
+  `src/analysis/analysis_template.{R,py}` (random intercept per participant; contrast as covariate;
+  d′ aggregated across conditions).
+
+## Key scientific decisions (literature-grounded)
+
+- Locked condition hex values are never changed; **contrast is recorded as a covariate** (C4
+  yellow-on-white is only 2.39:1, below WCAG AA).
 - **Passages are decoupled from conditions** (rotating Latin-square assignment) to remove the
   content confound.
-- Colour-vision screening, display photometry, validated CVS-Q, real/honest gaze calibration,
-  FPS-gated blink tiers, neutral-background RT stimuli, and longer adaptation on polarity
-  switches are added for scientific accuracy.
+- Colour-vision screening, display photometry, validated **CVS-Q**, **real per-participant gaze
+  calibration**, FPS-gated blink tiers, neutral-background RT stimuli, longer adaptation on polarity
+  switches, and build-provenance stamping are added for scientific accuracy and reproducibility.
+- Webcam metrics are reported honestly (uncalibrated-gaze flag; sub-Nyquist blink tiers gated;
+  non-monotonic blink-rate caveat).
 
-See `reference/BUILD_KNOWLEDGE.md` for the full origin history and `spec/CONSTANTS.md` for specs.
+## Verification
+
+- **134 unit/property tests** (scoring, counterbalancing balance, contrast, storage, screening,
+  gaze calibration, session admin) + a **fuzz harness** (1M-iteration soak clean).
+- **Playwright E2E**: a full no-camera run through all 56 stages plus edge cases (input gating,
+  double-click→single session, reload→resume).
+- Production build emits an offline-capable PWA (MediaPipe assets precached).

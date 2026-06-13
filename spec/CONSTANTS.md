@@ -140,3 +140,14 @@ validity item).
   Run: `npm run test:e2e` (uses a pre-installed Chromium when the browser download is blocked).
 - StrictMode removed from main.tsx (dev double-invoke double-requested the camera / re-ran FaceMesh
   init; the original build was production with no StrictMode). Production behaviour unchanged.
+
+## Authoritative protocol (final, post workflow cross-check)
+The implemented stage order was corrected during the workflow-logic review — see
+`docs/PROTOCOL.md` (authoritative). Key changes vs the original bundle order:
+- Setup: SESSION_INIT → CONSENT → PARTICIPANT_PROFILE → **PREFLIGHT → COLOR_VISION** (preflight now
+  before colour-vision so night-shift is off) → CAMERA_SETUP → CALIBRATION → CVSQ_BASELINE → BASELINE_FATIGUE.
+- Per condition: READING → COMPREHENSION → VISUAL_SEARCH → REACTION_TIME → **DISPLAY_PERCEPTION →
+  POST_FATIGUE** → ADAPTATION (subjective ratings moved to the END, after the performance tasks).
+- Consent recorded at the CONSENT stage (not pre-emptively at session creation).
+- Double-tap guards (session re-entry, advance lock, scale/screening submit) and condition-level
+  resume (interrupted condition restarted, not stitched).

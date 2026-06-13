@@ -18,8 +18,10 @@ export const SETUP_ORDER: Stage[] = [
   'SESSION_INIT',
   'CONSENT',
   'PARTICIPANT_PROFILE',
-  'COLOR_VISION',
+  // Pre-flight (display/room configured: brightness fixed, night-shift OFF) MUST precede the
+  // colour-vision screening — a blue-light filter would invalidate the red-green Ishihara plates.
   'PREFLIGHT',
+  'COLOR_VISION',
   'CAMERA_SETUP',
   'CALIBRATION',
   'CVSQ_BASELINE',
@@ -29,14 +31,19 @@ export const SETUP_ORDER: Stage[] = [
 /** Tracked setup steps (all except SESSION_INIT). */
 export const SETUP_STEPS = SETUP_ORDER.length - 1;
 
-/** Per-condition sub-stages in order; the last (ADAPTATION) is a rest, not a measured step. */
+/**
+ * Per-condition sub-stages in order; the last (ADAPTATION) is a rest, not a measured step.
+ * Subjective ratings (display perception, post-condition fatigue) come AFTER all performance tasks
+ * so they reflect the participant's full exposure to the condition — the original build rated them
+ * mid-condition (before search/RT), which did not.
+ */
 export const LOOP_ORDER: Stage[] = [
   'READING_TASK',
   'COMPREHENSION',
-  'DISPLAY_PERCEPTION',
-  'POST_FATIGUE',
   'VISUAL_SEARCH',
   'REACTION_TIME',
+  'DISPLAY_PERCEPTION',
+  'POST_FATIGUE',
   'ADAPTATION',
 ];
 
@@ -69,7 +76,8 @@ export function nextState({ stage, stepIndex }: MachineState): MachineState {
   // Condition loop.
   const loopIdx = LOOP_ORDER.indexOf(stage);
   if (loopIdx >= 0) {
-    if (stage === 'REACTION_TIME') {
+    // POST_FATIGUE is the final measured sub-stage of a condition.
+    if (stage === 'POST_FATIGUE') {
       return stepIndex < N_CONDITIONS - 1
         ? { stage: 'ADAPTATION', stepIndex }
         : { stage: 'CVSQ_END', stepIndex };

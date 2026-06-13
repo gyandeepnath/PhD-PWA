@@ -32,8 +32,8 @@ describe('stage machine', () => {
       'SESSION_INIT',
       'CONSENT',
       'PARTICIPANT_PROFILE',
-      'COLOR_VISION',
       'PREFLIGHT',
+      'COLOR_VISION',
       'CAMERA_SETUP',
       'CALIBRATION',
       'CVSQ_BASELINE',
@@ -55,15 +55,21 @@ describe('stage machine', () => {
     expect(adaptations).toHaveLength(7);
   });
 
-  it('REACTION_TIME of the last condition goes to the end CVS-Q', () => {
-    expect(nextState({ stage: 'REACTION_TIME', stepIndex: 7 })).toEqual({
+  it('POST_FATIGUE (last task) of the final condition goes to the end CVS-Q', () => {
+    expect(nextState({ stage: 'POST_FATIGUE', stepIndex: 7 })).toEqual({
       stage: 'CVSQ_END',
       stepIndex: 7,
     });
-    expect(nextState({ stage: 'REACTION_TIME', stepIndex: 0 })).toEqual({
+    expect(nextState({ stage: 'POST_FATIGUE', stepIndex: 0 })).toEqual({
       stage: 'ADAPTATION',
       stepIndex: 0,
     });
+  });
+
+  it('per-condition order ends with the subjective ratings after the performance tasks', () => {
+    // READING → COMPREHENSION → VISUAL_SEARCH → REACTION_TIME → DISPLAY_PERCEPTION → POST_FATIGUE
+    expect(nextState({ stage: 'REACTION_TIME', stepIndex: 2 })).toEqual({ stage: 'DISPLAY_PERCEPTION', stepIndex: 2 });
+    expect(nextState({ stage: 'DISPLAY_PERCEPTION', stepIndex: 2 })).toEqual({ stage: 'POST_FATIGUE', stepIndex: 2 });
   });
 
   it('progress increases monotonically from 0 to 100', () => {

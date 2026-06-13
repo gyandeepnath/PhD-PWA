@@ -131,9 +131,10 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       session_end_time: null,
       randomisation_seed: enrol,
       condition_order: thePlan.map((s) => s.conditionIndex),
-      preflight_complete: true,
-      consent_given: true,
-      consent_time: Date.now(),
+      preflight_complete: false,
+      // Consent is captured at the CONSENT stage (below), not pre-emptively at session creation.
+      consent_given: false,
+      consent_time: null,
       provenance: provenance(),
       device_type: navigator.userAgent.includes('Android') ? 'Android' : 'Other',
       browser: navigator.userAgent.slice(0, 60),
@@ -200,7 +201,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       view = <SessionInit onSubmit={beginSession} />;
       break;
     case 'CONSENT':
-      view = <Consent onConsent={advance} />;
+      view = <Consent onConsent={async () => {
+        if (session) {
+          const fresh = { ...session, consent_given: true, consent_time: Date.now() };
+          await put('sessions', fresh);
+          setSession(fresh);
+        }
+        advance();
+      }} />;
       break;
     case 'PARTICIPANT_PROFILE':
       view = <ParticipantProfile onSubmit={saveProfile} />;
@@ -227,7 +235,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     case 'PREFLIGHT':
       view = (
         <Preflight onDone={async () => {
-          if (session) await put('sessions', { ...session, preflight_complete: true });
+          if (session) {
+            const fresh = { ...session, preflight_complete: true };
+            await put('sessions', fresh);
+            setSession(fresh);
+          }
           advance();
         }} />
       );
@@ -342,10 +354,24 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           baselineMean={baselineFatigue ?? undefined}
           accent={cond?.polarity === 'negative' ? '#4f8ef7' : '#1a1a2e'}
           onComplete={async (r) => {
-            if (session) await put('fatigue_scores', {
-              fatigue_id: uuidv4(), session_id: session.session_id, condition_id: conditionId,
-              stage: 'post_condition', ...r.items, fatigue_mean: r.mean, touched: r.touched, all_touched: true,
-            });
+            if (session) {
+              await put('fatigue_scores', {
+                fatigue_id: uuidv4(), session_id: session.session_id, condition_id: conditionId,
+                stage: 'post_condition', ...r.items, fatigue_mean: r.mean, touched: r.touched, all_touched: true,
+              });
+              // POST_FATIGUE is the final task of the condition — mark it complete and advance the
+              // resume pointer past it (an interruption now resumes at the next condition).
+              const existing = await get('conditions', conditionId);
+              if (existing) {
+                const started = conditionStarted.current[machine.stepIndex] ?? existing.started_at;
+                await put('conditions', {
+                  ...existing,
+                  completed_at: Date.now(),
+                  condition_duration_sec: (Date.now() - started) / 1000,
+                });
+              }
+              saveResume(session.session_id, machine.stepIndex + 1);
+            }
             advance();
           }}
         />
@@ -381,18 +407,6 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 });
               }
               await put('rt_summaries', { condition_id: conditionId, session_id: session.session_id, ...res.summary });
-              // Mark the condition complete (tracking already ended after reading).
-              const existing = await get('conditions', conditionId);
-              if (existing) {
-                const started = conditionStarted.current[machine.stepIndex] ?? existing.started_at;
-                await put('conditions', {
-                  ...existing,
-                  completed_at: Date.now(),
-                  condition_duration_sec: (Date.now() - started) / 1000,
-                });
-              }
-              // Condition fully complete — advance the resume pointer past it.
-              saveResume(session.session_id, machine.stepIndex + 1);
             }
             advance();
           }}
