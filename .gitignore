@@ -1,7 +1,14 @@
-node_modules/
-dist/
-.DS_Store
+
 *.log
+*.tsbuildinfo
+.DS_Store
+.vite/
 coverage/
+dist/
+node_modules/
 playwright-report/
 test-results/
+vite.config.d.ts
+vite.config.js
+vitest.config.d.ts
+vitest.config.js

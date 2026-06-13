@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Root scaling strategy — preserved verbatim from the original VisuLab build.
+ * The ONLY correct approach for a full-viewport tablet app with mixed px/fixed layouts:
+ *
+ * 1. html/body fill the physical CSS viewport exactly — no zoom, no transform here.
+ * 2. #root is scaled via transform:scale() using the --vl-scale CSS variable.
+ * 3. When scale < 1, #root's layout dimensions are expanded inversely
+ *    (width: calc(100% / var(--vl-scale))) so content fills the viewport after scaling.
+ * 4. transform-origin: top left ensures alignment.
+ * 5. All position:fixed children are contained within #root's stacking context.
+ *
+ * Avoids CSS zoom (breaks fixed coords on Android Chrome), transform on <html>
+ * (breaks 100dvh), and font-size scaling (would require rem on 400+ inline px values).
+ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --vl-scale: 1;
+}
+
+html {
+  width: 100%;
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  width: 100%;
+  height: 100%;
+  background: #f8f7f5;
+  font-family: 'Roboto', ui-sans-serif, system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+  overscroll-behavior: none;
+  overflow: hidden;
+  touch-action: none;
+}
+
+#root {
+  transform-origin: top left;
+  transform: scale(var(--vl-scale));
+  width: calc(100% / var(--vl-scale));
+  height: calc(100% / var(--vl-scale));
+  background: #f8f7f5;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Inputs remain selectable/typable despite the global no-select. */
+input,
+textarea {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+  touch-action: auto;
+}
+
+/* Range input — consistent across Android Chrome. */
+input[type='range'] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  touch-action: pan-x;
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: currentColor;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+input[type='range']::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: currentColor;
+  cursor: pointer;
+  border: none;
+}
+
+/* Scrollable containers within the app. */
+.scrollable {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
