@@ -1,0 +1,195 @@
+/**
+ * Per-condition frame aggregator. Ingests per-frame tracking samples during a task and produces a
+ * single EyeMetricsRecord on finalize. Computes the defensible primary metrics (full-blink rate,
+ * incomplete-blink ratio, within-task bins) and keeps the sub-Nyquist tiers as flagged diagnostics.
+ */
+import { mean, stdPopulation } from '@/lib/stats';
+import {
+  classifyBlinks,
+  summariseBlinks,
+  blinkRatePerMinute,
+  effectiveFps,
+  fpsAdequateForTiers,
+  type EarSample,
+  type BlinkEvent,
+} from './blink';
+import type { HeadPose } from './headPose';
+import type { GazeZone } from './gaze';
+import type { EyeMetricsRecord } from '@/storage/types';
+
+export interface FrameSample {
+  t_ms: number;
+  ear: number;
+  pose: HeadPose;
+  zone: GazeZone;
+  isCenter: boolean;
+  offAxis: boolean;
+  facePresent: boolean;
+  faceSize: number;
+}
+
+/** Simple centered-ish moving average to damp single-frame head-pose noise. */
+function smooth(xs: number[], window = 5): number[] {
+  if (xs.length === 0) return xs;
+  const half = Math.floor(window / 2);
+  return xs.map((_, i) => {
+    const lo = Math.max(0, i - half);
+    const hi = Math.min(xs.length - 1, i + half);
+    return mean(xs.slice(lo, hi + 1));
+  });
+}
+
+export class EyeMetricsAggregator {
+  private ear: EarSample[] = [];
+  private pitch: number[] = [];
+  private yaw: number[] = [];
+  private roll: number[] = [];
+  private zones: GazeZone[] = [];
+  private centerCount = 0;
+  private offAxisCount = 0;
+  private faceSizes: number[] = [];
+  private framesTotal = 0;
+  private facesDetected = 0;
+  private frameTimes: number[] = [];
+
+  ingest(f: FrameSample): void {
+    this.framesTotal++;
+    this.frameTimes.push(f.t_ms);
+    if (!f.facePresent) return;
+    this.facesDetected++;
+    this.ear.push({ t_ms: f.t_ms, ear: f.ear });
+    this.pitch.push(f.pose.pitch);
+    this.yaw.push(f.pose.yaw);
+    this.roll.push(f.pose.roll);
+    this.zones.push(f.zone);
+    if (f.isCenter) this.centerCount++;
+    if (f.offAxis) this.offAxisCount++;
+    this.faceSizes.push(f.faceSize);
+  }
+
+  private zoneTransitions(): number {
+    let t = 0;
+    for (let i = 1; i < this.zones.length; i++) if (this.zones[i] !== this.zones[i - 1]) t++;
+    return t;
+  }
+
+  private binnedBlinkRates(events: BlinkEvent[], durationMs: number) {
+    if (durationMs <= 0) return { first_half_blink_rate: null, second_half_blink_rate: null };
+    const mid = durationMs / 2;
+    const first = events.filter((e) => e.onset_ms < mid).length;
+    const second = events.filter((e) => e.onset_ms >= mid).length;
+    return {
+      first_half_blink_rate: blinkRatePerMinute(first, mid),
+      second_half_blink_rate: blinkRatePerMinute(second, durationMs - mid),
+    };
+  }
+
+  /**
+   * Produce the record. `baselineEarValue` comes from calibration; `baselineBlinkRate` (session
+   * baseline) enables the delta-from-baseline interpretation aid.
+   */
+  finalize(args: {
+    conditionId: string;
+    sessionId: string;
+    cameraActive: boolean;
+    baselineEarValue: number | null;
+    earThresholdUsed: number | null;
+    gazeCalibrated: boolean;
+    baselineBlinkRate: number | null;
+  }): EyeMetricsRecord {
+    const durationMs =
+      this.ear.length > 0 ? this.ear[this.ear.length - 1].t_ms - this.ear[0].t_ms : 0;
+    const baseline = args.baselineEarValue ?? 0.3;
+    const events = classifyBlinks(this.ear, baseline);
+    const blink = summariseBlinks(events, durationMs);
+    const fps = effectiveFps(this.frameTimes);
+    const bins = this.binnedBlinkRates(events, durationMs);
+
+    const sPitch = smooth(this.pitch);
+    const sYaw = smooth(this.yaw);
+    const sRoll = smooth(this.roll);
+    const movementStd =
+      (stdPopulation(sPitch) + stdPopulation(sYaw) + stdPopulation(sRoll)) / 3;
+    const posturalLoad =
+      (mean(sPitch.map(Math.abs)) + mean(sYaw.map(Math.abs)) + mean(sRoll.map(Math.abs))) / 3;
+
+    return {
+      condition_id: args.conditionId,
+      session_id: args.sessionId,
+      camera_active: args.cameraActive,
+      effective_fps: fps,
+      fps_adequate_for_tiers: fpsAdequateForTiers(fps),
+
+      blink_rate: blink.blink_rate,
+      blink_rate_full: blink.blink_rate_full,
+      incomplete_blink_ratio: blink.incomplete_blink_ratio,
+      blink_duration_mean_ms: blink.blink_duration_mean_ms,
+      bins,
+      blink_rate_delta_from_baseline:
+        args.baselineBlinkRate != null ? blink.blink_rate - args.baselineBlinkRate : null,
+
+      blink_rate_micro: blink.blink_rate_micro,
+      blink_count_full: blink.blink_count_full,
+      blink_count_partial: blink.blink_count_partial,
+      blink_count_micro: blink.blink_count_micro,
+      blink_count_incomplete: blink.blink_count_incomplete,
+
+      ear_baseline: args.baselineEarValue,
+      ear_threshold_used: args.earThresholdUsed,
+
+      head_pitch_mean: this.pitch.length ? mean(sPitch) : 0,
+      head_yaw_mean: this.yaw.length ? mean(sYaw) : 0,
+      head_roll_mean: this.roll.length ? mean(sRoll) : 0,
+      head_movement_std: movementStd,
+      postural_load: posturalLoad,
+      head_stability_score: 1 / (1 + movementStd),
+      off_axis_ratio: this.facesDetected > 0 ? this.offAxisCount / this.facesDetected : 0,
+
+      gaze_calibrated: args.gazeCalibrated,
+      gaze_deviation_ratio:
+        this.facesDetected > 0 ? 1 - this.centerCount / this.facesDetected : 0,
+      zone_center_ratio: this.facesDetected > 0 ? this.centerCount / this.facesDetected : 0,
+      zone_transition_count: this.zoneTransitions(),
+
+      face_presence_ratio: this.framesTotal > 0 ? this.facesDetected / this.framesTotal : 0,
+      face_size_ratio: this.faceSizes.length ? mean(this.faceSizes) : 0,
+    };
+  }
+}
+
+/** Zeroed metrics for when the camera is denied/failed (matches the original disabledMetrics). */
+export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeMetricsRecord {
+  return {
+    condition_id: conditionId,
+    session_id: sessionId,
+    camera_active: false,
+    effective_fps: null,
+    fps_adequate_for_tiers: false,
+    blink_rate: 0,
+    blink_rate_full: 0,
+    incomplete_blink_ratio: 0,
+    blink_duration_mean_ms: null,
+    bins: { first_half_blink_rate: null, second_half_blink_rate: null },
+    blink_rate_delta_from_baseline: null,
+    blink_rate_micro: 0,
+    blink_count_full: 0,
+    blink_count_partial: 0,
+    blink_count_micro: 0,
+    blink_count_incomplete: 0,
+    ear_baseline: null,
+    ear_threshold_used: null,
+    head_pitch_mean: 0,
+    head_yaw_mean: 0,
+    head_roll_mean: 0,
+    head_movement_std: 0,
+    postural_load: 0,
+    head_stability_score: 0,
+    off_axis_ratio: 0,
+    gaze_calibrated: false,
+    gaze_deviation_ratio: 0,
+    zone_center_ratio: 0,
+    zone_transition_count: 0,
+    face_presence_ratio: 0,
+    face_size_ratio: 0,
+  };
+}
