@@ -54,5 +54,3 @@ export const CONFIG = {
 
 /** Number of measured sub-stages per condition (excludes ADAPTATION). */
 export const TASKS_PER_CONDITION = 6;
-/** Setup stages tracked in the progress bar. */
-export const SETUP_STEPS = 4;

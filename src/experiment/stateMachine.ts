@@ -11,15 +11,23 @@
  */
 import type { Stage } from '@/storage/types';
 import { N_CONDITIONS } from './conditions';
-import { SETUP_STEPS, TASKS_PER_CONDITION } from './config';
+import { TASKS_PER_CONDITION } from './config';
 
+/** Linear setup chain. SESSION_INIT is researcher-only and not counted in the progress bar. */
 export const SETUP_ORDER: Stage[] = [
   'SESSION_INIT',
+  'CONSENT',
   'PARTICIPANT_PROFILE',
+  'COLOR_VISION',
+  'PREFLIGHT',
   'CAMERA_SETUP',
   'CALIBRATION',
+  'CVSQ_BASELINE',
   'BASELINE_FATIGUE',
 ];
+
+/** Tracked setup steps (all except SESSION_INIT). */
+export const SETUP_STEPS = SETUP_ORDER.length - 1;
 
 /** Per-condition sub-stages in order; the last (ADAPTATION) is a rest, not a measured step. */
 export const LOOP_ORDER: Stage[] = [
@@ -64,7 +72,7 @@ export function nextState({ stage, stepIndex }: MachineState): MachineState {
     if (stage === 'REACTION_TIME') {
       return stepIndex < N_CONDITIONS - 1
         ? { stage: 'ADAPTATION', stepIndex }
-        : { stage: 'SESSION_COMPLETE', stepIndex };
+        : { stage: 'CVSQ_END', stepIndex };
     }
     if (stage === 'ADAPTATION') {
       return { stage: 'READING_TASK', stepIndex: stepIndex + 1 };
@@ -72,6 +80,7 @@ export function nextState({ stage, stepIndex }: MachineState): MachineState {
     return { stage: LOOP_ORDER[loopIdx + 1], stepIndex };
   }
 
+  if (stage === 'CVSQ_END') return { stage: 'SESSION_COMPLETE', stepIndex };
   if (stage === 'SESSION_COMPLETE') return { stage: 'EXPORT_DASHBOARD', stepIndex };
   return { stage: 'EXPORT_DASHBOARD', stepIndex }; // terminal
 }

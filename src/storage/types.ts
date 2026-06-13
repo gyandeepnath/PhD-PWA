@@ -10,9 +10,13 @@ import type { Polarity, WcagLevel } from './schemaEnums';
 
 export type Stage =
   | 'SESSION_INIT'
+  | 'CONSENT'
   | 'PARTICIPANT_PROFILE'
+  | 'COLOR_VISION'
+  | 'PREFLIGHT'
   | 'CAMERA_SETUP'
   | 'CALIBRATION'
+  | 'CVSQ_BASELINE'
   | 'BASELINE_FATIGUE'
   | 'READING_TASK'
   | 'COMPREHENSION'
@@ -23,6 +27,7 @@ export type Stage =
   | 'ADAPTATION'
   | 'BREAK_SCREEN'
   | 'SESSION_COMPLETE'
+  | 'CVSQ_END'
   | 'EXPORT_DASHBOARD';
 
 export type CameraStatus = 'active' | 'denied' | 'failed' | 'unavailable';

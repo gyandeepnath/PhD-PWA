@@ -23,9 +23,11 @@ import { ReadingTask } from '@/tasks/ReadingTask';
 import { ComprehensionTask } from '@/tasks/ComprehensionTask';
 import { VisualSearchTask } from '@/tasks/VisualSearchTask';
 import { ReactionTimeTask } from '@/tasks/ReactionTimeTask';
+import { IshiharaTest } from '@/screening/IshiharaTest';
+import { Cvsq } from '@/scales/Cvsq';
 import {
   SessionInit, ParticipantProfile, CameraSetup, Calibration, AdaptationScreen, SessionComplete,
-  type SessionInitData, type ProfileData,
+  Consent, Preflight, type SessionInitData, type ProfileData,
 } from '@/start/setupStages';
 
 function provenance(): Provenance {
@@ -137,8 +139,60 @@ export default function Experiment() {
     case 'SESSION_INIT':
       view = <SessionInit onSubmit={beginSession} />;
       break;
+    case 'CONSENT':
+      view = <Consent onConsent={advance} />;
+      break;
     case 'PARTICIPANT_PROFILE':
       view = <ParticipantProfile onSubmit={saveProfile} />;
+      break;
+    case 'COLOR_VISION':
+      view = (
+        <IshiharaTest
+          onComplete={async (r) => {
+            if (session) {
+              const p = await get('participants', session.participant_id);
+              if (p) {
+                const status = r.status === 'normal' ? 'normal'
+                  : r.status === 'screen_failed' ? 'screen_failed' : p.cvd_status;
+                await put('participants', {
+                  ...p, ishihara_correct: r.testCorrect, ishihara_total: r.testTotal, cvd_status: status,
+                });
+              }
+            }
+            advance();
+          }}
+        />
+      );
+      break;
+    case 'PREFLIGHT':
+      view = (
+        <Preflight onDone={async () => {
+          if (session) await put('sessions', { ...session, preflight_complete: true });
+          advance();
+        }} />
+      );
+      break;
+    case 'CVSQ_BASELINE':
+      view = (
+        <Cvsq stage="baseline" onComplete={async (r) => {
+          if (session) await put('cvsq_scores', {
+            cvsq_id: uuidv4(), session_id: session.session_id, stage: 'baseline',
+            frequency: r.frequency, intensity: r.intensity, total_score: r.total, symptomatic: r.symptomatic,
+          });
+          advance();
+        }} />
+      );
+      break;
+    case 'CVSQ_END':
+      view = (
+        <Cvsq stage="session_end" onComplete={async (r) => {
+          if (session) await put('cvsq_scores', {
+            cvsq_id: uuidv4(), session_id: session.session_id, stage: 'session_end',
+            frequency: r.frequency, intensity: r.intensity, total_score: r.total, symptomatic: r.symptomatic,
+          });
+          advance();
+        }} />
+      );
       break;
     case 'CAMERA_SETUP':
       view = (

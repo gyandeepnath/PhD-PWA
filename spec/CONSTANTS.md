@@ -114,3 +114,17 @@ Monte-Carlo power curve. Validation results (N=40, seed 20260613):
 - Power for the log-contrast RT effect: N=8 → 0.50, **N=16 → 0.90**, N≥24 → ~1.0.
 Authoritative inference uses the linear mixed models in `src/analysis/analysis_template.{R,py}`
 (random intercept per participant); OLS here is only for pipeline validation.
+
+## Setup flow (updated) & screening (Phase: start panel/consent/colour-vision/CVS-Q)
+Setup chain: SESSION_INIT → CONSENT → PARTICIPANT_PROFILE → COLOR_VISION → PREFLIGHT →
+CAMERA_SETUP → CALIBRATION → CVSQ_BASELINE → BASELINE_FATIGUE → [×8 loop] → CVSQ_END →
+SESSION_COMPLETE → EXPORT_DASHBOARD. Tracked steps = 8 setup + 8×6 = 56.
+- Consent: informed-consent gate (no-video statement, withdrawal, voluntary).
+- Colour-vision: digital Ishihara SCREENING (dot-mosaic plates via 5×7 font mask; control plate +
+  5 red-green confusion plates; status normal/screen_failed/inconclusive). Honestly framed as a
+  screening aid, not diagnostic; result stored on participant (ishihara_correct/total, cvd_status).
+- CVS-Q (Seguí 2015): validated 16-item freq×intensity, recode 0/1/2, cutoff ≥6; at baseline + end.
+- Pre-flight: 7-item researcher checklist (brightness/auto-brightness/night-shift/clean/lux/lenses/
+  backlight/distance) gating session start; sets preflight_complete.
+Deferred to a later phase: session manager + 30-day soft-delete bin (researcher convenience, not a
+validity item).

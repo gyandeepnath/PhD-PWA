@@ -224,6 +224,75 @@ export function SessionComplete({ onExport }: { onExport: () => void }) {
   );
 }
 
+// ---- CONSENT ----
+export function Consent({ onConsent }: { onConsent: () => void }) {
+  const [agreed, setAgreed] = useState(false);
+  return (
+    <div className={shell} style={{ position: 'relative' }}>
+      <WavyBackground opacity={0.05} />
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: 640 }}>
+        <h1 className="font-serif text-4xl font-light">Informed consent</h1>
+        <div className="scrollable mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]" style={{ maxHeight: '52vh', paddingRight: 8 }}>
+          <p>You are invited to take part in a study on visual ergonomics — how display colour and
+            background affect reading, attention and eye comfort. The session takes roughly 60–90
+            minutes and involves reading passages, short attention tasks, and brief questionnaires.</p>
+          <p style={{ marginTop: 12 }}><strong>Camera:</strong> if you allow it, the front camera
+            estimates blink rate, head position and gaze zone in real time. <strong>No image or video
+            is ever recorded or stored</strong> — only those numeric measures are saved.</p>
+          <p style={{ marginTop: 12 }}><strong>Data:</strong> responses are stored on this device under
+            a participant code (no name). You may stop at any time without penalty; tell the researcher
+            to withdraw and your data for this session can be deleted.</p>
+          <p style={{ marginTop: 12 }}>Taking part is voluntary. By continuing you confirm you have read
+            and understood this information and agree to participate.</p>
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16, cursor: 'pointer' }}>
+          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ width: 20, height: 20 }} />
+          <span className="font-lab text-sm">I have read the above and consent to participate.</span>
+        </label>
+        <button className={btn} disabled={!agreed}
+          style={{ marginTop: 18, background: agreed ? '#1a1a2e' : '#cfcbc3', cursor: agreed ? 'pointer' : 'not-allowed' }}
+          onClick={() => agreed && onConsent()}>
+          I consent — continue →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---- PRE-FLIGHT CHECKLIST (researcher) ----
+const PREFLIGHT_ITEMS = [
+  'Screen brightness set to a fixed level; auto-brightness OFF',
+  'Blue-light filter / Night Shift OFF',
+  'Screen cleaned (no smudges or glare)',
+  'Ambient illumination measured and lux entered',
+  'Participant not wearing tinted/photochromic lenses',
+  'No strong light source behind the participant (no backlight)',
+  'Device on a stand at ~50–60 cm viewing distance, landscape',
+];
+export function Preflight({ onDone }: { onDone: () => void }) {
+  const [checked, setChecked] = useState<boolean[]>(Array(PREFLIGHT_ITEMS.length).fill(false));
+  const all = checked.every(Boolean);
+  return (
+    <div className={shell}>
+      <h1 className="font-serif text-4xl font-light">Pre-flight checklist</h1>
+      <p className="mt-1 font-lab text-xs text-[#5a5a7a]">Researcher: confirm each item before starting.</p>
+      <div className="mt-5 space-y-2" style={{ maxWidth: 640 }}>
+        {PREFLIGHT_ITEMS.map((item, i) => (
+          <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e2dc', background: '#fff', cursor: 'pointer' }}>
+            <input type="checkbox" checked={checked[i]} onChange={(e) => { const n = [...checked]; n[i] = e.target.checked; setChecked(n); }} style={{ width: 20, height: 20 }} />
+            <span className="font-lab text-sm">{item}</span>
+          </label>
+        ))}
+      </div>
+      <button className={btn} disabled={!all}
+        style={{ marginTop: 18, background: all ? '#1a1a2e' : '#cfcbc3', cursor: all ? 'pointer' : 'not-allowed' }}
+        onClick={() => all && onDone()}>
+        All checks pass — continue →
+      </button>
+    </div>
+  );
+}
+
 // ---- helpers ----
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
