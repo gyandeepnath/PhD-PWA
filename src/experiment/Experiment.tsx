@@ -15,6 +15,7 @@ import { put, get, nextEnrolmentNumber } from '@/storage/db';
 import { DB_VERSION } from '@/storage/schemaEnums';
 import type { Provenance, SessionRecord } from '@/storage/types';
 import { useTracking } from '@/tracking/useTracking';
+import { Dashboard } from '@/dashboard/Dashboard';
 import { ExperimentProgress } from '@/components/ExperimentProgress';
 import { FatigueScale } from '@/scales/FatigueScale';
 import { DisplayPerceptionRating } from '@/scales/DisplayPerceptionRating';
@@ -294,14 +295,7 @@ export default function Experiment() {
       }} />;
       break;
     case 'EXPORT_DASHBOARD':
-      view = (
-        <div className="min-h-screen w-full bg-cream p-[6%] font-sans text-[#1a1a2e]">
-          <h1 className="font-serif text-4xl font-light">Export dashboard</h1>
-          <p className="mt-2 font-lab text-sm text-[#5a5a7a]">
-            Data captured to IndexedDB. The full dashboard + CSV/JSON export is the next phase.
-          </p>
-        </div>
-      );
+      view = <Dashboard initialSessionId={session?.session_id} />;
       break;
   }
 
