@@ -182,7 +182,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       wcag_contrast_ratio: cond.wcag_contrast_ratio, wcag_level: cond.wcag_level,
       michelson_contrast: cond.michelson_contrast, below_wcag_aa: cond.below_wcag_aa,
       started_at: Date.now(), completed_at: null, condition_duration_sec: null,
-      adaptation_ms_before: adaptationBefore,
+      adaptation_ms_before: adaptationBefore, reading_time_ms: null,
     });
     conditionStarted.current[machine.stepIndex] = Date.now();
     // Coarse resume pointer: an interruption during this condition resumes by redoing it.
@@ -309,8 +309,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         view = (
           <ReadingTask
             passage={passage} background={cond.background} text={cond.text}
-            onComplete={async () => {
-              if (session) await tracking.endCondition(conditionId, session.session_id);
+            onComplete={async (readingTimeMs) => {
+              if (session) {
+                await tracking.endCondition(conditionId, session.session_id);
+                const existing = await get('conditions', conditionId);
+                if (existing) await put('conditions', { ...existing, reading_time_ms: Math.round(readingTimeMs) });
+              }
               advance();
             }}
           />

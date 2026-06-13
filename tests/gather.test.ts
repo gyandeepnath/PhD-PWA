@@ -24,7 +24,7 @@ async function seed() {
     condition_id: 'A', session_id: 'S1', session_position: 0, condition_label: 'C1', polarity: 'positive',
     background_color: '#FFFFFF', text_color: '#000000', color_name: 'black', passage_id: 0,
     wcag_contrast_ratio: 21, wcag_level: 'AAA', michelson_contrast: 1, below_wcag_aa: false,
-    started_at: 1, completed_at: 2, condition_duration_sec: 1, adaptation_ms_before: 0,
+    started_at: 1, completed_at: 2, condition_duration_sec: 1, adaptation_ms_before: 0, reading_time_ms: null
   });
   await put('fatigue_scores', {
     fatigue_id: 'f0', session_id: 'S1', condition_id: null, stage: 'baseline', eye_strain: 1, dryness: 1,

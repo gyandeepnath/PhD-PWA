@@ -19,8 +19,8 @@ function bundle(): SessionBundle {
     },
     participant: undefined,
     conditions: [
-      { condition_id: 'A', session_id: 'S1', session_position: 0, condition_label: 'C1', polarity: 'positive', background_color: '#FFFFFF', text_color: '#000000', color_name: 'black', passage_id: 3, wcag_contrast_ratio: 21, wcag_level: 'AAA', michelson_contrast: 1, below_wcag_aa: false, started_at: 1, completed_at: 2, condition_duration_sec: 1, adaptation_ms_before: 0 },
-      { condition_id: 'B', session_id: 'S1', session_position: 1, condition_label: 'C4', polarity: 'positive', background_color: '#FFFFFF', text_color: '#C9A400', color_name: 'yellow', passage_id: 5, wcag_contrast_ratio: 2.39, wcag_level: 'Fail', michelson_contrast: 0.4, below_wcag_aa: true, started_at: 3, completed_at: 4, condition_duration_sec: 1, adaptation_ms_before: 60000 },
+      { condition_id: 'A', session_id: 'S1', session_position: 0, condition_label: 'C1', polarity: 'positive', background_color: '#FFFFFF', text_color: '#000000', color_name: 'black', passage_id: 3, wcag_contrast_ratio: 21, wcag_level: 'AAA', michelson_contrast: 1, below_wcag_aa: false, started_at: 1, completed_at: 2, condition_duration_sec: 1, adaptation_ms_before: 0, reading_time_ms: null },
+      { condition_id: 'B', session_id: 'S1', session_position: 1, condition_label: 'C4', polarity: 'positive', background_color: '#FFFFFF', text_color: '#C9A400', color_name: 'yellow', passage_id: 5, wcag_contrast_ratio: 2.39, wcag_level: 'Fail', michelson_contrast: 0.4, below_wcag_aa: true, started_at: 3, completed_at: 4, condition_duration_sec: 1, adaptation_ms_before: 60000, reading_time_ms: null },
     ],
     fatigue: [
       { fatigue_id: 'f0', session_id: 'S1', condition_id: null, stage: 'baseline', eye_strain: 1, dryness: 1, blur: 1, burning: 1, headache: 1, fatigue_mean: 1, touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true }, all_touched: true },

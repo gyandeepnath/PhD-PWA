@@ -124,6 +124,8 @@ export interface ConditionRecord {
   condition_duration_sec: number | null;
   /** Adaptation duration that preceded this condition (ms) — varies on polarity switch. */
   adaptation_ms_before: number;
+  /** Total time spent on the reading task (ms), self-paced; null until reading completes. */
+  reading_time_ms: number | null;
 }
 
 export type FatigueStage = 'baseline' | 'post_condition';

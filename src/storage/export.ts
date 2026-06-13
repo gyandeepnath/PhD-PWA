@@ -70,7 +70,7 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 02 — conditions
   csv('02_conditions.csv',
-    ['participant_id', 'condition_id', 'session_position', 'condition_label', 'polarity', 'background_color', 'text_color', 'color_name', 'passage_id', 'wcag_contrast_ratio', 'wcag_level', 'michelson_contrast', 'below_wcag_aa', 'adaptation_ms_before', 'condition_duration_sec'],
+    ['participant_id', 'condition_id', 'session_position', 'condition_label', 'polarity', 'background_color', 'text_color', 'color_name', 'passage_id', 'wcag_contrast_ratio', 'wcag_level', 'michelson_contrast', 'below_wcag_aa', 'adaptation_ms_before', 'reading_time_ms', 'condition_duration_sec'],
     bundle.conditions.map((c) => ({ participant_id: pid, ...c })));
 
   // 03 — fatigue
