@@ -1,6 +1,7 @@
 
 *.log
 *.tsbuildinfo
+*.zip
 .DS_Store
 .vite/
 coverage/
@@ -9,6 +10,7 @@ node_modules/
 playwright-report/
 public/mediapipe/
 test-results/
+visulab-build.zip
 vite.config.d.ts
 vite.config.js
 vitest.config.d.ts
