@@ -3,7 +3,7 @@
  * lifecycle, and all IndexedDB writes. Renders the component for the current stage and advances on
  * completion. The full researcher dashboard/export is a later phase — EXPORT_DASHBOARD is a stub.
  */
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { CONDITIONS, conditionDefinitionHash } from './conditions';
 import { PASSAGES } from './passages';
@@ -11,7 +11,9 @@ import { sessionPlan, type PlannedStep } from './counterbalance';
 import { CONFIG } from './config';
 import { initialState, nextState, progressPercent, type MachineState } from './stateMachine';
 import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
-import { put, get, nextEnrolmentNumber } from '@/storage/db';
+import { put, get, getAllByIndex, nextEnrolmentNumber } from '@/storage/db';
+import { saveResume, clearResume } from '@/storage/sessionPersistence';
+import { isInLoop } from './stateMachine';
 import { DB_VERSION } from '@/storage/schemaEnums';
 import type { Provenance, SessionRecord } from '@/storage/types';
 import { useTracking } from '@/tracking/useTracking';
@@ -29,6 +31,7 @@ import {
   SessionInit, ParticipantProfile, CameraSetup, Calibration, AdaptationScreen, SessionComplete,
   Consent, Preflight, type SessionInitData, type ProfileData,
 } from '@/start/setupStages';
+import { CalibrationRoutine } from '@/start/CalibrationRoutine';
 
 function provenance(): Provenance {
   return {
@@ -37,18 +40,56 @@ function provenance(): Provenance {
   };
 }
 
-export default function Experiment() {
+interface ExperimentProps {
+  /** When set, rehydrate and resume an in-progress session at the given condition index. */
+  resume?: { sessionId: string; nextStepIndex: number };
+  /** Return to the session manager (pause/exit or after completion). */
+  onExit: () => void;
+}
+
+export default function Experiment({ resume, onExit }: ExperimentProps) {
   const tracking = useTracking();
   const [machine, setMachine] = useState<MachineState>(initialState());
   const [session, setSession] = useState<SessionRecord | null>(null);
   const [enrolment, setEnrolment] = useState(0);
   const [plan, setPlan] = useState<PlannedStep[]>([]);
   const [baselineFatigue, setBaselineFatigue] = useState<number | null>(null);
+  const [resuming, setResuming] = useState<boolean>(!!resume);
   const conditionIds = useRef<string[]>([]);
   const writtenConditions = useRef<Set<number>>(new Set());
   const conditionStarted = useRef<Record<number, number>>({});
 
   const advance = useCallback(() => setMachine((m) => nextState(m)), []);
+
+  // --- RESUME: rehydrate an interrupted session at the next condition ---
+  useEffect(() => {
+    if (!resume) return;
+    let cancelled = false;
+    (async () => {
+      const s = await get('sessions', resume.sessionId);
+      const baseline = (await getAllByIndex('fatigue_scores', 'by_session', resume.sessionId)).find(
+        (f) => f.stage === 'baseline',
+      );
+      if (cancelled || !s) {
+        setResuming(false);
+        return;
+      }
+      const thePlan = sessionPlan(s.enrolment_number);
+      // Fresh ids for the remaining conditions; completed conditions keep their stored ids.
+      conditionIds.current = thePlan.map(() => uuidv4());
+      writtenConditions.current = new Set();
+      setSession(s);
+      setEnrolment(s.enrolment_number);
+      setPlan(thePlan);
+      setBaselineFatigue(baseline ? baseline.fatigue_mean : null);
+      const idx = resume.nextStepIndex;
+      setMachine(idx >= 8 ? { stage: 'CVSQ_END', stepIndex: 7 } : { stage: 'READING_TASK', stepIndex: idx });
+      setResuming(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [resume]);
 
   const step = plan[machine.stepIndex];
   const cond = step ? CONDITIONS[step.conditionIndex] : null;
@@ -66,6 +107,9 @@ export default function Experiment() {
       session_id: sid,
       participant_id: d.participantId,
       enrolment_number: enrol,
+      status: 'in_progress',
+      deleted_at: null,
+      display_label: null,
       ambient_lux: d.ambientLux,
       screen_white_luminance_cd_m2: d.whiteLuminance,
       brightness_percent: d.brightnessPercent,
@@ -126,6 +170,8 @@ export default function Experiment() {
       adaptation_ms_before: adaptationBefore,
     });
     conditionStarted.current[machine.stepIndex] = Date.now();
+    // Coarse resume pointer: an interruption during this condition resumes by redoing it.
+    saveResume(session.session_id, machine.stepIndex);
     // Eye-tracking window spans the reading task (begins here, ends at reading complete).
     tracking.beginCondition();
   }, [session, cond, step, conditionId, machine.stepIndex, plan, tracking]);
@@ -203,11 +249,16 @@ export default function Experiment() {
       );
       break;
     case 'CALIBRATION':
-      view = (
-        <Calibration
-          cameraStatus={tracking.status}
-          onDone={async () => { if (tracking.status === 'active') await tracking.calibrate(5000); advance(); }}
+      view = tracking.status === 'active' && session ? (
+        <CalibrationRoutine
+          sessionId={session.session_id}
+          beginGazeCalibration={tracking.beginGazeCalibration}
+          sampleGazeTarget={tracking.sampleGazeTarget}
+          endGazeCalibration={tracking.endGazeCalibration}
+          onDone={advance}
         />
+      ) : (
+        <Calibration cameraStatus={tracking.status} onDone={advance} />
       );
       break;
     case 'BASELINE_FATIGUE':
@@ -326,6 +377,8 @@ export default function Experiment() {
                   condition_duration_sec: (Date.now() - started) / 1000,
                 });
               }
+              // Condition fully complete — advance the resume pointer past it.
+              saveResume(session.session_id, machine.stepIndex + 1);
             }
             advance();
           }}
@@ -343,19 +396,60 @@ export default function Experiment() {
     }
     case 'SESSION_COMPLETE':
       view = <SessionComplete onExport={async () => {
-        if (session) await put('sessions', { ...session, session_end_time: Date.now() });
+        if (session) {
+          await put('sessions', { ...session, status: 'complete', session_end_time: Date.now() });
+          clearResume(session.session_id);
+        }
         tracking.stop();
         advance();
       }} />;
       break;
     case 'EXPORT_DASHBOARD':
-      view = <Dashboard initialSessionId={session?.session_id} />;
+      view = (
+        <div style={{ height: '100%' }}>
+          <Dashboard initialSessionId={session?.session_id} />
+          <button
+            onClick={onExit}
+            className="font-lab text-sm"
+            style={{ position: 'fixed', top: 10, left: 12, zIndex: 50, padding: '6px 12px', borderRadius: 8, border: '1px solid #d8d4cc', background: '#fff', cursor: 'pointer' }}
+          >
+            ← Sessions
+          </button>
+        </div>
+      );
       break;
   }
+
+  if (resuming) {
+    return (
+      <div className="min-h-screen w-full bg-cream font-sans text-[#1a1a2e]" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p className="font-lab text-sm text-[#5a5a7a]">Resuming session…</p>
+      </div>
+    );
+  }
+
+  // Pause control: available during the per-condition loop. Exits to the manager; the session
+  // remains in-progress and can be resumed from the start of the current condition.
+  const canPause = isInLoop(machine.stage) && machine.stage !== 'REACTION_TIME' && !!session;
 
   return (
     <div data-stage={machine.stage} style={{ height: '100%' }}>
       {showProgress && <ExperimentProgress percent={percent} label={machine.stage.replace(/_/g, ' ').toLowerCase()} />}
+      {canPause && (
+        <button
+          onClick={() => {
+            if (session && window.confirm('Pause and exit to the session manager? This condition will be restarted on resume.')) {
+              saveResume(session.session_id, machine.stepIndex);
+              tracking.stop();
+              onExit();
+            }
+          }}
+          className="font-lab text-xs"
+          style={{ position: 'fixed', top: 10, left: 12, zIndex: 45, padding: '5px 10px', borderRadius: 8, border: '1px solid #d8d4cc', background: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
+        >
+          ⏸ Pause
+        </button>
+      )}
       {view}
     </div>
   );

@@ -13,7 +13,7 @@ function makeSession(id: string, participant: string, enrolment: number): Sessio
   return {
     session_id: id,
     participant_id: participant,
-    enrolment_number: enrolment,
+    enrolment_number: enrolment, status: 'complete', deleted_at: null, display_label: null,
     ambient_lux: 350,
     screen_white_luminance_cd_m2: 120,
     brightness_percent: 80,

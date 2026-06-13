@@ -14,6 +14,8 @@ import { CONFIG } from '@/experiment/config';
 import { faceEar, baselineEar, type Point } from './blink';
 import { estimateHeadPose, isOffAxis } from './headPose';
 import { estimateGaze } from './gaze';
+import { fitGazeCalibration, type GazeCalibration, type GazeSample } from './gazeCalibration';
+import { v4 as uuidv4 } from 'uuid';
 import { EyeMetricsAggregator, disabledEyeMetrics } from './aggregator';
 import { put } from '@/storage/db';
 import { now } from '@/lib/timing';
@@ -26,6 +28,12 @@ interface TrackingApi {
   stop: () => void;
   /** Collect calibration EAR samples for ~`ms` and fit the baseline. Resolves to the baseline. */
   calibrate: (ms: number) => Promise<number | null>;
+  /** Begin gaze calibration: start EAR baseline collection and reset gaze samples. */
+  beginGazeCalibration: () => void;
+  /** Sample iris offset for a calibration target for ~`ms` while the participant fixates it. */
+  sampleGazeTarget: (targetId: string, ms: number) => Promise<void>;
+  /** Fit gaze calibration + EAR baseline, persist a CalibrationRecord. Returns whether gaze fit is valid. */
+  endGazeCalibration: (sessionId: string) => Promise<boolean>;
   beginCondition: () => void;
   /** Finalise the current condition and persist an EyeMetricsRecord. */
   endCondition: (conditionId: string, sessionId: string) => Promise<void>;
@@ -43,6 +51,17 @@ export function useTracking(): TrackingApi {
   const baselineEarRef = useRef<number | null>(null);
   const baselineBlinkRef = useRef<number | null>(null);
   const frameCounter = useRef(0);
+  // Gaze calibration state.
+  const gazeCalRef = useRef<GazeCalibration | null>(null);
+  const gazeSamplesRef = useRef<Record<string, GazeSample[]>>({});
+  const gazeCollectingTarget = useRef<string | null>(null);
+
+  const gazeFor = (lm: Point[]) => {
+    const c = gazeCalRef.current;
+    return c
+      ? estimateGaze(lm, c.hThreshold, c.vThreshold, c.h0, c.v0)
+      : estimateGaze(lm);
+  };
 
   const onFrame = useCallback(() => {
     const lm = latestLandmarks.current;
@@ -50,9 +69,14 @@ export function useTracking(): TrackingApi {
       const ear = faceEar(lm);
       if (calibrating.current) calibrating.current.samples.push(ear);
       const agg = aggRef.current;
+      const gazeNow = gazeFor(lm);
+      if (gazeCollectingTarget.current) {
+        const id = gazeCollectingTarget.current;
+        (gazeSamplesRef.current[id] ??= []).push({ h: gazeNow.h, v: gazeNow.v });
+      }
       if (agg) {
         const pose = estimateHeadPose(lm);
-        const gaze = estimateGaze(lm);
+        const gaze = gazeNow;
         agg.ingest({
           t_ms: now(),
           ear,
@@ -156,6 +180,38 @@ export function useTracking(): TrackingApi {
     return base;
   }, [status]);
 
+  const beginGazeCalibration = useCallback(() => {
+    calibrating.current = { samples: [] };
+    gazeSamplesRef.current = {};
+    gazeCalRef.current = null;
+  }, []);
+
+  const sampleGazeTarget = useCallback(async (targetId: string, ms: number): Promise<void> => {
+    gazeCollectingTarget.current = targetId;
+    await new Promise((r) => setTimeout(r, ms));
+    gazeCollectingTarget.current = null;
+  }, []);
+
+  const endGazeCalibration = useCallback(async (sessionId: string): Promise<boolean> => {
+    const earSamples = calibrating.current?.samples ?? [];
+    calibrating.current = null;
+    if (earSamples.length >= 10) baselineEarRef.current = baselineEar(earSamples);
+    const cal = fitGazeCalibration(gazeSamplesRef.current);
+    gazeCalRef.current = cal;
+    const targetsDetected = Object.values(gazeSamplesRef.current).filter((a) => a.length > 0).length;
+    await put('calibration_data', {
+      calibration_id: uuidv4(),
+      session_id: sessionId,
+      is_real_calibration: cal.valid,
+      targets_detected: targetsDetected,
+      targets_total: 9,
+      ear_baseline: baselineEarRef.current,
+      gaze_h_threshold: cal.valid ? cal.hThreshold : null,
+      gaze_v_threshold: cal.valid ? cal.vThreshold : null,
+    });
+    return cal.valid;
+  }, []);
+
   const beginCondition = useCallback(() => {
     aggRef.current = new EyeMetricsAggregator();
   }, []);
@@ -172,7 +228,7 @@ export function useTracking(): TrackingApi {
         cameraActive: true,
         baselineEarValue: baselineEarRef.current,
         earThresholdUsed: baselineEarRef.current != null ? baselineEarRef.current * 0.6 : null,
-        gazeCalibrated: false,
+        gazeCalibrated: gazeCalRef.current?.valid ?? false,
         baselineBlinkRate: baselineBlinkRef.current,
       });
       aggRef.current = null;
@@ -185,5 +241,9 @@ export function useTracking(): TrackingApi {
     baselineBlinkRef.current = rate;
   }, []);
 
-  return { status, start, stop, calibrate, beginCondition, endCondition, setBaselineBlinkRate };
+  return {
+    status, start, stop, calibrate,
+    beginGazeCalibration, sampleGazeTarget, endGazeCalibration,
+    beginCondition, endCondition, setBaselineBlinkRate,
+  };
 }

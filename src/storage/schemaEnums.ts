@@ -2,6 +2,7 @@
 export type { Polarity } from '@/experiment/conditions';
 export type { WcagLevel } from '@/lib/contrast';
 
-/** Current IndexedDB schema version. v1-5 = original; v6 adds the audit refinement fields. */
+/** Current IndexedDB schema version. v1-5 = original; v6 added audit fields; v7 added session
+ *  status + soft-delete (deleted_at) + display_label for the session manager. */
 export const DB_NAME = 'VisualErgonomicsDB';
-export const DB_VERSION = 6;
+export const DB_VERSION = 7;

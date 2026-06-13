@@ -74,6 +74,12 @@ export interface SessionRecord {
   session_id: string;
   participant_id: string;
   enrolment_number: number;
+  /** Lifecycle status for the session manager. */
+  status: 'in_progress' | 'complete';
+  /** Soft-delete tombstone (ms). Non-null = in the recycle bin; auto-purged after 30 days. */
+  deleted_at: number | null;
+  /** Optional researcher-editable display label (rename). Falls back to participant_id. */
+  display_label: string | null;
   ambient_lux: number;
   /** Measured white-screen luminance (cd/m2), entered by researcher; null if not measured. */
   screen_white_luminance_cd_m2: number | null;

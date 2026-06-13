@@ -55,6 +55,9 @@ test('full experiment run writes data and reaches the dashboard', async ({ page 
   const logs: string[] = [];
   page.on('pageerror', (e) => logs.push(`PAGEERROR: ${e.message}`));
   await page.goto('/?e2e=1');
+  // Shell: Landing → Session Manager → New Session → experiment (data-stage appears).
+  await page.getByRole('button', { name: /Enter Research Console/ }).click({ force: true });
+  await page.getByRole('button', { name: /New Session/ }).click({ force: true });
   await page.waitForSelector('[data-stage]', { timeout: 20_000 });
 
   let guard = 0;

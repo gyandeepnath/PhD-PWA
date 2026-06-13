@@ -15,7 +15,7 @@ beforeEach(() => {
 
 async function seed() {
   await put('sessions', {
-    session_id: 'S1', participant_id: 'P001', enrolment_number: 1, ambient_lux: 350,
+    session_id: 'S1', participant_id: 'P001', enrolment_number: 1, status: 'complete', deleted_at: null, display_label: null, ambient_lux: 350,
     screen_white_luminance_cd_m2: 120, brightness_percent: 80, session_start_time: 1700000000000,
     session_end_time: 1700000600000, randomisation_seed: 1, condition_order: [0], preflight_complete: true,
     consent_given: true, consent_time: 1, provenance: prov, device_type: 'Android', browser: 'Chrome', screen_resolution: '2880x1800',

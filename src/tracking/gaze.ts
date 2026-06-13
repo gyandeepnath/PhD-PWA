@@ -42,11 +42,14 @@ export interface GazeResult {
   isCenter: boolean;
 }
 
-/** Normalised iris offset within the eye box, averaged across both eyes. */
+/** Normalised iris offset within the eye box, averaged across both eyes.
+ *  `h0`/`v0` are the fitted neutral bias from calibration (default 0 = uncalibrated). */
 export function estimateGaze(
   lm: Point[],
   hThreshold = DEFAULT_GAZE_THRESHOLD,
   vThreshold = DEFAULT_GAZE_THRESHOLD,
+  h0 = 0,
+  v0 = 0,
 ): GazeResult {
   const irisL = lm[IRIS.left];
   const irisR = lm[IRIS.right];
@@ -63,8 +66,11 @@ export function estimateGaze(
   const vR = ((irisR.y - lm[EYE_BOX.topR].y) / rightBoxH - 0.5) * 2;
   const v = (vL + vR) / 2;
 
-  const col = h < -hThreshold ? 0 : h > hThreshold ? 2 : 1;
-  const row = v < -vThreshold ? 0 : v > vThreshold ? 2 : 1;
+  // Subtract the fitted neutral bias before thresholding.
+  const hc = h - h0;
+  const vc = v - v0;
+  const col = hc < -hThreshold ? 0 : hc > hThreshold ? 2 : 1;
+  const row = vc < -vThreshold ? 0 : vc > vThreshold ? 2 : 1;
   const zone = ZONE_GRID[row][col];
 
   return { h, v, zone, isCenter: zone === 'cc' };
