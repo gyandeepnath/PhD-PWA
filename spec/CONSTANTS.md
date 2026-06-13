@@ -50,7 +50,28 @@ Progress: 4 setup steps + 8×6 = 52 tracked steps.
 | Reading | per-page ~20 s minimum-unlock (rAF) | 120s min/180s max (stale config) | floor, self-paced beyond; record `reading_time_ms`/wpm |
 | Passages | 8 science topics, ~274–292 words, 2 pages | same | decouple from condition |
 | Comprehension | 1×4-option MCQ, RT recorded, 1 s feedback | same | persist record (was a fixed bug) |
-| Visual search | 40 000 ms limit | 60s (doc) / 120s (config) ⚠️ | equalize targets to 8; record `target_count` |
+| Visual search | 40 000 ms limit | 60s (doc) / 120s (config) ⚠️ | use ACTUAL occurrence count (see below); record as covariate |
+
+### Visual-search target counts — bundle bug (fixed)
+The bundle stored a hand-authored `target_count` per passage that does **not** match the actual
+occurrences in the passage text (tokenised: strip non-letters, lowercase, exact match), so the
+original `accuracy_rate = found/target_count` was miscalibrated. Authoritative computed counts:
+
+| Passage | target | stored (wrong) | actual |
+|---|---|---|---|
+| P0 | carbon | 8 | 12 |
+| P1 | ocean | 8 | 7 |
+| P2 | immune | 7 | 6 |
+| P3 | eruption | 6 | 3 |
+| P4 | sleep | 9 | 13 |
+| P5 | forest | 7 | 2 |
+| P6 | plate | 9 | 5 |
+| P7 | light | 10 | 11 |
+
+We use the actual count as `searchTargetCount` (original kept as `originalStoredTargetCount` for
+provenance). Counts are unequal across passages (2–13) but passage↔condition decoupling makes this
+orthogonal to condition (noise, not bias). Rebalancing target words to a tighter 6–11 range is an
+optional follow-up the researcher can opt into.
 | RT (flanker) | 48 trials, Eriksen colour flanker | 48; target red `#C81E1E`, distractors blue/yellow/green | render on fixed `#808080`; report d′ + SE |
 | RT windows | resp ~1500, fix ~400–600, delay ~800–1500, ITI ~400–700 ms ⚠️ | resp 3000, fix 500–1000, delay 1000–3000, ITI 800–1200 ⚠️ | confirm from bundle, make configurable |
 | Adaptation | 20 000 ms `#808080` | same | 60 s same-polarity / 120 s on polarity switch |
