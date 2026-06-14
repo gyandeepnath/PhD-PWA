@@ -82,6 +82,8 @@ export interface SessionRecord {
   /** Optional researcher-editable display label (rename). Falls back to participant_id. */
   display_label: string | null;
   ambient_lux: number;
+  /** Ambient illumination category (study IV) selected by the researcher; null if not set. */
+  ambient_illumination_level: 'low' | 'moderate' | 'high' | null;
   /** Measured white-screen luminance (cd/m2), entered by researcher; null if not measured. */
   screen_white_luminance_cd_m2: number | null;
   /** Locked display brightness percentage, null if unknown. */
@@ -245,6 +247,10 @@ export interface RtSummaryRecord {
   mean_rt_congruent_ms: number | null;
   mean_rt_incongruent_ms: number | null;
   flanker_congruency_effect_ms: number | null;
+  /** Overall error rate = (misses + false alarms) / total trials. */
+  error_rate: number;
+  /** RT coefficient of variation (SD/mean) — fatigue often shows as inconsistency before slowing. */
+  rt_cv: number | null;
   d_prime: number;
   /** Standard error of d' (flag if > 0.3 — small-N instability). */
   d_prime_se: number;

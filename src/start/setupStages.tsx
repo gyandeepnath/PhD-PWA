@@ -16,12 +16,14 @@ const btn = 'rounded-xl px-8 py-3 font-lab text-sm text-white transition active:
 export interface SessionInitData {
   participantId: string;
   ambientLux: number;
+  illuminationLevel: 'low' | 'moderate' | 'high' | null;
   whiteLuminance: number | null;
   brightnessPercent: number | null;
 }
 export function SessionInit({ onSubmit }: { onSubmit: (d: SessionInitData) => void }) {
   const [pid, setPid] = useState('');
   const [lux, setLux] = useState('');
+  const [level, setLevel] = useState<'low' | 'moderate' | 'high' | ''>('');
   const [lum, setLum] = useState('');
   const [bright, setBright] = useState('');
   const [err, setErr] = useState('');
@@ -41,6 +43,7 @@ export function SessionInit({ onSubmit }: { onSubmit: (d: SessionInitData) => vo
           <Field label="Ambient illumination (lux, 0–200000) — measure with a lux meter">
             <input data-testid="lux" className="vl-input" inputMode="numeric" value={lux} onChange={(e) => setLux(e.target.value)} placeholder="350" />
           </Field>
+          <Pick label="Ambient illumination level (study condition)" value={level} set={(v) => setLevel(v as 'low' | 'moderate' | 'high')} opts={['low', 'moderate', 'high']} />
           <Field label="Measured white-screen luminance (cd/m², optional)">
             <input className="vl-input" inputMode="numeric" value={lum} onChange={(e) => setLum(e.target.value)} placeholder="120" />
           </Field>
@@ -58,6 +61,7 @@ export function SessionInit({ onSubmit }: { onSubmit: (d: SessionInitData) => vo
             onSubmit({
               participantId: pid,
               ambientLux: luxNum,
+              illuminationLevel: level === '' ? null : level,
               whiteLuminance: lum === '' ? null : Number(lum),
               brightnessPercent: bright === '' ? null : Number(bright),
             });

@@ -35,17 +35,17 @@ export const SETUP_STEPS = SETUP_ORDER.length - 1;
 
 /**
  * Per-condition sub-stages in order; the last (ADAPTATION) is a rest, not a measured step.
- * Subjective ratings (display perception, post-condition fatigue) come AFTER all performance tasks
- * so they reflect the participant's full exposure to the condition — the original build rated them
- * mid-condition (before search/RT), which did not.
+ * Order follows the protocol: reading is the exposure task, so the preference rating and the
+ * fatigue questionnaire are collected IMMEDIATELY after reading (perception fresh; reading is the
+ * strongest fatigue inducer), then the attention/cognitive tasks (search, reaction) follow.
  */
 export const LOOP_ORDER: Stage[] = [
   'READING_TASK',
   'COMPREHENSION',
-  'VISUAL_SEARCH',
-  'REACTION_TIME',
   'DISPLAY_PERCEPTION',
   'POST_FATIGUE',
+  'VISUAL_SEARCH',
+  'REACTION_TIME',
   'ADAPTATION',
 ];
 
@@ -78,8 +78,8 @@ export function nextState({ stage, stepIndex }: MachineState): MachineState {
   // Condition loop.
   const loopIdx = LOOP_ORDER.indexOf(stage);
   if (loopIdx >= 0) {
-    // POST_FATIGUE is the final measured sub-stage of a condition.
-    if (stage === 'POST_FATIGUE') {
+    // REACTION_TIME is the final measured sub-stage of a condition.
+    if (stage === 'REACTION_TIME') {
       return stepIndex < N_CONDITIONS - 1
         ? { stage: 'ADAPTATION', stepIndex }
         : { stage: 'CVSQ_END', stepIndex };

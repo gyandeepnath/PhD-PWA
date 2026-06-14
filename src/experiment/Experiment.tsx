@@ -125,6 +125,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       deleted_at: null,
       display_label: null,
       ambient_lux: d.ambientLux,
+      ambient_illumination_level: d.illuminationLevel,
       screen_white_luminance_cd_m2: d.whiteLuminance,
       brightness_percent: d.brightnessPercent,
       session_start_time: Date.now(),
@@ -361,24 +362,10 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           baselineMean={baselineFatigue ?? undefined}
           accent={cond?.polarity === 'negative' ? '#4f8ef7' : '#1a1a2e'}
           onComplete={async (r) => {
-            if (session) {
-              await put('fatigue_scores', {
-                fatigue_id: uuidv4(), session_id: session.session_id, condition_id: conditionId,
-                stage: 'post_condition', ...r.items, fatigue_mean: r.mean, touched: r.touched, all_touched: true,
-              });
-              // POST_FATIGUE is the final task of the condition — mark it complete and advance the
-              // resume pointer past it (an interruption now resumes at the next condition).
-              const existing = await get('conditions', conditionId);
-              if (existing) {
-                const started = conditionStarted.current[machine.stepIndex] ?? existing.started_at;
-                await put('conditions', {
-                  ...existing,
-                  completed_at: Date.now(),
-                  condition_duration_sec: (Date.now() - started) / 1000,
-                });
-              }
-              saveResume(session.session_id, machine.stepIndex + 1);
-            }
+            if (session) await put('fatigue_scores', {
+              fatigue_id: uuidv4(), session_id: session.session_id, condition_id: conditionId,
+              stage: 'post_condition', ...r.items, fatigue_mean: r.mean, touched: r.touched, all_touched: true,
+            });
             advance();
           }}
         />
@@ -414,6 +401,18 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 });
               }
               await put('rt_summaries', { condition_id: conditionId, session_id: session.session_id, ...res.summary });
+              // Reaction time is the final task of the condition — mark it complete and advance the
+              // resume pointer past it (an interruption now resumes at the next condition).
+              const existing = await get('conditions', conditionId);
+              if (existing) {
+                const started = conditionStarted.current[machine.stepIndex] ?? existing.started_at;
+                await put('conditions', {
+                  ...existing,
+                  completed_at: Date.now(),
+                  condition_duration_sec: (Date.now() - started) / 1000,
+                });
+              }
+              saveResume(session.session_id, machine.stepIndex + 1);
             }
             advance();
           }}

@@ -5,6 +5,7 @@
  */
 import type { SessionBundle } from './gather';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
+import { PASSAGES } from '@/experiment/passages';
 
 export interface ExportFile {
   filename: string;
@@ -56,10 +57,11 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'enrolment_number', 'ambient_lux', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'preflight_complete'],
+    ['participant_id', 'experiment_date', 'enrolment_number', 'ambient_lux', 'ambient_illumination_level', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'preflight_complete'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
-      ambient_lux: session.ambient_lux, screen_white_luminance_cd_m2: session.screen_white_luminance_cd_m2,
+      ambient_lux: session.ambient_lux, ambient_illumination_level: session.ambient_illumination_level,
+      screen_white_luminance_cd_m2: session.screen_white_luminance_cd_m2,
       brightness_percent: session.brightness_percent,
       session_duration_min: session.session_end_time ? ((session.session_end_time - session.session_start_time) / 60000).toFixed(2) : '',
       app_version: session.provenance.app_version, git_hash: session.provenance.git_hash,
@@ -68,10 +70,14 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
       consent_given: session.consent_given, preflight_complete: session.preflight_complete,
     }]);
 
-  // 02 — conditions
+  // 02 — conditions (+ reading speed in words/min, derived from passage length & reading time)
   csv('02_conditions.csv',
-    ['participant_id', 'condition_id', 'session_position', 'condition_label', 'polarity', 'background_color', 'text_color', 'color_name', 'passage_id', 'wcag_contrast_ratio', 'wcag_level', 'michelson_contrast', 'below_wcag_aa', 'adaptation_ms_before', 'reading_time_ms', 'condition_duration_sec'],
-    bundle.conditions.map((c) => ({ participant_id: pid, ...c })));
+    ['participant_id', 'condition_id', 'session_position', 'condition_label', 'polarity', 'background_color', 'text_color', 'color_name', 'passage_id', 'wcag_contrast_ratio', 'wcag_level', 'michelson_contrast', 'below_wcag_aa', 'adaptation_ms_before', 'reading_time_ms', 'reading_speed_wpm', 'condition_duration_sec'],
+    bundle.conditions.map((c) => {
+      const words = PASSAGES[c.passage_id]?.wordCount ?? null;
+      const wpm = words != null && c.reading_time_ms ? Math.round(words / (c.reading_time_ms / 60000)) : '';
+      return { participant_id: pid, ...c, reading_speed_wpm: wpm };
+    }));
 
   // 03 — fatigue
   csv('03_fatigue_scores.csv',
@@ -116,7 +122,7 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 09 — rt summary
   csv('09_rt_summary.csv',
-    ['participant_id', 'condition_id', 'total_trials', 'signal_trials', 'hits', 'false_alarms', 'misses', 'correct_rejections', 'hit_rate', 'false_alarm_rate', 'mean_rt_hits_ms', 'median_rt_hits_ms', 'rt_sd_ms', 'mean_rt_congruent_ms', 'mean_rt_incongruent_ms', 'flanker_congruency_effect_ms', 'd_prime', 'd_prime_se', 'd_prime_unstable'],
+    ['participant_id', 'condition_id', 'total_trials', 'signal_trials', 'hits', 'false_alarms', 'misses', 'correct_rejections', 'hit_rate', 'false_alarm_rate', 'error_rate', 'mean_rt_hits_ms', 'median_rt_hits_ms', 'rt_sd_ms', 'rt_cv', 'mean_rt_congruent_ms', 'mean_rt_incongruent_ms', 'flanker_congruency_effect_ms', 'd_prime', 'd_prime_se', 'd_prime_unstable'],
     bundle.rtSummaries.map((r) => ({ participant_id: pid, ...r })));
 
   // 10 — wide one-row-per-condition summary (joined)

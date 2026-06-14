@@ -41,6 +41,8 @@ export interface RtResult {
     mean_rt_congruent_ms: number | null;
     mean_rt_incongruent_ms: number | null;
     flanker_congruency_effect_ms: number | null;
+    error_rate: number;
+    rt_cv: number | null;
     d_prime: number;
     d_prime_se: number;
     d_prime_unstable: boolean;
@@ -96,6 +98,8 @@ export function ReactionTimeTask({ onComplete }: Props) {
   const respondedRef = useRef<number | null>(null);
   const falseStartRef = useRef(false);
   const current = useRef<Trial | null>(null);
+  // Random screen position for the stimulus cluster each trial — prevents motor/spatial anticipation.
+  const clusterPos = useRef<{ x: number; y: number }>({ x: 50, y: 50 });
   const [, forceRender] = useState(0);
 
   const setPhaseSync = (p: Phase) => {
@@ -128,6 +132,8 @@ export function ReactionTimeTask({ onComplete }: Props) {
       setPhaseSync('delay');
       await rafDelay(randInt(rng, CONFIG.RT_DELAY_MIN_MS, CONFIG.RT_DELAY_MAX_MS));
 
+      // Place the cluster at a random location (keeps it fully on-screen with a margin).
+      clusterPos.current = { x: randInt(rng, 25, 75), y: randInt(rng, 28, 72) };
       onsetRef.current = now();
       setPhaseSync('stimulus');
       forceRender((n) => n + 1);
@@ -167,6 +173,10 @@ export function ReactionTimeTask({ onComplete }: Props) {
     const congHits = hits.filter((r) => r.is_congruent).map((r) => r.response_time_ms!);
     const incHits = hits.filter((r) => !r.is_congruent).map((r) => r.response_time_ms!);
     const sdt = computeSdt({ hits: hits.length, misses, falseAlarms: fa, correctRejections: cr });
+    const meanHit = hitRts.length ? mean(hitRts) : null;
+    const sdHit = hitRts.length ? stdSample(hitRts) : null;
+    const errorRate = recs.length ? (misses + fa) / recs.length : 0;
+    const rtCv = meanHit && sdHit != null && meanHit > 0 ? sdHit / meanHit : null;
 
     onComplete({
       trials: recs,
@@ -185,6 +195,8 @@ export function ReactionTimeTask({ onComplete }: Props) {
         mean_rt_congruent_ms: congHits.length ? mean(congHits) : null,
         mean_rt_incongruent_ms: incHits.length ? mean(incHits) : null,
         flanker_congruency_effect_ms: flankerCongruencyEffect(congHits, incHits),
+        error_rate: errorRate,
+        rt_cv: rtCv,
         d_prime: sdt.d_prime,
         d_prime_se: sdt.d_prime_se,
         d_prime_unstable: sdt.d_prime_unstable,
@@ -238,7 +250,7 @@ export function ReactionTimeTask({ onComplete }: Props) {
       )}
 
       {showStim && (
-        <div style={{ position: 'relative', width: gap * 2 + dot, height: gap * 2 + dot }}>
+        <div style={{ position: 'fixed', left: `${clusterPos.current.x}%`, top: `${clusterPos.current.y}%`, transform: 'translate(-50%, -50%)', width: gap * 2 + dot, height: gap * 2 + dot }}>
           {[
             { x: gap, y: gap, c: t!.centerColor },
             { x: 0, y: gap, c: t!.flankerColor },

@@ -139,7 +139,7 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
   return {
     session: {
       session_id: sid, participant_id: 'PF', enrolment_number: 1, status: 'complete', deleted_at: null,
-      display_label: null, ambient_lux: 350, screen_white_luminance_cd_m2: null, brightness_percent: null,
+      display_label: null, ambient_lux: 350, ambient_illumination_level: null, screen_white_luminance_cd_m2: null, brightness_percent: null,
       session_start_time: 1, session_end_time: 2, randomisation_seed: 1,
       condition_order: conditions.map((c) => c.session_position), preflight_complete: true,
       consent_given: true, consent_time: 1, provenance: PROV, device_type: 'X', browser: 'Y', screen_resolution: '1x1',
@@ -173,6 +173,7 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
       return {
         condition_id: c.condition_id, session_id: sid, total_trials: 48, signal_trials: 24, hits: 0,
         false_alarms: 0, misses: 0, correct_rejections: 0, hit_rate: r.hit_rate, false_alarm_rate: r.false_alarm_rate,
+        error_rate: rng(), rt_cv: rng() < 0.5 ? null : rng(),
         mean_rt_hits_ms: rng() < 0.5 ? null : randInt(rng, 200, 900), median_rt_hits_ms: null, rt_sd_ms: null,
         mean_rt_congruent_ms: null, mean_rt_incongruent_ms: null, flanker_congruency_effect_ms: null,
         d_prime: r.d_prime, d_prime_se: r.d_prime_se, d_prime_unstable: r.d_prime_unstable,

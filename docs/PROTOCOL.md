@@ -29,13 +29,17 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
   → CALIBRATION         9-point gaze calibration + EAR baseline (camera path) / positioning check
   → CVSQ_BASELINE       validated CVS-Q (16 items)
   → BASELINE_FATIGUE    5-item VAS baseline
+  → INSTRUCTIONS        participant overview of the per-condition tasks
   → [×8 conditions]
-        READING_TASK        per-page minimum dwell, self-paced; eye-tracking window
+        READING_TASK        intro → passage (self-paced beyond a per-page floor); exposure +
+                            eye-tracking window; reading time → words/min recorded
         → COMPREHENSION     1×4-option MCQ (accuracy + RT)
-        → VISUAL_SEARCH     tap every target word, 40 s limit
-        → REACTION_TIME     Eriksen colour-flanker go/no-go, neutral-grey background
-        → DISPLAY_PERCEPTION comfort + clarity (rated AFTER the performance tasks)
-        → POST_FATIGUE       5-item VAS (rated AFTER all tasks → reflects full exposure)
+        → DISPLAY_PERCEPTION comfort + clarity, rated IMMEDIATELY after reading (perception fresh)
+        → POST_FATIGUE       5-item VAS, immediately after the strongest fatigue inducer (reading)
+        → VISUAL_SEARCH     intro → tap every target word, 40 s limit (selective attention)
+        → REACTION_TIME     colour go/no-go flanker at a RANDOM screen location each trial
+                            (prevents motor/spatial anticipation); reports RT, median, SD, CV,
+                            error rate, FCE, d′
         → ADAPTATION         60 s neutral grey (120 s when polarity switches)
   → CVSQ_END            validated CVS-Q again (Δ from baseline = primary validated fatigue outcome)
   → SESSION_COMPLETE    thank-you; session marked complete
@@ -52,7 +56,7 @@ Reviewing the sequence as a PhD data-collection protocol surfaced these logic fl
 |---|---|---|
 | 1 | `consent_given` was written **true at session creation**, before the participant consented. | Consent is now recorded at the CONSENT stage (`consent_given:false` until then). |
 | 2 | Colour-vision screening ran **before** the pre-flight checklist that disables night-shift; a blue-light filter invalidates red-green plates. | PREFLIGHT now precedes COLOR_VISION. |
-| 3 | "Post-condition" fatigue/perception were rated **mid-condition** (before search & RT). | DISPLAY_PERCEPTION + POST_FATIGUE moved to the **end** of each condition. |
+| 3 | Order of the subjective ratings. | Per the author's framework (reading is the exposure + strongest fatigue inducer; perception must be captured fresh), the preference rating and fatigue VAS are collected **immediately after reading**, then search and reaction follow. (An interim build had moved them to the end; reverted to match the design.) |
 | 4 | Rapid double-tap could create **duplicate sessions** / **skip a stage**. | Re-entry guard on session creation + an `advance()` transition lock; scales/screening guard double-submit. |
 | 5 | Interruption mid-session lost progress. | Condition-level resume pointer; an interrupted condition is **restarted** (not stitched) for data integrity. |
 | 6 | Stale local session state reverted `preflight_complete` on the final write. | Local session state is refreshed after each session update. |
