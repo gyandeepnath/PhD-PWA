@@ -29,7 +29,7 @@ import { IshiharaTest } from '@/screening/IshiharaTest';
 import { Cvsq } from '@/scales/Cvsq';
 import {
   SessionInit, ParticipantProfile, CameraSetup, Calibration, AdaptationScreen, SessionComplete,
-  Consent, Preflight, type SessionInitData, type ProfileData,
+  Consent, Preflight, Instructions, type SessionInitData, type ProfileData,
 } from '@/start/setupStages';
 import { CalibrationRoutine } from '@/start/CalibrationRoutine';
 
@@ -301,6 +301,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           }}
         />
       );
+      break;
+    case 'INSTRUCTIONS':
+      view = <Instructions onContinue={advance} />;
       break;
     case 'READING_TASK':
       if (cond && passage) {

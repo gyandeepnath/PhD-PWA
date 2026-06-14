@@ -56,6 +56,9 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
 
   return (
     <div className="min-h-screen w-full p-[6%] font-sans animate-fade-in" style={{ background, color: text }}>
+      <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.55, marginBottom: 14 }}>
+        Task 2 of 4 · Comprehension — choose the best answer, then submit
+      </p>
       <h2 style={{ fontSize: 22, fontFamily: 'Roboto', lineHeight: 1.4 }}>{q.text}</h2>
       <div className="mt-8 space-y-3" style={{ maxWidth: 760 }}>
         {q.options.map((opt, i) => (

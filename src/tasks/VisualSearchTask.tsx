@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';
 import { now } from '@/lib/timing';
+import { TaskIntro } from './TaskIntro';
 import type { Passage } from '@/experiment/passages';
 
 export interface SearchResult {
@@ -47,6 +48,7 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
     });
   }, [passage, target]);
 
+  const [started, setStarted] = useState(false);
   const [foundIdx, setFoundIdx] = useState<Set<number>>(new Set());
   const start = useRef(now());
   const clickTimes = useRef<number[]>([]);
@@ -77,10 +79,31 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
   };
 
   useEffect(() => {
+    if (!started) return;
+    start.current = now();
     const id = setTimeout(() => finish('time_limit'), CONFIG.VS_TIME_LIMIT_MS);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [started]);
+
+  if (!started) {
+    return (
+      <TaskIntro
+        eyebrow="Task 3 of 4 · Visual search"
+        title="Find the target word"
+        lines={[
+          `Find and tap every occurrence of the word “${passage.searchTarget}” in the text.`,
+          'Be as fast and accurate as you can. Tapping a wrong word counts against you.',
+          `You have ${Math.round(CONFIG.VS_TIME_LIMIT_MS / 1000)} seconds; tap “Done searching” when finished.`,
+          'Tap “Begin search” when you are ready.',
+        ]}
+        buttonLabel="Begin search →"
+        background={background}
+        text={text}
+        onBegin={() => setStarted(true)}
+      />
+    );
+  }
 
   const tap = (tok: Token) => {
     if (done.current || !tok.isWord) return;

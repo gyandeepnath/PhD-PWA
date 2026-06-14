@@ -107,10 +107,22 @@ export async function handleStage(page: Page, stage: string): Promise<boolean> {
       await click(page, /Continue/);
       await waitStageChange(page, stage);
       break;
-    case 'READING_TASK':
-      await click(page, /Next page|Finished reading/);
-      await page.waitForTimeout(80);
+    case 'INSTRUCTIONS':
+      await click(page, /start the first display/);
+      await waitStageChange(page, stage);
       break;
+    case 'READING_TASK': {
+      // Intro screen first, then the reading footer (button appears after the min-dwell countdown).
+      const begin = page.getByRole('button', { name: /Begin reading/ });
+      if (await begin.count()) {
+        await begin.first().click({ force: true });
+        await page.waitForTimeout(60);
+      } else {
+        await click(page, /Next page|finished reading/i);
+        await page.waitForTimeout(80);
+      }
+      break;
+    }
     case 'COMPREHENSION':
       await page.getByTestId('mcq-option').first().click({ force: true });
       await click(page, /Submit answer/);
@@ -121,10 +133,17 @@ export async function handleStage(page: Page, stage: string): Promise<boolean> {
       await click(page, /Continue/);
       await waitStageChange(page, stage);
       break;
-    case 'VISUAL_SEARCH':
-      await click(page, /Done searching/);
-      await waitStageChange(page, stage);
+    case 'VISUAL_SEARCH': {
+      const beginSearch = page.getByRole('button', { name: /Begin search/ });
+      if (await beginSearch.count()) {
+        await beginSearch.first().click({ force: true });
+        await page.waitForTimeout(60);
+      } else {
+        await click(page, /Done searching/);
+        await waitStageChange(page, stage);
+      }
       break;
+    }
     case 'REACTION_TIME':
       await click(page, /Start/);
       await waitStageChange(page, stage);

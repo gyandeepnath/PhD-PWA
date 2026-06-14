@@ -21,14 +21,14 @@ function walk(): { stage: Stage; stepIndex: number }[] {
 }
 
 describe('stage machine', () => {
-  it('total tracked steps is 56 (8 setup + 8×6)', () => {
-    expect(TOTAL_TRACKED_STEPS).toBe(56);
+  it('total tracked steps is 57 (9 setup + 8×6)', () => {
+    expect(TOTAL_TRACKED_STEPS).toBe(57);
   });
 
   it('runs the full setup chain then 8 condition loops then completion + end CVS-Q', () => {
     const visited = walk();
     const stages = visited.map((v) => v.stage);
-    expect(stages.slice(0, 9)).toEqual([
+    expect(stages.slice(0, 10)).toEqual([
       'SESSION_INIT',
       'CONSENT',
       'PARTICIPANT_PROFILE',
@@ -38,6 +38,7 @@ describe('stage machine', () => {
       'CALIBRATION',
       'CVSQ_BASELINE',
       'BASELINE_FATIGUE',
+      'INSTRUCTIONS',
     ]);
     expect(stages[stages.length - 1]).toBe('EXPORT_DASHBOARD');
     expect(stages[stages.length - 2]).toBe('SESSION_COMPLETE');

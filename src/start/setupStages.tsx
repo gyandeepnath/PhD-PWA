@@ -124,26 +124,107 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
   );
 }
 
-// ---- CAMERA SETUP ----
+// ---- CAMERA SETUP (with live preview) ----
 export function CameraSetup({ onAllow, onSkip }: { onAllow: () => void; onSkip: () => void }) {
+  const [step, setStep] = useState<'notice' | 'preview' | 'denied'>('notice');
+  const [errMsg, setErrMsg] = useState('');
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stopPreview = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  };
+  useEffect(() => () => stopPreview(), []);
+
+  const requestCamera = async () => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setErrMsg('No camera API is available on this device/browser.');
+      setStep('denied');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, frameRate: 30 } });
+      streamRef.current = stream;
+      setStep('preview');
+      // Attach after the <video> mounts.
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          void videoRef.current.play();
+        }
+      }, 30);
+    } catch (e) {
+      const name = (e as { name?: string })?.name ?? '';
+      setErrMsg(name === 'NotAllowedError' || name === 'PermissionDeniedError'
+        ? 'Camera permission was denied. You can retry, or continue without the camera.'
+        : 'The camera could not be started. You can continue without it.');
+      setStep('denied');
+    }
+  };
+
   return (
     <div className={shell} style={{ position: 'relative' }}>
       <WavyBackground opacity={0.05} />
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: 560 }}>
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: 620 }}>
         <h1 className="font-serif text-4xl font-light">Camera setup</h1>
-        <div className="mt-4 rounded-xl border border-[#cdd8f0] bg-[#eef3ff] p-4 font-lab text-sm">
-          <strong>Privacy:</strong> no video or images are recorded. The camera estimates blink rate,
-          head pose and gaze zone only — and only those metrics are saved.
-        </div>
-        <p className="mt-4 font-lab text-sm text-[#5a5a7a]">
-          Sit facing the screen with your face clearly visible and well-lit. Avoid backlighting.
-        </p>
-        <div className="mt-6" style={{ display: 'flex', gap: 12 }}>
-          <button className={btn} style={{ background: '#1a1a2e' }} onClick={onAllow}>Allow camera access →</button>
-          <button className="rounded-xl border border-[#d8d4cc] px-8 py-3 font-lab text-sm text-[#5a5a7a]" onClick={onSkip}>
-            Continue without camera
-          </button>
-        </div>
+
+        {step === 'notice' && (
+          <>
+            <div className="mt-4 rounded-xl border border-[#cdd8f0] bg-[#eef3ff] p-4 font-lab text-sm">
+              <strong>Privacy:</strong> no video or images are recorded or stored. The camera only
+              estimates blink rate, head position and gaze zone — and only those numbers are saved.
+            </div>
+            <p className="mt-4 font-lab text-sm text-[#5a5a7a]">
+              Sit directly facing the screen, ~50–60 cm away, with your face clearly visible and
+              well-lit. Avoid strong light behind you. The browser will ask for camera permission —
+              please tap “Allow”.
+            </p>
+            <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <button className={btn} style={{ background: '#1a1a2e' }} onClick={requestCamera}>Enable camera →</button>
+              <button className="rounded-xl border border-[#d8d4cc] px-8 py-3 font-lab text-sm text-[#5a5a7a]" onClick={onSkip}>
+                Continue without camera
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 'preview' && (
+          <>
+            <p className="mt-3 font-lab text-sm text-[#5a5a7a]">
+              Check the preview: your whole face should be centred, in frame, and well-lit.
+            </p>
+            <div style={{ marginTop: 12, borderRadius: 16, overflow: 'hidden', background: '#000', width: 'min(480px, 70vw)', aspectRatio: '4 / 3', position: 'relative' }}>
+              <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
+              <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.4)', borderRadius: 20, padding: '4px 10px' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c97a' }} />
+                <span style={{ color: '#fff', fontFamily: '"DM Mono", monospace', fontSize: 11 }}>Camera active</span>
+              </div>
+            </div>
+            <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <button className={btn} style={{ background: '#1a1a2e' }} onClick={() => { stopPreview(); onAllow(); }}>
+                My face is centred — continue →
+              </button>
+              <button className="rounded-xl border border-[#d8d4cc] px-8 py-3 font-lab text-sm text-[#5a5a7a]" onClick={() => { stopPreview(); onSkip(); }}>
+                Continue without camera
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 'denied' && (
+          <>
+            <div className="mt-4 rounded-xl border border-[#f5a62366] bg-[#fff8ec] p-4 font-lab text-sm" style={{ color: '#8a6d2f' }}>
+              {errMsg}
+            </div>
+            <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <button className={btn} style={{ background: '#1a1a2e' }} onClick={() => { setErrMsg(''); setStep('notice'); }}>Retry</button>
+              <button className="rounded-xl border border-[#d8d4cc] px-8 py-3 font-lab text-sm text-[#5a5a7a]" onClick={onSkip}>
+                Continue without camera
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -201,6 +282,39 @@ export function AdaptationScreen({ durationMs, nextLabel, onDone }: { durationMs
         Rest your eyes · {Math.ceil((durationMs * (1 - progress)) / 1000)}s
       </p>
       <p style={{ marginTop: 6, fontFamily: '"DM Mono", monospace', fontSize: 12, opacity: 0.6 }}>{nextLabel}</p>
+    </div>
+  );
+}
+
+// ---- INSTRUCTIONS (participant overview, shown once before the conditions) ----
+export function Instructions({ onContinue }: { onContinue: () => void }) {
+  return (
+    <div className={shell} style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <WavyBackground opacity={0.05} />
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: 640 }}>
+        <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">Before you begin</p>
+        <h1 className="mt-2 font-serif text-4xl font-light">What you’ll be doing</h1>
+        <p className="mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]">
+          You’ll see <strong>8 different screen displays</strong> (different background and text
+          colours). For <strong>each</strong> display you’ll complete the same four short tasks, then
+          two quick ratings:
+        </p>
+        <ol className="mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]" style={{ paddingLeft: 18, listStyle: 'decimal' }}>
+          <li><strong>Read</strong> a short passage.</li>
+          <li>Answer <strong>one question</strong> about it.</li>
+          <li><strong>Find &amp; tap</strong> every occurrence of a target word, as fast as you can.</li>
+          <li><strong>Tap</strong> when a centre dot turns the target colour (a quick reaction game).</li>
+          <li>Rate the display’s <strong>comfort &amp; clarity</strong>, and how your <strong>eyes feel</strong>.</li>
+        </ol>
+        <p className="mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]">
+          Between displays there’s a short rest with a grey screen. Each task shows its own
+          instructions and a “Begin” button, so just follow the prompts. The whole session takes
+          about <strong>60–90 minutes</strong>. You may tell the researcher if you need to stop.
+        </p>
+        <button className={btn} style={{ marginTop: 22, background: '#1a1a2e' }} onClick={onContinue}>
+          I understand — start the first display →
+        </button>
+      </div>
     </div>
   );
 }

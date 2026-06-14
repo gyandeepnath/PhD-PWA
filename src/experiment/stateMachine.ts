@@ -26,6 +26,8 @@ export const SETUP_ORDER: Stage[] = [
   'CALIBRATION',
   'CVSQ_BASELINE',
   'BASELINE_FATIGUE',
+  // Participant-facing overview of what the 8 condition-blocks involve, shown once before the loop.
+  'INSTRUCTIONS',
 ];
 
 /** Tracked setup steps (all except SESSION_INIT). */
@@ -69,7 +71,7 @@ export function nextState({ stage, stepIndex }: MachineState): MachineState {
   if (setupIdx >= 0 && setupIdx < SETUP_ORDER.length - 1) {
     return { stage: SETUP_ORDER[setupIdx + 1], stepIndex: 0 };
   }
-  if (stage === 'BASELINE_FATIGUE') {
+  if (stage === 'INSTRUCTIONS') {
     return { stage: 'READING_TASK', stepIndex: 0 };
   }
 
