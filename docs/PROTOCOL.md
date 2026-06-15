@@ -37,9 +37,10 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
         → DISPLAY_PERCEPTION comfort + clarity, rated IMMEDIATELY after reading (perception fresh)
         → POST_FATIGUE       5-item VAS, immediately after the strongest fatigue inducer (reading)
         → VISUAL_SEARCH     intro → tap every target word, 40 s limit (selective attention)
-        → REACTION_TIME     colour go/no-go flanker at a RANDOM screen location each trial
-                            (prevents motor/spatial anticipation); reports RT, median, SD, CV,
-                            error rate, FCE, d′
+        → REACTION_TIME     pure colour go/no-go (one dot at a RANDOM screen location each trial;
+                            respond only to the target colour) — reports RT mean/median/SD/CV,
+                            omission & commission errors, d′. (An Eriksen-flanker variant is
+                            available behind CONFIG.RT_USE_FLANKERS for an optional congruency DV.)
         → ADAPTATION         60 s neutral grey (120 s when polarity switches)
   → CVSQ_END            validated CVS-Q again (Δ from baseline = primary validated fatigue outcome)
   → SESSION_COMPLETE    thank-you; session marked complete

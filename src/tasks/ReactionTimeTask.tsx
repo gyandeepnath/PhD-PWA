@@ -59,19 +59,32 @@ interface Trial {
 }
 
 function buildTrials(): Trial[] {
-  const { RT_TARGET_COLOR: TARGET, RT_DISTRACTOR_COLORS: DIST } = CONFIG;
+  const { RT_TARGET_COLOR: TARGET, RT_DISTRACTOR_COLORS: DIST, RT_TRIALS_PER_CONDITION: N } = CONFIG;
   const pick = () => DIST[Math.floor(Math.random() * DIST.length)];
   const trials: Trial[] = [];
-  const perCell = CONFIG.RT_TRIALS_PER_CONDITION / 4;
-  for (let i = 0; i < perCell; i++) {
-    trials.push({ signal: true, congruent: true, centerColor: TARGET, flankerColor: TARGET });
-    trials.push({ signal: true, congruent: false, centerColor: TARGET, flankerColor: pick() });
-    const nc = pick();
-    trials.push({ signal: false, congruent: true, centerColor: nc, flankerColor: nc });
-    let nf = pick();
-    while (nf === nc) nf = pick();
-    trials.push({ signal: false, congruent: false, centerColor: nc, flankerColor: nf });
+
+  if (CONFIG.RT_USE_FLANKERS) {
+    // Eriksen colour-flanker variant (off by default): 4 balanced cells.
+    const perCell = N / 4;
+    for (let i = 0; i < perCell; i++) {
+      trials.push({ signal: true, congruent: true, centerColor: TARGET, flankerColor: TARGET });
+      trials.push({ signal: true, congruent: false, centerColor: TARGET, flankerColor: pick() });
+      const nc = pick();
+      trials.push({ signal: false, congruent: true, centerColor: nc, flankerColor: nc });
+      let nf = pick();
+      while (nf === nc) nf = pick();
+      trials.push({ signal: false, congruent: false, centerColor: nc, flankerColor: nf });
+    }
+  } else {
+    // Pure colour go/no-go (default): a single dot; respond only when it is the target colour.
+    const nGo = Math.round(N * CONFIG.RT_GO_RATE);
+    for (let i = 0; i < N; i++) {
+      const go = i < nGo;
+      const c = go ? TARGET : pick();
+      trials.push({ signal: go, congruent: true, centerColor: c, flankerColor: c });
+    }
   }
+
   // Fisher-Yates shuffle.
   for (let i = trials.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -227,11 +240,16 @@ export function ReactionTimeTask({ onComplete }: Props) {
     >
       {phase === 'instruction' && (
         <div style={{ textAlign: 'center', color: '#fff', fontFamily: '"DM Mono", monospace', maxWidth: 520, padding: 24 }}>
-          <h2 style={{ fontSize: 24, marginBottom: 16 }}>Reaction task</h2>
+          <h2 style={{ fontSize: 24, marginBottom: 16 }}>Task 4 of 4 · Reaction</h2>
           <p style={{ fontSize: 16, lineHeight: 1.6, marginBottom: 24 }}>
-            Five dots will appear each trial. Tap anywhere as fast as you can ONLY when the centre
-            dot is <span style={{ color: CONFIG.RT_TARGET_COLOR, fontWeight: 700 }}>red</span>. Do not
-            tap for any other colour.
+            {CONFIG.RT_USE_FLANKERS ? (
+              <>Five dots will appear. Tap anywhere as fast as you can ONLY when the centre dot is{' '}
+                <span style={{ color: CONFIG.RT_TARGET_COLOR, fontWeight: 700 }}>red</span>. Ignore other colours.</>
+            ) : (
+              <>A coloured dot will appear at a random spot. Tap anywhere as fast as you can ONLY when
+                it is <span style={{ color: CONFIG.RT_TARGET_COLOR, fontWeight: 700 }}>red</span>. Do not
+                tap for any other colour.</>
+            )}
           </p>
           <button
             onPointerDown={(e) => { e.stopPropagation(); void run(); }}
@@ -249,7 +267,7 @@ export function ReactionTimeTask({ onComplete }: Props) {
         </div>
       )}
 
-      {showStim && (
+      {showStim && CONFIG.RT_USE_FLANKERS && (
         <div style={{ position: 'fixed', left: `${clusterPos.current.x}%`, top: `${clusterPos.current.y}%`, transform: 'translate(-50%, -50%)', width: gap * 2 + dot, height: gap * 2 + dot }}>
           {[
             { x: gap, y: gap, c: t!.centerColor },
@@ -261,6 +279,15 @@ export function ReactionTimeTask({ onComplete }: Props) {
             <div key={k} style={{ position: 'absolute', left: d.x, top: d.y, width: dot, height: dot, borderRadius: '50%', background: d.c }} />
           ))}
         </div>
+      )}
+
+      {showStim && !CONFIG.RT_USE_FLANKERS && (
+        <div
+          style={{
+            position: 'fixed', left: `${clusterPos.current.x}%`, top: `${clusterPos.current.y}%`,
+            transform: 'translate(-50%, -50%)', width: dot, height: dot, borderRadius: '50%', background: t!.centerColor,
+          }}
+        />
       )}
 
       {phase !== 'instruction' && phase !== 'done' && (

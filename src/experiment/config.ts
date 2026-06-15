@@ -19,8 +19,13 @@ const BASE_CONFIG = {
   // Visual search: hard time limit.
   VS_TIME_LIMIT_MS: 40000,
 
-  // Reaction time (Eriksen colour flanker, go/no-go).
-  RT_TRIALS_PER_CONDITION: 48,
+  // Reaction time (colour go/no-go). Default is a PURE colour go/no-go (one dot at a random
+  // location) — best matched to the fatigue/attention-stability hypothesis and to RT-variability
+  // reliability. Set RT_USE_FLANKERS true to add the Eriksen flanker congruency layer instead.
+  RT_USE_FLANKERS: false,
+  RT_TRIALS_PER_CONDITION: 60,
+  /** Proportion of go (target-colour) trials when not using flankers. */
+  RT_GO_RATE: 0.6,
   RT_RESPONSE_WINDOW_MS: 1500,
   RT_FIXATION_MIN_MS: 400,
   RT_FIXATION_MAX_MS: 600,
