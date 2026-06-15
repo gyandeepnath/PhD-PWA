@@ -30,27 +30,31 @@ export function DisplayPerceptionRating({ background, text, onComplete }: Props)
       className="min-h-screen w-full p-[6%] font-sans animate-fade-in"
       style={{ background, color: text }}
     >
+      <div style={{ width: '100%', maxWidth: 720, margin: '0 auto' }}>
       <h2 className="font-serif text-3xl font-light">How did this display feel?</h2>
-      <div className="mt-8 space-y-8" style={{ maxWidth: 720 }}>
+      <p className="mt-1 font-lab text-xs" style={{ opacity: 0.7 }}>Drag each slider to rate this display.</p>
+      <div className="mt-8 space-y-8">
         <div>
-          <div className="flex justify-between font-lab text-sm">
+          <div className="flex justify-between font-lab text-sm" style={{ marginBottom: 4 }}>
             <span>Very uncomfortable</span>
-            <span>{comfortTouched ? comfort : '–'}</span>
+            <span style={{ fontWeight: 700 }}>{comfortTouched ? comfort : 'not set'}</span>
             <span>Very comfortable</span>
           </div>
           <input
-            type="range" min={0} max={100} value={comfort} style={{ color: text }}
+            type="range" min={0} max={100} value={comfort}
+            style={{ color: text, background: `linear-gradient(to right, ${text} ${comfort}%, ${text}30 ${comfort}%)` }}
             onChange={(e) => { setComfort(Number(e.target.value)); setComfortTouched(true); }}
           />
         </div>
         <div>
-          <div className="flex justify-between font-lab text-sm">
+          <div className="flex justify-between font-lab text-sm" style={{ marginBottom: 4 }}>
             <span>Very unclear</span>
-            <span>{clarityTouched ? clarity : '–'}</span>
+            <span style={{ fontWeight: 700 }}>{clarityTouched ? clarity : 'not set'}</span>
             <span>Very clear</span>
           </div>
           <input
-            type="range" min={0} max={100} value={clarity} style={{ color: text }}
+            type="range" min={0} max={100} value={clarity}
+            style={{ color: text, background: `linear-gradient(to right, ${text} ${clarity}%, ${text}30 ${clarity}%)` }}
             onChange={(e) => { setClarity(Number(e.target.value)); setClarityTouched(true); }}
           />
         </div>
@@ -69,6 +73,7 @@ export function DisplayPerceptionRating({ background, text, onComplete }: Props)
       >
         Continue →
       </button>
+      </div>
     </div>
   );
 }

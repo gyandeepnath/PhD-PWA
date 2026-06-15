@@ -81,7 +81,7 @@ export function ReadingTask({ passage, background, text, onComplete }: Props) {
   return (
     <div
       className="min-h-screen w-full animate-fade-in"
-      style={{ background, color: text, padding: `3% ${CONFIG.READING_MARGIN_PERCENT}%`, display: 'flex', flexDirection: 'column', height: '100%' }}
+      style={{ background, color: text, padding: `56px ${CONFIG.READING_MARGIN_PERCENT}% 3%`, display: 'flex', flexDirection: 'column', height: '100%' }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <span style={{ fontFamily: 'Roboto', fontSize: 13, textTransform: 'uppercase', opacity: 0.5 }}>{passage.title}</span>

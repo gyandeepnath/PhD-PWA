@@ -40,7 +40,7 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
             ['Conditions', `${CONDITIONS.length} (2 polarity × 4 colour)`],
             ['Design', 'Within-subjects, Williams Latin square'],
             ['Duration', '~60–90 min'],
-            ['Tasks', 'Reading · Search · Flanker RT'],
+            ['Tasks', 'Reading · Search · Go/No-Go'],
           ].map(([k, v]) => (
             <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #e5e2dc' }}>
               <span className="font-lab" style={{ fontSize: 12, color: '#5a5a7a' }}>{k}</span>

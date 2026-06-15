@@ -45,6 +45,7 @@ export function Cvsq({ stage, onComplete }: Props) {
 
   return (
     <div className="min-h-screen w-full bg-cream p-[4%] font-sans text-[#1a1a2e] animate-fade-in">
+      <div style={{ width: '100%', maxWidth: 760, margin: '0 auto' }}>
       <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">
         Computer Vision Syndrome Questionnaire · {stage === 'baseline' ? 'baseline' : 'session end'}
       </p>
@@ -78,6 +79,7 @@ export function Cvsq({ stage, onComplete }: Props) {
         style={{ background: ready ? '#1a1a2e' : '#cfcbc3', cursor: ready ? 'pointer' : 'not-allowed' }}>
         Continue →
       </button>
+      </div>
     </div>
   );
 }

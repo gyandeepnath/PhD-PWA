@@ -45,30 +45,40 @@ export function FatigueScale({ prompt, baselineMean, accent = '#4f8ef7', onCompl
 
   return (
     <div className="min-h-screen w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in">
+      <div style={{ width: '100%', maxWidth: 720, margin: '0 auto' }}>
       <h2 className="font-serif text-3xl font-light">{prompt}</h2>
       <p className="mt-1 font-lab text-xs text-[#5a5a7a]">Drag each slider. 0 = none, 10 = severe.</p>
 
-      <div className="mt-6 space-y-5" style={{ maxWidth: 720 }}>
+      <div className="mt-6 space-y-6">
         {ITEMS.map((it) => (
           <div key={it.key}>
-            <div className="flex justify-between font-lab text-sm">
+            <div className="flex justify-between font-lab text-sm" style={{ marginBottom: 4 }}>
               <span>{it.label}</span>
-              <span style={{ color: touched[it.key] ? accent : '#b8b4ac' }}>
-                {touched[it.key] ? values[it.key] : '–'}
+              <span style={{ fontWeight: 700, color: touched[it.key] ? accent : '#b8b4ac' }}>
+                {touched[it.key] ? `${values[it.key]} / 10` : 'not set'}
               </span>
             </div>
-            <input
-              type="range"
-              min={0}
-              max={10}
-              step={1}
-              value={values[it.key]}
-              style={{ color: accent }}
-              onChange={(e) => {
-                setValues((v) => ({ ...v, [it.key]: Number(e.target.value) }));
-                setTouched((t) => ({ ...t, [it.key]: true }));
-              }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className="font-lab" style={{ fontSize: 11, color: '#9a968e', width: 14, textAlign: 'right' }}>0</span>
+              <input
+                type="range"
+                min={0}
+                max={10}
+                step={1}
+                value={values[it.key]}
+                style={{
+                  flex: 1,
+                  color: accent,
+                  // Visible filled track up to the thumb (works on Android Chrome).
+                  background: `linear-gradient(to right, ${touched[it.key] ? accent : '#cfcbc3'} ${values[it.key] * 10}%, #e2ded6 ${values[it.key] * 10}%)`,
+                }}
+                onChange={(e) => {
+                  setValues((v) => ({ ...v, [it.key]: Number(e.target.value) }));
+                  setTouched((t) => ({ ...t, [it.key]: true }));
+                }}
+              />
+              <span className="font-lab" style={{ fontSize: 11, color: '#9a968e', width: 14 }}>10</span>
+            </div>
           </div>
         ))}
       </div>
@@ -94,6 +104,7 @@ export function FatigueScale({ prompt, baselineMean, accent = '#4f8ef7', onCompl
       >
         Continue →
       </button>
+      </div>
     </div>
   );
 }

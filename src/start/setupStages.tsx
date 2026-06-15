@@ -33,7 +33,7 @@ export function SessionInit({ onSubmit }: { onSubmit: (d: SessionInitData) => vo
   return (
     <div className={shell} style={{ position: 'relative' }}>
       <WavyBackground opacity={0.06} />
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: 560 }}>
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', margin: '0 auto', maxWidth: 560 }}>
         <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">VisuLab · Research Console</p>
         <h1 className="mt-2 font-serif text-5xl font-light">New Session</h1>
         <div className="mt-8 space-y-4">
@@ -98,6 +98,7 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
 
   return (
     <div className={shell}>
+      <div style={{ width: '100%', maxWidth: 640, margin: '0 auto' }}>
       <h1 className="font-serif text-4xl font-light">Participant profile</h1>
       <p className="mt-1 font-lab text-xs text-[#5a5a7a]">Eligibility: ages 18–80.</p>
       <div className="mt-6 space-y-4" style={{ maxWidth: 640 }}>
@@ -123,6 +124,7 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
       >
         Continue →
       </button>
+      </div>
       <style>{`.vl-input{width:100%;padding:12px 14px;border:1px solid #d8d4cc;border-radius:10px;font-family:'DM Mono',monospace;font-size:15px;background:#fff;color:#1a1a2e}`}</style>
     </div>
   );
@@ -170,7 +172,7 @@ export function CameraSetup({ onAllow, onSkip }: { onAllow: () => void; onSkip: 
   return (
     <div className={shell} style={{ position: 'relative' }}>
       <WavyBackground opacity={0.05} />
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: 620 }}>
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', margin: '0 auto', maxWidth: 620 }}>
         <h1 className="font-serif text-4xl font-light">Camera setup</h1>
 
         {step === 'notice' && (
@@ -239,8 +241,9 @@ export function Calibration({ cameraStatus, onDone }: { cameraStatus: CameraStat
   const [counting, setCounting] = useState(false);
   return (
     <div className={shell}>
+      <div style={{ width: '100%', maxWidth: 560, margin: '0 auto' }}>
       <h1 className="font-serif text-4xl font-light">Positioning check</h1>
-      <p className="mt-2 font-lab text-sm text-[#5a5a7a]" style={{ maxWidth: 560 }}>
+      <p className="mt-2 font-lab text-sm text-[#5a5a7a]">
         {cameraStatus === 'active'
           ? 'Keep your eyes open and look at the centre of the screen for a few seconds while we record a baseline.'
           : 'Camera not active — this step is skipped. The experiment continues without eye tracking.'}
@@ -253,6 +256,7 @@ export function Calibration({ cameraStatus, onDone }: { cameraStatus: CameraStat
       >
         {cameraStatus === 'active' ? 'Record baseline →' : 'Continue →'}
       </button>
+      </div>
     </div>
   );
 }
@@ -295,7 +299,7 @@ export function Instructions({ onContinue }: { onContinue: () => void }) {
   return (
     <div className={shell} style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <WavyBackground opacity={0.05} />
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: 640 }}>
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', margin: '0 auto', maxWidth: 640 }}>
         <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">Before you begin</p>
         <h1 className="mt-2 font-serif text-4xl font-light">What you’ll be doing</h1>
         <p className="mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]">
@@ -348,7 +352,7 @@ export function Consent({ onConsent }: { onConsent: () => void }) {
   return (
     <div className={shell} style={{ position: 'relative' }}>
       <WavyBackground opacity={0.05} />
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: 640 }}>
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', margin: '0 auto', maxWidth: 640 }}>
         <h1 className="font-serif text-4xl font-light">Informed consent</h1>
         <div className="scrollable mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]" style={{ maxHeight: '52vh', paddingRight: 8 }}>
           <p>You are invited to take part in a study on visual ergonomics — how display colour and

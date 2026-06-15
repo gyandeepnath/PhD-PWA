@@ -53,7 +53,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   };
 
   return (
-    <div className="min-h-screen w-full bg-cream font-sans text-[#1a1a2e]" style={{ padding: '2% 3%' }}>
+    <div className="min-h-screen w-full bg-cream font-sans text-[#1a1a2e]" style={{ padding: '60px 3% 3%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12 }}>
         <h1 className="font-serif text-3xl font-light">Analysis Dashboard</h1>
         <select
