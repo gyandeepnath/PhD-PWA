@@ -360,7 +360,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         <FatigueScale
           prompt="How are your eyes feeling after this display condition?"
           baselineMean={baselineFatigue ?? undefined}
-          accent={cond?.polarity === 'negative' ? '#4f8ef7' : '#1a1a2e'}
+          background={cond?.background ?? '#F8F7F5'}
+          text={cond?.text ?? '#1a1a2e'}
+          accent={cond?.text ?? '#1a1a2e'}
           onComplete={async (r) => {
             if (session) await put('fatigue_scores', {
               fatigue_id: uuidv4(), session_id: session.session_id, condition_id: conditionId,
@@ -393,6 +395,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     case 'REACTION_TIME':
       view = (
         <ReactionTimeTask
+          background={cond?.background ?? '#F8F7F5'}
+          text={cond?.text ?? '#1a1a2e'}
           onComplete={async (res) => {
             if (session) {
               for (const t of res.trials) {

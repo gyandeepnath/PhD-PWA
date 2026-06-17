@@ -28,10 +28,15 @@ interface Props {
   prompt: string;
   baselineMean?: number;
   accent?: string;
+  /** Condition colours (post-condition rating runs under the active display); default = neutral cream. */
+  background?: string;
+  text?: string;
   onComplete: (r: FatigueResult) => void;
 }
 
-export function FatigueScale({ prompt, baselineMean, accent = '#4f8ef7', onComplete }: Props) {
+export function FatigueScale({ prompt, baselineMean, accent = '#4f8ef7', background = '#F8F7F5', text = '#1a1a2e', onComplete }: Props) {
+  const muted = text + '99';
+  const trackEmpty = text + '22';
   const [values, setValues] = useState<Record<Key, number>>({
     eye_strain: 0, dryness: 0, blur: 0, burning: 0, headache: 0,
   });
@@ -44,22 +49,22 @@ export function FatigueScale({ prompt, baselineMean, accent = '#4f8ef7', onCompl
   const composite = mean(ITEMS.map((it) => values[it.key]));
 
   return (
-    <div className="min-h-screen w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in">
+    <div className="min-h-screen w-full p-[5%] font-sans animate-fade-in" style={{ background, color: text }}>
       <div style={{ width: '100%', maxWidth: 720, margin: '0 auto' }}>
       <h2 className="font-serif text-3xl font-light">{prompt}</h2>
-      <p className="mt-1 font-lab text-xs text-[#5a5a7a]">Drag each slider. 0 = none, 10 = severe.</p>
+      <p className="mt-1 font-lab text-xs" style={{ color: muted }}>Drag each slider. 0 = none, 10 = severe.</p>
 
       <div className="mt-6 space-y-6">
         {ITEMS.map((it) => (
           <div key={it.key}>
             <div className="flex justify-between font-lab text-sm" style={{ marginBottom: 4 }}>
               <span>{it.label}</span>
-              <span style={{ fontWeight: 700, color: touched[it.key] ? accent : '#b8b4ac' }}>
+              <span style={{ fontWeight: 700, color: touched[it.key] ? accent : muted }}>
                 {touched[it.key] ? `${values[it.key]} / 10` : 'not set'}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span className="font-lab" style={{ fontSize: 11, color: '#9a968e', width: 14, textAlign: 'right' }}>0</span>
+              <span className="font-lab" style={{ fontSize: 11, color: muted, width: 14, textAlign: 'right' }}>0</span>
               <input
                 type="range"
                 min={0}
@@ -70,14 +75,14 @@ export function FatigueScale({ prompt, baselineMean, accent = '#4f8ef7', onCompl
                   flex: 1,
                   color: accent,
                   // Visible filled track up to the thumb (works on Android Chrome).
-                  background: `linear-gradient(to right, ${touched[it.key] ? accent : '#cfcbc3'} ${values[it.key] * 10}%, #e2ded6 ${values[it.key] * 10}%)`,
+                  background: `linear-gradient(to right, ${touched[it.key] ? accent : trackEmpty} ${values[it.key] * 10}%, ${trackEmpty} ${values[it.key] * 10}%)`,
                 }}
                 onChange={(e) => {
                   setValues((v) => ({ ...v, [it.key]: Number(e.target.value) }));
                   setTouched((t) => ({ ...t, [it.key]: true }));
                 }}
               />
-              <span className="font-lab" style={{ fontSize: 11, color: '#9a968e', width: 14 }}>10</span>
+              <span className="font-lab" style={{ fontSize: 11, color: muted, width: 14 }}>10</span>
             </div>
           </div>
         ))}
@@ -99,8 +104,8 @@ export function FatigueScale({ prompt, baselineMean, accent = '#4f8ef7', onCompl
           setSent(true);
           onComplete({ items: { ...values }, mean: composite, touched: { ...touched } });
         }}
-        className="mt-6 rounded-xl px-8 py-3 font-lab text-sm text-white transition active:scale-95"
-        style={{ background: allTouched ? accent : '#cfcbc3', cursor: allTouched ? 'pointer' : 'not-allowed' }}
+        className="mt-6 rounded-xl px-8 py-3 font-lab text-sm transition active:scale-95"
+        style={{ background: allTouched ? accent : trackEmpty, color: allTouched ? background : muted, cursor: allTouched ? 'pointer' : 'not-allowed' }}
       >
         Continue →
       </button>

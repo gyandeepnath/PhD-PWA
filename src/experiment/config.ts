@@ -23,23 +23,25 @@ const BASE_CONFIG = {
   // location) — best matched to the fatigue/attention-stability hypothesis and to RT-variability
   // reliability. Set RT_USE_FLANKERS true to add the Eriksen flanker congruency layer instead.
   RT_USE_FLANKERS: false,
-  RT_TRIALS_PER_CONDITION: 60,
+  RT_TRIALS_PER_CONDITION: 40,
   /** Proportion of go (target-colour) trials when not using flankers. */
   RT_GO_RATE: 0.6,
-  RT_RESPONSE_WINDOW_MS: 1500,
-  RT_FIXATION_MIN_MS: 400,
-  RT_FIXATION_MAX_MS: 600,
-  RT_DELAY_MIN_MS: 800,
-  RT_DELAY_MAX_MS: 1500,
-  RT_ITI_MIN_MS: 400,
-  RT_ITI_MAX_MS: 700,
+  /** Max time to respond. The trial ends as soon as a response is made (efficiency); only no-go
+   *  trials wait out the full window. */
+  RT_RESPONSE_WINDOW_MS: 1000,
+  RT_FIXATION_MIN_MS: 300,
+  RT_FIXATION_MAX_MS: 500,
+  RT_DELAY_MIN_MS: 400,
+  RT_DELAY_MAX_MS: 900,
+  RT_ITI_MIN_MS: 300,
+  RT_ITI_MAX_MS: 500,
   RT_FLANKER_DOT_PX: 44,
   RT_FLANKER_SPACING_PX: 56,
-  /** Target dots and flankers sit on a fixed neutral background to decouple salience from
-   *  condition polarity (audit fix — red dot is 5.74:1 on white vs 3.66:1 on black). */
-  RT_STIMULUS_BACKGROUND: '#808080',
-  RT_TARGET_COLOR: '#C81E1E',
-  RT_DISTRACTOR_COLORS: ['#1E4ED8', '#C9A400', '#00A651'],
+  /** Go-target colour: GREEN — the only colour not used by any display condition, so the target is
+   *  constant and unconfounded across conditions (protocol §11: "respond only to the target colour").
+   *  Stimuli render on the CONDITION's own background, keeping the participant under the display. */
+  RT_TARGET_COLOR: '#00A651',
+  RT_DISTRACTOR_COLORS: ['#C81E1E', '#1E4ED8', '#C9A400'],
 
   // Adaptation: longer than the original 20 s; doubled on a polarity switch.
   ADAPTATION_SAME_POLARITY_MS: 60000,

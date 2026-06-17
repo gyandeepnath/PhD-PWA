@@ -98,10 +98,13 @@ function category(t: Trial): RawTrial['trial_category'] {
 }
 
 interface Props {
+  /** Condition background/text so the RT runs under the active display (not a neutral screen). */
+  background: string;
+  text: string;
   onComplete: (r: RtResult) => void;
 }
 
-export function ReactionTimeTask({ onComplete }: Props) {
+export function ReactionTimeTask({ background, text, onComplete }: Props) {
   const [phase, setPhase] = useState<Phase>('instruction');
   const [trialNum, setTrialNum] = useState(0);
   const trials = useRef<Trial[]>(buildTrials());
@@ -130,6 +133,17 @@ export function ReactionTimeTask({ onComplete }: Props) {
     }
   };
 
+  /** Resolve as soon as a response is registered, or after `ms` (rAF-precise). */
+  const waitForResponseOrTimeout = (ms: number): Promise<void> =>
+    new Promise((resolve) => {
+      const start = now();
+      const tick = () => {
+        if (respondedRef.current != null || now() - start >= ms) resolve();
+        else requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+
   const run = async () => {
     setPhaseSync('fixation');
     const rng = Math.random;
@@ -150,7 +164,9 @@ export function ReactionTimeTask({ onComplete }: Props) {
       onsetRef.current = now();
       setPhaseSync('stimulus');
       forceRender((n) => n + 1);
-      await rafDelay(CONFIG.RT_RESPONSE_WINDOW_MS);
+      // Efficiency without losing integrity: end the stimulus the instant a response is made
+      // (RT is timestamped on tap regardless); only un-answered trials wait the full window.
+      await waitForResponseOrTimeout(CONFIG.RT_RESPONSE_WINDOW_MS);
 
       const responded = respondedRef.current != null;
       const rt = responded ? respondedRef.current! - onsetRef.current : null;
@@ -217,7 +233,7 @@ export function ReactionTimeTask({ onComplete }: Props) {
     });
   };
 
-  const bg = CONFIG.RT_STIMULUS_BACKGROUND;
+  const bg = background; // run under the active display condition
   const dot = CONFIG.RT_FLANKER_DOT_PX;
   const gap = CONFIG.RT_FLANKER_SPACING_PX;
 
@@ -239,21 +255,21 @@ export function ReactionTimeTask({ onComplete }: Props) {
       }}
     >
       {phase === 'instruction' && (
-        <div style={{ textAlign: 'center', color: '#fff', fontFamily: '"DM Mono", monospace', maxWidth: 520, padding: 24 }}>
+        <div style={{ textAlign: 'center', color: text, fontFamily: '"DM Mono", monospace', maxWidth: 520, padding: 24 }}>
           <h2 style={{ fontSize: 24, marginBottom: 16 }}>Task 4 of 4 · Reaction</h2>
           <p style={{ fontSize: 16, lineHeight: 1.6, marginBottom: 24 }}>
             {CONFIG.RT_USE_FLANKERS ? (
-              <>Five dots will appear. Tap anywhere as fast as you can ONLY when the centre dot is{' '}
-                <span style={{ color: CONFIG.RT_TARGET_COLOR, fontWeight: 700 }}>red</span>. Ignore other colours.</>
+              <>Five dots will appear. Tap the screen as fast as you can ONLY when the centre dot is{' '}
+                <span style={{ color: CONFIG.RT_TARGET_COLOR, fontWeight: 700 }}>green</span>. Ignore other colours.</>
             ) : (
-              <>A coloured dot will appear at a random spot. Tap anywhere as fast as you can ONLY when
-                it is <span style={{ color: CONFIG.RT_TARGET_COLOR, fontWeight: 700 }}>red</span>. Do not
+              <>A coloured dot will appear at a random spot. Tap the screen as fast as you can ONLY when
+                it is <span style={{ color: CONFIG.RT_TARGET_COLOR, fontWeight: 700 }}>green</span>. Do not
                 tap for any other colour.</>
             )}
           </p>
           <button
             onPointerDown={(e) => { e.stopPropagation(); void run(); }}
-            style={{ background: '#fff', color: bg, border: 'none', borderRadius: 12, padding: '14px 28px', fontFamily: '"DM Mono", monospace', fontSize: 14, cursor: 'pointer' }}
+            style={{ background: text, color: bg, border: 'none', borderRadius: 12, padding: '14px 28px', fontFamily: '"DM Mono", monospace', fontSize: 14, cursor: 'pointer' }}
           >
             Start ({CONFIG.RT_TRIALS_PER_CONDITION} trials) →
           </button>
@@ -262,8 +278,8 @@ export function ReactionTimeTask({ onComplete }: Props) {
 
       {(phase === 'fixation' || phase === 'delay') && (
         <div style={{ width: 24, height: 24, position: 'relative' }}>
-          <div style={{ position: 'absolute', top: 11, left: 0, width: 24, height: 2, background: '#ffffff80' }} />
-          <div style={{ position: 'absolute', left: 11, top: 0, width: 2, height: 24, background: '#ffffff80' }} />
+          <div style={{ position: 'absolute', top: 11, left: 0, width: 24, height: 2, background: text, opacity: 0.5 }} />
+          <div style={{ position: 'absolute', left: 11, top: 0, width: 2, height: 24, background: text, opacity: 0.5 }} />
         </div>
       )}
 
@@ -291,7 +307,7 @@ export function ReactionTimeTask({ onComplete }: Props) {
       )}
 
       {phase !== 'instruction' && phase !== 'done' && (
-        <div style={{ position: 'fixed', top: 12, right: 14, color: '#ffffff80', fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
+        <div style={{ position: 'fixed', top: 12, right: 14, color: text, opacity: 0.5, fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
           {trialNum}/{CONFIG.RT_TRIALS_PER_CONDITION}
         </div>
       )}
