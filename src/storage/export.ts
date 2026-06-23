@@ -117,12 +117,12 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 08 — reaction trials
   csv('08_reaction_trials.csv',
-    ['participant_id', 'condition_id', 'trial_number', 'trial_category', 'is_signal', 'is_congruent', 'response_time_ms', 'accuracy', 'false_start'],
-    bundle.reactionTrials.map((t) => ({ participant_id: pid, condition_id: t.condition_id, trial_number: t.trial_number, trial_category: t.trial_category, is_signal: t.is_signal, is_congruent: t.is_congruent, response_time_ms: t.response_time_ms, accuracy: t.accuracy, false_start: t.false_start })));
+    ['participant_id', 'condition_id', 'trial_number', 'trial_category', 'is_signal', 'response_time_ms', 'accuracy', 'anticipatory', 'false_start'],
+    bundle.reactionTrials.map((t) => ({ participant_id: pid, condition_id: t.condition_id, trial_number: t.trial_number, trial_category: t.trial_category, is_signal: t.is_signal, response_time_ms: t.response_time_ms, accuracy: t.accuracy, anticipatory: t.anticipatory, false_start: t.false_start })));
 
   // 09 — rt summary
   csv('09_rt_summary.csv',
-    ['participant_id', 'condition_id', 'total_trials', 'signal_trials', 'hits', 'false_alarms', 'misses', 'correct_rejections', 'hit_rate', 'false_alarm_rate', 'error_rate', 'mean_rt_hits_ms', 'median_rt_hits_ms', 'rt_sd_ms', 'rt_cv', 'mean_rt_congruent_ms', 'mean_rt_incongruent_ms', 'flanker_congruency_effect_ms', 'd_prime', 'd_prime_se', 'd_prime_unstable'],
+    ['participant_id', 'condition_id', 'total_trials', 'signal_trials', 'hits', 'false_alarms', 'misses', 'correct_rejections', 'hit_rate', 'false_alarm_rate', 'error_rate', 'mean_rt_hits_ms', 'median_rt_hits_ms', 'rt_sd_ms', 'rt_cv', 'anticipations', 'lapse_count', 'lapse_rate', 'inverse_efficiency_ms', 'first_half_mean_rt_ms', 'second_half_mean_rt_ms', 'd_prime', 'd_prime_se', 'd_prime_unstable'],
     bundle.rtSummaries.map((r) => ({ participant_id: pid, ...r })));
 
   // 10 — wide one-row-per-condition summary (joined)

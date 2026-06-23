@@ -397,6 +397,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         <ReactionTimeTask
           background={cond?.background ?? '#F8F7F5'}
           text={cond?.text ?? '#1a1a2e'}
+          practiceTrials={machine.stepIndex === 0 ? CONFIG.RT_PRACTICE_TRIALS : 0}
           onComplete={async (res) => {
             if (session) {
               for (const t of res.trials) {

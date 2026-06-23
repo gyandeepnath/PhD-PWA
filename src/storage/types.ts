@@ -228,6 +228,8 @@ export interface ReactionTrialRecord {
   response_time_ms: number | null;
   accuracy: RtAccuracy;
   false_start: boolean;
+  /** Response faster than the anticipation cutoff (excluded from RT means, counted separately). */
+  anticipatory: boolean;
 }
 
 export interface RtSummaryRecord {
@@ -251,6 +253,16 @@ export interface RtSummaryRecord {
   error_rate: number;
   /** RT coefficient of variation (SD/mean) — fatigue often shows as inconsistency before slowing. */
   rt_cv: number | null;
+  /** Responses faster than the anticipation cutoff (excluded from RT means). */
+  anticipations: number;
+  /** Valid hits slower than the lapse threshold, and the rate over hits — PVT attention-lapse index. */
+  lapse_count: number;
+  lapse_rate: number;
+  /** Inverse efficiency score = mean RT / proportion correct — speed-accuracy tradeoff control. */
+  inverse_efficiency_ms: number | null;
+  /** Vigilance: mean hit RT in the first vs second half of the block (rising = within-block fatigue). */
+  first_half_mean_rt_ms: number | null;
+  second_half_mean_rt_ms: number | null;
   d_prime: number;
   /** Standard error of d' (flag if > 0.3 — small-N instability). */
   d_prime_se: number;

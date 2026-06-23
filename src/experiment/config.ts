@@ -19,15 +19,14 @@ const BASE_CONFIG = {
   // Visual search: hard time limit.
   VS_TIME_LIMIT_MS: 40000,
 
-  // Reaction time (colour go/no-go). Default is a PURE colour go/no-go (one dot at a random
-  // location) — best matched to the fatigue/attention-stability hypothesis and to RT-variability
-  // reliability. Set RT_USE_FLANKERS true to add the Eriksen flanker congruency layer instead.
-  RT_USE_FLANKERS: false,
-  RT_TRIALS_PER_CONDITION: 40,
-  /** Proportion of go (target-colour) trials when not using flankers. */
-  RT_GO_RATE: 0.6,
-  /** Max time to respond. The trial ends as soon as a response is made (efficiency); only no-go
-   *  trials wait out the full window. */
+  // Reaction time — pure colour go/no-go (one dot at a random location; respond only to the target
+  // colour), run under the active display condition. Tuned for fatigue/attention-stability goals.
+  RT_TRIALS_PER_CONDITION: 32,
+  /** Proportion of go (target-colour) trials. 0.625 → 20 go / 12 no-go per condition. */
+  RT_GO_RATE: 0.625,
+  /** Unscored practice trials shown once, before the first condition's scored block. */
+  RT_PRACTICE_TRIALS: 6,
+  /** Max time to respond; the trial ends the instant a response is made (only no-go trials wait it out). */
   RT_RESPONSE_WINDOW_MS: 1000,
   RT_FIXATION_MIN_MS: 300,
   RT_FIXATION_MAX_MS: 500,
@@ -35,11 +34,12 @@ const BASE_CONFIG = {
   RT_DELAY_MAX_MS: 900,
   RT_ITI_MIN_MS: 300,
   RT_ITI_MAX_MS: 500,
-  RT_FLANKER_DOT_PX: 44,
-  RT_FLANKER_SPACING_PX: 56,
-  /** Go-target colour: GREEN — the only colour not used by any display condition, so the target is
-   *  constant and unconfounded across conditions (protocol §11: "respond only to the target colour").
-   *  Stimuli render on the CONDITION's own background, keeping the participant under the display. */
+  RT_DOT_PX: 52,
+  /** Responses faster than this (ms) are anticipations — excluded from RT means, counted separately. */
+  RT_MIN_VALID_RT_MS: 150,
+  /** Valid hits slower than this (ms) count as attention lapses (PVT-style). */
+  RT_LAPSE_THRESHOLD_MS: 600,
+  /** Go-target colour: GREEN — the only colour not used by any display condition (protocol §11). */
   RT_TARGET_COLOR: '#00A651',
   RT_DISTRACTOR_COLORS: ['#C81E1E', '#1E4ED8', '#C9A400'],
 
@@ -74,6 +74,7 @@ const E2E_OVERRIDES: Partial<typeof BASE_CONFIG> = {
   COMPREHENSION_FEEDBACK_MS: 120,
   VS_TIME_LIMIT_MS: 5000,
   RT_TRIALS_PER_CONDITION: 4,
+  RT_PRACTICE_TRIALS: 1,
   RT_RESPONSE_WINDOW_MS: 120,
   RT_FIXATION_MIN_MS: 30,
   RT_FIXATION_MAX_MS: 40,

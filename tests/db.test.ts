@@ -68,6 +68,7 @@ describe('IndexedDB storage layer', () => {
         response_time_ms: 420,
         accuracy: 'hit',
         false_start: false,
+        anticipatory: false,
       };
       await put('reaction_trials', trial);
     }

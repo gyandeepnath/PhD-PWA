@@ -173,7 +173,7 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
       return {
         condition_id: c.condition_id, session_id: sid, total_trials: 48, signal_trials: 24, hits: 0,
         false_alarms: 0, misses: 0, correct_rejections: 0, hit_rate: r.hit_rate, false_alarm_rate: r.false_alarm_rate,
-        error_rate: rng(), rt_cv: rng() < 0.5 ? null : rng(),
+        error_rate: rng(), rt_cv: rng() < 0.5 ? null : rng(), anticipations: 0, lapse_count: 0, lapse_rate: rng(), inverse_efficiency_ms: rng() < 0.5 ? null : randInt(rng, 200, 1200), first_half_mean_rt_ms: null, second_half_mean_rt_ms: null,
         mean_rt_hits_ms: rng() < 0.5 ? null : randInt(rng, 200, 900), median_rt_hits_ms: null, rt_sd_ms: null,
         mean_rt_congruent_ms: null, mean_rt_incongruent_ms: null, flanker_congruency_effect_ms: null,
         d_prime: r.d_prime, d_prime_se: r.d_prime_se, d_prime_unstable: r.d_prime_unstable,

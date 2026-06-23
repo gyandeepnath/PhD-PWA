@@ -1,16 +1,22 @@
 /**
- * Eriksen colour-flanker go/no-go reaction-time task (48 trials).
+ * Colour go/no-go reaction-time task — customised for the fatigue / attention-stability hypothesis.
  *
- * Tap when the CENTRE dot is the target colour (red). 24 signal + 24 noise trials, each split into
- * congruent/incongruent flankers. Audit fix: stimuli render on a FIXED neutral grey background so
- * dot salience is identical across conditions (the red dot is 5.74:1 on white vs 3.66:1 on black).
- * Timing uses rAF (precise on Android WebView). Per-trial records + an SDT summary are emitted.
+ * A single dot appears at a RANDOM location, on the active condition's own background; the
+ * participant taps ONLY when it is the target colour (green), ignoring red/blue/yellow. Design
+ * choices for accuracy & reliability:
+ *  - onset is timestamped at the actual painted frame (rAF), not one frame early;
+ *  - the response time comes from the hardware pointer-event timestamp (low jitter);
+ *  - responses < RT_MIN_VALID_RT are anticipations — excluded from RT means, counted separately;
+ *  - the trial ends the instant a response is made (only no-go trials wait the window out);
+ *  - one unscored practice block (with feedback) runs once before the first scored condition;
+ *  - metrics include RT mean/median/SD/CV, lapse rate, inverse efficiency, and first/second-half
+ *    RT (within-block vigilance) — sensitive to fatigue-driven inconsistency (§12).
  */
 import { useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';
 import { rafDelay, randInt, now } from '@/lib/timing';
-import { mean, median, stdSample } from '@/lib/stats';
-import { computeSdt, flankerCongruencyEffect } from '@/lib/signalDetection';
+import { median, stdSample } from '@/lib/stats';
+import { computeSdt } from '@/lib/signalDetection';
 import type { RtAccuracy } from '@/storage/types';
 
 export interface RawTrial {
@@ -22,6 +28,7 @@ export interface RawTrial {
   response_time_ms: number | null;
   accuracy: RtAccuracy;
   false_start: boolean;
+  anticipatory: boolean;
 }
 
 export interface RtResult {
@@ -43,49 +50,31 @@ export interface RtResult {
     flanker_congruency_effect_ms: number | null;
     error_rate: number;
     rt_cv: number | null;
+    anticipations: number;
+    lapse_count: number;
+    lapse_rate: number;
+    inverse_efficiency_ms: number | null;
+    first_half_mean_rt_ms: number | null;
+    second_half_mean_rt_ms: number | null;
     d_prime: number;
     d_prime_se: number;
     d_prime_unstable: boolean;
   };
 }
 
-type Phase = 'instruction' | 'fixation' | 'delay' | 'stimulus' | 'iti' | 'done';
+type Phase = 'instruction' | 'fixation' | 'delay' | 'stimulus' | 'feedback' | 'iti' | 'practice_done' | 'done';
 
 interface Trial {
   signal: boolean;
-  congruent: boolean;
-  centerColor: string;
-  flankerColor: string;
+  color: string;
 }
 
-function buildTrials(): Trial[] {
-  const { RT_TARGET_COLOR: TARGET, RT_DISTRACTOR_COLORS: DIST, RT_TRIALS_PER_CONDITION: N } = CONFIG;
+function buildTrials(n: number, goRate: number): Trial[] {
+  const { RT_TARGET_COLOR: TARGET, RT_DISTRACTOR_COLORS: DIST } = CONFIG;
   const pick = () => DIST[Math.floor(Math.random() * DIST.length)];
+  const nGo = Math.round(n * goRate);
   const trials: Trial[] = [];
-
-  if (CONFIG.RT_USE_FLANKERS) {
-    // Eriksen colour-flanker variant (off by default): 4 balanced cells.
-    const perCell = N / 4;
-    for (let i = 0; i < perCell; i++) {
-      trials.push({ signal: true, congruent: true, centerColor: TARGET, flankerColor: TARGET });
-      trials.push({ signal: true, congruent: false, centerColor: TARGET, flankerColor: pick() });
-      const nc = pick();
-      trials.push({ signal: false, congruent: true, centerColor: nc, flankerColor: nc });
-      let nf = pick();
-      while (nf === nc) nf = pick();
-      trials.push({ signal: false, congruent: false, centerColor: nc, flankerColor: nf });
-    }
-  } else {
-    // Pure colour go/no-go (default): a single dot; respond only when it is the target colour.
-    const nGo = Math.round(N * CONFIG.RT_GO_RATE);
-    for (let i = 0; i < N; i++) {
-      const go = i < nGo;
-      const c = go ? TARGET : pick();
-      trials.push({ signal: go, congruent: true, centerColor: c, flankerColor: c });
-    }
-  }
-
-  // Fisher-Yates shuffle.
+  for (let i = 0; i < n; i++) trials.push(i < nGo ? { signal: true, color: TARGET } : { signal: false, color: pick() });
   for (let i = trials.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [trials[i], trials[j]] = [trials[j], trials[i]];
@@ -93,101 +82,125 @@ function buildTrials(): Trial[] {
   return trials;
 }
 
-function category(t: Trial): RawTrial['trial_category'] {
-  return `${t.signal ? 'signal' : 'noise'}_${t.congruent ? 'congruent' : 'incongruent'}` as RawTrial['trial_category'];
-}
+const avg = (xs: number[]): number | null => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
 
 interface Props {
-  /** Condition background/text so the RT runs under the active display (not a neutral screen). */
   background: string;
   text: string;
+  /** Unscored practice trials to run before the scored block (0 = none). */
+  practiceTrials?: number;
   onComplete: (r: RtResult) => void;
 }
 
-export function ReactionTimeTask({ background, text, onComplete }: Props) {
+export function ReactionTimeTask({ background, text, practiceTrials = 0, onComplete }: Props) {
   const [phase, setPhase] = useState<Phase>('instruction');
   const [trialNum, setTrialNum] = useState(0);
-  const trials = useRef<Trial[]>(buildTrials());
+  const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null);
+  const scored = useRef<Trial[]>(buildTrials(CONFIG.RT_TRIALS_PER_CONDITION, CONFIG.RT_GO_RATE));
+  const practice = useRef<Trial[]>(buildTrials(practiceTrials, CONFIG.RT_GO_RATE));
   const records = useRef<RawTrial[]>([]);
   const phaseRef = useRef<Phase>('instruction');
   const onsetRef = useRef(0);
-  const respondedRef = useRef<number | null>(null);
+  const respondedAtRef = useRef<number | null>(null);
   const falseStartRef = useRef(false);
   const current = useRef<Trial | null>(null);
-  // Random screen position for the stimulus cluster each trial — prevents motor/spatial anticipation.
   const clusterPos = useRef<{ x: number; y: number }>({ x: 50, y: 50 });
-  const [, forceRender] = useState(0);
+  const [, force] = useState(0);
 
   const setPhaseSync = (p: Phase) => {
     phaseRef.current = p;
     setPhase(p);
   };
 
-  const handleResponse = () => {
+  // Use the hardware pointer-event timestamp (same performance clock as onset) for low-jitter RT.
+  const handleResponse = (e: React.PointerEvent) => {
     const ph = phaseRef.current;
-    if (ph === 'fixation' || ph === 'delay') {
-      falseStartRef.current = true;
-    } else if (ph === 'stimulus' && respondedRef.current == null) {
-      respondedRef.current = now();
-      forceRender((n) => n + 1);
+    if (ph === 'fixation' || ph === 'delay') falseStartRef.current = true;
+    else if (ph === 'stimulus' && respondedAtRef.current == null) {
+      respondedAtRef.current = e.timeStamp;
+      force((n) => n + 1);
     }
   };
 
-  /** Resolve as soon as a response is registered, or after `ms` (rAF-precise). */
   const waitForResponseOrTimeout = (ms: number): Promise<void> =>
     new Promise((resolve) => {
       const start = now();
       const tick = () => {
-        if (respondedRef.current != null || now() - start >= ms) resolve();
+        if (respondedAtRef.current != null || now() - start >= ms) resolve();
         else requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
     });
 
-  const run = async () => {
+  // Timestamp the onset on the frame the stimulus is actually painted.
+  const markOnsetAtPaint = (): Promise<void> =>
+    new Promise((resolve) => requestAnimationFrame(() => { onsetRef.current = now(); resolve(); }));
+
+  const runTrial = async (t: Trial, index: number, isPractice: boolean) => {
+    current.current = t;
+    setTrialNum(index + 1);
+    respondedAtRef.current = null;
+    falseStartRef.current = false;
+
     setPhaseSync('fixation');
-    const rng = Math.random;
-    for (let i = 0; i < trials.current.length; i++) {
-      const t = trials.current[i];
-      current.current = t;
-      setTrialNum(i + 1);
-      respondedRef.current = null;
-      falseStartRef.current = false;
+    await rafDelay(randInt(Math.random, CONFIG.RT_FIXATION_MIN_MS, CONFIG.RT_FIXATION_MAX_MS));
+    setPhaseSync('delay');
+    await rafDelay(randInt(Math.random, CONFIG.RT_DELAY_MIN_MS, CONFIG.RT_DELAY_MAX_MS));
 
-      setPhaseSync('fixation');
-      await rafDelay(randInt(rng, CONFIG.RT_FIXATION_MIN_MS, CONFIG.RT_FIXATION_MAX_MS));
-      setPhaseSync('delay');
-      await rafDelay(randInt(rng, CONFIG.RT_DELAY_MIN_MS, CONFIG.RT_DELAY_MAX_MS));
+    clusterPos.current = { x: randInt(Math.random, 25, 75), y: randInt(Math.random, 28, 72) };
+    setPhaseSync('stimulus');
+    force((n) => n + 1);
+    await markOnsetAtPaint();
+    await waitForResponseOrTimeout(CONFIG.RT_RESPONSE_WINDOW_MS);
 
-      // Place the cluster at a random location (keeps it fully on-screen with a margin).
-      clusterPos.current = { x: randInt(rng, 25, 75), y: randInt(rng, 28, 72) };
-      onsetRef.current = now();
-      setPhaseSync('stimulus');
-      forceRender((n) => n + 1);
-      // Efficiency without losing integrity: end the stimulus the instant a response is made
-      // (RT is timestamped on tap regardless); only un-answered trials wait the full window.
-      await waitForResponseOrTimeout(CONFIG.RT_RESPONSE_WINDOW_MS);
+    const responded = respondedAtRef.current != null;
+    const rt = responded ? respondedAtRef.current! - onsetRef.current : null;
+    const anticipatory = rt != null && rt < CONFIG.RT_MIN_VALID_RT_MS;
+    const accuracy: RtAccuracy = t.signal
+      ? responded ? 'hit' : 'miss'
+      : responded ? 'false_alarm' : 'correct_rejection';
 
-      const responded = respondedRef.current != null;
-      const rt = responded ? respondedRef.current! - onsetRef.current : null;
-      let accuracy: RtAccuracy;
-      if (t.signal) accuracy = responded ? 'hit' : 'miss';
-      else accuracy = responded ? 'false_alarm' : 'correct_rejection';
-
+    if (!isPractice) {
       records.current.push({
-        trial_number: i + 1,
-        trial_category: category(t),
+        trial_number: index + 1,
+        trial_category: t.signal ? 'signal_congruent' : 'noise_congruent',
         is_signal: t.signal,
-        is_congruent: t.congruent,
+        is_congruent: true,
         stimulus_onset_time: onsetRef.current,
         response_time_ms: rt,
         accuracy,
         false_start: falseStartRef.current,
+        anticipatory,
       });
-
-      setPhaseSync('iti');
-      await rafDelay(randInt(rng, CONFIG.RT_ITI_MIN_MS, CONFIG.RT_ITI_MAX_MS));
+    } else {
+      // Practice feedback only.
+      let msg: string;
+      let ok: boolean;
+      if (t.signal) {
+        if (!responded) { msg = 'Too slow — tap when the dot is green'; ok = false; }
+        else if (anticipatory) { msg = 'Wait until the dot appears'; ok = false; }
+        else { msg = '✓ Good'; ok = true; }
+      } else {
+        if (responded) { msg = '✗ That wasn’t green — don’t tap'; ok = false; }
+        else { msg = '✓ Good (correctly ignored)'; ok = true; }
+      }
+      setFeedback({ msg, ok });
+      setPhaseSync('feedback');
+      await rafDelay(700);
+      setFeedback(null);
     }
+
+    setPhaseSync('iti');
+    await rafDelay(randInt(Math.random, CONFIG.RT_ITI_MIN_MS, CONFIG.RT_ITI_MAX_MS));
+  };
+
+  const run = async () => {
+    for (let i = 0; i < practice.current.length; i++) await runTrial(practice.current[i], i, true);
+    if (practice.current.length > 0) {
+      setPhaseSync('practice_done');
+      await rafDelay(1400);
+    }
+    for (let i = 0; i < scored.current.length; i++) await runTrial(scored.current[i], i, false);
     finish();
   };
 
@@ -198,14 +211,21 @@ export function ReactionTimeTask({ background, text, onComplete }: Props) {
     const misses = recs.filter((r) => r.accuracy === 'miss').length;
     const fa = recs.filter((r) => r.accuracy === 'false_alarm').length;
     const cr = recs.filter((r) => r.accuracy === 'correct_rejection').length;
-    const hitRts = hits.map((r) => r.response_time_ms!).filter((x) => x != null);
-    const congHits = hits.filter((r) => r.is_congruent).map((r) => r.response_time_ms!);
-    const incHits = hits.filter((r) => !r.is_congruent).map((r) => r.response_time_ms!);
-    const sdt = computeSdt({ hits: hits.length, misses, falseAlarms: fa, correctRejections: cr });
-    const meanHit = hitRts.length ? mean(hitRts) : null;
-    const sdHit = hitRts.length ? stdSample(hitRts) : null;
+    const anticipations = recs.filter((r) => r.anticipatory).length;
+    const validHitRts = hits.filter((r) => !r.anticipatory && r.response_time_ms != null).map((r) => r.response_time_ms!);
+    const meanRt = avg(validHitRts);
+    const sdRt = validHitRts.length > 1 ? stdSample(validHitRts) : null;
     const errorRate = recs.length ? (misses + fa) / recs.length : 0;
-    const rtCv = meanHit && sdHit != null && meanHit > 0 ? sdHit / meanHit : null;
+    const lapseCount = validHitRts.filter((rt) => rt > CONFIG.RT_LAPSE_THRESHOLD_MS).length;
+    const accuracyProp = 1 - errorRate;
+    const ies = meanRt != null && accuracyProp > 0 ? meanRt / accuracyProp : null;
+
+    // Within-block vigilance: valid hit RTs in the first vs second half of the (chronological) block.
+    const mid = recs.length / 2;
+    const halfRt = (lo: number, hi: number) =>
+      avg(recs.filter((r, i) => i >= lo && i < hi && r.accuracy === 'hit' && !r.anticipatory && r.response_time_ms != null).map((r) => r.response_time_ms!));
+
+    const sdt = computeSdt({ hits: hits.length, misses, falseAlarms: fa, correctRejections: cr });
 
     onComplete({
       trials: recs,
@@ -218,14 +238,20 @@ export function ReactionTimeTask({ background, text, onComplete }: Props) {
         correct_rejections: cr,
         hit_rate: sdt.hit_rate,
         false_alarm_rate: sdt.false_alarm_rate,
-        mean_rt_hits_ms: hitRts.length ? mean(hitRts) : null,
-        median_rt_hits_ms: hitRts.length ? median(hitRts) : null,
-        rt_sd_ms: hitRts.length ? stdSample(hitRts) : null,
-        mean_rt_congruent_ms: congHits.length ? mean(congHits) : null,
-        mean_rt_incongruent_ms: incHits.length ? mean(incHits) : null,
-        flanker_congruency_effect_ms: flankerCongruencyEffect(congHits, incHits),
+        mean_rt_hits_ms: meanRt,
+        median_rt_hits_ms: validHitRts.length ? median(validHitRts) : null,
+        rt_sd_ms: sdRt,
+        mean_rt_congruent_ms: meanRt,
+        mean_rt_incongruent_ms: null,
+        flanker_congruency_effect_ms: null,
         error_rate: errorRate,
-        rt_cv: rtCv,
+        rt_cv: meanRt && sdRt != null && meanRt > 0 ? sdRt / meanRt : null,
+        anticipations,
+        lapse_count: lapseCount,
+        lapse_rate: hits.length ? lapseCount / hits.length : 0,
+        inverse_efficiency_ms: ies,
+        first_half_mean_rt_ms: halfRt(0, mid),
+        second_half_mean_rt_ms: halfRt(mid, recs.length),
         d_prime: sdt.d_prime,
         d_prime_se: sdt.d_prime_se,
         d_prime_unstable: sdt.d_prime_unstable,
@@ -233,45 +259,29 @@ export function ReactionTimeTask({ background, text, onComplete }: Props) {
     });
   };
 
-  const bg = background; // run under the active display condition
-  const dot = CONFIG.RT_FLANKER_DOT_PX;
-  const gap = CONFIG.RT_FLANKER_SPACING_PX;
-
+  const dot = CONFIG.RT_DOT_PX;
   const t = current.current;
   const showStim = phase === 'stimulus' && t;
+  const totalScored = CONFIG.RT_TRIALS_PER_CONDITION;
 
   return (
     <div
       onPointerDown={handleResponse}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: bg,
-        touchAction: 'none',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        userSelect: 'none',
-      }}
+      style={{ position: 'fixed', inset: 0, background, touchAction: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none' }}
     >
       {phase === 'instruction' && (
-        <div style={{ textAlign: 'center', color: text, fontFamily: '"DM Mono", monospace', maxWidth: 520, padding: 24 }}>
+        <div style={{ textAlign: 'center', color: text, fontFamily: '"DM Mono", monospace', maxWidth: 540, padding: 24 }}>
           <h2 style={{ fontSize: 24, marginBottom: 16 }}>Task 4 of 4 · Reaction</h2>
           <p style={{ fontSize: 16, lineHeight: 1.6, marginBottom: 24 }}>
-            {CONFIG.RT_USE_FLANKERS ? (
-              <>Five dots will appear. Tap the screen as fast as you can ONLY when the centre dot is{' '}
-                <span style={{ color: CONFIG.RT_TARGET_COLOR, fontWeight: 700 }}>green</span>. Ignore other colours.</>
-            ) : (
-              <>A coloured dot will appear at a random spot. Tap the screen as fast as you can ONLY when
-                it is <span style={{ color: CONFIG.RT_TARGET_COLOR, fontWeight: 700 }}>green</span>. Do not
-                tap for any other colour.</>
-            )}
+            A coloured dot will appear at a random spot. Tap the screen as fast as you can ONLY when
+            it is <span style={{ color: CONFIG.RT_TARGET_COLOR, fontWeight: 700 }}>green</span>. Do not
+            tap for any other colour.{practiceTrials > 0 ? ' A short practice comes first.' : ''}
           </p>
           <button
             onPointerDown={(e) => { e.stopPropagation(); void run(); }}
-            style={{ background: text, color: bg, border: 'none', borderRadius: 12, padding: '14px 28px', fontFamily: '"DM Mono", monospace', fontSize: 14, cursor: 'pointer' }}
+            style={{ background: text, color: background, border: 'none', borderRadius: 12, padding: '14px 28px', fontFamily: '"DM Mono", monospace', fontSize: 14, cursor: 'pointer' }}
           >
-            Start ({CONFIG.RT_TRIALS_PER_CONDITION} trials) →
+            {practiceTrials > 0 ? 'Start practice →' : `Start (${totalScored} trials) →`}
           </button>
         </div>
       )}
@@ -283,32 +293,26 @@ export function ReactionTimeTask({ background, text, onComplete }: Props) {
         </div>
       )}
 
-      {showStim && CONFIG.RT_USE_FLANKERS && (
-        <div style={{ position: 'fixed', left: `${clusterPos.current.x}%`, top: `${clusterPos.current.y}%`, transform: 'translate(-50%, -50%)', width: gap * 2 + dot, height: gap * 2 + dot }}>
-          {[
-            { x: gap, y: gap, c: t!.centerColor },
-            { x: 0, y: gap, c: t!.flankerColor },
-            { x: gap * 2, y: gap, c: t!.flankerColor },
-            { x: gap, y: 0, c: t!.flankerColor },
-            { x: gap, y: gap * 2, c: t!.flankerColor },
-          ].map((d, k) => (
-            <div key={k} style={{ position: 'absolute', left: d.x, top: d.y, width: dot, height: dot, borderRadius: '50%', background: d.c }} />
-          ))}
+      {showStim && (
+        <div style={{ position: 'fixed', left: `${clusterPos.current.x}%`, top: `${clusterPos.current.y}%`, transform: 'translate(-50%, -50%)', width: dot, height: dot, borderRadius: '50%', background: t!.color }} />
+      )}
+
+      {phase === 'feedback' && feedback && (
+        <div style={{ textAlign: 'center', fontFamily: '"DM Mono", monospace', fontSize: 20, color: feedback.ok ? '#22c97a' : '#e64c4c' }}>
+          {feedback.msg}
         </div>
       )}
 
-      {showStim && !CONFIG.RT_USE_FLANKERS && (
-        <div
-          style={{
-            position: 'fixed', left: `${clusterPos.current.x}%`, top: `${clusterPos.current.y}%`,
-            transform: 'translate(-50%, -50%)', width: dot, height: dot, borderRadius: '50%', background: t!.centerColor,
-          }}
-        />
+      {phase === 'practice_done' && (
+        <div style={{ textAlign: 'center', color: text, fontFamily: '"DM Mono", monospace', maxWidth: 480, padding: 24 }}>
+          <p style={{ fontSize: 18 }}>Practice complete.</p>
+          <p style={{ fontSize: 14, opacity: 0.7, marginTop: 8 }}>The real task begins now — go as fast and accurately as you can.</p>
+        </div>
       )}
 
-      {phase !== 'instruction' && phase !== 'done' && (
+      {(phase === 'fixation' || phase === 'delay' || phase === 'stimulus' || phase === 'iti') && (
         <div style={{ position: 'fixed', top: 12, right: 14, color: text, opacity: 0.5, fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
-          {trialNum}/{CONFIG.RT_TRIALS_PER_CONDITION}
+          {phaseRef.current && trialNum > 0 ? `${Math.min(trialNum, totalScored)}/${totalScored}` : ''}
         </div>
       )}
     </div>
