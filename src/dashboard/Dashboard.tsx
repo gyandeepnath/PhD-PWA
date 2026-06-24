@@ -17,7 +17,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'reaction', label: 'Reaction Time' },
   { id: 'fatigue', label: 'Fatigue' },
   { id: 'search', label: 'Search & Perception' },
-  { id: 'eye', label: 'Eye Metrics / QC' },
+  { id: 'eye', label: 'Data Quality / QC' },
   { id: 'export', label: 'Export' },
 ];
 
@@ -88,7 +88,8 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           <Stat label="Mean RT (hits)" value={fmt(avg(summaries.map((s) => s.mean_rt_hits_ms)), 'ms')} />
           <Stat label="Mean fatigue Δ vs baseline" value={fmt(avg(summaries.map((s) => s.fatigue_delta)))} />
           <Stat label="Comprehension accuracy" value={fmt(100 * (avg(summaries.map((s) => s.comprehension_correct)) ?? 0), '%')} />
-          <Stat label="Data quality (conditions OK)" value={`${summaries.filter((s) => s.qc.overall === 'good').length}/${summaries.length}`} />
+          <Stat label="Camera QC (conditions OK)" value={`${summaries.filter((s) => s.qc.overall === 'good').length}/${summaries.length}`} />
+          <Stat label="Engagement (conditions OK)" value={`${summaries.filter((s) => s.engagement === 'good').length}/${summaries.length}`} />
         </div>
       )}
 
@@ -131,10 +132,12 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
 
       {bundle && tab === 'eye' && (
         <Grid>
+          <BarPanel title="Engagement quality score per condition" data={summaries.map((s) => ({ label: s.condition_label, value: s.quality_score, flag: s.engagement }))} />
           <BarPanel title="Full-blink rate per condition" unit="/min" data={bar(summaries, 'blink_rate_full')} color="#4f8ef7" />
-          <BarPanel title="Data quality (face presence)" data={summaries.map((s) => ({ label: s.condition_label, value: s.face_presence_ratio, flag: s.qc.facePresence }))} />
+          <EngagementTable summaries={summaries} />
+          <BarPanel title="Camera face presence" data={summaries.map((s) => ({ label: s.condition_label, value: s.face_presence_ratio, flag: s.qc.facePresence }))} />
           <QcTable summaries={summaries} />
-          <Caveat text="Blink rate is non-monotonic w.r.t. fatigue: it DROPS with concentration/reading and RISES with fatigue onset — do not read 'higher = more fatigued'. Use full-blink rate + incomplete-blink ratio and within-task bins. Micro/partial tiers are sub-Nyquist below 25 fps (flagged). Gaze zones are NOT calibrated in this build — treat as a gross head-movement proxy only." />
+          <Caveat text="Engagement quality flags boredom/careless responding (reading skim, rushed or straight-lined ratings, RT disengagement, low face presence) so suspect conditions can be excluded or modelled — see 12_quality_flags.csv. Blink rate is non-monotonic w.r.t. fatigue: it DROPS with concentration/reading and RISES with fatigue onset. Micro/partial tiers are sub-Nyquist below 25 fps (flagged). Gaze zones are NOT calibrated in this build — treat as a gross head-movement proxy only." />
         </Grid>
       )}
 
@@ -181,6 +184,27 @@ function SummaryTable({ headers, rows }: { headers: string[]; rows: (string | nu
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
         <thead><tr>{headers.map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: '#5a5a7a', borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
         <tbody>{rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} style={{ padding: '6px 10px', borderBottom: '1px solid #f3f1ec' }}>{c}</td>)}</tr>)}</tbody>
+      </table>
+    </div>
+  );
+}
+function EngagementTable({ summaries }: { summaries: ConditionSummary[] }) {
+  return (
+    <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
+        <thead><tr>{['Cond', 'Engagement', 'Quality', 'Read ms', 'Fatigue ms', 'Flags'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: '#5a5a7a', borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
+        <tbody>
+          {summaries.map((s) => (
+            <tr key={s.condition_id}>
+              <td style={cell}>{s.condition_label}</td>
+              <td style={{ ...cell, fontWeight: 700, color: FLAG_COLOR[s.engagement] }}>{s.engagement}</td>
+              <td style={cell}>{n(s.quality_score)}</td>
+              <td style={cell}>{n(s.reading_time_ms, 0)}</td>
+              <td style={cell}>{n(s.fatigue_response_ms, 0)}</td>
+              <td style={cell}>{s.engagement_reasons.length ? s.engagement_reasons.join('; ') : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
       </table>
     </div>
   );

@@ -113,6 +113,9 @@ export function runFuzz(iterations: number, seed = 1): FuzzFailure[] {
       for (const s of summaries) {
         if (!inUnit(s.search_accuracy)) fail('export', i, `acc ${s.search_accuracy}`);
         if (!isFinitePos(s.mean_rt_hits_ms)) fail('export', i, `rt ${s.mean_rt_hits_ms}`);
+        // Engagement scoring must stay bounded and self-consistent on degenerate inputs.
+        if (!inUnit(s.quality_score)) fail('export', i, `quality_score ${s.quality_score}`);
+        if (!['good', 'warn', 'bad'].includes(s.engagement)) fail('export', i, `engagement ${s.engagement}`);
       }
       const files = buildExportFiles(bundle);
       if (!files.some((f) => f.filename === 'export_manifest.json')) fail('export', i, 'no manifest');
@@ -143,10 +146,11 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
       session_start_time: 1, session_end_time: 2, randomisation_seed: 1,
       condition_order: conditions.map((c) => c.session_position), preflight_complete: true,
       consent_given: true, consent_time: 1, provenance: PROV, device_type: 'X', browser: 'Y', screen_resolution: '1x1',
+      conditions_per_session: 8, condition_offset: 0, session_index: 1,
     },
     participant: undefined,
     conditions,
-    fatigue: rng() < 0.5 ? [{ fatigue_id: 'b', session_id: sid, condition_id: null, stage: 'baseline', eye_strain: 0, dryness: 0, blur: 0, burning: 0, headache: 0, fatigue_mean: 0, touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true }, all_touched: true }] : [],
+    fatigue: rng() < 0.5 ? [{ fatigue_id: 'b', session_id: sid, condition_id: null, stage: 'baseline', eye_strain: 0, dryness: 0, blur: 0, burning: 0, headache: 0, fatigue_mean: 0, touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true }, all_touched: true, response_time_ms: maybeWeird(rng) * 100 }] : [],
     cvsq: [],
     comprehension: [],
     visualSearch: conditions.filter(has).map((c) => ({

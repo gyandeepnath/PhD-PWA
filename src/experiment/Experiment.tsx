@@ -5,15 +5,17 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { CONDITIONS, conditionDefinitionHash } from './conditions';
+import { CONDITIONS, conditionDefinitionHash, N_CONDITIONS } from './conditions';
 import { PASSAGES } from './passages';
 import { sessionPlan, type PlannedStep } from './counterbalance';
 import { CONFIG } from './config';
 import { initialState, nextState, progressPercent, type MachineState } from './stateMachine';
 import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
 import { put, get, getAllByIndex, nextEnrolmentNumber } from '@/storage/db';
+import { priorParticipantProgress } from '@/storage/gather';
 import { saveResume, clearResume } from '@/storage/sessionPersistence';
 import { isInLoop } from './stateMachine';
+import { BreakScreen } from '@/start/BreakScreen';
 import { DB_VERSION } from '@/storage/schemaEnums';
 import type { Provenance, SessionRecord } from '@/storage/types';
 import { useTracking } from '@/tracking/useTracking';
@@ -59,6 +61,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const writtenConditions = useRef<Set<number>>(new Set());
   const conditionStarted = useRef<Record<number, number>>({});
   const creatingSession = useRef(false);
+  // Conditions run in THIS sitting (8 single, 4 split). Drives the loop length + break insertion.
+  const nConditionsRef = useRef<number>(N_CONDITIONS);
   // Transition lock: ignore re-entrant advance() calls (e.g. accidental double-taps on a tablet)
   // until the machine actually changes — prevents skipping a stage. Reset on every stage change.
   const transitioning = useRef(false);
@@ -66,7 +70,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const advance = useCallback(() => {
     if (transitioning.current) return;
     transitioning.current = true;
-    setMachine((m) => nextState(m));
+    setMachine((m) => nextState(m, nConditionsRef.current));
   }, []);
 
   useEffect(() => {
@@ -86,16 +90,23 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         setResuming(false);
         return;
       }
-      const thePlan = sessionPlan(s.enrolment_number);
+      // Rebuild THIS sitting's slice of the full counterbalanced plan (offset/cps default to a
+      // single full session for legacy records written before split-session support).
+      const offset = s.condition_offset ?? 0;
+      const cps = s.conditions_per_session ?? (s.condition_order?.length || N_CONDITIONS);
+      const sittingPlan = sessionPlan(s.enrolment_number).slice(offset, offset + cps);
+      nConditionsRef.current = sittingPlan.length;
       // Fresh ids for the remaining conditions; completed conditions keep their stored ids.
-      conditionIds.current = thePlan.map(() => uuidv4());
+      conditionIds.current = sittingPlan.map(() => uuidv4());
       writtenConditions.current = new Set();
       setSession(s);
       setEnrolment(s.enrolment_number);
-      setPlan(thePlan);
+      setPlan(sittingPlan);
       setBaselineFatigue(baseline ? baseline.fatigue_mean : null);
       const idx = resume.nextStepIndex;
-      setMachine(idx >= 8 ? { stage: 'CVSQ_END', stepIndex: 7 } : { stage: 'READING_TASK', stepIndex: idx });
+      setMachine(idx >= sittingPlan.length
+        ? { stage: 'CVSQ_END', stepIndex: sittingPlan.length - 1 }
+        : { stage: 'READING_TASK', stepIndex: idx });
       setResuming(false);
     })();
     return () => {
@@ -112,9 +123,17 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const beginSession = useCallback(async (d: SessionInitData) => {
     if (creatingSession.current) return; // guard against double-submit creating duplicate sessions
     creatingSession.current = true;
-    const enrol = await nextEnrolmentNumber();
-    const thePlan = sessionPlan(enrol);
-    conditionIds.current = thePlan.map(() => uuidv4());
+    // Split-session continuity: reuse this participant's prior enrolment number (so the Williams
+    // condition order is identical across sittings) and resume at the global serial position where
+    // their last sitting stopped. A brand-new participant gets a fresh sequential enrolment number.
+    const prior = await priorParticipantProgress(d.participantId);
+    const enrol = prior.enrolment ?? await nextEnrolmentNumber();
+    const fullPlan = sessionPlan(enrol);
+    const offset = Math.min(prior.conditionsCompleted, N_CONDITIONS);
+    const cps = Math.min(d.conditionsPerSession, N_CONDITIONS - offset);
+    const sittingPlan = fullPlan.slice(offset, offset + cps);
+    nConditionsRef.current = sittingPlan.length;
+    conditionIds.current = sittingPlan.map(() => uuidv4());
     writtenConditions.current = new Set();
     const sid = uuidv4();
     const rec: SessionRecord = {
@@ -131,7 +150,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       session_start_time: Date.now(),
       session_end_time: null,
       randomisation_seed: enrol,
-      condition_order: thePlan.map((s) => s.conditionIndex),
+      condition_order: sittingPlan.map((s) => s.conditionIndex),
       preflight_complete: false,
       // Consent is captured at the CONSENT stage (below), not pre-emptively at session creation.
       consent_given: false,
@@ -140,11 +159,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       device_type: navigator.userAgent.includes('Android') ? 'Android' : 'Other',
       browser: navigator.userAgent.slice(0, 60),
       screen_resolution: `${screen.width}x${screen.height}`,
+      conditions_per_session: sittingPlan.length,
+      condition_offset: offset,
+      session_index: prior.sittings + 1,
     };
     await put('sessions', rec);
     setSession(rec);
     setEnrolment(enrol);
-    setPlan(thePlan);
+    setPlan(sittingPlan);
     advance();
   }, [advance]);
 
@@ -177,7 +199,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       : switched ? CONFIG.ADAPTATION_SWITCH_POLARITY_MS : CONFIG.ADAPTATION_SAME_POLARITY_MS;
     await put('conditions', {
       condition_id: conditionId, session_id: session.session_id,
-      session_position: machine.stepIndex, condition_label: cond.label,
+      // Global serial position (offset + local index) so split sittings keep a 0..7 covariate.
+      session_position: step.position, condition_label: cond.label,
       polarity: cond.polarity, background_color: cond.background, text_color: cond.text,
       color_name: cond.colorName, passage_id: step.passageIndex,
       wcag_contrast_ratio: cond.wcag_contrast_ratio, wcag_level: cond.wcag_level,
@@ -193,8 +216,15 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   }, [session, cond, step, conditionId, machine.stepIndex, plan, tracking]);
 
   // ===== RENDER =====
-  const percent = progressPercent(machine);
+  const nConditions = plan.length || N_CONDITIONS;
+  const percent = progressPercent(machine, nConditions);
   const showProgress = machine.stage !== 'SESSION_INIT' && machine.stage !== 'EXPORT_DASHBOARD';
+  // Neutral "Condition X of N" + a rough time estimate (≈9 min/condition incl. rest), shown only
+  // inside the per-condition loop and the break — never any performance information.
+  const inLoopish = isInLoop(machine.stage) || machine.stage === 'BREAK_SCREEN';
+  const conditionCurrent = inLoopish ? machine.stepIndex + 1 : undefined;
+  const conditionTotal = inLoopish ? nConditions : undefined;
+  const timeRemainingMin = inLoopish ? Math.max(0, Math.round((nConditions - machine.stepIndex) * 9)) : null;
 
   let view: React.ReactNode = null;
   switch (machine.stage) {
@@ -251,6 +281,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           if (session) await put('cvsq_scores', {
             cvsq_id: uuidv4(), session_id: session.session_id, stage: 'baseline',
             frequency: r.frequency, intensity: r.intensity, total_score: r.total, symptomatic: r.symptomatic,
+            response_time_ms: r.responseTimeMs,
           });
           advance();
         }} />
@@ -262,6 +293,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           if (session) await put('cvsq_scores', {
             cvsq_id: uuidv4(), session_id: session.session_id, stage: 'session_end',
             frequency: r.frequency, intensity: r.intensity, total_score: r.total, symptomatic: r.symptomatic,
+            response_time_ms: r.responseTimeMs,
           });
           advance();
         }} />
@@ -296,6 +328,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             if (session) await put('fatigue_scores', {
               fatigue_id: uuidv4(), session_id: session.session_id, condition_id: null,
               stage: 'baseline', ...r.items, fatigue_mean: r.mean, touched: r.touched, all_touched: true,
+              response_time_ms: r.responseTimeMs,
             });
             setBaselineFatigue(r.mean);
             advance();
@@ -349,6 +382,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               perception_id: uuidv4(), session_id: session.session_id, condition_id: conditionId,
               display_comfort_score: r.comfort, text_clarity_score: r.clarity,
               comfort_touched: r.comfortTouched, clarity_touched: r.clarityTouched,
+              response_time_ms: r.responseTimeMs,
             });
             advance();
           }}
@@ -367,6 +401,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             if (session) await put('fatigue_scores', {
               fatigue_id: uuidv4(), session_id: session.session_id, condition_id: conditionId,
               stage: 'post_condition', ...r.items, fatigue_mean: r.mean, touched: r.touched, all_touched: true,
+              response_time_ms: r.responseTimeMs,
             });
             advance();
           }}
@@ -433,6 +468,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       view = <AdaptationScreen durationMs={dur} nextLabel={label} onDone={advance} />;
       break;
     }
+    case 'BREAK_SCREEN':
+      view = <BreakScreen completed={machine.stepIndex + 1} total={plan.length} onContinue={advance} />;
+      break;
     case 'SESSION_COMPLETE':
       view = <SessionComplete onExport={async () => {
         if (session) {
@@ -473,7 +511,15 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
 
   return (
     <div data-stage={machine.stage} style={{ height: '100%' }}>
-      {showProgress && <ExperimentProgress percent={percent} label={machine.stage.replace(/_/g, ' ').toLowerCase()} />}
+      {showProgress && (
+        <ExperimentProgress
+          percent={percent}
+          label={machine.stage.replace(/_/g, ' ').toLowerCase()}
+          conditionCurrent={conditionCurrent}
+          conditionTotal={conditionTotal}
+          timeRemainingMin={timeRemainingMin}
+        />
+      )}
       {canPause && (
         <button
           onClick={() => {

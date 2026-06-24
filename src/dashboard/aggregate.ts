@@ -4,8 +4,37 @@
  * charts/tables and the wide-format CSV, so the numbers are guaranteed consistent.
  */
 import type { SessionBundle } from '@/storage/gather';
+import type { FatigueRecord, DisplayPerceptionRecord, ComprehensionRecord, RtSummaryRecord, EyeMetricsRecord } from '@/storage/types';
+import { PASSAGES } from '@/experiment/passages';
 
 export type QcFlag = 'good' | 'warn' | 'bad';
+
+/**
+ * Engagement / careless-responding thresholds.
+ *
+ * Boredom and disengagement over a long within-subjects session mimic visual fatigue (slower,
+ * more variable RT, lapses, rushed/straight-lined ratings, skimming). These thresholds flag
+ * conditions whose data quality is suspect so the analyst can exclude or model them — they are
+ * deliberately conservative so genuine responding is not discarded. All reuse existing recorded
+ * fields; nothing extra is shown to the participant (no performance feedback → no confound).
+ */
+export const ENGAGEMENT = {
+  /** Fatigue questionnaire (5 sliders) faster than this is implausibly rushed. */
+  FATIGUE_RUSHED_MS: 3000,
+  /** Perception rating (2 sliders) faster than this is implausibly rushed. */
+  PERCEPTION_RUSHED_MS: 2000,
+  /** Reading faster than wordCount / this (wpm) is an implausible skim (normal reading ≤ ~400 wpm). */
+  SKIM_WPM_CEILING: 400,
+  /** RT block is disengaged if any of these existing rates exceed their cutoff. */
+  RT_FALSE_ALARM_MAX: 0.3,
+  RT_ERROR_MAX: 0.3,
+  RT_LAPSE_MAX: 0.3,
+  /** Camera face presence below this (when camera active) flags the participant turning away. */
+  FACE_PRESENCE_MIN: 0.5,
+  /** quality_score >= GOOD → good; >= WARN → warn; else bad. */
+  QUALITY_GOOD: 0.8,
+  QUALITY_WARN: 0.5,
+} as const;
 
 export interface ConditionSummary {
   condition_id: string;
@@ -39,6 +68,23 @@ export interface ConditionSummary {
   // Comprehension
   comprehension_correct: number | null;
   comprehension_rt_ms: number | null;
+
+  // Reading + engagement / careless-responding (boredom/disengagement detection)
+  reading_time_ms: number | null;
+  fatigue_response_ms: number | null;
+  perception_response_ms: number | null;
+  /** Composite engagement flag and 0-1 quality score, with human-readable reasons. */
+  engagement: QcFlag;
+  quality_score: number;
+  engagement_reasons: string[];
+  /** Individual careless-responding signals (also exported in the quality-flags CSV). */
+  careless_straight_lined: boolean;
+  careless_rushed_fatigue: boolean;
+  careless_rushed_perception: boolean;
+  reading_skim: boolean;
+  comprehension_wrong: boolean;
+  rt_disengaged: boolean;
+  low_face_presence: boolean;
 
   // Visual search
   search_time_ms: number | null;
@@ -74,6 +120,87 @@ function flag(value: number | null, good: number, warn: number, higherIsBetter =
 const worst = (flags: QcFlag[]): QcFlag =>
   flags.includes('bad') ? 'bad' : flags.includes('warn') ? 'warn' : 'good';
 
+export interface EngagementResult {
+  engagement: QcFlag;
+  quality_score: number;
+  reasons: string[];
+  careless_straight_lined: boolean;
+  careless_rushed_fatigue: boolean;
+  careless_rushed_perception: boolean;
+  reading_skim: boolean;
+  comprehension_wrong: boolean;
+  rt_disengaged: boolean;
+  low_face_presence: boolean;
+}
+
+/** True when all five fatigue items are identical (straight-lining), only if actually answered. */
+function isStraightLined(fat?: FatigueRecord): boolean {
+  if (!fat || !fat.all_touched) return false;
+  const v = [fat.eye_strain, fat.dryness, fat.blur, fat.burning, fat.headache];
+  return v.every((x) => x === v[0]);
+}
+
+/**
+ * Per-condition engagement / careless-responding assessment. Pure and unit-tested. Each fired
+ * signal subtracts a weight from a 1.0 quality score; the composite flag is derived from the
+ * remaining score. Weighted so a single weak signal (e.g. one wrong MCQ) only warns, while the
+ * strong behavioural signals (skim, RT disengagement) can push a condition to "bad".
+ */
+export function conditionEngagement(args: {
+  reading_time_ms: number | null;
+  word_count: number | null;
+  fatigue?: FatigueRecord;
+  perception?: DisplayPerceptionRecord;
+  comprehension?: ComprehensionRecord;
+  rt?: RtSummaryRecord;
+  eye?: EyeMetricsRecord;
+}): EngagementResult {
+  const { reading_time_ms, word_count, fatigue, perception, comprehension, rt, eye } = args;
+  const reasons: string[] = [];
+  let score = 1;
+  const penalise = (amount: number, reason: string) => { score -= amount; reasons.push(reason); };
+
+  // Reading skim — faster than the fastest plausible reading speed.
+  const skimFloorMs = word_count != null && word_count > 0 ? (word_count / ENGAGEMENT.SKIM_WPM_CEILING) * 60000 : null;
+  const reading_skim = reading_time_ms != null && skimFloorMs != null && reading_time_ms < skimFloorMs;
+  if (reading_skim) penalise(0.3, `reading skimmed (${Math.round(reading_time_ms!)}ms < ${Math.round(skimFloorMs!)}ms floor)`);
+
+  // RT block disengagement — reuse existing rates.
+  const rt_disengaged = !!rt && (
+    rt.false_alarm_rate > ENGAGEMENT.RT_FALSE_ALARM_MAX ||
+    rt.error_rate > ENGAGEMENT.RT_ERROR_MAX ||
+    rt.lapse_rate > ENGAGEMENT.RT_LAPSE_MAX
+  );
+  if (rt_disengaged) penalise(0.3, 'reaction-time block shows disengagement (high FA/error/lapse rate)');
+
+  // Rushed questionnaires.
+  const careless_rushed_fatigue = !!fatigue && fatigue.response_time_ms != null && fatigue.response_time_ms < ENGAGEMENT.FATIGUE_RUSHED_MS;
+  if (careless_rushed_fatigue) penalise(0.2, `fatigue scale rushed (${Math.round(fatigue!.response_time_ms!)}ms)`);
+  const careless_rushed_perception = !!perception && perception.response_time_ms != null && perception.response_time_ms < ENGAGEMENT.PERCEPTION_RUSHED_MS;
+  if (careless_rushed_perception) penalise(0.1, `perception rating rushed (${Math.round(perception!.response_time_ms!)}ms)`);
+
+  // Straight-lined fatigue ratings.
+  const careless_straight_lined = isStraightLined(fatigue);
+  if (careless_straight_lined) penalise(0.1, 'fatigue ratings straight-lined (all five identical)');
+
+  // Comprehension miss (weak on its own).
+  const comprehension_wrong = !!comprehension && !comprehension.is_correct;
+  if (comprehension_wrong) penalise(0.1, 'comprehension answer incorrect');
+
+  // Camera: participant turned away for a large share of the condition.
+  const low_face_presence = !!eye && eye.camera_active && eye.face_presence_ratio < ENGAGEMENT.FACE_PRESENCE_MIN;
+  if (low_face_presence) penalise(0.1, `low face presence (${Math.round((eye!.face_presence_ratio) * 100)}%)`);
+
+  const quality_score = Math.max(0, Math.round(score * 100) / 100);
+  const engagement: QcFlag = quality_score >= ENGAGEMENT.QUALITY_GOOD ? 'good' : quality_score >= ENGAGEMENT.QUALITY_WARN ? 'warn' : 'bad';
+
+  return {
+    engagement, quality_score, reasons,
+    careless_straight_lined, careless_rushed_fatigue, careless_rushed_perception,
+    reading_skim, comprehension_wrong, rt_disengaged, low_face_presence,
+  };
+}
+
 export function baselineFatigueMean(bundle: SessionBundle): number | null {
   const b = bundle.fatigue.find((f) => f.stage === 'baseline');
   return b ? b.fatigue_mean : null;
@@ -98,6 +225,12 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
     const facePresenceFlag: QcFlag = cameraActive ? flag(facePresence, 0.8, 0.5) : 'warn';
     const fpsFlag: QcFlag = cameraActive ? flag(fps, 25, 15) : 'warn';
     const offAxisFlag: QcFlag = cameraActive ? flag(offAxis, 0.2, 0.4, false) : 'warn';
+
+    const eng = conditionEngagement({
+      reading_time_ms: c.reading_time_ms,
+      word_count: PASSAGES[c.passage_id]?.wordCount ?? null,
+      fatigue: fat, perception: perc, comprehension: comp, rt, eye,
+    });
 
     return {
       condition_id: c.condition_id,
@@ -128,6 +261,20 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
 
       comprehension_correct: comp ? (comp.is_correct ? 1 : 0) : null,
       comprehension_rt_ms: comp?.response_time_ms ?? null,
+
+      reading_time_ms: c.reading_time_ms,
+      fatigue_response_ms: fat?.response_time_ms ?? null,
+      perception_response_ms: perc?.response_time_ms ?? null,
+      engagement: eng.engagement,
+      quality_score: eng.quality_score,
+      engagement_reasons: eng.reasons,
+      careless_straight_lined: eng.careless_straight_lined,
+      careless_rushed_fatigue: eng.careless_rushed_fatigue,
+      careless_rushed_perception: eng.careless_rushed_perception,
+      reading_skim: eng.reading_skim,
+      comprehension_wrong: eng.comprehension_wrong,
+      rt_disengaged: eng.rt_disengaged,
+      low_face_presence: eng.low_face_presence,
 
       search_time_ms: vs?.search_time_ms ?? null,
       search_accuracy: vs?.accuracy_rate ?? null,

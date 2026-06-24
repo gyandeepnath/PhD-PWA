@@ -19,6 +19,8 @@ export interface SessionInitData {
   illuminationLevel: 'low' | 'moderate' | 'high' | null;
   whiteLuminance: number | null;
   brightnessPercent: number | null;
+  /** Conditions to run this sitting: 8 = single session, 4 = split into two shorter sittings. */
+  conditionsPerSession: number;
 }
 export function SessionInit({ onSubmit }: { onSubmit: (d: SessionInitData) => void }) {
   const [pid, setPid] = useState('');
@@ -26,6 +28,7 @@ export function SessionInit({ onSubmit }: { onSubmit: (d: SessionInitData) => vo
   const [level, setLevel] = useState<'low' | 'moderate' | 'high' | ''>('');
   const [lum, setLum] = useState('');
   const [bright, setBright] = useState('');
+  const [sitting, setSitting] = useState<'single' | 'split'>('single');
   const [err, setErr] = useState('');
   const luxNum = Number(lux);
   const valid = /^[A-Za-z0-9_-]{1,20}$/.test(pid) && lux !== '' && luxNum >= 0 && luxNum <= 200000;
@@ -50,6 +53,17 @@ export function SessionInit({ onSubmit }: { onSubmit: (d: SessionInitData) => vo
           <Field label="Locked display brightness (%, optional)">
             <input className="vl-input" inputMode="numeric" value={bright} onChange={(e) => setBright(e.target.value)} placeholder="80" />
           </Field>
+          <Pick
+            label="Session structure (split shortens each sitting to reduce fatigue/boredom)"
+            value={sitting}
+            set={(v) => setSitting(v as 'single' | 'split')}
+            opts={['single', 'split']}
+          />
+          <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: -6 }}>
+            {sitting === 'single'
+              ? 'Single sitting: all 8 conditions (~60–90 min).'
+              : 'Split: 4 conditions now, the remaining 4 in a later sitting (re-enter the same Participant ID; the condition order is preserved).'}
+          </p>
         </div>
         {err && <p className="mt-3 font-lab text-xs text-[#e64c4c]">{err}</p>}
         <button
@@ -64,6 +78,7 @@ export function SessionInit({ onSubmit }: { onSubmit: (d: SessionInitData) => vo
               illuminationLevel: level === '' ? null : level,
               whiteLuminance: lum === '' ? null : Number(lum),
               brightnessPercent: bright === '' ? null : Number(bright),
+              conditionsPerSession: sitting === 'split' ? 4 : 8,
             });
           }}
         >

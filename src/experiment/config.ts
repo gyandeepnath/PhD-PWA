@@ -48,6 +48,13 @@ const BASE_CONFIG = {
   ADAPTATION_SWITCH_POLARITY_MS: 120000,
   ADAPTATION_COLOR: '#808080',
 
+  // Boredom mitigation: a self-paced rest break is offered after every N completed conditions
+  // (but never after the last condition of the sitting). Keeps participants fresh without giving
+  // any performance feedback that could differentially change effort across conditions.
+  BREAK_EVERY_N_CONDITIONS: 2,
+  /** Default conditions run per sitting: 8 = single session, 4 = split into two sittings. */
+  CONDITIONS_PER_SESSION_DEFAULT: 8,
+
   // Camera.
   CAMERA_WIDTH: 1280,
   CAMERA_HEIGHT: 720,

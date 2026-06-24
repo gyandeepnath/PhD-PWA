@@ -2,13 +2,16 @@
  * Display comfort + text clarity ratings (0-100). Shown on the active condition's colours so the
  * participant rates the display they're using. Touched-gated like the fatigue scale.
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { now } from '@/lib/timing';
 
 export interface PerceptionResult {
   comfort: number;
   clarity: number;
   comfortTouched: boolean;
   clarityTouched: boolean;
+  /** Time from mount to submit (ms) — engagement signal. */
+  responseTimeMs: number;
 }
 
 interface Props {
@@ -23,6 +26,7 @@ export function DisplayPerceptionRating({ background, text, onComplete }: Props)
   const [comfortTouched, setComfortTouched] = useState(false);
   const [clarityTouched, setClarityTouched] = useState(false);
   const [sent, setSent] = useState(false);
+  const mountedAt = useRef(now());
   const ready = comfortTouched && clarityTouched && !sent;
 
   return (
@@ -61,7 +65,7 @@ export function DisplayPerceptionRating({ background, text, onComplete }: Props)
       </div>
       <button
         disabled={!ready}
-        onClick={() => { if (!ready) return; setSent(true); onComplete({ comfort, clarity, comfortTouched, clarityTouched }); }}
+        onClick={() => { if (!ready) return; setSent(true); onComplete({ comfort, clarity, comfortTouched, clarityTouched, responseTimeMs: now() - mountedAt.current }); }}
         className="mt-8 rounded-xl px-8 py-3 font-lab text-sm transition active:scale-95"
         style={{
           background: ready ? text : 'transparent',

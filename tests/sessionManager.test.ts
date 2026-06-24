@@ -17,6 +17,7 @@ function makeSession(id: string, over: Partial<SessionRecord> = {}): SessionReco
     brightness_percent: null, session_start_time: Date.now(), session_end_time: Date.now(),
     randomisation_seed: 1, condition_order: [0], preflight_complete: true, consent_given: true,
     consent_time: 1, provenance: prov, device_type: 'X', browser: 'Y', screen_resolution: '1x1',
+    conditions_per_session: 8, condition_offset: 0, session_index: 1,
     ...over,
   };
 }

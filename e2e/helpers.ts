@@ -53,13 +53,14 @@ export async function startNewExperiment(page: Page) {
 }
 
 /** Perform the appropriate action for the current stage. Returns true if the run is complete. */
-export async function handleStage(page: Page, stage: string): Promise<boolean> {
+export async function handleStage(page: Page, stage: string, opts: { split?: boolean; participantId?: string } = {}): Promise<boolean> {
   if (stage === 'EXPORT_DASHBOARD') return true;
   await page.waitForTimeout(120);
   switch (stage) {
     case 'SESSION_INIT':
-      await setInput(page, 'pid', 'E2E01');
+      await setInput(page, 'pid', opts.participantId ?? 'E2E01');
       await setInput(page, 'lux', '350');
+      if (opts.split) await click(page, /^split$/);
       await click(page, /Begin setup/);
       await waitStageChange(page, stage);
       break;
@@ -149,6 +150,10 @@ export async function handleStage(page: Page, stage: string): Promise<boolean> {
       await waitStageChange(page, stage);
       break;
     case 'ADAPTATION':
+      await waitStageChange(page, stage);
+      break;
+    case 'BREAK_SCREEN':
+      await click(page, /continue/i);
       await waitStageChange(page, stage);
       break;
     case 'SESSION_COMPLETE':

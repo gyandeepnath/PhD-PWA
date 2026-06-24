@@ -11,7 +11,7 @@
  */
 import type { Stage } from '@/storage/types';
 import { N_CONDITIONS } from './conditions';
-import { TASKS_PER_CONDITION } from './config';
+import { TASKS_PER_CONDITION, CONFIG } from './config';
 
 /** Linear setup chain. SESSION_INIT is researcher-only and not counted in the progress bar. */
 export const SETUP_ORDER: Stage[] = [
@@ -54,9 +54,20 @@ const MEASURED_LOOP = LOOP_ORDER.slice(0, TASKS_PER_CONDITION);
 
 export const TOTAL_TRACKED_STEPS = SETUP_STEPS + N_CONDITIONS * TASKS_PER_CONDITION;
 
+/** Tracked steps for a sitting that runs `nConditions` conditions (default = full 8). */
+export function totalTrackedSteps(nConditions: number = N_CONDITIONS): number {
+  return SETUP_STEPS + nConditions * TASKS_PER_CONDITION;
+}
+
+/** True when a self-paced break is offered after completing `completedCount` of `nConditions`. */
+export function shouldBreakAfter(completedCount: number, nConditions: number): boolean {
+  const every = CONFIG.BREAK_EVERY_N_CONDITIONS;
+  return every > 0 && completedCount % every === 0 && completedCount < nConditions;
+}
+
 export interface MachineState {
   stage: Stage;
-  /** Current condition index 0..N-1 (meaningful only inside the loop). */
+  /** Current condition index within this sitting, 0..nConditions-1 (meaningful only inside the loop). */
   stepIndex: number;
 }
 
@@ -64,8 +75,12 @@ export function initialState(): MachineState {
   return { stage: 'SESSION_INIT', stepIndex: 0 };
 }
 
-/** Compute the next state. */
-export function nextState({ stage, stepIndex }: MachineState): MachineState {
+/**
+ * Compute the next state. `nConditions` is the number of conditions in THIS sitting (8 for a
+ * single session, 4 for a split sitting); it defaults to the full set so existing callers/tests
+ * are unaffected. A self-paced BREAK_SCREEN is inserted after every N completed conditions.
+ */
+export function nextState({ stage, stepIndex }: MachineState, nConditions: number = N_CONDITIONS): MachineState {
   // Setup chain.
   const setupIdx = SETUP_ORDER.indexOf(stage);
   if (setupIdx >= 0 && setupIdx < SETUP_ORDER.length - 1) {
@@ -80,16 +95,20 @@ export function nextState({ stage, stepIndex }: MachineState): MachineState {
   if (loopIdx >= 0) {
     // REACTION_TIME is the final measured sub-stage of a condition.
     if (stage === 'REACTION_TIME') {
-      return stepIndex < N_CONDITIONS - 1
+      return stepIndex < nConditions - 1
         ? { stage: 'ADAPTATION', stepIndex }
         : { stage: 'CVSQ_END', stepIndex };
     }
     if (stage === 'ADAPTATION') {
-      return { stage: 'READING_TASK', stepIndex: stepIndex + 1 };
+      // After resting, optionally insert a self-paced break, then move to the next condition.
+      return shouldBreakAfter(stepIndex + 1, nConditions)
+        ? { stage: 'BREAK_SCREEN', stepIndex }
+        : { stage: 'READING_TASK', stepIndex: stepIndex + 1 };
     }
     return { stage: LOOP_ORDER[loopIdx + 1], stepIndex };
   }
 
+  if (stage === 'BREAK_SCREEN') return { stage: 'READING_TASK', stepIndex: stepIndex + 1 };
   if (stage === 'CVSQ_END') return { stage: 'SESSION_COMPLETE', stepIndex };
   if (stage === 'SESSION_COMPLETE') return { stage: 'EXPORT_DASHBOARD', stepIndex };
   return { stage: 'EXPORT_DASHBOARD', stepIndex }; // terminal
@@ -106,17 +125,17 @@ export function completedSteps({ stage, stepIndex }: MachineState): number {
   if (measuredIdx >= 0) {
     return SETUP_STEPS + stepIndex * TASKS_PER_CONDITION + measuredIdx;
   }
-  if (stage === 'ADAPTATION') {
-    // After all measured sub-stages of this condition.
+  if (stage === 'ADAPTATION' || stage === 'BREAK_SCREEN') {
+    // After all measured sub-stages of this condition (rest/break is not itself a tracked step).
     return SETUP_STEPS + (stepIndex + 1) * TASKS_PER_CONDITION;
   }
   // SESSION_COMPLETE / EXPORT_DASHBOARD
   return TOTAL_TRACKED_STEPS;
 }
 
-/** Progress as a 0-100 percentage. */
-export function progressPercent(state: MachineState): number {
-  return Math.min(100, (completedSteps(state) / TOTAL_TRACKED_STEPS) * 100);
+/** Progress as a 0-100 percentage, relative to this sitting's condition count. */
+export function progressPercent(state: MachineState, nConditions: number = N_CONDITIONS): number {
+  return Math.min(100, (completedSteps(state) / totalTrackedSteps(nConditions)) * 100);
 }
 
 export function isSetup(stage: Stage): boolean {

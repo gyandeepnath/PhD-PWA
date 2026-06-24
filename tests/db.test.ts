@@ -34,6 +34,9 @@ function makeSession(id: string, participant: string, enrolment: number): Sessio
     device_type: 'Android Tablet',
     browser: 'Chrome 120',
     screen_resolution: '2880x1800',
+    conditions_per_session: 8,
+    condition_offset: 0,
+    session_index: 1,
   };
 }
 

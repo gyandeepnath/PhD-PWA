@@ -20,7 +20,8 @@ session, and the known limitations a PhD write-up should disclose.
 ## 2. Session flow (as implemented)
 
 ```
-SESSION_INIT            researcher: participant ID, ambient lux, (optional) screen luminance + brightness
+SESSION_INIT            researcher: participant ID, ambient lux, (optional) screen luminance + brightness,
+                        session structure (single 8-condition sitting, or split 4+4)
   → CONSENT             participant: informed consent (recorded here, not pre-emptively)
   → PARTICIPANT_PROFILE demographics + vision covariates (age 18–80, correction, self-report CVD…)
   → PREFLIGHT           researcher: display/room configured (brightness fixed, night-shift OFF, …)
@@ -42,6 +43,8 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                             omission & commission errors, d′. (An Eriksen-flanker variant is
                             available behind CONFIG.RT_USE_FLANKERS for an optional congruency DV.)
         → ADAPTATION         60 s neutral grey (120 s when polarity switches)
+        → BREAK_SCREEN       self-paced rest after every 2 conditions (CONFIG.BREAK_EVERY_N_CONDITIONS);
+                             neutral "X of N done", no performance feedback; never after the last
   → CVSQ_END            validated CVS-Q again (Δ from baseline = primary validated fatigue outcome)
   → SESSION_COMPLETE    thank-you; session marked complete
   → EXPORT_DASHBOARD    researcher: charts, QC, CSV/JSON export
@@ -99,5 +102,36 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
 - **Contrast confound**: C4 (yellow-on-white) is below WCAG AA (2.39:1); treat WCAG ratio as a
   covariate or reframe as polarity × contrast.
 - **Per-condition d′** rests on ~24 signal trials (unstable; SE often > 0.3) — report aggregated d′.
-- **Session length** (~60–90 min) accumulates fatigue; `session_position` is recorded as a covariate.
+- **Session length** (~60–90 min) accumulates fatigue; `session_position` (0–7) is recorded as a covariate.
+
+## 7. Boredom / disengagement vs. fatigue
+
+The session repeats the same 4-task loop ×8, so **boredom and disengagement accumulate with
+time-on-task and mimic visual fatigue** — slower and more variable RT, attention lapses, careless
+or straight-lined ratings, and skim-reading. Left unaddressed this adds noise (lowers power), risks
+careless data contaminating the fatigue/comprehension measures, and risks dropout. The Williams
+square already balances serial-position effects out of the *group-level* condition contrast; these
+additional measures target the *data-quality* and *participant-experience* problem directly.
+
+**Detection (so suspect data can be excluded or modelled, not silently trusted).** Each condition
+gets an **engagement flag** (`good`/`warn`/`bad`) and a 0–1 `quality_score` composed from existing
+signals plus newly recorded questionnaire response times: reading **skim** (reading faster than the
+word-count ÷ 400 wpm floor), **rushed** fatigue/perception ratings, **straight-lined** fatigue
+ratings, RT **disengagement** (high false-alarm/error/lapse rate), a wrong comprehension answer, and
+low camera face-presence. Exported in `10_wide_summary.csv` (`engagement_flag`, `quality_score`) and
+the dedicated **`12_quality_flags.csv`** (per-signal booleans + reasons). The analysis templates run
+a **sensitivity analysis**: fit on all data and on the clean subset (drop `bad`); agreement means
+disengagement is not driving the result.
+
+**Reduction (without biasing the data).** A neutral progress readout ("Condition X of N", rough time
+remaining) and a **self-paced rest break after every 2 conditions** reduce monotony. Crucially there
+is **no gamification or performance feedback** — telling participants their scores would
+differentially change effort across conditions and confound the display manipulation.
+
+**Methodology (shorten each sitting).** The session can be **split** (4 conditions per sitting, a
+later sitting for the remaining 4). The participant's enrolment number — which drives the Williams
+order — is **reused across sittings**, and the next sitting resumes at the global serial position
+where the last stopped, so each condition is still run exactly once. `session_index` (sitting
+number) is recorded and added as a covariate when sittings vary; baseline fatigue and CVS-Q are
+re-measured each sitting (fatigue resets between sittings — documented, not assumed away).
 - The **Ishihara screening** is a digital screening aid, not a clinical diagnosis.

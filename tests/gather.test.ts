@@ -19,6 +19,7 @@ async function seed() {
     screen_white_luminance_cd_m2: 120, brightness_percent: 80, session_start_time: 1700000000000,
     session_end_time: 1700000600000, randomisation_seed: 1, condition_order: [0], preflight_complete: true,
     consent_given: true, consent_time: 1, provenance: prov, device_type: 'Android', browser: 'Chrome', screen_resolution: '2880x1800',
+    conditions_per_session: 8, condition_offset: 0, session_index: 1,
   });
   await put('conditions', {
     condition_id: 'A', session_id: 'S1', session_position: 0, condition_label: 'C1', polarity: 'positive',
@@ -30,6 +31,7 @@ async function seed() {
     fatigue_id: 'f0', session_id: 'S1', condition_id: null, stage: 'baseline', eye_strain: 1, dryness: 1,
     blur: 1, burning: 1, headache: 1, fatigue_mean: 1,
     touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true }, all_touched: true,
+    response_time_ms: 8000,
   });
   await put('rt_summaries', {
     condition_id: 'A', session_id: 'S1', total_trials: 48, signal_trials: 24, hits: 22, false_alarms: 2,

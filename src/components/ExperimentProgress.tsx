@@ -1,10 +1,22 @@
-/** Thin top progress bar driven by the stage machine. */
+/** Thin top progress bar driven by the stage machine, with a neutral "Condition X of N" readout. */
 interface Props {
   percent: number;
   label?: string;
+  /** 1-based current condition within this sitting (omitted outside the loop). */
+  conditionCurrent?: number;
+  /** Total conditions in this sitting. */
+  conditionTotal?: number;
+  /** Rough minutes remaining in the sitting (neutral; no performance information). */
+  timeRemainingMin?: number | null;
 }
 
-export function ExperimentProgress({ percent, label }: Props) {
+export function ExperimentProgress({ percent, label, conditionCurrent, conditionTotal, timeRemainingMin }: Props) {
+  const parts: string[] = [];
+  if (conditionCurrent != null && conditionTotal != null) parts.push(`Condition ${conditionCurrent} of ${conditionTotal}`);
+  if (label) parts.push(label);
+  if (timeRemainingMin != null && timeRemainingMin > 0) parts.push(`~${timeRemainingMin} min left`);
+  const text = parts.join(' · ');
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 40 }}>
       <div style={{ height: 4, background: '#e5e2dc' }}>
@@ -17,7 +29,7 @@ export function ExperimentProgress({ percent, label }: Props) {
           }}
         />
       </div>
-      {label && (
+      {text && (
         <div
           style={{
             position: 'absolute',
@@ -28,7 +40,7 @@ export function ExperimentProgress({ percent, label }: Props) {
             color: '#5a5a7a',
           }}
         >
-          {label}
+          {text}
         </div>
       )}
     </div>

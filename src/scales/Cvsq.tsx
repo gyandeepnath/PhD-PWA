@@ -2,14 +2,17 @@
  * CVS-Q (Seguí 2015) questionnaire UI. For each of 16 symptoms: pick frequency; if not "never",
  * pick intensity. Scored live; submit enabled once every item has a frequency answer.
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { CVSQ_ITEMS, scoreCvsq } from './cvsq';
+import { now } from '@/lib/timing';
 
 export interface CvsqResult {
   frequency: number[];
   intensity: number[];
   total: number;
   symptomatic: boolean;
+  /** Time from mount to submit (ms) — engagement signal. */
+  responseTimeMs: number;
 }
 
 const FREQ = [
@@ -31,6 +34,7 @@ export function Cvsq({ stage, onComplete }: Props) {
   const [freq, setFreq] = useState<(number | null)[]>(Array(16).fill(null));
   const [inten, setInten] = useState<(number | null)[]>(Array(16).fill(null));
   const [sent, setSent] = useState(false);
+  const mountedAt = useRef(now());
 
   const ready = freq.every((f, i) => f != null && (f === 0 || inten[i] != null)) && !sent;
 
@@ -40,7 +44,7 @@ export function Cvsq({ stage, onComplete }: Props) {
     const frequency = freq.map((f) => f ?? 0);
     const intensity = frequency.map((f, i) => (f === 0 ? 0 : inten[i] ?? 0));
     const score = scoreCvsq(frequency, intensity);
-    onComplete({ frequency, intensity, total: score.total, symptomatic: score.symptomatic });
+    onComplete({ frequency, intensity, total: score.total, symptomatic: score.symptomatic, responseTimeMs: now() - mountedAt.current });
   };
 
   return (

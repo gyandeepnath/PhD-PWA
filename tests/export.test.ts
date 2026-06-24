@@ -16,6 +16,7 @@ function bundle(): SessionBundle {
       session_end_time: 1700000600000, randomisation_seed: 1, condition_order: [0, 1],
       preflight_complete: true, consent_given: true, consent_time: 1, provenance: prov,
       device_type: 'Android', browser: 'Chrome', screen_resolution: '2880x1800',
+      conditions_per_session: 8, condition_offset: 0, session_index: 1,
     },
     participant: undefined,
     conditions: [
@@ -23,9 +24,9 @@ function bundle(): SessionBundle {
       { condition_id: 'B', session_id: 'S1', session_position: 1, condition_label: 'C4', polarity: 'positive', background_color: '#FFFFFF', text_color: '#C9A400', color_name: 'yellow', passage_id: 5, wcag_contrast_ratio: 2.39, wcag_level: 'Fail', michelson_contrast: 0.4, below_wcag_aa: true, started_at: 3, completed_at: 4, condition_duration_sec: 1, adaptation_ms_before: 60000, reading_time_ms: null },
     ],
     fatigue: [
-      { fatigue_id: 'f0', session_id: 'S1', condition_id: null, stage: 'baseline', eye_strain: 1, dryness: 1, blur: 1, burning: 1, headache: 1, fatigue_mean: 1, touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true }, all_touched: true },
-      { fatigue_id: 'f1', session_id: 'S1', condition_id: 'A', stage: 'post_condition', eye_strain: 2, dryness: 2, blur: 2, burning: 2, headache: 2, fatigue_mean: 2, touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true }, all_touched: true },
-      { fatigue_id: 'f2', session_id: 'S1', condition_id: 'B', stage: 'post_condition', eye_strain: 4, dryness: 4, blur: 4, burning: 4, headache: 4, fatigue_mean: 4, touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true }, all_touched: true },
+      { fatigue_id: 'f0', session_id: 'S1', condition_id: null, stage: 'baseline', eye_strain: 1, dryness: 1, blur: 1, burning: 1, headache: 1, fatigue_mean: 1, touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true }, all_touched: true, response_time_ms: 8000 },
+      { fatigue_id: 'f1', session_id: 'S1', condition_id: 'A', stage: 'post_condition', eye_strain: 2, dryness: 3, blur: 2, burning: 1, headache: 2, fatigue_mean: 2, touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true }, all_touched: true, response_time_ms: 8000 },
+      { fatigue_id: 'f2', session_id: 'S1', condition_id: 'B', stage: 'post_condition', eye_strain: 4, dryness: 5, blur: 3, burning: 4, headache: 4, fatigue_mean: 4, touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true }, all_touched: true, response_time_ms: 8000 },
     ],
     cvsq: [],
     comprehension: [
@@ -35,7 +36,7 @@ function bundle(): SessionBundle {
       { condition_id: 'A', session_id: 'S1', passage_id: 3, search_target: 'plate', targets_in_set: 5, search_time_ms: 12000, time_to_first_target_ms: 800, targets_found: 5, targets_missed: 0, false_detections: 1, accuracy_rate: 1, search_efficiency: 25, mean_inter_target_interval_ms: 2000, termination_mode: 'voluntary_full' },
     ],
     perception: [
-      { perception_id: 'p1', session_id: 'S1', condition_id: 'A', display_comfort_score: 80, text_clarity_score: 90, comfort_touched: true, clarity_touched: true },
+      { perception_id: 'p1', session_id: 'S1', condition_id: 'A', display_comfort_score: 80, text_clarity_score: 90, comfort_touched: true, clarity_touched: true, response_time_ms: 5000 },
     ],
     eyeMetrics: [
       { condition_id: 'A', session_id: 'S1', camera_active: true, effective_fps: 28, fps_adequate_for_tiers: true, blink_rate: 9, blink_rate_full: 8, incomplete_blink_ratio: 0.1, blink_duration_mean_ms: 150, bins: { first_half_blink_rate: 8, second_half_blink_rate: 10 }, blink_rate_delta_from_baseline: -1, blink_rate_micro: 0, blink_count_full: 8, blink_count_partial: 0, blink_count_micro: 0, blink_count_incomplete: 1, ear_baseline: 0.3, ear_threshold_used: 0.18, head_pitch_mean: 2, head_yaw_mean: 1, head_roll_mean: 0, head_movement_std: 1, postural_load: 1.5, head_stability_score: 0.5, off_axis_ratio: 0.1, gaze_calibrated: false, gaze_deviation_ratio: 0.2, zone_center_ratio: 0.8, zone_transition_count: 5, face_presence_ratio: 0.95, face_size_ratio: 0.2 },
@@ -95,12 +96,23 @@ describe('export builder', () => {
   const files = buildExportFiles(bundle());
   const names = files.map((f) => f.filename);
 
-  it('produces all 11 CSVs + JSON + manifest', () => {
+  it('produces all 12 CSVs + JSON + manifest', () => {
     expect(names).toContain('00_MASTER_CODEBOOK.csv');
     expect(names).toContain('10_wide_summary.csv');
-    expect(names.filter((n) => n.endsWith('.csv'))).toHaveLength(11);
+    expect(names).toContain('12_quality_flags.csv');
+    expect(names.filter((n) => n.endsWith('.csv'))).toHaveLength(12);
     expect(names).toContain('export_manifest.json');
     expect(names.some((n) => n.startsWith('session_P001_'))).toBe(true);
+  });
+
+  it('wide summary + quality flags carry the engagement columns', () => {
+    const wide = files.find((f) => f.filename === '10_wide_summary.csv')!;
+    expect(wide.content.split('\n')[0]).toContain('engagement_flag');
+    const qf = files.find((f) => f.filename === '12_quality_flags.csv')!;
+    const lines = qf.content.trim().split('\n');
+    expect(lines.length).toBe(3); // header + 2 conditions
+    expect(lines[0]).toContain('reading_skim');
+    expect(lines[0]).toContain('reasons');
   });
 
   it('reaction-trials CSV has 48 data rows', () => {

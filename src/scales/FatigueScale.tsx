@@ -5,13 +5,16 @@
  * so an untouched all-zero record can't be silently submitted (the original defaulted every
  * slider to 0 with submit always enabled).
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { mean } from '@/lib/stats';
+import { now } from '@/lib/timing';
 
 export interface FatigueResult {
   items: { eye_strain: number; dryness: number; blur: number; burning: number; headache: number };
   mean: number;
   touched: { eye_strain: boolean; dryness: boolean; blur: boolean; burning: boolean; headache: boolean };
+  /** Time from mount to submit (ms) — engagement/careless-responding signal. */
+  responseTimeMs: number;
 }
 
 const ITEMS = [
@@ -45,6 +48,7 @@ export function FatigueScale({ prompt, baselineMean, accent = '#4f8ef7', backgro
   });
 
   const [sent, setSent] = useState(false);
+  const mountedAt = useRef(now());
   const allTouched = ITEMS.every((it) => touched[it.key]);
   const composite = mean(ITEMS.map((it) => values[it.key]));
 
@@ -102,7 +106,7 @@ export function FatigueScale({ prompt, baselineMean, accent = '#4f8ef7', backgro
         onClick={() => {
           if (!allTouched || sent) return;
           setSent(true);
-          onComplete({ items: { ...values }, mean: composite, touched: { ...touched } });
+          onComplete({ items: { ...values }, mean: composite, touched: { ...touched }, responseTimeMs: now() - mountedAt.current });
         }}
         className="mt-6 rounded-xl px-8 py-3 font-lab text-sm transition active:scale-95"
         style={{ background: allTouched ? accent : trackEmpty, color: allTouched ? background : muted, cursor: allTouched ? 'pointer' : 'not-allowed' }}

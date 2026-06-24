@@ -57,9 +57,10 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'enrolment_number', 'ambient_lux', 'ambient_illumination_level', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'preflight_complete'],
+    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'preflight_complete'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
+      session_index: session.session_index, conditions_per_session: session.conditions_per_session, condition_offset: session.condition_offset,
       ambient_lux: session.ambient_lux, ambient_illumination_level: session.ambient_illumination_level,
       screen_white_luminance_cd_m2: session.screen_white_luminance_cd_m2,
       brightness_percent: session.brightness_percent,
@@ -81,8 +82,8 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 03 — fatigue
   csv('03_fatigue_scores.csv',
-    ['participant_id', 'condition_id', 'stage', 'eye_strain', 'dryness', 'blur', 'burning', 'headache', 'fatigue_mean', 'all_touched'],
-    bundle.fatigue.map((f) => ({ participant_id: pid, condition_id: f.condition_id ?? '', stage: f.stage, eye_strain: f.eye_strain, dryness: f.dryness, blur: f.blur, burning: f.burning, headache: f.headache, fatigue_mean: f.fatigue_mean, all_touched: f.all_touched })));
+    ['participant_id', 'condition_id', 'stage', 'eye_strain', 'dryness', 'blur', 'burning', 'headache', 'fatigue_mean', 'all_touched', 'response_time_ms'],
+    bundle.fatigue.map((f) => ({ participant_id: pid, condition_id: f.condition_id ?? '', stage: f.stage, eye_strain: f.eye_strain, dryness: f.dryness, blur: f.blur, burning: f.burning, headache: f.headache, fatigue_mean: f.fatigue_mean, all_touched: f.all_touched, response_time_ms: f.response_time_ms })));
 
   // 04 — comprehension
   csv('04_comprehension.csv',
@@ -96,8 +97,8 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 06 — display perception
   csv('06_display_perception.csv',
-    ['participant_id', 'condition_id', 'display_comfort_score', 'text_clarity_score', 'comfort_touched', 'clarity_touched'],
-    bundle.perception.map((p) => ({ participant_id: pid, condition_id: p.condition_id, display_comfort_score: p.display_comfort_score, text_clarity_score: p.text_clarity_score, comfort_touched: p.comfort_touched, clarity_touched: p.clarity_touched })));
+    ['participant_id', 'condition_id', 'display_comfort_score', 'text_clarity_score', 'comfort_touched', 'clarity_touched', 'response_time_ms'],
+    bundle.perception.map((p) => ({ participant_id: pid, condition_id: p.condition_id, display_comfort_score: p.display_comfort_score, text_clarity_score: p.text_clarity_score, comfort_touched: p.comfort_touched, clarity_touched: p.clarity_touched, response_time_ms: p.response_time_ms })));
 
   // 07 — eye metrics
   csv('07_eye_metrics.csv',
@@ -127,9 +128,9 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 10 — wide one-row-per-condition summary (joined)
   csv('10_wide_summary.csv',
-    ['participant_id', 'condition_label', 'session_position', 'polarity', 'color_name', 'wcag_contrast_ratio', 'below_wcag_aa', 'passage_id', 'mean_rt_hits_ms', 'd_prime', 'd_prime_se', 'flanker_congruency_effect_ms', 'fatigue_mean', 'fatigue_delta', 'comprehension_correct', 'search_accuracy', 'search_efficiency', 'comfort_score', 'clarity_score', 'blink_rate', 'blink_rate_full', 'effective_fps', 'face_presence_ratio', 'qc_overall'],
+    ['participant_id', 'session_index', 'condition_label', 'session_position', 'polarity', 'color_name', 'wcag_contrast_ratio', 'below_wcag_aa', 'passage_id', 'mean_rt_hits_ms', 'd_prime', 'd_prime_se', 'flanker_congruency_effect_ms', 'fatigue_mean', 'fatigue_delta', 'comprehension_correct', 'search_accuracy', 'search_efficiency', 'comfort_score', 'clarity_score', 'blink_rate', 'blink_rate_full', 'effective_fps', 'face_presence_ratio', 'qc_overall', 'engagement_flag', 'quality_score'],
     summaries.map((s) => ({
-      participant_id: pid, condition_label: s.condition_label, session_position: s.session_position,
+      participant_id: pid, session_index: session.session_index, condition_label: s.condition_label, session_position: s.session_position,
       polarity: s.polarity, color_name: s.color_name, wcag_contrast_ratio: s.wcag_contrast_ratio,
       below_wcag_aa: s.below_wcag_aa, passage_id: s.passage_id, mean_rt_hits_ms: s.mean_rt_hits_ms,
       d_prime: s.d_prime, d_prime_se: s.d_prime_se, flanker_congruency_effect_ms: s.flanker_congruency_effect_ms,
@@ -137,6 +138,19 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
       search_accuracy: s.search_accuracy, search_efficiency: s.search_efficiency, comfort_score: s.comfort_score,
       clarity_score: s.clarity_score, blink_rate: s.blink_rate, blink_rate_full: s.blink_rate_full,
       effective_fps: s.effective_fps, face_presence_ratio: s.face_presence_ratio, qc_overall: s.qc.overall,
+      engagement_flag: s.engagement, quality_score: s.quality_score,
+    })));
+
+  // 12 — engagement / careless-responding quality flags (boredom & disengagement detection)
+  csv('12_quality_flags.csv',
+    ['participant_id', 'session_index', 'condition_label', 'session_position', 'engagement_flag', 'quality_score', 'reading_time_ms', 'fatigue_response_ms', 'perception_response_ms', 'reading_skim', 'rt_disengaged', 'careless_rushed_fatigue', 'careless_rushed_perception', 'careless_straight_lined', 'comprehension_wrong', 'low_face_presence', 'reasons'],
+    summaries.map((s) => ({
+      participant_id: pid, session_index: session.session_index, condition_label: s.condition_label,
+      session_position: s.session_position, engagement_flag: s.engagement, quality_score: s.quality_score,
+      reading_time_ms: s.reading_time_ms, fatigue_response_ms: s.fatigue_response_ms, perception_response_ms: s.perception_response_ms,
+      reading_skim: s.reading_skim, rt_disengaged: s.rt_disengaged, careless_rushed_fatigue: s.careless_rushed_fatigue,
+      careless_rushed_perception: s.careless_rushed_perception, careless_straight_lined: s.careless_straight_lined,
+      comprehension_wrong: s.comprehension_wrong, low_face_presence: s.low_face_presence, reasons: s.engagement_reasons.join('; '),
     })));
 
   // JSON bundle

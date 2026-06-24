@@ -103,6 +103,14 @@ export interface SessionRecord {
   device_type: string;
   browser: string;
   screen_resolution: string;
+
+  // --- Split-session / boredom-mitigation fields ---
+  /** How many of the 8 conditions are run in this sitting (8 = single session, 4 = split). */
+  conditions_per_session: number;
+  /** Conditions already completed by this participant in prior sittings (global serial offset). */
+  condition_offset: number;
+  /** 1-based sitting number for this participant (1 for a single session or the first split). */
+  session_index: number;
 }
 
 export interface ConditionRecord {
@@ -153,6 +161,8 @@ export interface FatigueRecord {
     headache: boolean;
   };
   all_touched: boolean;
+  /** Time from scale mount to submit (ms) — engagement/careless-responding signal. */
+  response_time_ms: number | null;
 }
 
 /** Validated CVS-Q (Seguí 2015): 16 items, frequency x intensity, cutoff >=6. Baseline + end only. */
@@ -167,6 +177,8 @@ export interface CvsqRecord {
   /** Total CVS-Q score (sum of frequency x intensity weights). */
   total_score: number;
   symptomatic: boolean;
+  /** Time from questionnaire mount to submit (ms) — engagement signal. */
+  response_time_ms: number | null;
 }
 
 export interface DisplayPerceptionRecord {
@@ -177,6 +189,8 @@ export interface DisplayPerceptionRecord {
   text_clarity_score: number; // 0-100
   comfort_touched: boolean;
   clarity_touched: boolean;
+  /** Time from rating mount to submit (ms) — engagement signal. */
+  response_time_ms: number | null;
 }
 
 export interface ComprehensionRecord {

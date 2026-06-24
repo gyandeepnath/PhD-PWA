@@ -54,6 +54,30 @@ export async function gatherSession(sessionId: string): Promise<SessionBundle | 
   };
 }
 
+/**
+ * Prior progress for a participant across all their (non-deleted) sittings. Used to make
+ * split-sessions work: the enrolment number — which drives the Williams counterbalance order —
+ * MUST be reused across a participant's sittings (a fresh number would re-roll the condition order
+ * on sitting 2 and break the design), and the next sitting must resume at the global serial
+ * position where the last one stopped.
+ */
+export async function priorParticipantProgress(
+  participantId: string,
+): Promise<{ enrolment: number | null; conditionsCompleted: number; sittings: number }> {
+  const sessions = (await getAllByIndex('sessions', 'by_participant', participantId) as SessionRecord[])
+    .map(normalise)
+    .filter((s) => s.deleted_at == null);
+  if (sessions.length === 0) return { enrolment: null, conditionsCompleted: 0, sittings: 0 };
+  // Reuse the earliest-assigned enrolment number for stability.
+  const enrolment = sessions.reduce((min, s) => Math.min(min, s.enrolment_number), Infinity);
+  let conditionsCompleted = 0;
+  for (const s of sessions) {
+    const conds = await getAllByIndex('conditions', 'by_session', s.session_id) as { completed_at: number | null }[];
+    conditionsCompleted += conds.filter((c) => c.completed_at != null).length;
+  }
+  return { enrolment: Number.isFinite(enrolment) ? enrolment : null, conditionsCompleted, sittings: sessions.length };
+}
+
 export const BIN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 /** Backfill defaults for sessions written before v7 (status/deleted_at/display_label). */
