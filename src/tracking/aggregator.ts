@@ -10,6 +10,8 @@ import {
   blinkRatePerMinute,
   effectiveFps,
   fpsAdequateForTiers,
+  computeClosureMetrics,
+  interBlinkInterval,
   type EarSample,
   type BlinkEvent,
 } from './blink';
@@ -109,6 +111,8 @@ export class EyeMetricsAggregator {
     const blink = summariseBlinks(events, durationMs);
     const fps = effectiveFps(this.frameTimes);
     const bins = this.binnedBlinkRates(events, durationMs);
+    const closure = computeClosureMetrics(this.ear, baseline, events);
+    const ibi = interBlinkInterval(events);
 
     const sPitch = smooth(this.pitch);
     const sYaw = smooth(this.yaw);
@@ -132,6 +136,12 @@ export class EyeMetricsAggregator {
       bins,
       blink_rate_delta_from_baseline:
         args.baselineBlinkRate != null ? blink.blink_rate - args.baselineBlinkRate : null,
+      mean_inter_blink_interval_ms: ibi.mean_inter_blink_interval_ms,
+      inter_blink_interval_cv: ibi.inter_blink_interval_cv,
+      perclos_p80: closure.perclos_p80,
+      perclos_p70: closure.perclos_p70,
+      long_closure_count: closure.long_closure_count,
+      long_closure_total_ms: closure.long_closure_total_ms,
 
       blink_rate_micro: blink.blink_rate_micro,
       blink_count_full: blink.blink_count_full,
@@ -179,6 +189,12 @@ export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeM
     blink_duration_mean_ms: null,
     bins: { first_half_blink_rate: null, second_half_blink_rate: null },
     blink_rate_delta_from_baseline: null,
+    mean_inter_blink_interval_ms: null,
+    inter_blink_interval_cv: null,
+    perclos_p80: null,
+    perclos_p70: null,
+    long_closure_count: 0,
+    long_closure_total_ms: 0,
     blink_rate_micro: 0,
     blink_count_full: 0,
     blink_count_partial: 0,

@@ -1,11 +1,19 @@
 /**
- * Eye-Aspect-Ratio (Soukupová & Čech, 2016) and the adaptive blink classifier.
+ * Eye-Aspect-Ratio (Soukupová & Čech, 2016) and the adaptive blink classifier, plus the
+ * literature-validated ocular-fatigue metrics.
  *
- * The original build classified full/partial/micro/incomplete blinks against an adaptive baseline
- * (90th percentile of calibration EARs). At the camera's ~15 fps effective rate (every 2nd frame),
- * the micro (<40 ms) and partial (40-79 ms) tiers are sub-Nyquist — we keep them as diagnostics
- * but expose `fpsAdequateForTiers` (>=25 fps) so analysis can gate them. Full-blink rate and the
- * incomplete-blink ratio remain the defensible primary metrics.
+ * Two distinct fatigue constructs are measured, with different validated markers:
+ *  • Visual / ocular fatigue (CVS — this study's construct): reduced blink RATE and a raised
+ *    INCOMPLETE-BLINK ratio are the validated markers (Portello & Rosenfield, Optom Vis Sci 2013).
+ *    These are the PRIMARY metrics here, read together with the within-task first/second-half bins.
+ *  • Drowsiness / sleepiness (a confound over a 60-90 min session): PERCLOS (proportion of time the
+ *    eyes are ≥70/80% closed) is the most validated real-time measure (Dinges & Grace, FHWA 1998;
+ *    best PVT-lapse predictor). PERCLOS + long-closure events are reported as covariates.
+ *
+ * PERCLOS, blink rate, incomplete-blink ratio and inter-blink interval are PROPORTION/COUNT
+ * measures, so they are robust to the webcam's frame rate. Blink DURATION and the micro/partial
+ * tiers depend on event timing and are sub-Nyquist below ~25 fps — kept as diagnostics, gated by
+ * `fpsAdequateForTiers`. Sampling now runs at one EAR sample per FaceMesh result (~30 fps target).
  */
 
 export interface Point {
@@ -152,4 +160,106 @@ export function effectiveFps(frameTimestampsMs: number[]): number | null {
 
 export function fpsAdequateForTiers(fps: number | null): boolean {
   return fps != null && fps >= FPS_TIER_THRESHOLD;
+}
+
+// --- PERCLOS + closure dynamics (frame-rate-robust ocular-fatigue / drowsiness metrics) ----------
+
+/** Openness thresholds: eyes ≥80% closed (P80, the most validated) and ≥70% closed (P70). */
+export const PERCLOS_P80_OPENNESS = 0.2;
+export const PERCLOS_P70_OPENNESS = 0.3;
+/** A sustained closure longer than this is a long-closure / micro-sleep proxy (drowsiness). */
+export const LONG_CLOSURE_MS = 500;
+
+export interface ClosureMetrics {
+  /** Proportion of measured time the eyes are ≥80% closed (PERCLOS P80). Null if not estimable. */
+  perclos_p80: number | null;
+  perclos_p70: number | null;
+  long_closure_count: number;
+  long_closure_total_ms: number;
+  /** Estimated fully-closed EAR used to normalise openness (median blink-min, or low percentile). */
+  ear_closed_estimate: number | null;
+}
+
+function percentileSorted(sortedAsc: number[], p: number): number {
+  const idx = Math.floor(p * (sortedAsc.length - 1));
+  return sortedAsc[Math.max(0, Math.min(sortedAsc.length - 1, idx))];
+}
+
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+/**
+ * PERCLOS and long-closure metrics from the EAR series. Eye "openness" is self-normalised between
+ * the open baseline (per-participant) and an estimated closed EAR (median of detected blink minima,
+ * or a low percentile when no blinks were detected). Proportion-based → robust to frame rate.
+ */
+export function computeClosureMetrics(
+  samples: EarSample[],
+  baseline: number,
+  events: BlinkEvent[],
+): ClosureMetrics {
+  const present = samples.filter((s) => Number.isFinite(s.ear) && s.ear > 0);
+  if (present.length < 2 || baseline <= 0) {
+    return { perclos_p80: null, perclos_p70: null, long_closure_count: 0, long_closure_total_ms: 0, ear_closed_estimate: null };
+  }
+  const earsAsc = present.map((s) => s.ear).sort((a, b) => a - b);
+  const earClosed = events.length > 0 ? median(events.map((e) => e.min_ear)) : percentileSorted(earsAsc, 0.02);
+  const earOpen = Math.max(baseline, earClosed + 1e-3);
+  // If the EAR never dropped meaningfully below the open baseline, no closures occurred — the eyes
+  // were effectively open throughout (avoids a degenerate openness scale collapsing to "all closed").
+  if (earOpen - earClosed < baseline * 0.15) {
+    return { perclos_p80: 0, perclos_p70: 0, long_closure_count: 0, long_closure_total_ms: 0, ear_closed_estimate: earClosed };
+  }
+  const openness = (ear: number) => Math.max(0, Math.min(1, (ear - earClosed) / (earOpen - earClosed)));
+
+  let p80 = 0;
+  let p70 = 0;
+  for (const s of present) {
+    const o = openness(s.ear);
+    if (o <= PERCLOS_P80_OPENNESS) p80++;
+    if (o <= PERCLOS_P70_OPENNESS) p70++;
+  }
+
+  // Long closures: maximal runs of consecutive ≥80%-closed samples spanning > LONG_CLOSURE_MS.
+  let longCount = 0;
+  let longTotal = 0;
+  let runStart: number | null = null;
+  for (let i = 0; i < present.length; i++) {
+    const closed = openness(present[i].ear) <= PERCLOS_P80_OPENNESS;
+    if (closed && runStart == null) runStart = present[i].t_ms;
+    const runEnds = runStart != null && (!closed || i === present.length - 1);
+    if (runEnds) {
+      const dur = present[i].t_ms - (runStart as number);
+      if (dur > LONG_CLOSURE_MS) {
+        longCount++;
+        longTotal += dur;
+      }
+      runStart = null;
+    }
+  }
+
+  return {
+    perclos_p80: p80 / present.length,
+    perclos_p70: p70 / present.length,
+    long_closure_count: longCount,
+    long_closure_total_ms: longTotal,
+    ear_closed_estimate: earClosed,
+  };
+}
+
+/** Mean and CV of the interval between successive blink onsets (sec). Null with < 2 blinks. */
+export function interBlinkInterval(events: BlinkEvent[]): {
+  mean_inter_blink_interval_ms: number | null;
+  inter_blink_interval_cv: number | null;
+} {
+  if (events.length < 2) return { mean_inter_blink_interval_ms: null, inter_blink_interval_cv: null };
+  const onsets = events.map((e) => e.onset_ms).sort((a, b) => a - b);
+  const gaps: number[] = [];
+  for (let i = 1; i < onsets.length; i++) gaps.push(onsets[i] - onsets[i - 1]);
+  const m = gaps.reduce((s, g) => s + g, 0) / gaps.length;
+  const sd = Math.sqrt(gaps.reduce((s, g) => s + (g - m) ** 2, 0) / gaps.length);
+  return { mean_inter_blink_interval_ms: m, inter_blink_interval_cv: m > 0 ? sd / m : null };
 }

@@ -89,18 +89,22 @@ def main() -> None:
     print("\n=== Aggregated d' per participant ===")
     print(dprime)
 
-    # --- Blink rate (full blinks only; caution per codebook) ---------------------------
+    # --- Ocular fatigue (interpret per codebook; gate duration tiers on effective_fps) ----
+    # CVS markers: blink_rate (drops with screen concentration) + incomplete_blink_ratio (rises,
+    # correlates with CVS symptoms — Portello & Rosenfield 2013). Drowsiness covariate: perclos_p80.
     eye_active = eye[eye["camera_active"] == 1].merge(
         cond, on=["participant_id", "condition_id"]
     )
     if len(eye_active):
-        m_blink = smf.mixedlm(
-            "blink_rate_full ~ session_position + C(polarity)",
-            eye_active,
-            groups=eye_active["participant_id"],
-        ).fit()
-        print("\n=== Full-blink-rate mixed model ===")
-        print(m_blink.summary())
+        for dv in ["blink_rate", "incomplete_blink_ratio", "perclos_p80"]:
+            if eye_active[dv].notna().any():
+                m = smf.mixedlm(
+                    f"{dv} ~ session_position + C(polarity)",
+                    eye_active.dropna(subset=[dv]),
+                    groups=eye_active.dropna(subset=[dv])["participant_id"],
+                ).fit()
+                print(f"\n=== {dv} mixed model ===")
+                print(m.summary())
 
 
 if __name__ == "__main__":

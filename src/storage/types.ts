@@ -298,7 +298,7 @@ export interface EyeMetricsRecord {
   /** True when effective_fps >= 25; gates the micro/partial blink tiers. */
   fps_adequate_for_tiers: boolean;
 
-  // Primary (defensible at ~15 fps)
+  // Primary (frame-rate-robust): CVS markers + drowsiness covariates.
   blink_rate: number;
   blink_rate_full: number;
   incomplete_blink_ratio: number;
@@ -306,6 +306,15 @@ export interface EyeMetricsRecord {
   bins: BlinkBins;
   /** Blink rate change vs session baseline (interpretation aid). */
   blink_rate_delta_from_baseline: number | null;
+  /** Inter-blink interval (ms) + its CV — longer/erratic with reduced blinking. */
+  mean_inter_blink_interval_ms: number | null;
+  inter_blink_interval_cv: number | null;
+  /** PERCLOS: proportion of time eyes ≥80% / ≥70% closed (validated drowsiness measure). */
+  perclos_p80: number | null;
+  perclos_p70: number | null;
+  /** Sustained eye-closure (>500 ms) events — long-closure / micro-sleep proxy. */
+  long_closure_count: number;
+  long_closure_total_ms: number;
 
   // Diagnostic only (sub-Nyquist at 15 fps — flagged in codebook)
   blink_rate_micro: number;

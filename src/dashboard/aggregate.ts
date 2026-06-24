@@ -103,6 +103,10 @@ export interface ConditionSummary {
   blink_rate: number | null;
   blink_rate_full: number | null;
   incomplete_blink_ratio: number | null;
+  mean_inter_blink_interval_ms: number | null;
+  perclos_p80: number | null;
+  perclos_p70: number | null;
+  long_closure_count: number | null;
   effective_fps: number | null;
   fps_adequate_for_tiers: boolean;
   face_presence_ratio: number | null;
@@ -295,6 +299,10 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       blink_rate: eye?.blink_rate ?? null,
       blink_rate_full: eye?.blink_rate_full ?? null,
       incomplete_blink_ratio: eye?.incomplete_blink_ratio ?? null,
+      mean_inter_blink_interval_ms: cameraActive ? (eye?.mean_inter_blink_interval_ms ?? null) : null,
+      perclos_p80: cameraActive ? (eye?.perclos_p80 ?? null) : null,
+      perclos_p70: cameraActive ? (eye?.perclos_p70 ?? null) : null,
+      long_closure_count: cameraActive ? (eye?.long_closure_count ?? null) : null,
       effective_fps: fps,
       fps_adequate_for_tiers: eye?.fps_adequate_for_tiers ?? false,
       face_presence_ratio: facePresence,

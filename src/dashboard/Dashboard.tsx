@@ -132,12 +132,14 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
 
       {bundle && tab === 'eye' && (
         <Grid>
-          <BarPanel title="Engagement quality score per condition" data={summaries.map((s) => ({ label: s.condition_label, value: s.quality_score, flag: s.engagement }))} />
-          <BarPanel title="Full-blink rate per condition" unit="/min" data={bar(summaries, 'blink_rate_full')} color="#4f8ef7" />
+          <BarPanel title="Blink rate per condition" unit="/min" data={bar(summaries, 'blink_rate')} color="#4f8ef7" />
+          <BarPanel title="Incomplete-blink ratio (CVS marker)" data={bar(summaries, 'incomplete_blink_ratio')} color="#e07b39" />
+          <BarPanel title="PERCLOS P80 (drowsiness)" data={bar(summaries, 'perclos_p80')} color="#e64c4c" />
+          <BarPanel title="Engagement quality score" data={summaries.map((s) => ({ label: s.condition_label, value: s.quality_score, flag: s.engagement }))} />
+          <OcularTable summaries={summaries} />
           <EngagementTable summaries={summaries} />
-          <BarPanel title="Camera face presence" data={summaries.map((s) => ({ label: s.condition_label, value: s.face_presence_ratio, flag: s.qc.facePresence }))} />
           <QcTable summaries={summaries} />
-          <Caveat text="Engagement quality flags boredom/careless responding (reading skim, rushed or straight-lined ratings, RT disengagement, low face presence) so suspect conditions can be excluded or modelled — see 12_quality_flags.csv. Lighting QC flags low/over-exposed conditions that degrade blink/EAR detection. Blink rate is non-monotonic w.r.t. fatigue: it DROPS with concentration/reading and RISES with fatigue onset. Micro/partial tiers are sub-Nyquist below 25 fps (flagged). Gaze zones are meaningful only when gaze_calibrated is true (real per-participant calibration succeeded); otherwise treat them as a gross head-movement proxy." />
+          <Caveat text="Two distinct constructs, with different validated markers. VISUAL/OCULAR FATIGUE (this study, CVS): the primary markers are a REDUCED blink rate and a RAISED incomplete-blink ratio (Portello & Rosenfield 2013), read with the within-task first/second-half bins and inter-blink interval. DROWSINESS (a confound over a long session): PERCLOS (% time eyes ≥70/80% closed) + long-closure events (Dinges & Grace 1998) — frame-rate-robust covariates. Blink rate is NON-MONOTONIC w.r.t. fatigue (drops with concentration/reading, rises with sleepiness) — never read 'higher = more fatigued' in isolation. Blink DURATION and micro/partial tiers are sub-Nyquist below 25 fps (gated by effective_fps). Lighting QC flags low/over-exposed conditions that degrade EAR detection. Gaze zones are meaningful only when gaze_calibrated is true; else a gross head-movement proxy. Webcam EAR is a screening-grade proxy — an IR eye-tracker is the reference standard." />
         </Grid>
       )}
 
@@ -184,6 +186,29 @@ function SummaryTable({ headers, rows }: { headers: string[]; rows: (string | nu
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
         <thead><tr>{headers.map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: '#5a5a7a', borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
         <tbody>{rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} style={{ padding: '6px 10px', borderBottom: '1px solid #f3f1ec' }}>{c}</td>)}</tr>)}</tbody>
+      </table>
+    </div>
+  );
+}
+function OcularTable({ summaries }: { summaries: ConditionSummary[] }) {
+  return (
+    <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
+        <thead><tr>{['Cond', 'Blink/min', 'Incomplete', 'IBI ms', 'PERCLOS80', 'PERCLOS70', 'Long-closures', 'Eff FPS'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: '#5a5a7a', borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
+        <tbody>
+          {summaries.map((s) => (
+            <tr key={s.condition_id}>
+              <td style={cell}>{s.condition_label}</td>
+              <td style={cell}>{n(s.blink_rate, 1)}</td>
+              <td style={cell}>{n(s.incomplete_blink_ratio)}</td>
+              <td style={cell}>{n(s.mean_inter_blink_interval_ms, 0)}</td>
+              <td style={cell}>{n(s.perclos_p80)}</td>
+              <td style={cell}>{n(s.perclos_p70)}</td>
+              <td style={cell}>{n(s.long_closure_count, 0)}</td>
+              <td style={cell}>{n(s.effective_fps, 0)}{s.camera_active && !s.fps_adequate_for_tiers ? ' ⚠' : ''}</td>
+            </tr>
+          ))}
+        </tbody>
       </table>
     </div>
   );

@@ -59,7 +59,10 @@ const BASE_CONFIG = {
   CAMERA_WIDTH: 1280,
   CAMERA_HEIGHT: 720,
   CAMERA_FPS: 30,
-  PROCESS_EVERY_N_FRAMES: 2,
+  // Process every camera frame: blinks last 100-400 ms, so ~30 fps is the literature minimum for
+  // valid blink detection (sub-Nyquist below ~25 fps). Raise to 2 only if a slow tablet can't keep
+  // up — effective_fps records the true achieved rate and gates the duration-based tiers.
+  PROCESS_EVERY_N_FRAMES: 1,
   EAR_CALIBRATION_SAMPLES: 150,
 
   // Touch target minimum.

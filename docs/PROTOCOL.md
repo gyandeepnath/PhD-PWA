@@ -93,10 +93,20 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
 
 ## 6. Known limitations to disclose
 
-- **Webcam eye tracking** is lower-fidelity than IR (spatial error ~3–5°; ~15 fps effective). Blink
-  micro/partial tiers are sub-Nyquist and flagged; **full-blink rate + incomplete-blink ratio** are
-  the defensible metrics. Blink rate is **non-monotonic** w.r.t. fatigue (drops with concentration,
-  rises with fatigue onset) — interpret with the within-task bins, not as "higher = more fatigued".
+- **Webcam eye tracking** is lower-fidelity than IR (spatial error ~3–5°). It now samples one EAR
+  reading **per FaceMesh result at ~30 fps** (the literature minimum for blink detection; an earlier
+  build sampled stale landmarks on a 60 fps render loop, duplicating samples and overstating fps).
+  `effective_fps` records the true achieved rate and gates the duration-based tiers.
+- **Blink metrics distinguish two constructs.** For **visual/ocular fatigue (CVS — this study)** the
+  validated markers are a **reduced blink rate** and a **raised incomplete-blink ratio** (Portello &
+  Rosenfield, *Optom Vis Sci* 2013), read with the within-task first/second-half bins and inter-blink
+  interval. For **drowsiness/sleepiness** (a confound over a 60–90 min session) **PERCLOS** (% time
+  eyes ≥70/80% closed) and **long-closure events** are the validated, frame-rate-robust covariates
+  (Dinges & Grace, FHWA 1998). Blink rate is **non-monotonic** w.r.t. fatigue (drops with
+  concentration/reading, rises with sleepiness) — never read "higher = more fatigued" in isolation;
+  triangulate the blink markers with the subjective CVS-Q. Blink **duration** and the micro/partial
+  tiers are sub-Nyquist below ~25 fps and flagged as diagnostics only. Webcam EAR is a
+  **screening-grade** proxy; an IR eye-tracker remains the reference standard for definitive data.
 - **Gaze** is only meaningful when calibration was valid (`gaze_calibrated:true`); otherwise treat
   as a gross head-movement proxy.
 - **Contrast confound**: C4 (yellow-on-white) is below WCAG AA (2.39:1); treat WCAG ratio as a

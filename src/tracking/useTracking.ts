@@ -49,7 +49,6 @@ export function useTracking(): TrackingApi {
   const lumaCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const faceMeshRef = useRef<unknown>(null);
   const rafRef = useRef<number | null>(null);
-  const latestLandmarks = useRef<Point[] | null>(null);
   const aggRef = useRef<EyeMetricsAggregator | null>(null);
   const calibrating = useRef<{ samples: number[] } | null>(null);
   const baselineEarRef = useRef<number | null>(null);
@@ -82,27 +81,29 @@ export function useTracking(): TrackingApi {
     }
   };
 
-  const onFrame = useCallback(() => {
-    const lm = latestLandmarks.current;
+  // Ingest exactly ONE sample per FaceMesh result, so the EAR series is sampled at the true
+  // measurement rate (not the display refresh rate). The previous build ran a free-running 60 fps
+  // sampler over stale landmarks, duplicating samples and overstating effective_fps.
+  const ingestResult = useCallback((lm: Point[] | null) => {
+    const t = now();
     const luma = sampleLuma();
     if (lm && lm.length > 0) {
       const ear = faceEar(lm);
       if (calibrating.current) calibrating.current.samples.push(ear);
-      const agg = aggRef.current;
       const gazeNow = gazeFor(lm);
       if (gazeCollectingTarget.current) {
         const id = gazeCollectingTarget.current;
         (gazeSamplesRef.current[id] ??= []).push({ h: gazeNow.h, v: gazeNow.v });
       }
+      const agg = aggRef.current;
       if (agg) {
         const pose = estimateHeadPose(lm);
-        const gaze = gazeNow;
         agg.ingest({
-          t_ms: now(),
+          t_ms: t,
           ear,
           pose,
-          zone: gaze.zone,
-          isCenter: gaze.isCenter,
+          zone: gazeNow.zone,
+          isCenter: gazeNow.isCenter,
           offAxis: isOffAxis(pose),
           facePresent: true,
           faceSize: 0, // populated from detection box when available
@@ -111,7 +112,7 @@ export function useTracking(): TrackingApi {
       }
     } else if (aggRef.current) {
       aggRef.current.ingest({
-        t_ms: now(),
+        t_ms: t,
         ear: 0,
         pose: { pitch: 0, yaw: 0, roll: 0 },
         zone: 'cc',
@@ -122,7 +123,6 @@ export function useTracking(): TrackingApi {
         luma,
       });
     }
-    rafRef.current = requestAnimationFrame(onFrame);
   }, []);
 
   const start = useCallback(async (): Promise<CameraStatus> => {
@@ -156,12 +156,11 @@ export function useTracking(): TrackingApi {
       };
       const fm = new mod.FaceMesh({ locateFile: (f) => `/mediapipe/${f}` });
       fm.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-      fm.onResults((r) => {
-        latestLandmarks.current = r.multiFaceLandmarks?.[0] ?? null;
-      });
+      // One ingest per result → EAR is sampled at the real FaceMesh throughput.
+      fm.onResults((r) => ingestResult(r.multiFaceLandmarks?.[0] ?? null));
       faceMeshRef.current = fm;
 
-      // Drive MediaPipe + the sampling loop.
+      // Drive MediaPipe: send each frame (awaited, so the loop self-paces to the achieved rate).
       const pump = async () => {
         frameCounter.current++;
         if (frameCounter.current % CONFIG.PROCESS_EVERY_N_FRAMES === 0 && videoRef.current) {
@@ -174,8 +173,6 @@ export function useTracking(): TrackingApi {
         rafRef.current = requestAnimationFrame(pump);
       };
       rafRef.current = requestAnimationFrame(pump);
-      // Separate sampler so metrics are captured even between MediaPipe results.
-      requestAnimationFrame(onFrame);
 
       setStatus('active');
       return 'active';
@@ -186,7 +183,7 @@ export function useTracking(): TrackingApi {
       setStatus(s);
       return s;
     }
-  }, [onFrame]);
+  }, [ingestResult]);
 
   const stop = useCallback(() => {
     if (rafRef.current != null) cancelAnimationFrame(rafRef.current);

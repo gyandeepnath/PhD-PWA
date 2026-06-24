@@ -3,7 +3,7 @@ import { estimateHeadPose, isOffAxis, OFF_AXIS_YAW_DEG } from '@/tracking/headPo
 import { estimateGaze } from '@/tracking/gaze';
 import { classifyLighting, pixelLuma } from '@/tracking/lighting';
 import { EyeMetricsAggregator } from '@/tracking/aggregator';
-import type { Point } from '@/tracking/blink';
+import { computeClosureMetrics, interBlinkInterval, classifyBlinks, type EarSample, type Point } from '@/tracking/blink';
 
 /** Build a 478-point landmark array, all at origin, then override specific indices. */
 function landmarks(overrides: Record<number, Point>): Point[] {
@@ -55,6 +55,52 @@ describe('lighting', () => {
   it('pixel luma is BT.601', () => {
     expect(pixelLuma(255, 255, 255)).toBeCloseTo(255, 0);
     expect(pixelLuma(0, 0, 0)).toBe(0);
+  });
+});
+
+describe('PERCLOS + closure dynamics', () => {
+  const open = (n: number, ear = 0.3): EarSample[] =>
+    Array.from({ length: n }, (_, i) => ({ t_ms: i * 33, ear }));
+
+  it('reports ~0 PERCLOS and no long closures for a fully-open series', () => {
+    const c = computeClosureMetrics(open(60), 0.3, []);
+    expect(c.perclos_p80).toBe(0);
+    expect(c.long_closure_count).toBe(0);
+  });
+
+  it('captures a sustained long closure (>500 ms) and raises PERCLOS', () => {
+    const samples: EarSample[] = [];
+    for (let t = 0; t < 2000; t += 33) samples.push({ t_ms: t, ear: t >= 500 && t < 1300 ? 0.05 : 0.3 });
+    const c = computeClosureMetrics(samples, 0.3, []);
+    expect(c.perclos_p80).toBeGreaterThan(0.2); // ~800/2000 of the window is closed
+    expect(c.long_closure_count).toBe(1);
+    expect(c.long_closure_total_ms).toBeGreaterThan(500);
+  });
+
+  it('is frame-rate robust: halving the sample rate barely moves PERCLOS', () => {
+    const mk = (step: number) => {
+      const s: EarSample[] = [];
+      for (let t = 0; t < 2000; t += step) s.push({ t_ms: t, ear: t >= 500 && t < 1300 ? 0.05 : 0.3 });
+      return computeClosureMetrics(s, 0.3, []).perclos_p80!;
+    };
+    expect(Math.abs(mk(33) - mk(66))).toBeLessThan(0.08);
+  });
+
+  it('inter-blink interval is the mean onset gap', () => {
+    // EAR dips at ~0, ~1000, ~2000 ms → two ~1000 ms gaps.
+    const samples: EarSample[] = [];
+    for (let t = 0; t <= 2200; t += 33) {
+      const blink = [0, 1000, 2000].some((c) => Math.abs(t - c) < 50);
+      samples.push({ t_ms: t, ear: blink ? 0.05 : 0.3 });
+    }
+    const events = classifyBlinks(samples, 0.3);
+    const ibi = interBlinkInterval(events);
+    expect(ibi.mean_inter_blink_interval_ms).toBeGreaterThan(800);
+    expect(ibi.mean_inter_blink_interval_ms).toBeLessThan(1200);
+  });
+
+  it('inter-blink interval is null with fewer than two blinks', () => {
+    expect(interBlinkInterval([]).mean_inter_blink_interval_ms).toBeNull();
   });
 });
 

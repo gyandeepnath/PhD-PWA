@@ -92,11 +92,19 @@ dprime_overall <- rt_summary %>%
             any_unstable = any(d_prime_unstable, na.rm = TRUE))
 cat("\n=== Aggregated d' per participant ===\n"); print(dprime_overall)
 
-# --- Blink rate (report with caution; gate tiers on effective_fps) -------------------------
-eye <- eye_metrics %>% left_join(cond, by = c("participant_id", "condition_id"))
-m_blink <- lmer(blink_rate_full ~ session_position + polarity + (1 | participant_id),
-                data = eye %>% filter(camera_active == 1))
-cat("\n=== Full-blink-rate mixed model ===\n"); print(summary(m_blink))
+# --- Ocular fatigue (interpret per the codebook; gate duration tiers on effective_fps) -----
+# CVS markers: blink_rate (expected to DROP with screen concentration) and incomplete_blink_ratio
+# (expected to RISE — the marker that correlates with CVS symptoms; Portello & Rosenfield 2013).
+# Drowsiness covariate: perclos_p80. Blink rate is non-monotonic, so model the set, not rate alone.
+eye <- eye_metrics %>% left_join(cond, by = c("participant_id", "condition_id")) %>% filter(camera_active == 1)
+m_blink <- lmer(blink_rate ~ session_position + polarity + (1 | participant_id), data = eye)
+cat("\n=== Blink-rate mixed model ===\n"); print(summary(m_blink))
+m_incomplete <- lmer(incomplete_blink_ratio ~ session_position + polarity + (1 | participant_id), data = eye)
+cat("\n=== Incomplete-blink-ratio (CVS) mixed model ===\n"); print(summary(m_incomplete))
+if (any(!is.na(eye$perclos_p80))) {
+  m_perclos <- lmer(perclos_p80 ~ session_position + polarity + (1 | participant_id), data = eye)
+  cat("\n=== PERCLOS P80 (drowsiness covariate) mixed model ===\n"); print(summary(m_perclos))
+}
 
 # --- Assumption checks ---------------------------------------------------------------------
 cat("\n=== RT model assumption checks ===\n")
