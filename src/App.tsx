@@ -2,7 +2,7 @@ import { useState } from 'react';
 import Experiment from '@/experiment/Experiment';
 import { LandingPage } from '@/start/LandingPage';
 import { SessionManager } from '@/start/SessionManager';
-import { Dashboard } from '@/dashboard/Dashboard';
+import { LazyDashboard as Dashboard } from '@/dashboard/LazyDashboard';
 
 /**
  * Top-level shell / router. Landing → session manager → (new or resumed experiment) → back to

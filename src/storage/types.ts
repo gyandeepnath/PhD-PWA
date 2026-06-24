@@ -334,6 +334,11 @@ export interface EyeMetricsRecord {
 
   face_presence_ratio: number;
   face_size_ratio: number;
+
+  /** Mean frame luminance (0-255, BT.601) over the condition — webcam exposure / room-light QC. */
+  mean_face_luma: number | null;
+  /** Classified lighting quality; null when the camera was inactive. */
+  lighting_quality: 'low' | 'good' | 'overexposed' | null;
 }
 
 export interface PerformanceLogRecord {

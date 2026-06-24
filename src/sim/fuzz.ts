@@ -170,6 +170,7 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
       head_pitch_mean: 0, head_yaw_mean: 0, head_roll_mean: 0, head_movement_std: 0, postural_load: 0,
       head_stability_score: 0, off_axis_ratio: rng(), gaze_calibrated: false, gaze_deviation_ratio: rng(),
       zone_center_ratio: rng(), zone_transition_count: 0, face_presence_ratio: rng(), face_size_ratio: 0,
+      mean_face_luma: rng() < 0.5 ? null : rng() * 255, lighting_quality: null,
     })),
     reactionTrials: [],
     rtSummaries: conditions.filter(has).map((c) => {
@@ -183,5 +184,6 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
         d_prime: r.d_prime, d_prime_se: r.d_prime_se, d_prime_unstable: r.d_prime_unstable,
       };
     }),
+    calibration: rng() < 0.5 ? [{ calibration_id: 'cal', session_id: sid, is_real_calibration: rng() < 0.5, targets_detected: randInt(rng, 0, 9), targets_total: 9, ear_baseline: rng() < 0.5 ? null : rng(), gaze_h_threshold: null, gaze_v_threshold: null }] : [],
   };
 }

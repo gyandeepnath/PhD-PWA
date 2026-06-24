@@ -1,7 +1,9 @@
 /**
- * Minimal-but-functional setup stages so the experiment runs end-to-end. The full researcher
- * panel (consent, colour-vision, pre-flight, photometry, session manager) is a later phase; these
- * collect the essential fields, write the records, and preserve the cream theme.
+ * Setup stages for the start of a session: session init (incl. photometry inputs + session
+ * structure), participant profile, camera setup with live preview, calibration, pre-flight
+ * checklist, consent, instructions, adaptation, and completion. Each collects its fields, writes
+ * the relevant records, and preserves the cream theme. (Consent, colour-vision and the session
+ * manager live in their own modules; the experiment wires them together in Experiment.tsx.)
  */
 import { useEffect, useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';

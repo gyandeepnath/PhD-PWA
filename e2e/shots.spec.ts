@@ -1,6 +1,6 @@
 import { test } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
-import { stageNow, handleStage, startNewExperiment } from './helpers';
+import { stageNow, handleStage } from './helpers';
 
 /** Capture a screenshot of every distinct screen for a manual UI/UX review. Not an assertion test. */
 test('capture screens', async ({ page }) => {

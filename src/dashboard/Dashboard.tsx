@@ -137,7 +137,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           <EngagementTable summaries={summaries} />
           <BarPanel title="Camera face presence" data={summaries.map((s) => ({ label: s.condition_label, value: s.face_presence_ratio, flag: s.qc.facePresence }))} />
           <QcTable summaries={summaries} />
-          <Caveat text="Engagement quality flags boredom/careless responding (reading skim, rushed or straight-lined ratings, RT disengagement, low face presence) so suspect conditions can be excluded or modelled — see 12_quality_flags.csv. Blink rate is non-monotonic w.r.t. fatigue: it DROPS with concentration/reading and RISES with fatigue onset. Micro/partial tiers are sub-Nyquist below 25 fps (flagged). Gaze zones are NOT calibrated in this build — treat as a gross head-movement proxy only." />
+          <Caveat text="Engagement quality flags boredom/careless responding (reading skim, rushed or straight-lined ratings, RT disengagement, low face presence) so suspect conditions can be excluded or modelled — see 12_quality_flags.csv. Lighting QC flags low/over-exposed conditions that degrade blink/EAR detection. Blink rate is non-monotonic w.r.t. fatigue: it DROPS with concentration/reading and RISES with fatigue onset. Micro/partial tiers are sub-Nyquist below 25 fps (flagged). Gaze zones are meaningful only when gaze_calibrated is true (real per-participant calibration succeeded); otherwise treat them as a gross head-movement proxy." />
         </Grid>
       )}
 
@@ -213,7 +213,7 @@ function QcTable({ summaries }: { summaries: ConditionSummary[] }) {
   return (
     <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
-        <thead><tr>{['Cond', 'Camera', 'Eff FPS', 'Face presence', 'Off-axis', 'Overall'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: '#5a5a7a', borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
+        <thead><tr>{['Cond', 'Camera', 'Eff FPS', 'Face presence', 'Off-axis', 'Lighting', 'Overall'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: '#5a5a7a', borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
         <tbody>
           {summaries.map((s) => (
             <tr key={s.condition_id}>
@@ -222,6 +222,7 @@ function QcTable({ summaries }: { summaries: ConditionSummary[] }) {
               <td style={cell}>{n(s.effective_fps, 0)}{s.camera_active && !s.fps_adequate_for_tiers ? ' ⚠' : ''}</td>
               <td style={{ ...cell, color: FLAG_COLOR[s.qc.facePresence] }}>{n(s.face_presence_ratio)}</td>
               <td style={{ ...cell, color: FLAG_COLOR[s.qc.offAxis] }}>{n(s.off_axis_ratio)}</td>
+              <td style={{ ...cell, color: FLAG_COLOR[s.qc.lighting] }}>{s.lighting_quality ?? '—'}</td>
               <td style={{ ...cell, fontWeight: 700, color: FLAG_COLOR[s.qc.overall] }}>{s.qc.overall}</td>
             </tr>
           ))}

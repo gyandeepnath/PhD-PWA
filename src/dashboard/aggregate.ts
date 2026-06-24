@@ -108,7 +108,9 @@ export interface ConditionSummary {
   face_presence_ratio: number | null;
   off_axis_ratio: number | null;
   zone_center_ratio: number | null;
-  qc: { facePresence: QcFlag; fps: QcFlag; offAxis: QcFlag; overall: QcFlag };
+  mean_face_luma: number | null;
+  lighting_quality: 'low' | 'good' | 'overexposed' | null;
+  qc: { facePresence: QcFlag; fps: QcFlag; offAxis: QcFlag; lighting: QcFlag; overall: QcFlag };
 }
 
 function flag(value: number | null, good: number, warn: number, higherIsBetter = true): QcFlag {
@@ -225,6 +227,9 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
     const facePresenceFlag: QcFlag = cameraActive ? flag(facePresence, 0.8, 0.5) : 'warn';
     const fpsFlag: QcFlag = cameraActive ? flag(fps, 25, 15) : 'warn';
     const offAxisFlag: QcFlag = cameraActive ? flag(offAxis, 0.2, 0.4, false) : 'warn';
+    // Lighting: 'good' is in range; 'low'/'overexposed' degrade blink/EAR detection → warn.
+    const lightingQuality = cameraActive ? (eye?.lighting_quality ?? null) : null;
+    const lightingFlag: QcFlag = !cameraActive ? 'warn' : lightingQuality == null ? 'warn' : lightingQuality === 'good' ? 'good' : 'warn';
 
     const eng = conditionEngagement({
       reading_time_ms: c.reading_time_ms,
@@ -295,11 +300,14 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       face_presence_ratio: facePresence,
       off_axis_ratio: offAxis,
       zone_center_ratio: cameraActive ? (eye?.zone_center_ratio ?? null) : null,
+      mean_face_luma: cameraActive ? (eye?.mean_face_luma ?? null) : null,
+      lighting_quality: lightingQuality,
       qc: {
         facePresence: facePresenceFlag,
         fps: fpsFlag,
         offAxis: offAxisFlag,
-        overall: worst([facePresenceFlag, fpsFlag, offAxisFlag]),
+        lighting: lightingFlag,
+        overall: worst([facePresenceFlag, fpsFlag, offAxisFlag, lightingFlag]),
       },
     };
   });

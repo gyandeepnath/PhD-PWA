@@ -47,5 +47,18 @@ export default defineConfig({
       },
     }),
   ],
-  build: { target: 'es2021', sourcemap: true },
+  build: {
+    target: 'es2021',
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        // Split heavy vendors into their own chunks so the main bundle isn't a single ~650 kB blob.
+        // (MediaPipe is already dynamically imported in useTracking, so it stays out of the entry.)
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-charts': ['recharts'],
+        },
+      },
+    },
+  },
 });

@@ -57,7 +57,7 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'preflight_complete'],
+    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'preflight_complete', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_targets_detected'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
       session_index: session.session_index, conditions_per_session: session.conditions_per_session, condition_offset: session.condition_offset,
@@ -69,6 +69,9 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
       condition_def_hash: session.provenance.condition_def_hash, schema_version: session.provenance.schema_version,
       device_type: session.device_type, screen_resolution: session.screen_resolution,
       consent_given: session.consent_given, preflight_complete: session.preflight_complete,
+      gaze_calibration_valid: bundle.calibration[0]?.is_real_calibration ?? '',
+      calibration_ear_baseline: bundle.calibration[0]?.ear_baseline ?? '',
+      calibration_targets_detected: bundle.calibration[0] ? `${bundle.calibration[0].targets_detected}/${bundle.calibration[0].targets_total}` : '',
     }]);
 
   // 02 — conditions (+ reading speed in words/min, derived from passage length & reading time)
@@ -102,7 +105,7 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 07 — eye metrics
   csv('07_eye_metrics.csv',
-    ['participant_id', 'condition_id', 'camera_active', 'effective_fps', 'fps_adequate_for_tiers', 'blink_rate', 'blink_rate_full', 'incomplete_blink_ratio', 'blink_duration_mean_ms', 'blink_rate_delta_from_baseline', 'first_half_blink_rate', 'second_half_blink_rate', 'head_pitch_mean', 'head_yaw_mean', 'head_roll_mean', 'postural_load', 'head_stability_score', 'off_axis_ratio', 'gaze_calibrated', 'gaze_deviation_ratio', 'zone_center_ratio', 'zone_transition_count', 'face_presence_ratio'],
+    ['participant_id', 'condition_id', 'camera_active', 'effective_fps', 'fps_adequate_for_tiers', 'blink_rate', 'blink_rate_full', 'incomplete_blink_ratio', 'blink_duration_mean_ms', 'blink_rate_delta_from_baseline', 'first_half_blink_rate', 'second_half_blink_rate', 'head_pitch_mean', 'head_yaw_mean', 'head_roll_mean', 'postural_load', 'head_stability_score', 'off_axis_ratio', 'gaze_calibrated', 'gaze_deviation_ratio', 'zone_center_ratio', 'zone_transition_count', 'face_presence_ratio', 'mean_face_luma', 'lighting_quality'],
     bundle.eyeMetrics.map((e) => ({
       participant_id: pid, condition_id: e.condition_id, camera_active: e.camera_active,
       effective_fps: e.effective_fps, fps_adequate_for_tiers: e.fps_adequate_for_tiers,
@@ -113,7 +116,7 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
       postural_load: e.postural_load, head_stability_score: e.head_stability_score, off_axis_ratio: e.off_axis_ratio,
       gaze_calibrated: e.gaze_calibrated, gaze_deviation_ratio: e.gaze_deviation_ratio,
       zone_center_ratio: e.zone_center_ratio, zone_transition_count: e.zone_transition_count,
-      face_presence_ratio: e.face_presence_ratio,
+      face_presence_ratio: e.face_presence_ratio, mean_face_luma: e.mean_face_luma, lighting_quality: e.lighting_quality,
     })));
 
   // 08 — reaction trials
@@ -161,6 +164,7 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
     conditions: bundle.conditions, fatigue: bundle.fatigue, cvsq: bundle.cvsq,
     comprehension: bundle.comprehension, visual_search: bundle.visualSearch,
     display_perception: bundle.perception, eye_metrics: bundle.eyeMetrics,
+    calibration: bundle.calibration,
     rt_summaries: bundle.rtSummaries, reaction_trials_count: bundle.reactionTrials.length,
   };
   files.push({ filename: `session_${pid}_${session.session_id.slice(0, 8)}.json`, content: JSON.stringify(jsonBundle, null, 2), mime: 'application/json' });

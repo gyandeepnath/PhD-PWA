@@ -57,7 +57,7 @@ interface Props {
 export function IshiharaTest({ onComplete }: Props) {
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  const busy = useRef(false); // guard against double-taps advancing/​completing twice
+  const busy = useRef(false); // guard against double-taps advancing or completing twice
   const plate = PLATES[idx];
   const isLast = idx === PLATES.length - 1;
 

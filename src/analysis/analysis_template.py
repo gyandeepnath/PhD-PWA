@@ -21,6 +21,9 @@ def load(name: str) -> pd.DataFrame:
 
 
 def main() -> None:
+    # Photometry covariates live in 01_session_info.csv (screen_white_luminance_cd_m2,
+    # brightness_percent); constant on a single fixed device, otherwise join as a session covariate.
+    session_info = load("01_session_info.csv")  # noqa: F841 (available for between-session covariates)
     conditions = load("02_conditions.csv")
     fatigue = load("03_fatigue_scores.csv")
     comprehension = load("04_comprehension.csv")

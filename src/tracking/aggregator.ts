@@ -15,6 +15,7 @@ import {
 } from './blink';
 import type { HeadPose } from './headPose';
 import type { GazeZone } from './gaze';
+import { classifyLighting } from './lighting';
 import type { EyeMetricsRecord } from '@/storage/types';
 
 export interface FrameSample {
@@ -26,6 +27,8 @@ export interface FrameSample {
   offAxis: boolean;
   facePresent: boolean;
   faceSize: number;
+  /** Mean frame luminance (0-255), null when not sampled this frame. */
+  luma: number | null;
 }
 
 /** Simple centered-ish moving average to damp single-frame head-pose noise. */
@@ -51,10 +54,12 @@ export class EyeMetricsAggregator {
   private framesTotal = 0;
   private facesDetected = 0;
   private frameTimes: number[] = [];
+  private lumas: number[] = [];
 
   ingest(f: FrameSample): void {
     this.framesTotal++;
     this.frameTimes.push(f.t_ms);
+    if (f.luma != null && Number.isFinite(f.luma)) this.lumas.push(f.luma);
     if (!f.facePresent) return;
     this.facesDetected++;
     this.ear.push({ t_ms: f.t_ms, ear: f.ear });
@@ -153,6 +158,9 @@ export class EyeMetricsAggregator {
 
       face_presence_ratio: this.framesTotal > 0 ? this.facesDetected / this.framesTotal : 0,
       face_size_ratio: this.faceSizes.length ? mean(this.faceSizes) : 0,
+
+      mean_face_luma: this.lumas.length ? mean(this.lumas) : null,
+      lighting_quality: this.lumas.length ? classifyLighting(mean(this.lumas)) : null,
     };
   }
 }
@@ -191,5 +199,7 @@ export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeM
     zone_transition_count: 0,
     face_presence_ratio: 0,
     face_size_ratio: 0,
+    mean_face_luma: null,
+    lighting_quality: null,
   };
 }

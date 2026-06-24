@@ -5,15 +5,17 @@
  * denied/unavailable or MediaPipe fails to load, the experiment continues with camera_active=false
  * and disabled (zeroed) eye metrics. Per-condition aggregation is driven by beginCondition/endCondition.
  *
- * Calibration collects EAR samples to fit a real per-participant baseline (the original build's
- * "calibration" stored hardcoded zeros — see gaze.ts). Gaze thresholds remain default unless a
- * future real gaze calibration fits them; gaze_calibrated is reported truthfully.
+ * Calibration collects EAR samples to fit a real per-participant baseline AND a real per-participant
+ * gaze mapping (tap targets → fitted iris-offset thresholds, used by estimateGaze at runtime). The
+ * original build's "calibration" stored hardcoded zeros — see gaze.ts. gaze_calibrated is reported
+ * truthfully (true only when the gaze fit is separable/valid).
  */
 import { useCallback, useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';
 import { faceEar, baselineEar, type Point } from './blink';
 import { estimateHeadPose, isOffAxis } from './headPose';
 import { estimateGaze } from './gaze';
+import { meanLumaFromRGBA } from './lighting';
 import { fitGazeCalibration, type GazeCalibration, type GazeSample } from './gazeCalibration';
 import { v4 as uuidv4 } from 'uuid';
 import { EyeMetricsAggregator, disabledEyeMetrics } from './aggregator';
@@ -43,6 +45,8 @@ interface TrackingApi {
 export function useTracking(): TrackingApi {
   const [status, setStatus] = useState<CameraStatus>('unavailable');
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Tiny offscreen canvas for cheap per-frame luminance sampling (lighting QC).
+  const lumaCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const faceMeshRef = useRef<unknown>(null);
   const rafRef = useRef<number | null>(null);
   const latestLandmarks = useRef<Point[] | null>(null);
@@ -63,8 +67,24 @@ export function useTracking(): TrackingApi {
       : estimateGaze(lm);
   };
 
+  /** Mean luminance of the current video frame (0-255), null if unavailable. */
+  const sampleLuma = (): number | null => {
+    const v = videoRef.current;
+    const cv = lumaCanvasRef.current;
+    if (!v || !cv || v.readyState < 2) return null;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    try {
+      ctx.drawImage(v, 0, 0, cv.width, cv.height);
+      return meanLumaFromRGBA(ctx.getImageData(0, 0, cv.width, cv.height).data);
+    } catch {
+      return null; // e.g. tainted canvas — skip lighting for this frame
+    }
+  };
+
   const onFrame = useCallback(() => {
     const lm = latestLandmarks.current;
+    const luma = sampleLuma();
     if (lm && lm.length > 0) {
       const ear = faceEar(lm);
       if (calibrating.current) calibrating.current.samples.push(ear);
@@ -86,6 +106,7 @@ export function useTracking(): TrackingApi {
           offAxis: isOffAxis(pose),
           facePresent: true,
           faceSize: 0, // populated from detection box when available
+          luma,
         });
       }
     } else if (aggRef.current) {
@@ -98,6 +119,7 @@ export function useTracking(): TrackingApi {
         offAxis: false,
         facePresent: false,
         faceSize: 0,
+        luma,
       });
     }
     rafRef.current = requestAnimationFrame(onFrame);
@@ -118,6 +140,11 @@ export function useTracking(): TrackingApi {
       video.playsInline = true;
       await video.play();
       videoRef.current = video;
+      // Small canvas for downsampled luminance sampling (lighting QC) — cheap to read each frame.
+      const lumaCanvas = document.createElement('canvas');
+      lumaCanvas.width = 32;
+      lumaCanvas.height = 24;
+      lumaCanvasRef.current = lumaCanvas;
 
       // Dynamic import keeps MediaPipe out of the critical path and lets the app build/run without it.
       const mod = (await import('@mediapipe/face_mesh')) as unknown as {

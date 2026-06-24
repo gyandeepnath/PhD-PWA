@@ -7,7 +7,7 @@ import { get, getAll, getAllByIndex, put, remove } from './db';
 import type {
   SessionRecord, ParticipantRecord, ConditionRecord, FatigueRecord, CvsqRecord,
   ComprehensionRecord, VisualSearchRecord, DisplayPerceptionRecord, EyeMetricsRecord,
-  ReactionTrialRecord, RtSummaryRecord,
+  ReactionTrialRecord, RtSummaryRecord, CalibrationRecord, PerformanceLogRecord,
 } from './types';
 
 export interface SessionBundle {
@@ -22,6 +22,7 @@ export interface SessionBundle {
   eyeMetrics: EyeMetricsRecord[];
   reactionTrials: ReactionTrialRecord[];
   rtSummaries: RtSummaryRecord[];
+  calibration: CalibrationRecord[];
 }
 
 export async function gatherSession(sessionId: string): Promise<SessionBundle | null> {
@@ -32,7 +33,7 @@ export async function gatherSession(sessionId: string): Promise<SessionBundle | 
 
   const [
     participants, conditions, fatigue, cvsq, comprehension, visualSearch, perception,
-    eyeMetrics, reactionTrials, rtSummaries,
+    eyeMetrics, reactionTrials, rtSummaries, calibration,
   ] = await Promise.all([
     bySession<ParticipantRecord>('participants'),
     bySession<ConditionRecord>('conditions'),
@@ -44,13 +45,14 @@ export async function gatherSession(sessionId: string): Promise<SessionBundle | 
     bySession<EyeMetricsRecord>('eye_metrics'),
     bySession<ReactionTrialRecord>('reaction_trials'),
     bySession<RtSummaryRecord>('rt_summaries'),
+    bySession<CalibrationRecord>('calibration_data'),
   ]);
 
   return {
     session,
     participant: participants[0],
     conditions: conditions.sort((a, b) => a.session_position - b.session_position),
-    fatigue, cvsq, comprehension, visualSearch, perception, eyeMetrics, reactionTrials, rtSummaries,
+    fatigue, cvsq, comprehension, visualSearch, perception, eyeMetrics, reactionTrials, rtSummaries, calibration,
   };
 }
 
@@ -136,6 +138,10 @@ export async function purgeSession(sessionId: string): Promise<void> {
   for (const r of bundle.visualSearch) await remove('visual_search', r.condition_id);
   for (const r of bundle.eyeMetrics) await remove('eye_metrics', r.condition_id);
   for (const r of bundle.rtSummaries) await remove('rt_summaries', r.condition_id);
+  for (const r of bundle.calibration) await remove('calibration_data', r.calibration_id);
+  // Performance logs aren't part of the analysis bundle, so purge them directly by session index.
+  const perfLogs = await getAllByIndex('system_performance_logs', 'by_session', sessionId) as PerformanceLogRecord[];
+  for (const r of perfLogs) await remove('system_performance_logs', r.log_id);
   for (const r of bundle.conditions) await remove('conditions', r.condition_id);
   if (bundle.participant) await remove('participants', bundle.participant.participant_id);
   await remove('sessions', sessionId);

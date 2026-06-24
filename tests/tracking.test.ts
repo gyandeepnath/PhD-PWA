@@ -65,7 +65,7 @@ describe('eye metrics aggregator', () => {
       agg.ingest({
         t_ms: t, ear: 0.3,
         pose: { pitch: 2, yaw: 1, roll: 0 },
-        zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.2,
+        zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.2, luma: 130,
       });
     }
     const rec = agg.finalize({
@@ -78,6 +78,25 @@ describe('eye metrics aggregator', () => {
     expect(rec.effective_fps).toBeGreaterThan(25);
     expect(rec.fps_adequate_for_tiers).toBe(true);
     expect(rec.blink_rate_delta_from_baseline).toBeCloseTo(-10, 5);
+    // Lighting QC: mean luma well inside the 'good' band.
+    expect(rec.mean_face_luma).toBeCloseTo(130, 5);
+    expect(rec.lighting_quality).toBe('good');
+  });
+
+  it('flags low lighting and leaves it null when no luma was sampled', () => {
+    const dim = new EyeMetricsAggregator();
+    for (let t = 0; t <= 1000; t += 33) {
+      dim.ingest({ t_ms: t, ear: 0.3, pose: { pitch: 0, yaw: 0, roll: 0 }, zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.2, luma: 30 });
+    }
+    expect(dim.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, baselineBlinkRate: null }).lighting_quality).toBe('low');
+
+    const noLuma = new EyeMetricsAggregator();
+    for (let t = 0; t <= 1000; t += 33) {
+      noLuma.ingest({ t_ms: t, ear: 0.3, pose: { pitch: 0, yaw: 0, roll: 0 }, zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.2, luma: null });
+    }
+    const rec = noLuma.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, baselineBlinkRate: null });
+    expect(rec.mean_face_luma).toBeNull();
+    expect(rec.lighting_quality).toBeNull();
   });
 
   it('counts missing-face frames against presence ratio', () => {
@@ -85,7 +104,7 @@ describe('eye metrics aggregator', () => {
     for (let t = 0; t < 10; t++) {
       agg.ingest({
         t_ms: t * 33, ear: 0, pose: { pitch: 0, yaw: 0, roll: 0 },
-        zone: 'cc', isCenter: false, offAxis: false, facePresent: t < 5, faceSize: 0,
+        zone: 'cc', isCenter: false, offAxis: false, facePresent: t < 5, faceSize: 0, luma: null,
       });
     }
     const rec = agg.finalize({

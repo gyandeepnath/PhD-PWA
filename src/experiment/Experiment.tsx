@@ -1,7 +1,7 @@
 /**
  * Experiment orchestrator. Owns the stage machine, the session/participant/plan, the tracking
  * lifecycle, and all IndexedDB writes. Renders the component for the current stage and advances on
- * completion. The full researcher dashboard/export is a later phase — EXPORT_DASHBOARD is a stub.
+ * completion. EXPORT_DASHBOARD renders the full researcher dashboard + CSV/JSON export.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
@@ -19,7 +19,7 @@ import { BreakScreen } from '@/start/BreakScreen';
 import { DB_VERSION } from '@/storage/schemaEnums';
 import type { Provenance, SessionRecord } from '@/storage/types';
 import { useTracking } from '@/tracking/useTracking';
-import { Dashboard } from '@/dashboard/Dashboard';
+import { LazyDashboard as Dashboard } from '@/dashboard/LazyDashboard';
 import { ExperimentProgress } from '@/components/ExperimentProgress';
 import { FatigueScale } from '@/scales/FatigueScale';
 import { DisplayPerceptionRating } from '@/scales/DisplayPerceptionRating';

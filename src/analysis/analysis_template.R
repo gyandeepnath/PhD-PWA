@@ -16,6 +16,11 @@ library(performance)
 
 DATA_DIR <- "."
 
+# Photometry covariates (per session, in 01_session_info.csv): screen_white_luminance_cd_m2 and
+# brightness_percent. With a single fixed device they are constant and can be ignored; across
+# devices/brightness settings, join them in as a between-session covariate alongside log_contrast.
+session_info <- read_csv(file.path(DATA_DIR, "01_session_info.csv"))
+
 conditions  <- read_csv(file.path(DATA_DIR, "02_conditions.csv"))
 fatigue     <- read_csv(file.path(DATA_DIR, "03_fatigue_scores.csv"))
 comprehension <- read_csv(file.path(DATA_DIR, "04_comprehension.csv"))
