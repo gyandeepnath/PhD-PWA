@@ -516,5 +516,66 @@ mixed models; contrast as covariate; d′ aggregated; engagement sensitivity ana
 - **Excluded** (not build logic / large binaries): `node_modules/`, `dist/`, `.git/`,
   `public/mediapipe/` (vendored third-party assets), `reference/VisuLab210_2.html` (the original
   compiled single-file bundle), `package-lock.json`, `*.tsbuildinfo`.
-```
-```
+
+---
+
+## 20. Reviewer brief — YOUR TASK (read and follow this)
+
+You are a senior peer reviewer and methodologist for a PhD-level human-vision / visual-ergonomics
+study. You have been given the complete specification (this document) and the full source code
+(`ALL_SOURCE.md`). **Your job is to REVIEW against the scientific literature — not to build.**
+Do **not** write, rewrite, or "fix" code, and do not produce an implementation. If you propose a
+change, describe it in prose with justification and citations — never as code to ship.
+
+### Method (do these in order and show your work)
+1. **Ingest & confirm.** Read this document and all the source in full. Confirm what you can see
+   (file/line counts, the subsystems) so it's clear nothing was truncated. Restate the study's aim,
+   hypotheses, and design in your own words to prove comprehension.
+2. **Extract every testable claim** — the scientific choices, parameters, formulae, thresholds and
+   stated rationales (e.g. EAR blink thresholds 0.60/0.75×baseline; incomplete-blink ratio as a CVS
+   marker; PERCLOS P80/P70 + 500 ms long-closure; d′/criterion scoring; WCAG/Michelson contrast;
+   Williams counterbalancing; CVS-Q recode/cutoff; the 5-item fatigue VAS; reading-time→wpm;
+   adaptation 60/120 s; go/no-go RT, 32 trials, 0.625 go-rate; per-person head-pitch calibration; the
+   contrast↔polarity confound in §2.1; sample-size/power).
+3. **Search the literature actively for each claim** (use web search if available). Find the
+   strongest, most current, authoritative sources (peer-reviewed papers, validated-instrument
+   references, standards, meta-analyses). For each claim state whether the literature **supports,
+   partially supports, contradicts, or is silent**, and cite specific sources (authors, year, venue;
+   DOI/identifier where possible). Flag citations that are misapplied, outdated, or weaker than what
+   is available. Do **not** invent references — if unsure a citation is real, say so.
+4. **Compare claim vs build vs literature.** Where the implementation diverges from best practice,
+   say so precisely, explain the consequence for validity/reliability/interpretability, and rate
+   severity.
+5. **Stress the design logic** (not just citations): confounds — especially contrast not balanced
+   across polarity (§2.1); counterbalancing adequacy; statistical-model choice (random-intercept LMM
+   — should there be random slopes / ordinal models for VAS & CVS-Q / trial-level models?); and
+   **statistical power / sample size** for plausible effect sizes (critique the build's own power
+   assumptions).
+6. **Give special attention to §15 (Open questions) and §14 (Known limitations)** — these are where
+   the author most wants your judgment.
+
+### Deliverables (structured, detailed, elaborate)
+- **A. Executive assessment** — overall scientific-integrity verdict and the top 5 issues ranked by
+  impact on the defensibility of the findings.
+- **B. Subsystem-by-subsystem audit** — for each of: experimental design & counterbalancing; display
+  conditions & contrast; the four tasks (reading, comprehension, visual search, reaction time);
+  ocular metrics (EAR / blink / incomplete-ratio / PERCLOS / IBI); head-pose & gaze; questionnaires
+  (CVS-Q & VAS); Ishihara screening; SDT scoring; data model & analysis pipeline; engagement/QC;
+  power & sampling — give a **rating** (e.g. 1–5 or strong/adequate/weak), what's right, what's
+  flawed, the relevant literature with citations, and concrete suggestions.
+- **C. Validity & confounds register** — every threat to internal/external/construct validity, with
+  severity and mitigation options.
+- **D. Literature map** — a referenced bibliography grouped by topic, noting which build claims each
+  source supports or challenges.
+- **E. Prioritised improvement plan** — sequenced and actionable (must-fix → should-fix →
+  nice-to-have), each item justified by evidence. **Description only — no code.**
+
+### Standards
+Maintain the highest scientific rigor. Distinguish clearly between (a) what the literature firmly
+establishes, (b) reasonable-but-contested choices, and (c) your own opinion. Cite sources for
+substantive claims. Call out anywhere the build **overstates** fidelity or certainty. Be specific
+(reference blueprint sections and file/function names). Be exhaustive; this is a formal
+methodological review, not a summary.
+
+> Suggested pacing if your replies get cut off: deliver **A + B** first, then continue with
+> **C, D, E** in follow-up replies.
