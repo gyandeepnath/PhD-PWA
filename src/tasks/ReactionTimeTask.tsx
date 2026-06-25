@@ -21,9 +21,8 @@ import type { RtAccuracy } from '@/storage/types';
 
 export interface RawTrial {
   trial_number: number;
-  trial_category: 'signal_congruent' | 'signal_incongruent' | 'noise_congruent' | 'noise_incongruent';
+  trial_category: 'signal' | 'noise';
   is_signal: boolean;
-  is_congruent: boolean;
   stimulus_onset_time: number;
   response_time_ms: number | null;
   accuracy: RtAccuracy;
@@ -45,9 +44,6 @@ export interface RtResult {
     mean_rt_hits_ms: number | null;
     median_rt_hits_ms: number | null;
     rt_sd_ms: number | null;
-    mean_rt_congruent_ms: number | null;
-    mean_rt_incongruent_ms: number | null;
-    flanker_congruency_effect_ms: number | null;
     error_rate: number;
     rt_cv: number | null;
     anticipations: number;
@@ -59,6 +55,7 @@ export interface RtResult {
     d_prime: number;
     d_prime_se: number;
     d_prime_unstable: boolean;
+    criterion: number;
   };
 }
 
@@ -163,9 +160,8 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
     if (!isPractice) {
       records.current.push({
         trial_number: index + 1,
-        trial_category: t.signal ? 'signal_congruent' : 'noise_congruent',
+        trial_category: t.signal ? 'signal' : 'noise',
         is_signal: t.signal,
-        is_congruent: true,
         stimulus_onset_time: onsetRef.current,
         response_time_ms: rt,
         accuracy,
@@ -241,9 +237,6 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
         mean_rt_hits_ms: meanRt,
         median_rt_hits_ms: validHitRts.length ? median(validHitRts) : null,
         rt_sd_ms: sdRt,
-        mean_rt_congruent_ms: meanRt,
-        mean_rt_incongruent_ms: null,
-        flanker_congruency_effect_ms: null,
         error_rate: errorRate,
         rt_cv: meanRt && sdRt != null && meanRt > 0 ? sdRt / meanRt : null,
         anticipations,
@@ -255,6 +248,7 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
         d_prime: sdt.d_prime,
         d_prime_se: sdt.d_prime_se,
         d_prime_unstable: sdt.d_prime_unstable,
+        criterion: sdt.criterion,
       },
     });
   };

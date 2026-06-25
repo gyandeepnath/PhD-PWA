@@ -89,7 +89,6 @@ export function cohortRows(participants: { rows: ConditionRow[] }[]): Record<str
         comprehension_correct: r.comprehension_correct,
         d_prime: r.d_prime,
         d_prime_se: r.d_prime_se,
-        flanker_congruency_effect_ms: r.flanker_congruency_effect_ms ?? NaN,
         comfort_score: r.comfort_score,
       });
     }

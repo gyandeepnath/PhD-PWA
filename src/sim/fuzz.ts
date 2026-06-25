@@ -208,7 +208,6 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
       condition_id: c.condition_id, session_id: sid, camera_active: rng() < 0.5, effective_fps: rng() < 0.5 ? null : rng() * 40,
       fps_adequate_for_tiers: false, blink_rate: rng() * 30, blink_rate_full: rng() * 30, incomplete_blink_ratio: rng(),
       blink_duration_mean_ms: null, bins: { first_half_blink_rate: null, second_half_blink_rate: null },
-      blink_rate_delta_from_baseline: null,
       mean_inter_blink_interval_ms: rng() < 0.5 ? null : rng() * 10000, inter_blink_interval_cv: rng() < 0.5 ? null : rng(),
       perclos_p80: rng() < 0.5 ? null : rng(), perclos_p70: rng() < 0.5 ? null : rng(),
       long_closure_count: randInt(rng, 0, 3), long_closure_total_ms: rng() * 2000,
@@ -227,8 +226,7 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
         false_alarms: 0, misses: 0, correct_rejections: 0, hit_rate: r.hit_rate, false_alarm_rate: r.false_alarm_rate,
         error_rate: rng(), rt_cv: rng() < 0.5 ? null : rng(), anticipations: 0, lapse_count: 0, lapse_rate: rng(), inverse_efficiency_ms: rng() < 0.5 ? null : randInt(rng, 200, 1200), first_half_mean_rt_ms: null, second_half_mean_rt_ms: null,
         mean_rt_hits_ms: rng() < 0.5 ? null : randInt(rng, 200, 900), median_rt_hits_ms: null, rt_sd_ms: null,
-        mean_rt_congruent_ms: null, mean_rt_incongruent_ms: null, flanker_congruency_effect_ms: null,
-        d_prime: r.d_prime, d_prime_se: r.d_prime_se, d_prime_unstable: r.d_prime_unstable,
+        d_prime: r.d_prime, d_prime_se: r.d_prime_se, d_prime_unstable: r.d_prime_unstable, criterion: r.criterion,
       };
     }),
     calibration: rng() < 0.5 ? [{ calibration_id: 'cal', session_id: sid, is_real_calibration: rng() < 0.5, targets_detected: randInt(rng, 0, 9), targets_total: 9, ear_baseline: rng() < 0.5 ? null : rng(), gaze_h_threshold: null, gaze_v_threshold: null, pitch_baseline_frac: rng() < 0.5 ? null : rng() }] : [],

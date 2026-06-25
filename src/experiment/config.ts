@@ -63,10 +63,6 @@ const BASE_CONFIG = {
   // valid blink detection (sub-Nyquist below ~25 fps). Raise to 2 only if a slow tablet can't keep
   // up — effective_fps records the true achieved rate and gates the duration-based tiers.
   PROCESS_EVERY_N_FRAMES: 1,
-  EAR_CALIBRATION_SAMPLES: 150,
-
-  // Touch target minimum.
-  MIN_TOUCH_TARGET_PX: 48,
 };
 
 /** True when running under the E2E harness (?e2e=1) — collapses long waits for fast tests. */

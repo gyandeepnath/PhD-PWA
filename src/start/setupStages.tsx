@@ -63,8 +63,8 @@ export function SessionInit({ onSubmit }: { onSubmit: (d: SessionInitData) => vo
           />
           <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: -6 }}>
             {sitting === 'single'
-              ? 'Single sitting: all 8 conditions (~60–90 min).'
-              : 'Split: 4 conditions now, the remaining 4 in a later sitting (re-enter the same Participant ID; the condition order is preserved).'}
+              ? `Single sitting: all ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT} conditions (~60–90 min).`
+              : `Split: ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2} conditions now, the remaining ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2} in a later sitting (re-enter the same Participant ID; the condition order is preserved).`}
           </p>
         </div>
         {err && <p className="mt-3 font-lab text-xs text-[#e64c4c]">{err}</p>}
@@ -80,7 +80,7 @@ export function SessionInit({ onSubmit }: { onSubmit: (d: SessionInitData) => vo
               illuminationLevel: level === '' ? null : level,
               whiteLuminance: lum === '' ? null : Number(lum),
               brightnessPercent: bright === '' ? null : Number(bright),
-              conditionsPerSession: sitting === 'split' ? 4 : 8,
+              conditionsPerSession: sitting === 'split' ? CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2 : CONFIG.CONDITIONS_PER_SESSION_DEFAULT,
             });
           }}
         >
@@ -101,6 +101,9 @@ export interface ProfileData {
   lightingHabit: 'bright' | 'moderate' | 'dim';
   correctionType: 'none' | 'glasses' | 'contacts';
   cvdSelfReport: boolean;
+  /** Fatigue/alertness covariates captured at intake. */
+  caffeineToday: boolean;
+  hoursSinceSleep: number;
 }
 export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) => void }) {
   const [age, setAge] = useState('');
@@ -110,8 +113,11 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
   const [light, setLight] = useState<ProfileData['lightingHabit'] | ''>('');
   const [corr, setCorr] = useState<ProfileData['correctionType'] | ''>('');
   const [cvd, setCvd] = useState<boolean | null>(null);
+  const [caffeine, setCaffeine] = useState<boolean | null>(null);
+  const [sinceSleep, setSinceSleep] = useState('');
   const ageN = Number(age);
-  const valid = ageN >= 18 && ageN <= 80 && gender && hours !== '' && fam && light && corr && cvd != null;
+  const valid = ageN >= 18 && ageN <= 80 && gender && hours !== '' && fam && light && corr && cvd != null
+    && caffeine != null && sinceSleep !== '' && Number.isFinite(Number(sinceSleep));
 
   return (
     <div className={shell}>
@@ -126,6 +132,8 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
         <Pick label="Typical lighting" value={light} set={(v) => setLight(v as ProfileData['lightingHabit'])} opts={['bright', 'moderate', 'dim']} />
         <Pick label="Vision correction" value={corr} set={(v) => setCorr(v as ProfileData['correctionType'])} opts={['none', 'glasses', 'contacts']} />
         <Pick label="Any colour-vision deficiency? (self-report; full screening added later)" value={cvd == null ? '' : cvd ? 'yes' : 'no'} set={(v) => setCvd(v === 'yes')} opts={['no', 'yes']} />
+        <Pick label="Caffeine in the last ~4 hours?" value={caffeine == null ? '' : caffeine ? 'yes' : 'no'} set={(v) => setCaffeine(v === 'yes')} opts={['no', 'yes']} />
+        <Field label="Hours since you woke up today"><input data-testid="since-sleep" className="vl-input" inputMode="numeric" value={sinceSleep} onChange={(e) => setSinceSleep(e.target.value)} placeholder="3" /></Field>
       </div>
       <button
         className={btn}
@@ -137,6 +145,8 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
           lightingHabit: light as ProfileData['lightingHabit'],
           correctionType: corr as ProfileData['correctionType'],
           cvdSelfReport: !!cvd,
+          caffeineToday: !!caffeine,
+          hoursSinceSleep: Number(sinceSleep),
         })}
       >
         Continue →

@@ -21,8 +21,8 @@ const rt = (over: Partial<RtSummaryRecord> = {}): RtSummaryRecord => ({
   misses: 2, correct_rejections: 11, hit_rate: 0.9, false_alarm_rate: 0.08, error_rate: 0.1, rt_cv: 0.2,
   anticipations: 0, lapse_count: 0, lapse_rate: 0.05, inverse_efficiency_ms: 460,
   first_half_mean_rt_ms: 450, second_half_mean_rt_ms: 470, mean_rt_hits_ms: 460, median_rt_hits_ms: 455,
-  rt_sd_ms: 50, mean_rt_congruent_ms: null, mean_rt_incongruent_ms: null, flanker_congruency_effect_ms: null,
-  d_prime: 2.8, d_prime_se: 0.4, d_prime_unstable: true, ...over,
+  rt_sd_ms: 50,
+  d_prime: 2.8, d_prime_se: 0.4, d_prime_unstable: true, criterion: 0.1, ...over,
 });
 
 describe('conditionEngagement', () => {

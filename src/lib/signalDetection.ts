@@ -1,5 +1,5 @@
 /**
- * Signal Detection Theory metrics for the reaction-time (go/no-go flanker) task.
+ * Signal Detection Theory metrics for the reaction-time (colour go/no-go) task.
  *
  * d' = z(H) - z(F). With only ~24 signal trials per condition the per-condition d' is unstable
  * (the audit flagged this), so we also return its standard error (Macmillan & Creelman) and a
@@ -67,14 +67,4 @@ export function computeSdt(input: SdtInput): SdtResult {
     d_prime_se: se,
     d_prime_unstable: se > 0.3,
   };
-}
-
-/** Flanker congruency effect: mean RT(incongruent hits) − mean RT(congruent hits), in ms. */
-export function flankerCongruencyEffect(
-  congruentHitRts: number[],
-  incongruentHitRts: number[],
-): number | null {
-  if (congruentHitRts.length === 0 || incongruentHitRts.length === 0) return null;
-  const m = (a: number[]) => a.reduce((s, x) => s + x, 0) / a.length;
-  return m(incongruentHitRts) - m(congruentHitRts);
 }

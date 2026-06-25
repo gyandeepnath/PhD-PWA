@@ -76,7 +76,10 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
       await click(page, /^high$/);
       await click(page, /^dim$/);
       await click(page, /^glasses$/);
-      await click(page, /^no$/);
+      // Two no/yes groups now: colour-vision self-report (first) and caffeine (second).
+      await page.getByRole('button', { name: /^no$/ }).first().click({ force: true });
+      await page.getByRole('button', { name: /^no$/ }).nth(1).click({ force: true });
+      await setInput(page, 'since-sleep', '3');
       await click(page, /Continue/);
       await waitStageChange(page, stage);
       break;

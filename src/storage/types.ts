@@ -235,9 +235,9 @@ export interface ReactionTrialRecord {
   condition_id: string;
   session_id: string;
   trial_number: number;
-  trial_category: 'signal_congruent' | 'signal_incongruent' | 'noise_congruent' | 'noise_incongruent';
+  /** Go/no-go trial type. (This task has no flanker/congruency manipulation.) */
+  trial_category: 'signal' | 'noise';
   is_signal: boolean;
-  is_congruent: boolean;
   stimulus_onset_time: number;
   response_time_ms: number | null;
   accuracy: RtAccuracy;
@@ -260,9 +260,6 @@ export interface RtSummaryRecord {
   mean_rt_hits_ms: number | null;
   median_rt_hits_ms: number | null;
   rt_sd_ms: number | null;
-  mean_rt_congruent_ms: number | null;
-  mean_rt_incongruent_ms: number | null;
-  flanker_congruency_effect_ms: number | null;
   /** Overall error rate = (misses + false alarms) / total trials. */
   error_rate: number;
   /** RT coefficient of variation (SD/mean) — fatigue often shows as inconsistency before slowing. */
@@ -281,6 +278,8 @@ export interface RtSummaryRecord {
   /** Standard error of d' (flag if > 0.3 — small-N instability). */
   d_prime_se: number;
   d_prime_unstable: boolean;
+  /** SDT response bias c = -0.5·(zH+zF): >0 conservative (fewer responses), <0 liberal. */
+  criterion: number;
 }
 
 /** Per-task within-window blink bins to capture fatigue *dynamics* (rising rate = fatigue). */
@@ -304,8 +303,6 @@ export interface EyeMetricsRecord {
   incomplete_blink_ratio: number;
   blink_duration_mean_ms: number | null;
   bins: BlinkBins;
-  /** Blink rate change vs session baseline (interpretation aid). */
-  blink_rate_delta_from_baseline: number | null;
   /** Inter-blink interval (ms) + its CV — longer/erratic with reduced blinking. */
   mean_inter_blink_interval_ms: number | null;
   inter_blink_interval_cv: number | null;
@@ -316,7 +313,7 @@ export interface EyeMetricsRecord {
   long_closure_count: number;
   long_closure_total_ms: number;
 
-  // Diagnostic only (sub-Nyquist at 15 fps — flagged in codebook)
+  // Diagnostic only (sub-Nyquist below ~25 fps; JSON bundle only, not in the CSV bundle)
   blink_rate_micro: number;
   blink_count_full: number;
   blink_count_micro: number;

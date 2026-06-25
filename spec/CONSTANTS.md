@@ -68,11 +68,11 @@ original `accuracy_rate = found/target_count` was miscalibrated. Authoritative c
 | P6 | plate | 9 | 5 |
 | P7 | light | 10 | 11 |
 
-We use the actual count as `searchTargetCount` (original kept as `originalStoredTargetCount` for
-provenance). Counts are unequal across passages (2–13) but passage↔condition decoupling makes this
-orthogonal to condition (noise, not bias). Rebalancing target words to a tighter 6–11 range is an
-optional follow-up the researcher can opt into.
-| RT (flanker) | 48 trials, Eriksen colour flanker | 48; target red `#C81E1E`, distractors blue/yellow/green | render on fixed `#808080`; report d′ + SE |
+We use the actual count as `searchTargetCount` (the original mismatched values are noted in the
+`passages.ts` source comment for provenance, not carried as a data field). Counts are unequal across
+passages (2–13) but passage↔condition decoupling makes this orthogonal to condition (noise, not
+bias). Rebalancing target words to a tighter 6–11 range is an optional follow-up the researcher can opt into.
+| RT (colour go/no-go) | implemented: 32 trials, go-rate 0.625, target GREEN `#00A651`, distractors red/blue/yellow | (no flanker manipulation) | render on the condition background; report d′ + SE + criterion |
 | RT windows | resp ~1500, fix ~400–600, delay ~800–1500, ITI ~400–700 ms ⚠️ | resp 3000, fix 500–1000, delay 1000–3000, ITI 800–1200 ⚠️ | confirm from bundle, make configurable |
 | Adaptation | 20 000 ms `#808080` | same | 60 s same-polarity / 120 s on polarity switch |
 | Camera | 1280×720 @30fps, process every 2nd frame (~15fps) ⚠️ | 640×480 @30fps ⚠️ | record effective FPS; gate blink tiers ≥25fps |
@@ -92,14 +92,13 @@ within-task blink bins, consent record, provenance (app version/git hash/conditi
 `session_position`, adaptation ms per transition, slider `touched` flags, CVS-Q baseline/end.
 
 ## Export
-11 CSVs + JSON bundle + master codebook. Fix stale `count!==20` validation → use configured
-trial count. Add per-export manifest: schema version, app version, git hash, condition-def hash,
-checksums.
+14 CSVs + JSON bundle + master codebook + per-export manifest (schema version, app version, git
+hash, condition-def hash, checksums).
 
 ## Scoring formulae (verified)
 - Composite fatigue = mean of 5 VAS items (eye_strain, dryness, blur, burning, headache), 0–10.
 - d′ = Φ⁻¹(hit_rate) − Φ⁻¹(false_alarm_rate), Acklam probit, inputs clamped [0.001, 0.999].
-- FCE = mean_RT(incongruent hits) − mean_RT(congruent hits).
+- criterion (response bias) c = −0.5·(zH + zF); >0 conservative, <0 liberal.
 - search_efficiency = hits / (search_seconds / 60); accuracy = (found + correct_rej)/total.
 - Population SD (÷N) for frame-level descriptives (intentional).
 

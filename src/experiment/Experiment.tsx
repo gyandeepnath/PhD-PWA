@@ -185,8 +185,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       correction_type: d.correctionType,
       cvd_status: d.cvdSelfReport ? 'self_reported_deficient' : 'normal',
       ishihara_correct: null, ishihara_total: null,
-      caffeine_today: null, hours_since_sleep: null,
-      eligible: d.age >= 18 && d.age <= 80, exclusion_reason: null,
+      caffeine_today: d.caffeineToday, hours_since_sleep: d.hoursSinceSleep,
+      eligible: d.age >= 18 && d.age <= 80,
+      exclusion_reason: d.age >= 18 && d.age <= 80 ? null : `Age ${d.age} outside the 18–80 inclusion range`,
       baseline_fatigue: 0, session_id: session.session_id,
     });
     advance();
@@ -329,11 +330,16 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         <FatigueScale
           prompt="How are your eyes feeling right now, before we begin?"
           onComplete={async (r) => {
-            if (session) await put('fatigue_scores', {
-              fatigue_id: uuidv4(), session_id: session.session_id, condition_id: null,
-              stage: 'baseline', ...r.items, fatigue_mean: r.mean, touched: r.touched, all_touched: true,
-              response_time_ms: r.responseTimeMs,
-            });
+            if (session) {
+              await put('fatigue_scores', {
+                fatigue_id: uuidv4(), session_id: session.session_id, condition_id: null,
+                stage: 'baseline', ...r.items, fatigue_mean: r.mean, touched: r.touched, all_touched: true,
+                response_time_ms: r.responseTimeMs,
+              });
+              // Propagate the measured baseline into the participant record (was hard-wired to 0).
+              const p = await get('participants', session.participant_id);
+              if (p) await put('participants', { ...p, baseline_fatigue: r.mean });
+            }
             setBaselineFatigue(r.mean);
             advance();
           }}

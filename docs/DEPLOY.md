@@ -42,5 +42,5 @@ once, the service worker caches everything (incl. MediaPipe), so subsequent runs
 ## Data
 
 Everything is stored **on the device** in IndexedDB (`VisualErgonomicsDB`). Export per session from
-the dashboard (11 CSVs + JSON + codebook + provenance manifest). Back up exports off-device; the
+the dashboard (14 CSVs + JSON + codebook + provenance manifest). Back up exports off-device; the
 container/browser storage is the only copy until exported.

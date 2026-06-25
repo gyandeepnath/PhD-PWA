@@ -173,14 +173,13 @@ describe('eye metrics aggregator', () => {
     }
     const rec = agg.finalize({
       conditionId: 'C', sessionId: 'S', cameraActive: true,
-      baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, baselineBlinkRate: 10, headPitchCalibrated: false,
+      baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, headPitchCalibrated: false,
     });
     expect(rec.face_presence_ratio).toBeCloseTo(1, 2);
     expect(rec.zone_center_ratio).toBeCloseTo(1, 2);
     expect(rec.blink_rate).toBe(0); // no dips => no blinks
     expect(rec.effective_fps).toBeGreaterThan(25);
     expect(rec.fps_adequate_for_tiers).toBe(true);
-    expect(rec.blink_rate_delta_from_baseline).toBeCloseTo(-10, 5);
     // Lighting QC: mean luma well inside the 'good' band.
     expect(rec.mean_face_luma).toBeCloseTo(130, 5);
     expect(rec.lighting_quality).toBe('good');
@@ -191,13 +190,13 @@ describe('eye metrics aggregator', () => {
     for (let t = 0; t <= 1000; t += 33) {
       dim.ingest({ t_ms: t, ear: 0.3, pose: { pitch: 0, yaw: 0, roll: 0 }, zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.2, luma: 30 });
     }
-    expect(dim.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, baselineBlinkRate: null, headPitchCalibrated: false }).lighting_quality).toBe('low');
+    expect(dim.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, headPitchCalibrated: false }).lighting_quality).toBe('low');
 
     const noLuma = new EyeMetricsAggregator();
     for (let t = 0; t <= 1000; t += 33) {
       noLuma.ingest({ t_ms: t, ear: 0.3, pose: { pitch: 0, yaw: 0, roll: 0 }, zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.2, luma: null });
     }
-    const rec = noLuma.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, baselineBlinkRate: null, headPitchCalibrated: false });
+    const rec = noLuma.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, headPitchCalibrated: false });
     expect(rec.mean_face_luma).toBeNull();
     expect(rec.lighting_quality).toBeNull();
   });
@@ -212,7 +211,7 @@ describe('eye metrics aggregator', () => {
     }
     const rec = agg.finalize({
       conditionId: 'C', sessionId: 'S', cameraActive: true,
-      baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, baselineBlinkRate: null, headPitchCalibrated: false,
+      baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, headPitchCalibrated: false,
     });
     expect(rec.face_presence_ratio).toBeCloseTo(0.5, 2);
   });

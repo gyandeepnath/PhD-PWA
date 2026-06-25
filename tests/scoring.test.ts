@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { mean, median, stdPopulation, stdSample, probit, normalPdf, clampRate } from '@/lib/stats';
-import { computeSdt, flankerCongruencyEffect } from '@/lib/signalDetection';
+import { computeSdt } from '@/lib/signalDetection';
 import {
   eyeAspectRatio,
   baselineEar,
@@ -62,9 +62,11 @@ describe('signal detection (d-prime)', () => {
     expect(r.d_prime).toBeGreaterThan(0);
   });
 
-  it('flanker congruency effect = incongruent - congruent', () => {
-    expect(flankerCongruencyEffect([400, 420], [460, 480])).toBeCloseTo(60, 6);
-    expect(flankerCongruencyEffect([], [460])).toBeNull();
+  it('criterion is 0 for symmetric H/F and rises as responding gets conservative', () => {
+    const sym = computeSdt({ hits: 12, misses: 12, falseAlarms: 12, correctRejections: 12 });
+    expect(sym.criterion).toBeCloseTo(0, 6); // H=F=0.5 → c=0
+    const conservative = computeSdt({ hits: 6, misses: 18, falseAlarms: 1, correctRejections: 23 });
+    expect(conservative.criterion).toBeGreaterThan(0); // few responses overall → positive bias
   });
 });
 

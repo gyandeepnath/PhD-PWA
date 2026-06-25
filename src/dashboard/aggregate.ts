@@ -54,7 +54,7 @@ export interface ConditionSummary {
   d_prime: number | null;
   d_prime_se: number | null;
   d_prime_unstable: boolean;
-  flanker_congruency_effect_ms: number | null;
+  criterion: number | null;
 
   // Fatigue
   fatigue_mean: number | null;
@@ -258,7 +258,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       d_prime: rt?.d_prime ?? null,
       d_prime_se: rt?.d_prime_se ?? null,
       d_prime_unstable: rt?.d_prime_unstable ?? false,
-      flanker_congruency_effect_ms: rt?.flanker_congruency_effect_ms ?? null,
+      criterion: rt?.criterion ?? null,
 
       fatigue_mean: fat?.fatigue_mean ?? null,
       fatigue_delta: fat && baseline != null ? fat.fatigue_mean - baseline : null,

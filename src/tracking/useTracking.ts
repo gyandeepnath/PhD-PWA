@@ -30,6 +30,24 @@ function medianOf(xs: number[]): number {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
+/**
+ * Apparent face size as a fraction of the frame: the geometric mean of the landmark bounding box's
+ * width and height (normalised coords). A viewing-distance / posture proxy — it shrinks as the
+ * participant leans back. (FaceMesh gives no detection box, so we derive it from the landmark extent.)
+ */
+function faceSizeFromLandmarks(lm: Point[]): number {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of lm) {
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const w = maxX - minX, h = maxY - minY;
+  return w > 0 && h > 0 ? Math.sqrt(w * h) : 0;
+}
+
 interface TrackingApi {
   status: CameraStatus;
   /** Request camera + init FaceMesh. Returns the resulting status. */
@@ -46,7 +64,6 @@ interface TrackingApi {
   beginCondition: () => void;
   /** Finalise the current condition and persist an EyeMetricsRecord. */
   endCondition: (conditionId: string, sessionId: string) => Promise<void>;
-  setBaselineBlinkRate: (rate: number) => void;
 }
 
 export function useTracking(): TrackingApi {
@@ -61,7 +78,6 @@ export function useTracking(): TrackingApi {
   const baselineEarRef = useRef<number | null>(null);
   // Per-participant frontal nose fraction (pitch zero), captured during calibration.
   const pitchBaselineFracRef = useRef<number | null>(null);
-  const baselineBlinkRef = useRef<number | null>(null);
   const frameCounter = useRef(0);
   // Gaze calibration state.
   const gazeCalRef = useRef<GazeCalibration | null>(null);
@@ -121,7 +137,7 @@ export function useTracking(): TrackingApi {
           isCenter: gazeNow.isCenter,
           offAxis: isOffAxis(pose),
           facePresent: true,
-          faceSize: 0, // populated from detection box when available
+          faceSize: faceSizeFromLandmarks(lm),
           luma,
         });
       }
@@ -272,7 +288,6 @@ export function useTracking(): TrackingApi {
         baselineEarValue: baselineEarRef.current,
         earThresholdUsed: baselineEarRef.current != null ? baselineEarRef.current * 0.6 : null,
         gazeCalibrated: gazeCalRef.current?.valid ?? false,
-        baselineBlinkRate: baselineBlinkRef.current,
         headPitchCalibrated: pitchBaselineFracRef.current != null,
       });
       aggRef.current = null;
@@ -281,13 +296,9 @@ export function useTracking(): TrackingApi {
     [status],
   );
 
-  const setBaselineBlinkRate = useCallback((rate: number) => {
-    baselineBlinkRef.current = rate;
-  }, []);
-
   return {
     status, start, stop, calibrate,
     beginGazeCalibration, sampleGazeTarget, endGazeCalibration,
-    beginCondition, endCondition, setBaselineBlinkRate,
+    beginCondition, endCondition,
   };
 }

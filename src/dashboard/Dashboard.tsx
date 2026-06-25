@@ -145,7 +145,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       {bundle && tab === 'export' && (
         <div style={{ background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 20, maxWidth: 720 }}>
           <p className="font-lab text-sm text-[#5a5a7a]">
-            Exports 11 CSVs + a nested JSON bundle + a master codebook + a provenance manifest (app
+            Exports 14 CSVs + a nested JSON bundle + a master codebook + a provenance manifest (app
             version, git hash, condition-definition hash, per-file checksums). Analyse with the R /
             Python mixed-model templates in <code>src/analysis/</code>.
           </p>

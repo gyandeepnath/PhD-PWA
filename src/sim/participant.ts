@@ -10,8 +10,8 @@ import { PASSAGES } from '@/experiment/passages';
 import { sessionPlan } from '@/experiment/counterbalance';
 import { CONFIG } from '@/experiment/config';
 import { computeSdt } from '@/lib/signalDetection';
-import { mean, median, stdSample } from '@/lib/stats';
-import { summariseBlinks, blinkRatePerMinute, type BlinkEvent } from '@/tracking/blink';
+import { mean } from '@/lib/stats';
+import { summariseBlinks, type BlinkEvent } from '@/tracking/blink';
 import { makeRng, gaussian, exGaussian, bernoulli, logistic, poissonEventTimes, type Rng } from './rng';
 import { GROUND_TRUTH as GT } from './effects';
 
@@ -35,7 +35,6 @@ export interface ConditionRow {
   passage_id: number;
   // DVs
   mean_rt_hits_ms: number | null;
-  flanker_congruency_effect_ms: number | null;
   d_prime: number;
   d_prime_se: number;
   comprehension_correct: 0 | 1;
@@ -124,8 +123,6 @@ export function generateParticipant(enrolmentNumber: number, seed: number): SimP
     }
 
     const sdt = computeSdt({ hits, misses, falseAlarms, correctRejections });
-    void median; // median available for richer summaries
-    void stdSample;
 
     // ---- Comprehension ----
     const pCorrect = logistic(
@@ -143,7 +140,6 @@ export function generateParticipant(enrolmentNumber: number, seed: number): SimP
     const targetRate = Math.max(2, GT.blink.base_rate + GT.blink.beta_position * pos + blinkIntercept + gaussian(rng, 0, 1));
     const events = synthBlinkEvents(rng, targetRate, READING_MS);
     const blink = summariseBlinks(events, READING_MS);
-    void blinkRatePerMinute;
 
     // ---- Visual search ----
     const targets = passage.searchTargetCount;
@@ -168,8 +164,6 @@ export function generateParticipant(enrolmentNumber: number, seed: number): SimP
       log_contrast: logC,
       passage_id: passage.id,
       mean_rt_hits_ms: allHitRts.length ? mean(allHitRts) : null,
-      // Pure go/no-go: no flanker congruency manipulation in the real task (kept null for schema parity).
-      flanker_congruency_effect_ms: null,
       d_prime: sdt.d_prime,
       d_prime_se: sdt.d_prime_se,
       comprehension_correct: correct ? 1 : 0,

@@ -9,8 +9,8 @@
  * occurrences in the passage (e.g. "forest" stored 7 but occurs 2x; "carbon" stored 8 but
  * occurs 12x) — making accuracy_rate = found/target_count miscalibrated. We instead use the
  * ACTUAL occurrence count (computed with the task tokenisation rule: strip non-letters,
- * lowercase, exact match) as the authoritative `searchTargetCount`. The discredited original
- * values are kept in `originalStoredTargetCount` for provenance only.
+ * lowercase, exact match) as the authoritative `searchTargetCount`. (The discredited original
+ * values are recorded here in source for provenance; they are not carried as data.)
  */
 export interface ComprehensionQuestion {
   text: string;
@@ -27,8 +27,6 @@ export interface Passage {
   searchTarget: string;
   /** Authoritative target occurrences (computed from the passage text). */
   searchTargetCount: number;
-  /** Original (incorrect) stored value from the bundle — provenance only, do not use. */
-  originalStoredTargetCount: number;
 }
 
 export const PASSAGES: Passage[] = [
@@ -51,7 +49,6 @@ Human activities have significantly altered the carbon cycle. Burning fossil fue
     },
     searchTarget: "carbon",
     searchTargetCount: 12,
-    originalStoredTargetCount: 8,
   },
   {
     id: 1,
@@ -72,7 +69,6 @@ Ocean currents have a profound influence on climate. The Gulf Stream carries war
     },
     searchTarget: "ocean",
     searchTargetCount: 7,
-    originalStoredTargetCount: 8,
   },
   {
     id: 2,
@@ -93,7 +89,6 @@ The adaptive immune system provides a more precise and targeted defence. Special
     },
     searchTarget: "immune",
     searchTargetCount: 6,
-    originalStoredTargetCount: 7,
   },
   {
     id: 3,
@@ -114,7 +109,6 @@ Despite their destructive power, volcanoes have played a vital role in shaping E
     },
     searchTarget: "eruption",
     searchTargetCount: 3,
-    originalStoredTargetCount: 6,
   },
   {
     id: 4,
@@ -135,7 +129,6 @@ Chronic sleep deprivation has serious health consequences. It impairs concentrat
     },
     searchTarget: "sleep",
     searchTargetCount: 13,
-    originalStoredTargetCount: 9,
   },
   {
     id: 5,
@@ -156,7 +149,6 @@ Rainforests play an indispensable role in regulating Earth's climate. They absor
     },
     searchTarget: "forest",
     searchTargetCount: 2,
-    originalStoredTargetCount: 7,
   },
   {
     id: 6,
@@ -177,7 +169,6 @@ At divergent boundaries, plates move apart and new oceanic crust is created as m
     },
     searchTarget: "plate",
     searchTargetCount: 5,
-    originalStoredTargetCount: 9,
   },
   {
     id: 7,
@@ -198,7 +189,6 @@ The speed of light in a vacuum is approximately 300,000 kilometres per second, o
     },
     searchTarget: "light",
     searchTargetCount: 11,
-    originalStoredTargetCount: 10,
   },
 ];
 

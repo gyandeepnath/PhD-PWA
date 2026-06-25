@@ -91,10 +91,7 @@ export class EyeMetricsAggregator {
     };
   }
 
-  /**
-   * Produce the record. `baselineEarValue` comes from calibration; `baselineBlinkRate` (session
-   * baseline) enables the delta-from-baseline interpretation aid.
-   */
+  /** Produce the record. `baselineEarValue` comes from calibration. */
   finalize(args: {
     conditionId: string;
     sessionId: string;
@@ -102,7 +99,6 @@ export class EyeMetricsAggregator {
     baselineEarValue: number | null;
     earThresholdUsed: number | null;
     gazeCalibrated: boolean;
-    baselineBlinkRate: number | null;
     /** True when head pitch was measured against the participant's calibrated frontal baseline. */
     headPitchCalibrated: boolean;
   }): EyeMetricsRecord {
@@ -136,8 +132,6 @@ export class EyeMetricsAggregator {
       incomplete_blink_ratio: blink.incomplete_blink_ratio,
       blink_duration_mean_ms: blink.blink_duration_mean_ms,
       bins,
-      blink_rate_delta_from_baseline:
-        args.baselineBlinkRate != null ? blink.blink_rate - args.baselineBlinkRate : null,
       mean_inter_blink_interval_ms: ibi.mean_inter_blink_interval_ms,
       inter_blink_interval_cv: ibi.inter_blink_interval_cv,
       perclos_p80: closure.perclos_p80,
@@ -190,7 +184,6 @@ export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeM
     incomplete_blink_ratio: 0,
     blink_duration_mean_ms: null,
     bins: { first_half_blink_rate: null, second_half_blink_rate: null },
-    blink_rate_delta_from_baseline: null,
     mean_inter_blink_interval_ms: null,
     inter_blink_interval_cv: null,
     perclos_p80: null,
