@@ -1,7 +1,7 @@
 # VisuLab — Visual Ergonomics Experiment (reconstructed source)
 
 A tablet PWA for a within-subjects visual-ergonomics study. Per display condition it runs
-reading-comprehension, visual-search and Eriksen-flanker reaction-time tasks while a webcam
+reading-comprehension, visual-search and colour go/no-go reaction-time tasks while a webcam
 (MediaPipe FaceMesh + Eye-Aspect-Ratio) estimates blink/gaze/head-pose metrics, with validated
 fatigue questionnaires. Data is stored in IndexedDB and exported as CSV + JSON for analysis in
 R/Python.
@@ -51,8 +51,10 @@ recycle bin holds soft-deleted sessions.
 
 ## Verification
 
-- **134 unit/property tests** (scoring, counterbalancing balance, contrast, storage, screening,
-  gaze calibration, session admin) + a **fuzz harness** (1M-iteration soak clean).
+- **169 unit/property tests** (scoring, counterbalancing balance, contrast, storage, screening,
+  gaze calibration, session admin, head-pose calibration, ocular metrics) + a **harsh stress suite**
+  (`tests/stress.test.ts`) and a **fuzz harness** (`npm run fuzz` / `npm run stress` — CSV-injection
+  round-trip, adversarial sensor/trial inputs, large-cohort invariants; soak clean).
 - **Playwright E2E**: a full no-camera run through all 56 stages plus edge cases (input gating,
-  double-click→single session, reload→resume).
+  double-click→single session, reload→resume, split-session).
 - Production build emits an offline-capable PWA (MediaPipe assets precached).
