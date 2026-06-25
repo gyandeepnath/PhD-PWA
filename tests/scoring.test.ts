@@ -107,6 +107,22 @@ describe('EAR & blink classification', () => {
     expect(blinkRatePerMinute(0, 0)).toBe(0);
   });
 
+  it('classifyBlinks produces incomplete blinks end-to-end (regression: ratio was stuck at 0)', () => {
+    const baseline = 0.3;
+    const samples: { t_ms: number; ear: number }[] = [];
+    let t = 0;
+    const push = (ear: number, n: number) => { for (let i = 0; i < n; i++) { samples.push({ t_ms: t, ear }); t += 33; } };
+    // Two deep (full-closure) blinks and two shallow partial closures that never fully close.
+    push(0.30, 15); push(0.05, 6); push(0.30, 15); push(0.20, 6); // full, then incomplete
+    push(0.30, 15); push(0.05, 6); push(0.30, 15); push(0.20, 6); // full, then incomplete
+    push(0.30, 15);
+    const events = classifyBlinks(samples, baseline);
+    const s = summariseBlinks(events, samples[samples.length - 1].t_ms);
+    expect(s.blink_count_full).toBe(2);
+    expect(s.blink_count_incomplete).toBe(2);
+    expect(s.incomplete_blink_ratio).toBeCloseTo(0.5, 6);
+  });
+
   it('summarises tiers and incomplete ratio', () => {
     const events = [
       { onset_ms: 0, duration_ms: 150, min_ear: 0.1, tier: 'full' as const },

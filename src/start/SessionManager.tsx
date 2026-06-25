@@ -78,7 +78,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
 
         {resume && inProgress.some((s) => s.session_id === resume.sessionId) && (
           <div style={{ marginTop: 14, background: '#eef3ff', border: '1px solid #cdd8f0', borderRadius: 12, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span className="font-lab text-sm">Resume in-progress session (next condition {resume.nextStepIndex + 1}/8)</span>
+            <span className="font-lab text-sm">Resume in-progress session (next condition {resume.nextStepIndex + 1}/{inProgress.find((s) => s.session_id === resume.sessionId)?.conditions_per_session ?? 8})</span>
             <button onClick={() => onResume(resume.sessionId, resume.nextStepIndex)} className="font-lab text-sm text-white" style={{ background: '#4f8ef7', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer' }}>Resume →</button>
           </div>
         )}

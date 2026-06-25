@@ -7,7 +7,6 @@
  *  - higher luminance contrast -> faster RT, better comprehension, less fatigue
  *  - negative polarity -> slightly slower RT (the red dot is less salient on black: 3.66 vs 5.74)
  *  - serial position -> fatigue accumulation (slower RT, more fatigue, rising blink rate)
- *  - incongruent flankers -> slower RT (the flanker congruency effect)
  */
 export interface GroundTruth {
   rt: {
@@ -20,8 +19,6 @@ export interface GroundTruth {
     beta_negative_polarity: number;
     /** ms added per serial position (fatigue accumulation). */
     beta_position: number;
-    /** ms added for incongruent flankers (the FCE). */
-    congruency_effect_ms: number;
     /** SD of per-participant random intercept. */
     participant_sd_ms: number;
   };
@@ -58,7 +55,6 @@ export const GROUND_TRUTH: GroundTruth = {
     beta_log_contrast: -28,
     beta_negative_polarity: 18,
     beta_position: 4,
-    congruency_effect_ms: 55,
     participant_sd_ms: 35,
   },
   hit: { intercept: 2.0, beta_log_contrast: 0.6, beta_position: -0.05 },

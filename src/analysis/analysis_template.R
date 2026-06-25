@@ -28,6 +28,8 @@ rt_summary  <- read_csv(file.path(DATA_DIR, "09_rt_summary.csv"))
 eye_metrics <- read_csv(file.path(DATA_DIR, "07_eye_metrics.csv"))
 quality     <- read_csv(file.path(DATA_DIR, "12_quality_flags.csv"))  # engagement / careless-responding
 wide        <- read_csv(file.path(DATA_DIR, "10_wide_summary.csv"))   # carries session_index per condition
+participant <- read_csv(file.path(DATA_DIR, "11_participant.csv"))   # demographics + vision covariates
+cvsq        <- read_csv(file.path(DATA_DIR, "13_cvsq.csv"))          # CVS-Q symptom questionnaire (per item)
 
 # --- Quality control: optionally exclude disengaged conditions -----------------------------
 # Boredom/disengagement over the long session mimics fatigue and adds noise. The engagement
@@ -42,6 +44,9 @@ clean_ids <- quality %>% filter(engagement_flag != "bad") %>% select(participant
 cond <- conditions %>%
   left_join(wide %>% select(participant_id, condition_label, session_index, engagement_flag),
             by = c("participant_id", "condition_label")) %>%
+  left_join(participant %>% select(participant_id, age, gender, daily_screen_hours,
+                                    correction_type, cvd_status),
+            by = "participant_id") %>%   # participant covariates for adjustment (e.g. + age)
   mutate(
     log_contrast = log10(wcag_contrast_ratio),
     polarity = factor(polarity, levels = c("positive", "negative")),

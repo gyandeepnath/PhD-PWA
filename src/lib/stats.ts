@@ -73,7 +73,10 @@ export function probit(p: number): number {
 
 /** Clamp a rate into (0,1) using the 1/(2N) correction to avoid infinite z-scores. */
 export function clampRate(rate: number, n: number): number {
-  const lo = 1 / (2 * n);
-  const hi = 1 - 1 / (2 * n);
+  // Guard tiny/empty pools: n=0 would make the correction ±Infinity. With n≤1 there is no usable
+  // rate information, so the loglinear bound collapses to 0.5 (maximum uncertainty) by construction.
+  const safeN = Math.max(1, n);
+  const lo = 1 / (2 * safeN);
+  const hi = 1 - 1 / (2 * safeN);
   return Math.min(hi, Math.max(lo, rate));
 }

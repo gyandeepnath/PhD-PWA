@@ -32,10 +32,12 @@ export async function gatherSession(sessionId: string): Promise<SessionBundle | 
     getAllByIndex(store, 'by_session', sessionId) as Promise<T[]>;
 
   const [
-    participants, conditions, fatigue, cvsq, comprehension, visualSearch, perception,
+    participant, conditions, fatigue, cvsq, comprehension, visualSearch, perception,
     eyeMetrics, reactionTrials, rtSummaries, calibration,
   ] = await Promise.all([
-    bySession<ParticipantRecord>('participants'),
+    // Fetch by participant_id, NOT by session_id: the participant record is created once and SHARED
+    // across a participant's sittings, so the 2nd+ sitting's session_id never matches it.
+    get('participants', session.participant_id),
     bySession<ConditionRecord>('conditions'),
     bySession<FatigueRecord>('fatigue_scores'),
     bySession<CvsqRecord>('cvsq_scores'),
@@ -50,7 +52,7 @@ export async function gatherSession(sessionId: string): Promise<SessionBundle | 
 
   return {
     session,
-    participant: participants[0],
+    participant: participant as ParticipantRecord | undefined,
     conditions: conditions.sort((a, b) => a.session_position - b.session_position),
     fatigue, cvsq, comprehension, visualSearch, perception, eyeMetrics, reactionTrials, rtSummaries, calibration,
   };
@@ -143,7 +145,15 @@ export async function purgeSession(sessionId: string): Promise<void> {
   const perfLogs = await getAllByIndex('system_performance_logs', 'by_session', sessionId) as PerformanceLogRecord[];
   for (const r of perfLogs) await remove('system_performance_logs', r.log_id);
   for (const r of bundle.conditions) await remove('conditions', r.condition_id);
-  if (bundle.participant) await remove('participants', bundle.participant.participant_id);
+  // The participant record is keyed by participant_id and SHARED across a participant's sittings
+  // (split sessions reuse it). Only delete it when no other session still references it — otherwise
+  // purging one sitting would strip the demographics/vision covariates from the surviving sitting.
+  if (bundle.participant) {
+    const siblings = await getAllByIndex('sessions', 'by_participant', bundle.participant.participant_id);
+    if (!siblings.some((s) => s.session_id !== sessionId)) {
+      await remove('participants', bundle.participant.participant_id);
+    }
+  }
   await remove('sessions', sessionId);
 }
 

@@ -17,7 +17,9 @@ export interface ExportFile {
 export function escapeCsv(value: unknown): string {
   if (value == null) return '';
   const s = String(value);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  // Quote when the value contains a quote, comma, or ANY line break (\n or \r) — a bare \r would
+  // otherwise be treated as a row terminator by Excel/read.csv and silently misalign columns.
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 /** Build a CSV string from explicit headers and object rows (stable column order). */
@@ -105,7 +107,7 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 07 — eye metrics
   csv('07_eye_metrics.csv',
-    ['participant_id', 'condition_id', 'camera_active', 'effective_fps', 'fps_adequate_for_tiers', 'blink_rate', 'blink_rate_full', 'incomplete_blink_ratio', 'mean_inter_blink_interval_ms', 'inter_blink_interval_cv', 'perclos_p80', 'perclos_p70', 'long_closure_count', 'long_closure_total_ms', 'blink_duration_mean_ms', 'blink_rate_delta_from_baseline', 'first_half_blink_rate', 'second_half_blink_rate', 'head_pitch_mean', 'head_yaw_mean', 'head_roll_mean', 'postural_load', 'head_stability_score', 'off_axis_ratio', 'gaze_calibrated', 'gaze_deviation_ratio', 'zone_center_ratio', 'zone_transition_count', 'face_presence_ratio', 'mean_face_luma', 'lighting_quality'],
+    ['participant_id', 'condition_id', 'camera_active', 'effective_fps', 'fps_adequate_for_tiers', 'blink_rate', 'blink_rate_full', 'incomplete_blink_ratio', 'mean_inter_blink_interval_ms', 'inter_blink_interval_cv', 'perclos_p80', 'perclos_p70', 'long_closure_count', 'long_closure_total_ms', 'blink_duration_mean_ms', 'blink_rate_delta_from_baseline', 'first_half_blink_rate', 'second_half_blink_rate', 'ear_baseline', 'ear_threshold_used', 'head_pitch_mean', 'head_yaw_mean', 'head_roll_mean', 'head_movement_std', 'postural_load', 'head_stability_score', 'off_axis_ratio', 'gaze_calibrated', 'gaze_deviation_ratio', 'zone_center_ratio', 'zone_transition_count', 'face_presence_ratio', 'face_size_ratio', 'mean_face_luma', 'lighting_quality'],
     bundle.eyeMetrics.map((e) => ({
       participant_id: pid, condition_id: e.condition_id, camera_active: e.camera_active,
       effective_fps: e.effective_fps, fps_adequate_for_tiers: e.fps_adequate_for_tiers,
@@ -114,11 +116,13 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
       perclos_p80: e.perclos_p80, perclos_p70: e.perclos_p70, long_closure_count: e.long_closure_count, long_closure_total_ms: e.long_closure_total_ms,
       blink_duration_mean_ms: e.blink_duration_mean_ms, blink_rate_delta_from_baseline: e.blink_rate_delta_from_baseline,
       first_half_blink_rate: e.bins.first_half_blink_rate, second_half_blink_rate: e.bins.second_half_blink_rate,
+      ear_baseline: e.ear_baseline, ear_threshold_used: e.ear_threshold_used,
       head_pitch_mean: e.head_pitch_mean, head_yaw_mean: e.head_yaw_mean, head_roll_mean: e.head_roll_mean,
+      head_movement_std: e.head_movement_std,
       postural_load: e.postural_load, head_stability_score: e.head_stability_score, off_axis_ratio: e.off_axis_ratio,
       gaze_calibrated: e.gaze_calibrated, gaze_deviation_ratio: e.gaze_deviation_ratio,
       zone_center_ratio: e.zone_center_ratio, zone_transition_count: e.zone_transition_count,
-      face_presence_ratio: e.face_presence_ratio, mean_face_luma: e.mean_face_luma, lighting_quality: e.lighting_quality,
+      face_presence_ratio: e.face_presence_ratio, face_size_ratio: e.face_size_ratio, mean_face_luma: e.mean_face_luma, lighting_quality: e.lighting_quality,
     })));
 
   // 08 — reaction trials
@@ -157,6 +161,31 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
       careless_rushed_perception: s.careless_rushed_perception, careless_straight_lined: s.careless_straight_lined,
       comprehension_wrong: s.comprehension_wrong, low_face_presence: s.low_face_presence, reasons: s.engagement_reasons.join('; '),
     })));
+
+  // 11 — participant demographics + vision covariates (previously available only in the JSON bundle,
+  // so the documented CSV analysis pipeline could not control for age/screen-habits/vision status).
+  csv('11_participant.csv',
+    ['participant_id', 'enrolment_number', 'age', 'gender', 'daily_screen_hours', 'device_familiarity', 'lighting_habit', 'correction_type', 'cvd_status', 'ishihara_correct', 'ishihara_total', 'caffeine_today', 'hours_since_sleep', 'eligible', 'exclusion_reason', 'baseline_fatigue'],
+    participant ? [{ ...participant }] : []);
+
+  // 13 — CVS-Q symptom questionnaire (baseline + session-end), wide with per-item columns. Was
+  // JSON-only; the validated primary symptom instrument is now in the numbered CSV bundle.
+  const maxCvsqItems = bundle.cvsq.reduce((m, c) => Math.max(m, c.frequency.length, c.intensity.length), 0);
+  const cvsqItemCols = [
+    ...Array.from({ length: maxCvsqItems }, (_, i) => `freq_${i + 1}`),
+    ...Array.from({ length: maxCvsqItems }, (_, i) => `intensity_${i + 1}`),
+  ];
+  csv('13_cvsq.csv',
+    ['participant_id', 'stage', 'total_score', 'symptomatic', 'response_time_ms', ...cvsqItemCols],
+    bundle.cvsq.map((c) => {
+      const row: Record<string, unknown> = {
+        participant_id: pid, stage: c.stage, total_score: c.total_score,
+        symptomatic: c.symptomatic, response_time_ms: c.response_time_ms,
+      };
+      c.frequency.forEach((f, i) => { row[`freq_${i + 1}`] = f; });
+      c.intensity.forEach((v, i) => { row[`intensity_${i + 1}`] = v; });
+      return row;
+    }));
 
   // JSON bundle
   const jsonBundle = {

@@ -11,9 +11,14 @@
  *    best PVT-lapse predictor). PERCLOS + long-closure events are reported as covariates.
  *
  * PERCLOS, blink rate, incomplete-blink ratio and inter-blink interval are PROPORTION/COUNT
- * measures, so they are robust to the webcam's frame rate. Blink DURATION and the micro/partial
- * tiers depend on event timing and are sub-Nyquist below ~25 fps — kept as diagnostics, gated by
+ * measures, so they are robust to the webcam's frame rate. Blink DURATION and the micro tier
+ * depend on event timing and are sub-Nyquist below ~25 fps — kept as diagnostics, gated by
  * `fpsAdequateForTiers`. Sampling now runs at one EAR sample per FaceMesh result (~30 fps target).
+ *
+ * Tiers are DEPTH-based: a blink that reaches (near-)full closure (min EAR < full threshold) is a
+ * COMPLETE blink (a very brief one is a micro-blink); a blink that crosses the partial threshold
+ * but never fully closes is an INCOMPLETE blink — the validated CVS marker. incomplete_blink_ratio
+ * = incomplete / all blinks.
  */
 
 export interface Point {
@@ -54,7 +59,7 @@ export function baselineEar(samples: number[]): number {
   return sorted[idx];
 }
 
-export type BlinkTier = 'full' | 'partial' | 'micro' | 'incomplete';
+export type BlinkTier = 'full' | 'micro' | 'incomplete';
 
 export interface BlinkEvent {
   onset_ms: number;
@@ -75,9 +80,8 @@ export interface EarSample {
  */
 export function classifyBlinks(samples: EarSample[], baseline: number): BlinkEvent[] {
   if (baseline <= 0) return [];
-  const fullT = baseline * EAR_TIERS.full;
+  // A blink is entered when EAR drops below the partial threshold (a ≥25% closure).
   const partialT = baseline * EAR_TIERS.partial;
-  const microT = baseline * EAR_TIERS.micro;
 
   const events: BlinkEvent[] = [];
   let inBlink = false;
@@ -95,13 +99,11 @@ export function classifyBlinks(samples: EarSample[], baseline: number): BlinkEve
       if (s.ear >= partialT || i === samples.length - 1) {
         const duration = s.t_ms - onset;
         const ratio = minEar / baseline;
-        let tier: BlinkTier;
-        if (ratio < EAR_TIERS.full) tier = duration < 40 ? 'micro' : 'full';
-        else if (ratio < EAR_TIERS.partial) tier = duration < 80 ? 'micro' : 'partial';
-        else tier = 'incomplete';
-        // Touch thresholds so they're referenced (full/micro thresholds aid readability/debug).
-        void fullT;
-        void microT;
+        // Depth-based tier. ratio < full ⇒ the lid reached (near-)full closure: a COMPLETE blink
+        // (a very brief one is a micro-blink). Otherwise the lid crossed the partial threshold but
+        // never fully closed ⇒ an INCOMPLETE blink (the validated CVS marker, Portello & Rosenfield).
+        const tier: BlinkTier =
+          ratio < EAR_TIERS.full ? (duration < 40 ? 'micro' : 'full') : 'incomplete';
         events.push({ onset_ms: onset, duration_ms: duration, min_ear: minEar, tier });
         inBlink = false;
         minEar = Infinity;
@@ -120,10 +122,9 @@ export interface BlinkSummary {
   blink_rate_full: number;
   blink_rate_micro: number;
   blink_count_full: number;
-  blink_count_partial: number;
   blink_count_micro: number;
   blink_count_incomplete: number;
-  /** complete blinks / (complete + incomplete). */
+  /** incomplete blinks / all blinks (raised under visual/ocular fatigue). */
   incomplete_blink_ratio: number;
   blink_duration_mean_ms: number | null;
 }
@@ -131,20 +132,18 @@ export interface BlinkSummary {
 export function summariseBlinks(events: BlinkEvent[], durationMs: number): BlinkSummary {
   const by = (t: BlinkTier) => events.filter((e) => e.tier === t).length;
   const full = by('full');
-  const partial = by('partial');
   const micro = by('micro');
   const incomplete = by('incomplete');
-  const complete = full + partial + micro;
+  const total = events.length; // full + micro + incomplete
   const durations = events.map((e) => e.duration_ms);
   return {
-    blink_rate: blinkRatePerMinute(events.length, durationMs),
+    blink_rate: blinkRatePerMinute(total, durationMs),
     blink_rate_full: blinkRatePerMinute(full, durationMs),
     blink_rate_micro: blinkRatePerMinute(micro, durationMs),
     blink_count_full: full,
-    blink_count_partial: partial,
     blink_count_micro: micro,
     blink_count_incomplete: incomplete,
-    incomplete_blink_ratio: complete + incomplete > 0 ? incomplete / (complete + incomplete) : 0,
+    incomplete_blink_ratio: total > 0 ? incomplete / total : 0,
     blink_duration_mean_ms:
       durations.length > 0 ? durations.reduce((s, d) => s + d, 0) / durations.length : null,
   };

@@ -8,13 +8,16 @@
 import { CONDITIONS } from '@/experiment/conditions';
 import { PASSAGES } from '@/experiment/passages';
 import { sessionPlan } from '@/experiment/counterbalance';
-import { computeSdt, flankerCongruencyEffect } from '@/lib/signalDetection';
+import { CONFIG } from '@/experiment/config';
+import { computeSdt } from '@/lib/signalDetection';
 import { mean, median, stdSample } from '@/lib/stats';
 import { summariseBlinks, blinkRatePerMinute, type BlinkEvent } from '@/tracking/blink';
 import { makeRng, gaussian, exGaussian, bernoulli, logistic, poissonEventTimes, type Rng } from './rng';
 import { GROUND_TRUTH as GT } from './effects';
 
-const RT_TRIALS = 48;
+// Match the real task: a pure colour go/no-go block (no flanker congruency manipulation).
+const RT_TRIALS = CONFIG.RT_TRIALS_PER_CONDITION;
+const RT_GO_RATE = CONFIG.RT_GO_RATE;
 const READING_MS = 60000;
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 
@@ -87,24 +90,21 @@ export function generateParticipant(enrolmentNumber: number, seed: number): SimP
     const negPol = cond.polarity === 'negative' ? 1 : 0;
     const belowAA = cond.below_wcag_aa ? 1 : 0;
 
-    // ---- Reaction-time (flanker go/no-go) ----
-    const congruentHitRts: number[] = [];
-    const incongruentHitRts: number[] = [];
+    // ---- Reaction-time (pure colour go/no-go: respond only to the go-target colour) ----
     const allHitRts: number[] = [];
     let hits = 0;
     let misses = 0;
     let falseAlarms = 0;
     let correctRejections = 0;
 
+    const nGo = Math.round(RT_TRIALS * RT_GO_RATE);
     for (let i = 0; i < RT_TRIALS; i++) {
-      const isSignal = i < RT_TRIALS / 2;
-      const isCongruent = i % 2 === 0;
+      const isSignal = i < nGo;
       const muBase =
         GT.rt.base_mu_ms +
         GT.rt.beta_log_contrast * logC +
         GT.rt.beta_negative_polarity * negPol +
         GT.rt.beta_position * pos +
-        (isCongruent ? 0 : GT.rt.congruency_effect_ms) +
         rtIntercept;
 
       if (isSignal) {
@@ -113,7 +113,6 @@ export function generateParticipant(enrolmentNumber: number, seed: number): SimP
           const rt = exGaussian(rng, muBase, GT.rt.sigma_ms, GT.rt.tau_ms);
           hits++;
           allHitRts.push(rt);
-          (isCongruent ? congruentHitRts : incongruentHitRts).push(rt);
         } else {
           misses++;
         }
@@ -125,7 +124,6 @@ export function generateParticipant(enrolmentNumber: number, seed: number): SimP
     }
 
     const sdt = computeSdt({ hits, misses, falseAlarms, correctRejections });
-    const fce = flankerCongruencyEffect(congruentHitRts, incongruentHitRts);
     void median; // median available for richer summaries
     void stdSample;
 
@@ -170,7 +168,8 @@ export function generateParticipant(enrolmentNumber: number, seed: number): SimP
       log_contrast: logC,
       passage_id: passage.id,
       mean_rt_hits_ms: allHitRts.length ? mean(allHitRts) : null,
-      flanker_congruency_effect_ms: fce,
+      // Pure go/no-go: no flanker congruency manipulation in the real task (kept null for schema parity).
+      flanker_congruency_effect_ms: null,
       d_prime: sdt.d_prime,
       d_prime_se: sdt.d_prime_se,
       comprehension_correct: correct ? 1 : 0,

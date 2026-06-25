@@ -96,10 +96,9 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       {bundle && tab === 'reaction' && (
         <Grid>
           <BarPanel title="Mean RT per condition" unit="ms" data={bar(summaries, 'mean_rt_hits_ms')} />
-          <BarPanel title="Flanker congruency effect" unit="ms" data={bar(summaries, 'flanker_congruency_effect_ms')} color="#1a1a2e" />
           <BarPanel title="d′ (sensitivity)" data={bar(summaries, 'd_prime')} color="#22c97a" />
           <BarPanel title="Hit rate" data={bar(summaries, 'hit_rate')} color="#4f8ef7" />
-          <Caveat text="Per-condition d′ rests on ~24 signal trials (SE often > 0.3). For inference, aggregate d′ across conditions per participant (see the R/Python templates). FCE is the reliable executive-control DV. RT stimuli use a fixed neutral-grey background so dot salience is constant across conditions." />
+          <Caveat text="Pure colour go/no-go (~20 go trials per condition). Per-condition d′ is small-N (SE often > 0.3), so for inference aggregate d′ across conditions per participant (see the R/Python templates). RT stimuli use the condition's own background; the go-target colour (green) is unused by any condition so its salience is constant." />
         </Grid>
       )}
 

@@ -13,15 +13,37 @@ function landmarks(overrides: Record<number, Point>): Point[] {
 }
 
 describe('head pose', () => {
-  it('frontal face has ~0 yaw and ~0 roll', () => {
-    const lm = landmarks({
-      1: { x: 0.5, y: 0.5 }, 152: { x: 0.5, y: 0.7 },
-      234: { x: 0.3, y: 0.5 }, 454: { x: 0.7, y: 0.5 },
-      133: { x: 0.45, y: 0.5 }, 362: { x: 0.55, y: 0.5 },
-    });
-    const pose = estimateHeadPose(lm);
+  // Frontal face: eye-line at 0.5, chin at 0.7, nose at 45% of the way down (≈ pitch 0).
+  const frontal = () => landmarks({
+    1: { x: 0.5, y: 0.59 }, 152: { x: 0.5, y: 0.7 },
+    234: { x: 0.3, y: 0.5 }, 454: { x: 0.7, y: 0.5 },
+    133: { x: 0.45, y: 0.5 }, 362: { x: 0.55, y: 0.5 },
+  });
+
+  it('frontal face has ~0 yaw, ~0 roll and ~0 pitch', () => {
+    const pose = estimateHeadPose(frontal());
     expect(Math.abs(pose.yaw)).toBeLessThan(1);
     expect(Math.abs(pose.roll)).toBeLessThan(1);
+    expect(Math.abs(pose.pitch)).toBeLessThan(2); // regression: pitch was a constant +22.5°
+  });
+
+  it('pitch varies with head tilt and is not pinned to a constant', () => {
+    // Nose tip nearer the eye-line ⇒ head pitched down ⇒ positive pitch; lower ⇒ negative.
+    const down = estimateHeadPose(landmarks({
+      1: { x: 0.5, y: 0.54 }, 152: { x: 0.5, y: 0.7 }, 234: { x: 0.3, y: 0.5 }, 454: { x: 0.7, y: 0.5 },
+      133: { x: 0.45, y: 0.5 }, 362: { x: 0.55, y: 0.5 },
+    })).pitch;
+    const up = estimateHeadPose(landmarks({
+      1: { x: 0.5, y: 0.66 }, 152: { x: 0.5, y: 0.7 }, 234: { x: 0.3, y: 0.5 }, 454: { x: 0.7, y: 0.5 },
+      133: { x: 0.45, y: 0.5 }, 362: { x: 0.55, y: 0.5 },
+    })).pitch;
+    expect(down).toBeGreaterThan(estimateHeadPose(frontal()).pitch);
+    expect(up).toBeLessThan(estimateHeadPose(frontal()).pitch);
+    expect(down).not.toBeCloseTo(up, 1);
+  });
+
+  it('a frontal face is NOT flagged off-axis (regression: was always true)', () => {
+    expect(isOffAxis(estimateHeadPose(frontal()))).toBe(false);
   });
 
   it('off-axis uses the raised yaw threshold (15°)', () => {

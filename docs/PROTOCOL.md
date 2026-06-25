@@ -40,8 +40,8 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
         → VISUAL_SEARCH     intro → tap every target word, 40 s limit (selective attention)
         → REACTION_TIME     pure colour go/no-go (one dot at a RANDOM screen location each trial;
                             respond only to the target colour) — reports RT mean/median/SD/CV,
-                            omission & commission errors, d′. (An Eriksen-flanker variant is
-                            available behind CONFIG.RT_USE_FLANKERS for an optional congruency DV.)
+                            omission & commission errors, d′. (Pure go/no-go by design — no flanker
+                            congruency manipulation; the simulation models the same go/no-go task.)
         → ADAPTATION         60 s neutral grey (120 s when polarity switches)
         → BREAK_SCREEN       self-paced rest after every 2 conditions (CONFIG.BREAK_EVERY_N_CONDITIONS);
                              neutral "X of N done", no performance feedback; never after the last

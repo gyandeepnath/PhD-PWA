@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
-import { put, _resetForTests } from '@/storage/db';
-import { gatherSession, listSessions } from '@/storage/gather';
+import { put, get, _resetForTests } from '@/storage/db';
+import { gatherSession, listSessions, purgeSession } from '@/storage/gather';
 import { buildExportFiles } from '@/storage/export';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
 import type { Provenance } from '@/storage/types';
@@ -59,6 +59,33 @@ describe('gather → aggregate → export integration (fake IndexedDB)', () => {
     await seed();
     const list = await listSessions();
     expect(list.map((s) => s.session_id)).toContain('S1');
+  });
+
+  it('purging one sitting keeps the participant record shared by another sitting (M1)', async () => {
+    await seed(); // S1 for participant P001
+    // A second sitting for the SAME participant (split-session), sharing the participant record.
+    await put('sessions', {
+      session_id: 'S2', participant_id: 'P001', enrolment_number: 1, status: 'in_progress', deleted_at: null,
+      display_label: null, ambient_lux: 350, ambient_illumination_level: null, screen_white_luminance_cd_m2: 120,
+      brightness_percent: 80, session_start_time: 1700001000000, session_end_time: null, randomisation_seed: 1,
+      condition_order: [1], preflight_complete: true, consent_given: true, consent_time: 1, provenance: prov,
+      device_type: 'Android', browser: 'Chrome', screen_resolution: '2880x1800',
+      conditions_per_session: 4, condition_offset: 4, session_index: 2,
+    });
+    await put('participants', {
+      participant_id: 'P001', enrolment_number: 1, age: 25, gender: 'f', daily_screen_hours: 6,
+      device_familiarity: 'high', lighting_habit: 'moderate', correction_type: 'none', cvd_status: 'normal',
+      ishihara_correct: 14, ishihara_total: 14, caffeine_today: null, hours_since_sleep: null,
+      eligible: true, exclusion_reason: null, baseline_fatigue: 1, session_id: 'S1',
+    });
+    await purgeSession('S1');
+    // S1 gone, but the shared participant must survive because S2 still references it.
+    expect(await gatherSession('S1')).toBeNull();
+    expect(await get('participants', 'P001')).toBeTruthy();
+
+    // Purging the last remaining sitting now removes the participant.
+    await purgeSession('S2');
+    expect(await get('participants', 'P001')).toBeUndefined();
   });
 
   it('aggregates and exports the gathered bundle', async () => {

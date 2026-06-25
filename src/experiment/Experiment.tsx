@@ -96,8 +96,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       const cps = s.conditions_per_session ?? (s.condition_order?.length || N_CONDITIONS);
       const sittingPlan = sessionPlan(s.enrolment_number).slice(offset, offset + cps);
       nConditionsRef.current = sittingPlan.length;
-      // Fresh ids for the remaining conditions; completed conditions keep their stored ids.
-      conditionIds.current = sittingPlan.map(() => uuidv4());
+      // Reuse the stored condition_id for any slot already written (keyed by global session_position),
+      // and mint fresh ids only for not-yet-started slots. This makes a redo of the interrupted
+      // condition OVERWRITE its existing row rather than create a duplicate, orphaned row.
+      const existing = await getAllByIndex('conditions', 'by_session', s.session_id);
+      const idByPosition = new Map(existing.map((c) => [c.session_position, c.condition_id]));
+      conditionIds.current = sittingPlan.map((st) => idByPosition.get(st.position) ?? uuidv4());
       writtenConditions.current = new Set();
       setSession(s);
       setEnrolment(s.enrolment_number);
@@ -432,7 +436,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         <ReactionTimeTask
           background={cond?.background ?? '#F8F7F5'}
           text={cond?.text ?? '#1a1a2e'}
-          practiceTrials={machine.stepIndex === 0 ? CONFIG.RT_PRACTICE_TRIALS : 0}
+          practiceTrials={machine.stepIndex === 0 && (session?.condition_offset ?? 0) === 0 ? CONFIG.RT_PRACTICE_TRIALS : 0}
           onComplete={async (res) => {
             if (session) {
               for (const t of res.trials) {

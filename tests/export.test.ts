@@ -39,8 +39,8 @@ function bundle(): SessionBundle {
       { perception_id: 'p1', session_id: 'S1', condition_id: 'A', display_comfort_score: 80, text_clarity_score: 90, comfort_touched: true, clarity_touched: true, response_time_ms: 5000 },
     ],
     eyeMetrics: [
-      { condition_id: 'A', session_id: 'S1', camera_active: true, effective_fps: 28, fps_adequate_for_tiers: true, blink_rate: 9, blink_rate_full: 8, incomplete_blink_ratio: 0.1, blink_duration_mean_ms: 150, bins: { first_half_blink_rate: 8, second_half_blink_rate: 10 }, blink_rate_delta_from_baseline: -1, mean_inter_blink_interval_ms: 6000, inter_blink_interval_cv: 0.3, perclos_p80: 0.05, perclos_p70: 0.08, long_closure_count: 0, long_closure_total_ms: 0, blink_rate_micro: 0, blink_count_full: 8, blink_count_partial: 0, blink_count_micro: 0, blink_count_incomplete: 1, ear_baseline: 0.3, ear_threshold_used: 0.18, head_pitch_mean: 2, head_yaw_mean: 1, head_roll_mean: 0, head_movement_std: 1, postural_load: 1.5, head_stability_score: 0.5, off_axis_ratio: 0.1, gaze_calibrated: false, gaze_deviation_ratio: 0.2, zone_center_ratio: 0.8, zone_transition_count: 5, face_presence_ratio: 0.95, face_size_ratio: 0.2, mean_face_luma: 130, lighting_quality: 'good' },
-      { condition_id: 'B', session_id: 'S1', camera_active: false, effective_fps: null, fps_adequate_for_tiers: false, blink_rate: 0, blink_rate_full: 0, incomplete_blink_ratio: 0, blink_duration_mean_ms: null, bins: { first_half_blink_rate: null, second_half_blink_rate: null }, blink_rate_delta_from_baseline: null, mean_inter_blink_interval_ms: null, inter_blink_interval_cv: null, perclos_p80: null, perclos_p70: null, long_closure_count: 0, long_closure_total_ms: 0, blink_rate_micro: 0, blink_count_full: 0, blink_count_partial: 0, blink_count_micro: 0, blink_count_incomplete: 0, ear_baseline: null, ear_threshold_used: null, head_pitch_mean: 0, head_yaw_mean: 0, head_roll_mean: 0, head_movement_std: 0, postural_load: 0, head_stability_score: 0, off_axis_ratio: 0, gaze_calibrated: false, gaze_deviation_ratio: 0, zone_center_ratio: 0, zone_transition_count: 0, face_presence_ratio: 0, face_size_ratio: 0, mean_face_luma: null, lighting_quality: null },
+      { condition_id: 'A', session_id: 'S1', camera_active: true, effective_fps: 28, fps_adequate_for_tiers: true, blink_rate: 9, blink_rate_full: 8, incomplete_blink_ratio: 0.1, blink_duration_mean_ms: 150, bins: { first_half_blink_rate: 8, second_half_blink_rate: 10 }, blink_rate_delta_from_baseline: -1, mean_inter_blink_interval_ms: 6000, inter_blink_interval_cv: 0.3, perclos_p80: 0.05, perclos_p70: 0.08, long_closure_count: 0, long_closure_total_ms: 0, blink_rate_micro: 0, blink_count_full: 8, blink_count_micro: 0, blink_count_incomplete: 1, ear_baseline: 0.3, ear_threshold_used: 0.18, head_pitch_mean: 2, head_yaw_mean: 1, head_roll_mean: 0, head_movement_std: 1, postural_load: 1.5, head_stability_score: 0.5, off_axis_ratio: 0.1, gaze_calibrated: false, gaze_deviation_ratio: 0.2, zone_center_ratio: 0.8, zone_transition_count: 5, face_presence_ratio: 0.95, face_size_ratio: 0.2, mean_face_luma: 130, lighting_quality: 'good' },
+      { condition_id: 'B', session_id: 'S1', camera_active: false, effective_fps: null, fps_adequate_for_tiers: false, blink_rate: 0, blink_rate_full: 0, incomplete_blink_ratio: 0, blink_duration_mean_ms: null, bins: { first_half_blink_rate: null, second_half_blink_rate: null }, blink_rate_delta_from_baseline: null, mean_inter_blink_interval_ms: null, inter_blink_interval_cv: null, perclos_p80: null, perclos_p70: null, long_closure_count: 0, long_closure_total_ms: 0, blink_rate_micro: 0, blink_count_full: 0, blink_count_micro: 0, blink_count_incomplete: 0, ear_baseline: null, ear_threshold_used: null, head_pitch_mean: 0, head_yaw_mean: 0, head_roll_mean: 0, head_movement_std: 0, postural_load: 0, head_stability_score: 0, off_axis_ratio: 0, gaze_calibrated: false, gaze_deviation_ratio: 0, zone_center_ratio: 0, zone_transition_count: 0, face_presence_ratio: 0, face_size_ratio: 0, mean_face_luma: null, lighting_quality: null },
     ],
     reactionTrials: Array.from({ length: 48 }, (_, i) => ({ trial_id: `t${i}`, condition_id: 'A', session_id: 'S1', trial_number: i, trial_category: 'signal_congruent' as const, is_signal: true, is_congruent: true, stimulus_onset_time: 0, response_time_ms: 450, accuracy: 'hit' as const, false_start: false, anticipatory: false })),
     rtSummaries: [
@@ -99,13 +99,32 @@ describe('export builder', () => {
   const files = buildExportFiles(bundle());
   const names = files.map((f) => f.filename);
 
-  it('produces all 12 CSVs + JSON + manifest', () => {
+  it('produces all 14 CSVs + JSON + manifest', () => {
     expect(names).toContain('00_MASTER_CODEBOOK.csv');
     expect(names).toContain('10_wide_summary.csv');
     expect(names).toContain('12_quality_flags.csv');
-    expect(names.filter((n) => n.endsWith('.csv'))).toHaveLength(12);
+    expect(names.filter((n) => n.endsWith('.csv'))).toHaveLength(14);
     expect(names).toContain('export_manifest.json');
     expect(names.some((n) => n.startsWith('session_P001_'))).toBe(true);
+  });
+
+  it('emits participant + CVS-Q CSVs with covariate/instrument columns (no longer JSON-only)', () => {
+    const p = files.find((f) => f.filename === '11_participant.csv')!;
+    expect(p).toBeTruthy();
+    const pHeader = p.content.split('\n')[0];
+    for (const col of ['age', 'gender', 'cvd_status', 'ishihara_correct', 'hours_since_sleep']) {
+      expect(pHeader).toContain(col);
+    }
+    const q = files.find((f) => f.filename === '13_cvsq.csv')!;
+    expect(q).toBeTruthy();
+    expect(q.content.split('\n')[0]).toContain('total_score');
+  });
+
+  it('07_eye_metrics CSV now carries ear_baseline + head_movement_std + face_size_ratio', () => {
+    const header = files.find((f) => f.filename === '07_eye_metrics.csv')!.content.split('\n')[0];
+    for (const col of ['ear_baseline', 'ear_threshold_used', 'head_movement_std', 'face_size_ratio']) {
+      expect(header).toContain(col);
+    }
   });
 
   it('wide summary + quality flags carry the engagement columns', () => {

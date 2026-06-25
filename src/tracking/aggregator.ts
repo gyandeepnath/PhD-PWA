@@ -145,7 +145,6 @@ export class EyeMetricsAggregator {
 
       blink_rate_micro: blink.blink_rate_micro,
       blink_count_full: blink.blink_count_full,
-      blink_count_partial: blink.blink_count_partial,
       blink_count_micro: blink.blink_count_micro,
       blink_count_incomplete: blink.blink_count_incomplete,
 
@@ -197,7 +196,6 @@ export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeM
     long_closure_total_ms: 0,
     blink_rate_micro: 0,
     blink_count_full: 0,
-    blink_count_partial: 0,
     blink_count_micro: 0,
     blink_count_incomplete: 0,
     ear_baseline: null,

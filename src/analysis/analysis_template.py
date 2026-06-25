@@ -30,6 +30,13 @@ def main() -> None:
     rt_summary = load("09_rt_summary.csv")
     eye = load("07_eye_metrics.csv")
     wide = load("10_wide_summary.csv")  # carries session_index + engagement_flag per condition
+    participant = load("11_participant.csv")  # demographics + vision covariates (age, cvd_status, ...)
+    cvsq = load("13_cvsq.csv")  # CVS-Q symptom questionnaire (baseline + session_end), per item
+
+    # Join participant covariates onto every condition row so models can adjust for them, e.g.
+    #   "... + age + C(correction_type)"  or stratify by cvd_status.
+    PARTICIPANT_COVARIATES = ["age", "gender", "daily_screen_hours", "correction_type", "cvd_status"]
+    participant_cov = participant[["participant_id", *PARTICIPANT_COVARIATES]]
 
     # Boredom/disengagement mimics fatigue; optionally drop conditions flagged "bad" and re-run as
     # a sensitivity analysis. session_index distinguishes split-session sittings (1, 2, ...).
@@ -41,8 +48,11 @@ def main() -> None:
     cond["session_index"] = cond["session_index"].fillna(1).astype(int)
     if DROP_DISENGAGED:
         cond = cond[cond["engagement_flag"].fillna("good") != "bad"]
+    cond = cond.merge(participant_cov, on="participant_id", how="left")
     cond["log_contrast"] = np.log10(cond["wcag_contrast_ratio"])
     cond["below_aa"] = cond["below_wcag_aa"].astype(int)
+    # CVS-Q change from baseline to session end (primary symptom outcome): pivot total_score by stage.
+    cvsq_wide = cvsq.pivot_table(index="participant_id", columns="stage", values="total_score")  # noqa: F841
     # Only include session_index when sittings actually vary (else it is constant → unidentified).
     si = " + session_index" if cond["session_index"].nunique() > 1 else ""
 

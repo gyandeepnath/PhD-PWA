@@ -319,7 +319,6 @@ export interface EyeMetricsRecord {
   // Diagnostic only (sub-Nyquist at 15 fps — flagged in codebook)
   blink_rate_micro: number;
   blink_count_full: number;
-  blink_count_partial: number;
   blink_count_micro: number;
   blink_count_incomplete: number;
 

@@ -169,7 +169,7 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
       mean_inter_blink_interval_ms: rng() < 0.5 ? null : rng() * 10000, inter_blink_interval_cv: rng() < 0.5 ? null : rng(),
       perclos_p80: rng() < 0.5 ? null : rng(), perclos_p70: rng() < 0.5 ? null : rng(),
       long_closure_count: randInt(rng, 0, 3), long_closure_total_ms: rng() * 2000,
-      blink_rate_micro: 0, blink_count_full: 0, blink_count_partial: 0,
+      blink_rate_micro: 0, blink_count_full: 0,
       blink_count_micro: 0, blink_count_incomplete: 0, ear_baseline: null, ear_threshold_used: null,
       head_pitch_mean: 0, head_yaw_mean: 0, head_roll_mean: 0, head_movement_std: 0, postural_load: 0,
       head_stability_score: 0, off_axis_ratio: rng(), gaze_calibrated: false, gaze_deviation_ratio: rng(),
