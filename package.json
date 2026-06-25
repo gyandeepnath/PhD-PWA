@@ -16,6 +16,7 @@
     "predev": "node scripts/copy-mediapipe.mjs",
     "prebuild": "node scripts/copy-mediapipe.mjs",
     "fuzz": "tsx src/sim/runFuzz.ts",
+    "stress": "tsx src/sim/runStress.ts",
     "icons": "node scripts/make-icons.mjs"
   },
   "dependencies": {

@@ -59,7 +59,7 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'preflight_complete', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_targets_detected'],
+    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'preflight_complete', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
       session_index: session.session_index, conditions_per_session: session.conditions_per_session, condition_offset: session.condition_offset,
@@ -73,6 +73,7 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
       consent_given: session.consent_given, preflight_complete: session.preflight_complete,
       gaze_calibration_valid: bundle.calibration[0]?.is_real_calibration ?? '',
       calibration_ear_baseline: bundle.calibration[0]?.ear_baseline ?? '',
+      calibration_pitch_baseline_frac: bundle.calibration[0]?.pitch_baseline_frac ?? '',
       calibration_targets_detected: bundle.calibration[0] ? `${bundle.calibration[0].targets_detected}/${bundle.calibration[0].targets_total}` : '',
     }]);
 
@@ -107,7 +108,7 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 07 — eye metrics
   csv('07_eye_metrics.csv',
-    ['participant_id', 'condition_id', 'camera_active', 'effective_fps', 'fps_adequate_for_tiers', 'blink_rate', 'blink_rate_full', 'incomplete_blink_ratio', 'mean_inter_blink_interval_ms', 'inter_blink_interval_cv', 'perclos_p80', 'perclos_p70', 'long_closure_count', 'long_closure_total_ms', 'blink_duration_mean_ms', 'blink_rate_delta_from_baseline', 'first_half_blink_rate', 'second_half_blink_rate', 'ear_baseline', 'ear_threshold_used', 'head_pitch_mean', 'head_yaw_mean', 'head_roll_mean', 'head_movement_std', 'postural_load', 'head_stability_score', 'off_axis_ratio', 'gaze_calibrated', 'gaze_deviation_ratio', 'zone_center_ratio', 'zone_transition_count', 'face_presence_ratio', 'face_size_ratio', 'mean_face_luma', 'lighting_quality'],
+    ['participant_id', 'condition_id', 'camera_active', 'effective_fps', 'fps_adequate_for_tiers', 'blink_rate', 'blink_rate_full', 'incomplete_blink_ratio', 'mean_inter_blink_interval_ms', 'inter_blink_interval_cv', 'perclos_p80', 'perclos_p70', 'long_closure_count', 'long_closure_total_ms', 'blink_duration_mean_ms', 'blink_rate_delta_from_baseline', 'first_half_blink_rate', 'second_half_blink_rate', 'ear_baseline', 'ear_threshold_used', 'head_pitch_mean', 'head_pitch_calibrated', 'head_yaw_mean', 'head_roll_mean', 'head_movement_std', 'postural_load', 'head_stability_score', 'off_axis_ratio', 'gaze_calibrated', 'gaze_deviation_ratio', 'zone_center_ratio', 'zone_transition_count', 'face_presence_ratio', 'face_size_ratio', 'mean_face_luma', 'lighting_quality'],
     bundle.eyeMetrics.map((e) => ({
       participant_id: pid, condition_id: e.condition_id, camera_active: e.camera_active,
       effective_fps: e.effective_fps, fps_adequate_for_tiers: e.fps_adequate_for_tiers,
@@ -117,7 +118,7 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
       blink_duration_mean_ms: e.blink_duration_mean_ms, blink_rate_delta_from_baseline: e.blink_rate_delta_from_baseline,
       first_half_blink_rate: e.bins.first_half_blink_rate, second_half_blink_rate: e.bins.second_half_blink_rate,
       ear_baseline: e.ear_baseline, ear_threshold_used: e.ear_threshold_used,
-      head_pitch_mean: e.head_pitch_mean, head_yaw_mean: e.head_yaw_mean, head_roll_mean: e.head_roll_mean,
+      head_pitch_mean: e.head_pitch_mean, head_pitch_calibrated: e.head_pitch_calibrated, head_yaw_mean: e.head_yaw_mean, head_roll_mean: e.head_roll_mean,
       head_movement_std: e.head_movement_std,
       postural_load: e.postural_load, head_stability_score: e.head_stability_score, off_axis_ratio: e.off_axis_ratio,
       gaze_calibrated: e.gaze_calibrated, gaze_deviation_ratio: e.gaze_deviation_ratio,

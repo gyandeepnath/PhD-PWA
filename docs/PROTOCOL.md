@@ -27,7 +27,8 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
   → PREFLIGHT           researcher: display/room configured (brightness fixed, night-shift OFF, …)
   → COLOR_VISION        digital Ishihara screening (runs AFTER night-shift is off)
   → CAMERA_SETUP        webcam permission (or skip → no eye tracking)
-  → CALIBRATION         9-point gaze calibration + EAR baseline (camera path) / positioning check
+  → CALIBRATION         9-point gaze calibration + EAR baseline + per-person frontal-pitch baseline
+                          (head frontal during calibration → pitch zero) / positioning check
   → CVSQ_BASELINE       validated CVS-Q (16 items)
   → BASELINE_FATIGUE    5-item VAS baseline
   → INSTRUCTIONS        participant overview of the per-condition tasks
@@ -109,9 +110,14 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
   **screening-grade** proxy; an IR eye-tracker remains the reference standard for definitive data.
 - **Gaze** is only meaningful when calibration was valid (`gaze_calibrated:true`); otherwise treat
   as a gross head-movement proxy.
+- **Head pitch** (`head_pitch_mean`) is reported relative to each participant's own frontal posture,
+  captured at calibration (`head_pitch_calibrated:true`; baseline fraction in `01_session_info.csv`).
+  This removes inter-individual face-geometry bias so 0° = that person's straight-ahead. The deg-per-
+  unit slope is still a monocular proxy (no depth sensor), so treat pitch magnitude as approximate and
+  prefer within-person change. When uncalibrated, a population default zero is used.
 - **Contrast confound**: C4 (yellow-on-white) is below WCAG AA (2.39:1); treat WCAG ratio as a
   covariate or reframe as polarity × contrast.
-- **Per-condition d′** rests on ~24 signal trials (unstable; SE often > 0.3) — report aggregated d′.
+- **Per-condition d′** rests on ~20 signal (go) trials of 32 (unstable; SE often > 0.3) — report aggregated d′.
 - **Session length** (~60–90 min) accumulates fatigue; `session_position` (0–7) is recorded as a covariate.
 
 ## 7. Boredom / disengagement vs. fatigue

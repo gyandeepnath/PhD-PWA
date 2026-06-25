@@ -103,6 +103,8 @@ export class EyeMetricsAggregator {
     earThresholdUsed: number | null;
     gazeCalibrated: boolean;
     baselineBlinkRate: number | null;
+    /** True when head pitch was measured against the participant's calibrated frontal baseline. */
+    headPitchCalibrated: boolean;
   }): EyeMetricsRecord {
     const durationMs =
       this.ear.length > 0 ? this.ear[this.ear.length - 1].t_ms - this.ear[0].t_ms : 0;
@@ -152,6 +154,7 @@ export class EyeMetricsAggregator {
       ear_threshold_used: args.earThresholdUsed,
 
       head_pitch_mean: this.pitch.length ? mean(sPitch) : 0,
+      head_pitch_calibrated: args.headPitchCalibrated,
       head_yaw_mean: this.yaw.length ? mean(sYaw) : 0,
       head_roll_mean: this.roll.length ? mean(sRoll) : 0,
       head_movement_std: movementStd,
@@ -201,6 +204,7 @@ export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeM
     ear_baseline: null,
     ear_threshold_used: null,
     head_pitch_mean: 0,
+    head_pitch_calibrated: false,
     head_yaw_mean: 0,
     head_roll_mean: 0,
     head_movement_std: 0,

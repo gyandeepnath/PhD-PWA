@@ -4,6 +4,7 @@ import { estimateGaze } from '@/tracking/gaze';
 import { classifyLighting, pixelLuma } from '@/tracking/lighting';
 import { EyeMetricsAggregator } from '@/tracking/aggregator';
 import { computeClosureMetrics, interBlinkInterval, classifyBlinks, type EarSample, type Point } from '@/tracking/blink';
+import { noseVerticalFraction, NOSE_FRONTAL_FRAC } from '@/tracking/headPose';
 
 /** Build a 478-point landmark array, all at origin, then override specific indices. */
 function landmarks(overrides: Record<number, Point>): Point[] {
@@ -49,6 +50,40 @@ describe('head pose', () => {
   it('off-axis uses the raised yaw threshold (15°)', () => {
     expect(isOffAxis({ pitch: 0, yaw: OFF_AXIS_YAW_DEG + 1, roll: 0 })).toBe(true);
     expect(isOffAxis({ pitch: 0, yaw: OFF_AXIS_YAW_DEG - 1, roll: 0 })).toBe(false);
+  });
+});
+
+describe('per-person frontal-pitch baseline', () => {
+  // A face whose nose sits at a given fraction of the eye-line→chin span.
+  const faceAtFrac = (frac: number): Point[] => {
+    const lm: Point[] = Array.from({ length: 478 }, () => ({ x: 0.5, y: 0.5 }));
+    const eyeY = 0.40, chinY = 0.90;
+    lm[133] = { x: 0.45, y: eyeY }; lm[362] = { x: 0.55, y: eyeY }; lm[152] = { x: 0.50, y: chinY };
+    lm[234] = { x: 0.30, y: 0.50 }; lm[454] = { x: 0.70, y: 0.50 };
+    lm[1] = { x: 0.50, y: eyeY + frac * (chinY - eyeY) };
+    return lm;
+  };
+
+  it('noseVerticalFraction recovers the nose fraction and is null on degenerate landmarks', () => {
+    expect(noseVerticalFraction(faceAtFrac(0.55))).toBeCloseTo(0.55, 5);
+    expect(noseVerticalFraction(Array.from({ length: 478 }, () => ({ x: 0, y: 0 })))).toBeNull();
+  });
+
+  it('a calibrated baseline makes THIS person’s frontal posture read ~0°, removing geometry bias', () => {
+    // A participant whose natural frontal nose fraction is 0.60 (longer mid-face) — well off the
+    // population default of 0.45.
+    const personFrontalFrac = 0.60;
+    const frontalFace = faceAtFrac(personFrontalFrac);
+    // Uncalibrated: their frontal posture is misread as a large pitch (bias).
+    const uncalibrated = estimateHeadPose(frontalFace).pitch;
+    expect(Math.abs(uncalibrated)).toBeGreaterThan(10);
+    // Calibrated to their own frontal fraction: frontal reads ~0°.
+    const calibrated = estimateHeadPose(frontalFace, personFrontalFrac).pitch;
+    expect(Math.abs(calibrated)).toBeLessThan(0.5);
+    // And a real downward nod (nose rises toward eye-line) still registers positive pitch.
+    const nodded = estimateHeadPose(faceAtFrac(personFrontalFrac - 0.1), personFrontalFrac).pitch;
+    expect(nodded).toBeGreaterThan(5);
+    expect(NOSE_FRONTAL_FRAC).toBe(0.45); // documents the population fallback
   });
 });
 
@@ -138,7 +173,7 @@ describe('eye metrics aggregator', () => {
     }
     const rec = agg.finalize({
       conditionId: 'C', sessionId: 'S', cameraActive: true,
-      baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, baselineBlinkRate: 10,
+      baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, baselineBlinkRate: 10, headPitchCalibrated: false,
     });
     expect(rec.face_presence_ratio).toBeCloseTo(1, 2);
     expect(rec.zone_center_ratio).toBeCloseTo(1, 2);
@@ -156,13 +191,13 @@ describe('eye metrics aggregator', () => {
     for (let t = 0; t <= 1000; t += 33) {
       dim.ingest({ t_ms: t, ear: 0.3, pose: { pitch: 0, yaw: 0, roll: 0 }, zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.2, luma: 30 });
     }
-    expect(dim.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, baselineBlinkRate: null }).lighting_quality).toBe('low');
+    expect(dim.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, baselineBlinkRate: null, headPitchCalibrated: false }).lighting_quality).toBe('low');
 
     const noLuma = new EyeMetricsAggregator();
     for (let t = 0; t <= 1000; t += 33) {
       noLuma.ingest({ t_ms: t, ear: 0.3, pose: { pitch: 0, yaw: 0, roll: 0 }, zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.2, luma: null });
     }
-    const rec = noLuma.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, baselineBlinkRate: null });
+    const rec = noLuma.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, baselineBlinkRate: null, headPitchCalibrated: false });
     expect(rec.mean_face_luma).toBeNull();
     expect(rec.lighting_quality).toBeNull();
   });
@@ -177,7 +212,7 @@ describe('eye metrics aggregator', () => {
     }
     const rec = agg.finalize({
       conditionId: 'C', sessionId: 'S', cameraActive: true,
-      baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, baselineBlinkRate: null,
+      baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, baselineBlinkRate: null, headPitchCalibrated: false,
     });
     expect(rec.face_presence_ratio).toBeCloseTo(0.5, 2);
   });

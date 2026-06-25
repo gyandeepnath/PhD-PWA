@@ -327,6 +327,9 @@ export interface EyeMetricsRecord {
 
   // Head pose (continuous; thresholds raised; smoothed)
   head_pitch_mean: number;
+  /** True when head_pitch_mean is relative to the participant's calibrated frontal posture (0° =
+   *  their straight-ahead), vs the uncalibrated population default. */
+  head_pitch_calibrated: boolean;
   head_yaw_mean: number;
   head_roll_mean: number;
   head_movement_std: number;
@@ -382,6 +385,9 @@ export interface CalibrationRecord {
   /** Fitted iris-offset thresholds (if real calibration). */
   gaze_h_threshold: number | null;
   gaze_v_threshold: number | null;
+  /** Participant's frontal nose fraction (pitch zero); null if not captured. Lets head pitch be
+   *  reported relative to this person's natural straight-ahead posture rather than a population mean. */
+  pitch_baseline_frac: number | null;
 }
 
 /** Maps store names to their record types for type-safe DB access. */

@@ -13,7 +13,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';
 import { faceEar, baselineEar, type Point } from './blink';
-import { estimateHeadPose, isOffAxis } from './headPose';
+import { estimateHeadPose, isOffAxis, noseVerticalFraction } from './headPose';
 import { estimateGaze } from './gaze';
 import { meanLumaFromRGBA } from './lighting';
 import { fitGazeCalibration, type GazeCalibration, type GazeSample } from './gazeCalibration';
@@ -22,6 +22,13 @@ import { EyeMetricsAggregator, disabledEyeMetrics } from './aggregator';
 import { put } from '@/storage/db';
 import { now } from '@/lib/timing';
 import type { CameraStatus } from '@/storage/types';
+
+/** Median of a numeric array (robust frontal-fraction estimate, ignores transient blinks/noise). */
+function medianOf(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
 
 interface TrackingApi {
   status: CameraStatus;
@@ -50,8 +57,10 @@ export function useTracking(): TrackingApi {
   const faceMeshRef = useRef<unknown>(null);
   const rafRef = useRef<number | null>(null);
   const aggRef = useRef<EyeMetricsAggregator | null>(null);
-  const calibrating = useRef<{ samples: number[] } | null>(null);
+  const calibrating = useRef<{ samples: number[]; noseFracs: number[] } | null>(null);
   const baselineEarRef = useRef<number | null>(null);
+  // Per-participant frontal nose fraction (pitch zero), captured during calibration.
+  const pitchBaselineFracRef = useRef<number | null>(null);
   const baselineBlinkRef = useRef<number | null>(null);
   const frameCounter = useRef(0);
   // Gaze calibration state.
@@ -89,7 +98,13 @@ export function useTracking(): TrackingApi {
     const luma = sampleLuma();
     if (lm && lm.length > 0) {
       const ear = faceEar(lm);
-      if (calibrating.current) calibrating.current.samples.push(ear);
+      if (calibrating.current) {
+        calibrating.current.samples.push(ear);
+        // During calibration the participant is frontal (eyes-only movement), so the nose fraction
+        // here defines their personal pitch zero.
+        const frac = noseVerticalFraction(lm);
+        if (frac != null) calibrating.current.noseFracs.push(frac);
+      }
       const gazeNow = gazeFor(lm);
       if (gazeCollectingTarget.current) {
         const id = gazeCollectingTarget.current;
@@ -97,7 +112,7 @@ export function useTracking(): TrackingApi {
       }
       const agg = aggRef.current;
       if (agg) {
-        const pose = estimateHeadPose(lm);
+        const pose = estimateHeadPose(lm, pitchBaselineFracRef.current);
         agg.ingest({
           t_ms: t,
           ear,
@@ -194,18 +209,19 @@ export function useTracking(): TrackingApi {
 
   const calibrate = useCallback(async (ms: number): Promise<number | null> => {
     if (status !== 'active') return null;
-    calibrating.current = { samples: [] };
+    calibrating.current = { samples: [], noseFracs: [] };
     await new Promise((r) => setTimeout(r, ms));
-    const samples = calibrating.current.samples;
+    const cal = calibrating.current;
     calibrating.current = null;
-    if (samples.length < 10) return null;
-    const base = baselineEar(samples);
+    if (cal.noseFracs.length >= 10) pitchBaselineFracRef.current = medianOf(cal.noseFracs);
+    if (cal.samples.length < 10) return null;
+    const base = baselineEar(cal.samples);
     baselineEarRef.current = base;
     return base;
   }, [status]);
 
   const beginGazeCalibration = useCallback(() => {
-    calibrating.current = { samples: [] };
+    calibrating.current = { samples: [], noseFracs: [] };
     gazeSamplesRef.current = {};
     gazeCalRef.current = null;
   }, []);
@@ -218,8 +234,10 @@ export function useTracking(): TrackingApi {
 
   const endGazeCalibration = useCallback(async (sessionId: string): Promise<boolean> => {
     const earSamples = calibrating.current?.samples ?? [];
+    const noseFracs = calibrating.current?.noseFracs ?? [];
     calibrating.current = null;
     if (earSamples.length >= 10) baselineEarRef.current = baselineEar(earSamples);
+    if (noseFracs.length >= 10) pitchBaselineFracRef.current = medianOf(noseFracs);
     const cal = fitGazeCalibration(gazeSamplesRef.current);
     gazeCalRef.current = cal;
     const targetsDetected = Object.values(gazeSamplesRef.current).filter((a) => a.length > 0).length;
@@ -232,6 +250,7 @@ export function useTracking(): TrackingApi {
       ear_baseline: baselineEarRef.current,
       gaze_h_threshold: cal.valid ? cal.hThreshold : null,
       gaze_v_threshold: cal.valid ? cal.vThreshold : null,
+      pitch_baseline_frac: pitchBaselineFracRef.current,
     });
     return cal.valid;
   }, []);
@@ -254,6 +273,7 @@ export function useTracking(): TrackingApi {
         earThresholdUsed: baselineEarRef.current != null ? baselineEarRef.current * 0.6 : null,
         gazeCalibrated: gazeCalRef.current?.valid ?? false,
         baselineBlinkRate: baselineBlinkRef.current,
+        headPitchCalibrated: pitchBaselineFracRef.current != null,
       });
       aggRef.current = null;
       await put('eye_metrics', record);

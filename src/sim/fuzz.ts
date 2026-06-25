@@ -10,7 +10,8 @@
 import { makeRng, type Rng } from './rng';
 import { conditionOrderFor, passageForCondition, sessionPlan } from '@/experiment/counterbalance';
 import { computeSdt } from '@/lib/signalDetection';
-import { classifyBlinks, summariseBlinks, effectiveFps, baselineEar, type EarSample } from '@/tracking/blink';
+import { classifyBlinks, summariseBlinks, effectiveFps, baselineEar, type EarSample, type Point } from '@/tracking/blink';
+import { estimateHeadPose } from '@/tracking/headPose';
 import { fitGazeCalibration, GAZE_TARGETS } from '@/tracking/gazeCalibration';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { buildExportFiles } from '@/storage/export';
@@ -26,6 +27,28 @@ export interface FuzzFailure {
 
 const isFinitePos = (x: number | null) => x == null || (Number.isFinite(x) && x >= 0);
 const inUnit = (x: number | null) => x == null || (Number.isFinite(x) && x >= -0.0001 && x <= 1.0001);
+
+/** Adversarial free-text fragments injected into export fields to attack CSV escaping. */
+const TORTURE = ['a,b', 'q"q', 'l\nf', 'c\rr', 'crlf\r\n', '=cmd', '😀', '""', ',,', '日本'];
+
+/** Strict RFC-4180 parser (unquoted \n = row end). Used to prove no column drift in exports. */
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let field = '', inQ = false;
+  let row: string[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; } else field += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n') { row.push(field); rows.push(row); field = ''; row = []; }
+    else field += c;
+  }
+  row.push(field);
+  rows.push(row);
+  return rows;
+}
 
 function randInt(rng: Rng, min: number, max: number): number {
   return Math.floor(rng() * (max - min + 1)) + min;
@@ -121,6 +144,25 @@ export function runFuzz(iterations: number, seed = 1): FuzzFailure[] {
       if (!files.some((f) => f.filename === 'export_manifest.json')) fail('export', i, 'no manifest');
       // Every CSV must at least have a header line.
       for (const f of files) if (f.content.length === 0) fail('export', i, `empty file ${f.filename}`);
+      // CSV integrity: with adversarial free text in the bundle, every row must still parse to
+      // exactly the header's column count (no delimiter/newline leaks).
+      for (const f of files.filter((f) => f.filename.endsWith('.csv'))) {
+        const parsed = parseCsv(f.content);
+        const cols = parsed[0].length;
+        for (let r = 1; r < parsed.length; r++)
+          if (parsed[r].length !== cols)
+            fail('export', i, `${f.filename} row ${r} has ${parsed[r].length}/${cols} cols`);
+      }
+    });
+
+    // 6) Head pose on degenerate / extreme landmark arrays — must stay finite, never throw.
+    guard('headpose', i, () => {
+      const lm: Point[] = Array.from({ length: 478 }, () => ({ x: maybeWeird(rng) / 100, y: maybeWeird(rng) / 100 }));
+      const pose = estimateHeadPose(lm);
+      // NaN landmarks may legitimately yield NaN pose, but finite landmarks must yield finite pose.
+      const allFinite = lm.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
+      if (allFinite && !(Number.isFinite(pose.pitch) && Number.isFinite(pose.yaw) && Number.isFinite(pose.roll)))
+        fail('headpose', i, `non-finite pose from finite landmarks: ${JSON.stringify(pose)}`);
     });
   }
 
@@ -130,10 +172,11 @@ export function runFuzz(iterations: number, seed = 1): FuzzFailure[] {
 /** A sparse bundle with `nConds` conditions and randomly-present child records. */
 function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
   const sid = 'F';
+  const torture = () => TORTURE[Math.floor(rng() * TORTURE.length)];
   const conditions = Array.from({ length: nConds }, (_, k) => ({
     condition_id: `c${k}`, session_id: sid, session_position: k, condition_label: `C${k + 1}`,
     polarity: (k % 2 ? 'negative' : 'positive') as 'positive' | 'negative',
-    background_color: '#FFFFFF', text_color: '#000000', color_name: 'black', passage_id: k % 8,
+    background_color: '#FFFFFF', text_color: '#000000', color_name: rng() < 0.5 ? 'black' : torture(), passage_id: k % 8,
     wcag_contrast_ratio: wcagContrastRatio('#FFFFFF', '#000000'), wcag_level: 'AAA' as const,
     michelson_contrast: 1, below_wcag_aa: false, started_at: 1, completed_at: rng() < 0.5 ? 2 : null,
     condition_duration_sec: 1, adaptation_ms_before: 0, reading_time_ms: null
@@ -142,10 +185,10 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
   return {
     session: {
       session_id: sid, participant_id: 'PF', enrolment_number: 1, status: 'complete', deleted_at: null,
-      display_label: null, ambient_lux: 350, ambient_illumination_level: null, screen_white_luminance_cd_m2: null, brightness_percent: null,
+      display_label: rng() < 0.5 ? null : torture(), ambient_lux: 350, ambient_illumination_level: null, screen_white_luminance_cd_m2: null, brightness_percent: null,
       session_start_time: 1, session_end_time: 2, randomisation_seed: 1,
       condition_order: conditions.map((c) => c.session_position), preflight_complete: true,
-      consent_given: true, consent_time: 1, provenance: PROV, device_type: 'X', browser: 'Y', screen_resolution: '1x1',
+      consent_given: true, consent_time: 1, provenance: PROV, device_type: torture(), browser: torture(), screen_resolution: '1x1',
       conditions_per_session: 8, condition_offset: 0, session_index: 1,
     },
     participant: undefined,
@@ -171,7 +214,7 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
       long_closure_count: randInt(rng, 0, 3), long_closure_total_ms: rng() * 2000,
       blink_rate_micro: 0, blink_count_full: 0,
       blink_count_micro: 0, blink_count_incomplete: 0, ear_baseline: null, ear_threshold_used: null,
-      head_pitch_mean: 0, head_yaw_mean: 0, head_roll_mean: 0, head_movement_std: 0, postural_load: 0,
+      head_pitch_mean: 0, head_pitch_calibrated: rng() < 0.5, head_yaw_mean: 0, head_roll_mean: 0, head_movement_std: 0, postural_load: 0,
       head_stability_score: 0, off_axis_ratio: rng(), gaze_calibrated: false, gaze_deviation_ratio: rng(),
       zone_center_ratio: rng(), zone_transition_count: 0, face_presence_ratio: rng(), face_size_ratio: 0,
       mean_face_luma: rng() < 0.5 ? null : rng() * 255, lighting_quality: null,
@@ -188,6 +231,6 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
         d_prime: r.d_prime, d_prime_se: r.d_prime_se, d_prime_unstable: r.d_prime_unstable,
       };
     }),
-    calibration: rng() < 0.5 ? [{ calibration_id: 'cal', session_id: sid, is_real_calibration: rng() < 0.5, targets_detected: randInt(rng, 0, 9), targets_total: 9, ear_baseline: rng() < 0.5 ? null : rng(), gaze_h_threshold: null, gaze_v_threshold: null }] : [],
+    calibration: rng() < 0.5 ? [{ calibration_id: 'cal', session_id: sid, is_real_calibration: rng() < 0.5, targets_detected: randInt(rng, 0, 9), targets_total: 9, ear_baseline: rng() < 0.5 ? null : rng(), gaze_h_threshold: null, gaze_v_threshold: null, pitch_baseline_frac: rng() < 0.5 ? null : rng() }] : [],
   };
 }
