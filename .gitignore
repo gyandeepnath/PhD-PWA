@@ -16,3 +16,4 @@ vite.config.js
 vitest.config.d.ts
 vitest.config.js
 ALL_SOURCE.md
+synopsis/node_modules/
