@@ -121,7 +121,7 @@ while (i < lines.length) {
   }
   if (/^---+$/.test(line.trim())) {
     children.push(new Paragraph({
-      spacing: { before: 120, after: 200 },
+      spacing: { before: 60, after: 90 },
       border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'AAAAAA', space: 1 } },
       children: [new TextRun({ text: '', font: FONT, size: SIZE })],
     }));
@@ -153,19 +153,52 @@ while (i < lines.length) {
     children.push(new Paragraph({
       heading: HL[lvl],
       alignment: lvl === 1 ? AlignmentType.CENTER : AlignmentType.LEFT,
-      spacing: { before: lvl === 1 ? 360 : 280, after: 180, line: LINE },
+      spacing: { before: lvl === 1 ? 240 : 180, after: 90, line: LINE },
       keepNext: true,
-      pageBreakBefore: lvl === 1 && /^(CHAPTER|REFERENCES)/i.test(h[2]),
+      pageBreakBefore: lvl === 1 && /^REFERENCES/i.test(h[2]),
       children: inline(h[2], { size: lvl === 1 ? 30 : lvl === 2 ? 27 : 25, bold: true }),
     }));
     i++; continue;
   }
+  // --- flow chart: <!--FLOW--> one box per line <!--/FLOW--> ---
+  if (line.trim() === '<!--FLOW-->') {
+    i++;
+    const items = [];
+    while (i < lines.length && lines[i].trim() !== '<!--/FLOW-->') {
+      if (lines[i].trim()) items.push(lines[i].trim());
+      i++;
+    }
+    i++;
+    const edge = { style: BorderStyle.SINGLE, size: 6, color: '5B6B7C', space: 4 };
+    items.forEach((it, idx) => {
+      children.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 30, after: 30, line: 240 },
+        indent: { left: 340, right: 340 },
+        border: { top: edge, bottom: edge, left: edge, right: edge },
+        shading: { type: ShadingType.CLEAR, fill: 'EDF2F9', color: 'auto' },
+        keepNext: idx < items.length - 1,
+        children: inline(it, { size: 20 }),
+      }));
+      if (idx < items.length - 1) {
+        children.push(new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 0, after: 0, line: 200 },
+          keepNext: true,
+          children: [new TextRun({ text: '▼', font: FONT, size: 18 })],
+        }));
+      }
+    });
+    children.push(new Paragraph({ spacing: { after: 90 }, children: [new TextRun({ text: '', size: 12 })] }));
+    continue;
+  }
+
   if (line.trim().startsWith('|')) {
     const rows = [];
     while (i < lines.length && lines[i].trim().startsWith('|')) { rows.push(lines[i]); i++; }
     if (rows.length >= 2) {
       children.push(buildTable(rows));
-      children.push(new Paragraph({ spacing: { after: 220 }, children: [new TextRun({ text: '', size: 12 })] }));
+      children.push(new Paragraph({ spacing: { after: 90 }, children: [new TextRun({ text: '', size: 12 })] }));
     }
     continue;
   }
@@ -173,7 +206,7 @@ while (i < lines.length) {
     const buf = [];
     while (i < lines.length && lines[i].trim().startsWith('>')) { buf.push(lines[i].trim().replace(/^>\s?/, '')); i++; }
     children.push(new Paragraph({
-      spacing: { before: 120, after: 180, line: LINE },
+      spacing: { before: 80, after: 100, line: LINE },
       indent: { left: 360, right: 240 },
       alignment: AlignmentType.JUSTIFIED,
       border: { left: { style: BorderStyle.SINGLE, size: 12, color: '4F8EF7', space: 8 } },
@@ -192,7 +225,7 @@ while (i < lines.length) {
     while (cont(i + 1)) { i++; t += ' ' + lines[i].trim(); }
     children.push(new Paragraph({
       numbering: { reference: 'bullets', level: 0 },
-      spacing: { after: 100, line: LINE },
+      spacing: { after: 50, line: LINE },
       alignment: AlignmentType.JUSTIFIED,
       children: inline(t),
     }));
@@ -203,7 +236,7 @@ while (i < lines.length) {
     let t = o[2];
     while (cont(i + 1)) { i++; t += ' ' + lines[i].trim(); }
     children.push(new Paragraph({
-      spacing: { after: 130, line: LINE },
+      spacing: { after: 60, line: LINE },
       indent: { left: 640, hanging: 640 },
       alignment: AlignmentType.JUSTIFIED,
       children: [new TextRun({ text: o[1] + '.', font: FONT, size: SIZE }), new TextRun({ text: '\t', font: FONT, size: SIZE }), ...inline(t)],
@@ -214,7 +247,7 @@ while (i < lines.length) {
   while (cont(i + 1)) { i++; t += ' ' + lines[i].trim(); }
   const sig = /^(Date:|Signature of|Seal)/.test(t);
   children.push(new Paragraph({
-    spacing: { after: sig ? 320 : 150, line: LINE },
+    spacing: { after: sig ? 240 : 60, line: LINE },
     alignment: sig ? AlignmentType.LEFT : AlignmentType.JUSTIFIED,
     children: inline(t),
   }));
@@ -235,9 +268,9 @@ const doc = new Document({
   styles: {
     default: {
       document: { run: { font: FONT, size: SIZE }, paragraph: { spacing: { line: LINE } } },
-      heading1: { run: { font: FONT, size: 30, bold: true, color: '000000' }, paragraph: { spacing: { before: 360, after: 180, line: LINE } } },
-      heading2: { run: { font: FONT, size: 27, bold: true, color: '000000' }, paragraph: { spacing: { before: 300, after: 160, line: LINE } } },
-      heading3: { run: { font: FONT, size: 25, bold: true, color: '000000' }, paragraph: { spacing: { before: 260, after: 140, line: LINE } } },
+      heading1: { run: { font: FONT, size: 30, bold: true, color: '000000' }, paragraph: { spacing: { before: 240, after: 120, line: LINE } } },
+      heading2: { run: { font: FONT, size: 27, bold: true, color: '000000' }, paragraph: { spacing: { before: 180, after: 90, line: LINE } } },
+      heading3: { run: { font: FONT, size: 25, bold: true, color: '000000' }, paragraph: { spacing: { before: 160, after: 80, line: LINE } } },
       heading4: { run: { font: FONT, size: 24, bold: true, italics: true, color: '000000' }, paragraph: { spacing: { before: 220, after: 120, line: LINE } } },
     },
   },
