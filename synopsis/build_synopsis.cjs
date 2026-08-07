@@ -19,7 +19,7 @@ const md = fs.readFileSync(IN, 'utf8');
 
 const FONT = 'Times New Roman';
 const SIZE = 24;          // 12 pt
-const SIZE_TBL = 20;      // 10 pt inside tables
+const SIZE_TBL = 18;      // 9 pt inside tables
 const LINE = 360;         // 1.5 line spacing (240 = single)
 const CM = 567;           // twips per cm
 const PAGE_W = 11906, PAGE_H = 16838;               // A4
@@ -84,7 +84,7 @@ function buildTable(rows) {
   const cell = (t, hdr, i) => new TableCell({
     width: { size: w[i], type: WidthType.DXA },
     shading: hdr ? { type: ShadingType.CLEAR, fill: 'E8EEF7', color: 'auto' } : undefined,
-    margins: { top: 60, bottom: 60, left: 100, right: 100 },
+    margins: { top: 40, bottom: 40, left: 80, right: 80 },
     children: [new Paragraph({ spacing: { before: 20, after: 20, line: 240 }, children: inline(t, { size: SIZE_TBL, bold: hdr }) })],
   });
   return new Table({
