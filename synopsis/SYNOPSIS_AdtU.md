@@ -24,7 +24,7 @@ Panikhaiti, Guwahati-781026, Assam, India
 
 Name of the Scholar : Gyandeep Nath
 
-Faculty of Study : Faculty of Paramedical Sciences
+Faculty of Study : Faculty of Allied and Healthcare Sciences
 
 Department/Discipline : Optometry
 
@@ -48,7 +48,7 @@ Name of Supervisor & affiliation:
 
 ## 1.1 Background
 
-Sustained reading has shifted from print to self-luminous displays, and tablets now mediate much of that reading in education, work and leisure. A printed page reflects ambient light; a display emits its own, and the properties of that emission are set in software. Polarity (whether text is dark on a light field or light on a dark one), chromaticity, luminance and contrast are all configurable, and are configured routinely by designers and by users selecting interface themes, of which the adoption of "dark mode" is the most visible instance. These choices are made at very large scale with little evidence about their consequences for the eye.
+Sustained reading has shifted from print to self-luminous displays, and tablets now mediate much of that reading in education, work and leisure. A printed page reflects ambient light; a display emits its own, and the properties of that emission are set in software. Polarity (whether text is dark on a light field or light on a dark one), chromaticity, luminance and contrast are all configurable, and are configured routinely by designers and by users selecting interface themes, of which the adoption of "dark mode" is the most visible instance. These choices are made at very large scale, yet evidence regarding the effects of combinations of these parameters during prolonged reading remains limited.
 
 A systematic review and meta-analysis of 103 cross-sectional studies covering 66,577 participants placed the pooled prevalence of computer vision syndrome at 69.0 per cent (95% CI 62.3–75.3), with individual estimates ranging from 12.1 to 97.3 per cent [1]. Prevalence was higher among women (71.4 versus 61.8 per cent) and university students (76.1 per cent), and reviews report a further rise with remote work and study, reaching 50 to 60 per cent among children [2,3].
 
@@ -58,13 +58,13 @@ The condition is termed either computer vision syndrome or digital eye strain, t
 
 Symptoms fall into two mechanistically distinct groups [3]. The first arises from accommodative and vergence stress, presenting as difficulty focusing, blurred vision, near-work-induced transient myopia and headache. The second arises at the ocular surface, presenting as dryness, burning and irritation.
 
-The ocular-surface route is the better described. Display work suppresses spontaneous blinking and raises the proportion of blinks that fail to close fully; incomplete closure enlarges the exposed evaporative area and impairs the spread of meibomian lipid, so tear-film stability falls and the surface enters the recognised inflammatory cycle of dry eye disease [5,6]. Mechanistic review attributes display-associated dry eye principally to impaired blinking, finding insufficient support for parasympathetic or blue-light contributions [6]. The accommodative route is more heterogeneously evidenced but responds measurably to display parameters [7,8].
+The ocular-surface route is the better described. Display work suppresses spontaneous blinking and raises the proportion of blinks that fail to close fully; incomplete closure enlarges the exposed evaporative area and impairs the spread of meibomian lipid, so tear-film stability falls and the surface enters the recognised inflammatory cycle of dry eye disease [5,6]. Mechanistic review attributes display-associated dry eye principally to impaired blinking, finding insufficient support for parasympathetic or blue-light contributions [6]. The accommodative route is more heterogeneously evidenced but responds measurably to display parameters [7,8]. Although accommodative and vergence mechanisms are relevant to digital visual fatigue, the present study focuses on ocular-surface behaviour, visual performance and subjective fatigue, and does not measure accommodative responses directly; the accommodative pathway is therefore reviewed as mechanistic context rather than tested.
 
 ## 1.3 Polarity, text colour and ambient illumination
 
 Three configurable properties of the reading stimulus bear on retinal illuminance, pupil state and visual effort, and are reviewed in detail in Chapter 2.
 
-The most reliably replicated is the positive polarity advantage: reading is better for dark text on a light field than for light text on a dark one, attributed to the greater light emitted by positive-polarity displays, which constricts the pupil, reduces optical aberration and sharpens the retinal image [9,10,11]. Text colour has been studied far less, and no study has crossed it with polarity while measuring fatigue [7,12]. Any manipulation of text colour also manipulates luminance contrast, since chromatic pigments differ intrinsically in relative luminance and chromatic contrast cannot substitute for luminance contrast [9], so an apparent effect of colour may be an effect of contrast unless the two are measured separately. Ambient light adds veiling luminance and drives pupil size independently of the display, interacting with the same mechanism [12,13].
+The most reliably replicated is the positive polarity advantage: reading is better for dark text on a light field than for light text on a dark one, attributed to the greater light emitted by positive-polarity displays, which constricts the pupil, reduces optical aberration and sharpens the retinal image [9,10,11]. Text colour has been studied far less and, to the best of the available evidence, no study has comprehensively evaluated it in combination with polarity while measuring fatigue [7,12]. Any manipulation of text colour also manipulates luminance contrast, since chromatic pigments differ intrinsically in relative luminance and chromatic contrast cannot substitute for luminance contrast [9], so an apparent effect of colour may be an effect of contrast unless the two are measured separately. Ambient light adds veiling luminance and drives pupil size independently of the display, interacting with the same mechanism [12,13].
 
 ## 1.4 Statement of the problem
 
@@ -78,30 +78,41 @@ A clinician, designer or standards body therefore has no evidence base from whic
 
 The study addresses a determinant of visual health that is common, freely modifiable and poorly evidenced, using a design that can answer a question the existing literature cannot.
 
-Because chromatic luminance differs by hue, the rank order of luminance contrast reverses between the two polarities in the proposed condition set (Table 3.3). Blue and red are high in contrast on a white field but fall below the accessibility minimum on a black one, while yellow and green behave oppositely. The polarity-by-colour interaction therefore functions as a direct test of whether reported colour effects are effects of hue or of luminance contrast. The ordering Fan and colleagues reported under negative polarity, red worst and yellow best, is precisely what luminance contrast alone would predict for those hues on a black background [12], and a single-polarity design cannot exclude that explanation.
+Because chromatic luminance differs by hue, the rank order of luminance contrast reverses between the two polarities in the proposed condition set (Table 3.3). Blue and red are high in contrast on a white field but fall below the accessibility minimum on a black one, while yellow and green behave oppositely. The polarity-by-colour interaction therefore allows contrast-mediated effects to be modelled and distinguished from residual, hue-specific effects. The design does not experimentally isolate hue from luminance contrast, since the two cannot be orthogonalised within a fixed colour set; the separation is statistical rather than experimental and is interpreted accordingly. The ordering Fan and colleagues reported under negative polarity, red worst and yellow best, is precisely what luminance contrast alone would predict for those hues on a black background [12], and a single-polarity design cannot exclude that explanation.
 
 Manipulating ambient light across sessions tests the polarity effect where it matters behaviourally, since devices are used extensively at night and in dim domestic settings, where negative polarity is predicted to cost most [13]. Validating an automated measure of blink completeness would remove the annotation bottleneck that has kept this literature small. The findings bear on interface design, on accessibility standards whose contrast criterion does not account for polarity [20,21], on public health guidance, and on the advice optometrists give patients, an area in which practitioners are documented to lack quality evidence [3].
 
 ## 1.6 Aim
 
-To determine how display polarity, text colour and ambient illumination, individually and in combination, affect visual fatigue, ocular behaviour and task performance during prolonged tablet reading, and to validate a scalable instrument for objective ocular measurement of digital eye strain outside the specialist laboratory.
+To determine the effects and interactions of display polarity, text colour and ambient illumination on visual fatigue, ocular behaviour and visual task performance during prolonged tablet-based reading, and, as a secondary methodological objective, to evaluate the validity and feasibility of camera-based blink assessment as an objective measure of ocular response.
 
 ## 1.7 Objectives
 
+**Primary objectives**
+
 1. To investigate the individual and interactive effects of display polarity, text colour and ambient illumination on subjective visual fatigue, ocular behaviour, cognitive workload and task performance during prolonged tablet reading.
-2. To distinguish the contribution of luminance contrast from that of hue, by computing standards-based contrast metrics for every condition and modelling contrast explicitly alongside colour.
+2. To model the contribution of luminance contrast and to distinguish it from residual, hue-specific effects, by computing standards-based contrast metrics for every condition and entering contrast explicitly alongside colour.
 3. To determine the configuration of polarity, colour and illumination that minimises visual fatigue and maximises task performance, and to examine how participant characteristics moderate these effects.
+
+**Methodological objective**
+
 4. To establish the feasibility and criterion validity of tablet-based camera metrology for this purpose, including agreement of automated blink classification against manual annotation and the correspondence between subjective and objective indices.
 
 ## 1.8 Hypotheses
 
-**Null hypothesis (H₀).** Display polarity, text colour and ambient illumination have no significant effect, individually or in combination, on visual fatigue, ocular behaviour, cognitive workload or task performance.
+**Null hypothesis (H₀).** Display polarity, text colour and ambient illumination, individually or in combination, have no significant effect on visual fatigue, ocular behaviour or visual task performance during prolonged tablet reading.
 
-**H₁ (Main effects).** Positive polarity, higher luminance contrast and higher ambient illumination are each associated with lower subjective visual fatigue, a lower incomplete-blink ratio and better task performance.
+**Alternative hypothesis (H₁).** At least one of these factors, individually or in combination, significantly affects these outcomes.
 
-**H₂ (Interaction and the contrast–hue test).** Polarity interacts with text colour and with ambient illumination. If colour acts through luminance contrast, the ordering of colours will reverse between polarities, with yellow and green most favourable on a dark field and blue and red most favourable on a light one. If hue exerts an effect independent of contrast, the ordering will hold across both polarities, with red expected to be least favourable [12]. The cost of negative polarity is further expected to be greater under dim than under moderate illumination [13].
+The following hypotheses are linked to the objectives.
 
-**H₃ (Individual moderation).** Habitual display-mode preference, habitual screen exposure, typical ambient-lighting environment and digital literacy moderate the magnitude of these effects.
+**H₁ₐ (Objective 1, main effects).** Positive polarity, higher luminance contrast and higher ambient illumination are each associated with a lower incomplete-blink ratio, lower subjective visual fatigue and better task performance.
+
+**H₁ᵦ (Objective 1, interactions).** The effect of text colour depends on polarity, and the cost of negative polarity is greater under dim than under moderate illumination [13].
+
+**H₁ᵪ (Objective 2, contrast mediation).** Colour-related variance is largely accounted for by luminance contrast. Because the computed contrast ordering reverses between the two polarities (Table 3.3), a contrast-mediated effect predicts a corresponding reversal of the colour ordering across polarity, whereas a residual hue-specific effect predicts a consistent ordering, with red the a priori candidate exception [12].
+
+**H₁ᵨ (Objective 3, moderation).** Habitual display-mode preference, habitual screen exposure, typical ambient-lighting environment and digital literacy moderate the magnitude of these effects.
 
 ## 1.9 Conceptual framework
 
@@ -109,11 +120,11 @@ Display configuration and ambient illuminance act through two proximal mechanism
 
 **Table 1.1 — Conceptual framework: the two pathways from display configuration to measured outcome.**
 
-| Pathway | Antecedent (independent variable) | Proximal mechanism | Mediating state | Symptom cluster | Measured outcome | Evidence |
+| Pathway | Antecedent (independent variable) | Proximal mechanism | Mediating state | Symptom cluster | Measured outcome (P = primary, S = secondary) | Evidence |
 |---|---|---|---|---|---|---|
-| Optical / refractive | Display luminance and polarity; ambient illuminance | Pupil diameter → aberration and depth of focus | Retinal image quality; accommodative demand | Accommodative/vergence (blur, focusing difficulty, headache, transient myopia) | Reading rate; comprehension; visual search; perceived clarity | [7,8,10,11,13] |
-| Ocular surface | Luminance contrast; chromaticity; visual and cognitive demand | Reduced blink rate; increased incomplete blinking | Exposed evaporative area; tear-film stability | Ocular surface (dryness, burning, irritation) | Incomplete-blink ratio; blink rate; inter-blink interval; CVS-Q, VAS | [5,6,17,18,19] |
-| Cross-cutting | Time on task; sleepiness; disengagement; participant factors | Resource depletion; arousal state; habituation | Sustained-attention capacity; response criterion | — | RT variability and lapses; PERCLOS; engagement flags | [22,23,27,28] |
+| Optical / refractive | Display luminance and polarity; ambient illuminance | Pupil diameter → aberration and depth of focus | Retinal image quality; accommodative demand | Accommodative/vergence (blur, focusing difficulty, headache, transient myopia) | Reading rate (S); comprehension (S); visual search (S); perceived clarity (S) | [7,8,10,11,13] |
+| Ocular surface | Luminance contrast; chromaticity; visual and cognitive demand | Reduced blink rate; increased incomplete blinking | Exposed evaporative area; tear-film stability | Ocular surface (dryness, burning, irritation) | Incomplete-blink ratio (P); CVS-Q change (key S); blink rate, inter-blink interval, VAS (S) | [5,6,17,18,19] |
+| Cross-cutting | Time on task; sleepiness; disengagement; participant factors | Resource depletion; arousal state; habituation | Sustained-attention capacity; response criterion | — | RT variability and lapses (S); PERCLOS (covariate); engagement flags (quality control) | [22,23,27,28] |
 
 ---
 
@@ -143,7 +154,7 @@ Two features of this corpus define the entry point for the present work. The par
 
 ## 2.3 Text colour and the contrast confound
 
-The literature manipulating text chromaticity is small and, as Table 2.2 shows, no study has crossed colour with polarity while measuring fatigue.
+The literature manipulating text chromaticity is small and, as Table 2.2 shows, no located study has crossed colour with polarity while measuring fatigue.
 
 **Table 2.2 — Studies on text colour and luminance contrast.**
 
@@ -208,10 +219,10 @@ Automated blink detection derives a scalar eye aspect ratio from facial landmark
 ## 2.8 Research gaps
 
 1. The positive polarity advantage is established for brief, achromatic legibility tasks but untested for prolonged reading with fatigue accumulation and ocular-surface outcomes.
-2. The interaction between polarity and text colour on visual fatigue has never been estimated, since the only text-colour fatigue study held polarity constant [12], and hue has not been disentangled from luminance contrast in any existing study [7,9,12,36].
+2. To the best of the available evidence the interaction between polarity and text colour on visual fatigue remains unestimated, since the only located text-colour fatigue study held polarity constant [12], and hue has not been separated from luminance contrast in the studies located [7,9,12,36].
 3. No study reports contrast metrics alongside measured display photometry, and the prevailing standard is polarity-blind [20,21]. Three-way effects of polarity, colour and illumination remain uncharacterised, the available two-way findings being in partial conflict [9,12,13].
 4. Few studies co-register a validated symptom instrument with objective markers in the same condition, leaving the subjective–objective discrepancy unresolved [3]; where both have been measured, they have pointed in opposite directions [36].
-5. The incomplete-blink ratio has never been tested as an outcome of a display-parameter manipulation despite its specificity [17,18,19,38], and its measurement does not scale, no automated implementation having been validated against manual annotation.
+5. The incomplete-blink ratio does not appear to have been tested as an outcome of a display-parameter manipulation despite its specificity [17,18,19,38], and its measurement does not scale, no automated implementation having been validated against manual annotation in the literature located.
 6. Individual differences in habitual display preference, exposure and lighting environment are seldom modelled as moderators, and tablet-specific, ecologically valid protocols are scarce.
 
 ---
@@ -220,7 +231,7 @@ Automated blink detection derives a scalar eye aspect ratio from facial landmark
 
 ## 3.1 Study design
 
-The study uses a within-subjects, repeated-measures factorial design with three factors: display polarity (positive, negative), text colour (achromatic, blue, red, yellow, green) and ambient illumination (dim, moderate).
+The study uses a repeated-measures crossover (split-plot) factorial design. Display polarity (positive, negative) and text colour (achromatic, blue, red, yellow, green) are manipulated within session; ambient illumination (dim, moderate) is manipulated at session level, each participant receiving both levels in counterbalanced order. All three factors are therefore within-participant, but illumination acts as the session-level (whole-plot) factor and polarity × text colour as within-session (sub-plot) factors.
 
 Polarity and colour together yield ten display conditions, each administered under both illumination levels, giving twenty condition-runs per participant. Illumination is manipulated between sessions rather than within, because a fully crossed within-session design would be unmanageable in one sitting and because room light cannot be switched without re-adaptation. Each session presents all ten display conditions under one illumination level, the two sessions being separated by 48 to 72 hours, with the order of illumination levels counterbalanced between participants.
 
@@ -239,7 +250,7 @@ Phase VI — Mixed-effects analysis, design recommendations, thesis
 
 The study will be conducted in a controlled laboratory room at Assam down town University in which ambient illuminance can be held constant and daylight is excluded. Data collection is expected to take approximately 24 months following ethics approval and piloting.
 
-**Sampling strategy and sample size.** Sampling is purposive and homogeneous, drawn from the university and its associated institutions, so that cognitive, visual and digital-exposure characteristics are consistent and the within-subject contrasts are not diluted by uncontrolled heterogeneity. Infinite-population formulae of the form n = Z²pq/e² do not apply, since this is a controlled repeated-measures experiment on a finite, purposively selected group in which each participant serves as their own control and no population prevalence is being estimated.
+**Sampling strategy and sample size.** Recruitment uses non-probability purposive (convenience) sampling, with consecutive enrolment of eligible volunteers from the university and its associated institutions, so that cognitive, visual and digital-exposure characteristics are reasonably homogeneous and the within-subject contrasts are not diluted by uncontrolled heterogeneity. Because sampling is non-probability, the findings are not intended to estimate population prevalence, and generalisation beyond comparable young-adult screen users is made with caution. Infinite-population formulae of the form n = Z²pq/e² do not apply, since this is a controlled repeated-measures experiment on a finite, purposively selected group in which each participant serves as their own control and no population prevalence is being estimated.
 
 The target is 100 participants aged 18 to 35, with 110 enrolled to allow for attrition across the two sessions. Three considerations fix this number. It is a multiple of the ten display conditions, which the Williams counterbalancing scheme requires for complete balance (§3.8). Within-subject power for the polarity, colour and illumination contrasts is high, since each participant contributes twenty condition-runs, and will be confirmed by an a priori simulation-based power analysis under the planned mixed-effects model rather than by a formula that assumes independent observations. The binding constraint is instead Objective 3, because moderation by participant characteristics is a between-participant comparison and requires adequate numbers in each subgroup; a sample of 100 supports subgroups of roughly 40 to 50 for a binary moderator such as habitual dark-mode preference. Published studies in this area have used substantially smaller samples, as Table 3.1 shows, so the proposed size is generous for the primary contrasts and appropriate for the moderation analysis.
 
@@ -288,7 +299,7 @@ Analysed (target n = 100; 20 condition-runs each, 2,000 condition-runs in total)
 
 ## 3.3 Display conditions and photometric characterisation
 
-All conditions are presented on a single fixed tablet at a viewing distance of 50 to 60 cm, with brightness fixed, automatic brightness and any blue-light filter disabled, and the screen cleaned before each session. Display white-point luminance is measured photometrically and recorded per session, with a working target of 120 to 150 cd/m², informed by the optimum of 153 cd/m² determined under 300 lux [14] and scaled for the lower domestic illuminance used here. Typography, line height and margins are fixed across conditions, so that polarity and colour are the only stimulus properties that vary. Contrast is computed from linearised sRGB relative luminance following the accessibility standard [20].
+All conditions are presented on a single fixed tablet at a viewing distance of 50 to 60 cm, with brightness fixed, automatic brightness and any blue-light filter disabled, and the screen cleaned before each session. Display white-point luminance is measured photometrically and recorded per session, with a working target of 120 to 150 cd/m², informed by the optimum of 153 cd/m² determined under 300 lux [14] and scaled for the lower domestic illuminance used here. Typography, line height and margins are fixed across conditions, so that polarity and colour are the only stimulus properties that vary. Contrast is computed from linearised sRGB relative luminance following the accessibility standard [20]. The five text colours were retained from the locked condition set used earlier in this programme, with green added so that the number of sub-AA conditions is balanced across the two polarities, at two per polarity, which is what permits the contrast ordering to reverse symmetrically between polarities.
 
 **Table 3.3 — The ten display conditions with computed contrast.**
 
@@ -305,17 +316,21 @@ All conditions are presented on a single fixed tablet at a viewing distance of 5
 | 9 | N4 | Yellow | #C9A400 | #000000 | 8.79 : 1 | AAA | 1.000 | No |
 | 10 | N5 | Green | #00A651 | #000000 | 6.57 : 1 | AA | 1.000 | No |
 
-Three properties of this matrix matter analytically. First, the contrast ordering reverses across polarity, so the polarity-by-colour interaction operates as a direct test of hue against luminance contrast. Second, conditions falling below the accessibility minimum are balanced two per polarity, so polarity is not systematically confounded with compliance. Third, Michelson contrast is degenerate under negative polarity: with a pure black background the minimum luminance is zero and the metric saturates at 1.000 for every colour, so it cannot discriminate those conditions. This last point is itself a finding, since it requires the accessibility contrast ratio and measured photometry, rather than Michelson contrast, to serve as the analytic contrast variable, and it reinforces the case that a luminance-insensitive metric is inadequate for dark-mode interfaces [20,21].
+Three properties of this matrix matter analytically. First, the contrast ordering reverses across polarity, so the polarity-by-colour interaction permits contrast-mediated effects to be modelled and distinguished from residual hue-specific effects, although the two are separated statistically rather than experimentally. Second, conditions falling below the accessibility minimum are balanced two per polarity, so polarity is not systematically confounded with compliance. Third, Michelson contrast is degenerate under negative polarity: with a pure black background the minimum luminance is zero and the metric saturates at 1.000 for every colour, so it cannot discriminate those conditions. This last point is itself a finding, since it requires the accessibility contrast ratio and measured photometry, rather than Michelson contrast, to serve as the analytic contrast variable, and it reinforces the case that a luminance-insensitive metric is inadequate for dark-mode interfaces [20,21].
 
 ## 3.4 Ambient illumination
 
-Illuminance is set and verified at the participant's eye position and at the display plane with a calibrated lux meter, and logged at the start, middle and end of each session. The dim level targets approximately 10 lux (acceptable range 5–15), representing night-time and low-light domestic use and comparable to the low-illumination conditions of prior polarity work [12,13]. The moderate level targets approximately 150 lux (range 130–170), representing general indoor domestic lighting and set deliberately below the 300–500 lux specified for offices and classrooms in the Indian interior-illumination code [35] and below the 300 lux reference used in recent display optimisation [14]. Correlated colour temperature and light-source type are held constant across both levels, so illuminance is the only photometric property of the room that varies.
+Illuminance is set and verified at the participant's eye position and at the display plane with a calibrated lux meter, and logged at the start, middle and end of each session. The dim level targets approximately 10 lux (acceptable range 5–15), representing night-time and low-light domestic use and comparable to the low-illumination conditions of prior polarity work [12,13]. The moderate level targets approximately 150 lux (range 130–170), representing general indoor domestic lighting and set deliberately below the 300–500 lux specified for offices and classrooms in the Indian interior-illumination code [35] and below the 300 lux reference used in recent display optimisation [14]. Two levels rather than a graded series were chosen so that illumination could be crossed with all ten display conditions within a feasible protocol. The values were selected to fall either side of the range at which negative-polarity penalties have been reported to emerge [12,13] and to differ by approximately one log unit, so that a pupillary difference is physiologically plausible. Because display white luminance is held constant, the display-to-ambient luminance ratio, which is the quantity the polarity account implicates, differs by design between sessions. Correlated colour temperature and light-source type are held constant across both levels, so illuminance is the only photometric property of the room that varies.
 
 ## 3.5 Instrumentation
 
 A purpose-built, offline-capable tablet application administers the protocol, standardising stimulus presentation, timing and data capture. It presents the ten conditions with locked colour values and a neutral grey adaptation field between them, and runs the four tasks with frame-accurate onset timestamping and hardware-timestamped responses.
 
 Ocular measurement uses camera-based facial-landmark tracking, computing the eye aspect ratio for each processed frame. Blink events are classified by depth of closure into complete and incomplete, yielding blink rate, incomplete-blink ratio, inter-blink interval and variability, PERCLOS and long-closure events, alongside head-pose and gaze-zone estimates. Per-participant calibration establishes an open-eye baseline, a nine-point gaze mapping and a frontal head-pose reference, so metrics are referenced to the individual rather than population defaults.
+
+**Operational definition of an incomplete blink.** An open-eye baseline eye-aspect-ratio (EAR) is established for each participant during calibration. A blink is registered when EAR falls below 0.75 of that baseline. A blink is classified as complete when minimum EAR reaches or falls below 0.60 of baseline, and as incomplete when minimum EAR remains between 0.60 and 0.75 of baseline, that is, the lid descends but does not achieve full apposition. The incomplete-blink ratio is the number of incomplete blinks divided by all detected blinks within the condition. These thresholds are provisional and will be finalised against manually annotated video in the validation subsample before the main analysis is run.
+
+**Validation of automated blink classification.** A pre-specified validation subsample of 20 participants will contribute synchronised video for manual annotation: two 3-minute reading segments each, one per illumination level, giving approximately 120 minutes of video and, at typical reading blink rates, of the order of 1,200 to 1,500 blink events. Two annotators, trained on a separate pilot set and masked both to condition and to algorithm output, will independently code every blink frame by frame as complete or incomplete, with disagreements adjudicated by a third assessor. Inter-rater reliability will be reported as Cohen's kappa for the complete/incomplete classification and as an intraclass correlation for event counts. Agreement between the automated classifier and the adjudicated manual standard will be reported as sensitivity and specificity for event detection and as Bland–Altman bias with 95 per cent limits of agreement for the incomplete-blink ratio. Pre-specified acceptability criteria are kappa of at least 0.60 for inter-rater agreement and an algorithm-to-manual bias within ±5 percentage points; if these are not met, the primary ocular outcome will be reported from the manually adjudicated subsample and the automated measure treated as exploratory.
 
 Quality-control indices are recorded as data rather than discarded: achieved sampling rate, face-presence ratio, frame luminance, head stability and flags for disengagement. Duration-dependent blink metrics are gated automatically on the achieved sampling rate, and every measure is written to storage immediately, so an interruption loses at most the condition in progress. All camera processing occurs on the device, and no video is retained.
 
@@ -339,7 +354,11 @@ Passages are matched for genre, length and readability, and passage assignment i
 
 The reaction-time target is achromatic and defined relative to the active background, black on light fields and white on dark ones, with the chromatic set as distractors. Target contrast is therefore maximal and identical in both polarities, so salience does not vary with condition and no hue coincides with the text-colour manipulation. The discrimination becomes achromatic against chromatic rather than hue against hue, which simplifies it but preserves the fatigue-sensitive indices of reaction-time variability and lapse rate [23].
 
+**Pilot and feasibility gate.** A pilot of ten participants will precede the main study to assess session tolerability, dropout, data quality and completion time. The pre-specified criteria for retaining the two-session structure are a median session duration of not more than 120 minutes, no more than one withdrawal in ten, and a face-presence ratio of at least 0.90 in at least 90 per cent of condition-runs. If any criterion is not met, each illumination level will be divided into two shorter sittings of five conditions, preserving the counterbalancing scheme and the global serial-position record.
+
 ## 3.7 Variables and outcome measures
+
+**Outcome hierarchy.** The primary outcome is the incomplete-blink ratio during the reading task, analysed per condition. The principal secondary outcome is the change in CVS-Q score from session baseline. All remaining measures, namely blink rate, inter-blink interval, reading rate, comprehension, visual-search and reaction-time indices, comfort and clarity ratings and the NASA Task Load Index, are secondary or exploratory. PERCLOS, head pose, face-presence ratio and achieved sampling rate are covariates or data-quality indices rather than outcomes. Confirmatory inference is confined to the primary outcome; secondary outcomes are reported with confidence intervals and interpreted as supportive, with multiplicity control applied within each outcome family.
 
 Independent variables are display polarity, text colour and ambient illumination. Covariates comprise serial position within session, illumination order, session index, measured ambient illuminance and display luminance, computed contrast metrics, PERCLOS, achieved sampling rate, refractive and binocular status, and the profiling variables.
 
@@ -349,20 +368,20 @@ Independent variables are display polarity, text colour and ambient illumination
 |---|---|
 | Ocular behaviour (objective) | Incomplete-blink ratio (primary); blink rate; inter-blink interval and variability; within-condition half bins |
 | Drowsiness and data quality (objective) | PERCLOS and long-closure events; head pose and stability; face-presence ratio; achieved sampling rate |
-| Subjective fatigue | CVS-Q score and change from baseline (primary) [30]; five-item visual-fatigue VAS (0–10) per condition |
+| Subjective fatigue | CVS-Q score and change from baseline (key secondary) [30]; five-item visual-fatigue VAS (0–10) per condition |
 | Perceived display quality | Display comfort and text clarity (0–100) per condition |
 | Cognitive workload | NASA-TLX, six dimensions, once per session [32] |
 | Task performance (objective) | Reading time and derived reading rate; comprehension accuracy and response time; visual-search accuracy, misses, false detections and efficiency; reaction-time mean, SD and coefficient of variation, lapse rate, anticipations, sensitivity d′ and criterion |
 
 ## 3.8 Counterbalancing
 
-Two order-related threats arise: serial-position effects driven by the vigilance decrement and accumulating fatigue, and first-order carryover, notably the light-adaptation transient imposed by a polarity switch. A balanced Williams-type Latin square over the ten conditions addresses both, since each condition occupies each serial position equally often across a complete block and precedes and follows every other equally often. Participants are assigned to rows by sequential enrolment index, complete balance being achieved in blocks of ten, which is why the sample size is a multiple of ten. Illumination order is counterbalanced orthogonally.
+Two order-related threats arise: serial-position effects driven by the vigilance decrement and accumulating fatigue, and first-order carryover, notably the light-adaptation transient imposed by a polarity switch. A balanced Williams-type Latin square over the ten conditions addresses both, since each condition occupies each serial position equally often across a complete block and precedes and follows every other equally often. Participants are assigned to rows by sequential enrolment index, complete balance being achieved in blocks of ten. The final sample size will be determined by the power analysis and rounded upward to the nearest multiple of ten to permit balanced allocation. Illumination order is counterbalanced orthogonally.
 
 ## 3.9 Statistical analysis
 
-Analysis uses linear mixed-effects models with a random intercept per participant, accommodating the repeated-measures structure and inter-individual heterogeneity. Fixed effects comprise polarity, text colour, ambient illumination, their two- and three-way interactions, serial position and illumination order.
+The confirmatory analysis is a mixed-effects model of the primary outcome, the incomplete-blink ratio, with fixed effects for polarity, text colour, ambient illumination, their two- and three-way interactions, serial position and illumination order. Because the incomplete-blink ratio is a bounded proportion, it will be modelled on the logit scale, or by a beta or binomial mixed model, rather than as an untransformed linear outcome. The random structure follows the split-plot design: a random intercept for participant and a random intercept for session nested within participant, with a random slope for polarity where the data support it. Where a maximal random structure fails to converge it will be reduced in a pre-specified order, random slopes first and then the session intercept, and the reduction reported. The primary contrast is tested at α = 0.05, and the three-way interaction is regarded as exploratory given its lower power.
 
-For Objective 2, two nested model families are compared: one specifying colour as a categorical factor, the other specifying luminance contrast as a continuous predictor with colour retained to capture residual hue effects, so that comparative fit and the size of residual hue terms quantify the contribution of each. Moderation (Objective 3) is tested by entering profiling variables as between-participant terms with condition-by-moderator interactions, and agreement between automated and manual blink classification (Objective 4) by Bland–Altman analysis, intraclass correlation and Cohen's kappa in a dual-coded subsample.
+For Objective 2, two nested model families are compared: one specifying colour as a categorical factor, the other specifying luminance contrast as a continuous predictor with colour retained to capture residual hue effects, so that comparative fit and the size of residual hue terms quantify the contribution of each. Moderation (Objective 3) is tested by entering profiling variables as between-participant terms with condition-by-moderator interactions, and agreement between automated and manual blink classification (Objective 4) is analysed as specified in §3.5.
 
 Ordinal cumulative-link models are used for VAS and Likert-type outcomes; signal-detection indices are treated hierarchically, being unstable at small per-condition trial counts; and binomial generalised mixed models for accuracy outcomes. Sensitivity analyses re-fit models excluding conditions flagged for disengagement or poor data quality, and with PERCLOS as a covariate to separate visual fatigue from sleepiness. Residual diagnostics, multiplicity control within outcome families, and effect sizes with 95 per cent confidence intervals are reported throughout.
 
@@ -370,15 +389,17 @@ Ordinal cumulative-link models are used for VAS and Likert-type outcomes; signal
 
 Approval will be obtained from the Institutional Ethics Committee of Assam down town University before recruitment. Written informed consent will be taken, with camera-based measurement consented separately and refusable without affecting participation. Participants may withdraw at any time. Camera processing is performed on the device with no video retained, and data are de-identified and stored securely. Participants reporting significant symptoms or screening abnormalities will be advised to seek a full optometric or ophthalmological examination. No intervention with therapeutic intent is administered, and exposure durations are comparable to habitual device use.
 
+Identifiable enrolment records will be stored separately from the de-identified research dataset and linked only by enrolment code, with access restricted to the researcher and the supervisor(s). Research data will be retained for [insert institutional retention period] years after completion of the work in accordance with institutional policy and then securely destroyed. Incidental findings at screening, including reduced acuity, uncorrected refractive error, binocular anomaly or colour-vision deficiency, will be communicated to the participant with written advice to seek a full optometric or ophthalmological examination, and will be recorded. [Insert institutional position on compensation: reimbursement of travel costs only, or no compensation]; any reimbursement will be set at a level that does not constitute undue inducement.
+
 ---
 
 # CHAPTER 4: CONCLUSION
 
 ## 4.1 Expected outcomes
 
-The study is expected to yield quantified effects, with confidence intervals, of display polarity, text colour and ambient illumination on subjective visual fatigue, ocular behaviour, cognitive workload and task performance, providing the first estimate of the polarity-by-colour interaction on fatigue outcomes and the first test of whether the positive polarity advantage extends from brief legibility tasks to hour-scale reading and ocular-surface outcomes.
+The study is expected to yield quantified effects, with confidence intervals, of display polarity, text colour and ambient illumination on subjective visual fatigue, ocular behaviour, cognitive workload and task performance, and, to the best of the available evidence, will provide among the first estimates of the polarity-by-colour interaction on fatigue outcomes, and is expected to determine whether the positive polarity advantage extends from brief legibility tasks to hour-scale reading and ocular-surface outcomes.
 
-Because the contrast ordering of colours reverses across polarity, the results will adjudicate between hue and luminance contrast: a crossover interaction would indicate contrast-mediated effects, a preserved ordering genuine hue-specific effects, with contrast expected to account for most colour-related variance and red a candidate exception. Characterising the polarity-by-illumination interaction will establish whether negative polarity is specifically costly under dim domestic lighting, where dark mode is most used and most advocated. The study will further identify the configurations that minimise and maximise fatigue, indicate whether a polarity-blind contrast criterion adequately predicts measured readability, and produce an account of subjective–objective correspondence and a validated instrument whose agreement with manual annotation is reported.
+Because the contrast ordering of colours reverses across polarity, the results are expected to indicate the extent to which colour-related effects are mediated by luminance contrast rather than hue: a crossover interaction would support contrast mediation, a preserved ordering would suggest residual hue-specific effects, with contrast expected to account for most colour-related variance and red a candidate exception. Characterising the polarity-by-illumination interaction is expected to indicate whether negative polarity is specifically costly under dim domestic lighting, where dark mode is most used and most advocated. The study will further identify the configurations that minimise and maximise fatigue, indicate whether a polarity-blind contrast criterion adequately predicts measured readability, and produce an account of subjective–objective correspondence and a validated instrument whose agreement with manual annotation is reported.
 
 ## 4.2 Significance of the study
 
@@ -396,7 +417,7 @@ Findings will be specific to the device, display technology, luminance range and
 
 ## 4.4 Concluding remarks
 
-The proposed research addresses a determinant of visual health that is ubiquitous, freely modifiable and inadequately evidenced. By crossing polarity with text colour under two ecologically relevant levels of ambient light, and measuring validated symptoms alongside ocular behaviour, workload and task performance in a single instrumented protocol, it can convert widely held but weakly supported beliefs about dark mode into quantified, standards-relevant design guidance, while contributing an instrument that removes a long-standing bottleneck in digital eye strain research.
+The proposed research addresses a determinant of visual health that is ubiquitous, freely modifiable and inadequately evidenced. By crossing polarity with text colour under two ecologically relevant levels of ambient light, and measuring validated symptoms alongside ocular behaviour, workload and task performance in a single instrumented protocol, it is intended to provide quantified, standards-relevant evidence on display configuration for prolonged reading, and to contribute a measurement approach that may reduce reliance on manual annotation in this field.
 
 ---
 
