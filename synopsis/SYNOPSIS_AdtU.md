@@ -48,29 +48,39 @@ Name of Supervisor & affiliation:
 
 ## 1.1 Background
 
-Sustained reading has shifted from print to self-luminous displays, and tablets now mediate much of that reading in education, work and leisure. A printed page reflects ambient light; a display emits its own, and the properties of that emission are set in software. Polarity (whether text is dark on a light field or light on a dark one), chromaticity, luminance and contrast are all configurable, and are configured routinely by designers and by users selecting interface themes, of which the adoption of "dark mode" is the most visible instance. These choices are made at very large scale, yet evidence regarding the effects of combinations of these parameters during prolonged reading remains limited.
+Most reading now happens on a screen rather than on paper. Tablets in particular have become a routine medium for study, work and leisure reading, often for hours at a time.
 
-A systematic review and meta-analysis of 103 cross-sectional studies covering 66,577 participants placed the pooled prevalence of computer vision syndrome at 69.0 per cent (95% CI 62.3–75.3), with individual estimates ranging from 12.1 to 97.3 per cent [1]. Prevalence was higher among women (71.4 versus 61.8 per cent) and university students (76.1 per cent), and reviews report a further rise with remote work and study, reaching 50 to 60 per cent among children [2,3].
+The difference between the two media is more than a matter of habit. A printed page is passive: it reflects whatever light falls on it, and its appearance is fixed once printed. A screen is active: it produces its own light, and almost every property of what it shows can be altered in software. Four such properties matter for this study, and it is worth defining them plainly before they are used again.
 
-The condition is termed either computer vision syndrome or digital eye strain, the labels being used almost interchangeably for the same cluster of complaints: dryness, burning, irritation, watering, blurred vision, difficulty refocusing, headache and photophobia, often with neck and shoulder discomfort [2,3,4]. Case definitions remain unstandardised, and the prevalence synthesis closes by calling for one [1].
+**Display polarity** describes which of the two elements is lighter. *Positive polarity* means dark text on a light background, the arrangement of a printed book. *Negative polarity* means light text on a dark background, the arrangement popularly known as "dark mode". **Text colour** (or chromaticity) is the hue of the letters themselves, which need not be black or white. **Luminance** is the amount of light the screen emits. **Luminance contrast** is the difference in brightness between the letters and their background, and it is the property that determines whether text is easy or hard to resolve; it is not the same as colour difference, and two colours can look very different yet still be hard to read against one another.
+
+These four properties are chosen constantly, by interface designers when they build an application and by users every time they switch a theme. The adoption of dark mode across operating systems and applications is the most visible example. Such choices are therefore made at very large scale, yet evidence regarding the effects of combinations of these parameters during prolonged reading remains limited.
+
+Prolonged screen reading is associated with a recognised pattern of discomfort. Users report that the eyes feel dry, tired, sore or gritty, that vision blurs or takes a moment to refocus when they look up, and that headaches and neck or shoulder ache follow long sessions. When these complaints occur together and are attributable to display use, they are grouped under a single label. Two names are in circulation for the same entity: **computer vision syndrome** and **digital eye strain**. The terms are used almost interchangeably, and this document uses digital eye strain for the condition and computer vision syndrome where the literature or an instrument uses that name.
+
+The condition is common. A systematic review and meta-analysis of 103 cross-sectional studies covering 66,577 participants placed pooled prevalence at 69.0 per cent (95% CI 62.3–75.3), with individual estimates ranging from 12.1 to 97.3 per cent (Ccami-Bernal et al., 2024). Prevalence was higher among women (71.4 versus 61.8 per cent) and university students (76.1 per cent), and reviews report a further rise with remote work and study, reaching 50 to 60 per cent among children (Kaur et al., 2022; Sheppard & Wolffsohn, 2018). The wide spread between studies is itself informative: case definitions remain unstandardised, and the prevalence synthesis closes by calling for one (Ccami-Bernal et al., 2024).
 
 ## 1.2 Biophysiological basis
 
-Symptoms fall into two mechanistically distinct groups [3]. The first arises from accommodative and vergence stress, presenting as difficulty focusing, blurred vision, near-work-induced transient myopia and headache. The second arises at the ocular surface, presenting as dryness, burning and irritation.
+The symptoms above do not all arise the same way, and separating them is the key to measuring them. Two mechanisms are involved (Sheppard & Wolffsohn, 2018).
 
-The ocular-surface route is the better described. Display work suppresses spontaneous blinking and raises the proportion of blinks that fail to close fully; incomplete closure enlarges the exposed evaporative area and impairs the spread of meibomian lipid, so tear-film stability falls and the surface enters the recognised inflammatory cycle of dry eye disease [5,6]. Mechanistic review attributes display-associated dry eye principally to impaired blinking, finding insufficient support for parasympathetic or blue-light contributions [6]. The accommodative route is more heterogeneously evidenced but responds measurably to display parameters [7,8]. Although accommodative and vergence mechanisms are relevant to digital visual fatigue, the present study focuses on ocular-surface behaviour, visual performance and subjective fatigue, and does not measure accommodative responses directly; the accommodative pathway is therefore reviewed as mechanistic context rather than tested.
+The first concerns **focusing**. To read at arm's length the eye must bend light more strongly, which it does by changing the shape of its lens; this is called **accommodation**. At the same time both eyes must turn slightly inward so that the two images fuse into one, which is called **vergence**. Holding both for a long period is effortful, and when that effort accumulates it produces difficulty focusing, blurred vision, a temporary shift towards short-sightedness after close work (**near-work-induced transient myopia**) and headache.
+
+The second concerns the **ocular surface**, the exposed front of the eye. It is kept smooth and comfortable by a thin **tear film**, which is renewed each time the eyelids close fully. When that renewal is disrupted, the surface dries and the result is dryness, burning and irritation. It is this second mechanism that the present study measures most directly.
+
+The ocular-surface route is the better described, and its logic is straightforward. A blink does two things: it spreads fresh tear fluid across the surface, and it draws an oily secretion from glands in the lid margins over that fluid, which slows evaporation. Concentrated screen work interferes with both. It reduces how often people blink, and it increases the proportion of blinks in which the lids approach one another but do not actually meet, which are termed **incomplete blinks**. An incomplete blink leaves part of the surface unwetted and unprotected, so the tear film thins and breaks up sooner, and the surface enters the recognised inflammatory cycle of dry eye disease (Fjaervoll et al., 2022; Kamøy et al., 2022). This is why the *completeness* of blinking, and not simply how often it occurs, is the ocular measure this study treats as primary. Mechanistic review attributes display-associated dry eye principally to impaired blinking, finding insufficient support for parasympathetic or blue-light contributions (Fjaervoll et al., 2022). The accommodative route is more heterogeneously evidenced but responds measurably to display parameters (Jiménez et al., 2020; Redondo et al., 2025). Although accommodative and vergence mechanisms are relevant to digital visual fatigue, the present study focuses on ocular-surface behaviour, visual performance and subjective fatigue, and does not measure accommodative responses directly; the accommodative pathway is therefore reviewed as mechanistic context rather than tested.
 
 ## 1.3 Polarity, text colour and ambient illumination
 
-Three configurable properties of the reading stimulus bear on retinal illuminance, pupil state and visual effort, and are reviewed in detail in Chapter 2.
+Having defined the display properties in §1.1 and the two symptom mechanisms in §1.2, the question is how the former act on the latter. Three properties are considered here, and each is reviewed in detail in Chapter 2.
 
-The most reliably replicated is the positive polarity advantage: reading is better for dark text on a light field than for light text on a dark one, attributed to the greater light emitted by positive-polarity displays, which constricts the pupil, reduces optical aberration and sharpens the retinal image [9,10,11]. Text colour has been studied far less and, to the best of the available evidence, no study has comprehensively evaluated it in combination with polarity while measuring fatigue [7,12]. Any manipulation of text colour also manipulates luminance contrast, since chromatic pigments differ intrinsically in relative luminance and chromatic contrast cannot substitute for luminance contrast [9], so an apparent effect of colour may be an effect of contrast unless the two are measured separately. Ambient light adds veiling luminance and drives pupil size independently of the display, interacting with the same mechanism [12,13].
+The most reliably replicated finding concerns polarity and is known as the **positive polarity advantage**: reading is better for dark text on a light field than for light text on a dark one. The accepted explanation runs through the pupil. A positive-polarity screen is mostly white, so it emits more light overall; more light entering the eye makes the pupil constrict; a smaller pupil admits light through the central, optically cleaner part of the lens and increases the range of distances held in focus; and the retinal image is consequently sharper (Buchner & Baumgartner, 2007; Piepenbrock et al., 2014; Piepenbrock et al., 2014a, 2014b). The advantage, in other words, is thought to be a matter of how much light the screen puts out rather than of colour preference. Text colour has been studied far less and, to the best of the available evidence, no study has comprehensively evaluated it in combination with polarity while measuring fatigue (Fan et al., 2024; Jiménez et al., 2020). Any manipulation of text colour also manipulates luminance contrast, since chromatic pigments differ intrinsically in relative luminance and chromatic contrast cannot substitute for luminance contrast (Buchner & Baumgartner, 2007), so an apparent effect of colour may be an effect of contrast unless the two are measured separately. Ambient light adds veiling luminance and drives pupil size independently of the display, interacting with the same mechanism (Dobres et al., 2017; Fan et al., 2024).
 
 ## 1.4 Statement of the problem
 
-Roughly seven in ten screen users report symptoms of digital eye strain [1], yet the remedies most heavily promoted for it lack trial support. A systematic review and meta-analysis of 45 randomised controlled trials involving 4,497 participants found no high-certainty evidence for any therapy examined, including blue-blocking lenses, with only low-certainty benefit for oral omega-3 in dry-eye symptoms [15]. A separate review in younger users reached the same conclusion on blue-blocking filters, supporting ergonomic optimisation and shorter exposure instead [16].
+Roughly seven in ten screen users report symptoms of digital eye strain (Ccami-Bernal et al., 2024), yet the remedies most heavily promoted for it lack trial support. A systematic review and meta-analysis of 45 randomised controlled trials involving 4,497 participants found no high-certainty evidence for any therapy examined, including blue-blocking lenses, with only low-certainty benefit for oral omega-3 in dry-eye symptoms (Singh et al., 2022). A separate review in younger users reached the same conclusion on blue-blocking filters, supporting ergonomic optimisation and shorter exposure instead (Mataftsi et al., 2023).
 
-The properties of the displayed stimulus are upstream of the visual load, cost nothing to change and can be deployed universally, yet remain the least investigated. Work on polarity is confined to brief, threshold-limited tasks using achromatic text, and does not extend to prolonged reading, blinking behaviour or validated symptom measurement. Work on text colour is limited to short exposures without symptom outcomes [7], or to a single polarity [12]. No study has therefore estimated how polarity and text colour interact, separated hue from luminance contrast, crossed either with ambient illumination, or measured a validated symptom instrument alongside the ocular marker most specific to this condition. Compounding this, blink completeness has been measured by frame-by-frame manual annotation, restricting the literature to samples of eleven to fifty participants [17,18,19].
+The properties of the displayed stimulus are upstream of the visual load, cost nothing to change and can be deployed universally, yet remain the least investigated. Work on polarity is confined to brief, threshold-limited tasks using achromatic text, and does not extend to prolonged reading, blinking behaviour or validated symptom measurement. Work on text colour is limited to short exposures without symptom outcomes (Jiménez et al., 2020), or to a single polarity (Fan et al., 2024). No study has therefore estimated how polarity and text colour interact, separated hue from luminance contrast, crossed either with ambient illumination, or measured a validated symptom instrument alongside the ocular marker most specific to this condition. Compounding this, blink completeness has been measured by frame-by-frame manual annotation, restricting the literature to samples of eleven to fifty participants (Argilés et al., 2015; Hirota et al., 2013; Portello et al., 2013).
 
 A clinician, designer or standards body therefore has no evidence base from which to advise how a tablet should be configured for prolonged reading, or how that configuration should change with the light in which it is used.
 
@@ -78,9 +88,9 @@ A clinician, designer or standards body therefore has no evidence base from whic
 
 The study addresses a determinant of visual health that is common, freely modifiable and poorly evidenced, using a design that can answer a question the existing literature cannot.
 
-Because chromatic luminance differs by hue, the rank order of luminance contrast reverses between the two polarities in the proposed condition set (Table 3.3). Blue and red are high in contrast on a white field but fall below the accessibility minimum on a black one, while yellow and green behave oppositely. The polarity-by-colour interaction therefore allows contrast-mediated effects to be modelled and distinguished from residual, hue-specific effects. The design does not experimentally isolate hue from luminance contrast, since the two cannot be orthogonalised within a fixed colour set; the separation is statistical rather than experimental and is interpreted accordingly. The ordering Fan and colleagues reported under negative polarity, red worst and yellow best, is precisely what luminance contrast alone would predict for those hues on a black background [12], and a single-polarity design cannot exclude that explanation.
+Because WCAG contrast on a white field falls as the text's relative luminance rises, while contrast on a black field rises with it, the rank order of the chromatic conditions is exactly inverted between the two polarities (Table 3.4). Blue and red are high in contrast on white but fall below the accessibility minimum on black, while yellow and green behave oppositely. The achromatic pair is the exception and the anchor: black-on-white and white-on-black both give 21.00:1, so that single pair varies polarity with luminance contrast held constant. The polarity-by-colour interaction therefore allows contrast-mediated effects to be modelled and distinguished from residual, hue-specific effects. The design does not experimentally isolate hue from luminance contrast, since the two cannot be orthogonalised within a fixed colour set; the separation is statistical rather than experimental and is interpreted accordingly. The ordering Fan and colleagues (2024) reported under negative polarity, red worst and yellow best, is precisely what luminance contrast alone would predict for those hues on a black background, and a single-polarity design cannot exclude that explanation.
 
-Manipulating ambient light across sessions tests the polarity effect where it matters behaviourally, since devices are used extensively at night and in dim domestic settings, where negative polarity is predicted to cost most [13]. Validating an automated measure of blink completeness would remove the annotation bottleneck that has kept this literature small. The findings bear on interface design, on accessibility standards whose contrast criterion does not account for polarity [20,21], on public health guidance, and on the advice optometrists give patients, an area in which practitioners are documented to lack quality evidence [3].
+Manipulating ambient light across sessions tests the polarity effect where it matters behaviourally, since devices are used extensively at night and in dim domestic settings, where negative polarity is predicted to cost most (Dobres et al., 2017). Validating an automated measure of blink completeness would remove the annotation bottleneck that has kept this literature small. The findings bear on interface design, on accessibility standards whose contrast criterion does not account for polarity (Advanced Perceptual Contrast Algorithm, n.d.; World Wide Web Consortium, 2023), on public health guidance, and on the advice optometrists give patients, an area in which practitioners are documented to lack quality evidence (Sheppard & Wolffsohn, 2018).
 
 ## 1.6 Aim
 
@@ -108,23 +118,23 @@ The following hypotheses are linked to the objectives.
 
 **H₁ₐ (Objective 1, main effects).** Positive polarity, higher luminance contrast and higher ambient illumination are each associated with a lower incomplete-blink ratio, lower subjective visual fatigue and better task performance.
 
-**H₁ᵦ (Objective 1, interactions).** The effect of text colour depends on polarity, and the cost of negative polarity is greater under dim than under moderate illumination [13].
+**H₁ᵦ (Objective 1, interactions).** The effect of text colour depends on polarity, and the cost of negative polarity is greater under dim than under moderate illumination (Dobres et al., 2017).
 
-**H₁ᵪ (Objective 2, contrast mediation).** Colour-related variance is largely accounted for by luminance contrast. Because the computed contrast ordering reverses between the two polarities (Table 3.3), a contrast-mediated effect predicts a corresponding reversal of the colour ordering across polarity, whereas a residual hue-specific effect predicts a consistent ordering, with red the a priori candidate exception [12].
+**H₁ᵪ (Objective 2, contrast mediation).** Colour-related variance is largely accounted for by luminance contrast. Because the computed contrast ordering reverses between the two polarities (Table 3.4), a contrast-mediated effect predicts a corresponding reversal of the colour ordering across polarity, whereas a residual hue-specific effect predicts a consistent ordering, with red the a priori candidate exception (Fan et al., 2024).
 
 **H₁ᵨ (Objective 3, moderation).** Habitual display-mode preference, habitual screen exposure, typical ambient-lighting environment and digital literacy moderate the magnitude of these effects.
 
 ## 1.9 Conceptual framework
 
-Display configuration and ambient illuminance act through two proximal mechanisms, summarised in Table 1.1. Along the optical route, display and room luminance determine pupil diameter, which governs aberration and depth of focus and therefore retinal image quality, legibility and accommodative demand. Along the ocular-surface route, visual and cognitive demand suppress blink rate and raise incomplete blinking, destabilising the tear film. Both routes feed the manifest outcomes of reading rate, comprehension, visual search, sustained attention, perceived comfort, workload and subjective fatigue. Time on task exerts its own effect and is counterbalanced and modelled [22,23]; sleepiness, indexed by PERCLOS, and disengagement are treated as measured confounders; participant characteristics modulate susceptibility throughout.
+Display configuration and ambient illuminance act through two proximal mechanisms, summarised in Table 1.1. Along the optical route, display and room luminance determine pupil diameter, which governs aberration and depth of focus and therefore retinal image quality, legibility and accommodative demand. Along the ocular-surface route, visual and cognitive demand suppress blink rate and raise incomplete blinking, destabilising the tear film. Both routes feed the manifest outcomes of reading rate, comprehension, visual search, sustained attention, perceived comfort, workload and subjective fatigue. Time on task exerts its own effect and is counterbalanced and modelled (Abe et al., 2014; Warm et al., 2008); sleepiness, indexed by PERCLOS, and disengagement are treated as measured confounders; participant characteristics modulate susceptibility throughout.
 
 **Table 1.1 — Conceptual framework: the two pathways from display configuration to measured outcome.**
 
 | Pathway | Antecedent (independent variable) | Proximal mechanism | Mediating state | Symptom cluster | Measured outcome (P = primary, S = secondary) | Evidence |
 |---|---|---|---|---|---|---|
-| Optical / refractive | Display luminance and polarity; ambient illuminance | Pupil diameter → aberration and depth of focus | Retinal image quality; accommodative demand | Accommodative/vergence (blur, focusing difficulty, headache, transient myopia) | Reading rate (S); comprehension (S); visual search (S); perceived clarity (S) | [7,8,10,11,13] |
-| Ocular surface | Luminance contrast; chromaticity; visual and cognitive demand | Reduced blink rate; increased incomplete blinking | Exposed evaporative area; tear-film stability | Ocular surface (dryness, burning, irritation) | Incomplete-blink ratio (P); CVS-Q change (key S); blink rate, inter-blink interval, VAS (S) | [5,6,17,18,19] |
-| Cross-cutting | Time on task; sleepiness; disengagement; participant factors | Resource depletion; arousal state; habituation | Sustained-attention capacity; response criterion | — | RT variability and lapses (S); PERCLOS (covariate); engagement flags (quality control) | [22,23,27,28] |
+| Optical / refractive | Display luminance and polarity; ambient illuminance | Pupil diameter → aberration and depth of focus | Retinal image quality; accommodative demand | Accommodative/vergence (blur, focusing difficulty, headache, transient myopia) | Reading rate (S); comprehension (S); visual search (S); perceived clarity (S) | (Dobres et al., 2017; Jiménez et al., 2020; Piepenbrock et al., 2014; Piepenbrock et al., 2014; Redondo et al., 2025) |
+| Ocular surface | Luminance contrast; chromaticity; visual and cognitive demand | Reduced blink rate; increased incomplete blinking | Exposed evaporative area; tear-film stability | Ocular surface (dryness, burning, irritation) | Incomplete-blink ratio (P); CVS-Q change (key S); blink rate, inter-blink interval, VAS (S) | (Argilés et al., 2015; Fjaervoll et al., 2022; Hirota et al., 2013; Kamøy et al., 2022; Portello et al., 2013) |
+| Cross-cutting | Time on task; sleepiness; disengagement; participant factors | Resource depletion; arousal state; habituation | Sustained-attention capacity; response criterion | — | RT variability and lapses (S); PERCLOS (covariate); engagement flags (quality control) | (Abe et al., 2014; Abe, 2023; Jackson et al., 2016; Warm et al., 2008) |
 
 ---
 
@@ -132,7 +142,7 @@ Display configuration and ambient illuminance act through two proximal mechanism
 
 ## 2.1 Burden, risk factors and measurement
 
-The pooled prevalence of 69.0 per cent across 103 studies conceals heterogeneity attributable partly to inconsistent case definition [1]. One finding carries methodological force: prevalence was higher in studies that did not use the Computer Vision Syndrome Questionnaire (75.4 per cent), and meta-regression associated use of that instrument with lower estimates [1], so ad hoc checklists appear to inflate prevalence and a validated instrument with a defined cut-off is preferable. Reviews identify exposure beyond four to five hours daily, uncorrected refractive error, accommodative and vergence anomalies, altered blinking, close working distance, small font size, adverse lighting and contact-lens wear as risk factors [1,3,4,16], and note that preventive measures acting at different points of the dry-eye cycle may be complementary [5].
+The pooled prevalence of 69.0 per cent across 103 studies conceals heterogeneity attributable partly to inconsistent case definition (Ccami-Bernal et al., 2024). One finding carries methodological force: prevalence was higher in studies that did not use the Computer Vision Syndrome Questionnaire (75.4 per cent), and meta-regression associated use of that instrument with lower estimates (Ccami-Bernal et al., 2024), so ad hoc checklists appear to inflate prevalence and a validated instrument with a defined cut-off is preferable. Reviews identify exposure beyond four to five hours daily, uncorrected refractive error, accommodative and vergence anomalies, altered blinking, close working distance, small font size, adverse lighting and contact-lens wear as risk factors (Ccami-Bernal et al., 2024; Mataftsi et al., 2023; Pucker et al., 2024; Sheppard & Wolffsohn, 2018), and note that preventive measures acting at different points of the dry-eye cycle may be complementary (Kamøy et al., 2022).
 
 ## 2.2 Display polarity
 
@@ -142,15 +152,15 @@ Evidence for the positive polarity advantage is consistent across paradigms, tas
 
 | Sl. | Study | Year | N | Design and manipulation | Principal finding | Limitation |
 |---|---|---|---|---|---|---|
-| 1 | Buchner & Baumgartner [9] | 2007 | NR | Proofreading; polarity × illumination × chromaticity | Polarity advantage independent of lighting and chromaticity; colour contrast cannot replace luminance contrast | Short task; no ocular or symptom measures |
-| 2 | Piepenbrock et al. [10] | 2014 | NR | Pupillometry with proofreading; polarity | Smaller pupils and better performance under positive polarity | Achromatic only; no fatigue outcome |
-| 3 | Piepenbrock et al. [11] | 2014 | NR | Proofreading; polarity × character size | Advantage increased linearly as character size decreased | Achromatic; brief exposure |
-| 4 | Dobres et al. [24] | 2016 | NR | Adaptive-staircase psychophysics; typeface × polarity × size × age | Black-on-white more legible than white-on-black; typeface interacted with age | Glance reading only; threshold outcome |
-| 5 | Dobres et al. [13] | 2017 | NR | Lexical decision; polarity × illumination × size | Thresholds worst for negative polarity under near-dark light | No fatigue or ocular-surface outcomes |
-| 6 | Sethi & Ziat [25] | 2023 | NR | Eye tracking with subjective and affective measures; polarity × environment × age × task | Higher cognitive load under negative polarity, conditional on age and lighting | Search and writing tasks; no ocular-surface measures |
-| 7 | Lin et al. [14] | 2024 | NR | Visual-ergonomic optimisation; luminance × polarity at 300 lux | Positive polarity preferable; optimum display luminance 153 cd/m² | Desktop head-up display; office lighting only; achromatic |
+| 1 | Buchner & Baumgartner | 2007 | NR | Proofreading; polarity × illumination × chromaticity | Polarity advantage independent of lighting and chromaticity; colour contrast cannot replace luminance contrast | Short task; no ocular or symptom measures |
+| 2 | Piepenbrock et al. | 2014 | NR | Pupillometry with proofreading; polarity | Smaller pupils and better performance under positive polarity | Achromatic only; no fatigue outcome |
+| 3 | Piepenbrock et al. | 2014 | NR | Proofreading; polarity × character size | Advantage increased linearly as character size decreased | Achromatic; brief exposure |
+| 4 | Dobres et al. | 2016 | NR | Adaptive-staircase psychophysics; typeface × polarity × size × age | Black-on-white more legible than white-on-black; typeface interacted with age | Glance reading only; threshold outcome |
+| 5 | Dobres et al. | 2017 | NR | Lexical decision; polarity × illumination × size | Thresholds worst for negative polarity under near-dark light | No fatigue or ocular-surface outcomes |
+| 6 | Sethi & Ziat | 2023 | NR | Eye tracking with subjective and affective measures; polarity × environment × age × task | Higher cognitive load under negative polarity, conditional on age and lighting | Search and writing tasks; no ocular-surface measures |
+| 7 | Lin et al. | 2024 | NR | Visual-ergonomic optimisation; luminance × polarity at 300 lux | Positive polarity preferable; optimum display luminance 153 cd/m² | Desktop head-up display; office lighting only; achromatic |
 
-Two features of this corpus define the entry point for the present work. The paradigms are short and threshold-limited, and they do not measure blinking, validated symptoms, comprehension or fatigue accumulated over an hour; the stimuli are also almost entirely achromatic. An advantage in legibility does not license an inference about visual fatigue, although popular argument about dark mode routinely makes that inference in both directions. Sethi and Ziat's finding that the cognitive cost of negative polarity depended jointly on age and lighting [25] indicates that polarity effects are conditional rather than universal.
+Two features of this corpus define the entry point for the present work. The paradigms are short and threshold-limited, and they do not measure blinking, validated symptoms, comprehension or fatigue accumulated over an hour; the stimuli are also almost entirely achromatic. An advantage in legibility does not license an inference about visual fatigue, although popular argument about dark mode routinely makes that inference in both directions. Sethi and Ziat (2023)'s finding that the cognitive cost of negative polarity depended jointly on age and lighting indicates that polarity effects are conditional rather than universal.
 
 ## 2.3 Text colour and the contrast confound
 
@@ -160,69 +170,69 @@ The literature manipulating text chromaticity is small and, as Table 2.2 shows, 
 
 | Sl. | Study | Year | N | Design and manipulation | Principal finding | Limitation |
 |---|---|---|---|---|---|---|
-| 1 | Buchner & Baumgartner [9] | 2007 | NR | Proofreading; colour contrast vs luminance contrast (red-on-green) | Colour contrast cannot compensate for absent luminance contrast | Single chromatic pair; short task |
-| 2 | Jiménez et al. [7] | 2020 | 20 | Binocular open-field autorefractometry; 14 text–background colour combinations, 2-min passages | Colour modulated accommodative and pupillary dynamics; low-contrast pairs rated less legible; reading speed unaffected | 2-min exposure; no symptom-level outcome; lab instrumentation |
-| 3 | Xie et al. [36] | 2021 | NR | Eye tracking and Likert scales; 2 colour modes × 6 luminance-contrast ratios at night | Dark mode raised blink rate and pupil accommodation, yet light mode was rated less fatiguing and preferred | Objective–subjective dissociation unexplained; night conditions only |
-| 4 | Tian et al. [37] | 2022 | NR | Eye tracker and EEG; paradigm colour × screen brightness in a dark environment | Low screen brightness reduced fatigue; blue preferred to red; no EEG colour effect | Non-reading paradigm stimuli; no ocular-surface measures |
-| 5 | Fan et al. [12] | 2024 | NR | Eye tracking during reading; ambient illumination × text colour, negative polarity only | Red most fatiguing, yellow least; performance better with yellow and white | Negative polarity only; hue confounded with contrast |
+| 1 | Buchner & Baumgartner | 2007 | NR | Proofreading; colour contrast vs luminance contrast (red-on-green) | Colour contrast cannot compensate for absent luminance contrast | Single chromatic pair; short task |
+| 2 | Jiménez et al. | 2020 | 20 | Binocular open-field autorefractometry; 14 text–background colour combinations, 2-min passages | Colour modulated accommodative and pupillary dynamics; low-contrast pairs rated less legible; reading speed unaffected | 2-min exposure; no symptom-level outcome; lab instrumentation |
+| 3 | Xie et al. | 2021 | NR | Eye tracking and Likert scales; 2 colour modes × 6 luminance-contrast ratios at night | Dark mode raised blink rate and pupil accommodation, yet light mode was rated less fatiguing and preferred | Objective–subjective dissociation unexplained; night conditions only |
+| 4 | Tian et al. | 2022 | NR | Eye tracker and EEG; paradigm colour × screen brightness in a dark environment | Low screen brightness reduced fatigue; blue preferred to red; no EEG colour effect | Non-reading paradigm stimuli; no ocular-surface measures |
+| 5 | Fan et al. | 2024 | NR | Eye tracking during reading; ambient illumination × text colour, negative polarity only | Red most fatiguing, yellow least; performance better with yellow and white | Negative polarity only; hue confounded with contrast |
 
-Two limitations recur. Exposure is brief, so duration is a plausible moderator of the discrepancy between studies finding no effect on reading speed [7] and those finding effects on fatigue and performance [12], which neither was designed to estimate. More consequentially, none separates hue from luminance contrast: because chromatic pigments differ in relative luminance, a fixed colour set rendered on light and dark fields produces unequal, polarity-asymmetric contrasts, so contrast is an inseparable covarying property of any colour manipulation and must be modelled [9]. Xie and colleagues add a complication directly relevant here, their objective and subjective indices pointing in opposite directions, dark mode improving blink measures while light mode was preferred and rated less fatiguing [36].
+Two limitations recur. Exposure is brief, so duration is a plausible moderator of the discrepancy between studies finding no effect on reading speed (Jiménez et al., 2020) and those finding effects on fatigue and performance (Fan et al., 2024), which neither was designed to estimate. More consequentially, none separates hue from luminance contrast: because chromatic pigments differ in relative luminance, a fixed colour set rendered on light and dark fields produces unequal, polarity-asymmetric contrasts, so contrast is an inseparable covarying property of any colour manipulation and must be modelled (Buchner & Baumgartner, 2007). Xie and colleagues add (2021) a complication directly relevant here, their objective and subjective indices pointing in opposite directions, dark mode improving blink measures while light mode was preferred and rated less fatiguing.
 
-The choice of contrast metric is also consequential. The ratio defined in the accessibility guidelines is the de facto design standard [20], but takes no account of text size, weight or polarity, and is held to overstate contrast for dark colour pairs, so nominally compliant light-on-dark combinations can be hard to read and can produce halation. A perceptual replacement incorporating polarity and typography is under development [21]. That a polarity-blind criterion governs a domain in which polarity is among the strongest determinants of legibility [9,10,11,13] is a problem to which empirical work can contribute.
+The choice of contrast metric is also consequential. The ratio defined in the accessibility guidelines is the de facto design standard (World Wide Web Consortium, 2023), but takes no account of text size, weight or polarity, and is held to overstate contrast for dark colour pairs, so nominally compliant light-on-dark combinations can be hard to read and can produce halation. A perceptual replacement incorporating polarity and typography is under development (Advanced Perceptual Contrast Algorithm, n.d.). That a polarity-blind criterion governs a domain in which polarity is among the strongest determinants of legibility (Buchner & Baumgartner, 2007; Dobres et al., 2017; Piepenbrock et al., 2014; Piepenbrock et al., 2014a, 2014b) is a problem to which empirical work can contribute.
 
 ## 2.4 Ambient illumination
 
-Illumination modulates the legibility cost of negative polarity [13] and the fatigue cost of coloured text under it [12], consistent with a pupil-mediated account in which room light and display polarity trade against one another (Table 2.3).
+Illumination modulates the legibility cost of negative polarity (Dobres et al., 2017) and the fatigue cost of coloured text under it (Fan et al., 2024), consistent with a pupil-mediated account in which room light and display polarity trade against one another (Table 2.3).
 
 **Table 2.3 — Studies on ambient illumination as a moderator.**
 
 | Sl. | Study | Year | N | Illumination manipulated | Principal finding | Limitation |
 |---|---|---|---|---|---|---|
-| 1 | Buchner & Baumgartner [9] | 2007 | NR | Darkness vs typical office lighting | Positive polarity advantage independent of ambient lighting | Two coarse levels; proofreading only |
-| 2 | Dobres et al. [13] | 2017 | NR | Near-dark vs daylight-like | Negative polarity worst under near-dark; raising illumination or switching polarity restored legibility | Threshold legibility only; no fatigue outcome |
-| 3 | Xie et al. [36] | 2021 | NR | Low ambient illumination at night, 6 contrast ratios | Colour mode and contrast jointly affected fatigue under low light | Night conditions only |
-| 4 | Tian et al. [37] | 2022 | NR | Dark environment, graded screen brightness | Low screen brightness in darkness reduced fatigue; sensitivity most vulnerable at medium-high brightness | Non-reading stimuli |
-| 5 | Fan et al. [12] | 2024 | NR | Graded ambient illumination, negative polarity | Higher illumination reduced fatigue, by an amount depending on text colour | Negative polarity only |
-| 6 | Contact Lens and Anterior Eye study [38] | 2025 | 30 | Bright vs dark room × bright vs dark screen, 30-min reading | Dark room with bright screen most destabilised the tear film; incomplete-blink rate rose over time in all groups | Smartphone; four combinations only; polarity not manipulated |
+| 1 | Buchner & Baumgartner | 2007 | NR | Darkness vs typical office lighting | Positive polarity advantage independent of ambient lighting | Two coarse levels; proofreading only |
+| 2 | Dobres et al. | 2017 | NR | Near-dark vs daylight-like | Negative polarity worst under near-dark; raising illumination or switching polarity restored legibility | Threshold legibility only; no fatigue outcome |
+| 3 | Xie et al. | 2021 | NR | Low ambient illumination at night, 6 contrast ratios | Colour mode and contrast jointly affected fatigue under low light | Night conditions only |
+| 4 | Tian et al. | 2022 | NR | Dark environment, graded screen brightness | Low screen brightness in darkness reduced fatigue; sensitivity most vulnerable at medium-high brightness | Non-reading stimuli |
+| 5 | Fan et al. | 2024 | NR | Graded ambient illumination, negative polarity | Higher illumination reduced fatigue, by an amount depending on text colour | Negative polarity only |
+| 6 | Contact Lens and Anterior Eye study ([Authors], 2025) | 2025 | 30 | Bright vs dark room × bright vs dark screen, 30-min reading | Dark room with bright screen most destabilised the tear film; incomplete-blink rate rose over time in all groups | Smartphone; four combinations only; polarity not manipulated |
 
-The evidence is not uniform: the proofreading advantage was independent of ambient lighting [9] whereas threshold legibility showed a clear interaction [13], suggesting a threshold-like rather than smoothly scaling relationship and requiring that illumination be measured rather than merely described. The most recent work is the most directly relevant, reading in a dark room from a bright screen having produced the greatest tear-film destabilisation and the largest blink changes, with incomplete blinking rising over time in every condition [38].
+The evidence is not uniform: the proofreading advantage was independent of ambient lighting (Buchner & Baumgartner, 2007) whereas threshold legibility showed a clear interaction (Dobres et al., 2017), suggesting a threshold-like rather than smoothly scaling relationship and requiring that illumination be measured rather than merely described. The most recent work is the most directly relevant, reading in a dark room from a bright screen having produced the greatest tear-film destabilisation and the largest blink changes, with incomplete blinking rising over time in every condition ([Authors], 2025).
 
 ## 2.5 Ocular behaviour as an objective marker
 
-Suppression of spontaneous blinking during display use is among the most reproducible findings in the field [3,5,6], and the proportion of blinks that fail to close fully has the strongest claim to specificity (Table 2.4).
+Suppression of spontaneous blinking during display use is among the most reproducible findings in the field (Fjaervoll et al., 2022; Kamøy et al., 2022; Sheppard & Wolffsohn, 2018), and the proportion of blinks that fail to close fully has the strongest claim to specificity (Table 2.4).
 
 **Table 2.4 — Studies on ocular behaviour as an objective marker.**
 
 | Sl. | Study | Year | N | Measure and task | Principal finding | Limitation |
 |---|---|---|---|---|---|---|
-| 1 | Cardona et al. [26] | 2011 | 25 | Blink rate and amplitude, tear film; fast vs slow display task | Blink rate fell to one-third (fast) and one-half (slow) of baseline; more incomplete blinks when dynamic | Game task, not reading; manual video coding |
-| 2 | Portello et al. [17] | 2013 | 21 | Blink rate and completeness, symptom score; 15-min reading | Incomplete blinks 0.9–56.5% (mean 16.1); symptoms correlated with incomplete-blink % (p = 0.002); raising blink rate did not help | Single condition; small sample; manual coding |
-| 3 | Hirota et al. [19] | 2013 | 11 | Blink composition and tear break-up time; 60-min task | Break-up time fell 8.62→4.33 s at 30 min, recovering as incomplete blinking declined; quality, not frequency, governs stability | Very small sample; single display condition |
-| 4 | Argilés et al. [18] | 2015 | 50 | Blink rate and completeness across 6 hard-copy and electronic reading conditions | All reading reduced blink rate; incomplete blinks rose only on electronic platforms | Display parameters not manipulated; manual coding |
-| 5 | Jackson et al. [28] | 2016 | 12 | PERCLOS and driving performance after 24-h sleep deprivation | PERCLOS correlated with vigilance variability (r = 0.68) and lane position (r = 0.61) | Drowsiness, not visual fatigue; extreme manipulation |
-| 6 | Contact Lens and Anterior Eye study [38] | 2025 | 30 | Tear-film indices and blink parameters; 30-min reading, 4 lighting–brightness combinations | Dark room with bright screen most destabilised the tear film; incomplete-blink rate rose over time in all groups | Smartphone; polarity and text colour not manipulated |
+| 1 | Cardona et al. | 2011 | 25 | Blink rate and amplitude, tear film; fast vs slow display task | Blink rate fell to one-third (fast) and one-half (slow) of baseline; more incomplete blinks when dynamic | Game task, not reading; manual video coding |
+| 2 | Portello et al. | 2013 | 21 | Blink rate and completeness, symptom score; 15-min reading | Incomplete blinks 0.9–56.5% (mean 16.1); symptoms correlated with incomplete-blink % (p = 0.002); raising blink rate did not help | Single condition; small sample; manual coding |
+| 3 | Hirota et al. | 2013 | 11 | Blink composition and tear break-up time; 60-min task | Break-up time fell 8.62→4.33 s at 30 min, recovering as incomplete blinking declined; quality, not frequency, governs stability | Very small sample; single display condition |
+| 4 | Argilés et al. | 2015 | 50 | Blink rate and completeness across 6 hard-copy and electronic reading conditions | All reading reduced blink rate; incomplete blinks rose only on electronic platforms | Display parameters not manipulated; manual coding |
+| 5 | Jackson et al. | 2016 | 12 | PERCLOS and driving performance after 24-h sleep deprivation | PERCLOS correlated with vigilance variability (r = 0.68) and lane position (r = 0.61) | Drowsiness, not visual fatigue; extreme manipulation |
+| 6 | Contact Lens and Anterior Eye study ([Authors], 2025) | 2025 | 30 | Tear-film indices and blink parameters; 30-min reading, 4 lighting–brightness combinations | Dark room with bright screen most destabilised the tear film; incomplete-blink rate rose over time in all groups | Smartphone; polarity and text colour not manipulated |
 
-Three findings together forbid reading blink rate as a simple index of fatigue: it is suppressed by reading irrespective of medium [18] and by task dynamism at matched cognitive load [26]; total rate can remain stable while the complete-to-incomplete composition shifts [19]; and raising blink rate experimentally produced no change in symptom score [17]. The incomplete-blink ratio, referenced to a within-participant baseline, is therefore the better-justified primary marker. Every study in Table 2.4 relied on manual frame-by-frame coding or dedicated hardware, and none manipulated display polarity or text colour.
+Three findings together forbid reading blink rate as a simple index of fatigue: it is suppressed by reading irrespective of medium (Argilés et al., 2015) and by task dynamism at matched cognitive load (Cardona et al., 2011); total rate can remain stable while the complete-to-incomplete composition shifts (Hirota et al., 2013); and raising blink rate experimentally produced no change in symptom score (Portello et al., 2013). The incomplete-blink ratio, referenced to a within-participant baseline, is therefore the better-justified primary marker. Every study in Table 2.4 relied on manual frame-by-frame coding or dedicated hardware, and none manipulated display polarity or text colour.
 
-PERCLOS, the proportion of time the eyes are more than 80 per cent closed, is among the most validated indices for passive drowsiness detection [27] and correlates with vigilance-performance variability after sleep deprivation [28]. Its documented insensitivity in moderate drowsiness [27] dictates its role here as a covariate for sleepiness rather than a measure of visual fatigue.
+PERCLOS, the proportion of time the eyes are more than 80 per cent closed, is among the most validated indices for passive drowsiness detection (Abe, 2023) and correlates with vigilance-performance variability after sleep deprivation (Jackson et al., 2016). Its documented insensitivity in moderate drowsiness (Abe, 2023) dictates its role here as a covariate for sleepiness rather than a measure of visual fatigue.
 
 ## 2.6 Task performance and sustained attention
 
-Comparison of reading media reports an advantage for print over screen, moderated by genre and time pressure [29]. This constrains how comprehension should be measured, since genre, difficulty and pacing must be standardised, but does not bear on the hypothesis under test, because a within-screen design removes the medium confound. Prolonged monotonous tasks also produce a vigilance decrement best accounted for by resource depletion [22], with lapses and reaction-time variability its most fatigue-sensitive indices [23]. Attentional and visual-fatigue outcomes therefore share time on task as a driver and must be measured together if they are to be distinguished.
+Comparison of reading media reports an advantage for print over screen, moderated by genre and time pressure (Delgado et al., 2018). This constrains how comprehension should be measured, since genre, difficulty and pacing must be standardised, but does not bear on the hypothesis under test, because a within-screen design removes the medium confound. Prolonged monotonous tasks also produce a vigilance decrement best accounted for by resource depletion (Warm et al., 2008), with lapses and reaction-time variability its most fatigue-sensitive indices (Abe et al., 2014). Attentional and visual-fatigue outcomes therefore share time on task as a driver and must be measured together if they are to be distinguished.
 
 ## 2.7 Subjective instruments and scalable measurement
 
-The Computer Vision Syndrome Questionnaire assesses frequency and intensity of sixteen symptoms on a Rasch-fitting scale, with sensitivity and specificity above 70 per cent and test–retest intraclass correlation of 0.802 [30]. Cross-cultural validation reports internal consistency of 0.793, sensitivity 78.5 per cent, specificity 70.7 per cent, convergent validity with the Ocular Surface Disease Index of 0.728 and a cut-off of seven [31]. Cognitive workload is conventionally indexed by the NASA Task Load Index across six dimensions [32]. Review notes that correlations between objective and subjective measures are not always apparent [3], a discrepancy treated here as an object of study.
+The Computer Vision Syndrome Questionnaire assesses frequency and intensity of sixteen symptoms on a Rasch-fitting scale, with sensitivity and specificity above 70 per cent and test–retest intraclass correlation of 0.802 (Seguí et al., 2015). Cross-cultural validation reports internal consistency of 0.793, sensitivity 78.5 per cent, specificity 70.7 per cent, convergent validity with the Ocular Surface Disease Index of 0.728 and a cut-off of seven (Cantó-Sancho et al., 2024). Cognitive workload is conventionally indexed by the NASA Task Load Index across six dimensions (Hart & Staveland, 1988). Review notes that correlations between objective and subjective measures are not always apparent (Sheppard & Wolffsohn, 2018), a discrepancy treated here as an object of study.
 
-Automated blink detection derives a scalar eye aspect ratio from facial landmarks and identifies blinks as a temporal pattern in that signal [33]. Being continuous and normalised, it can distinguish partial from complete closure, automating what the clinical literature has done by hand [17,18,19]. Validity differs by target: camera-based gaze estimation is lower in accuracy and sampling rate than infrared tracking and is defensible only for coarse zone classification, whereas blink measures are proportion-based and need temporal rather than spatial precision. Since blinks last 100 to 400 ms, duration-based metrics become unreliable below about 25 frames per second, while proportion measures are more robust. No published study has validated a camera-based incomplete-blink measure against manual annotation.
+Automated blink detection derives a scalar eye aspect ratio from facial landmarks and identifies blinks as a temporal pattern in that signal (Soukupová & Čech, 2016). Being continuous and normalised, it can distinguish partial from complete closure, automating what the clinical literature has done by hand (Argilés et al., 2015; Hirota et al., 2013; Portello et al., 2013). Validity differs by target: camera-based gaze estimation is lower in accuracy and sampling rate than infrared tracking and is defensible only for coarse zone classification, whereas blink measures are proportion-based and need temporal rather than spatial precision. Since blinks last 100 to 400 ms, duration-based metrics become unreliable below about 25 frames per second, while proportion measures are more robust. No published study has validated a camera-based incomplete-blink measure against manual annotation.
 
 ## 2.8 Research gaps
 
 1. The positive polarity advantage is established for brief, achromatic legibility tasks but untested for prolonged reading with fatigue accumulation and ocular-surface outcomes.
-2. To the best of the available evidence the interaction between polarity and text colour on visual fatigue remains unestimated, since the only located text-colour fatigue study held polarity constant [12], and hue has not been separated from luminance contrast in the studies located [7,9,12,36].
-3. No study reports contrast metrics alongside measured display photometry, and the prevailing standard is polarity-blind [20,21]. Three-way effects of polarity, colour and illumination remain uncharacterised, the available two-way findings being in partial conflict [9,12,13].
-4. Few studies co-register a validated symptom instrument with objective markers in the same condition, leaving the subjective–objective discrepancy unresolved [3]; where both have been measured, they have pointed in opposite directions [36].
-5. The incomplete-blink ratio does not appear to have been tested as an outcome of a display-parameter manipulation despite its specificity [17,18,19,38], and its measurement does not scale, no automated implementation having been validated against manual annotation in the literature located.
+2. To the best of the available evidence the interaction between polarity and text colour on visual fatigue remains unestimated, since the only located text-colour fatigue study held polarity constant (Fan et al., 2024), and hue has not been separated from luminance contrast in the studies located (Buchner & Baumgartner, 2007; Fan et al., 2024; Jiménez et al., 2020; Xie et al., 2021).
+3. No study reports contrast metrics alongside measured display photometry, and the prevailing standard is polarity-blind (Advanced Perceptual Contrast Algorithm, n.d.; World Wide Web Consortium, 2023). Three-way effects of polarity, colour and illumination remain uncharacterised, the available two-way findings being in partial conflict (Buchner & Baumgartner, 2007; Dobres et al., 2017; Fan et al., 2024).
+4. Few studies co-register a validated symptom instrument with objective markers in the same condition, leaving the subjective–objective discrepancy unresolved (Sheppard & Wolffsohn, 2018); where both have been measured, they have pointed in opposite directions (Xie et al., 2021).
+5. The incomplete-blink ratio does not appear to have been tested as an outcome of a display-parameter manipulation despite its specificity ([Authors], 2025; Argilés et al., 2015; Hirota et al., 2013; Portello et al., 2013), and its measurement does not scale, no automated implementation having been validated against manual annotation in the literature located.
 6. Individual differences in habitual display preference, exposure and lighting environment are seldom modelled as moderators, and tablet-specific, ecologically valid protocols are scarce.
 
 ---
@@ -252,24 +262,43 @@ The study will be conducted in a controlled laboratory room at Assam down town U
 
 **Sampling strategy and sample size.** Recruitment uses non-probability purposive (convenience) sampling, with consecutive enrolment of eligible volunteers from the university and its associated institutions, so that cognitive, visual and digital-exposure characteristics are reasonably homogeneous and the within-subject contrasts are not diluted by uncontrolled heterogeneity. Because sampling is non-probability, the findings are not intended to estimate population prevalence, and generalisation beyond comparable young-adult screen users is made with caution. Infinite-population formulae of the form n = Z²pq/e² do not apply, since this is a controlled repeated-measures experiment on a finite, purposively selected group in which each participant serves as their own control and no population prevalence is being estimated.
 
-The target is 100 participants aged 18 to 35, with 110 enrolled to allow for attrition across the two sessions. Three considerations fix this number. It is a multiple of the ten display conditions, which the Williams counterbalancing scheme requires for complete balance (§3.8). Within-subject power for the polarity, colour and illumination contrasts is high, since each participant contributes twenty condition-runs, and will be confirmed by an a priori simulation-based power analysis under the planned mixed-effects model rather than by a formula that assumes independent observations. The binding constraint is instead Objective 3, because moderation by participant characteristics is a between-participant comparison and requires adequate numbers in each subgroup; a sample of 100 supports subgroups of roughly 40 to 50 for a binary moderator such as habitual dark-mode preference. Published studies in this area have used substantially smaller samples, as Table 3.1 shows, so the proposed size is generous for the primary contrasts and appropriate for the moderation analysis.
+The target is **130 participants** aged 18 to 35 for analysis, with 145 enrolled to allow for attrition across the two sessions. The figure is a multiple of ten, which the Williams counterbalancing scheme requires for complete balance (§3.8), and it follows from a simulation-based power analysis rather than from a formula that assumes independent observations, which would be inappropriate here.
 
-**Table 3.1 — Sample sizes in comparable published studies, and the basis for the proposed sample.**
+The design has two distinct units of replication, and the required sample differs between them. Within-participant contrasts, which cover Objectives 1 and 2 and both the primary and key secondary outcomes, are tested on participant-level difference scores; each participant contributes twenty condition-runs, so these contrasts are efficient. Between-participant moderation, which is Objective 3, is tested across participants and is far more demanding. Table 3.1 gives the simulated power.
 
-| Study | N | Design | Observations per participant |
-|---|---|---|---|
-| Hirota et al. [19] | 11 | Single condition, 60-min task | 1 |
-| Jackson et al. [28] | 12 | Two conditions (rested, sleep-deprived) | 2 |
-| Portello et al. [17] | 21 | Two conditions (with and without blink cue) | 2 |
-| Jiménez et al. [7] | 20 | 14 colour combinations, 2-min each | 14 |
-| Cardona et al. [26] | 25 | Three conditions | 3 |
-| Argilés et al. [18] | 50 | Six reading conditions | 6 |
-| Contact Lens and Anterior Eye study [38] | 30 | Four lighting–brightness combinations, 30-min each | 4 |
-| **Proposed study** | **100** | **10 display conditions × 2 illumination levels** | **20** |
+**Table 3.1 — Simulation-based power (20,000 replications per cell, two-sided α = 0.05).**
+
+| Analysis | Effect size | n = 60 | n = 100 | n = 130 | n = 200 |
+|---|---|---|---|---|---|
+| Within: polarity main effect | d_z = 0.40 | 86% | 98% | >99% | >99% |
+| Within: polarity main effect | d_z = 0.30 | 62% | 84% | 92% | 99% |
+| Within: polarity × colour interaction | d_z = 0.25 | 47% | 71% | 81% | 94% |
+| Between: moderation, large | 0.60 SD | 62% | 84% | 92% | 99% |
+| Between: moderation, moderate | 0.50 SD | 48% | 70% | 81% | 94% |
+| Between: moderation, small | 0.40 SD | 34% | 51% | 62% | 80% |
+
+The binding constraint is the polarity-by-colour interaction, which is central to Objective 2 and to the contrast-mediation hypothesis. Achieving 80 per cent power for that interaction at d_z = 0.25 requires approximately 128 participants, and moderate between-participant moderation (0.50 SD) requires approximately 127. A sample of 130 therefore satisfies both at 80 per cent power, while giving better than 90 per cent power for the polarity main effect. Detecting small moderation effects of 0.40 SD would require approximately 200 participants; moderation of that magnitude is accordingly declared exploratory and hypothesis-generating, and will be reported with confidence intervals rather than as a confirmatory test.
+
+Although 130 is smaller than samples typical of between-participant survey research, the quantity governing precision here is the number of condition-runs, not the number of participants. Table 3.2 sets the proposed design against the published studies from which its measures are drawn.
+
+**Table 3.2 — The proposed design set against the published studies from which its measures are drawn.**
+
+| Study | Year | N | Conditions per participant | Total condition-runs | Ocular measure | Display parameter manipulated |
+|---|---|---|---|---|---|---|
+| Hirota et al. | 2013 | 11 | 1 | 11 | Blink composition, tear break-up | None |
+| Jackson et al. | 2016 | 12 | 2 | 24 | PERCLOS | None |
+| Jiménez et al. | 2020 | 20 | 14 | 280 | Accommodation, pupil | Text–background colour |
+| Portello et al. | 2013 | 21 | 2 | 42 | Blink rate, completeness | None |
+| Cardona et al. | 2011 | 25 | 3 | 75 | Blink rate, amplitude | Task dynamism |
+| Contact Lens and Anterior Eye study ([Authors], 2025) | 2025 | 30 | 4 | 120 | Blink patterns, tear film | Ambient light × screen brightness |
+| Argilés et al. | 2015 | 50 | 6 | 300 | Blink rate, completeness | Reading medium |
+| **Proposed study** | — | **130** | **20** | **2,600** | **Incomplete-blink ratio, blink rate, IBI, PERCLOS** | **Polarity × colour × illumination** |
+
+No located study has combined a sample of this size with per-condition ocular measurement under a manipulated display parameter. The proposed design yields roughly nine times the condition-runs of the largest comparable study, and is the first in this group to manipulate polarity, text colour and ambient illumination together.
 
 **Eligibility.** Criteria are applied at screening and recorded for reporting.
 
-**Table 3.2 — Eligibility criteria.**
+**Table 3.3 — Eligibility criteria.**
 
 | Inclusion | Exclusion |
 |---|---|
@@ -281,27 +310,29 @@ The target is 100 participants aged 18 to 35, with 110 enrolled to allow for att
 | Available for two sessions 48 to 72 hours apart | Diagnosed learning or psychiatric disorder |
 | — | Contact-lens wear on test days; ocular surgery within six months |
 
-**Screening and profiling.** Screening comprises visual acuity, non-cycloplegic refraction, cover test, near point of convergence, and Ishihara colour-vision screening on the study display, for which sensitivity was 94.4 per cent and specificity 82.4 per cent on a calibrated monitor and 96.0 and 94.7 per cent on a smartphone, with no significant difference between modes [34]. Screening is an aid rather than a diagnosis, and outcomes are recorded as covariates. Participants also complete a profiling questionnaire covering habitual display-mode preference, screen exposure, lighting environment, familiarity with coloured interfaces, digital literacy, hours since waking and recent caffeine intake, which supply the moderators for Objective 3 and the sleepiness covariates.
+**Screening and profiling.** Screening comprises visual acuity, non-cycloplegic refraction, cover test, near point of convergence, and Ishihara colour-vision screening on the study display, for which sensitivity was 94.4 per cent and specificity 82.4 per cent on a calibrated monitor and 96.0 and 94.7 per cent on a smartphone, with no significant difference between modes (Klinke et al., 2024). Screening is an aid rather than a diagnosis, and outcomes are recorded as covariates. Participants also complete a profiling questionnaire covering habitual display-mode preference, screen exposure, lighting environment, familiarity with coloured interfaces, digital literacy, hours since waking and recent caffeine intake, which supply the moderators for Objective 3 and the sleepiness covariates.
 
 **Figure 3.2 — Participant flow.**
 
 <!--FLOW-->
-Approached and assessed for eligibility (target ≈ 140)
+Approached and assessed for eligibility (target ≈ 180)
 Screening: visual acuity, refraction, binocular status, colour vision
 Excluded: criteria not met, or declined to participate
-Enrolled and consented (n = 110), assigned a sequential enrolment number
+Enrolled and consented (n = 145), assigned a sequential enrolment number
 Allocated to a Williams row and to an illumination order (dim-first or moderate-first)
 Session 1: 10 display conditions under illumination level A
 Session 2 (48–72 h later): 10 display conditions under illumination level B
 Withdrawal, non-attendance or data-quality exclusion recorded and reported
-Analysed (target n = 100; 20 condition-runs each, 2,000 condition-runs in total)
+Analysed (target n = 130; 20 condition-runs each, 2,600 condition-runs in total)
 <!--/FLOW-->
 
 ## 3.3 Display conditions and photometric characterisation
 
-All conditions are presented on a single fixed tablet at a viewing distance of 50 to 60 cm, with brightness fixed, automatic brightness and any blue-light filter disabled, and the screen cleaned before each session. Display white-point luminance is measured photometrically and recorded per session, with a working target of 120 to 150 cd/m², informed by the optimum of 153 cd/m² determined under 300 lux [14] and scaled for the lower domestic illuminance used here. Typography, line height and margins are fixed across conditions, so that polarity and colour are the only stimulus properties that vary. Contrast is computed from linearised sRGB relative luminance following the accessibility standard [20]. The five text colours were retained from the locked condition set used earlier in this programme, with green added so that the number of sub-AA conditions is balanced across the two polarities, at two per polarity, which is what permits the contrast ordering to reverse symmetrically between polarities.
+All conditions are presented on a single fixed tablet at a viewing distance of 50 to 60 cm, with brightness fixed, automatic brightness and any blue-light filter disabled, and the screen cleaned before each session. Display white-point luminance is measured photometrically and recorded per session, with a working target of 120 to 150 cd/m², informed by the optimum of 153 cd/m² determined under 300 lux (Lin et al., 2024) and scaled for the lower domestic illuminance used here. Typography, line height and margins are fixed across conditions, so that polarity and colour are the only stimulus properties that vary. Contrast is computed from linearised sRGB relative luminance following the accessibility standard (World Wide Web Consortium, 2023). The five text colours were retained from the locked condition set used earlier in this programme, with green added so that the number of sub-AA conditions is balanced at two per polarity.
 
-**Table 3.3 — The ten display conditions with computed contrast.**
+The adequacy of this set was examined against three alternatives before it was fixed: the original three-chromatic set without green, a luminance-matched chromatic set in which all four hues carry approximately equal relative luminance, and the web-default hues. The comparison used three criteria: balance of sub-AA conditions across polarity, the correlation between polarity and log contrast across the condition set (a confounding index, where zero is ideal), and the contrast of the weakest condition. The retained set balances sub-AA conditions two per polarity, gives a polarity-to-contrast correlation of +0.11 and a weakest condition of 2.39:1. The luminance-matched set performs worst, placing all four sub-AA conditions in one polarity and raising the confounding correlation to +0.43, because equalising luminance across hues necessarily makes every chromatic colour low-contrast on white and high-contrast on black. The web-default set yields an unusable condition (yellow on white, 1.07:1). The retained set is therefore the most defensible of those considered, and no change is proposed.
+
+**Table 3.4 — The ten display conditions with computed contrast.**
 
 | Sl. No. | Code | Text colour | Text hex | Background | WCAG ratio | Level | Michelson | Below AA |
 |---|---|---|---|---|---|---|---|---|
@@ -316,11 +347,19 @@ All conditions are presented on a single fixed tablet at a viewing distance of 5
 | 9 | N4 | Yellow | #C9A400 | #000000 | 8.79 : 1 | AAA | 1.000 | No |
 | 10 | N5 | Green | #00A651 | #000000 | 6.57 : 1 | AA | 1.000 | No |
 
-Three properties of this matrix matter analytically. First, the contrast ordering reverses across polarity, so the polarity-by-colour interaction permits contrast-mediated effects to be modelled and distinguished from residual hue-specific effects, although the two are separated statistically rather than experimentally. Second, conditions falling below the accessibility minimum are balanced two per polarity, so polarity is not systematically confounded with compliance. Third, Michelson contrast is degenerate under negative polarity: with a pure black background the minimum luminance is zero and the metric saturates at 1.000 for every colour, so it cannot discriminate those conditions. This last point is itself a finding, since it requires the accessibility contrast ratio and measured photometry, rather than Michelson contrast, to serve as the analytic contrast variable, and it reinforces the case that a luminance-insensitive metric is inadequate for dark-mode interfaces [20,21].
+Four properties of this matrix matter for the analysis, and are stated here in plain terms before the technical consequence is drawn.
+
+*The contrast ordering is inverted between the polarities, and this is arithmetic rather than design.* On a white field, contrast falls as the text becomes lighter; on a black field it rises. Both depend on the same quantity, the text's relative luminance, so for any set of colours the ranking on white must be the exact reverse of the ranking on black. Blue and red are therefore the higher-contrast colours on white and the lower-contrast colours on black, with yellow and green the reverse. This is not something the choice of colours creates, and the design does not claim credit for it; what the choice of colours does determine is how balanced the two polarities are and whether any condition is too faint to read.
+
+*The achromatic pair is contrast-matched and provides the cleanest test of polarity.* Black-on-white and white-on-black both yield 21.00:1. That pair therefore changes polarity while holding luminance contrast constant, which is an experimental rather than merely statistical control, and it is the one comparison in the design where a polarity effect cannot be attributed to contrast.
+
+*Conditions falling below the accessibility minimum are balanced across polarity, two in each.* Polarity is therefore not systematically confounded with accessibility compliance. Across the full condition set the correlation between polarity and log contrast is +0.11, so the two predictors are close to orthogonal and can enter the same model without collinearity.
+
+*Michelson contrast is uninformative under negative polarity.* With a pure black background the minimum luminance is zero, so the metric saturates at 1.000 for every colour and cannot discriminate between them. The accessibility contrast ratio, supported by measured display photometry, therefore serves as the analytic contrast variable. This is itself a small finding, and it reinforces the argument that a luminance-insensitive metric is inadequate for dark-mode interfaces (Advanced Perceptual Contrast Algorithm, n.d.; World Wide Web Consortium, 2023).
 
 ## 3.4 Ambient illumination
 
-Illuminance is set and verified at the participant's eye position and at the display plane with a calibrated lux meter, and logged at the start, middle and end of each session. The dim level targets approximately 10 lux (acceptable range 5–15), representing night-time and low-light domestic use and comparable to the low-illumination conditions of prior polarity work [12,13]. The moderate level targets approximately 150 lux (range 130–170), representing general indoor domestic lighting and set deliberately below the 300–500 lux specified for offices and classrooms in the Indian interior-illumination code [35] and below the 300 lux reference used in recent display optimisation [14]. Two levels rather than a graded series were chosen so that illumination could be crossed with all ten display conditions within a feasible protocol. The values were selected to fall either side of the range at which negative-polarity penalties have been reported to emerge [12,13] and to differ by approximately one log unit, so that a pupillary difference is physiologically plausible. Because display white luminance is held constant, the display-to-ambient luminance ratio, which is the quantity the polarity account implicates, differs by design between sessions. Correlated colour temperature and light-source type are held constant across both levels, so illuminance is the only photometric property of the room that varies.
+Illuminance is set and verified at the participant's eye position and at the display plane with a calibrated lux meter, and logged at the start, middle and end of each session. The dim level targets approximately 10 lux (acceptable range 5–15), representing night-time and low-light domestic use and comparable to the low-illumination conditions of prior polarity work (Dobres et al., 2017; Fan et al., 2024). The moderate level targets approximately 150 lux (range 130–170), representing general indoor domestic lighting and set deliberately below the 300–500 lux specified for offices and classrooms in the Indian interior-illumination code (Bureau of Indian Standards, 2009) and below the 300 lux reference used in recent display optimisation (Lin et al., 2024). Two levels rather than a graded series were chosen so that illumination could be crossed with all ten display conditions within a feasible protocol. The values were selected to fall either side of the range at which negative-polarity penalties have been reported to emerge (Dobres et al., 2017; Fan et al., 2024) and to differ by approximately one log unit, so that a pupillary difference is physiologically plausible. Because display white luminance is held constant, the display-to-ambient luminance ratio, which is the quantity the polarity account implicates, differs by design between sessions. Correlated colour temperature and light-source type are held constant across both levels, so illuminance is the only photometric property of the room that varies.
 
 ## 3.5 Instrumentation
 
@@ -352,7 +391,7 @@ Go/no-go reaction time: dot at random screen locations on the active background
 
 Passages are matched for genre, length and readability, and passage assignment is counterbalanced independently of condition so passage difficulty is orthogonal to display condition. A self-paced rest break follows every two conditions, and no performance feedback is given, so effort is not differentially modulated across conditions. Each session begins with setup, seating and calibration, followed by baseline CVS-Q and fatigue VAS, and closes with the CVS-Q repeated and the NASA Task Load Index administered once as a session-level index of cumulative workload. The protocol will be piloted for feasibility, fatigue and dropout; should burden prove excessive, each illumination level can be divided into two shorter sittings of five conditions, preserving the counterbalancing scheme and the global serial-position record.
 
-The reaction-time target is achromatic and defined relative to the active background, black on light fields and white on dark ones, with the chromatic set as distractors. Target contrast is therefore maximal and identical in both polarities, so salience does not vary with condition and no hue coincides with the text-colour manipulation. The discrimination becomes achromatic against chromatic rather than hue against hue, which simplifies it but preserves the fatigue-sensitive indices of reaction-time variability and lapse rate [23].
+The reaction-time target is achromatic and defined relative to the active background, black on light fields and white on dark ones, with the chromatic set as distractors. Target contrast is therefore maximal and identical in both polarities, so salience does not vary with condition and no hue coincides with the text-colour manipulation. The discrimination becomes achromatic against chromatic rather than hue against hue, which simplifies it but preserves the fatigue-sensitive indices of reaction-time variability and lapse rate (Abe et al., 2014).
 
 **Pilot and feasibility gate.** A pilot of ten participants will precede the main study to assess session tolerability, dropout, data quality and completion time. The pre-specified criteria for retaining the two-session structure are a median session duration of not more than 120 minutes, no more than one withdrawal in ten, and a face-presence ratio of at least 0.90 in at least 90 per cent of condition-runs. If any criterion is not met, each illumination level will be divided into two shorter sittings of five conditions, preserving the counterbalancing scheme and the global serial-position record.
 
@@ -362,15 +401,15 @@ The reaction-time target is achromatic and defined relative to the active backgr
 
 Independent variables are display polarity, text colour and ambient illumination. Covariates comprise serial position within session, illumination order, session index, measured ambient illuminance and display luminance, computed contrast metrics, PERCLOS, achieved sampling rate, refractive and binocular status, and the profiling variables.
 
-**Table 3.4 — Dependent variables.**
+**Table 3.5 — Dependent variables.**
 
 | Domain | Measures |
 |---|---|
 | Ocular behaviour (objective) | Incomplete-blink ratio (primary); blink rate; inter-blink interval and variability; within-condition half bins |
 | Drowsiness and data quality (objective) | PERCLOS and long-closure events; head pose and stability; face-presence ratio; achieved sampling rate |
-| Subjective fatigue | CVS-Q score and change from baseline (key secondary) [30]; five-item visual-fatigue VAS (0–10) per condition |
+| Subjective fatigue | CVS-Q score and change from baseline (key secondary) (Seguí et al., 2015); five-item visual-fatigue VAS (0–10) per condition |
 | Perceived display quality | Display comfort and text clarity (0–100) per condition |
-| Cognitive workload | NASA-TLX, six dimensions, once per session [32] |
+| Cognitive workload | NASA-TLX, six dimensions, once per session (Hart & Staveland, 1988) |
 | Task performance (objective) | Reading time and derived reading rate; comprehension accuracy and response time; visual-search accuracy, misses, false detections and efficiency; reaction-time mean, SD and coefficient of variation, lapse rate, anticipations, sensitivity d′ and criterion |
 
 ## 3.8 Counterbalancing
@@ -423,81 +462,81 @@ The proposed research addresses a determinant of visual health that is ubiquitou
 
 # REFERENCES
 
-1. Ccami-Bernal F, Soriano-Moreno DR, Romero-Robles MA, Barriga-Chambi F, Tuco KG, Castro-Diaz SD, et al. Prevalence of computer vision syndrome: A systematic review and meta-analysis. Journal of Optometry. 2024;17(1):100482. https://doi.org/10.1016/j.optom.2023.100482
+[Authors to be completed from the publisher record]. (2025). Effects of ambient illuminance and mobile phone screen brightness on tear film stability, visual fatigue, and blink patterns during reading. *Contact Lens and Anterior Eye*. https://doi.org/10.1016/j.clae.2025.102515
 
-2. Kaur K, Gurnani B, Nayak S, Deori N, Kaur S, Jethani J, et al. Digital Eye Strain — A Comprehensive Review. Ophthalmology and Therapy. 2022;11(5):1655–1680. https://doi.org/10.1007/s40123-022-00540-9
+Abe, T., Mollicone, D., Basner, M., & Dinges, D. F. (2014). Sleepiness and safety: Where biology needs technology. *Sleep and Biological Rhythms*, *12*(2), 74–84. https://doi.org/10.1111/sbr.12067
 
-3. Sheppard AL, Wolffsohn JS. Digital eye strain: prevalence, measurement and amelioration. BMJ Open Ophthalmology. 2018;3(1):e000146. https://doi.org/10.1136/bmjophth-2018-000146
+Abe, T. (2023). PERCLOS-based technologies for detecting drowsiness: Current evidence and future directions. *SLEEP Advances*, *4*(1), zpad006. https://doi.org/10.1093/sleepadvances/zpad006
 
-4. Pucker AD, Kerr AM, Sanderson J, et al. Digital Eye Strain: Updated Perspectives. Clinical Optometry. 2024;16:233–246. https://doi.org/10.2147/OPTO.S412382
+Advanced Perceptual Contrast Algorithm. (n.d.). APCA: A candidate perceptual contrast method incorporating polarity and typographic parameters. https://git.apcacontrast.com/
 
-5. Kamøy B, Magno M, Nøland ST, et al. Video display terminal use and dry eye: preventive measures and future perspectives. Acta Ophthalmologica. 2022;100(7):723–739. https://doi.org/10.1111/aos.15105
+Argilés, M., Cardona, G., Pérez-Cabré, E., & Rodríguez, M. (2015). Blink rate and incomplete blinks in six different controlled hard-copy and electronic reading conditions. *Investigative Ophthalmology & Visual Science*, *56*(11), 6679–6685. https://doi.org/10.1167/iovs.15-16967
 
-6. Fjaervoll K, Fjaervoll H, Magno M, et al. Review on the possible pathophysiological mechanisms underlying visual display terminal-associated dry eye disease. Acta Ophthalmologica. 2022;100(8):861–877. https://doi.org/10.1111/aos.15150
+Buchner, A., & Baumgartner, N. (2007). Text–background polarity affects performance irrespective of ambient illumination and colour contrast. *Ergonomics*, *50*(7), 1036–1063. https://doi.org/10.1080/00140130701306413
 
-7. Jiménez R, Redondo B, Molina R, et al. Short-term effects of text-background color combinations on the dynamics of the accommodative response. Vision Research. 2020;166:33–42. https://doi.org/10.1016/j.visres.2019.11.006
+Bureau of Indian Standards. (2009). IS 3646: Code of practice for interior illumination. Bureau of Indian Standards.
 
-8. Redondo B, Jiménez R, Vera J, et al. The impact of break schedules on digital eye strain symptoms and ocular accommodation during prolonged near work. Experimental Eye Research. 2025;258:110463. https://doi.org/10.1016/j.exer.2025.110463
+Cantó-Sancho, N., Linhares, J., Ronda-Pérez, E., Franco, S., Perales, E., & Seguí-Crespo, M. (2024). Cross-cultural validation into Portuguese of a questionnaire to assess computer vision syndrome in workers exposed to digital devices. *Arquivos Brasileiros de Oftalmologia*, *87*(6), e20220256. https://doi.org/10.5935/0004-2749.2022-0256
 
-9. Buchner A, Baumgartner N. Text — background polarity affects performance irrespective of ambient illumination and colour contrast. Ergonomics. 2007;50(7):1036–1063. https://doi.org/10.1080/00140130701306413
+Cardona, G., García, C., Serés, C., Vilaseca, M., & Gispets, J. (2011). Blink rate, blink amplitude, and tear film integrity during dynamic visual display terminal tasks. *Current Eye Research*, *36*(3), 190–197. https://doi.org/10.3109/02713683.2010.544442
 
-10. Piepenbrock C, Mayr S, Buchner A. Smaller pupil size and better proofreading performance with positive than with negative polarity displays. Ergonomics. 2014;57(11):1670–1677. https://doi.org/10.1080/00140139.2014.948496
+Ccami-Bernal, F., Soriano-Moreno, D. R., Romero-Robles, M. A., Barriga-Chambi, F., Tuco, K. G., Castro-Diaz, S. D., Nuñez-Lupaca, J. N., Pacheco-Mendoza, J., Galvez-Olortegui, T., & Benites-Zapata, V. A. (2024). Prevalence of computer vision syndrome: A systematic review and meta-analysis. *Journal of Optometry*, *17*(1), 100482. https://doi.org/10.1016/j.optom.2023.100482
 
-11. Piepenbrock C, Mayr S, Buchner A. Positive display polarity is particularly advantageous for small character sizes: implications for display design. Human Factors. 2014;56(5):942–951. https://doi.org/10.1177/0018720813515509
+Delgado, P., Vargas, C., Ackerman, R., & Salmerón, L. (2018). Don't throw away your printed books: A meta-analysis on the effects of reading media on reading comprehension. *Educational Research Review*, *25*, 23–38. https://doi.org/10.1016/j.edurev.2018.09.003
 
-12. Fan Q, Xie J, Dong Z, et al. The Effect of Ambient Illumination and Text Color on Visual Fatigue under Negative Polarity. Sensors. 2024;24(11):3516. https://doi.org/10.3390/s24113516
+Dobres, J., Chahine, N., Reimer, B., Gould, D., Mehler, B., & Coughlin, J. F. (2016). Utilising psychophysical techniques to investigate the effects of age, typeface design, size and display polarity on glance legibility. *Ergonomics*, *59*(10), 1377–1391. https://doi.org/10.1080/00140139.2015.1137637
 
-13. Dobres J, Chahine N, Reimer B. Effects of ambient illumination, contrast polarity, and letter size on text legibility under glance-like reading. Applied Ergonomics. 2017;60:68–73. https://doi.org/10.1016/j.apergo.2016.11.001
+Dobres, J., Chahine, N., & Reimer, B. (2017). Effects of ambient illumination, contrast polarity, and letter size on text legibility under glance-like reading. *Applied Ergonomics*, *60*, 68–73. https://doi.org/10.1016/j.apergo.2016.11.001
 
-14. Lin C, Ji Z, Lin Y. Optimum display luminance and contrast polarity of desktop head-up display under office lighting level based on visual ergonomic study. Ergonomics. 2024;67(11):1491–1503. https://doi.org/10.1080/00140139.2024.2339439
+Fan, Q., Xie, J., Dong, Z., & Wang, Y. (2024). The effect of ambient illumination and text color on visual fatigue under negative polarity. *Sensors*, *24*(11), 3516. https://doi.org/10.3390/s24113516
 
-15. Singh S, McGuinness MB, Anderson AJ, et al. Interventions for the Management of Computer Vision Syndrome: A Systematic Review and Meta-analysis. Ophthalmology. 2022;129(10):1192–1215. https://doi.org/10.1016/j.ophtha.2022.05.009
+Fjaervoll, K., Fjaervoll, H., Magno, M., Nøland, S. T., Dartt, D. A., Vehof, J., & Utheim, T. P. (2022). Review on the possible pathophysiological mechanisms underlying visual display terminal-associated dry eye disease. *Acta Ophthalmologica*, *100*(8), 861–877. https://doi.org/10.1111/aos.15150
 
-16. Mataftsi A, Seliniotaki AK, Moutzouri S, Prousali E, Darusman KR, Adio AO, et al. Digital eye strain in young screen users: A systematic review. Preventive Medicine. 2023;170:107493. https://doi.org/10.1016/j.ypmed.2023.107493
+Hart, S. G., & Staveland, L. E. (1988). Development of NASA-TLX (Task Load Index): Results of empirical and theoretical research. In P. A. Hancock & N. Meshkati (Eds.), *Human mental workload* (Advances in Psychology, Vol. 52, pp. 139–183). North-Holland.
 
-17. Portello JK, Rosenfield M, Chu CA. Blink rate, incomplete blinks and computer vision syndrome. Optometry and Vision Science. 2013;90(5):482–487. https://doi.org/10.1097/OPX.0b013e31828f09a7
+Hirota, M., Uozato, H., Kawamorita, T., Shibata, Y., & Yamamoto, S. (2013). Effect of incomplete blinking on tear film stability. *Optometry and Vision Science*, *90*(7), 650–657. https://doi.org/10.1097/OPX.0b013e31829962ec
 
-18. Argilés M, Cardona G, Pérez-Cabré E, et al. Blink Rate and Incomplete Blinks in Six Different Controlled Hard-Copy and Electronic Reading Conditions. Investigative Ophthalmology & Visual Science. 2015;56(11):6679–6685. https://doi.org/10.1167/iovs.15-16967
+Jackson, M. L., Raj, S., Croft, R. J., Hayley, A. C., Downey, L. A., Kennedy, G. A., & Howard, M. E. (2016). Slow eyelid closure as a measure of driver drowsiness and its relationship to performance. *Traffic Injury Prevention*, *17*(3), 251–257. https://doi.org/10.1080/15389588.2015.1055327
 
-19. Hirota M, Uozato H, Kawamorita T, et al. Effect of incomplete blinking on tear film stability. Optometry and Vision Science. 2013;90(7):650–657. https://doi.org/10.1097/OPX.0b013e31829962ec
+Jiménez, R., Redondo, B., Molina, R., Martínez-Domingo, M. Á., Hernández-Andrés, J., & Vera, J. (2020). Short-term effects of text-background color combinations on the dynamics of the accommodative response. *Vision Research*, *166*, 33–42. https://doi.org/10.1016/j.visres.2019.11.006
 
-20. World Wide Web Consortium (W3C). Web Content Accessibility Guidelines (WCAG) 2.2, Success Criteria 1.4.3 and 1.4.6; definitions of contrast ratio and relative luminance. W3C Recommendation. https://www.w3.org/TR/WCAG22/
+Kamøy, B., Magno, M., Nøland, S. T., Moe, M. C., Petrovski, G., Vehof, J., & Utheim, T. P. (2022). Video display terminal use and dry eye: Preventive measures and future perspectives. *Acta Ophthalmologica*, *100*(7), 723–739. https://doi.org/10.1111/aos.15105
 
-21. Advanced Perceptual Contrast Algorithm (APCA): candidate perceptual contrast method incorporating polarity and typographic parameters, under development for a future generation of the accessibility guidelines. https://git.apcacontrast.com/
+Kaur, K., Gurnani, B., Nayak, S., Deori, N., Kaur, S., Jethani, J., Singh, D., Agarkar, S., Hussaindeen, J. R., Sukhija, J., & Mishra, D. (2022). Digital eye strain: A comprehensive review. *Ophthalmology and Therapy*, *11*(5), 1655–1680. https://doi.org/10.1007/s40123-022-00540-9
 
-22. Warm JS, Parasuraman R, Matthews G. Vigilance requires hard mental work and is stressful. Human Factors. 2008;50(3):433–441. https://doi.org/10.1518/001872008X312152
+Klinke, T., Hannak, W., Böning, K., & Jakstat, H. (2024). A comparative study of the sensitivity and specificity of the Ishihara test with various displays. *International Dental Journal*, *74*(4), 892–896. https://doi.org/10.1016/j.identj.2023.12.009
 
-23. Abe T, Mollicone D, Basner M, et al. Sleepiness and Safety: Where Biology Needs Technology. Sleep and Biological Rhythms. 2014;12(2):74–84. https://doi.org/10.1111/sbr.12067
+Lin, C., Ji, Z., & Lin, Y. (2024). Optimum display luminance and contrast polarity of desktop head-up display under office lighting level based on visual ergonomic study. *Ergonomics*, *67*(11), 1491–1503. https://doi.org/10.1080/00140139.2024.2339439
 
-24. Dobres J, Chahine N, Reimer B, et al. Utilising psychophysical techniques to investigate the effects of age, typeface design, size and display polarity on glance legibility. Ergonomics. 2016;59(10):1377–1391. https://doi.org/10.1080/00140139.2015.1137637
+Mataftsi, A., Seliniotaki, A. K., Moutzouri, S., Prousali, E., Darusman, K. R., Adio, A. O., Haidich, A. B., & Nischal, K. K. (2023). Digital eye strain in young screen users: A systematic review. *Preventive Medicine*, *170*, 107493. https://doi.org/10.1016/j.ypmed.2023.107493
 
-25. Sethi T, Ziat M. Dark mode vogue: Do light-on-dark displays have measurable benefits to users? Ergonomics. 2023;66(12):1814–1828. https://doi.org/10.1080/00140139.2022.2160879
+Piepenbrock, C., Mayr, S., & Buchner, A. (2014b). Smaller pupil size and better proofreading performance with positive than with negative polarity displays. *Ergonomics*, *57*(11), 1670–1677. https://doi.org/10.1080/00140139.2014.948496
 
-26. Cardona G, García C, Serés C, et al. Blink rate, blink amplitude, and tear film integrity during dynamic visual display terminal tasks. Current Eye Research. 2011;36(3):190–197. https://doi.org/10.3109/02713683.2010.544442
+Piepenbrock, C., Mayr, S., & Buchner, A. (2014a). Positive display polarity is particularly advantageous for small character sizes: Implications for display design. *Human Factors*, *56*(5), 942–951. https://doi.org/10.1177/0018720813515509
 
-27. Abe T. PERCLOS-based technologies for detecting drowsiness: current evidence and future directions. SLEEP Advances. 2023;4(1):zpad006. https://doi.org/10.1093/sleepadvances/zpad006
+Portello, J. K., Rosenfield, M., & Chu, C. A. (2013). Blink rate, incomplete blinks and computer vision syndrome. *Optometry and Vision Science*, *90*(5), 482–487. https://doi.org/10.1097/OPX.0b013e31828f09a7
 
-28. Jackson ML, Raj S, Croft RJ, et al. Slow eyelid closure as a measure of driver drowsiness and its relationship to performance. Traffic Injury Prevention. 2016;17(3):251–257. https://doi.org/10.1080/15389588.2015.1055327
+Pucker, A. D., Kerr, A. M., Sanderson, J., & Lievens, C. (2024). Digital eye strain: Updated perspectives. *Clinical Optometry*, *16*, 233–246. https://doi.org/10.2147/OPTO.S412382
 
-29. Delgado P, Vargas C, Ackerman R, et al. Don't throw away your printed books: A meta-analysis on the effects of reading media on reading comprehension. Educational Research Review. 2018;25:23–38. https://doi.org/10.1016/j.edurev.2018.09.003
+Redondo, B., Jiménez, R., Vera, J., & Rosenfield, M. (2025). The impact of break schedules on digital eye strain symptoms and ocular accommodation during prolonged near work. *Experimental Eye Research*, *258*, 110463. https://doi.org/10.1016/j.exer.2025.110463
 
-30. Seguí MdelM, Cabrero-García J, Crespo A, et al. A reliable and valid questionnaire was developed to measure computer vision syndrome at the workplace. Journal of Clinical Epidemiology. 2015;68(6):662–673. https://doi.org/10.1016/j.jclinepi.2015.01.015
+Seguí, M. del M., Cabrero-García, J., Crespo, A., Verdú, J., & Ronda, E. (2015). A reliable and valid questionnaire was developed to measure computer vision syndrome at the workplace. *Journal of Clinical Epidemiology*, *68*(6), 662–673. https://doi.org/10.1016/j.jclinepi.2015.01.015
 
-31. Cantó-Sancho N, Linhares J, Ronda-Pérez E, et al. Cross-cultural validation into Portuguese of a questionnaire to assess computer vision syndrome in workers exposed to digital devices. Arquivos Brasileiros de Oftalmologia. 2024;87(6):e20220256. https://doi.org/10.5935/0004-2749.2022-0256
+Sethi, T., & Ziat, M. (2023). Dark mode vogue: Do light-on-dark displays have measurable benefits to users?. *Ergonomics*, *66*(12), 1814–1828. https://doi.org/10.1080/00140139.2022.2160879
 
-32. Hart SG, Staveland LE. Development of NASA-TLX (Task Load Index): Results of empirical and theoretical research. In: Hancock PA, Meshkati N, editors. Human Mental Workload. Advances in Psychology, Vol. 52. Amsterdam: North-Holland; 1988. p. 139–183.
+Sheppard, A. L., & Wolffsohn, J. S. (2018). Digital eye strain: Prevalence, measurement and amelioration. *BMJ Open Ophthalmology*, *3*(1), e000146. https://doi.org/10.1136/bmjophth-2018-000146
 
-33. Soukupová T, Čech J. Real-Time Eye Blink Detection using Facial Landmarks. In: Proceedings of the 21st Computer Vision Winter Workshop (CVWW). Rimske Toplice, Slovenia; 2016.
+Singh, S., McGuinness, M. B., Anderson, A. J., & Downie, L. E. (2022). Interventions for the management of computer vision syndrome: A systematic review and meta-analysis. *Ophthalmology*, *129*(10), 1192–1215. https://doi.org/10.1016/j.ophtha.2022.05.009
 
-34. Klinke T, Hannak W, Böning K, et al. A Comparative Study of the Sensitivity and Specificity of the Ishihara Test With Various Displays. International Dental Journal. 2024;74(4):892–896. https://doi.org/10.1016/j.identj.2023.12.009
+Soukupová, T., & Čech, J. (2016). Real-time eye blink detection using facial landmarks. In *Proceedings of the 21st Computer Vision Winter Workshop* (pp. 1–8). Rimske Toplice, Slovenia.
 
-35. Bureau of Indian Standards. IS 3646: Code of Practice for Interior Illumination (Part 2: Schedule of Illumination and Glare Index). New Delhi: BIS.
+Tian, P., Xu, G., Han, C., Zheng, X., Zhang, K., Du, C., Wei, F., & Zhang, S. (2022). Effects of paradigm color and screen brightness on visual fatigue in light environment of night based on eye tracker and EEG acquisition equipment. *Sensors*, *22*(11), 4082. https://doi.org/10.3390/s22114082
 
-36. Xie X, Song F, Liu Y, et al. Study on the Effects of Display Color Mode and Luminance Contrast on Visual Fatigue. IEEE Access. 2021;9:35915–35923. https://doi.org/10.1109/ACCESS.2021.3061770
+Warm, J. S., Parasuraman, R., & Matthews, G. (2008). Vigilance requires hard mental work and is stressful. *Human Factors*, *50*(3), 433–441. https://doi.org/10.1518/001872008X312152
 
-37. Tian P, Xu G, Han C, et al. Effects of Paradigm Color and Screen Brightness on Visual Fatigue in Light Environment of Night Based on Eye Tracker and EEG Acquisition Equipment. Sensors. 2022;22(11):4082. https://doi.org/10.3390/s22114082
+World Wide Web Consortium. (2023). Web content accessibility guidelines (WCAG) 2.2. https://www.w3.org/TR/WCAG22/
 
-38. [Author list to be completed from the publisher record.] Effects of ambient illuminance and mobile phone screen brightness on tear film stability, visual fatigue, and blink patterns during reading. Contact Lens and Anterior Eye. 2025. https://doi.org/10.1016/j.clae.2025.102515
+Xie, X., Song, F., Liu, Y., Wang, S., & Yu, D. (2021). Study on the effects of display color mode and luminance contrast on visual fatigue. *IEEE Access*, *9*, 35915–35923. https://doi.org/10.1109/ACCESS.2021.3061770
 
 ---
 
