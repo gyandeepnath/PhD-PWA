@@ -19,8 +19,11 @@ const md = fs.readFileSync(IN, 'utf8');
 
 const FONT = 'Times New Roman';
 const SIZE = 24;          // 12 pt
-const SIZE_TBL = 18;      // 9 pt inside tables
+const SIZE_TBL = 16;      // 8 pt inside tables
 const LINE = 360;         // 1.5 line spacing (240 = single)
+const LINE_REF = 240;     // reference list: single spacing, APA hanging indent
+const REF_HANG = 720;     // 0.5 inch hanging indent (APA 7)
+const IND_FIRST = 360;    // first-line indent on running body paragraphs
 const CM = 567;           // twips per cm
 const PAGE_W = 11906, PAGE_H = 16838;               // A4
 const M_LEFT = Math.round(3.0 * CM);                // 1701
@@ -46,20 +49,33 @@ function inline(text, o = {}) {
   plain(text.slice(last));
   return runs.length ? runs : [new TextRun({ text: '', font: FONT, size })];
 }
+/* Bracketed items the author must still supply are left in the text verbatim
+   and marked with a yellow highlight so they cannot be missed at proofing. */
+const PLACEHOLDER = /(\[(?:insert|Insert|Authors)[^\]]*\])/g;
+function push(out, t, size, bold, italics) {
+  if (!t) return;
+  let last = 0, m;
+  PLACEHOLDER.lastIndex = 0;
+  while ((m = PLACEHOLDER.exec(t)) !== null) {
+    if (m.index > last) out.push(new TextRun({ text: t.slice(last, m.index), font: FONT, size, bold, italics }));
+    out.push(new TextRun({ text: m[1], font: FONT, size, bold, italics, highlight: 'yellow' }));
+    last = PLACEHOLDER.lastIndex;
+  }
+  if (last < t.length) out.push(new TextRun({ text: t.slice(last), font: FONT, size, bold, italics }));
+}
 function emph(s, size, bB, bI) {
   const out = [];
   const re = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
   let last = 0, m;
-  const plain = (t) => { if (t) out.push(new TextRun({ text: t, font: FONT, size, bold: bB, italics: bI })); };
   while ((m = re.exec(s)) !== null) {
-    plain(s.slice(last, m.index));
+    push(out, s.slice(last, m.index), size, bB, bI);
     const tok = m[1];
-    if (tok.startsWith('**')) out.push(new TextRun({ text: tok.slice(2, -2), font: FONT, size, bold: true, italics: bI }));
-    else if (tok.startsWith('`')) out.push(new TextRun({ text: tok.slice(1, -1), font: FONT, size, bold: bB, italics: bI }));
-    else out.push(new TextRun({ text: tok.slice(1, -1), font: FONT, size, italics: true, bold: bB }));
+    if (tok.startsWith('**')) push(out, tok.slice(2, -2), size, true, bI);
+    else if (tok.startsWith('`')) push(out, tok.slice(1, -1), size, bB, bI);
+    else push(out, tok.slice(1, -1), size, bB, true);
     last = re.lastIndex;
   }
-  plain(s.slice(last));
+  push(out, s.slice(last), size, bB, bI);
   return out;
 }
 
@@ -84,8 +100,8 @@ function buildTable(rows) {
   const cell = (t, hdr, i) => new TableCell({
     width: { size: w[i], type: WidthType.DXA },
     shading: hdr ? { type: ShadingType.CLEAR, fill: 'E8EEF7', color: 'auto' } : undefined,
-    margins: { top: 40, bottom: 40, left: 80, right: 80 },
-    children: [new Paragraph({ spacing: { before: 20, after: 20, line: 240 }, children: inline(t, { size: SIZE_TBL, bold: hdr }) })],
+    margins: { top: 20, bottom: 20, left: 60, right: 60 },
+    children: [new Paragraph({ spacing: { before: 0, after: 0, line: 240 }, children: inline(t, { size: SIZE_TBL, bold: hdr }) })],
   });
   return new Table({
     columnWidths: w,
@@ -109,7 +125,9 @@ function buildTable(rows) {
 const lines = md.split('\n');
 const children = [];
 let i = 0, pageIdx = 0;   // 0 = title page, 1 = details page, 2+ = body
-const HL = { 1: HeadingLevel.HEADING_1, 2: HeadingLevel.HEADING_2, 3: HeadingLevel.HEADING_3, 4: HeadingLevel.HEADING_4 };
+let inRefs = false;       // reference list: single spacing + APA hanging indent
+let afterHeading = false; // first paragraph under a heading takes no first-line indent
+const HL ={ 1: HeadingLevel.HEADING_1, 2: HeadingLevel.HEADING_2, 3: HeadingLevel.HEADING_3, 4: HeadingLevel.HEADING_4 };
 
 while (i < lines.length) {
   const line = lines[i].trimEnd();
@@ -121,7 +139,7 @@ while (i < lines.length) {
   }
   if (/^---+$/.test(line.trim())) {
     children.push(new Paragraph({
-      spacing: { before: 60, after: 90 },
+      spacing: { before: 0, after: 40 },
       border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'AAAAAA', space: 1 } },
       children: [new TextRun({ text: '', font: FONT, size: SIZE })],
     }));
@@ -150,12 +168,13 @@ while (i < lines.length) {
   const h = line.match(/^(#{1,4})\s+(.*)$/);
   if (h) {
     const lvl = h[1].length;
+    if (lvl === 1) inRefs = /^REFERENCES/i.test(h[2]);
+    afterHeading = true;
     children.push(new Paragraph({
       heading: HL[lvl],
       alignment: lvl === 1 ? AlignmentType.CENTER : AlignmentType.LEFT,
-      spacing: { before: lvl === 1 ? 240 : 180, after: 90, line: LINE },
+      spacing: { before: lvl === 1 ? 140 : 100, after: 40, line: LINE },
       keepNext: true,
-      pageBreakBefore: lvl === 1 && /^REFERENCES/i.test(h[2]),
       children: inline(h[2], { size: lvl === 1 ? 30 : lvl === 2 ? 27 : 25, bold: true }),
     }));
     i++; continue;
@@ -173,23 +192,23 @@ while (i < lines.length) {
     items.forEach((it, idx) => {
       children.push(new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { before: 30, after: 30, line: 240 },
+        spacing: { before: 10, after: 10, line: 240 },
         indent: { left: 340, right: 340 },
         border: { top: edge, bottom: edge, left: edge, right: edge },
         shading: { type: ShadingType.CLEAR, fill: 'EDF2F9', color: 'auto' },
         keepNext: idx < items.length - 1,
-        children: inline(it, { size: 20 }),
+        children: inline(it, { size: 18 }),
       }));
       if (idx < items.length - 1) {
         children.push(new Paragraph({
           alignment: AlignmentType.CENTER,
-          spacing: { before: 0, after: 0, line: 200 },
+          spacing: { before: 0, after: 0, line: 160 },
           keepNext: true,
           children: [new TextRun({ text: '▼', font: FONT, size: 18 })],
         }));
       }
     });
-    children.push(new Paragraph({ spacing: { after: 90 }, children: [new TextRun({ text: '', size: 12 })] }));
+    children.push(new Paragraph({ spacing: { after: 40, line: 120 }, children: [new TextRun({ text: '', size: 8 })] }));
     continue;
   }
 
@@ -198,9 +217,9 @@ while (i < lines.length) {
     while (i < lines.length && lines[i].trim().startsWith('|')) { rows.push(lines[i]); i++; }
     if (rows.length >= 2) {
       children.push(buildTable(rows));
-      children.push(new Paragraph({ spacing: { after: 90 }, children: [new TextRun({ text: '', size: 12 })] }));
+      children.push(new Paragraph({ spacing: { after: 40, line: 120 }, children: [new TextRun({ text: '', size: 8 })] }));
     }
-    continue;
+    afterHeading = false; continue;
   }
   if (line.trim().startsWith('>')) {
     const buf = [];
@@ -225,32 +244,43 @@ while (i < lines.length) {
     while (cont(i + 1)) { i++; t += ' ' + lines[i].trim(); }
     children.push(new Paragraph({
       numbering: { reference: 'bullets', level: 0 },
-      spacing: { after: 50, line: LINE },
+      spacing: { after: 0, line: LINE },
       alignment: AlignmentType.JUSTIFIED,
       children: inline(t),
     }));
-    i++; continue;
+    afterHeading = false; i++; continue;
   }
   const o = line.match(/^\s*(\d+)\.\s+(.*)$/);
   if (o) {
     let t = o[2];
     while (cont(i + 1)) { i++; t += ' ' + lines[i].trim(); }
     children.push(new Paragraph({
-      spacing: { after: 60, line: LINE },
+      spacing: { after: 0, line: LINE },
       indent: { left: 640, hanging: 640 },
       alignment: AlignmentType.JUSTIFIED,
       children: [new TextRun({ text: o[1] + '.', font: FONT, size: SIZE }), new TextRun({ text: '\t', font: FONT, size: SIZE }), ...inline(t)],
     }));
-    i++; continue;
+    afterHeading = false; i++; continue;
   }
   let t = line.trim();
   while (cont(i + 1)) { i++; t += ' ' + lines[i].trim(); }
   const sig = /^(Date:|Signature of|Seal)/.test(t);
-  children.push(new Paragraph({
-    spacing: { after: sig ? 240 : 60, line: LINE },
-    alignment: sig ? AlignmentType.LEFT : AlignmentType.JUSTIFIED,
-    children: inline(t),
-  }));
+  if (inRefs) {
+    // APA 7 reference entry: single-spaced, 0.5 in hanging indent, flush left.
+    children.push(new Paragraph({
+      spacing: { after: 60, line: LINE_REF },
+      indent: { left: REF_HANG, hanging: REF_HANG },
+      children: inline(t),
+    }));
+  } else {
+    children.push(new Paragraph({
+      spacing: { after: sig ? 240 : 0, line: LINE },
+      indent: (sig || afterHeading) ? undefined : { firstLine: IND_FIRST },
+      alignment: sig ? AlignmentType.LEFT : AlignmentType.JUSTIFIED,
+      children: inline(t),
+    }));
+  }
+  afterHeading = false;
   i++;
 }
 
@@ -268,10 +298,10 @@ const doc = new Document({
   styles: {
     default: {
       document: { run: { font: FONT, size: SIZE }, paragraph: { spacing: { line: LINE } } },
-      heading1: { run: { font: FONT, size: 30, bold: true, color: '000000' }, paragraph: { spacing: { before: 240, after: 120, line: LINE } } },
-      heading2: { run: { font: FONT, size: 27, bold: true, color: '000000' }, paragraph: { spacing: { before: 180, after: 90, line: LINE } } },
-      heading3: { run: { font: FONT, size: 25, bold: true, color: '000000' }, paragraph: { spacing: { before: 160, after: 80, line: LINE } } },
-      heading4: { run: { font: FONT, size: 24, bold: true, italics: true, color: '000000' }, paragraph: { spacing: { before: 220, after: 120, line: LINE } } },
+      heading1: { run: { font: FONT, size: 30, bold: true, color: '000000' }, paragraph: { spacing: { before: 140, after: 40, line: LINE } } },
+      heading2: { run: { font: FONT, size: 27, bold: true, color: '000000' }, paragraph: { spacing: { before: 100, after: 40, line: LINE } } },
+      heading3: { run: { font: FONT, size: 25, bold: true, color: '000000' }, paragraph: { spacing: { before: 100, after: 40, line: LINE } } },
+      heading4: { run: { font: FONT, size: 24, bold: true, italics: true, color: '000000' }, paragraph: { spacing: { before: 100, after: 40, line: LINE } } },
     },
   },
   sections: [{
