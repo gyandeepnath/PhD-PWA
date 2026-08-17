@@ -573,12 +573,21 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     case 'BREAK_SCREEN':
       view = (
         <BreakScreen completed={machine.stepIndex + 1} total={plan.length} onContinue={advance}>
-          <LuxCheckpointPanel
-            checkpoint="middle"
-            level={session?.ambient_illumination_level ?? null}
-            existing={session?.lux_readings?.find((r) => r.checkpoint === 'middle')?.lux ?? null}
-            onSubmit={(lux) => void logLuxCheckpoint('middle', lux)}
-          />
+          {/*
+            Show the mid-session illuminance prompt at the break NEAREST the sitting's midpoint,
+            not at every break. Rendering it on all of them meant the "middle" reading was taken at
+            the FIRST break — after 2 of 10 conditions, 20% in — which is not the middle of
+            anything. If that break is missed the prompt reappears at the next one, so a skipped
+            reading is still recoverable.
+          */}
+          {machine.stepIndex + 1 >= Math.floor(plan.length / 2) && (
+            <LuxCheckpointPanel
+              checkpoint="middle"
+              level={session?.ambient_illumination_level ?? null}
+              existing={session?.lux_readings?.find((r) => r.checkpoint === 'middle')?.lux ?? null}
+              onSubmit={(lux) => void logLuxCheckpoint('middle', lux)}
+            />
+          )}
         </BreakScreen>
       );
       break;

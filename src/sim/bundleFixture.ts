@@ -1,0 +1,337 @@
+/**
+ * A complete, TYPE-CHECKED session bundle with deliberately distinctive values.
+ *
+ * Purpose: manual verifiability of the export pipeline. Every field is set to a value that is
+ * unique and recognisable, so a person reading the exported CSVs can confirm by eye that each
+ * output cell traces back to the record it came from — rather than trusting a passing assertion.
+ *
+ * The bundle is typed as `SessionBundle` with NO `as` casts, so the compiler enforces that the
+ * fixture matches the real data model. A hand-guessed fixture would make any verification built
+ * on it worthless, which is exactly the failure mode this module exists to avoid.
+ *
+ * Distinctive-value conventions:
+ *   - reading_time_ms      = 61000 + 1234*i   (unique per serial position)
+ *   - fatigue_mean         = 1 + 0.37*i
+ *   - incomplete_blink_ratio = 0.05 + 0.031*i (all distinct, none at a bound)
+ *   - mean_rt_hits_ms      = 340 + 7*i
+ *   - participant_id contains a comma AND a double quote, exercising CSV escaping everywhere.
+ */
+import type { SessionBundle } from '@/storage/gather';
+import { CONDITIONS } from '@/experiment/conditions';
+import { PASSAGES } from '@/experiment/passages';
+import { blockPlan } from '@/experiment/counterbalance';
+import { illuminationForBlock, illuminationOrderFor, summariseLux } from '@/experiment/illumination';
+import { DB_VERSION } from '@/storage/schemaEnums';
+
+export const FIXTURE = {
+  /** Embeds a comma and a quote on purpose: the hardest thing for a CSV writer to get right. */
+  pid: 'VER,"01',
+  sid: 'sess-verify-0001',
+  /** Odd and non-trivial, so the counterbalancing arithmetic is genuinely exercised. */
+  enrolment: 7,
+  /** The SECOND illumination block, so blockPlan must advance the Williams row. */
+  block: 1,
+  t0: 1_700_000_000_000,
+} as const;
+
+export const readingMs = (i: number) => 61000 + i * 1234;
+export const fatigueMean = (i: number) => Math.round((1 + i * 0.37) * 100) / 100;
+export const ibrFor = (i: number) => Math.round((0.05 + i * 0.031) * 1000) / 1000;
+export const blinkRateFor = (i: number) => Math.round((12 + i * 0.9) * 10) / 10;
+export const rtFor = (i: number) => 340 + i * 7;
+
+export interface FixtureOptions {
+  /** Which lux checkpoints to include. Default: all three. */
+  luxCheckpoints?: ('start' | 'middle' | 'end')[];
+  /** Override the illuminance recorded at each checkpoint. */
+  luxValues?: Partial<Record<'start' | 'middle' | 'end', number>>;
+  /** Set a protocol-deviation note (implies an out-of-range reading). */
+  luxDeviationNote?: string | null;
+}
+
+export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
+  const { pid, sid, enrolment, block, t0 } = FIXTURE;
+  const level = illuminationForBlock(enrolment, block);
+  const plan = blockPlan(enrolment, block);
+  const wanted = opts.luxCheckpoints ?? ['start', 'middle', 'end'];
+  const defaults: Record<'start' | 'middle' | 'end', number> = { start: 152, middle: 148, end: 151 };
+  const luxReadings = wanted.map((cp, k) => ({
+    checkpoint: cp,
+    lux: opts.luxValues?.[cp] ?? defaults[cp],
+    at: t0 + k * 3_600_000,
+  }));
+
+  const conditions: SessionBundle['conditions'] = plan.map((step, i) => {
+    const c = CONDITIONS[step.conditionIndex];
+    return {
+      condition_id: `cond-${i}`,
+      session_id: sid,
+      session_position: step.position,
+      condition_label: c.label,
+      polarity: c.polarity,
+      background_color: c.background,
+      text_color: c.text,
+      color_name: c.colorName,
+      ink_name: c.inkName,
+      passage_id: step.passageIndex,
+      wcag_contrast_ratio: c.wcag_contrast_ratio,
+      wcag_level: c.wcag_level,
+      michelson_contrast: c.michelson_contrast,
+      below_wcag_aa: c.below_wcag_aa,
+      started_at: t0 + 100_000 + i * 600_000,
+      completed_at: t0 + 100_000 + i * 600_000 + 540_000,
+      condition_duration_sec: 540,
+      adaptation_ms_before: i === 0 ? 0 : 60_000,
+      reading_time_ms: readingMs(i),
+    };
+  });
+
+  const bundle: SessionBundle = {
+    session: {
+      session_id: sid,
+      participant_id: pid,
+      enrolment_number: enrolment,
+      status: 'complete',
+      deleted_at: null,
+      display_label: 'Tablet A "lab", bench 2',
+      ambient_lux: luxReadings.find((r) => r.checkpoint === 'start')?.lux ?? 0,
+      ambient_illumination_level: level,
+      illumination_block: block,
+      illumination_order_first: illuminationOrderFor(enrolment)[0],
+      lux_readings: luxReadings,
+      lux_all_in_range: summariseLux(level, luxReadings).all_in_range,
+      lux_deviation_note: opts.luxDeviationNote ?? null,
+      screen_white_luminance_cd_m2: 137,
+      brightness_percent: 78,
+      session_start_time: t0,
+      session_end_time: t0 + 7_500_000,
+      randomisation_seed: enrolment,
+      condition_order: plan.map((s) => s.conditionIndex),
+      preflight_complete: true,
+      consent_given: true,
+      consent_time: t0 + 50_000,
+      provenance: {
+        app_version: '2.1.0',
+        git_hash: 'verifyhash',
+        build_time: '2026-01-01T00:00:00.000Z',
+        condition_def_hash: 'abcd1234',
+        schema_version: DB_VERSION,
+      },
+      device_type: 'Android',
+      browser: 'Chrome/verify',
+      screen_resolution: '1600x2560',
+      conditions_per_session: plan.length,
+      condition_offset: 0,
+      session_index: 2,
+    },
+    participant: {
+      participant_id: pid,
+      enrolment_number: enrolment,
+      age: 22,
+      gender: 'female',
+      daily_screen_hours: 7.5,
+      device_familiarity: 'high',
+      lighting_habit: 'dim',
+      correction_type: 'glasses',
+      cvd_status: 'normal',
+      ishihara_correct: 5,
+      ishihara_total: 5,
+      caffeine_today: true,
+      hours_since_sleep: 6,
+      eligible: true,
+      exclusion_reason: null,
+      baseline_fatigue: 1.2,
+      session_id: sid,
+    },
+    conditions,
+    fatigue: [
+      {
+        fatigue_id: 'fat-base',
+        session_id: sid,
+        condition_id: null,
+        stage: 'baseline',
+        eye_strain: 1, dryness: 1, blur: 2, burning: 1, headache: 1,
+        fatigue_mean: 1.2,
+        touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true },
+        all_touched: true,
+        response_time_ms: 9000,
+      },
+      ...conditions.map((c, i) => ({
+        fatigue_id: `fat-${i}`,
+        session_id: sid,
+        condition_id: c.condition_id,
+        stage: 'post_condition' as const,
+        eye_strain: 2, dryness: 2, blur: 2, burning: 1, headache: 1,
+        fatigue_mean: fatigueMean(i),
+        touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true },
+        all_touched: true,
+        response_time_ms: 7000 + i * 100,
+      })),
+    ],
+    cvsq: [
+      {
+        cvsq_id: 'cvsq-base', session_id: sid, stage: 'baseline',
+        frequency: Array(16).fill(0), intensity: Array(16).fill(0),
+        total_score: 3, symptomatic: false, response_time_ms: 41_000,
+      },
+      {
+        cvsq_id: 'cvsq-end', session_id: sid, stage: 'session_end',
+        frequency: Array(16).fill(1), intensity: Array(16).fill(1),
+        total_score: 11, symptomatic: true, response_time_ms: 38_000,
+      },
+    ],
+    tlx: [
+      {
+        tlx_id: 'tlx-1', session_id: sid,
+        mental_demand: 65, physical_demand: 30, temporal_demand: 45,
+        performance: 25, effort: 70, frustration: 35,
+        performance_load: 75,
+        raw_tlx: (65 + 30 + 45 + 75 + 70 + 35) / 6,
+        all_touched: true, response_time_ms: 26_000,
+      },
+    ],
+    comprehension: conditions.map((c, i) => {
+      const correctIndex = PASSAGES[c.passage_id].question.correctIndex;
+      const selected = i % 4;
+      return {
+        comprehension_id: `comp-${i}`,
+        session_id: sid,
+        condition_id: c.condition_id,
+        passage_id: c.passage_id,
+        selected_index: selected,
+        correct_index: correctIndex,
+        is_correct: selected === correctIndex,
+        response_time_ms: 8000 + i * 50,
+      };
+    }),
+    visualSearch: conditions.map((c, i) => {
+      const inSet = PASSAGES[c.passage_id].searchTargetCount;
+      const found = Math.max(0, inSet - (i % 3));
+      return {
+        condition_id: c.condition_id,
+        session_id: sid,
+        passage_id: c.passage_id,
+        search_target: PASSAGES[c.passage_id].searchTarget,
+        targets_in_set: inSet,
+        search_time_ms: 30_000 + i * 200,
+        time_to_first_target_ms: 2500 + i * 10,
+        targets_found: found,
+        targets_missed: inSet - found,
+        false_detections: i % 2,
+        accuracy_rate: inSet > 0 ? found / inSet : 0,
+        search_efficiency: found / ((30_000 + i * 200) / 60_000),
+        mean_inter_target_interval_ms: found > 1 ? 4000 : null,
+        termination_mode: found === inSet ? 'voluntary_full' : 'time_limit',
+      };
+    }),
+    perception: conditions.map((c, i) => ({
+      perception_id: `perc-${i}`,
+      session_id: sid,
+      condition_id: c.condition_id,
+      display_comfort_score: 40 + i * 3,
+      text_clarity_score: 50 + i * 2,
+      comfort_touched: true,
+      clarity_touched: true,
+      response_time_ms: 5000 + i * 30,
+    })),
+    eyeMetrics: conditions.map((c, i) => ({
+      condition_id: c.condition_id,
+      session_id: sid,
+      camera_active: true,
+      effective_fps: 29.4,
+      fps_adequate_for_tiers: true,
+      blink_rate: blinkRateFor(i),
+      blink_rate_full: Math.round(blinkRateFor(i) * 0.8 * 10) / 10,
+      incomplete_blink_ratio: ibrFor(i),
+      blink_duration_mean_ms: 180,
+      bins: {
+        first_half_blink_rate: blinkRateFor(i) + 1,
+        second_half_blink_rate: blinkRateFor(i) - 1,
+      },
+      mean_inter_blink_interval_ms: 4200,
+      inter_blink_interval_cv: 0.45,
+      perclos_p80: Math.round((0.03 + i * 0.001) * 1000) / 1000,
+      perclos_p70: 0.05,
+      long_closure_count: 0,
+      long_closure_total_ms: 0,
+      blink_rate_micro: 0.4,
+      blink_count_full: 30,
+      blink_count_micro: 2,
+      blink_count_incomplete: 8,
+      ear_baseline: 0.312,
+      ear_threshold_used: 0.234,
+      head_pitch_mean: -3.2,
+      head_pitch_calibrated: true,
+      head_yaw_mean: 1.1,
+      head_roll_mean: 0.4,
+      head_movement_std: 1.8,
+      postural_load: 0.2,
+      head_stability_score: 0.9,
+      off_axis_ratio: 0.04,
+      gaze_calibrated: true,
+      gaze_deviation_ratio: 0.05,
+      zone_center_ratio: 0.95,
+      zone_transition_count: 12,
+      face_presence_ratio: 0.97,
+      face_size_ratio: 0.22,
+      mean_face_luma: 120,
+      lighting_quality: 'good',
+    })),
+    reactionTrials: conditions.flatMap((c, i) =>
+      Array.from({ length: 4 }, (_, t) => ({
+        trial_id: `rt-${i}-${t}`,
+        condition_id: c.condition_id,
+        session_id: sid,
+        trial_number: t + 1,
+        trial_category: (t % 2 === 0 ? 'signal' : 'noise') as 'signal' | 'noise',
+        is_signal: t % 2 === 0,
+        stimulus_onset_time: 1000 + t,
+        response_time_ms: t % 2 === 0 ? 320 + i : null,
+        accuracy: (t % 2 === 0 ? 'hit' : 'correct_rejection') as 'hit' | 'correct_rejection',
+        false_start: false,
+        anticipatory: false,
+      })),
+    ),
+    rtSummaries: conditions.map((c, i) => ({
+      condition_id: c.condition_id,
+      session_id: sid,
+      total_trials: 32,
+      signal_trials: 20,
+      hits: 19,
+      false_alarms: 1,
+      misses: 1,
+      correct_rejections: 11,
+      hit_rate: 0.95,
+      false_alarm_rate: 1 / 12,
+      mean_rt_hits_ms: rtFor(i),
+      median_rt_hits_ms: 335,
+      rt_sd_ms: 55,
+      error_rate: 2 / 32,
+      rt_cv: 0.16,
+      anticipations: 0,
+      lapse_count: i % 2,
+      lapse_rate: (i % 2) / 20,
+      inverse_efficiency_ms: 360,
+      first_half_mean_rt_ms: 330,
+      second_half_mean_rt_ms: 350,
+      d_prime: Math.round((2.9 - i * 0.05) * 100) / 100,
+      d_prime_se: 0.4,
+      d_prime_unstable: false,
+      criterion: 0.1,
+    })),
+    calibration: [
+      {
+        calibration_id: 'cal-1',
+        session_id: sid,
+        is_real_calibration: true,
+        targets_detected: 9,
+        targets_total: 9,
+        ear_baseline: 0.312,
+        gaze_h_threshold: 0.08,
+        gaze_v_threshold: 0.06,
+        pitch_baseline_frac: 0.481,
+      },
+    ],
+  };
+  return bundle;
+}

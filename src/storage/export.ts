@@ -5,9 +5,10 @@
  */
 import type { SessionBundle } from './gather';
 import type { SessionRecord } from './types';
-import { summariseLux } from '@/experiment/illumination';
+import { summariseLux, LUX_CHECKPOINTS } from '@/experiment/illumination';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { PASSAGES } from '@/experiment/passages';
+import { CONDITIONS } from '@/experiment/conditions';
 
 export interface ExportFile {
   filename: string;
@@ -15,7 +16,6 @@ export interface ExportFile {
   mime: string;
 }
 
-/** CSV-escape a single value: wrap in quotes and double internal quotes when needed. */
 /** One logged illuminance reading, or '' when that checkpoint was never taken. */
 function luxAt(session: SessionRecord, cp: 'start' | 'middle' | 'end'): number | '' {
   return session.lux_readings?.find((r) => r.checkpoint === cp)?.lux ?? '';
@@ -27,6 +27,7 @@ function luxSummary(session: SessionRecord): { mean: number | null; max_deviatio
   return { mean: s.mean, max_deviation: s.max_deviation };
 }
 
+/** CSV-escape a single value: wrap in quotes and double internal quotes when needed. */
 export function escapeCsv(value: unknown): string {
   if (value == null) return '';
   const s = String(value);
@@ -42,6 +43,26 @@ export function toCsv(headers: string[], rows: Record<string, unknown>[]): strin
   return body ? `${head}\n${body}` : head;
 }
 
+/**
+ * Round a number for PRESENTATION in a CSV, leaving storage at full precision.
+ *
+ * Raw IEEE-754 subtraction leaks artefacts into analyst-facing files — a fatigue delta of
+ * `-0.19999999999999996` instead of `-0.2`, a mean of `150.33333333333334`. Those are not more
+ * precise, just noisier, and they invite spurious significant figures in a thesis table. Applied
+ * at the export boundary only, so the stored records and the JSON bundle keep full precision.
+ */
+export function round(value: unknown, dp = 4): unknown {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.round(value * 10 ** dp) / 10 ** dp
+    : value;
+}
+
+/** Make a string safe for a filename on every platform (Windows forbids " < > : | ? * \ /). */
+export function safeFilePart(s: string, max = 32): string {
+  const cleaned = s.replace(/[<>:"/\\|?*\x00-\x1f,]/g, '_').replace(/_{2,}/g, '_').replace(/^[._]+|[._]+$/g, '');
+  return (cleaned || 'unknown').slice(0, max);
+}
+
 /** FNV-1a 32-bit hash (hex) — lightweight integrity checksum for the manifest. */
 export function fnv1a(str: string): string {
   let h = 0x811c9dc5;
@@ -52,6 +73,93 @@ export function fnv1a(str: string): string {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
+
+/**
+ * Data dictionary for the export bundle.
+ *
+ * `role` values: iv = independent variable, dv = dependent variable, primary = the confirmatory
+ * outcome, covariate, qc = quality control, id = identifier, provenance.
+ */
+export const CODEBOOK: Record<string, string>[] = [
+  // ---- 00_condition_reference.csv
+  { file: '00_condition_reference.csv', column: 'condition_label', type: 'string', unit: '-', role: 'id', description: 'Condition code. P1-P5 positive polarity, N1-N5 negative. Synopsis Table 3.4.' },
+  { file: '00_condition_reference.csv', column: 'color_name', type: 'factor(5)', unit: '-', role: 'iv', description: 'Text-colour factor: achromatic | blue | red | yellow | green. Same 5 levels in both polarities, which is what makes polarity x colour estimable.' },
+  { file: '00_condition_reference.csv', column: 'ink_name', type: 'string', unit: '-', role: 'id', description: 'Human-readable ink colour (black/white/blue/...). Display only; never an analysis factor.' },
+  { file: '00_condition_reference.csv', column: 'polarity', type: 'factor(2)', unit: '-', role: 'iv', description: 'positive = dark text on light background; negative = light text on dark.' },
+  { file: '00_condition_reference.csv', column: 'wcag_contrast_ratio', type: 'number', unit: 'ratio 1-21', role: 'iv', description: 'WCAG 2.x contrast from linearised sRGB relative luminance. Enter as log10 in models.' },
+  { file: '00_condition_reference.csv', column: 'michelson_contrast', type: 'number', unit: '0-1', role: 'covariate', description: 'Michelson contrast. SATURATES at 1.000 for every negative-polarity condition (pure black background => Lmin = 0), so it cannot discriminate there. Reported for completeness only.' },
+  { file: '00_condition_reference.csv', column: 'below_wcag_aa', type: 'boolean', unit: '-', role: 'covariate', description: 'True when contrast < 4.5:1. Balanced 2 per polarity by design (P4,P5 / N2,N3).' },
+  { file: '00_condition_reference.csv', column: 'ran_in_this_session', type: 'boolean', unit: '-', role: 'qc', description: 'Whether this condition was actually presented in this session. False for the other half of a split sitting.' },
+
+  // ---- 01_session_info.csv
+  { file: '01_session_info.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'Researcher-assigned participant code. Shared across a participant\'s sittings.' },
+  { file: '01_session_info.csv', column: 'enrolment_number', type: 'integer', unit: '-', role: 'id', description: 'Sequential 1-based enrolment index. Drives the Williams condition row AND the illumination order; must stay dense for balance.' },
+  { file: '01_session_info.csv', column: 'session_index', type: 'integer', unit: '-', role: 'iv', description: 'Sitting number for this participant, 1-based.' },
+  { file: '01_session_info.csv', column: 'condition_offset', type: 'integer', unit: 'conditions', role: 'qc', description: 'Conditions already completed before this sitting, within the illumination block.' },
+  { file: '01_session_info.csv', column: 'ambient_illumination_level', type: 'factor(2)', unit: '-', role: 'iv', description: 'Session-level (whole-plot) factor: dim (~10 lux) or moderate (~150 lux). ASSIGNED by counterbalancing, not chosen.' },
+  { file: '01_session_info.csv', column: 'illumination_block', type: 'integer', unit: '-', role: 'iv', description: '0 = this participant\'s first illumination level, 1 = their second.' },
+  { file: '01_session_info.csv', column: 'illumination_order_first', type: 'factor(2)', unit: '-', role: 'covariate', description: 'Which level the participant received first. The counterbalancing assignment, for reporting order effects.' },
+  { file: '01_session_info.csv', column: 'lux_start', type: 'number', unit: 'lux', role: 'qc', description: 'Meter reading at the participant\'s eye at session start. Mandatory.' },
+  { file: '01_session_info.csv', column: 'lux_middle', type: 'number', unit: 'lux', role: 'qc', description: 'Meter reading at the mid-session break. EMPTY if the researcher did not take it.' },
+  { file: '01_session_info.csv', column: 'lux_end', type: 'number', unit: 'lux', role: 'qc', description: 'Meter reading at session completion. EMPTY if not taken.' },
+  { file: '01_session_info.csv', column: 'lux_n_readings', type: 'integer', unit: 'count', role: 'qc', description: 'How many of the three checkpoints were actually recorded (0-3).' },
+  { file: '01_session_info.csv', column: 'lux_checkpoints_logged', type: 'string', unit: '-', role: 'qc', description: 'Which checkpoints exist, + separated, e.g. "start+end".' },
+  { file: '01_session_info.csv', column: 'lux_complete', type: 'boolean', unit: '-', role: 'qc', description: 'TRUE only when all three checkpoints were recorded. Check this before treating illuminance as verified across the sitting.' },
+  { file: '01_session_info.csv', column: 'lux_mean', type: 'number', unit: 'lux', role: 'covariate', description: 'Mean of the readings that exist. With one reading this is just that reading — read alongside lux_n_readings.' },
+  { file: '01_session_info.csv', column: 'lux_max_deviation', type: 'number', unit: 'lux', role: 'qc', description: 'Largest absolute deviation of any reading from the assigned level\'s target.' },
+  { file: '01_session_info.csv', column: 'lux_logged_all_in_range', type: 'boolean', unit: '-', role: 'qc', description: 'Whether every LOGGED reading fell inside the accepted range. Says nothing about readings never taken — pair with lux_complete.' },
+  { file: '01_session_info.csv', column: 'lux_deviation_note', type: 'string', unit: '-', role: 'qc', description: 'Researcher-entered reason for running outside the accepted range. Non-empty = protocol deviation.' },
+  { file: '01_session_info.csv', column: 'screen_white_luminance_cd_m2', type: 'number', unit: 'cd/m2', role: 'covariate', description: 'Photometrically measured display white point. Working target 120-150.' },
+  { file: '01_session_info.csv', column: 'session_duration_min', type: 'number', unit: 'minutes', role: 'qc', description: 'Wall-clock session length. Feasibility gate: median <= 120.' },
+  { file: '01_session_info.csv', column: 'condition_def_hash', type: 'string', unit: '-', role: 'provenance', description: 'Hash of the locked condition table. Ties a dataset to the exact stimulus set that produced it.' },
+  { file: '01_session_info.csv', column: 'schema_version', type: 'integer', unit: '-', role: 'provenance', description: 'IndexedDB schema version at export time.' },
+
+  // ---- 02_conditions.csv
+  { file: '02_conditions.csv', column: 'session_position', type: 'integer', unit: '-', role: 'covariate', description: 'Serial position within the sitting, 0-based. Enter in models: absorbs the vigilance decrement and fatigue accumulation.' },
+  { file: '02_conditions.csv', column: 'passage_id', type: 'integer', unit: '-', role: 'covariate', description: 'Reading passage shown. Rotated independently of condition, so passage difficulty is orthogonal to display condition.' },
+  { file: '02_conditions.csv', column: 'adaptation_ms_before', type: 'integer', unit: 'ms', role: 'qc', description: 'Grey-field adaptation before this condition. Doubled on a polarity switch; 0 for the first condition.' },
+  { file: '02_conditions.csv', column: 'reading_time_ms', type: 'integer', unit: 'ms', role: 'dv', description: 'Self-paced reading duration. This is also the ocular-metrics exposure window.' },
+  { file: '02_conditions.csv', column: 'reading_speed_wpm', type: 'integer', unit: 'words/min', role: 'dv', description: 'Derived: passage word count / reading_time_ms. Word counts are computed from the passage text, not declared.' },
+
+  // ---- 03_fatigue_scores.csv
+  { file: '03_fatigue_scores.csv', column: 'stage', type: 'factor', unit: '-', role: 'id', description: 'baseline (once per session) or post_condition (once per condition).' },
+  { file: '03_fatigue_scores.csv', column: 'fatigue_mean', type: 'number', unit: '0-10', role: 'dv', description: 'Mean of the five visual-fatigue VAS items. Ordinal — model with a cumulative-link model, not OLS.' },
+  { file: '03_fatigue_scores.csv', column: 'all_touched', type: 'boolean', unit: '-', role: 'qc', description: 'Every slider was moved. False means at least one item kept its default and the record is suspect.' },
+  { file: '03_fatigue_scores.csv', column: 'response_time_ms', type: 'integer', unit: 'ms', role: 'qc', description: 'Time from screen mount to submit. Implausibly fast = careless responding.' },
+
+  // ---- 07_eye_metrics.csv
+  { file: '07_eye_metrics.csv', column: 'incomplete_blink_ratio', type: 'number', unit: '0-1', role: 'primary', description: 'THE PRIMARY OUTCOME. Incomplete blinks / all detected blinks, during reading. A bounded proportion: model on the logit scale or with a beta/binomial mixed model.' },
+  { file: '07_eye_metrics.csv', column: 'blink_rate', type: 'number', unit: 'blinks/min', role: 'dv', description: 'All detected blinks per minute. Secondary: rate alone is a poor fatigue index, since it falls during reading on any medium and can hold steady while completeness degrades.' },
+  { file: '07_eye_metrics.csv', column: 'effective_fps', type: 'number', unit: 'frames/s', role: 'qc', description: 'Achieved processing rate. Below ~25 the duration-based metrics are sub-Nyquist; proportion measures remain valid.' },
+  { file: '07_eye_metrics.csv', column: 'fps_adequate_for_tiers', type: 'boolean', unit: '-', role: 'qc', description: 'effective_fps >= 25. Gate duration-based blink metrics on this.' },
+  { file: '07_eye_metrics.csv', column: 'perclos_p80', type: 'number', unit: '0-1', role: 'covariate', description: 'Proportion of time eyes >80% closed. A SLEEPINESS covariate, never a visual-fatigue outcome — it is insensitive in moderate drowsiness.' },
+  { file: '07_eye_metrics.csv', column: 'face_presence_ratio', type: 'number', unit: '0-1', role: 'qc', description: 'Fraction of frames with a detected face. Pilot gate: >= 0.90 in at least 90% of condition-runs.' },
+  { file: '07_eye_metrics.csv', column: 'ear_baseline', type: 'number', unit: 'ratio', role: 'qc', description: 'Per-participant open-eye eye-aspect-ratio from calibration. All blink thresholds are relative to this.' },
+  { file: '07_eye_metrics.csv', column: 'head_pitch_calibrated', type: 'boolean', unit: '-', role: 'qc', description: 'True when head_pitch_mean is relative to the participant\'s own frontal posture rather than a population default.' },
+
+  // ---- 09_rt_summary.csv
+  { file: '09_rt_summary.csv', column: 'mean_rt_hits_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Mean RT for correct go responses, excluding anticipations (<150 ms).' },
+  { file: '09_rt_summary.csv', column: 'rt_cv', type: 'number', unit: 'ratio', role: 'dv', description: 'RT coefficient of variation. One of the two most fatigue-sensitive indices.' },
+  { file: '09_rt_summary.csv', column: 'lapse_rate', type: 'number', unit: '0-1', role: 'dv', description: 'Proportion of valid hits slower than 600 ms. The other fatigue-sensitive index.' },
+  { file: '09_rt_summary.csv', column: 'd_prime', type: 'number', unit: 'z units', role: 'dv', description: 'Signal-detection sensitivity. Unstable at low trial counts — model hierarchically; check d_prime_unstable.' },
+  { file: '09_rt_summary.csv', column: 'd_prime_unstable', type: 'boolean', unit: '-', role: 'qc', description: 'Set when hit or false-alarm rate hit a bound and required a correction.' },
+
+  // ---- 10_wide_summary.csv
+  { file: '10_wide_summary.csv', column: 'fatigue_delta', type: 'number', unit: '0-10', role: 'dv', description: 'post_condition fatigue_mean minus the session baseline. Rounded to 4 dp for presentation.' },
+  { file: '10_wide_summary.csv', column: 'engagement_flag', type: 'factor(3)', unit: '-', role: 'qc', description: 'good | warn | bad. Sensitivity analyses should be run with and without "bad".' },
+  { file: '10_wide_summary.csv', column: 'quality_score', type: 'number', unit: '0-1', role: 'qc', description: 'Composite data-quality score for the condition-run.' },
+
+  // ---- 13_cvsq.csv
+  { file: '13_cvsq.csv', column: 'total_score', type: 'integer', unit: '0-32', role: 'dv', description: 'CVS-Q total. The KEY SECONDARY outcome is the session_end minus baseline change. Cut-off 6 for symptomatic.' },
+  { file: '13_cvsq.csv', column: 'freq_1..16', type: 'integer', unit: '0-2', role: 'dv', description: 'Per-item frequency: 0 never, 1 occasionally, 2 often/always.' },
+  { file: '13_cvsq.csv', column: 'intensity_1..16', type: 'integer', unit: '0-2', role: 'dv', description: 'Per-item intensity: 1 moderate, 2 intense; 0 when frequency is 0.' },
+
+  // ---- 14_nasa_tlx.csv
+  { file: '14_nasa_tlx.csv', column: 'raw_tlx', type: 'number', unit: '0-100', role: 'dv', description: 'Unweighted mean of the six LOAD-aligned subscales (Performance reversed). Session-level: supports inference about the illumination contrast only.' },
+  { file: '14_nasa_tlx.csv', column: 'performance', type: 'number', unit: '0-100', role: 'dv', description: 'RAW response. Anchored Perfect(0) to Failure(100), so LOW means good performance.' },
+  { file: '14_nasa_tlx.csv', column: 'performance_load', type: 'number', unit: '0-100', role: 'dv', description: 'Performance after reversal (100 - performance). This is the value that enters raw_tlx.' },
+];
+
 export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
   const { session, participant } = bundle;
   const pid = session.participant_id;
@@ -61,26 +169,46 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
   const csv = (filename: string, headers: string[], rows: Record<string, unknown>[]) =>
     files.push({ filename, content: toCsv(headers, rows), mime: 'text/csv' });
 
-  // 00 — codebook / condition key
-  csv('00_MASTER_CODEBOOK.csv',
-    ['condition_label', 'color_name', 'ink_name', 'polarity', 'background_color', 'text_color', 'wcag_contrast_ratio', 'wcag_level', 'below_wcag_aa'],
-    bundle.conditions.map((c) => ({
-      condition_label: c.condition_label, color_name: c.color_name, ink_name: c.ink_name, polarity: c.polarity,
-      background_color: c.background_color, text_color: c.text_color,
-      wcag_contrast_ratio: c.wcag_contrast_ratio, wcag_level: c.wcag_level, below_wcag_aa: c.below_wcag_aa,
+  // 00 — DATA DICTIONARY.
+  // Every column of every exported file, with its unit and meaning. This is what makes the export
+  // manually verifiable: without it a reader has to infer from column names whether a duration is
+  // in ms or s, whether a ratio is 0-1 or a percentage, and which columns are outcomes versus
+  // quality flags. Kept adjacent to the code that writes the columns so the two cannot drift.
+  csv('00_CODEBOOK.csv',
+    ['file', 'column', 'type', 'unit', 'role', 'description'],
+    CODEBOOK);
+
+  // 00 — condition REFERENCE table.
+  // Built from the canonical CONDITIONS table, NOT from this session's rows. Deriving it from the
+  // session made it vary per participant (presentation order) and silently truncated it to 5 rows
+  // for a split sitting — a reference table that changes per file is not a reference.
+  csv('00_condition_reference.csv',
+    ['condition_label', 'color_name', 'ink_name', 'polarity', 'background_color', 'text_color', 'wcag_contrast_ratio', 'wcag_level', 'michelson_contrast', 'below_wcag_aa', 'ran_in_this_session'],
+    CONDITIONS.map((c) => ({
+      condition_label: c.label, color_name: c.colorName, ink_name: c.inkName, polarity: c.polarity,
+      background_color: c.background, text_color: c.text,
+      wcag_contrast_ratio: c.wcag_contrast_ratio, wcag_level: c.wcag_level,
+      michelson_contrast: c.michelson_contrast, below_wcag_aa: c.below_wcag_aa,
+      ran_in_this_session: bundle.conditions.some((x) => x.condition_label === c.label),
     })));
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_mean', 'lux_max_deviation', 'lux_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'preflight_complete', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected'],
+    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'preflight_complete', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
       session_index: session.session_index, conditions_per_session: session.conditions_per_session, condition_offset: session.condition_offset,
       ambient_lux: session.ambient_lux, ambient_illumination_level: session.ambient_illumination_level,
       illumination_block: session.illumination_block, illumination_order_first: session.illumination_order_first,
       lux_start: luxAt(session, 'start'), lux_middle: luxAt(session, 'middle'), lux_end: luxAt(session, 'end'),
-      lux_mean: luxSummary(session).mean, lux_max_deviation: luxSummary(session).max_deviation,
-      lux_all_in_range: session.lux_all_in_range, lux_deviation_note: session.lux_deviation_note,
+      // Completeness is reported SEPARATELY from range compliance. Previously a session with only
+      // the mandatory start reading exported lux_all_in_range=true, which an analyst would read as
+      // "illuminance was verified throughout" when it was verified once and never re-checked.
+      lux_n_readings: (session.lux_readings ?? []).length,
+      lux_checkpoints_logged: (session.lux_readings ?? []).map((r) => r.checkpoint).join('+'),
+      lux_complete: LUX_CHECKPOINTS.every((cp) => (session.lux_readings ?? []).some((r) => r.checkpoint === cp)),
+      lux_mean: round(luxSummary(session).mean, 2), lux_max_deviation: round(luxSummary(session).max_deviation, 2),
+      lux_logged_all_in_range: session.lux_all_in_range, lux_deviation_note: session.lux_deviation_note,
       screen_white_luminance_cd_m2: session.screen_white_luminance_cd_m2,
       brightness_percent: session.brightness_percent,
       session_duration_min: session.session_end_time ? ((session.session_end_time - session.session_start_time) / 60000).toFixed(2) : '',
@@ -161,12 +289,16 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
       polarity: s.polarity, color_name: s.color_name, wcag_contrast_ratio: s.wcag_contrast_ratio,
       below_wcag_aa: s.below_wcag_aa, passage_id: s.passage_id, mean_rt_hits_ms: s.mean_rt_hits_ms,
       d_prime: s.d_prime, d_prime_se: s.d_prime_se, criterion: s.criterion,
-      fatigue_mean: s.fatigue_mean, fatigue_delta: s.fatigue_delta, comprehension_correct: s.comprehension_correct,
+      fatigue_mean: round(s.fatigue_mean), fatigue_delta: round(s.fatigue_delta), comprehension_correct: s.comprehension_correct,
       search_accuracy: s.search_accuracy, search_efficiency: s.search_efficiency, comfort_score: s.comfort_score,
       clarity_score: s.clarity_score, blink_rate: s.blink_rate, blink_rate_full: s.blink_rate_full,
       effective_fps: s.effective_fps, face_presence_ratio: s.face_presence_ratio, qc_overall: s.qc.overall,
       engagement_flag: s.engagement, quality_score: s.quality_score,
     })));
+
+  csv('11_participant.csv',
+    ['participant_id', 'enrolment_number', 'age', 'gender', 'daily_screen_hours', 'device_familiarity', 'lighting_habit', 'correction_type', 'cvd_status', 'ishihara_correct', 'ishihara_total', 'caffeine_today', 'hours_since_sleep', 'eligible', 'exclusion_reason', 'baseline_fatigue'],
+    participant ? [{ ...participant }] : []);
 
   // 12 — engagement / careless-responding quality flags (boredom & disengagement detection)
   csv('12_quality_flags.csv',
@@ -182,10 +314,6 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 11 — participant demographics + vision covariates (previously available only in the JSON bundle,
   // so the documented CSV analysis pipeline could not control for age/screen-habits/vision status).
-  csv('11_participant.csv',
-    ['participant_id', 'enrolment_number', 'age', 'gender', 'daily_screen_hours', 'device_familiarity', 'lighting_habit', 'correction_type', 'cvd_status', 'ishihara_correct', 'ishihara_total', 'caffeine_today', 'hours_since_sleep', 'eligible', 'exclusion_reason', 'baseline_fatigue'],
-    participant ? [{ ...participant }] : []);
-
   // 13 — CVS-Q symptom questionnaire (baseline + session-end), wide with per-item columns. Was
   // JSON-only; the validated primary symptom instrument is now in the numbered CSV bundle.
   const maxCvsqItems = bundle.cvsq.reduce((m, c) => Math.max(m, c.frequency.length, c.intensity.length), 0);
@@ -214,7 +342,7 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
     (bundle.tlx ?? []).map((t) => ({
       participant_id: pid, session_index: session.session_index,
       ambient_illumination_level: session.ambient_illumination_level,
-      raw_tlx: t.raw_tlx,
+      raw_tlx: round(t.raw_tlx, 2),
       mental_demand: t.mental_demand, physical_demand: t.physical_demand,
       temporal_demand: t.temporal_demand, performance: t.performance,
       performance_load: t.performance_load, effort: t.effort, frustration: t.frustration,
@@ -232,7 +360,7 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
     calibration: bundle.calibration,
     rt_summaries: bundle.rtSummaries, reaction_trials_count: bundle.reactionTrials.length,
   };
-  files.push({ filename: `session_${pid}_${session.session_id.slice(0, 8)}.json`, content: JSON.stringify(jsonBundle, null, 2), mime: 'application/json' });
+  files.push({ filename: `session_${safeFilePart(pid)}_${session.session_id.slice(0, 8)}.json`, content: JSON.stringify(jsonBundle, null, 2), mime: 'application/json' });
 
   // Manifest with checksums
   const manifest = {
