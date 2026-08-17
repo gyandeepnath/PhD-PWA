@@ -1,0 +1,1836 @@
+<title>Polarity, Colour, Light</title>
+<style>
+:root{
+  --ground:#FAF9FC; --surface:#FFFFFF; --sunk:#F2F0F7;
+  --ink:#181523; --ink-2:#3C3550; --muted:#67617A; --faint:#8E88A0;
+  --rule:#E3DFEC; --rule-2:#CFC9DE;
+  --accent:#6C3FA3; --accent-soft:#EDE4F8; --accent-ink:#4E2A7A;
+  --warn:#A6512B; --warn-soft:#F7EAE2;
+  --shadow:0 1px 2px rgba(24,21,35,.05), 0 8px 24px -12px rgba(24,21,35,.12);
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,ui-serif,serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,"Cascadia Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#131019; --surface:#1B1826; --sunk:#221E2F;
+    --ink:#EBE8F2; --ink-2:#CDC7DC; --muted:#9C95AE; --faint:#7C7590;
+    --rule:#2E2939; --rule-2:#413A52;
+    --accent:#B99AE8; --accent-soft:#2A2139; --accent-ink:#D2BDF2;
+    --warn:#D8926A; --warn-soft:#33251C;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#131019; --surface:#1B1826; --sunk:#221E2F;
+  --ink:#EBE8F2; --ink-2:#CDC7DC; --muted:#9C95AE; --faint:#7C7590;
+  --rule:#2E2939; --rule-2:#413A52;
+  --accent:#B99AE8; --accent-soft:#2A2139; --accent-ink:#D2BDF2;
+  --warn:#D8926A; --warn-soft:#33251C;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--sans); font-size:17px; line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+/* ---------- masthead ---------- */
+.mast{
+  border-bottom:1px solid var(--rule); background:var(--surface);
+  padding:2.6rem 1.25rem 2rem;
+}
+.mast-in{max-width:70ch; margin:0 auto}
+.eyebrow{
+  font-family:var(--mono); font-size:.7rem; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--accent); margin:0 0 .9rem;
+}
+.mast h1{
+  font-family:var(--serif); font-weight:600; font-size:clamp(1.9rem,5vw,2.7rem);
+  line-height:1.12; letter-spacing:-.015em; margin:0 0 .7rem; text-wrap:balance;
+}
+.mast .sub{font-size:1.06rem; color:var(--muted); margin:0 0 1.4rem; text-wrap:pretty}
+.mast .meta{
+  font-family:var(--mono); font-size:.74rem; color:var(--faint);
+  display:flex; flex-wrap:wrap; gap:.4rem 1.1rem; padding-top:1.1rem;
+  border-top:1px solid var(--rule);
+}
+/* ---------- nav ---------- */
+nav.toc{
+  position:sticky; top:0; z-index:20; background:var(--ground);
+  border-bottom:1px solid var(--rule); overflow-x:auto;
+}
+nav.toc ol{
+  display:flex; gap:0; list-style:none; margin:0 auto; padding:0;
+  max-width:1040px; font-family:var(--mono); font-size:.72rem;
+}
+nav.toc a{
+  display:block; padding:.7rem .8rem; color:var(--muted);
+  text-decoration:none; white-space:nowrap; border-bottom:2px solid transparent;
+}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--accent); border-bottom-color:var(--accent)}
+nav.toc .n{color:var(--faint); margin-right:.4em}
+/* ---------- layout ---------- */
+article{
+  display:grid; padding:0 0 5rem;
+  grid-template-columns:
+    [full-start] minmax(1rem,1fr)
+    [main-start] minmax(0,70ch) [main-end]
+    minmax(1rem,1fr) [full-end];
+}
+article>*{grid-column:main}
+article>.wide{grid-column:full; width:min(100%,1060px); margin-inline:auto; padding-inline:1rem}
+/* ---------- headings ---------- */
+h2{
+  scroll-margin-top:3.4rem;
+  font-family:var(--serif); font-weight:600; font-size:1.72rem; line-height:1.2;
+  letter-spacing:-.012em; margin:4rem 0 .3rem; padding-top:2rem;
+  border-top:2px solid var(--ink); text-wrap:balance;
+}
+h2 .part{
+  display:block; font-family:var(--mono); font-size:.7rem; font-weight:400;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--accent);
+  margin-bottom:.55rem; border:0;
+}
+h3{
+  font-family:var(--serif); font-weight:600; font-size:1.22rem; line-height:1.3;
+  margin:2.6rem 0 .2rem; text-wrap:balance;
+}
+h4{
+  font-family:var(--sans); font-weight:650; font-size:.95rem;
+  margin:1.9rem 0 .1rem; letter-spacing:-.005em;
+}
+p{margin:.85rem 0}
+a{color:var(--accent)}
+/* ---------- cross-reference chip ---------- */
+.xref{
+  font-family:var(--mono); font-size:.7rem; color:var(--faint);
+  display:block; margin:.15rem 0 1.1rem;
+}
+.xref b{color:var(--muted); font-weight:400}
+/* ---------- inline bits ---------- */
+.term{font-weight:650; color:var(--ink)}
+code,.num{font-family:var(--mono); font-size:.88em; font-variant-numeric:tabular-nums}
+.pill{
+  display:inline-block; font-family:var(--mono); font-size:.7rem;
+  padding:.12em .5em; border-radius:3px; background:var(--accent-soft);
+  color:var(--accent-ink); white-space:nowrap;
+}
+.pill.warn{background:var(--warn-soft); color:var(--warn)}
+mark{background:#FFE9A8; color:#3A2B00; padding:0 .18em; border-radius:2px}
+:root[data-theme="dark"] mark{background:#6B5410; color:#FFEFC0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) mark{background:#6B5410; color:#FFEFC0}}
+/* ---------- callouts ---------- */
+.note{
+  border-left:3px solid var(--accent); background:var(--sunk);
+  padding:.9rem 1.1rem; margin:1.5rem 0; border-radius:0 5px 5px 0;
+}
+.note p{margin:.35rem 0}
+.note .lab{
+  font-family:var(--mono); font-size:.68rem; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--accent); display:block; margin-bottom:.3rem;
+}
+.plain{
+  background:var(--sunk); border:1px solid var(--rule); border-radius:6px;
+  padding:1rem 1.15rem; margin:1.5rem 0;
+}
+.plain .lab{
+  font-family:var(--mono); font-size:.68rem; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--muted); display:block; margin-bottom:.35rem;
+}
+.plain p{margin:.3rem 0}
+/* ---------- figures ---------- */
+figure{margin:2rem 0; background:var(--surface); border:1px solid var(--rule); border-radius:8px; padding:1.2rem; box-shadow:var(--shadow)}
+figure svg{display:block; width:100%; max-width:100%; height:auto; color:var(--ink)}
+figcaption{
+  font-size:.86rem; color:var(--muted); margin-top:.95rem; padding-top:.8rem;
+  border-top:1px solid var(--rule); text-wrap:pretty;
+}
+figcaption b{color:var(--ink-2); font-weight:650}
+.scroll{overflow-x:auto; -webkit-overflow-scrolling:touch}
+/* ---------- tables ---------- */
+table{border-collapse:collapse; width:100%; font-size:.85rem; min-width:520px}
+caption{
+  text-align:left; font-family:var(--mono); font-size:.7rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--accent); padding-bottom:.6rem;
+}
+th,td{
+  text-align:left; padding:.5rem .65rem; border-bottom:1px solid var(--rule);
+  vertical-align:top;
+}
+thead th{
+  font-family:var(--sans); font-size:.72rem; font-weight:650; letter-spacing:.03em;
+  text-transform:uppercase; color:var(--muted); border-bottom:1.5px solid var(--rule-2);
+  background:var(--sunk); position:sticky; top:0;
+}
+tbody tr:hover{background:var(--sunk)}
+td.n{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:nowrap}
+tfoot td{font-weight:650; border-top:1.5px solid var(--rule-2); border-bottom:0}
+/* ---------- lists ---------- */
+ul,ol{padding-left:1.35rem; margin:.85rem 0}
+li{margin:.35rem 0}
+ul.tight li,ol.tight li{margin:.15rem 0}
+dl.gloss{margin:1.2rem 0}
+dl.gloss dt{
+  font-weight:650; margin-top:1.05rem; font-size:.95rem;
+}
+dl.gloss dd{margin:.15rem 0 0; color:var(--ink-2); font-size:.94rem}
+/* ---------- timeline ---------- */
+ol.timeline{list-style:none; padding:0; margin:1.6rem 0; position:relative}
+ol.timeline::before{
+  content:""; position:absolute; left:1.35rem; top:.6rem; bottom:.6rem;
+  width:2px; background:var(--rule-2);
+}
+ol.timeline li{
+  position:relative; padding:0 0 1.05rem 3.6rem; margin:0;
+}
+ol.timeline .dot{
+  position:absolute; left:0; top:0; width:2.7rem; height:1.7rem;
+  display:grid; place-items:center; border-radius:4px;
+  background:var(--sunk); border:1px solid var(--rule-2);
+  font-family:var(--mono); font-size:.7rem; color:var(--muted);
+}
+ol.timeline li.hot .dot{background:var(--accent-soft); border-color:var(--accent); color:var(--accent-ink)}
+ol.timeline .t{font-weight:650; font-size:.96rem}
+ol.timeline .d{font-size:.9rem; color:var(--muted)}
+/* ---------- condition specimens ---------- */
+.spec-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(158px,1fr)); gap:.7rem; margin:1.2rem 0}
+.spec{border:1px solid var(--rule-2); border-radius:6px; overflow:hidden}
+.spec .swatch{
+  padding:.85rem .8rem; font-family:Georgia,serif; font-size:1.02rem; line-height:1.35;
+}
+.spec .cap{
+  display:flex; justify-content:space-between; gap:.4rem; align-items:baseline;
+  font-family:var(--mono); font-size:.68rem; padding:.35rem .55rem;
+  background:var(--sunk); color:var(--muted); border-top:1px solid var(--rule);
+}
+.spec .cap .lv{color:var(--ink-2); font-weight:600}
+.spec.fail .cap .lv{color:var(--warn)}
+/* ---------- key-value strip ---------- */
+.kv{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:1px; background:var(--rule); border:1px solid var(--rule); border-radius:7px; overflow:hidden; margin:1.6rem 0}
+.kv>div{background:var(--surface); padding:.8rem .9rem}
+.kv dt{font-family:var(--mono); font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); margin:0 0 .25rem}
+.kv dd{margin:0; font-family:var(--serif); font-size:1.45rem; font-weight:600; line-height:1.1; font-variant-numeric:tabular-nums}
+.kv dd small{display:block; font-family:var(--sans); font-size:.72rem; font-weight:400; color:var(--muted); margin-top:.25rem; line-height:1.35}
+/* ---------- footer ---------- */
+footer{
+  border-top:1px solid var(--rule); background:var(--surface);
+  padding:2.2rem 1.25rem 3rem; font-size:.86rem; color:var(--muted);
+}
+footer .in{max-width:70ch; margin:0 auto}
+@media (max-width:640px){
+  body{font-size:16px}
+  h2{font-size:1.45rem; margin-top:3rem}
+  .kv dd{font-size:1.2rem}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+
+<header class="mast">
+  <div class="mast-in">
+    <p class="eyebrow">Companion guide to the PhD synopsis</p>
+    <h1>Polarity, Colour, Light</h1>
+    <p class="sub">Everything in the synopsis — the background, the concepts, the experiment, every table and calculation — explained from first principles, with the diagrams the document itself cannot carry.</p>
+    <div class="meta">
+      <span>Gyandeep Nath</span>
+      <span>Optometry · Faculty of Allied and Healthcare Sciences</span>
+      <span>Assam down town University</span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Contents">
+  <ol>
+    <li><a href="#orient"><span class="n">00</span>Orientation</a></li>
+    <li><a href="#problem"><span class="n">01</span>The problem</a></li>
+    <li><a href="#mechanism"><span class="n">02</span>How eyes tire</a></li>
+    <li><a href="#factors"><span class="n">03</span>The three factors</a></li>
+    <li><a href="#gap"><span class="n">04</span>The gap</a></li>
+    <li><a href="#asks"><span class="n">05</span>Aim &amp; hypotheses</a></li>
+    <li><a href="#design"><span class="n">06</span>The design</a></li>
+    <li><a href="#conditions"><span class="n">07</span>The ten conditions</a></li>
+    <li><a href="#sample"><span class="n">08</span>How many people</a></li>
+    <li><a href="#session"><span class="n">09</span>Inside a session</a></li>
+    <li><a href="#measure"><span class="n">10</span>Measuring the eye</a></li>
+    <li><a href="#analysis"><span class="n">11</span>The analysis</a></li>
+    <li><a href="#results"><span class="n">12</span>What results mean</a></li>
+    <li><a href="#limits"><span class="n">13</span>Ethics &amp; limits</a></li>
+    <li><a href="#cheat"><span class="n">14</span>Cheat sheet</a></li>
+    <li><a href="#gloss"><span class="n">15</span>Glossary</a></li>
+  </ol>
+</nav>
+
+<article>
+
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="context-stroke currentColor"/>
+    </marker>
+    <marker id="arA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"/>
+    </marker>
+  </defs>
+</svg>
+
+<h2 id="orient"><span class="part">00 — Orientation</span>The whole study in one page</h2>
+<p class="xref"><b>Covers</b> · title, aim, §1.6</p>
+
+<p>People read on screens for hours a day, and roughly seven in ten of them report tired, dry or aching eyes as a result. Almost every treatment sold for this — blue-light lenses above all — fails in trials. But the <em>stimulus itself</em> is free to change: whether text is dark-on-light or light-on-dark, what colour the letters are, and how bright the room is. Nobody has properly tested those three things together.</p>
+
+<p>This study puts <strong>130 young adults</strong> in a light-controlled room, gives each of them a tablet, and has them read under <strong>twenty different display setups</strong> — ten colour-and-polarity combinations, each seen twice, once in dim light and once in ordinary indoor light. While they read, the tablet's own camera counts their blinks and, crucially, works out how many of those blinks failed to close all the way. That single number, the <strong>incomplete-blink ratio</strong>, is the study's primary outcome, because incompletely closing the eyelid is the specific step that lets the tear film break down.</p>
+
+<dl class="kv">
+  <div><dt>Participants</dt><dd>130<small>145 enrolled, allowing for dropout</small></dd></div>
+  <div><dt>Setups each</dt><dd>20<small>10 displays × 2 light levels</small></dd></div>
+  <div><dt>Condition-runs</dt><dd>2,600<small>~9× the largest comparable study</small></dd></div>
+  <div><dt>Sessions</dt><dd>2<small>48–72 hours apart</small></dd></div>
+  <div><dt>Primary outcome</dt><dd>IBR<small>incomplete-blink ratio</small></dd></div>
+  <div><dt>Duration</dt><dd>24 mo<small>data collection after approval</small></dd></div>
+</dl>
+
+<div class="note">
+  <span class="lab">A note on this page</span>
+  <p>This guide follows your system's light or dark setting. If you are reading it on a light background you are looking at <em>positive polarity</em>; on a dark background, <em>negative polarity</em>. Those two words are what the study is largely about, and you are currently inside one of its two conditions.</p>
+  <p>One exception: the colour specimens in Part 07 are locked to true white and true black, because those are the actual experimental stimuli and must not shift with your theme.</p>
+</div>
+
+<h3>How to read this guide</h3>
+<p>The fifteen parts follow the argument of the synopsis rather than its chapter order, because the argument is what makes the method make sense. Each part opens with a grey line telling you which synopsis sections it covers, so you can move between the two documents. Terms are defined the first time they appear and collected again in the glossary at the end.</p>
+
+<h2 id="problem"><span class="part">01 — The problem</span>Why any of this matters</h2>
+<p class="xref"><b>Covers</b> · §1.1 Background · §1.4 Statement of the problem · §2.1 Burden</p>
+
+<h3>Reading moved onto screens, and screens are not paper</h3>
+<p>A printed page is <strong>passive</strong>. It reflects whatever light falls on it, and once it is printed its appearance is fixed. A screen is <strong>active</strong>. It makes its own light, and essentially every property of what it shows can be changed in software — instantly, by the designer who built the app or by the user who flips a theme switch.</p>
+
+<p>That difference is the opening the study walks through. If appearance is a software setting, then appearance is a modifiable risk factor, and finding the best setting costs nothing to deploy afterwards.</p>
+
+<h3>The condition has a name, and it is common</h3>
+<p>When prolonged screen use produces dry, tired, sore or gritty eyes, blurred vision, difficulty refocusing, headache and neck ache together, the cluster is labelled <span class="term">digital eye strain</span> — or, interchangeably, <span class="term">computer vision syndrome</span>. The synopsis uses the first name for the condition and the second only where a cited study or questionnaire uses it.</p>
+
+<div class="plain">
+  <span class="lab">The headline number and what sits behind it</span>
+  <p>A meta-analysis of <strong>103 cross-sectional studies covering 66,577 people</strong> put pooled prevalence at <strong>69.0%</strong> (95% CI 62.3–75.3). Individual studies ranged from 12.1% to 97.3% — a spread so wide it is itself a finding.</p>
+  <p>Higher in women (71.4% vs 61.8%) and in university students (76.1%). Reviews report 50–60% among children.</p>
+  <p>Why the spread? Because there is no agreed case definition. Studies that used the validated <strong>Computer Vision Syndrome Questionnaire</strong> reported <em>lower</em> prevalence than those using home-made checklists (75.4% without it). Ad-hoc checklists appear to inflate the estimate. This is why the present study uses a validated instrument with a published cut-off rather than inventing its own symptom list.</p>
+</div>
+
+<h3>The treatments do not work</h3>
+<p>This is the part that turns a nuisance into a research problem. A systematic review and meta-analysis of <strong>45 randomised controlled trials with 4,497 participants</strong> found <em>no high-certainty evidence for any therapy examined</em>, blue-blocking lenses included. The only signal was low-certainty benefit from oral omega-3 for dry-eye symptoms. A separate review in younger users reached the same verdict on blue-light filters and recommended ergonomic optimisation and shorter exposure instead.</p>
+
+<p>So: a condition affecting most screen users, no working treatment, and an explicit recommendation to optimise ergonomics — while the most basic ergonomic variables of all remain untested for prolonged reading. That is the gap this study occupies.</p>
+
+<h3>What a clinician cannot currently answer</h3>
+<p>The synopsis states the practical consequence plainly: a clinician, designer or standards body has no evidence base from which to advise how a tablet should be configured for long reading, or how that configuration should change with the light in the room. Everyone has an opinion about dark mode. Nobody has the data.</p>
+
+<h2 id="mechanism"><span class="part">02 — How eyes tire</span>Two separate routes, and why separating them matters</h2>
+<p class="xref"><b>Covers</b> · §1.2 Biophysiological basis · §1.9 Conceptual framework, Table 1.1</p>
+
+<p>The symptoms listed above do not all arise the same way. Two mechanisms are involved, and telling them apart is what makes the study measurable — because each route needs a different instrument.</p>
+
+<h3>Route one: focusing effort</h3>
+<p>To read something at arm's length, the eye has to bend light more strongly than it does for distance. It achieves this by changing the shape of its internal lens; this is called <span class="term">accommodation</span>. At the same time, both eyes must swivel slightly inwards so the two images fuse into one, which is <span class="term">vergence</span>. Holding both for a long stretch is effortful work, and when the effort accumulates you get difficulty focusing, blurred vision, headache, and a temporary drift towards short-sightedness after close work — <span class="term">near-work-induced transient myopia</span>.</p>
+
+<div class="note">
+  <span class="lab">Scope, stated honestly</span>
+  <p>This study does <strong>not</strong> measure accommodation. Doing so needs open-field autorefractometry, which is lab-bench instrumentation and outside the scope here. The focusing route is reviewed as mechanistic context — it explains <em>why</em> polarity should matter — but it is not tested. The synopsis says so explicitly rather than leaving the omission to be discovered.</p>
+</div>
+
+<h3>Route two: the ocular surface</h3>
+<p>The exposed front of the eye is kept smooth and comfortable by a thin <span class="term">tear film</span>, which is renewed every time the eyelids close fully. A blink does two jobs: it spreads fresh tear fluid across the surface, and it drags an oily secretion from glands in the lid margins over the top of that fluid, which slows evaporation.</p>
+
+<p>Concentrated screen work interferes with both jobs. It reduces how often people blink, and — more importantly — it increases the proportion of blinks in which the lids approach each other but never actually meet. These are <span class="term">incomplete blinks</span>. An incomplete blink leaves part of the surface unwetted and unprotected, so the tear film thins and breaks up sooner, and the surface enters the recognised inflammatory cycle of dry eye disease.</p>
+
+<div class="plain">
+  <span class="lab">The single most important sentence in the study's logic</span>
+  <p>It is the <em>completeness</em> of blinking, not how often blinking happens, that governs tear-film stability. That is why the <strong>incomplete-blink ratio</strong> is the primary outcome, and why blink rate alone is treated as a secondary measure that can mislead.</p>
+</div>
+
+<p>Mechanistic review attributes display-associated dry eye principally to impaired blinking, and finds insufficient support for the two popular alternative explanations — parasympathetic nervous-system effects and blue light.</p>
+
+<div class="wide">
+<figure>
+<div class="scroll">
+<svg viewBox="0 0 780 548" role="img" aria-label="Two causal routes from display settings to measured outcomes: an optical route through pupil size to retinal image quality, and an ocular-surface route through blink completeness to tear-film breakup.">
+  <g font-family="system-ui,sans-serif" font-size="12.5" fill="currentColor">
+
+    <rect x="20" y="14" width="740" height="38" rx="5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <text x="390" y="31" text-anchor="middle" font-size="10.5" letter-spacing="1.6" opacity=".62">WHAT THE STUDY MANIPULATES</text>
+    <text x="390" y="46" text-anchor="middle" font-weight="600">display polarity · text colour · ambient illuminance</text>
+
+    <text x="198" y="72" text-anchor="middle" font-size="10.5" letter-spacing="1.4" style="fill:var(--accent)">OPTICAL ROUTE</text>
+    <text x="582" y="72" text-anchor="middle" font-size="10.5" letter-spacing="1.4" style="fill:var(--accent)">OCULAR-SURFACE ROUTE</text>
+
+    <line x1="198" y1="52" x2="198" y2="84" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)" opacity=".55"/>
+    <line x1="582" y1="52" x2="582" y2="84" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)" opacity=".55"/>
+
+    <rect x="20" y="86" width="355" height="46" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="198" y="104" text-anchor="middle">More total light reaches the eye</text>
+    <text x="198" y="121" text-anchor="middle" font-size="11" opacity=".65">a white screen emits more than a black one</text>
+    <rect x="405" y="86" width="355" height="46" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="582" y="104" text-anchor="middle">Sustained visual and cognitive demand</text>
+    <text x="582" y="121" text-anchor="middle" font-size="11" opacity=".65">low contrast and hard text cost more effort</text>
+
+    <line x1="198" y1="132" x2="198" y2="164" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <text x="210" y="152" font-size="10.5" opacity=".7">constricts</text>
+    <line x1="582" y1="132" x2="582" y2="164" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <text x="594" y="152" font-size="10.5" opacity=".7">suppresses</text>
+
+    <rect x="20" y="166" width="355" height="46" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="198" y="184" text-anchor="middle">Pupil diameter falls</text>
+    <text x="198" y="201" text-anchor="middle" font-size="11" opacity=".65">ambient light drives this too, independently</text>
+    <rect x="405" y="166" width="355" height="46" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="582" y="184" text-anchor="middle">Blink rate falls · incomplete blinks rise</text>
+    <text x="582" y="201" text-anchor="middle" font-size="11" opacity=".65">total rate can hold steady while quality shifts</text>
+
+    <line x1="198" y1="212" x2="198" y2="244" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <text x="210" y="232" font-size="10.5" opacity=".7">less aberration</text>
+    <line x1="582" y1="212" x2="582" y2="244" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <text x="594" y="232" font-size="10.5" opacity=".7">leaves surface unwetted</text>
+
+    <rect x="20" y="246" width="355" height="46" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="198" y="264" text-anchor="middle">Wider depth of focus, cleaner optics</text>
+    <text x="198" y="281" text-anchor="middle" font-size="11" opacity=".65">light passes through the centre of the lens</text>
+    <rect x="405" y="246" width="355" height="46" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="582" y="264" text-anchor="middle">Larger exposed evaporative area</text>
+    <text x="582" y="281" text-anchor="middle" font-size="11" opacity=".65">no fresh oily layer drawn over the film</text>
+
+    <line x1="198" y1="292" x2="198" y2="324" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <line x1="582" y1="292" x2="582" y2="324" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+
+    <rect x="20" y="326" width="355" height="40" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="198" y="351" text-anchor="middle" font-weight="600">Sharper retinal image</text>
+    <rect x="405" y="326" width="355" height="40" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="582" y="351" text-anchor="middle" font-weight="600">Tear film thins and breaks up</text>
+
+    <line x1="198" y1="366" x2="198" y2="398" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <line x1="582" y1="366" x2="582" y2="398" style="stroke:var(--accent)" stroke-width="1.8" marker-end="url(#arA)"/>
+
+    <rect x="20" y="400" width="355" height="76" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55" stroke-dasharray="4 3"/>
+    <text x="198" y="418" text-anchor="middle" font-size="10.5" letter-spacing="1.2" opacity=".62">SECONDARY OUTCOMES</text>
+    <text x="198" y="437" text-anchor="middle" font-size="11.5">reading rate · comprehension</text>
+    <text x="198" y="453" text-anchor="middle" font-size="11.5">visual search · reaction time</text>
+    <text x="198" y="469" text-anchor="middle" font-size="11.5">perceived clarity and comfort</text>
+
+    <rect x="405" y="400" width="355" height="76" rx="5" fill="none" style="stroke:var(--accent)" stroke-width="2"/>
+    <text x="582" y="418" text-anchor="middle" font-size="10.5" letter-spacing="1.2" style="fill:var(--accent)">PRIMARY OUTCOME</text>
+    <text x="582" y="439" text-anchor="middle" font-size="13.5" font-weight="700">Incomplete-blink ratio</text>
+    <text x="582" y="457" text-anchor="middle" font-size="11" opacity=".7">key secondary: change in CVS-Q score</text>
+    <text x="582" y="471" text-anchor="middle" font-size="11" opacity=".7">also blink rate, inter-blink interval, VAS</text>
+
+    <rect x="20" y="496" width="740" height="38" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" opacity=".6"/>
+    <text x="390" y="512" text-anchor="middle" font-size="10.5" letter-spacing="1.4" opacity=".62">CROSS-CUTTING — MEASURED AND MODELLED, NOT ELIMINATED</text>
+    <text x="390" y="527" text-anchor="middle" font-size="11.5">time on task · sleepiness (PERCLOS) · disengagement · participant characteristics</text>
+    <line x1="120" y1="496" x2="120" y2="478" stroke="currentColor" stroke-width="1.1" stroke-dasharray="3 3" marker-end="url(#ar)" opacity=".5"/>
+    <line x1="660" y1="496" x2="660" y2="478" stroke="currentColor" stroke-width="1.1" stroke-dasharray="3 3" marker-end="url(#ar)" opacity=".5"/>
+  </g>
+</svg>
+</div>
+<figcaption><b>The conceptual framework of Table 1.1, drawn.</b> The two routes are parallel, not alternative: the same display settings feed both at once. The left route is the mechanism behind the polarity advantage and produces the performance outcomes; the right route is the one this study measures directly and produces the primary outcome. The dashed band at the bottom carries the nuisance variables — they are recorded as data and entered into the model rather than assumed away.</figcaption>
+</figure>
+</div>
+
+<h3>Why the primary outcome is a ratio and not a count</h3>
+<p>Three findings in the literature, taken together, forbid reading blink <em>rate</em> as a simple fatigue index:</p>
+<ol>
+  <li><strong>Reading suppresses blinking whatever the medium.</strong> Blink rate falls on paper as well as on screens, so a low rate does not indicate a display problem.</li>
+  <li><strong>Rate can hold steady while quality collapses.</strong> In a 60-minute study, tear break-up time fell from 8.62 s to 4.33 s at 30 minutes and then recovered as incomplete blinking declined — with total rate not telling that story.</li>
+  <li><strong>Raising blink rate experimentally did not help.</strong> Participants prompted to blink more often showed no change in symptom score.</li>
+</ol>
+<p>The proportion of blinks that fail to close, referenced to each participant's own baseline, survives all three objections. It is also the measure with a documented symptom correlation: in one 15-minute reading study, incomplete blinks ranged from 0.9% to 56.5% of all blinks (mean 16.1%), and symptoms correlated with that percentage at <span class="num">p = 0.002</span>.</p>
+
+<h2 id="factors"><span class="part">03 — The three factors</span>Polarity, colour and room light</h2>
+<p class="xref"><b>Covers</b> · §1.1 definitions · §1.3 · §2.2 Table 2.1 · §2.3 Table 2.2 · §2.4 Table 2.3</p>
+
+<h3>Four words you need before anything else</h3>
+<dl class="gloss">
+  <dt>Display polarity</dt>
+  <dd>Which of the two elements — letters or background — is the lighter one. <strong>Positive polarity</strong> is dark text on a light background, the arrangement of a printed book. <strong>Negative polarity</strong> is light text on a dark background, popularly known as dark mode.</dd>
+  <dt>Text colour (chromaticity)</dt>
+  <dd>The hue of the letters themselves. Letters need not be black or white; they can be blue, red, yellow, green.</dd>
+  <dt>Luminance</dt>
+  <dd>How much light the screen actually emits, measured in candelas per square metre (cd/m²).</dd>
+  <dt>Luminance contrast</dt>
+  <dd>The <em>brightness</em> difference between the letters and their background. This is the property that determines whether text is easy or hard to resolve. It is <strong>not</strong> the same as colour difference: two colours can look completely different and still be hard to read against one another.</dd>
+</dl>
+
+<div class="note">
+  <span class="lab">The distinction the whole study turns on</span>
+  <p>Colour difference and brightness difference are different things. Red text on a green background is chromatically dramatic and nearly illegible, because the two have similar luminance. Proofreading experiments confirmed directly that <strong>colour contrast cannot compensate for absent luminance contrast</strong>. Hold on to this — it is why Part 07 exists.</p>
+</div>
+
+<h3>Factor one: polarity, and the best-replicated finding in the field</h3>
+<p>The <span class="term">positive polarity advantage</span> is the finding that reading is measurably better for dark-on-light than for light-on-dark. It replicates across paradigms, tasks and display technologies. The accepted explanation is a chain of four steps, and it runs entirely through the pupil:</p>
+
+<div class="wide">
+<figure>
+<div class="scroll">
+<svg viewBox="0 0 760 268" role="img" aria-label="The pupil-mediated explanation of the positive polarity advantage: a mostly-white positive-polarity screen emits more light, constricting the pupil, which improves optical quality and sharpens the retinal image; a mostly-black negative-polarity screen does the opposite.">
+  <g font-family="system-ui,sans-serif" font-size="12" fill="currentColor">
+    <text x="14" y="16" font-size="10.5" letter-spacing="1.4" style="fill:var(--accent)">POSITIVE POLARITY</text>
+    <rect x="14" y="26" width="150" height="96" rx="5" fill="#FFFFFF" stroke="#8E88A0" stroke-width="1.2"/>
+    <g fill="#000000" font-family="Georgia,serif" font-size="10.5">
+      <text x="26" y="46">The quick brown fox</text><text x="26" y="62">jumps over the lazy</text>
+      <text x="26" y="78">dog and the pupil</text><text x="26" y="94">narrows accordingly.</text>
+    </g>
+    <text x="89" y="138" text-anchor="middle" font-size="11" opacity=".7">mostly white — emits a lot</text>
+
+    <text x="14" y="176" font-size="10.5" letter-spacing="1.4" opacity=".62">NEGATIVE POLARITY</text>
+    <rect x="14" y="186" width="150" height="96" rx="5" fill="#000000" stroke="#8E88A0" stroke-width="1.2"/>
+    <g fill="#FFFFFF" font-family="Georgia,serif" font-size="10.5">
+      <text x="26" y="206">The quick brown fox</text><text x="26" y="222">jumps over the lazy</text>
+      <text x="26" y="238">dog and the pupil</text><text x="26" y="254">stays wide open.</text>
+    </g>
+
+    <g stroke="currentColor" fill="none">
+      <line x1="176" y1="74" x2="212" y2="74" stroke-width="1.3" marker-end="url(#ar)"/>
+      <line x1="176" y1="234" x2="212" y2="234" stroke-width="1.3" marker-end="url(#ar)"/>
+    </g>
+
+    <circle cx="256" cy="74" r="30" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <circle cx="256" cy="74" r="9" fill="currentColor"/>
+    <text x="256" y="122" text-anchor="middle" font-size="11">pupil constricts</text>
+    <text x="256" y="136" text-anchor="middle" font-size="10.5" opacity=".65">small aperture</text>
+
+    <circle cx="256" cy="234" r="30" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <circle cx="256" cy="234" r="21" fill="currentColor"/>
+    <text x="256" y="272" text-anchor="middle" font-size="11">pupil stays dilated</text>
+
+    <g stroke="currentColor" fill="none">
+      <line x1="300" y1="74" x2="336" y2="74" stroke-width="1.3" marker-end="url(#ar)"/>
+      <line x1="300" y1="234" x2="336" y2="234" stroke-width="1.3" marker-end="url(#ar)"/>
+    </g>
+
+    <rect x="342" y="46" width="186" height="56" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".8"/>
+    <text x="435" y="66" text-anchor="middle" font-size="11.5">light uses the centre of</text>
+    <text x="435" y="81" text-anchor="middle" font-size="11.5">the lens · less aberration</text>
+    <text x="435" y="96" text-anchor="middle" font-size="11.5">· deeper depth of focus</text>
+
+    <rect x="342" y="206" width="186" height="56" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".5" stroke-dasharray="4 3"/>
+    <text x="435" y="226" text-anchor="middle" font-size="11.5">light uses the lens edge</text>
+    <text x="435" y="241" text-anchor="middle" font-size="11.5">· more aberration</text>
+    <text x="435" y="256" text-anchor="middle" font-size="11.5">· shallower depth of focus</text>
+
+    <g stroke="currentColor" fill="none">
+      <line x1="534" y1="74" x2="570" y2="74" stroke-width="1.3" marker-end="url(#ar)"/>
+      <line x1="534" y1="234" x2="570" y2="234" stroke-width="1.3" marker-end="url(#ar)"/>
+    </g>
+
+    <rect x="576" y="50" width="170" height="48" rx="5" fill="none" style="stroke:var(--accent)" stroke-width="1.8"/>
+    <text x="661" y="70" text-anchor="middle" font-size="12.5" font-weight="650">sharper retinal image</text>
+    <text x="661" y="87" text-anchor="middle" font-size="11" opacity=".7">better legibility</text>
+
+    <rect x="576" y="210" width="170" height="48" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".5" stroke-dasharray="4 3"/>
+    <text x="661" y="230" text-anchor="middle" font-size="12.5">softer retinal image</text>
+    <text x="661" y="247" text-anchor="middle" font-size="11" opacity=".7">the polarity penalty</text>
+  </g>
+</svg>
+</div>
+<figcaption><b>The polarity advantage is an argument about photons, not preference.</b> Nothing in this chain mentions colour or taste. It says the advantage exists because a mostly-white screen puts out more light, and more light entering the eye improves the optics. That prediction is testable — and it also predicts that the advantage should shrink when the room is already bright, which is exactly why ambient illumination is the study's third factor.</figcaption>
+</figure>
+</div>
+
+<p>Seven studies in the synopsis (Table 2.1) support the advantage. Two features of that corpus define where this study starts:</p>
+<ul>
+  <li><strong>The tasks are short and threshold-limited.</strong> Proofreading, lexical decision, adaptive-staircase psychophysics, glance reading. None measures blinking, validated symptoms, comprehension or fatigue accumulated over an hour.</li>
+  <li><strong>The stimuli are almost entirely achromatic.</strong> Black-on-white versus white-on-black. Coloured text barely appears.</li>
+</ul>
+
+<div class="plain">
+  <span class="lab">The inference everyone makes and nobody has earned</span>
+  <p>An advantage in <em>legibility</em> does not license a conclusion about <em>visual fatigue</em>. Popular argument about dark mode makes that leap constantly, in both directions. Bridging brief legibility work to hour-scale fatigue is one of this study's specific contributions.</p>
+  <p>And the advantage is not universal: one study found the cognitive cost of negative polarity depended jointly on the reader's age and on the room lighting. Polarity effects are conditional, which is an argument for crossing polarity with other factors rather than testing it alone.</p>
+</div>
+
+<h3>Factor two: text colour, where the evidence thins out</h3>
+<p>Only five studies (Table 2.2) manipulate text chromaticity, and <strong>none crosses colour with polarity while measuring fatigue</strong>. Two limitations recur across all of them:</p>
+<ol>
+  <li><strong>Exposure is brief.</strong> A study with 20 participants over 2-minute passages found colour changed accommodative and pupillary dynamics but left reading speed alone; a study measuring fatigue found strong colour effects. Duration is a plausible explanation for the disagreement, and neither study was designed to estimate it.</li>
+  <li><strong>Hue is never separated from luminance contrast.</strong> Because coloured pigments differ intrinsically in brightness, any fixed set of colours rendered on a light and a dark field produces unequal, polarity-asymmetric contrasts. Contrast is an inseparable travelling companion of any colour manipulation — so an apparent colour effect may simply be a contrast effect wearing a costume.</li>
+</ol>
+
+<p>One study adds a complication that this design must confront directly: its objective and subjective measures pointed in <em>opposite directions</em>. Dark mode improved the blink measures, yet light mode was preferred and rated less fatiguing. The present study treats that subjective–objective discrepancy as an object of study rather than an inconvenience, which is why it co-registers a validated questionnaire with the camera metrics in the same condition.</p>
+
+<h3>Factor three: ambient light, the moderator</h3>
+<p>Room light matters because it drives pupil size <em>independently of the screen</em>, and it adds veiling luminance to the display surface. If the polarity advantage really works through the pupil, then the amount of light already in the room should change how much the advantage is worth. Six studies (Table 2.3) bear on this, and they are not unanimous:</p>
+
+<div class="scroll">
+<table>
+  <caption>Where the illumination evidence agrees and disagrees</caption>
+  <thead><tr><th>Finding</th><th>Task</th><th>Implication for this design</th></tr></thead>
+  <tbody>
+    <tr><td>Polarity advantage was <em>independent</em> of ambient lighting</td><td>Proofreading, darkness vs office light</td><td>No interaction at the task level</td></tr>
+    <tr><td>Negative polarity was <em>worst</em> under near-dark light; raising illumination or switching polarity restored legibility</td><td>Threshold legibility</td><td>A clear interaction at threshold</td></tr>
+    <tr><td>Higher illumination reduced fatigue, by an amount that depended on text colour</td><td>Reading, negative polarity only</td><td>Three-way structure implied but untested</td></tr>
+    <tr><td>Dark room with a bright screen most destabilised the tear film; incomplete blinking rose over time in every condition</td><td>30-min smartphone reading, n = 30</td><td>Closest existing work; polarity not manipulated</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>The disagreement between the first two rows suggests a <strong>threshold-like rather than smoothly scaling</strong> relationship — which is a methodological instruction: illumination must be <em>measured</em> with a meter, not merely described as "dim" or "bright". The study does exactly that (Part 07).</p>
+
+<h2 id="gap"><span class="part">04 — The gap</span>What nobody has done</h2>
+<p class="xref"><b>Covers</b> · §1.4 · §2.5 Table 2.4 · §2.7 · §2.8 Research gaps</p>
+
+<p>The synopsis lists six gaps. They are easier to hold in mind as three kinds of missing thing.</p>
+
+<h3>Missing combinations</h3>
+<ul>
+  <li>Polarity is established for <strong>brief achromatic legibility</strong> tasks, untested for prolonged reading with fatigue accumulation and ocular-surface outcomes.</li>
+  <li>The <strong>polarity × colour interaction</strong> on fatigue has not been estimated: the only text-colour fatigue study held polarity constant.</li>
+  <li><strong>Three-way effects</strong> of polarity, colour and illumination are uncharacterised, and the available two-way findings partly conflict.</li>
+</ul>
+
+<h3>Missing separation</h3>
+<ul>
+  <li><strong>Hue has never been separated from luminance contrast</strong> in any of the located studies.</li>
+  <li><strong>No study reports contrast metrics alongside measured display photometry</strong> — the numbers are asserted, not measured.</li>
+  <li>The prevailing accessibility standard is <strong>polarity-blind</strong>, which is a problem when polarity is among the strongest determinants of legibility.</li>
+</ul>
+
+<h3>Missing measurement</h3>
+<ul>
+  <li>The <strong>incomplete-blink ratio has never been used as the outcome of a display-parameter manipulation</strong>, despite being the most specific marker available.</li>
+  <li>Few studies co-register a <strong>validated symptom instrument</strong> with objective markers in the same condition; where both were measured they pointed in opposite directions.</li>
+  <li><strong>Individual differences</strong> — habitual dark-mode preference, exposure, lighting environment — are seldom modelled as moderators.</li>
+</ul>
+
+<div class="note">
+  <span class="lab">The bottleneck that kept this field small</span>
+  <p>Every study in Table 2.4 measured blink completeness by <strong>manual frame-by-frame video coding</strong> or with dedicated hardware. That is why their samples are <span class="num">11</span>, <span class="num">12</span>, <span class="num">21</span>, <span class="num">25</span>, <span class="num">30</span> and <span class="num">50</span> participants. Annotation labour, not scientific interest, is the constraint.</p>
+  <p>Removing that bottleneck is Objective 4, and it is why the study is worth a <em>methodological</em> objective alongside its three substantive ones. No published study has validated a camera-based incomplete-blink measure against manual annotation.</p>
+</div>
+
+<h3>The instruments this study borrows, and why those ones</h3>
+<div class="scroll">
+<table>
+  <caption>Measurement tools and their published credentials</caption>
+  <thead><tr><th>Instrument</th><th>What it measures</th><th>Why it was chosen</th></tr></thead>
+  <tbody>
+    <tr><td><strong>CVS-Q</strong><br><span class="pill">key secondary</span></td><td>Frequency and intensity of 16 symptoms on a Rasch-fitting scale</td><td class="n">Sensitivity &amp; specificity &gt;70%; test–retest ICC 0.802. Cross-cultural validation: internal consistency 0.793, sensitivity 78.5%, specificity 70.7%, convergent validity with OSDI 0.728, cut-off 7</td></tr>
+    <tr><td><strong>NASA-TLX</strong><br><span class="pill">once per session</span></td><td>Cognitive workload across six dimensions</td><td>The conventional workload index; administered once per session as a cumulative measure rather than after every condition, to limit burden</td></tr>
+    <tr><td><strong>Eye aspect ratio</strong><br><span class="pill">primary source</span></td><td>A single number per video frame describing how open the eye is</td><td>Continuous and normalised, so it can distinguish partial from complete closure — automating what the clinical literature does by hand</td></tr>
+    <tr><td><strong>PERCLOS</strong><br><span class="pill warn">covariate only</span></td><td>Proportion of time the eyes are more than 80% closed</td><td>Among the most validated drowsiness indices; correlates with vigilance variability (r = 0.68) after sleep deprivation. <em>Insensitive in moderate drowsiness</em>, which is precisely why it is a sleepiness covariate and not a fatigue outcome</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>The eye-aspect-ratio choice deserves one more sentence, because it explains why a tablet camera is defensible here when it would not be for other purposes. Camera-based <em>gaze</em> estimation is genuinely inferior to infrared tracking in both spatial accuracy and sampling rate — so gaze is used only for coarse zone classification. But <em>blink</em> measures are proportions, and proportions need temporal rather than spatial precision. Blinks last 100–400 ms, so duration-based metrics become unreliable below roughly 25 frames per second, while proportion measures hold up. The study exploits that asymmetry deliberately and gates the duration-dependent metrics on the frame rate actually achieved.</p>
+
+<h2 id="asks"><span class="part">05 — Aim &amp; hypotheses</span>Exactly what is being asked</h2>
+<p class="xref"><b>Covers</b> · §1.6 Aim · §1.7 Objectives · §1.8 Hypotheses</p>
+
+<h3>The aim, unpacked</h3>
+<p>The formal aim is one long sentence. It contains two halves:</p>
+<div class="plain">
+  <p><strong>Substantive half.</strong> To determine the effects and interactions of display polarity, text colour and ambient illumination on visual fatigue, ocular behaviour and visual task performance during prolonged tablet-based reading.</p>
+  <p><strong>Methodological half.</strong> And, as a secondary objective, to evaluate the validity and feasibility of camera-based blink assessment as an objective measure of ocular response.</p>
+</div>
+
+<h3>Four objectives, and the hypothesis attached to each</h3>
+<div class="scroll">
+<table>
+  <caption>Objectives mapped to hypotheses and outcomes</caption>
+  <thead><tr><th>Objective</th><th>What it asks</th><th>Hypothesis</th><th>Prediction</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>1</strong><br><span class="pill">primary</span></td>
+      <td>Individual and interactive effects of the three factors on fatigue, ocular behaviour, workload and performance</td>
+      <td class="n">H₁ₐ main effects<br>H₁ᵦ interactions</td>
+      <td><strong>H₁ₐ:</strong> positive polarity, higher contrast and higher ambient light each give a lower incomplete-blink ratio, lower fatigue and better performance.<br><strong>H₁ᵦ:</strong> the effect of colour depends on polarity, and negative polarity costs more in dim than moderate light.</td>
+    </tr>
+    <tr>
+      <td><strong>2</strong><br><span class="pill">primary</span></td>
+      <td>Model the contribution of luminance contrast and distinguish it from residual hue-specific effects</td>
+      <td class="n">H₁ᵪ contrast mediation</td>
+      <td>Colour-related variance is largely accounted for by contrast. Because the contrast ordering reverses between polarities, contrast mediation predicts a <em>reversal</em> of the colour ordering across polarity; a residual hue effect predicts a <em>consistent</em> ordering, with red the a priori candidate exception.</td>
+    </tr>
+    <tr>
+      <td><strong>3</strong><br><span class="pill">primary</span></td>
+      <td>Find the configuration that minimises fatigue and maximises performance; examine who is affected differently</td>
+      <td class="n">H₁ᵨ moderation</td>
+      <td>Habitual display-mode preference, habitual screen exposure, typical lighting environment and digital literacy all moderate the size of these effects.</td>
+    </tr>
+    <tr>
+      <td><strong>4</strong><br><span class="pill">methodological</span></td>
+      <td>Feasibility and criterion validity of tablet camera metrology</td>
+      <td>—</td>
+      <td>Agreement of automated blink classification against manual annotation, and the correspondence between subjective and objective indices.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note">
+  <span class="lab">Why H₁ᵪ is the cleverest part of the design</span>
+  <p>Hue and contrast cannot be pulled apart experimentally — you cannot change a letter's colour without changing its brightness. So the design does something else: it uses the fact that the <em>contrast ordering reverses between the two polarities</em> to make the two explanations predict <strong>opposite patterns</strong>.</p>
+  <p>If contrast is doing the work, the best colour on white must be among the worst on black. If hue is doing the work, the best colour stays best in both. One experiment, two rival predictions, and they cannot both be right. Part 07 shows why the reversal is guaranteed.</p>
+</div>
+
+<h4>The formal null and alternative</h4>
+<p><strong>H₀</strong> — display polarity, text colour and ambient illumination, individually or in combination, have no significant effect on visual fatigue, ocular behaviour or visual task performance during prolonged tablet reading. <strong>H₁</strong> — at least one of these factors, individually or in combination, significantly affects these outcomes.</p>
+
+<h2 id="design"><span class="part">06 — The design</span>A crossover, and what "split-plot" means</h2>
+<p class="xref"><b>Covers</b> · §3.1 Study design, Figure 3.1 · §3.2 setting · Figure 3.2</p>
+
+<p>The design is a <span class="term">repeated-measures crossover (split-plot) factorial</span>. That phrase carries three separate ideas, and they are worth taking one at a time.</p>
+
+<dl class="gloss">
+  <dt>Repeated measures / crossover</dt>
+  <dd>Every participant experiences <em>every</em> condition. Nobody is assigned to one group and compared with strangers in another group. Each person is their own control, which removes between-person variation from the comparison and makes the design dramatically more efficient than a between-groups study of the same size.</dd>
+  <dt>Factorial</dt>
+  <dd>The factors are fully crossed rather than varied one at a time. Every text colour appears in both polarities, and every one of those ten combinations appears at both light levels. This is what makes interactions estimable — you cannot detect "colour behaves differently depending on polarity" unless you have observed every colour in both polarities.</dd>
+  <dt>Split-plot</dt>
+  <dd>Not all factors sit at the same level. Polarity and colour switch <em>within</em> a sitting — you can change them in software in a second. Ambient illumination cannot: you cannot re-light a room mid-session without forcing the eye to re-adapt. So illumination is manipulated <em>between sessions</em>. It is still within-participant (everyone gets both levels), but it operates at the session level. The larger unit is the <strong>whole plot</strong>; the conditions nested inside it are the <strong>sub-plots</strong>.</dd>
+</dl>
+
+<div class="wide">
+<figure>
+<div class="scroll">
+<svg viewBox="0 0 760 388" role="img" aria-label="Split-plot structure: one participant attends two sessions differing in ambient illumination, and inside each session sees all ten polarity-by-colour display conditions, giving twenty condition-runs per person.">
+  <g font-family="system-ui,sans-serif" font-size="12" fill="currentColor">
+    <rect x="300" y="12" width="160" height="36" rx="18" fill="none" style="stroke:var(--accent)" stroke-width="1.8"/>
+    <text x="380" y="35" text-anchor="middle" font-weight="650" font-size="12.5">one participant</text>
+
+    <path d="M380,48 L380,62 L200,62 L200,74" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <path d="M380,48 L380,62 L560,62 L560,74" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+
+    <rect x="30" y="76" width="340" height="184" rx="6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 3" opacity=".8"/>
+    <text x="200" y="97" text-anchor="middle" font-weight="650">Session 1 · illumination level A</text>
+    <text x="200" y="113" text-anchor="middle" font-size="11" opacity=".7">e.g. dim, ≈10 lux — order counterbalanced</text>
+
+    <rect x="390" y="76" width="340" height="184" rx="6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 3" opacity=".8"/>
+    <text x="560" y="97" text-anchor="middle" font-weight="650">Session 2 · illumination level B</text>
+    <text x="560" y="113" text-anchor="middle" font-size="11" opacity=".7">the other level, 48–72 h later</text>
+
+    <text x="103" y="170" text-anchor="end" font-size="10" letter-spacing=".8" opacity=".65">POS</text>
+    <text x="103" y="224" text-anchor="end" font-size="10" letter-spacing=".8" opacity=".65">NEG</text>
+    <text x="463" y="170" text-anchor="end" font-size="10" letter-spacing=".8" opacity=".65">POS</text>
+    <text x="463" y="224" text-anchor="end" font-size="10" letter-spacing=".8" opacity=".65">NEG</text>
+
+    <g font-family="Georgia,serif" font-size="14" text-anchor="middle">
+      <rect x="111" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="126" y="170" fill="#000000">Aa</text>
+      <rect x="148" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="163" y="170" fill="#1E4ED8">Aa</text>
+      <rect x="185" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="200" y="170" fill="#C81E1E">Aa</text>
+      <rect x="222" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="237" y="170" fill="#C9A400">Aa</text>
+      <rect x="259" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="274" y="170" fill="#00A651">Aa</text>
+      <rect x="111" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="126" y="224" fill="#FFFFFF">Aa</text>
+      <rect x="148" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="163" y="224" fill="#1E4ED8">Aa</text>
+      <rect x="185" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="200" y="224" fill="#C81E1E">Aa</text>
+      <rect x="222" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="237" y="224" fill="#C9A400">Aa</text>
+      <rect x="259" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="274" y="224" fill="#00A651">Aa</text>
+      <rect x="471" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="486" y="170" fill="#000000">Aa</text>
+      <rect x="508" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="523" y="170" fill="#1E4ED8">Aa</text>
+      <rect x="545" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="560" y="170" fill="#C81E1E">Aa</text>
+      <rect x="582" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="597" y="170" fill="#C9A400">Aa</text>
+      <rect x="619" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="634" y="170" fill="#00A651">Aa</text>
+      <rect x="471" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="486" y="224" fill="#FFFFFF">Aa</text>
+      <rect x="508" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="523" y="224" fill="#1E4ED8">Aa</text>
+      <rect x="545" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="560" y="224" fill="#C81E1E">Aa</text>
+      <rect x="582" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="597" y="224" fill="#C9A400">Aa</text>
+      <rect x="619" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="634" y="224" fill="#00A651">Aa</text>
+    </g>
+    <g font-family="ui-monospace,monospace" font-size="8" text-anchor="middle" opacity=".6">
+      <text x="126" y="192">P1</text><text x="163" y="192">P2</text><text x="200" y="192">P3</text><text x="237" y="192">P4</text><text x="274" y="192">P5</text>
+      <text x="126" y="246">N1</text><text x="163" y="246">N2</text><text x="200" y="246">N3</text><text x="237" y="246">N4</text><text x="274" y="246">N5</text>
+      <text x="486" y="192">P1</text><text x="523" y="192">P2</text><text x="560" y="192">P3</text><text x="597" y="192">P4</text><text x="634" y="192">P5</text>
+      <text x="486" y="246">N1</text><text x="523" y="246">N2</text><text x="560" y="246">N3</text><text x="597" y="246">N4</text><text x="634" y="246">N5</text>
+    </g>
+
+    <path d="M200,260 L200,278 L380,278 L380,290" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <path d="M560,260 L560,278 L380,278" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <text x="210" y="274" font-size="10.5" opacity=".7">10 runs</text>
+    <text x="550" y="274" text-anchor="end" font-size="10.5" opacity=".7">10 runs</text>
+
+    <rect x="228" y="292" width="304" height="46" rx="5" fill="none" style="stroke:var(--accent)" stroke-width="1.8"/>
+    <text x="380" y="311" text-anchor="middle" font-weight="700" font-size="13">20 condition-runs per participant</text>
+    <text x="380" y="329" text-anchor="middle" font-size="11" opacity=".75">× 130 analysed = 2,600 condition-runs</text>
+
+    <text x="380" y="366" text-anchor="middle" font-size="11" opacity=".72">whole plot = illumination (session level) · sub-plots = polarity × colour (within session)</text>
+    <text x="380" y="382" text-anchor="middle" font-size="11" opacity=".72">all three factors are within-participant — nobody is compared against a stranger</text>
+  </g>
+</svg>
+</div>
+<figcaption><b>The design, drawn to scale of what one person actually does.</b> Each small tile is a real stimulus: the top row of every session is positive polarity, the bottom row negative, and the letters carry the five locked colours. The two sessions differ only in room light. Because illumination sits at the session level and colour-by-polarity sits inside it, the statistical model needs two nested random effects rather than one — that is the whole practical consequence of the word "split-plot" (Part 11).</figcaption>
+</figure>
+</div>
+
+<h3>Why illumination is not switched within a session</h3>
+<p>Two reasons, both practical. A fully crossed within-session design would mean twenty conditions in one sitting, which is unmanageable. And room light cannot be changed without forcing the eye to re-adapt, which would contaminate the condition that follows the switch. Sessions are separated by <strong>48 to 72 hours</strong>, and the order of the two light levels is counterbalanced between participants so that any session-order effect cancels out across the sample.</p>
+
+<div class="plain">
+  <span class="lab">The cost of that choice, stated in the limitations</span>
+  <p>Because illumination is manipulated between sessions rather than within, its effect is more exposed to between-session variance — time of day, sleep, circadian phase. The design mitigates this by counterbalancing order and recording covariates, but it cannot eliminate it. The synopsis says so in §4.3 rather than leaving it for an examiner to find.</p>
+</div>
+
+<h3>The six phases of the whole project</h3>
+<ol class="timeline">
+  <li><span class="dot">I</span><span class="t">Preparation</span><span class="d">Ethics approval; instrument development and pilot; photometric characterisation of the tablet.</span></li>
+  <li><span class="dot">II</span><span class="t">Recruitment, screening and baseline profiling</span><span class="d">Eligibility checks, vision screening, and the questionnaire that supplies the Objective 3 moderators.</span></li>
+  <li class="hot"><span class="dot">III</span><span class="t">Session 1</span><span class="d">Ten display conditions under illumination level A, presented in Williams order.</span></li>
+  <li class="hot"><span class="dot">IV</span><span class="t">Session 2, after 48–72 hours</span><span class="d">The same ten conditions under illumination level B.</span></li>
+  <li><span class="dot">V</span><span class="t">Data processing</span><span class="d">Automated ocular metrics, quality-control gating, and the manual-annotation validation sub-study.</span></li>
+  <li><span class="dot">VI</span><span class="t">Analysis and write-up</span><span class="d">Mixed-effects analysis, design recommendations, thesis.</span></li>
+</ol>
+
+<h3>Setting</h3>
+<p>A controlled laboratory room at Assam down town University in which ambient illuminance can be held constant and <strong>daylight is excluded</strong> — the last point matters, because daylight cannot be held at 10 lux. Data collection is expected to take approximately <strong>24 months</strong> after ethics approval and piloting.</p>
+
+<h2 id="conditions"><span class="part">07 — The ten conditions</span>Where the arithmetic does the experimental work</h2>
+<p class="xref"><b>Covers</b> · §3.3 Display conditions, Table 3.4 · §3.4 Ambient illumination · §1.5 Rationale</p>
+
+<p>This is the technical heart of the study, and it is the section the reviewer flagged for discussion. It rewards slow reading. The claim is that a fact about arithmetic — not a clever choice of colours — creates the leverage that lets the study separate two explanations that cannot be separated experimentally.</p>
+
+<h3>First, how contrast is calculated</h3>
+<p>The accessibility standard defines a <span class="term">contrast ratio</span> from <span class="term">relative luminance</span>, written <em>L</em> — a number from 0 (black) to 1 (white) describing how much light a colour reflects or emits, weighted for human sensitivity. Green contributes most to it, blue least, which is why a saturated blue is far darker than a saturated yellow even when both look vivid.</p>
+
+<div class="plain">
+  <span class="lab">The two formulae, and the whole trick</span>
+  <p><strong>On a white background:</strong> ratio = 1.05 ÷ (<em>L</em> + 0.05) — this <em>falls</em> as the text gets lighter.</p>
+  <p><strong>On a black background:</strong> ratio = (<em>L</em> + 0.05) ÷ 0.05 — this <em>rises</em> as the text gets lighter.</p>
+  <p>Both depend on the same single quantity, <em>L</em>. One is decreasing in it, the other increasing. Therefore, for <em>any</em> set of colours whatsoever, the ranking on white must be the <strong>exact reverse</strong> of the ranking on black. There is no colour set for which this fails.</p>
+</div>
+
+<div class="wide">
+<figure>
+<div class="scroll">
+<svg viewBox="0 0 720 430" role="img" aria-label="Contrast ratio plotted against text relative luminance. The curve for a white background falls steeply while the line for a black background rises linearly, so the five text colours occupy exactly reversed rank orders in the two polarities.">
+  <g font-family="system-ui,sans-serif" font-size="11" fill="currentColor">
+    <line x1="70" y1="40" x2="70" y2="340" stroke="currentColor" stroke-width="1.2"/>
+    <line x1="70" y1="340" x2="662" y2="340" stroke="currentColor" stroke-width="1.2"/>
+
+    <g opacity=".28" stroke="currentColor" stroke-width=".8" stroke-dasharray="2 3">
+      <line x1="70" y1="280" x2="660" y2="280"/><line x1="70" y1="205" x2="660" y2="205"/><line x1="70" y1="130" x2="660" y2="130"/>
+    </g>
+    <g text-anchor="end" font-family="ui-monospace,monospace" font-size="9.5" opacity=".7">
+      <text x="63" y="344">1:1</text><text x="63" y="284">5:1</text><text x="63" y="209">10:1</text><text x="63" y="134">15:1</text><text x="63" y="44">21:1</text>
+    </g>
+    <text x="20" y="196" font-size="10" letter-spacing="1" transform="rotate(-90 20 196)" text-anchor="middle" opacity=".7">WCAG CONTRAST RATIO</text>
+
+    <g text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" opacity=".7">
+      <text x="70" y="356">0</text><text x="217" y="356">0.25</text><text x="365" y="356">0.50</text><text x="512" y="356">0.75</text><text x="660" y="356">1.0</text>
+    </g>
+    <text x="365" y="376" text-anchor="middle" font-size="10" letter-spacing="1" opacity=".7">RELATIVE LUMINANCE OF THE TEXT COLOUR &nbsp;→&nbsp; LIGHTER</text>
+
+    <line x1="70" y1="287.5" x2="660" y2="287.5" stroke="currentColor" stroke-width="1.2" stroke-dasharray="6 4" opacity=".65"/>
+    <text x="666" y="291" font-family="ui-monospace,monospace" font-size="9" opacity=".75">AA 4.5</text>
+    <line x1="70" y1="250" x2="660" y2="250" stroke="currentColor" stroke-width="1" stroke-dasharray="6 4" opacity=".4"/>
+    <text x="666" y="253" font-family="ui-monospace,monospace" font-size="9" opacity=".55">AAA 7</text>
+
+    <polyline points="70,40 99.5,197.5 129,250 158.5,276.3 188,292 217.5,302.5 247,310 276.5,315.6 306,320 365,326.4 424,330.8 483,334 542,336.5 601,338.4 660,340"
+      fill="none" stroke="currentColor" stroke-width="2.4"/>
+    <line x1="70" y1="340" x2="660" y2="40" style="stroke:var(--accent)" stroke-width="2.4"/>
+
+    <text x="150" y="140" font-size="11.5" font-weight="650">text on a WHITE background</text>
+    <text x="150" y="156" font-size="10.5" opacity=".7">falls as text gets lighter</text>
+    <line x1="146" y1="146" x2="112" y2="200" stroke="currentColor" stroke-width="1" opacity=".5"/>
+
+    <text x="452" y="112" font-size="11.5" font-weight="650" style="fill:var(--accent)">text on a BLACK background</text>
+    <text x="452" y="128" font-size="10.5" opacity=".7">rises as text gets lighter</text>
+    <line x1="500" y1="136" x2="520" y2="168" style="stroke:var(--accent)" stroke-width="1" opacity=".6"/>
+
+    <circle cx="175.7" cy="286.3" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+
+    <g stroke="#FFFFFF" stroke-width="1.4">
+      <circle cx="70" cy="40" r="6" fill="#000000"/>
+      <circle cx="133" cy="254.5" r="6" fill="#1E4ED8"/>
+      <circle cx="148.5" cy="268.9" r="6" fill="#C81E1E"/>
+      <circle cx="234.5" cy="307.2" r="6" fill="#00A651"/>
+      <circle cx="300" cy="319.2" r="6" fill="#C9A400"/>
+      <circle cx="70" cy="340" r="6" fill="#000000"/>
+      <circle cx="133" cy="307.9" r="6" fill="#1E4ED8"/><line x1="126" y1="313" x2="118" y2="320" stroke="#8E88A0" stroke-width="1"/>
+      <circle cx="148.5" cy="300.1" r="6" fill="#C81E1E"/>
+      <circle cx="234.5" cy="256.5" r="6" fill="#00A651"/>
+      <circle cx="300" cy="223.2" r="6" fill="#C9A400"/>
+      <circle cx="660" cy="40" r="6" fill="#FFFFFF" stroke="#8E88A0"/>
+      <circle cx="660" cy="340" r="6" fill="#FFFFFF" stroke="#8E88A0"/>
+    </g>
+
+    <g font-family="ui-monospace,monospace" font-size="9" fill="currentColor" style="paint-order:stroke;stroke:var(--surface);stroke-width:3.4;stroke-linejoin:round">
+      <text x="80" y="34">black 21.00</text>
+      <text x="142" y="244">blue 6.70</text>
+      <text x="160" y="274">red 5.74</text>
+      <text x="244" y="313">green 3.19</text>
+      <text x="310" y="309">yellow 2.39</text>
+      <text x="120" y="324" text-anchor="end">blue 3.14</text>
+      <text x="140" y="296" text-anchor="end">red 3.66</text>
+      <text x="244" y="250">green 6.57</text>
+      <text x="310" y="217">yellow 8.79</text>
+      <text x="600" y="34" text-anchor="end">white 21.00</text>
+    </g>
+
+    <text x="70" y="404" font-size="11" font-weight="650">On white, best → worst:</text>
+    <text x="228" y="404" font-size="11" font-family="ui-monospace,monospace">black · blue · red · green · yellow</text>
+    <text x="70" y="422" font-size="11" font-weight="650" style="fill:var(--accent)">On black, best → worst:</text>
+    <text x="228" y="422" font-size="11" font-family="ui-monospace,monospace" style="fill:var(--accent)">white · yellow · green · red · blue</text>
+  </g>
+</svg>
+</div>
+<figcaption><b>Why the colour ordering must reverse, and why that is arithmetic rather than design.</b> Both formulae read the same input — the text's relative luminance on the horizontal axis — but one falls with it and the other rises. Blue and red sit low on that axis, so they are high-contrast on white and low-contrast on black; yellow and green sit higher, so they do the opposite. Simulation confirmed a rank correlation of exactly <b>−1.00</b> between the two polarities for the chromatic colours in <em>every</em> candidate colour set tested. The synopsis therefore explicitly declines to claim credit for the reversal. The small ring marks where the two curves meet, at <b>4.58:1</b> — almost exactly the AA threshold of 4.5:1.</figcaption>
+</figure>
+</div>
+
+<h3>The ten conditions as they will actually look</h3>
+<p>Within each polarity the specimens are ordered from highest to lowest contrast, so the reversal is visible in the stimuli themselves. Compare where blue and yellow sit in the two rows.</p>
+
+<h4>Positive polarity — dark text on white</h4>
+<div class="spec-grid">
+  <div class="spec"><div class="swatch" style="background:#FFFFFF;color:#000000">Prolonged reading on a tablet screen</div><div class="cap"><span>P1 achromatic</span><span class="lv">21.00 · AAA</span></div></div>
+  <div class="spec"><div class="swatch" style="background:#FFFFFF;color:#1E4ED8">Prolonged reading on a tablet screen</div><div class="cap"><span>P2 blue</span><span class="lv">6.70 · AA</span></div></div>
+  <div class="spec"><div class="swatch" style="background:#FFFFFF;color:#C81E1E">Prolonged reading on a tablet screen</div><div class="cap"><span>P3 red</span><span class="lv">5.74 · AA</span></div></div>
+  <div class="spec fail"><div class="swatch" style="background:#FFFFFF;color:#00A651">Prolonged reading on a tablet screen</div><div class="cap"><span>P5 green</span><span class="lv">3.19 · AA Large</span></div></div>
+  <div class="spec fail"><div class="swatch" style="background:#FFFFFF;color:#C9A400">Prolonged reading on a tablet screen</div><div class="cap"><span>P4 yellow</span><span class="lv">2.39 · Fail</span></div></div>
+</div>
+
+<h4>Negative polarity — light text on black</h4>
+<div class="spec-grid">
+  <div class="spec"><div class="swatch" style="background:#000000;color:#FFFFFF">Prolonged reading on a tablet screen</div><div class="cap"><span>N1 achromatic</span><span class="lv">21.00 · AAA</span></div></div>
+  <div class="spec"><div class="swatch" style="background:#000000;color:#C9A400">Prolonged reading on a tablet screen</div><div class="cap"><span>N4 yellow</span><span class="lv">8.79 · AAA</span></div></div>
+  <div class="spec"><div class="swatch" style="background:#000000;color:#00A651">Prolonged reading on a tablet screen</div><div class="cap"><span>N5 green</span><span class="lv">6.57 · AA</span></div></div>
+  <div class="spec fail"><div class="swatch" style="background:#000000;color:#C81E1E">Prolonged reading on a tablet screen</div><div class="cap"><span>N3 red</span><span class="lv">3.66 · AA Large</span></div></div>
+  <div class="spec fail"><div class="swatch" style="background:#000000;color:#1E4ED8">Prolonged reading on a tablet screen</div><div class="cap"><span>N2 blue</span><span class="lv">3.14 · AA Large</span></div></div>
+</div>
+
+<p class="xref">These ten specimens use the locked hex values from Table 3.4 and are deliberately not theme-aware — they are the experimental stimuli.</p>
+
+<h3>Four properties of this matrix, and what each one buys</h3>
+
+<h4>1 · The reversal is arithmetic, and the design says so</h4>
+<p>Covered above. What the choice of colours <em>does</em> control is not the reversal but two other things: how balanced the two polarities are, and whether any condition is too faint to read at all.</p>
+
+<h4>2 · The achromatic pair is contrast-matched — the one clean test of polarity</h4>
+<p>Black-on-white and white-on-black both give exactly <span class="num">21.00 : 1</span>. That single pair therefore changes polarity while <strong>holding luminance contrast constant</strong>. It is an <em>experimental</em> control rather than a statistical one, and it is the only comparison in the entire design where a polarity effect cannot be blamed on contrast.</p>
+
+<div class="wide">
+<figure>
+<div class="scroll">
+<svg viewBox="0 0 700 232" role="img" aria-label="The achromatic pair holds contrast at 21 to 1 in both polarities, so polarity changes alone; the chromatic pairs change both polarity and contrast at once.">
+  <g font-family="system-ui,sans-serif" font-size="12" fill="currentColor">
+    <text x="14" y="16" font-size="10.5" letter-spacing="1.4" style="fill:var(--accent)">THE CLEAN COMPARISON — one thing changes</text>
+    <rect x="14" y="26" width="130" height="52" fill="#FFFFFF" stroke="#8E88A0"/>
+    <text x="79" y="57" text-anchor="middle" font-family="Georgia,serif" font-size="15" fill="#000000">Reading</text>
+    <text x="79" y="94" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10">21.00 : 1</text>
+    <line x1="152" y1="52" x2="196" y2="52" stroke="currentColor" stroke-width="1.6" marker-end="url(#ar)"/>
+    <text x="174" y="44" text-anchor="middle" font-size="10">polarity</text>
+    <rect x="204" y="26" width="130" height="52" fill="#000000" stroke="#8E88A0"/>
+    <text x="269" y="57" text-anchor="middle" font-family="Georgia,serif" font-size="15" fill="#FFFFFF">Reading</text>
+    <text x="269" y="94" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10">21.00 : 1</text>
+    <rect x="352" y="26" width="334" height="68" rx="5" fill="none" style="stroke:var(--accent)" stroke-width="1.8"/>
+    <text x="366" y="48" font-size="11.5" font-weight="650">Contrast is identical on both sides.</text>
+    <text x="366" y="66" font-size="11.5">Any difference in blinking or fatigue</text>
+    <text x="366" y="84" font-size="11.5">must be caused by polarity itself.</text>
+
+    <text x="14" y="132" font-size="10.5" letter-spacing="1.4" opacity=".62">EVERY CHROMATIC COMPARISON — two things change at once</text>
+    <rect x="14" y="142" width="130" height="52" fill="#FFFFFF" stroke="#8E88A0"/>
+    <text x="79" y="173" text-anchor="middle" font-family="Georgia,serif" font-size="15" fill="#1E4ED8">Reading</text>
+    <text x="79" y="210" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10">6.70 : 1</text>
+    <line x1="152" y1="168" x2="196" y2="168" stroke="currentColor" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+    <text x="174" y="160" text-anchor="middle" font-size="10">polarity</text>
+    <text x="174" y="186" text-anchor="middle" font-size="10">+ contrast</text>
+    <rect x="204" y="142" width="130" height="52" fill="#000000" stroke="#8E88A0"/>
+    <text x="269" y="173" text-anchor="middle" font-family="Georgia,serif" font-size="15" fill="#1E4ED8">Reading</text>
+    <text x="269" y="210" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10">3.14 : 1</text>
+    <rect x="352" y="142" width="334" height="68" rx="5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="5 3" opacity=".7"/>
+    <text x="366" y="164" font-size="11.5" font-weight="650">Contrast fell by more than half.</text>
+    <text x="366" y="182" font-size="11.5">A difference here could be polarity,</text>
+    <text x="366" y="200" font-size="11.5">contrast, or both — hence the model.</text>
+  </g>
+</svg>
+</div>
+<figcaption><b>The achromatic anchor is the most valuable single feature of the condition matrix.</b> This is the comparison the reviewer noted the chromatic conditions cannot provide, and simulation confirmed that it is the only contrast-matched pair available: every chromatic colour changes contrast when it changes polarity, and by a large margin.</figcaption>
+</figure>
+</div>
+
+<h4>3 · Conditions below the accessibility minimum are balanced, two per polarity</h4>
+<p>Green (3.19) and yellow (2.39) fall below AA on white; blue (3.14) and red (3.66) fall below AA on black. Because failures are split evenly, <strong>polarity is not systematically confounded with accessibility compliance</strong>. Across the whole ten-condition set the correlation between polarity and log contrast is <span class="num">+0.11</span> — close enough to zero that both can enter the same statistical model without collinearity.</p>
+
+<h4>4 · Michelson contrast is useless under negative polarity</h4>
+<p>The synopsis reports a second contrast metric, <span class="term">Michelson contrast</span>, defined as (L<sub>max</sub> − L<sub>min</sub>) ÷ (L<sub>max</sub> + L<sub>min</sub>). On a <em>pure black</em> background the minimum luminance is zero, so the formula collapses to L/L = <span class="num">1.000</span> for every single colour. Look at the Michelson column of Table 3.4: five identical values. The metric cannot discriminate between conditions it is meant to distinguish.</p>
+<div class="note">
+  <span class="lab">A small finding in its own right</span>
+  <p>This is why the accessibility contrast ratio, backed by measured display photometry, serves as the analytic contrast variable rather than Michelson. And it reinforces the study's broader argument: a luminance-insensitive metric is inadequate for dark-mode interfaces. A perceptual replacement that does incorporate polarity and typography is under development, but is not yet a standard.</p>
+</div>
+
+<h3>Why this colour set and not another</h3>
+<p>Before the set was fixed, four candidates were compared by simulation on three criteria: whether sub-AA conditions balance across polarity, the correlation between polarity and log contrast (a confounding index where zero is ideal), and the contrast of the weakest condition.</p>
+
+<div class="scroll">
+<table>
+  <caption>Colour-set comparison — the retained set is the most defensible of those considered</caption>
+  <thead><tr><th>Candidate set</th><th>Sub-AA balance</th><th class="n">r (polarity, log contrast)</th><th class="n">Weakest condition</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Retained</strong> — 4 chromatic + achromatic, green added</td><td>2 / 2 — balanced</td><td class="n">+0.11</td><td class="n">2.39 : 1</td><td><span class="pill">adopted</span></td></tr>
+    <tr><td>Original 3 chromatic, no green</td><td>1 / 2 — unbalanced</td><td class="n">+0.02</td><td class="n">2.39 : 1</td><td>Lowest confounding, but polarity unbalanced for compliance</td></tr>
+    <tr><td>Luminance-matched chromatic set</td><td>4 / 0 — all failures in one polarity</td><td class="n">+0.43</td><td class="n">low throughout</td><td><span class="pill warn">worst option</span></td></tr>
+    <tr><td>Web-default hues (#FF0000 etc.)</td><td>unbalanced</td><td class="n">+0.18</td><td class="n">1.07 : 1</td><td><span class="pill warn">unusable condition</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="plain">
+  <span class="lab">The counter-intuitive result</span>
+  <p>Matching the colours for equal luminance — the move that <em>sounds</em> like the rigorous thing to do — is the <strong>worst</strong> of the four options. Equalising luminance across hues necessarily makes every chromatic colour low-contrast on white <em>and</em> high-contrast on black, which pushes all four sub-AA conditions into one polarity and raises the confounding correlation from +0.11 to +0.43. The intuitive fix makes the confound nearly four times worse.</p>
+  <p>Adding green to the original three was the change that balanced the sub-AA count at two per polarity. That is what the green condition is for.</p>
+</div>
+
+<h3>Holding everything else still</h3>
+<ul>
+  <li>A <strong>single fixed tablet</strong>, viewing distance 50–60 cm.</li>
+  <li>Brightness fixed; automatic brightness and any blue-light filter <strong>disabled</strong>; screen cleaned before each session.</li>
+  <li>White-point luminance measured photometrically each session, target <span class="num">120–150 cd/m²</span> — informed by an optimum of 153 cd/m² determined under 300 lux, scaled down for the lower domestic illuminance used here.</li>
+  <li>Typography, line height and margins <strong>identical across all conditions</strong>, so polarity and colour are the only stimulus properties that vary.</li>
+</ul>
+
+<h3>The two light levels, and why those numbers</h3>
+<div class="scroll">
+<table>
+  <caption>Ambient illumination — measured, not described</caption>
+  <thead><tr><th>Level</th><th class="n">Target</th><th class="n">Accepted range</th><th>Represents</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Dim</strong></td><td class="n">≈10 lux</td><td class="n">5–15 lux</td><td>Night-time and low-light domestic use; comparable to the low-illumination conditions of prior polarity work</td></tr>
+    <tr><td><strong>Moderate</strong></td><td class="n">≈150 lux</td><td class="n">130–170 lux</td><td>General indoor domestic lighting — deliberately <em>below</em> the 300–500 lux the Indian interior-illumination code specifies for offices and classrooms</td></tr>
+  </tbody>
+</table>
+</div>
+
+<ul>
+  <li><strong>Verified at two points</strong> — the participant's eye position and the display plane — with a calibrated lux meter, and logged at the start, middle and end of every session.</li>
+  <li><strong>Two levels rather than a graded series</strong>, so that illumination could be crossed with all ten display conditions inside a feasible protocol.</li>
+  <li><strong>Roughly one log unit apart</strong>, so a pupillary difference is physiologically plausible rather than hypothetical.</li>
+  <li><strong>Chosen to straddle</strong> the range at which negative-polarity penalties have been reported to appear.</li>
+  <li><strong>Colour temperature and light-source type held constant</strong> across both levels, so illuminance is the only photometric property of the room that changes.</li>
+</ul>
+
+<p>One consequence is worth stating because it is the mechanism, not a side effect: since display white luminance is held constant while room light changes, the <strong>display-to-ambient luminance ratio</strong> — the quantity the pupil account actually implicates — differs by design between the two sessions.</p>
+
+<h2 id="sample"><span class="part">08 — How many people</span>Why 130, when the instinct says 200</h2>
+<p class="xref"><b>Covers</b> · §3.2 sampling, Tables 3.1–3.3 · §3.8 Counterbalancing</p>
+
+<h3>The formula everyone reaches for does not apply here</h3>
+<p>The familiar sample-size formula <em>n</em> = Z²pq/e² estimates how many people you need to pin down a <strong>prevalence</strong> in a population, assuming every observation is independent. Neither assumption holds. This is a controlled repeated-measures experiment on a purposively selected group, no prevalence is being estimated, and each participant serves as their own control — so observations within a person are deliberately <em>not</em> independent. Using that formula here would be a category error, and the synopsis says so explicitly.</p>
+
+<h3>The design has two units of replication, not one</h3>
+<div class="scroll">
+<table>
+  <caption>Two questions, two different denominators</caption>
+  <thead><tr><th></th><th>Within-participant contrasts</th><th>Between-participant moderation</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Covers</strong></td><td>Objectives 1 and 2 — primary and key secondary outcomes</td><td>Objective 3 — who is affected differently</td></tr>
+    <tr><td><strong>Tested on</strong></td><td>Each participant's own difference scores</td><td>Comparisons across people, e.g. habitual dark-mode users vs others</td></tr>
+    <tr><td><strong>Replicates</strong></td><td>20 condition-runs per person</td><td>1 person = 1 data point</td></tr>
+    <tr><td><strong>Consequence</strong></td><td class="n">Efficient — small n suffices</td><td class="n">Demanding — large n required</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note">
+  <span class="lab">Where the guide's instinct is right, and where it does not apply</span>
+  <p>The intuition that <em>n</em> should exceed 200 comes from between-participant research, where <em>n</em> <em>is</em> the number of independent replicates. That intuition is <strong>correct — for Objective 3 only</strong>. It does not transfer to the within-participant contrasts, which carry the primary outcome, because there the replicates are condition-runs and there are 2,600 of them.</p>
+</div>
+
+<h3>What the simulation actually returned</h3>
+<p>Power was estimated by simulation — 20,000 replications per cell, two-sided α = 0.05 — rather than by a formula that assumes independence.</p>
+
+<div class="wide">
+<figure>
+<div class="scroll">
+<svg viewBox="0 0 720 424" role="img" aria-label="Simulated statistical power against sample size for four analyses. The polarity-by-colour interaction reaches 80 percent power at about 130 participants, which is the binding constraint; small between-participant moderation reaches 80 percent only near 200.">
+  <g font-family="system-ui,sans-serif" font-size="11" fill="currentColor">
+    <line x1="70" y1="40" x2="70" y2="340" stroke="currentColor" stroke-width="1.2"/>
+    <line x1="70" y1="340" x2="680" y2="340" stroke="currentColor" stroke-width="1.2"/>
+    <g opacity=".25" stroke="currentColor" stroke-width=".8" stroke-dasharray="2 3">
+      <line x1="70" y1="280" x2="670" y2="280"/><line x1="70" y1="220" x2="670" y2="220"/><line x1="70" y1="160" x2="670" y2="160"/><line x1="70" y1="40" x2="670" y2="40"/>
+    </g>
+    <g text-anchor="end" font-family="ui-monospace,monospace" font-size="9.5" opacity=".7">
+      <text x="63" y="344">0%</text><text x="63" y="284">20%</text><text x="63" y="224">40%</text><text x="63" y="164">60%</text><text x="63" y="104">80%</text><text x="63" y="44">100%</text>
+    </g>
+    <text x="22" y="190" font-size="10" letter-spacing="1" transform="rotate(-90 22 190)" text-anchor="middle" opacity=".7">STATISTICAL POWER</text>
+
+    <line x1="70" y1="100" x2="670" y2="100" stroke="currentColor" stroke-width="1.4" stroke-dasharray="7 4"/>
+    <text x="676" y="103" font-family="ui-monospace,monospace" font-size="9" opacity=".8">80%</text>
+
+    <line x1="382" y1="40" x2="382" y2="340" style="stroke:var(--accent)" stroke-width="1.2" stroke-dasharray="4 3" opacity=".8"/>
+    <rect x="352" y="20" width="62" height="17" rx="3" style="fill:var(--accent)"/>
+    <text x="383" y="33" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#FFFFFF">n = 130</text>
+
+    <g text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" opacity=".7">
+      <text x="139" y="356">60</text><text x="278" y="356">100</text><text x="382" y="356">130</text><text x="625" y="356">200</text>
+    </g>
+    <text x="375" y="376" text-anchor="middle" font-size="10" letter-spacing="1" opacity=".7">PARTICIPANTS ANALYSED</text>
+
+    <polyline points="139,82 278,46 382,41.5 625,40.3" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".45"/>
+    <polyline points="139,154 278,88 382,64 625,43" fill="none" stroke="currentColor" stroke-width="1.8" opacity=".7"/>
+    <polyline points="139,199 278,127 382,97 625,58" fill="none" style="stroke:var(--accent)" stroke-width="3"/>
+    <polyline points="139,238 278,187 382,154 625,100" fill="none" stroke="currentColor" stroke-width="1.8" stroke-dasharray="6 4" opacity=".8"/>
+
+    <g stroke="currentColor" stroke-width="1.2" fill="none" opacity=".45">
+      <circle cx="139" cy="82" r="3"/><circle cx="278" cy="46" r="3"/><circle cx="382" cy="41.5" r="3"/><circle cx="625" cy="40.3" r="3"/>
+    </g>
+    <g stroke="currentColor" stroke-width="1.4" fill="none" opacity=".7">
+      <circle cx="139" cy="154" r="3.2"/><circle cx="278" cy="88" r="3.2"/><circle cx="382" cy="64" r="3.2"/><circle cx="625" cy="43" r="3.2"/>
+    </g>
+    <g style="fill:var(--accent)">
+      <circle cx="139" cy="199" r="4"/><circle cx="278" cy="127" r="4"/><circle cx="382" cy="97" r="4.8"/><circle cx="625" cy="58" r="4"/>
+    </g>
+    <g stroke="currentColor" stroke-width="1.4" fill="none" opacity=".8">
+      <circle cx="139" cy="238" r="3.2"/><circle cx="278" cy="187" r="3.2"/><circle cx="382" cy="154" r="3.2"/><circle cx="625" cy="100" r="3.2"/>
+    </g>
+
+    <text x="640" y="36" font-size="10.5" opacity=".6">polarity, d_z 0.40</text>
+    <text x="640" y="52" font-size="10.5" opacity=".75">polarity, d_z 0.30</text>
+    <text x="530" y="52" font-size="10.5" font-weight="650" style="fill:var(--accent)" text-anchor="end">polarity × colour, d_z 0.25 — the binding constraint</text>
+    <text x="640" y="118" font-size="10.5" opacity=".85">moderation, 0.40 SD</text>
+
+    <text x="70" y="400" font-size="11">At <tspan font-weight="650">n = 130</tspan>: polarity main effect <tspan font-family="ui-monospace,monospace">92%</tspan> · interaction <tspan font-family="ui-monospace,monospace" font-weight="650">81%</tspan> · moderate moderation <tspan font-family="ui-monospace,monospace">81%</tspan> · small moderation <tspan font-family="ui-monospace,monospace">62%</tspan></text>
+    <text x="70" y="418" font-size="11" opacity=".72">80% power needs ≈128 for the interaction, ≈127 for moderate moderation, and ≈200 for small moderation.</text>
+  </g>
+</svg>
+</div>
+<figcaption><b>The polarity × colour interaction, not the main effect, sets the sample size.</b> The main effects are comfortable well below 130. The interaction — which is central to Objective 2 and to the contrast-mediation hypothesis — needs about 128 participants for 80% power, and moderate between-participant moderation needs about 127. Rounding up to the nearest multiple of ten that satisfies both gives <b>130</b>. Small moderation effects of 0.40 SD would need roughly 200, so moderation of that magnitude is declared exploratory and reported with confidence intervals rather than as a confirmatory test.</figcaption>
+</figure>
+</div>
+
+<div class="scroll">
+<table>
+  <caption>Table 3.1 — simulated power, 20,000 replications per cell</caption>
+  <thead><tr><th>Analysis</th><th>Effect size</th><th class="n">n = 60</th><th class="n">n = 100</th><th class="n">n = 130</th><th class="n">n = 200</th></tr></thead>
+  <tbody>
+    <tr><td>Within: polarity main effect</td><td class="n">d_z = 0.40</td><td class="n">86%</td><td class="n">98%</td><td class="n">&gt;99%</td><td class="n">&gt;99%</td></tr>
+    <tr><td>Within: polarity main effect</td><td class="n">d_z = 0.30</td><td class="n">62%</td><td class="n">84%</td><td class="n">92%</td><td class="n">99%</td></tr>
+    <tr><td><strong>Within: polarity × colour</strong></td><td class="n">d_z = 0.25</td><td class="n">47%</td><td class="n">71%</td><td class="n"><strong>81%</strong></td><td class="n">94%</td></tr>
+    <tr><td>Between: moderation, large</td><td class="n">0.60 SD</td><td class="n">62%</td><td class="n">84%</td><td class="n">92%</td><td class="n">99%</td></tr>
+    <tr><td>Between: moderation, moderate</td><td class="n">0.50 SD</td><td class="n">48%</td><td class="n">70%</td><td class="n">81%</td><td class="n">94%</td></tr>
+    <tr><td>Between: moderation, small</td><td class="n">0.40 SD</td><td class="n">34%</td><td class="n">51%</td><td class="n">62%</td><td class="n">80%</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Why 130 is not small — the quantity that governs precision</h3>
+<p>The number that determines how precisely a within-participant contrast can be estimated is the number of <strong>condition-runs</strong>, not the number of people. On that measure the proposed study is not modest at all.</p>
+
+<div class="wide">
+<figure>
+<div class="scroll">
+<svg viewBox="0 0 700 348" role="img" aria-label="Total condition-runs compared across the studies from which this design's measures are drawn. The proposed study's 2600 condition-runs dwarf the largest comparable study's 300.">
+  <g font-family="system-ui,sans-serif" font-size="11" fill="currentColor">
+    <g text-anchor="end" font-size="10.5">
+      <text x="182" y="49">Hirota 2013 · n=11</text>
+      <text x="182" y="85">Jackson 2016 · n=12</text>
+      <text x="182" y="121">Portello 2013 · n=21</text>
+      <text x="182" y="157">Cardona 2011 · n=25</text>
+      <text x="182" y="193">CLAE 2025 · n=30</text>
+      <text x="182" y="229">Jiménez 2020 · n=20</text>
+      <text x="182" y="265">Argilés 2015 · n=50</text>
+      <text x="182" y="301" font-weight="700">Proposed · n=130</text>
+    </g>
+    <line x1="190" y1="26" x2="190" y2="316" stroke="currentColor" stroke-width="1.2"/>
+    <g fill="currentColor" opacity=".55">
+      <rect x="190" y="34" width="2.5" height="22" rx="1"/>
+      <rect x="190" y="70" width="4.3" height="22" rx="1"/>
+      <rect x="190" y="106" width="7.6" height="22" rx="1"/>
+      <rect x="190" y="142" width="13.6" height="22" rx="1"/>
+      <rect x="190" y="178" width="21.7" height="22" rx="1"/>
+      <rect x="190" y="214" width="50.6" height="22" rx="1"/>
+      <rect x="190" y="250" width="54.2" height="22" rx="1"/>
+    </g>
+    <rect x="190" y="286" width="470" height="22" rx="1" style="fill:var(--accent)"/>
+    <g font-family="ui-monospace,monospace" font-size="10" fill="currentColor">
+      <text x="200" y="49">11</text><text x="202" y="85">24</text><text x="205" y="121">42</text><text x="211" y="157">75</text>
+      <text x="219" y="193">120</text><text x="248" y="229">280</text><text x="252" y="265">300</text>
+    </g>
+    <text x="650" y="301" text-anchor="end" font-family="ui-monospace,monospace" font-size="13" font-weight="700" fill="#FFFFFF">2,600</text>
+    <text x="190" y="336" font-size="10.5" letter-spacing="1" opacity=".7">TOTAL CONDITION-RUNS (participants × conditions each)</text>
+  </g>
+</svg>
+</div>
+<figcaption><b>Table 3.2 as a picture.</b> The seven studies from which this design borrows its measures produced between 11 and 300 condition-runs each. The proposed study produces <b>2,600</b> — roughly nine times the largest of them — and is the first in the group to manipulate polarity, text colour and ambient illumination together. No located study has combined a sample of this size with per-condition ocular measurement under a manipulated display parameter.</figcaption>
+</figure>
+</div>
+
+<h3>Who is eligible</h3>
+<div class="scroll">
+<table>
+  <caption>Table 3.3 — eligibility, applied at screening and recorded for reporting</caption>
+  <thead><tr><th>Include if…</th><th>Exclude if…</th></tr></thead>
+  <tbody>
+    <tr><td>Aged 18 to 35</td><td>Refractive error beyond ±3.00 D</td></tr>
+    <tr><td>Distance acuity 6/6 or better, with or without correction</td><td>Manifest binocular vision disorder</td></tr>
+    <tr><td>Habitual screen use of at least four hours daily</td><td>Colour-vision deficiency on screening</td></tr>
+    <tr><td>No known ocular, systemic or neurological illness</td><td>History of photosensitivity or migraine</td></tr>
+    <tr><td>Able to give written informed consent</td><td>Medication affecting vision, accommodation or tear film</td></tr>
+    <tr><td>Available for two sessions 48–72 hours apart</td><td>Diagnosed learning or psychiatric disorder</td></tr>
+    <tr><td>—</td><td>Contact-lens wear on test days; ocular surgery within six months</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Two exclusions deserve a word. <strong>Colour-vision deficiency</strong> is excluded because the study manipulates hue — a deficient observer would be receiving a different stimulus. <strong>Contact lenses on test days</strong> are excluded because lens wear independently destabilises the tear film, which is the primary outcome's own pathway.</p>
+
+<h4>Screening and profiling</h4>
+<p>Screening comprises visual acuity, non-cycloplegic refraction, cover test, near point of convergence, and Ishihara colour-vision screening <em>administered on the study display itself</em> — a method whose sensitivity was 94.4% and specificity 82.4% on a calibrated monitor, and 96.0% / 94.7% on a smartphone, with no significant difference between modes. Screening is an aid, not a diagnosis; results are recorded as covariates.</p>
+<p>Participants also complete a profiling questionnaire covering habitual display-mode preference, screen exposure, lighting environment, familiarity with coloured interfaces, digital literacy, hours since waking and recent caffeine intake. The first four supply the Objective 3 moderators; the last two are sleepiness covariates.</p>
+
+<h3>Sampling honesty</h3>
+<p>Recruitment is <strong>non-probability purposive (convenience) sampling</strong>, with consecutive enrolment of eligible volunteers from the university and associated institutions. This is a deliberate choice: it keeps cognitive, visual and digital-exposure characteristics reasonably homogeneous, so the within-subject contrasts are not diluted by uncontrolled heterogeneity. The cost is stated plainly — <em>the findings are not intended to estimate population prevalence, and generalisation beyond comparable young-adult screen users is made with caution.</em></p>
+
+<div class="wide">
+<figure>
+<div class="scroll">
+<svg viewBox="0 0 700 468" role="img" aria-label="Participant flow from approximately 180 people approached, through screening and exclusion, to 145 enrolled and a target of 130 analysed contributing 2600 condition-runs.">
+  <g font-family="system-ui,sans-serif" font-size="12" fill="currentColor">
+    <rect x="60" y="12" width="330" height="38" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <text x="225" y="30" text-anchor="middle">Approached and assessed for eligibility</text>
+    <text x="225" y="45" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" opacity=".75">target ≈ 180</text>
+    <line x1="225" y1="50" x2="225" y2="72" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+
+    <rect x="60" y="74" width="330" height="38" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <text x="225" y="92" text-anchor="middle">Screening</text>
+    <text x="225" y="107" text-anchor="middle" font-size="11" opacity=".75">acuity · refraction · binocular status · colour vision</text>
+    <line x1="390" y1="93" x2="440" y2="93" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+    <rect x="446" y="74" width="234" height="38" rx="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="4 3" opacity=".6"/>
+    <text x="563" y="98" text-anchor="middle" font-size="11.5" opacity=".8">Excluded — criteria not met, or declined</text>
+    <line x1="225" y1="112" x2="225" y2="134" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+
+    <rect x="60" y="136" width="330" height="38" rx="5" fill="none" style="stroke:var(--accent)" stroke-width="1.7"/>
+    <text x="225" y="154" text-anchor="middle" font-weight="650">Enrolled and consented</text>
+    <text x="225" y="169" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11">n = 145 · sequential enrolment number</text>
+    <line x1="225" y1="174" x2="225" y2="196" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+
+    <rect x="60" y="198" width="330" height="38" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <text x="225" y="216" text-anchor="middle">Allocated to a Williams row</text>
+    <text x="225" y="231" text-anchor="middle" font-size="11" opacity=".75">and to dim-first or moderate-first order</text>
+    <line x1="225" y1="236" x2="225" y2="258" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+
+    <rect x="60" y="260" width="330" height="34" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <text x="225" y="282" text-anchor="middle">Session 1 — 10 conditions, illumination A</text>
+    <line x1="225" y1="294" x2="225" y2="314" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <rect x="60" y="316" width="330" height="34" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <text x="225" y="338" text-anchor="middle">Session 2, 48–72 h later — illumination B</text>
+    <line x1="390" y1="305" x2="440" y2="305" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+    <rect x="446" y="278" width="234" height="54" rx="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="4 3" opacity=".6"/>
+    <text x="563" y="298" text-anchor="middle" font-size="11.5" opacity=".8">Withdrawal, non-attendance or</text>
+    <text x="563" y="314" text-anchor="middle" font-size="11.5" opacity=".8">data-quality exclusion —</text>
+    <text x="563" y="326" text-anchor="middle" font-size="10.5" opacity=".7">recorded and reported, not silently dropped</text>
+    <line x1="225" y1="350" x2="225" y2="372" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+
+    <rect x="60" y="374" width="330" height="46" rx="5" fill="none" style="stroke:var(--accent)" stroke-width="2"/>
+    <text x="225" y="393" text-anchor="middle" font-weight="700">Analysed — target n = 130</text>
+    <text x="225" y="411" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11">20 runs each = 2,600 condition-runs</text>
+
+    <text x="225" y="446" text-anchor="middle" font-size="11" opacity=".72">The 15-person gap between 145 enrolled and 130 analysed is planned attrition,</text>
+    <text x="225" y="461" text-anchor="middle" font-size="11" opacity=".72">not an afterthought — two sessions 48–72 h apart will lose people.</text>
+  </g>
+</svg>
+</div>
+<figcaption><b>Figure 3.2, drawn as a CONSORT-style flow.</b> Dashed boxes on the right are the exits. Both are recorded and reported rather than quietly removed, which is what allows a reader to judge whether the analysed sample is representative of the enrolled one.</figcaption>
+</figure>
+</div>
+
+<h3>Controlling for order — the Williams square</h3>
+<p>Two order-related threats arise when one person sees ten conditions in a row:</p>
+<ul>
+  <li><strong>Serial-position effects</strong> — the vigilance decrement and accumulating fatigue mean that whichever condition comes tenth will look worse than it is.</li>
+  <li><strong>First-order carryover</strong> — notably the light-adaptation transient imposed by a polarity switch, which contaminates the condition that follows it.</li>
+</ul>
+
+<p>A <span class="term">balanced Williams-type Latin square</span> over the ten conditions handles both at once, because across a complete block it guarantees two properties simultaneously:</p>
+<div class="plain">
+  <p><strong>1.</strong> Every condition occupies every serial position equally often — so position effects cancel.</p>
+  <p><strong>2.</strong> Every condition precedes and follows every other condition equally often — so carryover cancels.</p>
+</div>
+
+<p>Participants are assigned to rows by sequential enrolment index, and complete balance is achieved in <strong>blocks of ten</strong>. This is the real reason the sample size is a multiple of ten: 130 is 13 complete blocks. Illumination order is counterbalanced orthogonally on top of that, so dim-first and moderate-first are equally represented within each block.</p>
+
+<h2 id="session"><span class="part">09 — Inside a session</span>What a participant actually does</h2>
+<p class="xref"><b>Covers</b> · §3.6 Procedure, Figure 3.3 · §3.5 instrumentation</p>
+
+<h3>The session frame</h3>
+<ol class="timeline">
+  <li><span class="dot">1</span><span class="t">Setup, seating and calibration</span><span class="d">Viewing distance set to 50–60 cm. Per-participant calibration establishes an open-eye baseline, a nine-point gaze mapping and a frontal head-pose reference — so every metric is referenced to <em>this person</em> rather than to population defaults.</span></li>
+  <li><span class="dot">2</span><span class="t">Baseline CVS-Q and fatigue VAS</span><span class="d">Recorded before any reading, so the key secondary outcome is a <em>change</em> score rather than an absolute one.</span></li>
+  <li class="hot"><span class="dot">3</span><span class="t">Ten display conditions, in Williams order</span><span class="d">Each condition runs the full seven-step sequence below. A self-paced rest break follows every two conditions.</span></li>
+  <li><span class="dot">4</span><span class="t">CVS-Q repeated, NASA-TLX administered once</span><span class="d">The questionnaire is repeated to give the change score; workload is captured once per session as a cumulative index rather than after every condition.</span></li>
+</ol>
+
+<h3>The seven steps inside every single condition</h3>
+<ol class="timeline">
+  <li><span class="dot">i</span><span class="t">Adaptation on a neutral grey field</span><span class="d"><strong>60 seconds</strong>, extended to <strong>120 seconds</strong> when the polarity switches. This is the carryover control from Part 08 made physical — the eye is given time to re-adapt before the next condition is measured.</span></li>
+  <li class="hot"><span class="dot">ii</span><span class="t">Reading task</span><span class="d">A standardised passage in the active condition, self-paced beyond a per-page minimum. <strong>This is the exposure window from which the ocular metrics are taken</strong> — the primary outcome comes from here and nowhere else.</span></li>
+  <li><span class="dot">iii</span><span class="t">Comprehension</span><span class="d">Multiple-choice items assessing gist, inference and detail — three levels, so a ceiling on one does not hide effects on another.</span></li>
+  <li><span class="dot">iv</span><span class="t">Display perception</span><span class="d">Comfort and clarity ratings, 0–100, captured immediately after reading while the impression is fresh.</span></li>
+  <li><span class="dot">v</span><span class="t">Visual-fatigue VAS</span><span class="d">Five items, 0–10, per condition.</span></li>
+  <li><span class="dot">vi</span><span class="t">Visual search</span><span class="d">Tap every occurrence of a target word, fixed time limit.</span></li>
+  <li><span class="dot">vii</span><span class="t">Go/no-go reaction time</span><span class="d">A dot appears at random screen locations on the active background. Yields reaction-time mean, SD and coefficient of variation, lapse rate, anticipations, and signal-detection <em>d′</em> and criterion.</span></li>
+</ol>
+
+<div class="note">
+  <span class="lab">A design detail worth noticing</span>
+  <p>The reaction-time target is <strong>achromatic and defined relative to the active background</strong> — black on light fields, white on dark ones — with the chromatic set used as distractors. So target contrast is maximal and identical in both polarities, salience does not vary with condition, and no target hue coincides with the text-colour manipulation.</p>
+  <p>The discrimination becomes achromatic-against-chromatic rather than hue-against-hue. That simplifies the task, but it preserves the two indices that are actually fatigue-sensitive: reaction-time variability and lapse rate.</p>
+</div>
+
+<h4>Three more controls</h4>
+<ul>
+  <li><strong>Passages matched</strong> for genre, length and readability, and assigned <em>counterbalanced independently of condition</em> — so passage difficulty is orthogonal to display condition rather than confounded with it.</li>
+  <li><strong>No performance feedback</strong> is given, so effort is not differentially modulated across conditions.</li>
+  <li><strong>Rest break every two conditions</strong>, self-paced.</li>
+</ul>
+
+<div class="plain">
+  <span class="lab">The pilot and the feasibility gate — §3.6</span>
+  <p>Ten participants precede the main study. Three pre-specified criteria decide whether the two-session structure survives:</p>
+  <p>· median session duration ≤ <strong>120 minutes</strong><br>· no more than <strong>one withdrawal in ten</strong><br>· face-presence ratio ≥ <strong>0.90</strong> in at least 90% of condition-runs</p>
+  <p>If any criterion fails, each illumination level is split into <strong>two shorter sittings of five conditions</strong>, preserving the counterbalancing scheme and the global serial-position record. The fallback is specified in advance rather than improvised, which is what makes it a gate rather than a hope.</p>
+</div>
+
+<h2 id="measure"><span class="part">10 — Measuring the eye</span>How a tablet camera counts an incomplete blink</h2>
+<p class="xref"><b>Covers</b> · §3.5 Instrumentation · operational definitions · validation sub-study</p>
+
+<h3>Eye aspect ratio, in one paragraph</h3>
+<p>Facial-landmark tracking places a set of points around each eye on every processed video frame. From those points a single scalar is computed — the <span class="term">eye aspect ratio</span>, or EAR — which is essentially the height of the eye opening divided by its width. When the eye is open the number is high; as the lid descends it falls toward zero. A blink is not detected as an image; it is detected as a <em>temporal pattern</em> in this one number.</p>
+
+<p>Two properties make it right for this job. It is <strong>continuous</strong>, so it registers partial closure rather than only a binary open/shut. And it is <strong>normalised</strong>, so it can be referenced to each participant's own open-eye baseline instead of to a population value — which matters because eye shape varies enormously between people.</p>
+
+<div class="wide">
+<figure>
+<div class="scroll">
+<svg viewBox="0 0 720 326" role="img" aria-label="An eye-aspect-ratio trace over time showing three blinks. Two dip below 0.60 of baseline and count as complete; the middle one bottoms out at 0.68, inside the 0.60 to 0.75 band, and counts as incomplete.">
+  <g font-family="system-ui,sans-serif" font-size="11" fill="currentColor">
+    <rect x="50" y="136" width="640" height="43" style="fill:var(--accent)" opacity=".16"/>
+    <line x1="50" y1="64" x2="690" y2="64" stroke="currentColor" stroke-width="1.1" stroke-dasharray="5 4" opacity=".6"/>
+    <line x1="50" y1="136" x2="690" y2="136" stroke="currentColor" stroke-width="1.4" stroke-dasharray="6 4"/>
+    <line x1="50" y1="179" x2="690" y2="179" stroke="currentColor" stroke-width="1.4" stroke-dasharray="6 4"/>
+    <g text-anchor="end" font-family="ui-monospace,monospace" font-size="10">
+      <text x="44" y="67" opacity=".7">1.00 ×</text>
+      <text x="44" y="139">0.75 ×</text>
+      <text x="44" y="182">0.60 ×</text>
+    </g>
+    <text x="50" y="30" font-size="9.5" letter-spacing="1" opacity=".7">EAR ÷ OPEN-EYE BASELINE &nbsp; (1.00 = fully open)</text>
+
+    <text x="680" y="152" font-size="9.5" style="fill:var(--accent)" font-weight="650" text-anchor="end">INCOMPLETE</text>
+    <text x="680" y="165" font-size="9.5" style="fill:var(--accent)" font-weight="650" text-anchor="end">BAND</text>
+
+    <polyline points="50,64 140,64 152,79 162,150 170,230 178,150 190,79 200,64 330,64 342,81 352,156 362,81 374,64 500,64 512,79 522,144 530,221 538,144 550,79 562,64 690,64"
+      fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/>
+
+    <circle cx="170" cy="230" r="4.5" fill="currentColor"/>
+    <text x="170" y="252" text-anchor="middle" font-size="11" font-weight="650">complete</text>
+    <text x="170" y="266" text-anchor="middle" font-size="10" opacity=".7">min 0.42 — lids meet</text>
+
+    <circle cx="352" cy="156" r="5.5" style="fill:var(--accent)"/>
+    <text x="328" y="122" text-anchor="end" font-size="11.5" font-weight="700" style="fill:var(--accent)">INCOMPLETE</text>
+    <text x="328" y="107" text-anchor="end" font-size="10" opacity=".75">min 0.68 — lids never meet</text>
+    <polyline points="333,118 344,140 346,150" fill="none" style="stroke:var(--accent)" stroke-width="1.2"/>
+
+    <circle cx="530" cy="221" r="4.5" fill="currentColor"/>
+    <text x="530" y="252" text-anchor="middle" font-size="11" font-weight="650">complete</text>
+    <text x="530" y="266" text-anchor="middle" font-size="10" opacity=".7">min 0.45 — lids meet</text>
+
+    <text x="60" y="56" font-size="10" opacity=".7">open-eye baseline, set per participant at calibration</text>
+    <text x="50" y="292" font-size="10.5" letter-spacing="1" opacity=".7">TIME →</text>
+
+    <text x="200" y="292" font-size="11.5">Blink registered when EAR falls below <tspan font-family="ui-monospace,monospace" font-weight="650">0.75 ×</tspan> baseline.</text>
+    <text x="200" y="310" font-size="11.5">Incomplete-blink ratio = <tspan font-weight="650">incomplete blinks ÷ all detected blinks</tspan>, per condition.</text>
+  </g>
+</svg>
+</div>
+<figcaption><b>The primary outcome, derived.</b> Two thresholds do all the work: crossing <b>0.75 × baseline</b> means a blink has started; whether the minimum reaches <b>0.60 × baseline</b> decides complete versus incomplete. The middle blink here bottoms out at 0.68 — the lid clearly descended, but never achieved full apposition, so part of the ocular surface went unwetted. The study's primary number is simply how often that happens, as a proportion of all blinks in the condition. Note that the trace's total blink <em>count</em> is three regardless — which is exactly why rate alone would miss this.</figcaption>
+</figure>
+</div>
+
+<div class="note">
+  <span class="lab">Stated as provisional, on purpose</span>
+  <p>The synopsis says the 0.75 and 0.60 thresholds <strong>are provisional and will be finalised against manually annotated video</strong> in the validation subsample <em>before</em> the main analysis is run. Fixing them afterwards, once outcomes were visible, would be a form of analytic flexibility that could manufacture a result.</p>
+</div>
+
+<h3>The validation sub-study — Objective 4</h3>
+<p>This is what turns a convenient camera measure into a defensible one.</p>
+<div class="scroll">
+<table>
+  <caption>Validating automated blink classification against manual annotation</caption>
+  <thead><tr><th>Element</th><th>Specification</th></tr></thead>
+  <tbody>
+    <tr><td>Subsample</td><td class="n">20 participants, pre-specified</td></tr>
+    <tr><td>Video contributed</td><td>Two 3-minute reading segments each, one per illumination level — ≈120 minutes total</td></tr>
+    <tr><td>Expected events</td><td class="n">≈1,200–1,500 blinks at typical reading rates</td></tr>
+    <tr><td>Annotators</td><td>Two, trained on a <em>separate</em> pilot set, masked both to condition <em>and</em> to algorithm output; a third adjudicates disagreements</td></tr>
+    <tr><td>Inter-rater reliability</td><td>Cohen's κ for complete/incomplete classification; ICC for event counts</td></tr>
+    <tr><td>Algorithm vs standard</td><td>Sensitivity and specificity for event detection; Bland–Altman bias with 95% limits of agreement for the ratio</td></tr>
+    <tr><td><strong>Acceptability criteria</strong></td><td class="n">κ ≥ 0.60 for inter-rater agreement, and algorithm-to-manual bias within ±5 percentage points</td></tr>
+    <tr><td><strong>If criteria fail</strong></td><td>The primary ocular outcome is reported from the <em>manually adjudicated subsample</em>, and the automated measure is demoted to exploratory</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>The last row is the important one. A pre-specified failure route means the study does not depend on the new instrument working — it produces a defensible primary result either way, and reports honestly which route it took.</p>
+
+<h3>Quality control as data, not as deletion</h3>
+<p>The application records achieved sampling rate, face-presence ratio, frame luminance, head stability and flags for disengagement — and keeps them as variables rather than using them to silently bin data. Three consequences:</p>
+<ul>
+  <li>Duration-dependent blink metrics are <strong>gated automatically on the achieved sampling rate</strong>, because below roughly 25 fps a 100 ms event is not reliably timed.</li>
+  <li>Every measure is <strong>written to storage immediately</strong>, so an interruption loses at most the condition in progress.</li>
+  <li><strong>All camera processing happens on the device and no video is retained</strong> — except for the consented validation segments.</li>
+</ul>
+
+<h2 id="analysis"><span class="part">11 — The analysis</span>Mixed models, and why each choice is forced</h2>
+<p class="xref"><b>Covers</b> · §3.7 Variables, Table 3.5 · §3.9 Statistical analysis</p>
+
+<h3>The outcome hierarchy — declared before any data exist</h3>
+<div class="scroll">
+<table>
+  <caption>What counts as confirmatory, and what does not</caption>
+  <thead><tr><th>Tier</th><th>Measure</th><th>Inferential status</th></tr></thead>
+  <tbody>
+    <tr><td><span class="pill">primary</span></td><td>Incomplete-blink ratio during the reading task, per condition</td><td><strong>Confirmatory inference is confined to this one outcome.</strong> Tested at α = 0.05</td></tr>
+    <tr><td><span class="pill">key secondary</span></td><td>Change in CVS-Q score from session baseline</td><td>Reported with confidence intervals, interpreted as supportive</td></tr>
+    <tr><td>secondary</td><td>Blink rate, inter-blink interval, reading rate, comprehension, visual search, reaction-time indices, comfort and clarity, NASA-TLX</td><td>Supportive; multiplicity control applied <em>within each outcome family</em></td></tr>
+    <tr><td><span class="pill warn">not outcomes</span></td><td>PERCLOS, head pose, face-presence ratio, achieved sampling rate</td><td>Covariates or data-quality indices</td></tr>
+  </tbody>
+</table>
+</div>
+<p>Declaring one primary outcome in advance is what prevents the study from testing thirty things and reporting whichever three came out significant. Everything else is explicitly supportive.</p>
+
+<h3>The confirmatory model, piece by piece</h3>
+<div class="plain">
+  <span class="lab">Fixed effects — what is being estimated</span>
+  <p>Polarity · text colour · ambient illumination · all two-way interactions · the three-way interaction · serial position · illumination order.</p>
+  <p>Serial position and illumination order are in the model because Part 08's counterbalancing removes their <em>bias</em> but not their <em>variance</em> — modelling them recovers precision.</p>
+</div>
+
+<h4>Why the outcome is modelled on the logit scale</h4>
+<p>The incomplete-blink ratio is a <strong>bounded proportion</strong>: it cannot go below 0 or above 1. Treating it as an ordinary linear outcome would let the model predict impossible values, and would assume constant variance when in fact variance is smallest near the bounds. So it is modelled on the logit scale, or with a beta or binomial mixed model. This is not fussiness — it is the difference between a model that can and cannot represent the data.</p>
+
+<h4>Why the random structure has two levels</h4>
+<p>This is the split-plot design from Part 06 expressed in statistical form:</p>
+<ul>
+  <li>a <strong>random intercept for participant</strong> — people differ in their baseline blink behaviour;</li>
+  <li>a <strong>random intercept for session nested within participant</strong> — the same person differs between their two sessions, and illumination is a session-level factor;</li>
+  <li>a <strong>random slope for polarity</strong> where the data support it — people may differ in <em>how much</em> polarity affects them, which is itself the Objective 3 question.</li>
+</ul>
+<div class="note">
+  <span class="lab">The convergence contingency, pre-specified</span>
+  <p>Maximal random structures often fail to converge. Rather than improvising, the reduction order is fixed in advance — <strong>random slopes first, then the session intercept</strong> — and whatever reduction was needed is reported. This closes off a route by which a researcher could try structures until one gave a favourable answer.</p>
+</div>
+
+<h3>How Objective 2 is actually tested</h3>
+<p>Two nested model families are fitted and compared:</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>Model</th><th>Colour enters as…</th><th>What it represents</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Categorical</strong></td><td>A five-level factor, each colour free to have its own effect</td><td>The saturated description — colour matters, for whatever reason</td></tr>
+    <tr><td><strong>Contrast + residual</strong></td><td>Luminance contrast as a <em>continuous</em> predictor, with colour retained to pick up whatever contrast fails to explain</td><td>The mechanistic account — contrast does the work, hue is a leftover</td></tr>
+  </tbody>
+</table>
+</div>
+<p>Comparative fit, and the <em>size of the residual hue terms</em>, quantify how much of the colour effect is really a contrast effect. If contrast explains it all, the residual hue terms shrink toward zero.</p>
+
+<h3>The remaining analyses</h3>
+<ul>
+  <li><strong>Objective 3 (moderation)</strong> — profiling variables entered as between-participant terms with condition-by-moderator interactions.</li>
+  <li><strong>Objective 4 (validation)</strong> — as specified in Part 10.</li>
+  <li><strong>VAS and Likert outcomes</strong> — ordinal cumulative-link models, because a 0–10 rating is not an interval scale.</li>
+  <li><strong>Accuracy outcomes</strong> — binomial generalised mixed models.</li>
+  <li><strong>Signal-detection indices (<em>d′</em>, criterion)</strong> — treated hierarchically, because they are unstable at small per-condition trial counts.</li>
+  <li><strong>Sensitivity analyses</strong> — models re-fitted (a) excluding conditions flagged for disengagement or poor data quality, and (b) with PERCLOS as a covariate, which is how visual fatigue is separated from plain sleepiness.</li>
+</ul>
+<p>Residual diagnostics, multiplicity control within outcome families, and effect sizes with 95% confidence intervals are reported throughout. The three-way interaction is treated as <strong>exploratory</strong>, because Part 08 showed it has the least power.</p>
+
+<h2 id="results"><span class="part">12 — What results mean</span>The one figure the study is built to produce</h2>
+<p class="xref"><b>Covers</b> · §4.1 Expected outcomes · §4.2 Significance</p>
+
+<p>Almost everything in Parts 07 to 11 exists to make the following distinction decidable. The study will plot fatigue against colour, separately for each polarity, and the <em>shape</em> of that plot answers the mechanistic question directly.</p>
+
+<div class="wide">
+<figure>
+<div class="scroll">
+<svg viewBox="0 0 700 306" role="img" aria-label="Two rival result patterns. If luminance contrast mediates the colour effect, the colour ordering crosses over between polarities. If a residual hue effect exists, the ordering is preserved and the lines stay parallel.">
+  <g font-family="system-ui,sans-serif" font-size="11" fill="currentColor">
+    <rect x="14" y="14" width="326" height="278" rx="6" fill="none" style="stroke:var(--accent)" stroke-width="1.8"/>
+    <text x="177" y="38" text-anchor="middle" font-size="12.5" font-weight="700" style="fill:var(--accent)">IF CONTRAST MEDIATES</text>
+    <text x="177" y="54" text-anchor="middle" font-size="10.5" opacity=".75">the ordering crosses over — H₁ᵪ supported</text>
+
+    <line x1="34" y1="200" x2="34" y2="96" stroke="currentColor" stroke-width="1.1" marker-end="url(#ar)" opacity=".6"/>
+    <text x="28" y="150" font-size="9.5" transform="rotate(-90 28 150)" text-anchor="middle" opacity=".7">MORE FATIGUE</text>
+
+    <line x1="100" y1="84" x2="100" y2="212" stroke="currentColor" stroke-width="1" opacity=".3"/>
+    <line x1="254" y1="84" x2="254" y2="212" stroke="currentColor" stroke-width="1" opacity=".3"/>
+    <text x="100" y="76" text-anchor="middle" font-size="10" letter-spacing=".6" opacity=".7">POSITIVE</text>
+    <text x="254" y="76" text-anchor="middle" font-size="10" letter-spacing=".6" opacity=".7">NEGATIVE</text>
+
+    <g stroke-width="2.2" fill="none">
+      <line x1="100" y1="96" x2="254" y2="192" stroke="#C9A400"/>
+      <line x1="100" y1="128" x2="254" y2="160" stroke="#00A651"/>
+      <line x1="100" y1="160" x2="254" y2="128" stroke="#C81E1E"/>
+      <line x1="100" y1="192" x2="254" y2="96" stroke="#1E4ED8"/>
+    </g>
+    <g stroke="#FFFFFF" stroke-width="1.2">
+      <circle cx="100" cy="96" r="5" fill="#C9A400"/><circle cx="100" cy="128" r="5" fill="#00A651"/>
+      <circle cx="100" cy="160" r="5" fill="#C81E1E"/><circle cx="100" cy="192" r="5" fill="#1E4ED8"/>
+      <circle cx="254" cy="96" r="5" fill="#1E4ED8"/><circle cx="254" cy="128" r="5" fill="#C81E1E"/>
+      <circle cx="254" cy="160" r="5" fill="#00A651"/><circle cx="254" cy="192" r="5" fill="#C9A400"/>
+    </g>
+    <g font-family="ui-monospace,monospace" font-size="9" opacity=".8">
+      <text x="92" y="99" text-anchor="end">yellow</text><text x="92" y="131" text-anchor="end">green</text>
+      <text x="92" y="163" text-anchor="end">red</text><text x="92" y="195" text-anchor="end">blue</text>
+      <text x="262" y="99">blue</text><text x="262" y="131">red</text>
+      <text x="262" y="163">green</text><text x="262" y="195">yellow</text>
+    </g>
+    <text x="177" y="240" text-anchor="middle" font-size="11">The worst colour on white becomes the best on black.</text>
+    <text x="177" y="256" text-anchor="middle" font-size="11">That is what contrast alone predicts.</text>
+    <text x="177" y="278" text-anchor="middle" font-size="11" font-weight="650">Verdict: colour is a proxy for contrast.</text>
+
+    <rect x="360" y="14" width="326" height="278" rx="6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 3" opacity=".75"/>
+    <text x="523" y="38" text-anchor="middle" font-size="12.5" font-weight="700">IF HUE HAS ITS OWN EFFECT</text>
+    <text x="523" y="54" text-anchor="middle" font-size="10.5" opacity=".75">the ordering is preserved — lines stay parallel</text>
+
+    <line x1="446" y1="84" x2="446" y2="212" stroke="currentColor" stroke-width="1" opacity=".3"/>
+    <line x1="600" y1="84" x2="600" y2="212" stroke="currentColor" stroke-width="1" opacity=".3"/>
+    <text x="446" y="76" text-anchor="middle" font-size="10" letter-spacing=".6" opacity=".7">POSITIVE</text>
+    <text x="600" y="76" text-anchor="middle" font-size="10" letter-spacing=".6" opacity=".7">NEGATIVE</text>
+
+    <g stroke-width="2.2" fill="none">
+      <line x1="446" y1="96" x2="600" y2="96" stroke="#C81E1E"/>
+      <line x1="446" y1="128" x2="600" y2="128" stroke="#1E4ED8"/>
+      <line x1="446" y1="160" x2="600" y2="160" stroke="#00A651"/>
+      <line x1="446" y1="192" x2="600" y2="192" stroke="#C9A400"/>
+    </g>
+    <g stroke="#FFFFFF" stroke-width="1.2">
+      <circle cx="446" cy="96" r="5" fill="#C81E1E"/><circle cx="446" cy="128" r="5" fill="#1E4ED8"/>
+      <circle cx="446" cy="160" r="5" fill="#00A651"/><circle cx="446" cy="192" r="5" fill="#C9A400"/>
+      <circle cx="600" cy="96" r="5" fill="#C81E1E"/><circle cx="600" cy="128" r="5" fill="#1E4ED8"/>
+      <circle cx="600" cy="160" r="5" fill="#00A651"/><circle cx="600" cy="192" r="5" fill="#C9A400"/>
+    </g>
+    <g font-family="ui-monospace,monospace" font-size="9" opacity=".8">
+      <text x="438" y="99" text-anchor="end">red</text><text x="438" y="131" text-anchor="end">blue</text>
+      <text x="438" y="163" text-anchor="end">green</text><text x="438" y="195" text-anchor="end">yellow</text>
+    </g>
+    <text x="523" y="240" text-anchor="middle" font-size="11">Red stays worst and yellow best regardless of</text>
+    <text x="523" y="256" text-anchor="middle" font-size="11">polarity, even though their contrasts swapped.</text>
+    <text x="523" y="278" text-anchor="middle" font-size="11" font-weight="650">Verdict: hue matters in its own right.</text>
+  </g>
+</svg>
+</div>
+<figcaption><b>Two patterns, two verdicts, and they cannot both happen.</b> This is what the polarity × colour interaction is <em>for</em>. Red is the a priori candidate exception, because the one existing single-polarity study reported red most fatiguing and yellow least under negative polarity — and that ordering is <em>precisely</em> what luminance contrast alone would predict for those hues on a black background. A single-polarity design cannot tell the two panels apart. This one can. The expected result is that contrast accounts for most colour-related variance, with red a candidate exception.</figcaption>
+</figure>
+</div>
+
+<h3>The full set of expected outputs</h3>
+<ul>
+  <li>Quantified effects, with confidence intervals, of all three factors on fatigue, ocular behaviour, workload and performance.</li>
+  <li>Among the <strong>first estimates of the polarity × colour interaction</strong> on fatigue outcomes.</li>
+  <li>Whether the positive polarity advantage <strong>extends from brief legibility tasks to hour-scale reading</strong> and to ocular-surface outcomes.</li>
+  <li>The extent to which colour effects are <strong>contrast-mediated rather than hue-specific</strong> — the figure above.</li>
+  <li>Whether negative polarity is <strong>specifically costly under dim domestic lighting</strong>, which is where dark mode is most used and most advocated.</li>
+  <li>The configurations that <strong>minimise and maximise</strong> fatigue.</li>
+  <li>Whether a <strong>polarity-blind contrast criterion</strong> adequately predicts measured readability.</li>
+  <li>An account of <strong>subjective–objective correspondence</strong>, and a validated instrument with reported agreement against manual annotation.</li>
+</ul>
+
+<h3>Who the findings are for</h3>
+<div class="scroll">
+<table>
+  <caption>§4.2 — significance by audience</caption>
+  <thead><tr><th>Audience</th><th>What they get</th></tr></thead>
+  <tbody>
+    <tr><td>Interface and product design</td><td>Empirically grounded specification of text presentation and dark-mode implementation for reading apps, e-readers, e-learning platforms and OS themes</td></tr>
+    <tr><td>Accessibility standards</td><td>Evidence on whether and how polarity must enter a contrast criterion — the current one is polarity-blind</td></tr>
+    <tr><td>Occupational and public health</td><td>A preventive measure that costs nothing and deploys at population scale, for a condition affecting ~7 in 10 screen users</td></tr>
+    <tr><td>Education</td><td>Configuration guidance for tablet-based learning materials</td></tr>
+    <tr><td>Optometric practice</td><td>Actionable device-configuration advice in an area where practitioners are documented to lack quality evidence</td></tr>
+    <tr><td>Methodology</td><td>A scalable instrument that relieves the annotation bottleneck confining this literature to samples of 11–50</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="limits"><span class="part">13 — Ethics &amp; limits</span>What is protected, and what the study cannot claim</h2>
+<p class="xref"><b>Covers</b> · §3.10 Ethical considerations · §4.3 Limitations and delimitations</p>
+
+<h3>Ethics</h3>
+<ul>
+  <li><strong>Institutional Ethics Committee approval</strong> from Assam down town University before any recruitment.</li>
+  <li><strong>Written informed consent</strong>, with <em>camera-based measurement consented separately</em> and refusable without affecting participation — so nobody has to accept being filmed to take part.</li>
+  <li><strong>Withdrawal at any time.</strong></li>
+  <li><strong>On-device camera processing, no video retained</strong>; data de-identified and stored securely.</li>
+  <li><strong>Identifiable enrolment records stored separately</strong> from the research dataset, linked only by enrolment code, access restricted to the researcher and supervisor(s).</li>
+  <li><strong>Incidental findings communicated.</strong> Reduced acuity, uncorrected refractive error, binocular anomaly or colour-vision deficiency found at screening are reported to the participant with written advice to seek a full examination, and recorded.</li>
+  <li><strong>No therapeutic intervention</strong> is administered, and exposure durations are comparable to habitual device use.</li>
+</ul>
+<div class="note">
+  <span class="lab">The two highlighted placeholders</span>
+  <p>Two items in §3.10 are institution-specific and cannot be invented — they are left in the text and <mark>highlighted in yellow</mark> in the Word document so they cannot be overlooked at proofing:</p>
+  <p>· <mark>[insert institutional retention period]</mark> — how many years research data is retained after completion, per AdtU policy.<br>· <mark>[insert institutional position on compensation]</mark> — whether participants receive travel reimbursement or nothing. Whatever is filled in, the synopsis already commits that any reimbursement will be set at a level that does not constitute undue inducement.</p>
+  <p>A third highlighted placeholder, <mark>[Authors]</mark>, marks the 2025 <em>Contact Lens and Anterior Eye</em> paper whose author list could not be retrieved. It is deliberately not guessed.</p>
+</div>
+
+<h3>Limitations — stated by the synopsis itself</h3>
+<div class="scroll">
+<table>
+  <caption>§4.3 — what constrains the conclusions, and how each is mitigated</caption>
+  <thead><tr><th>Limitation</th><th>Why it exists</th><th>Mitigation</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Polarity and contrast are not fully orthogonal</strong></td>
+      <td>Coloured pigments differ intrinsically in luminance; contrast cannot be equalised across polarity with a fixed colour set</td>
+      <td>Contrast is measured and modelled, and the non-orthogonality is deliberately <em>exploited</em> as a crossover test — but it still constrains fully independent causal attribution</td>
+    </tr>
+    <tr>
+      <td><strong>Camera measurement is screening-grade</strong></td>
+      <td>Lower spatial accuracy and sampling rate than infrared eye tracking</td>
+      <td>Gaze limited to coarse zones; duration-based blink metrics gated on achieved frame rate; validation sub-study quantifies agreement</td>
+    </tr>
+    <tr>
+      <td><strong>Accommodation is not measured</strong></td>
+      <td>Requires open-field autorefractometry</td>
+      <td>Declared out of scope; the accommodative route is reviewed as context, not tested</td>
+    </tr>
+    <tr>
+      <td><strong>The manipulation cannot be blinded</strong></td>
+      <td>Polarity and colour are visible — participants always know which condition they are in</td>
+      <td>Objective markers, absence of performance feedback, and counterbalancing; expectation effects on <em>subjective</em> ratings cannot be excluded</td>
+    </tr>
+    <tr>
+      <td><strong>Generic fatigue and boredom accumulate</strong></td>
+      <td>A two-hour session is tiring regardless of display</td>
+      <td>Counterbalanced, measured and modelled rather than eliminated</td>
+    </tr>
+    <tr>
+      <td><strong>NASA-TLX once per session</strong></td>
+      <td>Administering it after every condition would be excessive burden</td>
+      <td>Workload inference is limited to the illumination contrast, and this is stated</td>
+    </tr>
+    <tr>
+      <td><strong>Illumination is between-session</strong></td>
+      <td>Room light cannot be switched mid-session without re-adaptation</td>
+      <td>Order counterbalanced, covariates recorded — but exposure to between-session variance in time of day, sleep and circadian phase remains</td>
+    </tr>
+    <tr>
+      <td><strong>PERCLOS is insensitive in moderate drowsiness</strong></td>
+      <td>A documented property of the index</td>
+      <td>Used only as a sleepiness covariate, never as a fatigue outcome</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h4>Delimitations — the boundaries drawn on purpose</h4>
+<p>Findings will be specific to the device, display technology, luminance range and population studied. The sample is delimited to adults aged 18–35 with normal or corrected vision and no colour-vision deficiency. <strong>Presbyopic, paediatric and colour-vision-deficient populations — for whom polarity effects may well differ — lie outside this study and are identified as future work.</strong></p>
+
+<h2 id="cheat"><span class="part">14 — Cheat sheet</span>Every number in one place</h2>
+
+<h4>Design and sample</h4>
+<div class="scroll">
+<table>
+  <thead><tr><th>Quantity</th><th class="n">Value</th><th>Note</th></tr></thead>
+  <tbody>
+    <tr><td>Participants analysed</td><td class="n">130</td><td>13 complete Williams blocks of 10</td></tr>
+    <tr><td>Participants enrolled</td><td class="n">145</td><td>allows for attrition across two sessions</td></tr>
+    <tr><td>Approached at screening</td><td class="n">≈180</td><td>target</td></tr>
+    <tr><td>Age range</td><td class="n">18–35 years</td><td>inclusion criterion</td></tr>
+    <tr><td>Display conditions</td><td class="n">10</td><td>2 polarities × 5 colours</td></tr>
+    <tr><td>Illumination levels</td><td class="n">2</td><td>session-level (whole-plot) factor</td></tr>
+    <tr><td>Condition-runs per person</td><td class="n">20</td><td>10 conditions × 2 sessions</td></tr>
+    <tr><td>Total condition-runs</td><td class="n">2,600</td><td>≈9× the largest comparable study</td></tr>
+    <tr><td>Inter-session interval</td><td class="n">48–72 hours</td><td>illumination order counterbalanced</td></tr>
+    <tr><td>Pilot sample</td><td class="n">10</td><td>feasibility gate before the main study</td></tr>
+    <tr><td>Validation subsample</td><td class="n">20</td><td>≈120 min video, ≈1,200–1,500 blinks</td></tr>
+    <tr><td>Data collection period</td><td class="n">≈24 months</td><td>after approval and piloting</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h4>Stimulus and environment</h4>
+<div class="scroll">
+<table>
+  <thead><tr><th>Quantity</th><th class="n">Value</th><th>Note</th></tr></thead>
+  <tbody>
+    <tr><td>Viewing distance</td><td class="n">50–60 cm</td><td>fixed tablet</td></tr>
+    <tr><td>Display white luminance</td><td class="n">120–150 cd/m²</td><td>measured per session; informed by a 153 cd/m² optimum at 300 lux</td></tr>
+    <tr><td>Dim illumination</td><td class="n">≈10 lux (5–15)</td><td>night-time / low-light domestic</td></tr>
+    <tr><td>Moderate illumination</td><td class="n">≈150 lux (130–170)</td><td>below the 300–500 lux office/classroom code</td></tr>
+    <tr><td>Adaptation before a condition</td><td class="n">60 s</td><td>extended to 120 s on a polarity switch</td></tr>
+    <tr><td>Contrast range across conditions</td><td class="n">2.39 : 1 → 21.00 : 1</td><td>weakest condition is yellow on white</td></tr>
+    <tr><td>Achromatic pair contrast</td><td class="n">21.00 : 1 both polarities</td><td>the contrast-matched anchor</td></tr>
+    <tr><td>Sub-AA conditions</td><td class="n">2 per polarity</td><td>balanced by design</td></tr>
+    <tr><td>r (polarity, log contrast)</td><td class="n">+0.11</td><td>near-orthogonal, so both enter the model</td></tr>
+    <tr><td>Curves cross at</td><td class="n">4.58 : 1</td><td>essentially the AA threshold</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h4>Measurement thresholds</h4>
+<div class="scroll">
+<table>
+  <thead><tr><th>Quantity</th><th class="n">Value</th><th>Note</th></tr></thead>
+  <tbody>
+    <tr><td>Blink registered when EAR falls below</td><td class="n">0.75 × baseline</td><td>provisional, finalised against manual annotation</td></tr>
+    <tr><td>Blink classed complete when minimum reaches</td><td class="n">≤ 0.60 × baseline</td><td>lids achieve apposition</td></tr>
+    <tr><td>Blink classed incomplete when minimum stays</td><td class="n">0.60–0.75 × baseline</td><td>lid descends, never meets</td></tr>
+    <tr><td>PERCLOS definition</td><td class="n">eyes &gt;80% closed</td><td>proportion of time; covariate only</td></tr>
+    <tr><td>Minimum usable frame rate</td><td class="n">≈25 fps</td><td>below this, duration metrics are gated out</td></tr>
+    <tr><td>Blink duration</td><td class="n">100–400 ms</td><td>why temporal precision matters more than spatial</td></tr>
+    <tr><td>Inter-rater agreement criterion</td><td class="n">κ ≥ 0.60</td><td>pre-specified acceptability</td></tr>
+    <tr><td>Algorithm-to-manual bias criterion</td><td class="n">within ±5 pp</td><td>pre-specified acceptability</td></tr>
+    <tr><td>Face-presence gate (pilot)</td><td class="n">≥ 0.90 in ≥90% of runs</td><td>feasibility criterion</td></tr>
+    <tr><td>CVS-Q cut-off</td><td class="n">7</td><td>from cross-cultural validation</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h4>Published figures cited</h4>
+<div class="scroll">
+<table>
+  <thead><tr><th>Figure</th><th class="n">Value</th><th>Source context</th></tr></thead>
+  <tbody>
+    <tr><td>Pooled prevalence of digital eye strain</td><td class="n">69.0% (95% CI 62.3–75.3)</td><td>103 studies, 66,577 participants</td></tr>
+    <tr><td>Range across individual studies</td><td class="n">12.1–97.3%</td><td>reflects absent case definition</td></tr>
+    <tr><td>Prevalence, women vs men</td><td class="n">71.4% vs 61.8%</td><td>same meta-analysis</td></tr>
+    <tr><td>Prevalence, university students</td><td class="n">76.1%</td><td>same meta-analysis</td></tr>
+    <tr><td>Prevalence without the CVS-Q</td><td class="n">75.4%</td><td>ad-hoc checklists inflate estimates</td></tr>
+    <tr><td>Trials finding no high-certainty therapy</td><td class="n">45 RCTs, 4,497 participants</td><td>includes blue-blocking lenses</td></tr>
+    <tr><td>Incomplete blinks in 15-min reading</td><td class="n">0.9–56.5%, mean 16.1%</td><td>symptom correlation p = 0.002</td></tr>
+    <tr><td>Tear break-up time over 60 min</td><td class="n">8.62 s → 4.33 s at 30 min</td><td>recovered as incomplete blinking declined</td></tr>
+    <tr><td>PERCLOS vs vigilance variability</td><td class="n">r = 0.68</td><td>after 24-h sleep deprivation</td></tr>
+    <tr><td>CVS-Q test–retest ICC</td><td class="n">0.802</td><td>original validation</td></tr>
+    <tr><td>CVS-Q sensitivity / specificity</td><td class="n">78.5% / 70.7%</td><td>cross-cultural validation</td></tr>
+    <tr><td>Ishihara on-screen sensitivity</td><td class="n">94.4% (monitor), 96.0% (phone)</td><td>no significant difference between modes</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="gloss"><span class="part">15 — Glossary</span>Every term, alphabetically</h2>
+
+<dl class="gloss">
+  <dt>Accommodation</dt>
+  <dd>The eye changing the shape of its internal lens to focus on something near. Effortful to sustain; contributes to the focusing route of visual fatigue. <em>Not measured in this study.</em></dd>
+
+  <dt>Achromatic</dt>
+  <dd>Having no hue — black, white or grey. The achromatic conditions (P1, N1) are the study's contrast-matched anchor pair.</dd>
+
+  <dt>APCA — Advanced Perceptual Contrast Algorithm</dt>
+  <dd>A candidate successor to the current accessibility contrast metric that <em>does</em> incorporate polarity and typographic parameters. Under development, not yet a standard. Cited as evidence that the polarity-blindness of the current criterion is recognised.</dd>
+
+  <dt>Bland–Altman</dt>
+  <dd>A method for comparing two measurement techniques by plotting their difference against their average, reporting bias and 95% limits of agreement. Used to compare the automated incomplete-blink ratio against manual annotation.</dd>
+
+  <dt>Carryover</dt>
+  <dd>Contamination of one condition by the condition that preceded it. Here the specific worry is the light-adaptation transient after a polarity switch — handled by the Williams square and by extending adaptation to 120 s at a switch.</dd>
+
+  <dt>Cohen's κ (kappa)</dt>
+  <dd>An agreement statistic for categorical judgements that corrects for chance agreement. The study requires κ ≥ 0.60 between its two human annotators before their coding is used as a standard.</dd>
+
+  <dt>Condition-run</dt>
+  <dd>One participant experiencing one display condition once. The unit that governs precision for within-participant contrasts. This study produces 2,600 of them.</dd>
+
+  <dt>Contrast ratio (WCAG)</dt>
+  <dd>The accessibility standard's contrast measure, computed from relative luminance: (L<sub>lighter</sub> + 0.05) ÷ (L<sub>darker</sub> + 0.05). Ranges from 1:1 to 21:1. Thresholds: 3:1 (AA Large), 4.5:1 (AA), 7:1 (AAA). Takes no account of text size, weight or polarity.</dd>
+
+  <dt>Counterbalancing</dt>
+  <dd>Systematically varying the order in which conditions are presented across participants so that order effects cancel rather than accumulate in one direction.</dd>
+
+  <dt>Crossover design</dt>
+  <dd>Every participant receives every condition, in a counterbalanced order, serving as their own control.</dd>
+
+  <dt>CVS-Q — Computer Vision Syndrome Questionnaire</dt>
+  <dd>A validated 16-symptom instrument scoring frequency and intensity on a Rasch-fitting scale, with a published cut-off of 7. Change from session baseline is this study's key secondary outcome.</dd>
+
+  <dt>d′ (d-prime) and criterion</dt>
+  <dd>Signal-detection measures separating a participant's genuine sensitivity (<em>d′</em>) from their willingness to respond (criterion). Derived from the go/no-go task; modelled hierarchically because they are unstable at low trial counts.</dd>
+
+  <dt>d_z</dt>
+  <dd>The effect size for a within-participant comparison: the mean of the paired differences divided by the standard deviation of those differences. Distinct from a between-groups <em>d</em> — a d_z of 0.25 is detectable with far fewer people than a between-groups <em>d</em> of 0.25.</dd>
+
+  <dt>Digital eye strain / computer vision syndrome</dt>
+  <dd>Two names for the same condition: the cluster of ocular and visual symptoms attributable to prolonged display use. Pooled prevalence 69.0%.</dd>
+
+  <dt>EAR — eye aspect ratio</dt>
+  <dd>A single number per video frame describing how open the eye is, derived from facial landmarks. Continuous and normalised, which is what lets it distinguish partial from complete lid closure.</dd>
+
+  <dt>Factorial design</dt>
+  <dd>All factors fully crossed, so every level of one appears with every level of the others. Necessary to estimate interactions.</dd>
+
+  <dt>Incomplete blink</dt>
+  <dd>A blink in which the lids approach but never fully meet, leaving part of the ocular surface unwetted. Operationally: minimum EAR stays between 0.60 and 0.75 of the participant's baseline.</dd>
+
+  <dt>Incomplete-blink ratio (IBR)</dt>
+  <dd>Incomplete blinks ÷ all detected blinks, within a condition. <strong>The study's primary outcome.</strong></dd>
+
+  <dt>Logit scale</dt>
+  <dd>The transformation log[p ÷ (1 − p)], which maps a proportion bounded at 0 and 1 onto the whole real line. Used so the model cannot predict impossible values for the incomplete-blink ratio.</dd>
+
+  <dt>Luminance / relative luminance</dt>
+  <dd>Luminance is emitted light, in cd/m². Relative luminance is a 0–1 normalised version weighted for human sensitivity (green weighted most, blue least) — the single input to both contrast formulae.</dd>
+
+  <dt>Luminance contrast</dt>
+  <dd>The brightness difference between text and background. Distinct from colour difference, and the property that actually governs legibility.</dd>
+
+  <dt>Michelson contrast</dt>
+  <dd>(L<sub>max</sub> − L<sub>min</sub>) ÷ (L<sub>max</sub> + L<sub>min</sub>). Reported for completeness but analytically useless in negative polarity, where a pure black background drives it to 1.000 for every colour.</dd>
+
+  <dt>Mixed-effects model</dt>
+  <dd>A regression containing both fixed effects (the factors of interest) and random effects (participant- and session-level variation). Required here because observations are nested inside people and sessions rather than independent.</dd>
+
+  <dt>Moderation</dt>
+  <dd>When the size of an effect depends on a characteristic of the person. Objective 3. Tested between participants, which is why it is the power-hungry analysis.</dd>
+
+  <dt>NASA-TLX</dt>
+  <dd>A six-dimension self-report index of cognitive workload. Administered once per session.</dd>
+
+  <dt>Near-work-induced transient myopia</dt>
+  <dd>A temporary shift towards short-sightedness after sustained close work. A symptom of the focusing route.</dd>
+
+  <dt>Negative polarity</dt>
+  <dd>Light text on a dark background. Dark mode.</dd>
+
+  <dt>Ocular surface</dt>
+  <dd>The exposed front of the eye, kept comfortable by the tear film and renewed by complete blinking. The route this study measures.</dd>
+
+  <dt>Orthogonal</dt>
+  <dd>Statistically independent — two variables that carry non-overlapping information and can therefore both enter a model. Polarity and log contrast are near-orthogonal here (r = +0.11).</dd>
+
+  <dt>PERCLOS</dt>
+  <dd>The proportion of time the eyes are more than 80% closed. A validated drowsiness index, used here strictly as a sleepiness <em>covariate</em> because it is insensitive in moderate drowsiness.</dd>
+
+  <dt>Positive polarity</dt>
+  <dd>Dark text on a light background. The arrangement of a printed book.</dd>
+
+  <dt>Positive polarity advantage</dt>
+  <dd>The well-replicated finding that reading performance is better in positive than negative polarity, attributed to a mostly-white screen emitting more light, constricting the pupil and improving retinal image quality.</dd>
+
+  <dt>Power</dt>
+  <dd>The probability of detecting an effect of a given size if it is really there. Conventionally 80% is the minimum acceptable. Estimated here by simulation rather than formula.</dd>
+
+  <dt>Purposive (convenience) sampling</dt>
+  <dd>Non-probability recruitment of accessible eligible volunteers. Chosen deliberately for homogeneity; the cost is that prevalence cannot be estimated and generalisation is limited.</dd>
+
+  <dt>Serial position effect</dt>
+  <dd>Systematic differences caused by <em>where</em> in the sequence a condition fell rather than by the condition itself. Handled by the Williams square and modelled as a covariate.</dd>
+
+  <dt>Split-plot</dt>
+  <dd>A design in which factors operate at different levels — here illumination at session level (whole plot) and polarity × colour within session (sub-plot). Its statistical signature is two nested random intercepts.</dd>
+
+  <dt>sRGB linearisation</dt>
+  <dd>Undoing the non-linear encoding of standard display colour values before computing luminance. Without this step contrast calculations are simply wrong.</dd>
+
+  <dt>Tear film</dt>
+  <dd>The thin fluid layer covering the ocular surface, renewed by each complete blink and capped by an oily layer that slows evaporation. Its breakdown is the mechanism behind display-associated dry eye.</dd>
+
+  <dt>Veiling luminance</dt>
+  <dd>Stray ambient light reflecting off the screen surface, which raises the darkest achievable black and so reduces effective contrast. One of the two ways room light acts.</dd>
+
+  <dt>Vergence</dt>
+  <dd>Both eyes turning inward so their two images fuse into one. Effortful at reading distance; part of the focusing route. Not measured here.</dd>
+
+  <dt>Williams Latin square</dt>
+  <dd>A counterbalancing scheme in which, across a complete block, every condition occupies every serial position equally often <em>and</em> precedes and follows every other condition equally often. Complete balance for ten conditions needs blocks of ten — which is why <em>n</em> is a multiple of ten.</dd>
+</dl>
+
+</article>
+
+<footer>
+  <div class="in">
+    <p><strong>Companion guide to</strong> <em>Ergonomics of Visual Perception: Effects of Display Polarity, Text Colour and Ambient Illumination on Visual Fatigue, Ocular Behaviour and Task Performance</em> — PhD synopsis, Optometry, Faculty of Allied and Healthcare Sciences, Assam down town University.</p>
+    <p>Every figure, table and number on this page is derived from the synopsis and from the simulations run alongside it. Nothing has been added that the synopsis does not support, and the three unresolved placeholders are identified in Part 13 rather than filled in. For the full argument, the complete evidence tables and the APA 7 reference list, read the synopsis itself; this page exists to make that reading easier, not to replace it.</p>
+  </div>
+</footer>
