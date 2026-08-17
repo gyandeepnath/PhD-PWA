@@ -31,6 +31,20 @@ export const ENGAGEMENT = {
   RT_LAPSE_MAX: 0.3,
   /** Camera face presence below this (when camera active) flags the participant turning away. */
   FACE_PRESENCE_MIN: 0.5,
+  /**
+   * Minimum blinks in a condition for its incomplete-blink RATIO to be worth interpreting.
+   *
+   * The ratio is a binomial proportion, so its precision depends entirely on how many blinks were
+   * captured. At p = 0.16 the standard error is sqrt(p(1-p)/n): 30 blinks gives SE 0.067, 20 gives
+   * 0.082, 10 gives 0.116. A ratio computed from a handful of blinks is not a measurement of that
+   * condition, and averaging such values across participants does not rescue them — it propagates
+   * the noise into the contrast the study exists to estimate.
+   *
+   * 20 is set as the floor at which the ratio is reported without a caveat. Runs below it are
+   * flagged so they can be down-weighted or excluded in a sensitivity analysis, and so a thin
+   * exposure window cannot be mistaken for a clean null.
+   */
+  MIN_BLINKS_FOR_RATIO: 20,
   /** quality_score >= GOOD → good; >= WARN → warn; else bad. */
   QUALITY_GOOD: 0.8,
   QUALITY_WARN: 0.5,
@@ -73,6 +87,10 @@ export interface ConditionSummary {
   reading_time_ms: number | null;
   fatigue_response_ms: number | null;
   perception_response_ms: number | null;
+  /** Blinks captured during the condition; null when the camera was inactive. */
+  blink_count_total: number | null;
+  /** Too few blinks for the incomplete-blink ratio to be precise (see ENGAGEMENT.MIN_BLINKS_FOR_RATIO). */
+  insufficient_blinks: boolean;
   /** Composite engagement flag and 0-1 quality score, with human-readable reasons. */
   engagement: QcFlag;
   quality_score: number;
@@ -130,6 +148,10 @@ export interface EngagementResult {
   engagement: QcFlag;
   quality_score: number;
   reasons: string[];
+  /** Blinks captured in the condition; null when the camera was inactive. */
+  blink_count_total: number | null;
+  /** True when too few blinks were captured for the incomplete-blink ratio to be precise. */
+  insufficient_blinks: boolean;
   careless_straight_lined: boolean;
   careless_rushed_fatigue: boolean;
   careless_rushed_perception: boolean;
@@ -197,11 +219,23 @@ export function conditionEngagement(args: {
   const low_face_presence = !!eye && eye.camera_active && eye.face_presence_ratio < ENGAGEMENT.FACE_PRESENCE_MIN;
   if (low_face_presence) penalise(0.1, `low face presence (${Math.round((eye!.face_presence_ratio) * 100)}%)`);
 
+  // Too few blinks for the PRIMARY outcome to mean anything in this condition. Flagged rather than
+  // dropped: the run's other measures are still valid, and silently discarding it would bias the
+  // sample toward high blinkers. This does not penalise the participant's engagement score, since a
+  // low blink count is a measurement-window property, not evidence of carelessness.
+  const blinkCount = eye ? (eye.blink_count_full + eye.blink_count_micro + eye.blink_count_incomplete) : null;
+  const insufficient_blinks = !!eye && eye.camera_active && blinkCount != null
+    && blinkCount < ENGAGEMENT.MIN_BLINKS_FOR_RATIO;
+  if (insufficient_blinks) {
+    reasons.push(`only ${blinkCount} blinks captured — incomplete-blink ratio is imprecise (need >= ${ENGAGEMENT.MIN_BLINKS_FOR_RATIO})`);
+  }
+
   const quality_score = Math.max(0, Math.round(score * 100) / 100);
   const engagement: QcFlag = quality_score >= ENGAGEMENT.QUALITY_GOOD ? 'good' : quality_score >= ENGAGEMENT.QUALITY_WARN ? 'warn' : 'bad';
 
   return {
     engagement, quality_score, reasons,
+    blink_count_total: blinkCount, insufficient_blinks,
     careless_straight_lined, careless_rushed_fatigue, careless_rushed_perception,
     reading_skim, comprehension_wrong, rt_disengaged, low_face_presence,
   };
@@ -277,6 +311,8 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       engagement: eng.engagement,
       quality_score: eng.quality_score,
       engagement_reasons: eng.reasons,
+      blink_count_total: eng.blink_count_total,
+      insufficient_blinks: eng.insufficient_blinks,
       careless_straight_lined: eng.careless_straight_lined,
       careless_rushed_fatigue: eng.careless_rushed_fatigue,
       careless_rushed_perception: eng.careless_rushed_perception,

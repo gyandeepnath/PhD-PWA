@@ -157,3 +157,57 @@ where the last stopped, so each condition is still run exactly once. `session_in
 number) is recorded and added as a covariate when sittings vary; baseline fatigue and CVS-Q are
 re-measured each sitting (fatigue resets between sittings — documented, not assumed away).
 - The **Ishihara screening** is a digital screening aid, not a clinical diagnosis.
+
+
+---
+
+## Media capture — consented, off by default
+
+The instrument's default is that no image or video leaves the frame buffer: the camera produces
+numeric ocular measures and the pixels are discarded. Two things need pixels, and each is a
+**separate, optional grant** on the consent screen, defaulting to OFF:
+
+| Grant | What it permits | Why it exists |
+|---|---|---|
+| `camera_metrics` | Numeric blink / head-pose measures. No pixels stored. | The ocular outcomes. Refusable — §3.10 requires it. |
+| `setup_photos` | One still at session start, one at session end. | Documents seating distance and room lighting, so setup compliance is evidenced rather than asserted. |
+| `annotation_video` | One 3-minute reading segment per session. | Objective 4 cannot be met without video a human can code frame by frame. Validation subsample only. |
+
+Enforcement is in `src/storage/media.ts`, not the UI:
+
+- `mayCapture()` is checked against the **persisted** session record immediately before every
+  capture, so a withdrawn grant takes effect at once and a stale component cannot capture.
+- No grant implies another. A photo grant does not authorise video; the `camera_metrics` grant does
+  not authorise retaining pixels at all. Tests assert each of these separately.
+- Every stored item carries a `consent_snapshot`, so a file can never be separated from the
+  permission under which it was made.
+- Media lives in its own `media_captures` store and is deletable independently of the research
+  data, so withdrawing media consent later does not force discarding the numeric dataset.
+- `15_media_inventory.csv` lists every retained file with an FNV-1a checksum over its bytes.
+- A capture that fails, or finds no frame yet, is a silent no-op. A black placeholder is never
+  stored as "proof", and a media failure never aborts a session.
+
+## Timing and the feasibility gate
+
+`scripts/simulateParticipant.ts` models one sitting for the target population (university students
+aged 20–24), reading every app-controlled duration from the real `CONFIG`. Participant-controlled
+durations are drawn from distributions with a stated basis — reading rate anchored below
+Brysbaert's (2019) meta-analytic 238 wpm for dense expository prose, blink rate 13/min during
+reading, and two participant-level multipliers so a slow, careful participant is slow throughout
+rather than independently slow at each step.
+
+Result over 2,000 simulated participants: **median 75 min, p95 90 min, p99 96 min** — the
+120-minute gate passes with margin, and no simulated participant exceeded it.
+
+Where the time goes: adaptation 14.0 min (18.6%), reading 12.1 min (16.1%), RT blocks 10.9 min
+(14.5%), visual search 4.8 min, CVS-Q ×2 6.4 min. Polarity switching costs ~5 min per sitting on
+top of the baseline adaptation, since a Williams row averages 5 switches over 9 transitions.
+
+**Open issue — reading exposure and the precision of the primary outcome.** At ~73 s of reading per
+condition the camera captures only ~16 blinks, so the incomplete-blink ratio for that condition has
+a standard error of about 0.09 (±18 percentage points at 95%). The synopsis's own validation
+sub-study assumes **3-minute** reading segments, which the current ~245-word passages cannot fill.
+Raising reading exposure to 180 s costs ~20 min per sitting (median 93 min, still inside the gate)
+and needs passages of roughly 650 words. Until that is done, `12_quality_flags.csv` carries
+`blink_count_total` and `insufficient_blinks` so a thin exposure window can never be mistaken for a
+clean null.

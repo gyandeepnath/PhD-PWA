@@ -8,6 +8,7 @@
  */
 import type { Polarity, WcagLevel } from './schemaEnums';
 import type { IlluminationLevel } from '@/experiment/illumination';
+import type { MediaConsent, MediaRecord } from './media';
 
 export type Stage =
   | 'SESSION_INIT'
@@ -115,6 +116,12 @@ export interface SessionRecord {
   /** Informed consent recorded. */
   consent_given: boolean;
   consent_time: number | null;
+  /**
+   * Granular media permissions. Separate from consent_given because §3.10 requires camera-based
+   * measurement to be refusable without affecting participation — and retaining pixels is a
+   * strictly stronger ask than deriving numbers from them, so it needs its own grant.
+   */
+  media_consent: MediaConsent;
   provenance: Provenance;
   device_type: string;
   browser: string;
@@ -437,6 +444,7 @@ export interface StoreMap {
   fatigue_scores: FatigueRecord;
   cvsq_scores: CvsqRecord;
   nasa_tlx: NasaTlxRecord;
+  media_captures: MediaRecord;
   display_perception: DisplayPerceptionRecord;
   comprehension_results: ComprehensionRecord;
   visual_search: VisualSearchRecord;

@@ -59,6 +59,9 @@ export function round(value: unknown, dp = 4): unknown {
 
 /** Make a string safe for a filename on every platform (Windows forbids " < > : | ? * \ /). */
 export function safeFilePart(s: string, max = 32): string {
+  // Control characters are matched deliberately: a filename containing one is not merely ugly, it
+  // is rejected outright by Windows and can truncate a ZIP entry name. Stripping them is the point.
+  // eslint-disable-next-line no-control-regex
   const cleaned = s.replace(/[<>:"/\\|?*\x00-\x1f,]/g, '_').replace(/_{2,}/g, '_').replace(/^[._]+|[._]+$/g, '');
   return (cleaned || 'unknown').slice(0, max);
 }
@@ -114,6 +117,18 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '01_session_info.csv', column: 'condition_def_hash', type: 'string', unit: '-', role: 'provenance', description: 'Hash of the locked condition table. Ties a dataset to the exact stimulus set that produced it.' },
   { file: '01_session_info.csv', column: 'schema_version', type: 'integer', unit: '-', role: 'provenance', description: 'IndexedDB schema version at export time.' },
 
+  { file: '01_session_info.csv', column: 'consent_camera_metrics', type: 'boolean', unit: '-', role: 'qc', description: 'Participant permitted camera-derived numeric measures. FALSE means no ocular data was collected for them; every other measure still ran.' },
+  { file: '01_session_info.csv', column: 'consent_setup_photos', type: 'boolean', unit: '-', role: 'qc', description: 'Participant permitted two retained setup photographs. Separate, optional grant.' },
+  { file: '01_session_info.csv', column: 'consent_annotation_video', type: 'boolean', unit: '-', role: 'qc', description: 'Participant permitted retained reading video for the manual blink-annotation sub-study (validation subsample only).' },
+  { file: '01_session_info.csv', column: 'media_items_retained', type: 'integer', unit: 'count', role: 'qc', description: 'How many photo/video files this session actually retained. 0 unless a media grant was given.' },
+
+  // ---- 15_media_inventory.csv
+  { file: '15_media_inventory.csv', column: 'media_id', type: 'string', unit: '-', role: 'id', description: 'Identifier of one retained photo or video file.' },
+  { file: '15_media_inventory.csv', column: 'kind', type: 'factor(2)', unit: '-', role: 'id', description: 'photo (a setup-proof still) or video (a reading segment for manual annotation).' },
+  { file: '15_media_inventory.csv', column: 'checkpoint', type: 'factor(3)', unit: '-', role: 'id', description: 'session_start / session_end (setup-proof stills) or reading_segment (annotation video).' },
+  { file: '15_media_inventory.csv', column: 'checksum_fnv1a', type: 'string', unit: '-', role: 'provenance', description: 'FNV-1a over the file bytes. Confirms a given file is the one this session recorded and has not been altered or swapped.' },
+  { file: '15_media_inventory.csv', column: 'consent_annotation_video', type: 'boolean', unit: '-', role: 'qc', description: 'The consent state in force when this item was captured, snapshotted onto the record so a file can never be separated from its permission.' },
+
   // ---- 02_conditions.csv
   { file: '02_conditions.csv', column: 'session_position', type: 'integer', unit: '-', role: 'covariate', description: 'Serial position within the sitting, 0-based. Enter in models: absorbs the vigilance decrement and fatigue accumulation.' },
   { file: '02_conditions.csv', column: 'passage_id', type: 'integer', unit: '-', role: 'covariate', description: 'Reading passage shown. Rotated independently of condition, so passage difficulty is orthogonal to display condition.' },
@@ -146,6 +161,8 @@ export const CODEBOOK: Record<string, string>[] = [
 
   // ---- 10_wide_summary.csv
   { file: '10_wide_summary.csv', column: 'fatigue_delta', type: 'number', unit: '0-10', role: 'dv', description: 'post_condition fatigue_mean minus the session baseline. Rounded to 4 dp for presentation.' },
+  { file: '12_quality_flags.csv', column: 'blink_count_total', type: 'integer', unit: 'count', role: 'qc', description: 'Blinks captured during the condition. The incomplete-blink ratio is a binomial proportion, so its precision depends entirely on this.' },
+  { file: '12_quality_flags.csv', column: 'insufficient_blinks', type: 'boolean', unit: '-', role: 'qc', description: 'TRUE when fewer than 20 blinks were captured, at which point the incomplete-blink ratio for that condition is too imprecise to interpret (SE >= 0.082 at p=0.16). Flagged, not dropped — down-weight or exclude in a sensitivity analysis.' },
   { file: '10_wide_summary.csv', column: 'engagement_flag', type: 'factor(3)', unit: '-', role: 'qc', description: 'good | warn | bad. Sensitivity analyses should be run with and without "bad".' },
   { file: '10_wide_summary.csv', column: 'quality_score', type: 'number', unit: '0-1', role: 'qc', description: 'Composite data-quality score for the condition-run.' },
 
@@ -194,7 +211,7 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'preflight_complete', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected'],
+    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'preflight_complete', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
       session_index: session.session_index, conditions_per_session: session.conditions_per_session, condition_offset: session.condition_offset,
@@ -215,7 +232,12 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
       app_version: session.provenance.app_version, git_hash: session.provenance.git_hash,
       condition_def_hash: session.provenance.condition_def_hash, schema_version: session.provenance.schema_version,
       device_type: session.device_type, screen_resolution: session.screen_resolution,
-      consent_given: session.consent_given, preflight_complete: session.preflight_complete,
+      consent_given: session.consent_given,
+      consent_camera_metrics: session.media_consent?.camera_metrics ?? '',
+      consent_setup_photos: session.media_consent?.setup_photos ?? '',
+      consent_annotation_video: session.media_consent?.annotation_video ?? '',
+      media_items_retained: (bundle.media ?? []).length,
+      preflight_complete: session.preflight_complete,
       gaze_calibration_valid: bundle.calibration[0]?.is_real_calibration ?? '',
       calibration_ear_baseline: bundle.calibration[0]?.ear_baseline ?? '',
       calibration_pitch_baseline_frac: bundle.calibration[0]?.pitch_baseline_frac ?? '',
@@ -302,10 +324,11 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 12 — engagement / careless-responding quality flags (boredom & disengagement detection)
   csv('12_quality_flags.csv',
-    ['participant_id', 'session_index', 'condition_label', 'session_position', 'engagement_flag', 'quality_score', 'reading_time_ms', 'fatigue_response_ms', 'perception_response_ms', 'reading_skim', 'rt_disengaged', 'careless_rushed_fatigue', 'careless_rushed_perception', 'careless_straight_lined', 'comprehension_wrong', 'low_face_presence', 'reasons'],
+    ['participant_id', 'session_index', 'condition_label', 'session_position', 'engagement_flag', 'quality_score', 'blink_count_total', 'insufficient_blinks', 'reading_time_ms', 'fatigue_response_ms', 'perception_response_ms', 'reading_skim', 'rt_disengaged', 'careless_rushed_fatigue', 'careless_rushed_perception', 'careless_straight_lined', 'comprehension_wrong', 'low_face_presence', 'reasons'],
     summaries.map((s) => ({
       participant_id: pid, session_index: session.session_index, condition_label: s.condition_label,
       session_position: s.session_position, engagement_flag: s.engagement, quality_score: s.quality_score,
+      blink_count_total: s.blink_count_total, insufficient_blinks: s.insufficient_blinks,
       reading_time_ms: s.reading_time_ms, fatigue_response_ms: s.fatigue_response_ms, perception_response_ms: s.perception_response_ms,
       reading_skim: s.reading_skim, rt_disengaged: s.rt_disengaged, careless_rushed_fatigue: s.careless_rushed_fatigue,
       careless_rushed_perception: s.careless_rushed_perception, careless_straight_lined: s.careless_straight_lined,
@@ -347,6 +370,23 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
       temporal_demand: t.temporal_demand, performance: t.performance,
       performance_load: t.performance_load, effort: t.effort, frustration: t.frustration,
       all_touched: t.all_touched, response_time_ms: t.response_time_ms,
+    })));
+
+  // 15 — consented media inventory. Metadata and checksums only: the blobs are downloaded as
+  // separate files, and embedding them here would make the CSV bundle unusable. The checksum lets
+  // a reader confirm a given file is the one this session recorded.
+  csv('15_media_inventory.csv',
+    ['participant_id', 'session_index', 'media_id', 'kind', 'checkpoint', 'condition_label',
+     'captured_at', 'mime', 'bytes', 'width', 'height', 'duration_ms', 'checksum_fnv1a',
+     'consent_setup_photos', 'consent_annotation_video'],
+    (bundle.media ?? []).map((m) => ({
+      participant_id: pid, session_index: session.session_index,
+      media_id: m.media_id, kind: m.kind, checkpoint: m.checkpoint,
+      condition_label: m.condition_label ?? '', captured_at: new Date(m.captured_at).toISOString(),
+      mime: m.mime, bytes: m.bytes, width: m.width ?? '', height: m.height ?? '',
+      duration_ms: m.duration_ms ?? '', checksum_fnv1a: m.checksum_fnv1a,
+      consent_setup_photos: m.consent_snapshot.setup_photos,
+      consent_annotation_video: m.consent_snapshot.annotation_video,
     })));
 
   // JSON bundle

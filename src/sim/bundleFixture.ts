@@ -109,7 +109,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       condition_order: plan.map((s) => s.conditionIndex),
       preflight_complete: true,
       consent_given: true,
-      consent_time: t0 + 50_000,
+      consent_time: t0 + 50_000, media_consent: { camera_metrics: true, setup_photos: false, annotation_video: false, granted_at: null },
       provenance: {
         app_version: '2.1.0',
         git_hash: 'verifyhash',
@@ -180,6 +180,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
         total_score: 11, symptomatic: true, response_time_ms: 38_000,
       },
     ],
+    media: [],
     tlx: [
       {
         tlx_id: 'tlx-1', session_id: sid,

@@ -74,6 +74,7 @@ describe('export: filename portability', () => {
     // A participant id is constrained at entry, but an imported or hand-edited record is not, and
     // a filename containing " or , breaks ZIP extraction and Windows saves outright.
     for (const name of filesOf().keys()) {
+      // eslint-disable-next-line no-control-regex
       expect(name, `filename ${JSON.stringify(name)}`).not.toMatch(/[<>:"/\\|?*\x00-\x1f]/);
     }
   });

@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { CONFIG } from '@/experiment/config';
 import { ILLUMINATION, luxInRange, type IlluminationLevel } from '@/experiment/illumination';
+import type { MediaConsent } from '@/storage/media';
 import { WavyBackground } from '@/components/WavyBackground';
 import { now } from '@/lib/timing';
 import type { CameraStatus } from '@/storage/types';
@@ -440,35 +441,105 @@ export function SessionComplete({ onExport, luxPanel }: { onExport: () => void; 
 }
 
 // ---- CONSENT ----
-export function Consent({ onConsent }: { onConsent: () => void }) {
+/**
+ * Informed consent, with GRANULAR media permissions.
+ *
+ * Participation is one decision; retaining pixels is three more. §3.10 requires camera-based
+ * measurement to be "consented separately and refusable without affecting participation", and
+ * keeping photographs or video is a strictly stronger ask than deriving numbers from frames that
+ * are immediately discarded. Each is therefore its own checkbox, each defaults to OFF, and only
+ * the first is required to continue — so a participant who declines all three is still fully
+ * enrolled and contributes every non-camera measure.
+ */
+export function Consent({
+  onConsent,
+  askAnnotationVideo = false,
+}: {
+  onConsent: (media: MediaConsent) => void;
+  /** True for the pre-specified validation subsample, who are additionally asked about video. */
+  askAnnotationVideo?: boolean;
+}) {
   const [agreed, setAgreed] = useState(false);
+  const [cameraMetrics, setCameraMetrics] = useState(false);
+  const [setupPhotos, setSetupPhotos] = useState(false);
+  const [annotationVideo, setAnnotationVideo] = useState(false);
+
+  const Opt = ({ checked, set, title, body, testid }: {
+    checked: boolean; set: (v: boolean) => void; title: string; body: string; testid: string;
+  }) => (
+    <label style={{ display: 'flex', gap: 10, marginTop: 12, cursor: 'pointer', alignItems: 'flex-start' }}>
+      <input
+        type="checkbox" data-testid={testid} checked={checked}
+        onChange={(e) => set(e.target.checked)}
+        style={{ width: 20, height: 20, marginTop: 2, flexShrink: 0 }}
+      />
+      <span>
+        <span className="font-lab text-sm" style={{ fontWeight: 650 }}>{title}</span>
+        <span className="font-lab text-xs" style={{ display: 'block', color: '#5a5a7a', marginTop: 2 }}>{body}</span>
+      </span>
+    </label>
+  );
+
   return (
     <div className={shell} style={{ position: 'relative' }}>
       <WavyBackground opacity={0.05} />
       <div style={{ position: 'relative', zIndex: 1, width: '100%', margin: '0 auto', maxWidth: 640 }}>
         <h1 className="font-serif text-4xl font-light">Informed consent</h1>
-        <div className="scrollable mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]" style={{ maxHeight: '52vh', paddingRight: 8 }}>
-          <p>You are invited to take part in a study on visual ergonomics — how display colour and
-            background affect reading, attention and eye comfort. The session takes roughly 60–90
-            minutes and involves reading passages, short attention tasks, and brief questionnaires.</p>
-          <p style={{ marginTop: 12 }}><strong>Camera:</strong> if you allow it, the front camera
-            estimates blink rate, head position and gaze zone in real time. <strong>No image or video
-            is ever recorded or stored</strong> — only those numeric measures are saved.</p>
-          <p style={{ marginTop: 12 }}><strong>Data:</strong> responses are stored on this device under
-            a participant code (no name). You may stop at any time without penalty; tell the researcher
-            to withdraw and your data for this session can be deleted.</p>
-          <p style={{ marginTop: 12 }}>Taking part is voluntary. By continuing you confirm you have read
-            and understood this information and agree to participate.</p>
+        <div className="scrollable mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]" style={{ maxHeight: '38vh', paddingRight: 8 }}>
+          <p>You are invited to take part in a study on visual ergonomics — how display polarity,
+            text colour and room lighting affect reading, attention and eye comfort. Each session
+            takes roughly 75–120 minutes and involves reading passages, short attention tasks and
+            brief questionnaires. You will be asked to attend twice, 48–72 hours apart.</p>
+          <p style={{ marginTop: 12 }}><strong>Data:</strong> responses are stored on this device
+            under a participant code, not your name. You may stop at any time without penalty; tell
+            the researcher to withdraw and your data for this session can be deleted.</p>
+          <p style={{ marginTop: 12 }}><strong>Camera:</strong> by default the front camera is used
+            only to compute numbers — how often you blink, how fully your eyelids close, head
+            position — and <strong>the images themselves are discarded immediately and never
+            stored</strong>. The options below are separate and entirely optional.</p>
+          <p style={{ marginTop: 12 }}>Taking part is voluntary. Declining any option below does not
+            affect your participation or anything else about the session.</p>
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16, cursor: 'pointer' }}>
-          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ width: 20, height: 20 }} />
-          <span className="font-lab text-sm">I have read the above and consent to participate.</span>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 18, cursor: 'pointer' }}>
+          <input type="checkbox" data-testid="consent-core" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ width: 20, height: 20 }} />
+          <span className="font-lab text-sm" style={{ fontWeight: 650 }}>I have read the above and consent to participate.</span>
         </label>
+
+        <p className="font-lab text-xs uppercase tracking-wide" style={{ color: '#5a5a7a', marginTop: 20 }}>
+          Optional — each is a separate choice
+        </p>
+        <Opt
+          testid="consent-camera" checked={cameraMetrics} set={setCameraMetrics}
+          title="Use the camera for blink and head-position measures"
+          body="Numbers only. No image or video is saved. Declining means the eye measures are not collected for you; everything else runs as normal."
+        />
+        <Opt
+          testid="consent-photos" checked={setupPhotos} set={setSetupPhotos}
+          title="Keep two photographs of me at the device"
+          body="One at the start and one at the end, to document seating distance and room lighting. Stored on this device with your participant code, used only as a record that the setup was correct."
+        />
+        {askAnnotationVideo && (
+          <Opt
+            testid="consent-video" checked={annotationVideo} set={setAnnotationVideo}
+            title="Keep short video clips of my eyes while I read"
+            body="A few minutes in total. A trained assessor watches them frame by frame to check the automatic blink measurement is accurate. This is what allows the method to be validated; it is optional and you can take part fully without it."
+          />
+        )}
+
         <button className={btn} disabled={!agreed}
-          style={{ marginTop: 18, background: agreed ? '#1a1a2e' : '#cfcbc3', cursor: agreed ? 'pointer' : 'not-allowed' }}
-          onClick={() => agreed && onConsent()}>
+          style={{ marginTop: 22, background: agreed ? '#1a1a2e' : '#cfcbc3', cursor: agreed ? 'pointer' : 'not-allowed' }}
+          onClick={() => agreed && onConsent({
+            camera_metrics: cameraMetrics,
+            setup_photos: setupPhotos,
+            annotation_video: askAnnotationVideo && annotationVideo,
+            granted_at: Date.now(),
+          })}>
           I consent — continue →
         </button>
+        <p className="font-lab text-xs" style={{ color: '#5a5a7a', marginTop: 10 }}>
+          Unticked boxes are recorded as a refusal, not left blank.
+        </p>
       </div>
     </div>
   );

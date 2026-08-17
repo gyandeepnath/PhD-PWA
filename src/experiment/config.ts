@@ -77,6 +77,13 @@ const BASE_CONFIG = {
    */
   CONDITIONS_PER_SESSION_DEFAULT: 10,
 
+  /**
+   * Length of one retained reading-video segment for the manual blink-annotation sub-study.
+   * The synopsis specifies two 3-minute segments per participant in the validation subsample, one
+   * per illumination level — so one segment per session at 3 minutes.
+   */
+  ANNOTATION_SEGMENT_MS: 180000,
+
   // Camera.
   CAMERA_WIDTH: 1280,
   CAMERA_HEIGHT: 720,
@@ -112,6 +119,7 @@ const E2E_OVERRIDES: Partial<typeof BASE_CONFIG> = {
   RT_ITI_MAX_MS: 30,
   ADAPTATION_SAME_POLARITY_MS: 200,
   ADAPTATION_SWITCH_POLARITY_MS: 300,
+  ANNOTATION_SEGMENT_MS: 400,
 };
 
 export const CONFIG = isE2E() ? { ...BASE_CONFIG, ...E2E_OVERRIDES } : BASE_CONFIG;

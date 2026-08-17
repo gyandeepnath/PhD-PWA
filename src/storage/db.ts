@@ -24,6 +24,7 @@ const STORE_SPECS: StoreSpec[] = [
   { name: 'conditions', keyPath: 'condition_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
   { name: 'fatigue_scores', keyPath: 'fatigue_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }, { name: 'by_condition', keyPath: 'condition_id' }] },
   { name: 'cvsq_scores', keyPath: 'cvsq_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
+  { name: 'media_captures', keyPath: 'media_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
   { name: 'nasa_tlx', keyPath: 'tlx_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
   { name: 'display_perception', keyPath: 'perception_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }, { name: 'by_condition', keyPath: 'condition_id' }] },
   { name: 'comprehension_results', keyPath: 'comprehension_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }, { name: 'by_condition', keyPath: 'condition_id' }] },

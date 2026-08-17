@@ -23,7 +23,7 @@ function makeSession(id: string, participant: string, enrolment: number): Sessio
     condition_order: [0, 1, 7, 2, 6, 3, 5, 4],
     preflight_complete: true,
     consent_given: true,
-    consent_time: Date.now(),
+    consent_time: Date.now(), media_consent: { camera_metrics: true, setup_photos: false, annotation_video: false, granted_at: null },
     provenance: {
       app_version: 'test',
       git_hash: 'test',

@@ -18,7 +18,7 @@ async function seed() {
     session_id: 'S1', participant_id: 'P001', enrolment_number: 1, status: 'complete', deleted_at: null, display_label: null, ambient_lux: 350, ambient_illumination_level: null, illumination_block: 0, illumination_order_first: 'dim' as const, lux_readings: [], lux_all_in_range: null, lux_deviation_note: null,
     screen_white_luminance_cd_m2: 120, brightness_percent: 80, session_start_time: 1700000000000,
     session_end_time: 1700000600000, randomisation_seed: 1, condition_order: [0], preflight_complete: true,
-    consent_given: true, consent_time: 1, provenance: prov, device_type: 'Android', browser: 'Chrome', screen_resolution: '2880x1800',
+    consent_given: true, consent_time: 1, media_consent: { camera_metrics: true, setup_photos: false, annotation_video: false, granted_at: null }, provenance: prov, device_type: 'Android', browser: 'Chrome', screen_resolution: '2880x1800',
     conditions_per_session: 8, condition_offset: 0, session_index: 1,
   });
   await put('conditions', {
@@ -68,7 +68,7 @@ describe('gather → aggregate → export integration (fake IndexedDB)', () => {
       session_id: 'S2', participant_id: 'P001', enrolment_number: 1, status: 'in_progress', deleted_at: null,
       display_label: null, ambient_lux: 350, ambient_illumination_level: null, illumination_block: 0, illumination_order_first: 'dim' as const, lux_readings: [], lux_all_in_range: null, lux_deviation_note: null, screen_white_luminance_cd_m2: 120,
       brightness_percent: 80, session_start_time: 1700001000000, session_end_time: null, randomisation_seed: 1,
-      condition_order: [1], preflight_complete: true, consent_given: true, consent_time: 1, provenance: prov,
+      condition_order: [1], preflight_complete: true, consent_given: true, consent_time: 1, media_consent: { camera_metrics: true, setup_photos: false, annotation_video: false, granted_at: null }, provenance: prov,
       device_type: 'Android', browser: 'Chrome', screen_resolution: '2880x1800',
       conditions_per_session: 4, condition_offset: 4, session_index: 2,
     });

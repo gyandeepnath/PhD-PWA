@@ -16,6 +16,9 @@ import { CONFIG } from './config';
 import { initialState, nextState, progressPercent, type MachineState } from './stateMachine';
 import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
 import { put, get, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber } from '@/storage/db';
+import {
+  noMediaConsent, mayCapture, capturePhoto, recordSegment, checksumOfBlob,
+} from '@/storage/media';
 import { priorParticipantProgress } from '@/storage/gather';
 import { saveResume, clearResume } from '@/storage/sessionPersistence';
 import { isInLoop } from './stateMachine';
@@ -183,6 +186,60 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     setSession(updated);
   }, [session]);
 
+  /**
+   * Capture one consented media item.
+   *
+   * Consent is re-read from the PERSISTED session record rather than trusted from component state,
+   * so a capture cannot slip through after a grant was withdrawn. A refusal is a silent no-op: the
+   * participant is not told a capture was skipped, because that would pressure them about a choice
+   * they already made.
+   */
+  const captureMedia = useCallback(async (
+    checkpoint: 'session_start' | 'session_end' | 'reading_segment',
+    conditionLabel: string | null = null,
+  ) => {
+    if (!session) return;
+    const fresh = await get('sessions', session.session_id);
+    if (!mayCapture(fresh?.media_consent, checkpoint)) return;
+    const src = tracking.mediaSource();
+    if (!src) return;
+    try {
+      let blob: Blob;
+      let width: number | null = null;
+      let height: number | null = null;
+      let duration: number | null = null;
+      let mime: string;
+      if (checkpoint === 'reading_segment') {
+        const seg = await recordSegment(src.stream, CONFIG.ANNOTATION_SEGMENT_MS);
+        if (!seg) return;
+        blob = seg.blob; mime = seg.mime; duration = seg.duration_ms;
+      } else {
+        const shot = await capturePhoto(src.video);
+        if (!shot) return;   // no frame yet — never store a black placeholder as "proof"
+        blob = shot.blob; mime = 'image/jpeg'; width = shot.width; height = shot.height;
+      }
+      await put('media_captures', {
+        media_id: uuidv4(),
+        session_id: session.session_id,
+        participant_id: session.participant_id,
+        kind: checkpoint === 'reading_segment' ? 'video' : 'photo',
+        checkpoint,
+        condition_label: conditionLabel,
+        captured_at: Date.now(),
+        mime,
+        bytes: blob.size,
+        width,
+        height,
+        duration_ms: duration,
+        checksum_fnv1a: await checksumOfBlob(blob),
+        consent_snapshot: fresh!.media_consent,
+        blob,
+      });
+    } catch {
+      // A failed capture must never abort the session: the numeric data is the study.
+    }
+  }, [session, tracking]);
+
   // --- SESSION INIT ---
   const beginSession = useCallback(async (d: SessionInitData) => {
     if (creatingSession.current) return; // guard against double-submit creating duplicate sessions
@@ -229,6 +286,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       // Consent is captured at the CONSENT stage (below), not pre-emptively at session creation.
       consent_given: false,
       consent_time: null,
+      media_consent: noMediaConsent(),
       provenance: provenance(),
       device_type: navigator.userAgent.includes('Android') ? 'Android' : 'Other',
       browser: navigator.userAgent.slice(0, 60),
@@ -288,7 +346,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     saveResume(session.session_id, machine.stepIndex);
     // Eye-tracking window spans the reading task (begins here, ends at reading complete).
     tracking.beginCondition();
-  }, [session, cond, step, conditionId, machine.stepIndex, plan, tracking]);
+    // Annotation video for the validation sub-study: one segment per session, taken during the
+    // first condition's reading so it always lands inside a real exposure window. Fire-and-forget —
+    // recording must never delay stimulus onset, and mayCapture() gates it on the video grant.
+    if (machine.stepIndex === 0) void captureMedia('reading_segment', cond?.label ?? null);
+  }, [session, cond, step, conditionId, machine.stepIndex, plan, tracking, captureMedia]);
 
   // ===== RENDER =====
   const nConditions = plan.length || N_CONDITIONS;
@@ -307,9 +369,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       view = <SessionInit resolveAssignment={resolveAssignment} onSubmit={beginSession} />;
       break;
     case 'CONSENT':
-      view = <Consent onConsent={async () => {
+      view = <Consent onConsent={async (media) => {
         if (session) {
-          const fresh = { ...session, consent_given: true, consent_time: Date.now() };
+          // Persist the media grants alongside the participation consent, in one write, so a
+          // capture can never find consent_given=true with the grants still unset.
+          const fresh = { ...session, consent_given: true, consent_time: Date.now(), media_consent: media };
           await put('sessions', fresh);
           setSession(fresh);
         }
@@ -411,7 +475,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           beginGazeCalibration={tracking.beginGazeCalibration}
           sampleGazeTarget={tracking.sampleGazeTarget}
           endGazeCalibration={tracking.endGazeCalibration}
-          onDone={advance}
+          onDone={() => { void captureMedia('session_start').then(advance); }}
         />
       ) : (
         <Calibration cameraStatus={tracking.status} onDone={advance} />
@@ -602,6 +666,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           />
         )}
         onExport={async () => {
+        // Final setup-proof still, before the record is closed. Ordered before the status write so a
+        // capture failure cannot leave the session marked complete without its end photo attempted.
+        await captureMedia('session_end');
         if (session) {
           await put('sessions', { ...session, status: 'complete', session_end_time: Date.now() });
           clearResume(session.session_id);

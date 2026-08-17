@@ -55,6 +55,8 @@ interface TrackingApi {
   stop: () => void;
   /** Collect calibration EAR samples for ~`ms` and fit the baseline. Resolves to the baseline. */
   calibrate: (ms: number) => Promise<number | null>;
+  /** Live video element + stream for CONSENTED capture; null when the camera is not running. */
+  mediaSource: () => { video: HTMLVideoElement; stream: MediaStream } | null;
   /** Begin gaze calibration: start EAR baseline collection and reset gaze samples. */
   beginGazeCalibration: () => void;
   /** Sample iris offset for a calibration target for ~`ms` while the participant fixates it. */
@@ -296,8 +298,21 @@ export function useTracking(): TrackingApi {
     [status],
   );
 
+  /**
+   * The live video element and its stream, for CONSENTED media capture only.
+   *
+   * Exposed rather than hidden because the alternative is a second getUserMedia call, which on many
+   * tablets fails or steals the camera from the tracker mid-session. Callers must still check the
+   * persisted media_consent grant before capturing — see storage/media.ts mayCapture().
+   */
+  const mediaSource = useCallback(() => {
+    const v = videoRef.current;
+    const stream = (v?.srcObject as MediaStream | null) ?? null;
+    return v && stream ? { video: v, stream } : null;
+  }, []);
+
   return {
-    status, start, stop, calibrate,
+    status, start, stop, calibrate, mediaSource,
     beginGazeCalibration, sampleGazeTarget, endGazeCalibration,
     beginCondition, endCondition,
   };
