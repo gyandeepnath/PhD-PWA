@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { N_CONDITIONS } from '@/experiment/conditions';
 import { makeRng, gaussian } from '@/sim/rng';
 import { generateParticipant, generateCohort } from '@/sim/participant';
 import { cohortRows, ols, isSignificant } from '@/sim/analysis';
@@ -28,11 +29,11 @@ describe('seeded RNG', () => {
 });
 
 describe('participant generation', () => {
-  it('produces 8 condition rows with unique conditions and decoupled passages', () => {
+  it('produces N condition rows with unique conditions and decoupled passages', () => {
     const p = generateParticipant(1, 123);
-    expect(p.rows).toHaveLength(8);
-    expect(new Set(p.rows.map((r) => r.condition_label)).size).toBe(8);
-    expect(new Set(p.rows.map((r) => r.passage_id)).size).toBe(8);
+    expect(p.rows).toHaveLength(N_CONDITIONS);
+    expect(new Set(p.rows.map((r) => r.condition_label)).size).toBe(N_CONDITIONS);
+    expect(new Set(p.rows.map((r) => r.passage_id)).size).toBe(N_CONDITIONS);
     // Passage is not yoked to condition for this participant (some differ from index order).
     const yoked = p.rows.every((r, i) => r.passage_id === i);
     expect(yoked).toBe(false);

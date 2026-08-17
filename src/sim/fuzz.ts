@@ -8,7 +8,10 @@
  * soak. Returns a list of failures (empty = clean).
  */
 import { makeRng, type Rng } from './rng';
-import { conditionOrderFor, passageForCondition, sessionPlan } from '@/experiment/counterbalance';
+import { N_CONDITIONS } from '@/experiment/conditions';
+import { N_PASSAGES } from '@/experiment/passages';
+import { conditionOrderFor, passageForCondition, sessionPlan, blockPlan } from '@/experiment/counterbalance';
+import { illuminationOrderFor, illuminationForBlock, N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 import { computeSdt } from '@/lib/signalDetection';
 import { classifyBlinks, summariseBlinks, effectiveFps, baselineEar, type EarSample, type Point } from '@/tracking/blink';
 import { estimateHeadPose } from '@/tracking/headPose';
@@ -81,11 +84,22 @@ export function runFuzz(iterations: number, seed = 1): FuzzFailure[] {
     guard('counterbalance', i, () => {
       const enrol = maybeWeird(rng);
       const order = conditionOrderFor(enrol);
-      if (order.length !== 8 || order.some((x) => x < 0 || x > 7 || !Number.isInteger(x)))
+      if (order.length !== N_CONDITIONS || order.some((x) => x < 0 || x >= N_CONDITIONS || !Number.isInteger(x)))
         fail('counterbalance', i, `bad order for enrol=${enrol}: ${order}`);
       const p = passageForCondition(randInt(rng, -5, 12), enrol);
-      if (!(p >= 0 && p < 8)) fail('counterbalance', i, `bad passage ${p}`);
+      if (!(p >= 0 && p < N_PASSAGES)) fail('counterbalance', i, `bad passage ${p}`);
       sessionPlan(enrol);
+      // The illumination factor must survive the same degenerate enrolment numbers.
+      const order2 = illuminationOrderFor(enrol);
+      if (order2.length !== N_ILLUMINATION_BLOCKS || new Set(order2).size !== N_ILLUMINATION_BLOCKS)
+        fail('counterbalance', i, `bad illumination order for enrol=${enrol}: ${order2}`);
+      for (let b = -3; b < 5; b++) {
+        const lvl = illuminationForBlock(enrol, b);
+        if (lvl !== 'dim' && lvl !== 'moderate')
+          fail('counterbalance', i, `bad illumination level ${lvl} for enrol=${enrol} block=${b}`);
+      }
+      const bp = blockPlan(enrol, randInt(rng, -3, 5));
+      if (bp.length !== N_CONDITIONS) fail('counterbalance', i, `bad blockPlan length ${bp.length}`);
     });
 
     // 2) Signal detection with degenerate trial counts (incl. zero, all-hit, all-miss).
@@ -129,7 +143,7 @@ export function runFuzz(iterations: number, seed = 1): FuzzFailure[] {
 
     // 5) Aggregation + export on a partial/sparse bundle (missing records, empty conditions).
     guard('export', i, () => {
-      const nConds = randInt(rng, 0, 8);
+      const nConds = randInt(rng, 0, N_CONDITIONS);
       const bundle = makePartialBundle(rng, nConds);
       const summaries = buildConditionSummaries(bundle);
       if (summaries.length !== nConds) fail('export', i, `summaries ${summaries.length} != ${nConds}`);
@@ -176,7 +190,7 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
   const conditions = Array.from({ length: nConds }, (_, k) => ({
     condition_id: `c${k}`, session_id: sid, session_position: k, condition_label: `C${k + 1}`,
     polarity: (k % 2 ? 'negative' : 'positive') as 'positive' | 'negative',
-    background_color: '#FFFFFF', text_color: '#000000', color_name: rng() < 0.5 ? 'black' : torture(), passage_id: k % 8,
+    background_color: '#FFFFFF', text_color: '#000000', color_name: rng() < 0.5 ? 'black' : torture(), ink_name: rng() < 0.5 ? 'black' : torture(), passage_id: k % N_PASSAGES,
     wcag_contrast_ratio: wcagContrastRatio('#FFFFFF', '#000000'), wcag_level: 'AAA' as const,
     michelson_contrast: 1, below_wcag_aa: false, started_at: 1, completed_at: rng() < 0.5 ? 2 : null,
     condition_duration_sec: 1, adaptation_ms_before: 0, reading_time_ms: null
@@ -185,7 +199,7 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
   return {
     session: {
       session_id: sid, participant_id: 'PF', enrolment_number: 1, status: 'complete', deleted_at: null,
-      display_label: rng() < 0.5 ? null : torture(), ambient_lux: 350, ambient_illumination_level: null, screen_white_luminance_cd_m2: null, brightness_percent: null,
+      display_label: rng() < 0.5 ? null : torture(), ambient_lux: 350, ambient_illumination_level: null, illumination_block: 0, illumination_order_first: 'dim' as const, lux_readings: [], lux_all_in_range: null, lux_deviation_note: null, screen_white_luminance_cd_m2: null, brightness_percent: null,
       session_start_time: 1, session_end_time: 2, randomisation_seed: 1,
       condition_order: conditions.map((c) => c.session_position), preflight_complete: true,
       consent_given: true, consent_time: 1, provenance: PROV, device_type: torture(), browser: torture(), screen_resolution: '1x1',
@@ -194,6 +208,7 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
     participant: undefined,
     conditions,
     fatigue: rng() < 0.5 ? [{ fatigue_id: 'b', session_id: sid, condition_id: null, stage: 'baseline', eye_strain: 0, dryness: 0, blur: 0, burning: 0, headache: 0, fatigue_mean: 0, touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true }, all_touched: true, response_time_ms: maybeWeird(rng) * 100 }] : [],
+    tlx: [],
     cvsq: [],
     comprehension: [],
     visualSearch: conditions.filter(has).map((c) => ({

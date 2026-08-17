@@ -7,7 +7,7 @@
  * change effort across conditions and confound the display manipulation. The participant continues
  * whenever they are ready (no forced timer), so the break never inflates the session unnecessarily.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { WavyBackground } from '@/components/WavyBackground';
 import { now } from '@/lib/timing';
 
@@ -17,9 +17,11 @@ interface Props {
   /** Total conditions in this sitting. */
   total: number;
   onContinue: () => void;
+  /** Researcher-facing slot (mid-session illuminance checkpoint). */
+  children?: ReactNode;
 }
 
-export function BreakScreen({ completed, total, onContinue }: Props) {
+export function BreakScreen({ completed, total, onContinue, children }: Props) {
   const [rested, setRested] = useState(0);
   useEffect(() => {
     const start = now();
@@ -50,6 +52,8 @@ export function BreakScreen({ completed, total, onContinue }: Props) {
           screen, blink, and relax your eyes for a moment. Continue whenever you’re ready.
         </p>
         <p className="mt-3 font-lab text-xs text-[#5a5a7a]">Rested for {rested}s</p>
+      {children}
+
         <button
           onClick={onContinue}
           className="mt-8 rounded-xl px-8 py-3 font-lab text-sm text-white transition active:scale-95"

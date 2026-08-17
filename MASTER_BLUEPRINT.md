@@ -7,7 +7,7 @@ data model and exports, the software architecture, the verification harness, and
 log. Paired with the complete source tree in this archive (`ALL_SOURCE.md` = every code line
 concatenated; the original files are also present under their paths).
 
-- **Version:** package `visulab@2.1.0`; IndexedDB schema v7.
+- **Version:** package `visulab@2.1.0`; IndexedDB schema v8.
 - **Commit at packaging:** branch `claude/build-review-refinement-3z0nrm` (see `CHANGELOG` section §16).
 - **Status:** 169 unit/property tests, `tsc`+`vite` production build, ESLint, a harsh stress
   harness, and 6 Playwright E2E specs — all green.
@@ -62,34 +62,82 @@ conditions. The analysis is a **linear mixed model with a random intercept per p
 
 ## 2. Design overview
 
-- **8 display conditions** = **2 polarity × 4 text colour** (achromatic, blue, red, yellow). Hex
-  values are **locked** (original spec: "must not be changed under any circumstance"); contrast
-  metadata is **derived** and recorded as covariates rather than altering colours.
-- **Within-subjects**, all 8 conditions per participant.
+- **10 display conditions** = **2 polarity × 5 text colour** (achromatic, blue, red, yellow,
+  green). Hex values are **locked** (original spec: "must not be changed under any circumstance");
+  contrast metadata is **derived** and recorded as covariates rather than altering colours.
+  Green was added after a colour-set simulation (see §2.2) to balance sub-AA conditions across
+  polarity at two each.
+- **Ambient illumination** is a third factor with **two levels** — dim ≈10 lux (accept 5–15) and
+  moderate ≈150 lux (accept 130–170) — manipulated at **session level**, not within a session,
+  because room light cannot be changed without forcing re-adaptation. Each participant completes
+  both levels, so all three factors are within-participant: **20 condition-runs per person**.
+- **Split-plot structure:** illumination is the whole-plot factor; polarity × colour are the
+  sub-plot factors. The statistical consequence is two nested random intercepts — participant, and
+  session within participant (see `src/analysis/analysis_template.R`).
 - **Counterbalancing:** balanced **Williams Latin square** (first-order carryover controlled),
   indexed by a **sequential enrolment number** (not a hash of an arbitrary ID — hashing breaks
-  balance). Each condition appears in each serial position equally over each block of 8 participants.
+  balance). Each condition appears in each serial position equally over each block of 10
+  participants. The **second illumination block advances the Williams row by one**, so a
+  participant does not meet the conditions in the same serial order twice — otherwise serial
+  position would be perfectly correlated with condition within a participant across both sessions.
+- **Illumination order** (dim-first / moderate-first) is counterbalanced **orthogonally** to the
+  Williams row. A naive parity rule would NOT be orthogonal: the row cycles every 10 and parity
+  every 2, and 2 divides 10, so row would determine order completely. The rule therefore
+  alternates with parity *and* flips once per completed block of ten, which splits 5/5 within each
+  block and pairs every row with both orders across twenty participants.
 - **Passage assignment** is a **second, independent Latin square** (rotating offset), so passage
   content is **orthogonal to display condition** (removes the passage-difficulty confound that the
-  original build had by yoking passage = condition).
+  original build had by yoking passage = condition). Word counts and search-target counts are
+  **derived from the passage text**, never declared — the original bundle's declared word counts
+  overstated the real text by 11–32%, which inflated `reading_speed_wpm` and mis-set the
+  skim-detection floor.
 - **Per condition**, 6 measured sub-stages run in a fixed order (reading → comprehension → display
   perception → post-fatigue → visual search → reaction time), followed by an adaptation rest.
+- **Session close:** end CVS-Q, then **NASA-TLX** once per session as a cumulative workload index.
 
-### 2.1 The 8 conditions (derived contrast, computed by `src/lib/contrast.ts`)
+### 2.1 The 10 conditions (derived contrast, computed by `src/lib/contrast.ts`)
 
 | Label | Text on background | Polarity | WCAG ratio | WCAG level | Michelson | Below AA? |
 |------|--------------------|----------|-----------|-----------|-----------|-----------|
-| C1 | black on white  | positive | 21.00 : 1 | AAA      | 1.000 | no  |
-| C2 | blue on white   | positive | 6.70 : 1  | AA       | 0.807 | no  |
-| C3 | red on white    | positive | 5.74 : 1  | AA       | 0.765 | no  |
-| C4 | yellow on white | positive | **2.39 : 1** | **Fail** | 0.439 | **yes** |
-| C5 | white on black  | negative | 21.00 : 1 | AAA      | 1.000 | no  |
-| C6 | blue on black   | negative | **3.14 : 1** | AA Large | 1.000 | **yes** |
-| C7 | red on black    | negative | **3.66 : 1** | AA Large | 1.000 | **yes** |
-| C8 | yellow on black | negative | 8.79 : 1  | AAA      | 1.000 | no  |
+| P1 | black on white   | positive | 21.00 : 1 | AAA      | 1.000 | no  |
+| P2 | blue on white    | positive | 6.70 : 1  | AA       | 0.807 | no  |
+| P3 | red on white     | positive | 5.74 : 1  | AA       | 0.765 | no  |
+| P4 | yellow on white  | positive | **2.39 : 1** | **Fail** | 0.439 | **yes** |
+| P5 | green on white   | positive | **3.19 : 1** | AA Large | 0.564 | **yes** |
+| N1 | white on black   | negative | 21.00 : 1 | AAA      | 1.000 | no  |
+| N2 | blue on black    | negative | **3.14 : 1** | AA Large | 1.000 | **yes** |
+| N3 | red on black     | negative | **3.66 : 1** | AA Large | 1.000 | **yes** |
+| N4 | yellow on black  | negative | 8.79 : 1  | AAA      | 1.000 | no  |
+| N5 | green on black   | negative | 6.57 : 1  | AA       | 1.000 | no  |
 
-> **Confound to scrutinise:** contrast is **not balanced across polarity** — three conditions fall
-> below WCAG AA (C4, C6, C7) and they are unevenly split (1 positive, 2 negative). Polarity and
+### 2.2 What the condition matrix buys, and what it cannot
+
+1. **The contrast ordering is exactly reversed between polarities, and this is arithmetic rather
+   than design.** Contrast on white is `1.05/(L+0.05)`, strictly decreasing in the text's relative
+   luminance L; on black it is `(L+0.05)/0.05`, strictly increasing in the same L. Both read one
+   quantity, so the chromatic rank order must reverse — rank correlation is exactly **−1.00** for
+   *any* colour set. The build does not claim credit for it. What the colour choice *does* control
+   is how balanced the polarities are and whether any condition is too faint to read.
+2. **The achromatic pair is contrast-matched and is the one clean test of polarity.** Both give
+   21.00 : 1, so that pair varies polarity with luminance contrast held constant — an experimental
+   control, not a statistical one. It is the only comparison where a polarity effect cannot be
+   attributed to contrast.
+3. **Sub-AA conditions are balanced two per polarity** (P4, P5 / N2, N3), so polarity is not
+   systematically confounded with accessibility compliance. Across the ten conditions
+   `r(polarity, log contrast) = +0.11` — near enough to zero for both to enter one model.
+4. **Michelson contrast is uninformative under negative polarity.** With a pure black background
+   the minimum luminance is zero, so the metric saturates at 1.000 for every colour. The WCAG
+   ratio, backed by measured display photometry, is therefore the analytic contrast variable.
+
+Colour-set alternatives were compared before the set was fixed. A **luminance-matched** chromatic
+set is the *worst* option, not the most rigorous: equalising luminance across hues necessarily
+makes every chromatic colour low-contrast on white and high-contrast on black, pushing all four
+sub-AA conditions into one polarity and raising the confounding correlation to **+0.43**. The
+web-default hues yield an unusable condition (yellow on white, 1.07 : 1).
+
+> **Residual limitation (superseded in part by §2.2):** polarity and luminance contrast are still
+> not fully orthogonal, because chromatic pigments differ intrinsically in luminance and contrast
+> cannot be equalised across polarity with a fixed colour set. Polarity and
 > contrast are therefore partially entangled. The build records WCAG ratio + `below_wcag_aa` so the
 > analysis can model contrast as a covariate or reframe as **polarity × contrast**, but the reviewer
 > should assess whether the design can cleanly separate the two effects, or whether additional
@@ -117,7 +165,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) whit
   → CVSQ_BASELINE       validated CVS-Q (16 items)
   → BASELINE_FATIGUE    5-item visual-fatigue VAS (0–10)
   → INSTRUCTIONS        participant overview
-  → [× 8 conditions, Williams order]
+  → [× 10 conditions, Williams order, per illumination block]
         READING_TASK         self-paced passage (per-page minimum dwell floor); eye-tracking window
         → COMPREHENSION      1 × 4-option MCQ (accuracy + RT)
         → DISPLAY_PERCEPTION comfort + clarity sliders, captured immediately after reading
@@ -179,9 +227,14 @@ Progress bar = **8 setup steps + 8×6 measured sub-stages = 56 steps**. The stat
 
 ### 4.6 Reaction time — colour go/no-go (`ReactionTimeTask.tsx`)
 - A single coloured dot appears at a **random screen location** each trial, on the active condition's
-  own background. The participant taps **only** for the **target colour (green `#00A651`)** and
-  withholds for distractors (red/blue/yellow). Green is the one colour used by **no** display
-  condition, so its salience is constant across conditions (protocol §11).
+  own background. The participant taps **only** for the **achromatic target** — black `#000000` on
+  a light field, white `#FFFFFF` on a dark one — so target contrast is 21:1 and identical in both
+  polarities, and no target hue coincides with the text-colour manipulation. (This replaced a fixed
+  green target, whose justification — "the only colour not used by any display condition" — expired
+  when green became the fifth text colour.) The participant withholds for the four chromatic
+  distractors (red, blue, yellow, green). The discrimination is therefore achromatic-against-
+  chromatic rather than hue-against-hue: an easier judgement, but it preserves the two
+  fatigue-sensitive indices the task exists to measure — RT variability and lapse rate.
 - **32 trials/condition**, go-rate **0.625** (≈ 20 go / 12 no-go). **6 unscored practice trials**
   run once, before the first scored block only.
 - Onset is timestamped at the **actual painted frame** (rAF); RT uses the hardware pointer-event
@@ -278,7 +331,7 @@ from processed-frame timestamps and **gates** the timing-dependent metrics.
 
 ---
 
-## 8. Data model (IndexedDB `VisualErgonomicsDB`, schema v7)
+## 8. Data model (IndexedDB `VisualErgonomicsDB`, schema v8)
 
 **Stores:** `participants`, `sessions`, `conditions`, `reaction_trials`, `rt_summaries`,
 `visual_search`, `eye_metrics`, `fatigue_scores`, `display_perception`, `comprehension_results`,
@@ -308,7 +361,7 @@ hash, schema version; the export manifest carries **per-file FNV-1a checksums**.
   (mod n). For n=8 the first row is `[0,1,7,2,6,3,5,4]`. Each column (serial position) contains every
   condition exactly once and first-order carryover is balanced.
 - `conditionOrderFor(enrolment)` maps the **1-based enrolment number** to a row (`(n−1) mod 8`),
-  cycling every 8 participants; safe-modulo guards non-integer/negative inputs.
+  cycling every 10 participants; safe-modulo guards non-integer/negative inputs.
 - `passageForCondition` applies a **rotating offset** so passage is decoupled from condition.
 
 ---

@@ -14,7 +14,7 @@ function makeSession(id: string, participant: string, enrolment: number): Sessio
     session_id: id,
     participant_id: participant,
     enrolment_number: enrolment, status: 'complete', deleted_at: null, display_label: null,
-    ambient_lux: 350, ambient_illumination_level: null,
+    ambient_lux: 350, ambient_illumination_level: null, illumination_block: 0, illumination_order_first: 'dim' as const, lux_readings: [], lux_all_in_range: null, lux_deviation_note: null,
     screen_white_luminance_cd_m2: 120,
     brightness_percent: 80,
     session_start_time: Date.now(),

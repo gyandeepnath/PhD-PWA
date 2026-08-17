@@ -5,8 +5,9 @@
  * the relevant records, and preserves the cream theme. (Consent, colour-vision and the session
  * manager live in their own modules; the experiment wires them together in Experiment.tsx.)
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { CONFIG } from '@/experiment/config';
+import { ILLUMINATION, luxInRange, type IlluminationLevel } from '@/experiment/illumination';
 import { WavyBackground } from '@/components/WavyBackground';
 import { now } from '@/lib/timing';
 import type { CameraStatus } from '@/storage/types';
@@ -18,22 +19,57 @@ const btn = 'rounded-xl px-8 py-3 font-lab text-sm text-white transition active:
 export interface SessionInitData {
   participantId: string;
   ambientLux: number;
-  illuminationLevel: 'low' | 'moderate' | 'high' | null;
+  /** Assigned by counterbalancing once the enrolment number is known; null only before lookup. */
+  illuminationLevel: IlluminationLevel | null;
   whiteLuminance: number | null;
   brightnessPercent: number | null;
-  /** Conditions to run this sitting: 8 = single session, 4 = split into two shorter sittings. */
+  /** Conditions this sitting: 10 = whole illumination block, 5 = split into two shorter sittings. */
   conditionsPerSession: number;
+  /** Researcher acknowledged running outside the accepted lux range; free-text reason. */
+  luxDeviationNote: string | null;
 }
-export function SessionInit({ onSubmit }: { onSubmit: (d: SessionInitData) => void }) {
+export interface IlluminationAssignment {
+  level: IlluminationLevel;
+  block: number;
+  orderFirst: IlluminationLevel;
+  enrolment: number;
+  conditionsCompleted: number;
+}
+
+export function SessionInit({
+  onSubmit,
+  resolveAssignment,
+}: {
+  onSubmit: (d: SessionInitData) => void;
+  /** Looks up this participant's counterbalanced assignment from their enrolment history. */
+  resolveAssignment: (participantId: string) => Promise<IlluminationAssignment>;
+}) {
   const [pid, setPid] = useState('');
   const [lux, setLux] = useState('');
-  const [level, setLevel] = useState<'low' | 'moderate' | 'high' | ''>('');
+  const [deviation, setDeviation] = useState('');
+  const [assigned, setAssigned] = useState<IlluminationAssignment | null>(null);
   const [lum, setLum] = useState('');
   const [bright, setBright] = useState('');
   const [sitting, setSitting] = useState<'single' | 'split'>('single');
   const [err, setErr] = useState('');
+
+  // Resolve the counterbalanced assignment as soon as the id is well-formed, so the researcher
+  // sets the room to the ASSIGNED level before measuring rather than measuring whatever it was.
+  useEffect(() => {
+    if (!/^[A-Za-z0-9_-]{1,20}$/.test(pid)) { setAssigned(null); return; }
+    let cancelled = false;
+    void resolveAssignment(pid).then((a) => { if (!cancelled) setAssigned(a); });
+    return () => { cancelled = true; };
+  }, [pid, resolveAssignment]);
+
   const luxNum = Number(lux);
-  const valid = /^[A-Za-z0-9_-]{1,20}$/.test(pid) && lux !== '' && luxNum >= 0 && luxNum <= 200000;
+  const spec = assigned ? ILLUMINATION[assigned.level] : null;
+  const inRange = spec != null && luxInRange(assigned!.level, luxNum);
+  const luxEntered = lux !== '' && luxNum >= 0 && luxNum <= 200000;
+  // Out-of-range is permitted only with an explicit written reason, so a deviation is recorded
+  // as data rather than silently accepted or silently blocked.
+  const valid =
+    /^[A-Za-z0-9_-]{1,20}$/.test(pid) && luxEntered && (inRange || deviation.trim().length >= 3);
 
   return (
     <div className={shell} style={{ position: 'relative' }}>
@@ -45,10 +81,31 @@ export function SessionInit({ onSubmit }: { onSubmit: (d: SessionInitData) => vo
           <Field label="Participant ID (letters, digits, - or _, ≤20)">
             <input data-testid="pid" className="vl-input" value={pid} onChange={(e) => setPid(e.target.value)} placeholder="P001" />
           </Field>
-          <Field label="Ambient illumination (lux, 0–200000) — measure with a lux meter">
-            <input data-testid="lux" className="vl-input" inputMode="numeric" value={lux} onChange={(e) => setLux(e.target.value)} placeholder="350" />
+          {assigned && spec && (
+            <div style={{ border: '1px solid #d8d4cc', borderRadius: 10, padding: '14px 16px', background: '#fbf9f5' }}>
+              <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">
+                Assigned illumination — block {assigned.block + 1} of 2
+              </p>
+              <p className="mt-1 font-serif text-2xl">{spec.label}</p>
+              <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: 4 }}>{spec.description}</p>
+              <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: 6 }}>
+                Set the room to <strong>{spec.target} lux</strong> (accept {spec.min}–{spec.max}) before measuring.
+                Order for this participant: {ILLUMINATION[assigned.orderFirst].label} first — assigned by
+                counterbalancing, not chosen.
+              </p>
+            </div>
+          )}
+          <Field label={`Measured illuminance at the eye (lux) — ${spec ? `target ${spec.target}, accept ${spec.min}–${spec.max}` : 'measure with a lux meter'}`}>
+            <input data-testid="lux" className="vl-input" inputMode="numeric" value={lux} onChange={(e) => setLux(e.target.value)} placeholder={spec ? String(spec.target) : '150'} />
           </Field>
-          <Pick label="Ambient illumination level (study condition)" value={level} set={(v) => setLevel(v as 'low' | 'moderate' | 'high')} opts={['low', 'moderate', 'high']} />
+          {luxEntered && spec && !inRange && (
+            <Field label={`⚠ ${luxNum} lux is outside ${spec.min}–${spec.max}. Adjust the room, or record why you are proceeding (≥3 chars).`}>
+              <input data-testid="lux-deviation" className="vl-input" value={deviation} onChange={(e) => setDeviation(e.target.value)} placeholder="Reason for protocol deviation" />
+            </Field>
+          )}
+          {luxEntered && inRange && (
+            <p className="font-lab text-xs" style={{ color: '#2e7d46', marginTop: -6 }}>✓ Within the accepted range for {spec!.label}.</p>
+          )}
           <Field label="Measured white-screen luminance (cd/m², optional)">
             <input className="vl-input" inputMode="numeric" value={lum} onChange={(e) => setLum(e.target.value)} placeholder="120" />
           </Field>
@@ -73,14 +130,22 @@ export function SessionInit({ onSubmit }: { onSubmit: (d: SessionInitData) => vo
           style={{ marginTop: 24, background: valid ? '#1a1a2e' : '#cfcbc3', cursor: valid ? 'pointer' : 'not-allowed' }}
           disabled={!valid}
           onClick={() => {
-            if (!valid) { setErr('Enter a valid ID and a lux value between 0 and 200000.'); return; }
+            if (!valid) {
+              setErr(
+                luxEntered && spec && !inRange
+                  ? `Illuminance is outside ${spec.min}–${spec.max} lux. Adjust the room, or record a reason for the deviation.`
+                  : 'Enter a valid Participant ID and a measured lux value.',
+              );
+              return;
+            }
             onSubmit({
               participantId: pid,
               ambientLux: luxNum,
-              illuminationLevel: level === '' ? null : level,
+              illuminationLevel: assigned ? assigned.level : null,
               whiteLuminance: lum === '' ? null : Number(lum),
               brightnessPercent: bright === '' ? null : Number(bright),
               conditionsPerSession: sitting === 'split' ? CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2 : CONFIG.CONDITIONS_PER_SESSION_DEFAULT,
+              luxDeviationNote: inRange ? null : deviation.trim(),
             });
           }}
         >
@@ -355,12 +420,13 @@ export function Instructions({ onContinue }: { onContinue: () => void }) {
 }
 
 // ---- SESSION COMPLETE ----
-export function SessionComplete({ onExport }: { onExport: () => void }) {
+export function SessionComplete({ onExport, luxPanel }: { onExport: () => void; luxPanel?: ReactNode }) {
   return (
     <div className={shell} style={{ position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
       <WavyBackground opacity={0.05} />
       <div style={{ position: 'relative', zIndex: 1 }}>
         <h1 className="font-serif text-5xl font-light">Thank you</h1>
+        {luxPanel}
         <p className="mt-3 font-lab text-sm text-[#5a5a7a]" style={{ maxWidth: 560 }}>
           Your responses have been recorded and will contribute to research on visual ergonomics.
           Please inform the researcher that you have finished.

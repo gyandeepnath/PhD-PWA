@@ -2,7 +2,9 @@
  * Colour go/no-go reaction-time task — customised for the fatigue / attention-stability hypothesis.
  *
  * A single dot appears at a RANDOM location, on the active condition's own background; the
- * participant taps ONLY when it is the target colour (green), ignoring red/blue/yellow. Design
+ * participant taps ONLY when it is the ACHROMATIC target — black on a light background, white on
+ * a dark one — ignoring the four chromatic distractors. Target contrast is 21:1 in both
+ * polarities, so go-signal salience is constant across display conditions (synopsis §3.6). Design
  * choices for accuracy & reliability:
  *  - onset is timestamped at the actual painted frame (rAF), not one frame early;
  *  - the response time comes from the hardware pointer-event timestamp (low jitter);
@@ -14,6 +16,7 @@
  */
 import { useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';
+import { relativeLuminance } from '@/lib/contrast';
 import { rafDelay, randInt, now } from '@/lib/timing';
 import { median, stdSample } from '@/lib/stats';
 import { computeSdt } from '@/lib/signalDetection';
@@ -66,8 +69,18 @@ interface Trial {
   color: string;
 }
 
-function buildTrials(n: number, goRate: number): Trial[] {
-  const { RT_TARGET_COLOR: TARGET, RT_DISTRACTOR_COLORS: DIST } = CONFIG;
+/**
+ * Achromatic go-target for the active background: black on a light field, white on a dark one.
+ * Chosen by the background's WCAG relative luminance rather than by the condition's polarity
+ * label, so the rule stays correct for any background the task is ever handed.
+ */
+export function goTargetColor(background: string): string {
+  return relativeLuminance(background) > 0.5 ? CONFIG.RT_TARGET_LIGHT_BG : CONFIG.RT_TARGET_DARK_BG;
+}
+
+function buildTrials(n: number, goRate: number, background: string): Trial[] {
+  const TARGET = goTargetColor(background);
+  const { RT_DISTRACTOR_COLORS: DIST } = CONFIG;
   const pick = () => DIST[Math.floor(Math.random() * DIST.length)];
   const nGo = Math.round(n * goRate);
   const trials: Trial[] = [];
@@ -93,8 +106,8 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
   const [phase, setPhase] = useState<Phase>('instruction');
   const [trialNum, setTrialNum] = useState(0);
   const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null);
-  const scored = useRef<Trial[]>(buildTrials(CONFIG.RT_TRIALS_PER_CONDITION, CONFIG.RT_GO_RATE));
-  const practice = useRef<Trial[]>(buildTrials(practiceTrials, CONFIG.RT_GO_RATE));
+  const scored = useRef<Trial[]>(buildTrials(CONFIG.RT_TRIALS_PER_CONDITION, CONFIG.RT_GO_RATE, background));
+  const practice = useRef<Trial[]>(buildTrials(practiceTrials, CONFIG.RT_GO_RATE, background));
   const records = useRef<RawTrial[]>([]);
   const phaseRef = useRef<Phase>('instruction');
   const onsetRef = useRef(0);
@@ -102,6 +115,9 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
   const falseStartRef = useRef(false);
   const current = useRef<Trial | null>(null);
   const clusterPos = useRef<{ x: number; y: number }>({ x: 50, y: 50 });
+  // Achromatic go-target, resolved from the active background (black on light, white on dark).
+  const targetColor = goTargetColor(background);
+  const targetName = targetColor === CONFIG.RT_TARGET_LIGHT_BG ? 'black' : 'white';
   const [, force] = useState(0);
 
   const setPhaseSync = (p: Phase) => {
@@ -173,11 +189,11 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
       let msg: string;
       let ok: boolean;
       if (t.signal) {
-        if (!responded) { msg = 'Too slow — tap when the dot is green'; ok = false; }
+        if (!responded) { msg = `Too slow — tap when the dot is ${targetName}`; ok = false; }
         else if (anticipatory) { msg = 'Wait until the dot appears'; ok = false; }
         else { msg = '✓ Good'; ok = true; }
       } else {
-        if (responded) { msg = '✗ That wasn’t green — don’t tap'; ok = false; }
+        if (responded) { msg = `✗ That wasn’t ${targetName} — don’t tap`; ok = false; }
         else { msg = '✓ Good (correctly ignored)'; ok = true; }
       }
       setFeedback({ msg, ok });
@@ -267,9 +283,9 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
         <div style={{ textAlign: 'center', color: text, fontFamily: '"DM Mono", monospace', maxWidth: 540, padding: 24 }}>
           <h2 style={{ fontSize: 24, marginBottom: 16 }}>Task 4 of 4 · Reaction</h2>
           <p style={{ fontSize: 16, lineHeight: 1.6, marginBottom: 24 }}>
-            A coloured dot will appear at a random spot. Tap the screen as fast as you can ONLY when
-            it is <span style={{ color: CONFIG.RT_TARGET_COLOR, fontWeight: 700 }}>green</span>. Do not
-            tap for any other colour.{practiceTrials > 0 ? ' A short practice comes first.' : ''}
+            A dot will appear at a random spot. Tap the screen as fast as you can ONLY when it is{' '}
+            <span style={{ color: targetColor, fontWeight: 700, textShadow: `0 0 1px ${text}` }}>{targetName}</span>.
+            Do not tap for any coloured dot.{practiceTrials > 0 ? ' A short practice comes first.' : ''}
           </p>
           <button
             onPointerDown={(e) => { e.stopPropagation(); void run(); }}

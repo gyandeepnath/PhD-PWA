@@ -15,7 +15,7 @@ beforeEach(() => {
 
 async function seed() {
   await put('sessions', {
-    session_id: 'S1', participant_id: 'P001', enrolment_number: 1, status: 'complete', deleted_at: null, display_label: null, ambient_lux: 350, ambient_illumination_level: null,
+    session_id: 'S1', participant_id: 'P001', enrolment_number: 1, status: 'complete', deleted_at: null, display_label: null, ambient_lux: 350, ambient_illumination_level: null, illumination_block: 0, illumination_order_first: 'dim' as const, lux_readings: [], lux_all_in_range: null, lux_deviation_note: null,
     screen_white_luminance_cd_m2: 120, brightness_percent: 80, session_start_time: 1700000000000,
     session_end_time: 1700000600000, randomisation_seed: 1, condition_order: [0], preflight_complete: true,
     consent_given: true, consent_time: 1, provenance: prov, device_type: 'Android', browser: 'Chrome', screen_resolution: '2880x1800',
@@ -23,7 +23,7 @@ async function seed() {
   });
   await put('conditions', {
     condition_id: 'A', session_id: 'S1', session_position: 0, condition_label: 'C1', polarity: 'positive',
-    background_color: '#FFFFFF', text_color: '#000000', color_name: 'black', passage_id: 0,
+    background_color: '#FFFFFF', text_color: '#000000', color_name: 'black', ink_name: 'black', passage_id: 0,
     wcag_contrast_ratio: 21, wcag_level: 'AAA', michelson_contrast: 1, below_wcag_aa: false,
     started_at: 1, completed_at: 2, condition_duration_sec: 1, adaptation_ms_before: 0, reading_time_ms: null
   });
@@ -66,7 +66,7 @@ describe('gather → aggregate → export integration (fake IndexedDB)', () => {
     // A second sitting for the SAME participant (split-session), sharing the participant record.
     await put('sessions', {
       session_id: 'S2', participant_id: 'P001', enrolment_number: 1, status: 'in_progress', deleted_at: null,
-      display_label: null, ambient_lux: 350, ambient_illumination_level: null, screen_white_luminance_cd_m2: 120,
+      display_label: null, ambient_lux: 350, ambient_illumination_level: null, illumination_block: 0, illumination_order_first: 'dim' as const, lux_readings: [], lux_all_in_range: null, lux_deviation_note: null, screen_white_luminance_cd_m2: 120,
       brightness_percent: 80, session_start_time: 1700001000000, session_end_time: null, randomisation_seed: 1,
       condition_order: [1], preflight_complete: true, consent_given: true, consent_time: 1, provenance: prov,
       device_type: 'Android', browser: 'Chrome', screen_resolution: '2880x1800',

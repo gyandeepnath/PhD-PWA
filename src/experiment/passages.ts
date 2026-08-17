@@ -18,22 +18,26 @@ export interface ComprehensionQuestion {
   correctIndex: number;
 }
 
-export interface Passage {
+/** Passage as authored — counts are NOT declared here; they are derived from the text below. */
+interface PassageDef {
   id: number;
   title: string;
-  wordCount: number;
   pages: string[];
   question: ComprehensionQuestion;
   searchTarget: string;
-  /** Authoritative target occurrences (computed from the passage text). */
+}
+
+export interface Passage extends PassageDef {
+  /** Words in the passage, derived from the text. Drives reading_speed_wpm and skim detection. */
+  wordCount: number;
+  /** Target occurrences, derived from the text with the search task's own tokenisation rule. */
   searchTargetCount: number;
 }
 
-export const PASSAGES: Passage[] = [
+const PASSAGE_DEFS: PassageDef[] = [
   {
     id: 0,
     title: "The Carbon Cycle",
-    wordCount: 278,
     pages: [
       `Carbon is one of the most fundamental elements in nature, cycling continuously between living organisms, the atmosphere, oceans, and rocks. This process, known as the carbon cycle, regulates Earth's climate and supports all life on the planet.
 
@@ -48,12 +52,10 @@ Human activities have significantly altered the carbon cycle. Burning fossil fue
       correctIndex: 2,
     },
     searchTarget: "carbon",
-    searchTargetCount: 12,
   },
   {
     id: 1,
     title: "Ocean Currents",
-    wordCount: 285,
     pages: [
       `Ocean currents are continuous, directed movements of water flowing through the world's seas. These currents are driven by a combination of wind, differences in water density, Earth's rotation, and the shape of ocean basins. Together they form a global circulation system that distributes heat, nutrients, and dissolved gases around the planet.
 
@@ -68,12 +70,10 @@ Ocean currents have a profound influence on climate. The Gulf Stream carries war
       correctIndex: 1,
     },
     searchTarget: "ocean",
-    searchTargetCount: 7,
   },
   {
     id: 2,
     title: "The Human Immune System",
-    wordCount: 292,
     pages: [
       `The immune system is the body's defence network, protecting against bacteria, viruses, fungi, and other harmful substances. It operates through a complex series of biological processes involving specialised cells, tissues, and organs working in coordination to identify and eliminate threats.
 
@@ -88,12 +88,10 @@ The adaptive immune system provides a more precise and targeted defence. Special
       correctIndex: 0,
     },
     searchTarget: "immune",
-    searchTargetCount: 6,
   },
   {
     id: 3,
     title: "Volcanic Eruptions",
-    wordCount: 276,
     pages: [
       `Volcanoes are openings in Earth's crust through which molten rock, gases, and ash can escape from the interior of the planet. They occur along tectonic plate boundaries and above areas known as hotspots, where plumes of hot mantle material rise toward the surface. Volcanic eruptions range from gentle lava flows to catastrophic explosions with global consequences.
 
@@ -108,12 +106,10 @@ Despite their destructive power, volcanoes have played a vital role in shaping E
       correctIndex: 3,
     },
     searchTarget: "eruption",
-    searchTargetCount: 3,
   },
   {
     id: 4,
     title: "The Science of Sleep",
-    wordCount: 281,
     pages: [
       `Sleep is a fundamental biological process that is essential for physical health, cognitive function, and emotional regulation. During sleep, the brain and body perform critical maintenance tasks that cannot occur during waking hours. Despite spending approximately one third of our lives asleep, the precise functions of sleep are still being investigated by scientists.
 
@@ -128,12 +124,10 @@ Chronic sleep deprivation has serious health consequences. It impairs concentrat
       correctIndex: 1,
     },
     searchTarget: "sleep",
-    searchTargetCount: 13,
   },
   {
     id: 5,
     title: "Rainforest Ecosystems",
-    wordCount: 283,
     pages: [
       `Tropical rainforests are among the most biologically diverse ecosystems on Earth, covering approximately six percent of the planet's land surface yet harbouring more than half of all known plant and animal species. These dense forests are found near the equator, where warm temperatures and high rainfall create ideal conditions for extraordinary biodiversity.
 
@@ -148,12 +142,10 @@ Rainforests play an indispensable role in regulating Earth's climate. They absor
       correctIndex: 2,
     },
     searchTarget: "forest",
-    searchTargetCount: 2,
   },
   {
     id: 6,
     title: "Plate Tectonics",
-    wordCount: 279,
     pages: [
       `Plate tectonics is the scientific theory that describes the movement of large sections of Earth's outer shell, called tectonic plates, and explains many geological features including mountains, earthquakes, and volcanoes. The theory revolutionised Earth science when it was established in the 1960s, providing a unifying framework that connected previously separate observations.
 
@@ -168,12 +160,10 @@ At divergent boundaries, plates move apart and new oceanic crust is created as m
       correctIndex: 0,
     },
     searchTarget: "plate",
-    searchTargetCount: 5,
   },
   {
     id: 7,
     title: "Light and the Electromagnetic Spectrum",
-    wordCount: 274,
     pages: [
       `Light is a form of electromagnetic radiation, a type of energy that travels as waves through space. What we perceive as visible light is only a small portion of a much broader electromagnetic spectrum that includes radio waves, microwaves, infrared radiation, ultraviolet light, X-rays, and gamma rays. These different forms of radiation share the same fundamental nature but differ in wavelength and frequency.
 
@@ -188,8 +178,68 @@ The speed of light in a vacuum is approximately 300,000 kilometres per second, o
       correctIndex: 3,
     },
     searchTarget: "light",
-    searchTargetCount: 11,
+  },
+  {
+    id: 8,
+    title: "Sound and Hearing",
+    pages: [
+      `Sound is a mechanical wave, a travelling disturbance in the pressure of a material medium. Unlike light, sound cannot cross a vacuum, because it depends on particles displacing one another. When an object vibrates, it compresses and then rarefies the adjacent air. That alternation passes outward as a chain of pressure fluctuations that eventually reaches the ear.
+
+Two independent properties characterise any sound. Frequency, measured in hertz, is the number of pressure cycles arriving each second, and the auditory system interprets it as pitch. Amplitude is the magnitude of the fluctuation, which the auditory system interprets as loudness. Because the range of audible amplitudes is enormous, loudness is expressed on the logarithmic decibel scale rather than in absolute units.`,
+      `The external ear collects sound and channels it along the canal to the tympanic membrane. That membrane vibrates in synchrony with the arriving pressure fluctuations. Three articulated bones in the middle ear amplify the motion and transmit it to the cochlea, a fluid-filled spiral within the inner ear. A membrane runs the length of the cochlea, and its stiffness varies from one end to the other, so different regions resonate at different frequencies.
+
+Specialised hair cells positioned on that membrane convert mechanical displacement into neural impulses. Higher frequencies excite cells near the entrance of the spiral, whereas lower frequencies excite cells situated deeper within it. The cochlea therefore accomplishes a frequency analysis before the signal reaches the brain. Because mammalian hair cells do not regenerate once destroyed, hearing loss caused by noise exposure is irreversible.`,
+    ],
+    question: {
+      text: "According to the passage, why is noise-induced hearing loss irreversible?",
+      options: ["The tympanic membrane cannot heal", "Mammalian hair cells do not regenerate once destroyed", "The cochlea permanently loses its fluid", "The middle-ear bones fuse together"],
+      correctIndex: 1,
+    },
+    searchTarget: "sound",
+  },
+  {
+    id: 9,
+    title: "Bird Migration",
+    pages: [
+      `Each year billions of birds undertake migration, a regular seasonal movement between a breeding range and a wintering range. The pattern is driven less by temperature than by the seasonal supply of food. Insect-eating birds cannot survive a northern winter, yet the northern summer offers long daylight and abundant prey. The breeding advantage of the round trip therefore outweighs its considerable energetic cost.
+
+Departure is timed internally rather than by immediate weather. Birds kept under constant laboratory lighting still become restless in the period when they would normally leave, which shows that an internal annual rhythm sets the schedule. Changing day length is the environmental cue that keeps that rhythm aligned with the calendar.`,
+      `Navigation depends on several partly independent mechanisms working together. Many species orient by the position of the sun, correcting for its apparent movement across the sky by reference to an internal clock. Night migrants instead orient by the pattern of stars around the celestial pole, which they appear to learn during their first summer. A magnetic sense supplies a further reference that remains available beneath complete cloud cover.
+
+Experienced birds do considerably more than hold a constant compass heading. Adults displaced to unfamiliar territory can compute a corrected course and still reach the intended destination. Juveniles on a first migration typically continue along their original bearing and arrive somewhere entirely different. This difference suggests that determining position, as distinct from holding direction, is learned through experience rather than inherited.`,
+    ],
+    question: {
+      text: "According to the passage, how do displaced juvenile birds differ from adults?",
+      options: ["They migrate at lower altitudes", "They rely only on the magnetic sense", "They continue along their original bearing instead of computing a corrected course", "They postpone departure until conditions improve"],
+      correctIndex: 2,
+    },
+    searchTarget: "birds",
   },
 ];
+
+/** Words in a passage: whitespace-delimited tokens containing at least one letter. */
+export function countWords(pages: string[]): number {
+  return pages.join('\n\n').split(/\s+/).filter((t) => /[a-zA-Z]/.test(t)).length;
+}
+
+/**
+ * Occurrences of the search target, using the EXACT tokenisation VisualSearchTask applies when it
+ * decides whether a tapped word is a hit: strip non-letters, lowercase, compare for equality.
+ * Deriving it here means accuracy_rate = found / searchTargetCount can never be miscalibrated by
+ * a stale hand-written number, which is precisely how the original bundle got it wrong.
+ */
+export function countTargetOccurrences(pages: string[], target: string): number {
+  const t = target.toLowerCase();
+  return pages
+    .join('\n\n')
+    .split(/\s+/)
+    .filter((w) => w.replace(/[^a-zA-Z]/g, '').toLowerCase() === t).length;
+}
+
+export const PASSAGES: Passage[] = PASSAGE_DEFS.map((p) => ({
+  ...p,
+  wordCount: countWords(p.pages),
+  searchTargetCount: countTargetOccurrences(p.pages, p.searchTarget),
+}));
 
 export const N_PASSAGES = PASSAGES.length;

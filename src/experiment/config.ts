@@ -39,9 +39,25 @@ const BASE_CONFIG = {
   RT_MIN_VALID_RT_MS: 150,
   /** Valid hits slower than this (ms) count as attention lapses (PVT-style). */
   RT_LAPSE_THRESHOLD_MS: 600,
-  /** Go-target colour: GREEN — the only colour not used by any display condition (protocol §11). */
-  RT_TARGET_COLOR: '#00A651',
-  RT_DISTRACTOR_COLORS: ['#C81E1E', '#1E4ED8', '#C9A400'],
+  /**
+   * Go-target: ACHROMATIC, defined relative to the active background — black on light fields,
+   * white on dark ones (synopsis §3.6). Target contrast is therefore maximal (21:1) and
+   * IDENTICAL in both polarities, so target salience does not vary with display condition and
+   * no target hue coincides with the text-colour manipulation.
+   *
+   * This replaced a fixed green target, which was justified as "the only colour not used by any
+   * display condition" — a justification that expired the moment green was added as a fifth text
+   * colour. Leaving it would have made the go-target collide with conditions P5/N5, confounding
+   * go-signal detectability with the colour factor.
+   *
+   * The discrimination becomes achromatic-against-chromatic rather than hue-against-hue. That is
+   * an easier discrimination, but it preserves the two fatigue-sensitive indices the task exists
+   * to measure: reaction-time variability and lapse rate.
+   */
+  RT_TARGET_LIGHT_BG: '#000000',
+  RT_TARGET_DARK_BG: '#FFFFFF',
+  /** Distractors: the four chromatic text colours from the condition set. */
+  RT_DISTRACTOR_COLORS: ['#C81E1E', '#1E4ED8', '#C9A400', '#00A651'],
 
   // Adaptation: longer than the original 20 s; doubled on a polarity switch.
   ADAPTATION_SAME_POLARITY_MS: 60000,
@@ -52,8 +68,14 @@ const BASE_CONFIG = {
   // (but never after the last condition of the sitting). Keeps participants fresh without giving
   // any performance feedback that could differentially change effort across conditions.
   BREAK_EVERY_N_CONDITIONS: 2,
-  /** Default conditions run per sitting: 8 = single session, 4 = split into two sittings. */
-  CONDITIONS_PER_SESSION_DEFAULT: 8,
+  /**
+   * Conditions per sitting within ONE illumination block: 10 = the whole block in one sitting,
+   * 5 = split into two shorter sittings. The pilot feasibility gate (§3.6) decides which: if the
+   * median session runs over 120 min, or withdrawals exceed 1 in 10, or face-presence drops below
+   * 0.90 in more than 10% of runs, each illumination level is split into two sittings of five,
+   * preserving the counterbalancing scheme and the global serial-position record.
+   */
+  CONDITIONS_PER_SESSION_DEFAULT: 10,
 
   // Camera.
   CAMERA_WIDTH: 1280,

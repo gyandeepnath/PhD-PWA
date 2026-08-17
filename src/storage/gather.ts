@@ -6,6 +6,7 @@
 import { get, getAll, getAllByIndex, put, remove } from './db';
 import type {
   SessionRecord, ParticipantRecord, ConditionRecord, FatigueRecord, CvsqRecord,
+  NasaTlxRecord,
   ComprehensionRecord, VisualSearchRecord, DisplayPerceptionRecord, EyeMetricsRecord,
   ReactionTrialRecord, RtSummaryRecord, CalibrationRecord, PerformanceLogRecord,
 } from './types';
@@ -16,6 +17,8 @@ export interface SessionBundle {
   conditions: ConditionRecord[];
   fatigue: FatigueRecord[];
   cvsq: CvsqRecord[];
+  /** NASA-TLX: at most one record per session (administered once, at close). */
+  tlx: NasaTlxRecord[];
   comprehension: ComprehensionRecord[];
   visualSearch: VisualSearchRecord[];
   perception: DisplayPerceptionRecord[];
@@ -32,7 +35,7 @@ export async function gatherSession(sessionId: string): Promise<SessionBundle | 
     getAllByIndex(store, 'by_session', sessionId) as Promise<T[]>;
 
   const [
-    participant, conditions, fatigue, cvsq, comprehension, visualSearch, perception,
+    participant, conditions, fatigue, cvsq, tlx, comprehension, visualSearch, perception,
     eyeMetrics, reactionTrials, rtSummaries, calibration,
   ] = await Promise.all([
     // Fetch by participant_id, NOT by session_id: the participant record is created once and SHARED
@@ -41,6 +44,7 @@ export async function gatherSession(sessionId: string): Promise<SessionBundle | 
     bySession<ConditionRecord>('conditions'),
     bySession<FatigueRecord>('fatigue_scores'),
     bySession<CvsqRecord>('cvsq_scores'),
+    bySession<NasaTlxRecord>('nasa_tlx'),
     bySession<ComprehensionRecord>('comprehension_results'),
     bySession<VisualSearchRecord>('visual_search'),
     bySession<DisplayPerceptionRecord>('display_perception'),
@@ -54,7 +58,7 @@ export async function gatherSession(sessionId: string): Promise<SessionBundle | 
     session,
     participant: participant as ParticipantRecord | undefined,
     conditions: conditions.sort((a, b) => a.session_position - b.session_position),
-    fatigue, cvsq, comprehension, visualSearch, perception, eyeMetrics, reactionTrials, rtSummaries, calibration,
+    fatigue, cvsq, tlx, comprehension, visualSearch, perception, eyeMetrics, reactionTrials, rtSummaries, calibration,
   };
 }
 
@@ -135,6 +139,7 @@ export async function purgeSession(sessionId: string): Promise<void> {
   for (const r of bundle.reactionTrials) await remove('reaction_trials', r.trial_id);
   for (const r of bundle.fatigue) await remove('fatigue_scores', r.fatigue_id);
   for (const r of bundle.cvsq) await remove('cvsq_scores', r.cvsq_id);
+  for (const r of bundle.tlx ?? []) await remove('nasa_tlx', r.tlx_id);
   for (const r of bundle.comprehension) await remove('comprehension_results', r.comprehension_id);
   for (const r of bundle.perception) await remove('display_perception', r.perception_id);
   for (const r of bundle.visualSearch) await remove('visual_search', r.condition_id);

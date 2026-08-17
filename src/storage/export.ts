@@ -4,6 +4,8 @@
  * is the thin browser wrapper that streams the files to the device.
  */
 import type { SessionBundle } from './gather';
+import type { SessionRecord } from './types';
+import { summariseLux } from '@/experiment/illumination';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { PASSAGES } from '@/experiment/passages';
 
@@ -14,6 +16,17 @@ export interface ExportFile {
 }
 
 /** CSV-escape a single value: wrap in quotes and double internal quotes when needed. */
+/** One logged illuminance reading, or '' when that checkpoint was never taken. */
+function luxAt(session: SessionRecord, cp: 'start' | 'middle' | 'end'): number | '' {
+  return session.lux_readings?.find((r) => r.checkpoint === cp)?.lux ?? '';
+}
+
+/** Mean and worst deviation across whatever readings exist for the session's assigned level. */
+function luxSummary(session: SessionRecord): { mean: number | null; max_deviation: number | null } {
+  const s = summariseLux(session.ambient_illumination_level, session.lux_readings);
+  return { mean: s.mean, max_deviation: s.max_deviation };
+}
+
 export function escapeCsv(value: unknown): string {
   if (value == null) return '';
   const s = String(value);
@@ -50,20 +63,24 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 00 — codebook / condition key
   csv('00_MASTER_CODEBOOK.csv',
-    ['condition_label', 'color_name', 'polarity', 'background_color', 'text_color', 'wcag_contrast_ratio', 'wcag_level', 'below_wcag_aa'],
+    ['condition_label', 'color_name', 'ink_name', 'polarity', 'background_color', 'text_color', 'wcag_contrast_ratio', 'wcag_level', 'below_wcag_aa'],
     bundle.conditions.map((c) => ({
-      condition_label: c.condition_label, color_name: c.color_name, polarity: c.polarity,
+      condition_label: c.condition_label, color_name: c.color_name, ink_name: c.ink_name, polarity: c.polarity,
       background_color: c.background_color, text_color: c.text_color,
       wcag_contrast_ratio: c.wcag_contrast_ratio, wcag_level: c.wcag_level, below_wcag_aa: c.below_wcag_aa,
     })));
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'preflight_complete', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected'],
+    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_mean', 'lux_max_deviation', 'lux_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'preflight_complete', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
       session_index: session.session_index, conditions_per_session: session.conditions_per_session, condition_offset: session.condition_offset,
       ambient_lux: session.ambient_lux, ambient_illumination_level: session.ambient_illumination_level,
+      illumination_block: session.illumination_block, illumination_order_first: session.illumination_order_first,
+      lux_start: luxAt(session, 'start'), lux_middle: luxAt(session, 'middle'), lux_end: luxAt(session, 'end'),
+      lux_mean: luxSummary(session).mean, lux_max_deviation: luxSummary(session).max_deviation,
+      lux_all_in_range: session.lux_all_in_range, lux_deviation_note: session.lux_deviation_note,
       screen_white_luminance_cd_m2: session.screen_white_luminance_cd_m2,
       brightness_percent: session.brightness_percent,
       session_duration_min: session.session_end_time ? ((session.session_end_time - session.session_start_time) / 60000).toFixed(2) : '',
@@ -79,7 +96,7 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // 02 — conditions (+ reading speed in words/min, derived from passage length & reading time)
   csv('02_conditions.csv',
-    ['participant_id', 'condition_id', 'session_position', 'condition_label', 'polarity', 'background_color', 'text_color', 'color_name', 'passage_id', 'wcag_contrast_ratio', 'wcag_level', 'michelson_contrast', 'below_wcag_aa', 'adaptation_ms_before', 'reading_time_ms', 'reading_speed_wpm', 'condition_duration_sec'],
+    ['participant_id', 'condition_id', 'session_position', 'condition_label', 'polarity', 'background_color', 'text_color', 'color_name', 'ink_name', 'passage_id', 'wcag_contrast_ratio', 'wcag_level', 'michelson_contrast', 'below_wcag_aa', 'adaptation_ms_before', 'reading_time_ms', 'reading_speed_wpm', 'condition_duration_sec'],
     bundle.conditions.map((c) => {
       const words = PASSAGES[c.passage_id]?.wordCount ?? null;
       const wpm = words != null && c.reading_time_ms ? Math.round(words / (c.reading_time_ms / 60000)) : '';
@@ -188,12 +205,28 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
       return row;
     }));
 
+  // NASA-TLX: session-level, one row per session. `performance` is the raw response (low = good,
+  // per the original anchors); `performance_load` is it reversed, which is what enters raw_tlx.
+  csv('14_nasa_tlx.csv',
+    ['participant_id', 'session_index', 'ambient_illumination_level', 'raw_tlx',
+     'mental_demand', 'physical_demand', 'temporal_demand', 'performance', 'performance_load',
+     'effort', 'frustration', 'all_touched', 'response_time_ms'],
+    (bundle.tlx ?? []).map((t) => ({
+      participant_id: pid, session_index: session.session_index,
+      ambient_illumination_level: session.ambient_illumination_level,
+      raw_tlx: t.raw_tlx,
+      mental_demand: t.mental_demand, physical_demand: t.physical_demand,
+      temporal_demand: t.temporal_demand, performance: t.performance,
+      performance_load: t.performance_load, effort: t.effort, frustration: t.frustration,
+      all_touched: t.all_touched, response_time_ms: t.response_time_ms,
+    })));
+
   // JSON bundle
   const jsonBundle = {
     exported_at: new Date().toISOString(),
     provenance: session.provenance,
     session, participant,
-    conditions: bundle.conditions, fatigue: bundle.fatigue, cvsq: bundle.cvsq,
+    conditions: bundle.conditions, fatigue: bundle.fatigue, cvsq: bundle.cvsq, nasa_tlx: bundle.tlx,
     comprehension: bundle.comprehension, visual_search: bundle.visualSearch,
     display_perception: bundle.perception, eye_metrics: bundle.eyeMetrics,
     calibration: bundle.calibration,

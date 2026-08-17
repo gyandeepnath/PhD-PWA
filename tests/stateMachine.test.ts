@@ -8,6 +8,8 @@ import {
   type MachineState,
 } from '@/experiment/stateMachine';
 import type { Stage } from '@/storage/types';
+import { N_CONDITIONS } from '@/experiment/conditions';
+import { TASKS_PER_CONDITION } from '@/experiment/config';
 
 /** Walk the whole machine to completion, collecting the visited stage sequence. */
 function walk(nConditions?: number): { stage: Stage; stepIndex: number }[] {
@@ -22,11 +24,11 @@ function walk(nConditions?: number): { stage: Stage; stepIndex: number }[] {
 }
 
 describe('stage machine', () => {
-  it('total tracked steps is 57 (9 setup + 8×6)', () => {
-    expect(TOTAL_TRACKED_STEPS).toBe(57);
+  it('total tracked steps is 9 setup + N×TASKS_PER_CONDITION', () => {
+    expect(TOTAL_TRACKED_STEPS).toBe(9 + N_CONDITIONS * TASKS_PER_CONDITION);
   });
 
-  it('runs the full setup chain then 8 condition loops then completion + end CVS-Q', () => {
+  it('runs the full setup chain then N condition loops then end CVS-Q, NASA-TLX, completion', () => {
     const visited = walk();
     const stages = visited.map((v) => v.stage);
     expect(stages.slice(0, 10)).toEqual([
@@ -43,24 +45,26 @@ describe('stage machine', () => {
     ]);
     expect(stages[stages.length - 1]).toBe('EXPORT_DASHBOARD');
     expect(stages[stages.length - 2]).toBe('SESSION_COMPLETE');
-    expect(stages[stages.length - 3]).toBe('CVSQ_END');
+    expect(stages[stages.length - 3]).toBe('NASA_TLX');
+    expect(stages[stages.length - 4]).toBe('CVSQ_END');
   });
 
-  it('visits READING_TASK exactly 8 times (once per condition)', () => {
+  it('visits READING_TASK exactly N times (once per condition)', () => {
     const readings = walk().filter((v) => v.stage === 'READING_TASK');
-    expect(readings).toHaveLength(8);
-    expect(readings.map((r) => r.stepIndex)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(readings).toHaveLength(N_CONDITIONS);
+    expect(readings.map((r) => r.stepIndex)).toEqual(Array.from({ length: N_CONDITIONS }, (_, i) => i));
   });
 
-  it('has 7 adaptations (skipped after the final condition)', () => {
+  it('has N-1 adaptations (skipped after the final condition)', () => {
     const adaptations = walk().filter((v) => v.stage === 'ADAPTATION');
-    expect(adaptations).toHaveLength(7);
+    expect(adaptations).toHaveLength(N_CONDITIONS - 1);
   });
 
   it('REACTION_TIME (last task) of the final condition goes to the end CVS-Q', () => {
-    expect(nextState({ stage: 'REACTION_TIME', stepIndex: 7 })).toEqual({
+    const last = N_CONDITIONS - 1;
+    expect(nextState({ stage: 'REACTION_TIME', stepIndex: last })).toEqual({
       stage: 'CVSQ_END',
-      stepIndex: 7,
+      stepIndex: last,
     });
     expect(nextState({ stage: 'REACTION_TIME', stepIndex: 0 })).toEqual({
       stage: 'ADAPTATION',
@@ -77,8 +81,10 @@ describe('stage machine', () => {
   it('inserts a self-paced break after every 2 conditions, never after the last', () => {
     const visited = walk();
     const breaks = visited.filter((v) => v.stage === 'BREAK_SCREEN');
-    // 8 conditions, break after #2/#4/#6 (not after #8) → 3 breaks at stepIndex 1,3,5.
-    expect(breaks.map((b) => b.stepIndex)).toEqual([1, 3, 5]);
+    // A break follows every 2nd condition, but never the last one of the sitting.
+    const expectedBreaks = Array.from({ length: N_CONDITIONS }, (_, i) => i)
+      .filter((i) => (i + 1) % 2 === 0 && i < N_CONDITIONS - 1);
+    expect(breaks.map((b) => b.stepIndex)).toEqual(expectedBreaks);
     // Each BREAK_SCREEN leads into the next condition's reading task.
     expect(nextState({ stage: 'BREAK_SCREEN', stepIndex: 1 })).toEqual({ stage: 'READING_TASK', stepIndex: 2 });
   });

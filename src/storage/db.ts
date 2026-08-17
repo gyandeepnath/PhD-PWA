@@ -24,6 +24,7 @@ const STORE_SPECS: StoreSpec[] = [
   { name: 'conditions', keyPath: 'condition_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
   { name: 'fatigue_scores', keyPath: 'fatigue_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }, { name: 'by_condition', keyPath: 'condition_id' }] },
   { name: 'cvsq_scores', keyPath: 'cvsq_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
+  { name: 'nasa_tlx', keyPath: 'tlx_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
   { name: 'display_perception', keyPath: 'perception_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }, { name: 'by_condition', keyPath: 'condition_id' }] },
   { name: 'comprehension_results', keyPath: 'comprehension_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }, { name: 'by_condition', keyPath: 'condition_id' }] },
   { name: 'visual_search', keyPath: 'condition_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
@@ -128,6 +129,23 @@ export async function remove(store: StoreName, key: IDBValidKey): Promise<void> 
   }
   const db = await getDB();
   await db.delete(store, key);
+}
+
+/**
+ * The enrolment number a NEW participant would receive, WITHOUT consuming it.
+ *
+ * Used to preview the counterbalanced illumination assignment while the researcher is still
+ * typing the participant id. Calling nextEnrolmentNumber() for a preview would burn a number on
+ * every keystroke and tear holes in the Williams allocation, which depends on a dense sequence.
+ */
+export async function peekNextEnrolmentNumber(): Promise<number> {
+  if (!indexedDBAvailable()) {
+    const meta = memStore('meta');
+    return ((meta.get('enrolment_counter') as { key: string; value: number } | undefined)?.value ?? 0) + 1;
+  }
+  const db = await getDB();
+  const rec = (await db.get('meta', 'enrolment_counter')) as { key: string; value: number } | undefined;
+  return (rec?.value ?? 0) + 1;
 }
 
 /**

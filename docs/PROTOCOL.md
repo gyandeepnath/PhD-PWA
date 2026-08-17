@@ -8,7 +8,12 @@ session, and the known limitations a PhD write-up should disclose.
 
 ## 1. Design
 
-- **Within-subjects, 8 conditions** = 2 polarity (light/dark background) × 4 text colour
+- **Within-subjects crossover (split-plot), 10 conditions × 2 illumination levels = 20 condition-runs**
+  = 2 polarity (light/dark background) × 5 text colour (achromatic, blue, red, yellow, green),
+  each block run under one ambient illumination level (dim ≈10 lux / moderate ≈150 lux). Polarity
+  and colour vary WITHIN a session; illumination is the session-level (whole-plot) factor, with
+  its order counterbalanced between participants. Legacy note: the build previously ran 4 text
+  colours and a single researcher-chosen illumination level
   (achromatic / blue / red / yellow). Hex values are locked; contrast differs across conditions and
   is recorded as a covariate (see §5).
 - **Condition order**: balanced Williams Latin square, assigned by a **sequential enrolment index**
@@ -32,7 +37,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
   → CVSQ_BASELINE       validated CVS-Q (16 items)
   → BASELINE_FATIGUE    5-item VAS baseline
   → INSTRUCTIONS        participant overview of the per-condition tasks
-  → [×8 conditions]
+  → [×10 conditions per illumination block]
         READING_TASK        intro → passage (self-paced beyond a per-page floor); exposure +
                             eye-tracking window; reading time → words/min recorded
         → COMPREHENSION     1×4-option MCQ (accuracy + RT)
@@ -87,7 +92,8 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
    **off** auto-brightness and night-shift/blue-light filter, clean screen, ~50–60 cm distance,
    landscape, no backlight).
 3. Run **colour-vision screening**, allow the **camera**, complete **calibration**, then the
-   baseline questionnaires. The participant then completes the 8 conditions (~60–90 min).
+   baseline questionnaires. The participant then completes the 10 conditions of the assigned
+   illumination block (~60–120 min), closing with the end CVS-Q and NASA-TLX.
 4. At the end, open the session from the manager → **Export** the CSV + JSON bundle.
 5. Analyse with the **mixed-model templates** in `src/analysis/analysis_template.{R,py}` (random
    intercept per participant; contrast as a covariate; d′ aggregated across conditions).

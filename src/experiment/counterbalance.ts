@@ -81,3 +81,21 @@ export function sessionPlan(enrolmentNumber: number): PlannedStep[] {
     passageIndex: passageForCondition(conditionIndex, enrolmentNumber),
   }));
 }
+
+/**
+ * Plan for one ILLUMINATION BLOCK (0 = first session's level, 1 = second's).
+ *
+ * The block advances the Williams row by one, so a participant does NOT meet the ten conditions
+ * in the same serial order in both sessions. Without this, serial position would be perfectly
+ * correlated with condition WITHIN a participant across both sessions, and any position effect
+ * would masquerade as a condition effect in exactly the same direction twice. Advancing the row
+ * preserves complete balance across each block of ten participants (each row is still used once)
+ * while decorrelating position from condition within a participant.
+ *
+ * Passage assignment advances with the block too, so no participant reads the same passage twice.
+ */
+export function blockPlan(enrolmentNumber: number, block: number): PlannedStep[] {
+  const n = Number.isFinite(enrolmentNumber) ? Math.floor(enrolmentNumber) : 1;
+  const b = Number.isFinite(block) ? Math.floor(block) : 0;
+  return sessionPlan(n + b);
+}

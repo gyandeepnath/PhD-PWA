@@ -6,12 +6,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { CONDITIONS, conditionDefinitionHash, N_CONDITIONS } from './conditions';
+import {
+  illuminationForBlock, illuminationOrderFor, luxInRange, summariseLux,
+  N_ILLUMINATION_BLOCKS,
+} from '@/experiment/illumination';
 import { PASSAGES } from './passages';
-import { sessionPlan, type PlannedStep } from './counterbalance';
+import { blockPlan, type PlannedStep } from './counterbalance';
 import { CONFIG } from './config';
 import { initialState, nextState, progressPercent, type MachineState } from './stateMachine';
 import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
-import { put, get, getAllByIndex, nextEnrolmentNumber } from '@/storage/db';
+import { put, get, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber } from '@/storage/db';
 import { priorParticipantProgress } from '@/storage/gather';
 import { saveResume, clearResume } from '@/storage/sessionPersistence';
 import { isInLoop } from './stateMachine';
@@ -29,6 +33,8 @@ import { VisualSearchTask } from '@/tasks/VisualSearchTask';
 import { ReactionTimeTask } from '@/tasks/ReactionTimeTask';
 import { IshiharaTest } from '@/screening/IshiharaTest';
 import { Cvsq } from '@/scales/Cvsq';
+import { NasaTlx } from '@/scales/NasaTlx';
+import { LuxCheckpointPanel } from '@/start/LuxCheckpoint';
 import {
   SessionInit, ParticipantProfile, CameraSetup, Calibration, AdaptationScreen, SessionComplete,
   Consent, Preflight, Instructions, type SessionInitData, type ProfileData,
@@ -94,7 +100,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       // single full session for legacy records written before split-session support).
       const offset = s.condition_offset ?? 0;
       const cps = s.conditions_per_session ?? (s.condition_order?.length || N_CONDITIONS);
-      const sittingPlan = sessionPlan(s.enrolment_number).slice(offset, offset + cps);
+      // Resume must rebuild from the SAME illumination block the session was created under,
+      // otherwise a resumed second-block session would replay the first block's condition order.
+      const sittingPlan = blockPlan(s.enrolment_number, s.illumination_block ?? 0).slice(offset, offset + cps);
       nConditionsRef.current = sittingPlan.length;
       // Reuse the stored condition_id for any slot already written (keyed by global session_position),
       // and mint fresh ids only for not-yet-started slots. This makes a redo of the interrupted
@@ -123,6 +131,58 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const passage = step ? PASSAGES[step.passageIndex] : null;
   const conditionId = conditionIds.current[machine.stepIndex];
 
+  /**
+   * Resolve the counterbalanced illumination assignment for a participant id. Runs as soon as the
+   * researcher has typed a valid id, so the room can be set BEFORE the lux reading is taken — the
+   * level is derived from the enrolment number, never chosen.
+   */
+  const resolveAssignment = useCallback(async (participantId: string) => {
+    const prior = await priorParticipantProgress(participantId);
+    const enrol = prior.enrolment ?? (await peekNextEnrolmentNumber());
+    const block = Math.min(
+      Math.floor(prior.conditionsCompleted / N_CONDITIONS),
+      N_ILLUMINATION_BLOCKS - 1,
+    );
+    return {
+      level: illuminationForBlock(enrol, block),
+      block,
+      orderFirst: illuminationOrderFor(enrol)[0],
+      enrolment: enrol,
+      conditionsCompleted: prior.conditionsCompleted,
+    };
+  }, []);
+
+  /**
+   * Append a researcher-measured illuminance reading to the session record.
+   *
+   * Three readings are taken per session — start (at session init), middle (at the mid-session
+   * break) and end (at completion). Recording all three means drift across a 60-120 minute
+   * sitting is reportable rather than assumed away, which matters because the literature
+   * disagreement over whether illumination interacts with polarity points to a threshold-like
+   * relationship: the exact illuminance is the thing under test.
+   *
+   * The value must come from the calibrated lux meter at the participant's eye position. The
+   * camera's frame luminance is NOT used as a substitute: auto-exposure makes it a poor proxy for
+   * absolute illuminance, and a derived number here would look like a measurement without being one.
+   */
+  const logLuxCheckpoint = useCallback(async (checkpoint: 'middle' | 'end', lux: number) => {
+    if (!session || !Number.isFinite(lux)) return;
+    const fresh = await get('sessions', session.session_id);
+    if (!fresh) return;
+    // Never duplicate a checkpoint — a resumed session may revisit the same screen.
+    const readings = [
+      ...(fresh.lux_readings ?? []).filter((r) => r.checkpoint !== checkpoint),
+      { checkpoint, lux, at: Date.now() },
+    ];
+    const updated = {
+      ...fresh,
+      lux_readings: readings,
+      lux_all_in_range: summariseLux(fresh.ambient_illumination_level, readings).all_in_range,
+    };
+    await put('sessions', updated);
+    setSession(updated);
+  }, [session]);
+
   // --- SESSION INIT ---
   const beginSession = useCallback(async (d: SessionInitData) => {
     if (creatingSession.current) return; // guard against double-submit creating duplicate sessions
@@ -132,8 +192,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     // their last sitting stopped. A brand-new participant gets a fresh sequential enrolment number.
     const prior = await priorParticipantProgress(d.participantId);
     const enrol = prior.enrolment ?? await nextEnrolmentNumber();
-    const fullPlan = sessionPlan(enrol);
-    const offset = Math.min(prior.conditionsCompleted, N_CONDITIONS);
+    // Which illumination block is this participant on, and how far into it? Each block is a full
+    // pass through the ten conditions, so completed / 10 gives the block and completed % 10 the
+    // offset within it. A block may itself be run as one sitting of ten or two sittings of five.
+    const block = Math.min(Math.floor(prior.conditionsCompleted / N_CONDITIONS), N_ILLUMINATION_BLOCKS - 1);
+    const offset = prior.conditionsCompleted % N_CONDITIONS;
+    const level = illuminationForBlock(enrol, block);
+    const fullPlan = blockPlan(enrol, block);
     const cps = Math.min(d.conditionsPerSession, N_CONDITIONS - offset);
     const sittingPlan = fullPlan.slice(offset, offset + cps);
     nConditionsRef.current = sittingPlan.length;
@@ -148,7 +213,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       deleted_at: null,
       display_label: null,
       ambient_lux: d.ambientLux,
-      ambient_illumination_level: d.illuminationLevel,
+      ambient_illumination_level: level,
+      illumination_block: block,
+      illumination_order_first: illuminationOrderFor(enrol)[0],
+      lux_readings: [{ checkpoint: 'start', lux: d.ambientLux, at: Date.now() }],
+      lux_all_in_range: luxInRange(level, d.ambientLux),
+      lux_deviation_note: d.luxDeviationNote,
       screen_white_luminance_cd_m2: d.whiteLuminance,
       brightness_percent: d.brightnessPercent,
       session_start_time: Date.now(),
@@ -204,10 +274,10 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       : switched ? CONFIG.ADAPTATION_SWITCH_POLARITY_MS : CONFIG.ADAPTATION_SAME_POLARITY_MS;
     await put('conditions', {
       condition_id: conditionId, session_id: session.session_id,
-      // Global serial position (offset + local index) so split sittings keep a 0..7 covariate.
+      // Global serial position (offset + local index) so split sittings keep a 0..9 covariate.
       session_position: step.position, condition_label: cond.label,
       polarity: cond.polarity, background_color: cond.background, text_color: cond.text,
-      color_name: cond.colorName, passage_id: step.passageIndex,
+      color_name: cond.colorName, ink_name: cond.inkName, passage_id: step.passageIndex,
       wcag_contrast_ratio: cond.wcag_contrast_ratio, wcag_level: cond.wcag_level,
       michelson_contrast: cond.michelson_contrast, below_wcag_aa: cond.below_wcag_aa,
       started_at: Date.now(), completed_at: null, condition_duration_sec: null,
@@ -234,7 +304,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   let view: React.ReactNode = null;
   switch (machine.stage) {
     case 'SESSION_INIT':
-      view = <SessionInit onSubmit={beginSession} />;
+      view = <SessionInit resolveAssignment={resolveAssignment} onSubmit={beginSession} />;
       break;
     case 'CONSENT':
       view = <Consent onConsent={async () => {
@@ -300,6 +370,28 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             frequency: r.frequency, intensity: r.intensity, total_score: r.total, symptomatic: r.symptomatic,
             response_time_ms: r.responseTimeMs,
           });
+          advance();
+        }} />
+      );
+      break;
+    case 'NASA_TLX':
+      view = (
+        <NasaTlx onComplete={async (r) => {
+          if (session) {
+            await put('nasa_tlx', {
+              tlx_id: uuidv4(), session_id: session.session_id,
+              mental_demand: r.ratings.mental_demand,
+              physical_demand: r.ratings.physical_demand,
+              temporal_demand: r.ratings.temporal_demand,
+              performance: r.ratings.performance,
+              effort: r.ratings.effort,
+              frustration: r.ratings.frustration,
+              performance_load: r.contributions.performance,
+              raw_tlx: r.raw_tlx,
+              all_touched: Object.values(r.touched).every(Boolean),
+              response_time_ms: r.responseTimeMs,
+            });
+          }
           advance();
         }} />
       );
@@ -479,10 +571,28 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       break;
     }
     case 'BREAK_SCREEN':
-      view = <BreakScreen completed={machine.stepIndex + 1} total={plan.length} onContinue={advance} />;
+      view = (
+        <BreakScreen completed={machine.stepIndex + 1} total={plan.length} onContinue={advance}>
+          <LuxCheckpointPanel
+            checkpoint="middle"
+            level={session?.ambient_illumination_level ?? null}
+            existing={session?.lux_readings?.find((r) => r.checkpoint === 'middle')?.lux ?? null}
+            onSubmit={(lux) => void logLuxCheckpoint('middle', lux)}
+          />
+        </BreakScreen>
+      );
       break;
     case 'SESSION_COMPLETE':
-      view = <SessionComplete onExport={async () => {
+      view = <SessionComplete
+        luxPanel={(
+          <LuxCheckpointPanel
+            checkpoint="end"
+            level={session?.ambient_illumination_level ?? null}
+            existing={session?.lux_readings?.find((r) => r.checkpoint === 'end')?.lux ?? null}
+            onSubmit={(lux) => void logLuxCheckpoint('end', lux)}
+          />
+        )}
+        onExport={async () => {
         if (session) {
           await put('sessions', { ...session, status: 'complete', session_end_time: Date.now() });
           clearResume(session.session_id);

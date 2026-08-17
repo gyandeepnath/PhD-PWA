@@ -18,14 +18,16 @@ tagged ⚠️ VERIFY and should be re-confirmed against the bundle as each modul
 ## Conditions (LOCKED hex — never change)
 | Label | Bg | Text | Polarity | Colour | WCAG ratio | Level |
 |---|---|---|---|---|---|---|
-| C1 | #FFFFFF | #000000 | positive | black | 21.0 | AAA |
-| C2 | #FFFFFF | #1E4ED8 | positive | blue | 6.70 | AA |
-| C3 | #FFFFFF | #C81E1E | positive | red | 5.74 | AA |
-| C4 | #FFFFFF | #C9A400 | positive | yellow | **2.39** | **Fail** |
-| C5 | #000000 | #FFFFFF | negative | white | 21.0 | AAA |
-| C6 | #000000 | #1E4ED8 | negative | blue | 3.14 | AA Large |
-| C7 | #000000 | #C81E1E | negative | red | 3.66 | AA Large |
-| C8 | #000000 | #C9A400 | negative | yellow | 8.79 | AAA |
+| P1 | #FFFFFF | #000000 | positive | achromatic | 21.00 | AAA |
+| P2 | #FFFFFF | #1E4ED8 | positive | blue | 6.70 | AA |
+| P3 | #FFFFFF | #C81E1E | positive | red | 5.74 | AA |
+| P4 | #FFFFFF | #C9A400 | positive | yellow | 2.39 | Fail |
+| P5 | #FFFFFF | #00A651 | positive | green | 3.19 | AA Large |
+| N1 | #000000 | #FFFFFF | negative | achromatic | 21.00 | AAA |
+| N2 | #000000 | #1E4ED8 | negative | blue | 3.14 | AA Large |
+| N3 | #000000 | #C81E1E | negative | red | 3.66 | AA Large |
+| N4 | #000000 | #C9A400 | negative | yellow | 8.79 | AAA |
+| N5 | #000000 | #00A651 | negative | green | 6.57 | AA |
 
 Contrast is auto-computed (`src/lib/contrast.ts`) and stored per condition as an analysis
 covariate. C4/C6/C7 are below AA and flagged in the codebook.
@@ -135,7 +137,8 @@ validity item).
 - `?e2e=1` collapses long timings (reading floor 150 ms, adaptation 200/300 ms, RT 4 trials/120 ms
   window) for fast automation; production timings are unchanged.
 - Playwright E2E (e2e/fullRun.spec.ts) drives the entire flow on the no-camera path and asserts
-  IndexedDB captured 8 conditions, 8 RT summaries, 2 CVS-Q, 9 fatigue records, then the dashboard.
+  IndexedDB captured 10 conditions, 10 RT summaries, 2 CVS-Q, 11 fatigue records, 1 NASA-TLX,
+  then the dashboard.
   Run: `npm run test:e2e` (uses a pre-installed Chromium when the browser download is blocked).
 - StrictMode removed from main.tsx (dev double-invoke double-requested the camera / re-ran FaceMesh
   init; the original build was production with no StrictMode). Production behaviour unchanged.

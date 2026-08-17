@@ -11,7 +11,7 @@ const prov: Provenance = {
 function bundle(): SessionBundle {
   return {
     session: {
-      session_id: 'S1', participant_id: 'P001', enrolment_number: 1, status: 'complete', deleted_at: null, display_label: null, ambient_lux: 350, ambient_illumination_level: null,
+      session_id: 'S1', participant_id: 'P001', enrolment_number: 1, status: 'complete', deleted_at: null, display_label: null, ambient_lux: 350, ambient_illumination_level: null, illumination_block: 0, illumination_order_first: 'dim' as const, lux_readings: [], lux_all_in_range: null, lux_deviation_note: null,
       screen_white_luminance_cd_m2: 120, brightness_percent: 80, session_start_time: 1700000000000,
       session_end_time: 1700000600000, randomisation_seed: 1, condition_order: [0, 1],
       preflight_complete: true, consent_given: true, consent_time: 1, provenance: prov,
@@ -20,14 +20,15 @@ function bundle(): SessionBundle {
     },
     participant: undefined,
     conditions: [
-      { condition_id: 'A', session_id: 'S1', session_position: 0, condition_label: 'C1', polarity: 'positive', background_color: '#FFFFFF', text_color: '#000000', color_name: 'black', passage_id: 3, wcag_contrast_ratio: 21, wcag_level: 'AAA', michelson_contrast: 1, below_wcag_aa: false, started_at: 1, completed_at: 2, condition_duration_sec: 1, adaptation_ms_before: 0, reading_time_ms: null },
-      { condition_id: 'B', session_id: 'S1', session_position: 1, condition_label: 'C4', polarity: 'positive', background_color: '#FFFFFF', text_color: '#C9A400', color_name: 'yellow', passage_id: 5, wcag_contrast_ratio: 2.39, wcag_level: 'Fail', michelson_contrast: 0.4, below_wcag_aa: true, started_at: 3, completed_at: 4, condition_duration_sec: 1, adaptation_ms_before: 60000, reading_time_ms: null },
+      { condition_id: 'A', session_id: 'S1', session_position: 0, condition_label: 'C1', polarity: 'positive', background_color: '#FFFFFF', text_color: '#000000', color_name: 'black', ink_name: 'black', passage_id: 3, wcag_contrast_ratio: 21, wcag_level: 'AAA', michelson_contrast: 1, below_wcag_aa: false, started_at: 1, completed_at: 2, condition_duration_sec: 1, adaptation_ms_before: 0, reading_time_ms: null },
+      { condition_id: 'B', session_id: 'S1', session_position: 1, condition_label: 'C4', polarity: 'positive', background_color: '#FFFFFF', text_color: '#C9A400', color_name: 'yellow', ink_name: 'yellow', passage_id: 5, wcag_contrast_ratio: 2.39, wcag_level: 'Fail', michelson_contrast: 0.4, below_wcag_aa: true, started_at: 3, completed_at: 4, condition_duration_sec: 1, adaptation_ms_before: 60000, reading_time_ms: null },
     ],
     fatigue: [
       { fatigue_id: 'f0', session_id: 'S1', condition_id: null, stage: 'baseline', eye_strain: 1, dryness: 1, blur: 1, burning: 1, headache: 1, fatigue_mean: 1, touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true }, all_touched: true, response_time_ms: 8000 },
       { fatigue_id: 'f1', session_id: 'S1', condition_id: 'A', stage: 'post_condition', eye_strain: 2, dryness: 3, blur: 2, burning: 1, headache: 2, fatigue_mean: 2, touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true }, all_touched: true, response_time_ms: 8000 },
       { fatigue_id: 'f2', session_id: 'S1', condition_id: 'B', stage: 'post_condition', eye_strain: 4, dryness: 5, blur: 3, burning: 4, headache: 4, fatigue_mean: 4, touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true }, all_touched: true, response_time_ms: 8000 },
     ],
+    tlx: [],
     cvsq: [],
     comprehension: [
       { comprehension_id: 'c1', session_id: 'S1', condition_id: 'A', passage_id: 3, selected_index: 2, correct_index: 2, is_correct: true, response_time_ms: 2500 },
@@ -99,11 +100,11 @@ describe('export builder', () => {
   const files = buildExportFiles(bundle());
   const names = files.map((f) => f.filename);
 
-  it('produces all 14 CSVs + JSON + manifest', () => {
+  it('produces all 15 CSVs + JSON + manifest', () => {
     expect(names).toContain('00_MASTER_CODEBOOK.csv');
     expect(names).toContain('10_wide_summary.csv');
     expect(names).toContain('12_quality_flags.csv');
-    expect(names.filter((n) => n.endsWith('.csv'))).toHaveLength(14);
+    expect(names.filter((n) => n.endsWith('.csv'))).toHaveLength(15);
     expect(names).toContain('export_manifest.json');
     expect(names.some((n) => n.startsWith('session_P001_'))).toBe(true);
   });

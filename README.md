@@ -32,7 +32,7 @@ recycle bin holds soft-deleted sessions.
   sequence, scientific rationale, the workflow-logic cross-check, researcher run instructions, and
   limitations to disclose.
 - **Constants & provenance**: see [`spec/CONSTANTS.md`](spec/CONSTANTS.md) — values extracted from
-  the original bundle, the data schema (IndexedDB v7), and every refinement made.
+  the original bundle, the data schema (IndexedDB v8), and every refinement made.
 - **Analysis**: exported data is analysed with the mixed-model templates in
   `src/analysis/analysis_template.{R,py}` (random intercept per participant; contrast as covariate;
   d′ aggregated across conditions).

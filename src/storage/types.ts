@@ -7,6 +7,7 @@
  * All physical units are explicit in field names (ms, deg, cd/m2, ratio, 0-10).
  */
 import type { Polarity, WcagLevel } from './schemaEnums';
+import type { IlluminationLevel } from '@/experiment/illumination';
 
 export type Stage =
   | 'SESSION_INIT'
@@ -29,6 +30,7 @@ export type Stage =
   | 'BREAK_SCREEN'
   | 'SESSION_COMPLETE'
   | 'CVSQ_END'
+  | 'NASA_TLX'
   | 'EXPORT_DASHBOARD';
 
 export type CameraStatus = 'active' | 'denied' | 'failed' | 'unavailable';
@@ -81,9 +83,23 @@ export interface SessionRecord {
   deleted_at: number | null;
   /** Optional researcher-editable display label (rename). Falls back to participant_id. */
   display_label: string | null;
+  /** Illuminance at the eye at session start, lux (the 'start' checkpoint reading). */
   ambient_lux: number;
-  /** Ambient illumination category (study IV) selected by the researcher; null if not set. */
-  ambient_illumination_level: 'low' | 'moderate' | 'high' | null;
+  /**
+   * Ambient illumination level — the session-level (whole-plot) IV. ASSIGNED by counterbalancing
+   * from the enrolment number, not chosen: see experiment/illumination.ts.
+   */
+  ambient_illumination_level: IlluminationLevel | null;
+  /** 0-based illumination block: 0 = this participant's first level, 1 = their second. */
+  illumination_block: number;
+  /** Which level the participant received first — the counterbalancing assignment, for reporting. */
+  illumination_order_first: IlluminationLevel | null;
+  /** Illuminance logged at start / middle / end of the session (§3.4). */
+  lux_readings: { checkpoint: 'start' | 'middle' | 'end'; lux: number; at: number }[];
+  /** True when every logged reading fell inside the accepted range for the assigned level. */
+  lux_all_in_range: boolean | null;
+  /** Set when the researcher ran the session outside the accepted lux range — a protocol deviation. */
+  lux_deviation_note: string | null;
   /** Measured white-screen luminance (cd/m2), entered by researcher; null if not measured. */
   screen_white_luminance_cd_m2: number | null;
   /** Locked display brightness percentage, null if unknown. */
@@ -116,13 +132,16 @@ export interface SessionRecord {
 export interface ConditionRecord {
   condition_id: string;
   session_id: string;
-  /** Serial position in this session (0-7) — fatigue-accumulation covariate. */
+  /** Serial position in this session (0-9) — fatigue-accumulation covariate. */
   session_position: number;
   condition_label: string;
   polarity: Polarity;
   background_color: string;
   text_color: string;
+  /** Text-colour factor level: achromatic | blue | red | yellow | green (same 5 in both polarities). */
   color_name: string;
+  /** Human-readable ink name (black/white/blue/...). Display only, never an analysis factor. */
+  ink_name: string;
   /** Decoupled passage shown under this condition. */
   passage_id: number;
   // Photometric covariates (computed; see lib/contrast.ts).
@@ -178,6 +197,29 @@ export interface CvsqRecord {
   total_score: number;
   symptomatic: boolean;
   /** Time from questionnaire mount to submit (ms) — engagement signal. */
+  response_time_ms: number | null;
+}
+
+/**
+ * NASA-TLX, once per session (Hart & Staveland, 1988). Session-level, not per-condition — so it
+ * supports inference about the ILLUMINATION contrast only; see scales/nasaTlx.ts.
+ */
+export interface NasaTlxRecord {
+  tlx_id: string;
+  session_id: string;
+  /** Raw responses as given, 0-100 in steps of 5. Performance is NOT reversed here. */
+  mental_demand: number;
+  physical_demand: number;
+  temporal_demand: number;
+  performance: number;
+  effort: number;
+  frustration: number;
+  /** Unweighted mean of the six load-aligned subscales (Performance reversed), 0-100. */
+  raw_tlx: number;
+  /** Performance after reversal, stored so the composite is reproducible from the columns. */
+  performance_load: number;
+  /** Every slider must be touched before submit; retained as a data-quality flag. */
+  all_touched: boolean;
   response_time_ms: number | null;
 }
 
@@ -394,6 +436,7 @@ export interface StoreMap {
   conditions: ConditionRecord;
   fatigue_scores: FatigueRecord;
   cvsq_scores: CvsqRecord;
+  nasa_tlx: NasaTlxRecord;
   display_perception: DisplayPerceptionRecord;
   comprehension_results: ComprehensionRecord;
   visual_search: VisualSearchRecord;

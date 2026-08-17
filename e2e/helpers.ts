@@ -59,7 +59,14 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
   switch (stage) {
     case 'SESSION_INIT':
       await setInput(page, 'pid', opts.participantId ?? 'E2E01');
-      await setInput(page, 'lux', '350');
+      // The illumination level is ASSIGNED by counterbalancing once the id is entered, and the lux
+      // reading must land inside that level's accepted range. Read the assignment off the screen
+      // and supply a matching value, rather than hard-coding one that only fits one level.
+      await page.waitForTimeout(150);
+      {
+        const assignedDim = (await page.getByText(/Dim \(/).count()) > 0;
+        await setInput(page, 'lux', assignedDim ? '10' : '150');
+      }
       if (opts.split) await click(page, /^split$/);
       await click(page, /Begin setup/);
       await waitStageChange(page, stage);
@@ -102,6 +109,13 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
     case 'CVSQ_BASELINE':
     case 'CVSQ_END':
       for (const b of await page.getByRole('button', { name: 'Never' }).all()) await b.click({ force: true });
+      await click(page, /Continue/);
+      await waitStageChange(page, stage);
+      break;
+    case 'NASA_TLX':
+      // Must differ from the component's 50 default: React suppresses onChange when the value is
+      // unchanged, so the touched flags would never set and submit would stay disabled.
+      await setAllRanges(page, 65);
       await click(page, /Continue/);
       await waitStageChange(page, stage);
       break;

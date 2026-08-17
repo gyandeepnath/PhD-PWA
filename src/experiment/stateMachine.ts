@@ -109,7 +109,11 @@ export function nextState({ stage, stepIndex }: MachineState, nConditions: numbe
   }
 
   if (stage === 'BREAK_SCREEN') return { stage: 'READING_TASK', stepIndex: stepIndex + 1 };
-  if (stage === 'CVSQ_END') return { stage: 'SESSION_COMPLETE', stepIndex };
+  // NASA-TLX sits between the end CVS-Q and completion: both are session-level instruments, and
+  // asking for workload AFTER the symptom questionnaire keeps the symptom rating from being
+  // primed by having just reflected on how hard the session was.
+  if (stage === 'CVSQ_END') return { stage: 'NASA_TLX', stepIndex };
+  if (stage === 'NASA_TLX') return { stage: 'SESSION_COMPLETE', stepIndex };
   if (stage === 'SESSION_COMPLETE') return { stage: 'EXPORT_DASHBOARD', stepIndex };
   return { stage: 'EXPORT_DASHBOARD', stepIndex }; // terminal
 }

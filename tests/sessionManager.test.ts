@@ -13,7 +13,7 @@ const prov: Provenance = { app_version: 't', git_hash: 't', build_time: 't', con
 function makeSession(id: string, over: Partial<SessionRecord> = {}): SessionRecord {
   return {
     session_id: id, participant_id: `P-${id}`, enrolment_number: 1, status: 'complete',
-    deleted_at: null, display_label: null, ambient_lux: 350, ambient_illumination_level: null, screen_white_luminance_cd_m2: null,
+    deleted_at: null, display_label: null, ambient_lux: 350, ambient_illumination_level: null, illumination_block: 0, illumination_order_first: 'dim' as const, lux_readings: [], lux_all_in_range: null, lux_deviation_note: null, screen_white_luminance_cd_m2: null,
     brightness_percent: null, session_start_time: Date.now(), session_end_time: Date.now(),
     randomisation_seed: 1, condition_order: [0], preflight_complete: true, consent_given: true,
     consent_time: 1, provenance: prov, device_type: 'X', browser: 'Y', screen_resolution: '1x1',
@@ -58,7 +58,7 @@ describe('session manager admin', () => {
   it('purge cascades to all child records', async () => {
     await put('sessions', makeSession('A'));
     await put('participants', { participant_id: 'P-A', enrolment_number: 1, age: 30, gender: 'x', daily_screen_hours: 6, device_familiarity: 'high', lighting_habit: 'moderate', correction_type: 'none', cvd_status: 'normal', ishihara_correct: null, ishihara_total: null, caffeine_today: null, hours_since_sleep: null, eligible: true, exclusion_reason: null, baseline_fatigue: 0, session_id: 'A' });
-    await put('conditions', { condition_id: 'c1', session_id: 'A', session_position: 0, condition_label: 'C1', polarity: 'positive', background_color: '#fff', text_color: '#000', color_name: 'black', passage_id: 0, wcag_contrast_ratio: 21, wcag_level: 'AAA', michelson_contrast: 1, below_wcag_aa: false, started_at: 1, completed_at: 2, condition_duration_sec: 1, adaptation_ms_before: 0, reading_time_ms: null });
+    await put('conditions', { condition_id: 'c1', session_id: 'A', session_position: 0, condition_label: 'C1', polarity: 'positive', background_color: '#fff', text_color: '#000', color_name: 'black', ink_name: 'black', passage_id: 0, wcag_contrast_ratio: 21, wcag_level: 'AAA', michelson_contrast: 1, below_wcag_aa: false, started_at: 1, completed_at: 2, condition_duration_sec: 1, adaptation_ms_before: 0, reading_time_ms: null });
     await put('rt_summaries', { condition_id: 'c1', session_id: 'A', total_trials: 4, signal_trials: 2, hits: 2, false_alarms: 0, misses: 0, correct_rejections: 2, hit_rate: 1, false_alarm_rate: 0, error_rate: 0.1, rt_cv: 0.2, anticipations: 0, lapse_count: 0, lapse_rate: 0, inverse_efficiency_ms: 460, first_half_mean_rt_ms: 450, second_half_mean_rt_ms: 470, mean_rt_hits_ms: 400, median_rt_hits_ms: 400, rt_sd_ms: 10, d_prime: 2, d_prime_se: 0.4, d_prime_unstable: true, criterion: 0 });
 
     await purgeSession('A');
