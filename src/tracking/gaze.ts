@@ -53,8 +53,19 @@ export function estimateGaze(
 ): GazeResult {
   const irisL = lm[IRIS.left];
   const irisR = lm[IRIS.right];
+  const lIn = lm[EYE_BOX.leftInner];
+  const lOut = lm[EYE_BOX.leftOuter];
+  const rIn = lm[EYE_BOX.rightInner];
+  const rOut = lm[EYE_BOX.rightOuter];
 
-  const leftBoxW = lm[EYE_BOX.leftInner].x - lm[EYE_BOX.leftOuter].x + 1e-6;
+  // A partially-solved frame gives a short landmark array. Dereferencing threw inside the frame
+  // loop and stopped tracking for the remainder of the condition; an unresolved gaze is reported
+  // as off-centre-unknown instead, which the aggregator already treats as "not measured".
+  if (!irisL || !irisR || !lIn || !lOut || !rIn || !rOut) {
+    return { zone: 'cc', isCenter: false, h: NaN, v: NaN };
+  }
+
+  const leftBoxW = lIn.x - lOut.x + 1e-6;
   const rightBoxW = lm[EYE_BOX.rightOuter].x - lm[EYE_BOX.rightInner].x + 1e-6;
   const hL = ((irisL.x - lm[EYE_BOX.leftOuter].x) / leftBoxW - 0.5) * 2;
   const hR = ((irisR.x - lm[EYE_BOX.rightInner].x) / rightBoxW - 0.5) * 2;

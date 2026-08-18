@@ -24,7 +24,16 @@ export function rafDelay(ms: number): Promise<void> {
 
 /** Inclusive random integer in [min, max]. */
 export function randInt(rng: () => number, min: number, max: number): number {
-  return Math.floor(rng() * (max - min + 1)) + min;
+  // An rng that returns exactly 1 (or anything outside [0,1)) pushed the result one past `max`.
+  // Callers use this for fixation, delay and inter-trial durations and for stimulus placement, so
+  // an out-of-range value is a silent protocol deviation rather than a crash. Non-finite bounds
+  // used to yield NaN, which then became a NaN timeout.
+  const lo = Number.isFinite(min) ? Math.floor(min) : 0;
+  const hi = Number.isFinite(max) ? Math.floor(max) : lo;
+  if (hi < lo) return lo;
+  const r = rng();
+  const u = Number.isFinite(r) ? Math.min(0.9999999999, Math.max(0, r)) : 0;
+  return lo + Math.floor(u * (hi - lo + 1));
 }
 
 /** Elapsed ms since a performance.now() timestamp. */

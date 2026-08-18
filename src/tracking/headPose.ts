@@ -74,8 +74,34 @@ export function estimateHeadPose(lm: Point[], pitchBaselineFrac?: number | null)
   const leftEye = lm[HEAD_LANDMARKS.leftEyeCorner];
   const rightEye = lm[HEAD_LANDMARKS.rightEyeCorner];
 
+  // MediaPipe returns a short or empty landmark array when a frame is only partially solved.
+  // Dereferencing straight through threw inside the per-frame loop, which kills tracking for the
+  // rest of the condition - a partial detection cost every remaining measurement. An unresolvable
+  // pose is reported as non-finite instead; the aggregator filters each channel on ingest, so the
+  // frame is dropped from the pose summary while the rest of the frame's data survives.
+  if (!nose || !leftEar || !rightEar || !leftEye || !rightEye) {
+    return { pitch: NaN, yaw: NaN, roll: NaN };
+  }
+
+  // A single geometry-validity gate for all three axes.
+  //
+  // The epsilon added to the ear span kept the division finite, which meant a degenerate face -
+  // every landmark at the same point, as a collapsed or failed solve produces - yielded yaw and
+  // roll of exactly 0 while pitch went non-finite. Zero degrees is a measurement ("looking
+  // straight ahead"), not an absence, and reporting it for an unmeasurable frame biases the
+  // postural summary toward perfect posture precisely when tracking is worst. If the face has no
+  // extent, no axis is measurable and all three say so together.
+  const earSpanRaw = Math.abs(rightEar.x - leftEar.x);
+  const eyeSpanRaw = Math.hypot(rightEye.x - leftEye.x, rightEye.y - leftEye.y);
+  const MIN_SPAN = 1e-4;
+  const geometryUsable =
+    Number.isFinite(earSpanRaw) && earSpanRaw > MIN_SPAN &&
+    Number.isFinite(eyeSpanRaw) && eyeSpanRaw > MIN_SPAN &&
+    Number.isFinite(nose.x) && Number.isFinite(nose.y);
+  if (!geometryUsable) return { pitch: NaN, yaw: NaN, roll: NaN };
+
   const earMidX = (leftEar.x + rightEar.x) / 2;
-  const earSpan = Math.abs(rightEar.x - leftEar.x) + 1e-6;
+  const earSpan = earSpanRaw + 1e-6;
   const yaw = ((nose.x - earMidX) / earSpan) * 90;
 
   // Pitch proxy: the nose tip's vertical position between the eye-line (top) and chin (bottom),
@@ -84,9 +110,16 @@ export function estimateHeadPose(lm: Point[], pitchBaselineFrac?: number | null)
   // algebraically constant — pitch was pinned at +22.5° every frame.) Pitching down raises the
   // nose toward the eye-line (fraction ↓ → positive pitch). The zero is the participant's own
   // calibrated frontal fraction when available, else the population default.
-  const noseFrac = noseVerticalFraction(lm) ?? NOSE_FRONTAL_FRAC;
+  //
+  // When the fraction cannot be computed, pitch is NON-FINITE rather than falling back to the
+  // population frontal default. That fallback made pitch resolve to exactly 0 degrees - "head
+  // perfectly level" - for a frame whose geometry was never measurable, while yaw and roll from
+  // the same frame correctly came out non-finite. A partial mixture is worse than no reading: the
+  // aggregator would drop yaw and roll but keep a fabricated level pitch, biasing the postural
+  // summary toward the default on exactly the frames where tracking struggled.
+  const noseFrac = noseVerticalFraction(lm);
   const zero = pitchBaselineFrac != null && Number.isFinite(pitchBaselineFrac) ? pitchBaselineFrac : NOSE_FRONTAL_FRAC;
-  const pitch = (zero - noseFrac) * PITCH_SCALE_DEG;
+  const pitch = noseFrac == null ? NaN : (zero - noseFrac) * PITCH_SCALE_DEG;
 
   const roll = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * (180 / Math.PI);
 

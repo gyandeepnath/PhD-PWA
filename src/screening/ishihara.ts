@@ -29,6 +29,10 @@ export const GLYPH_H = 7;
  * Used by the renderer to colour each dot as figure vs background.
  */
 export function isFigurePixel(digit: string, nx: number, ny: number): boolean {
+  // A non-finite coordinate indexed the glyph grid with NaN and threw. Rendering is driven by a
+  // loop that can produce a degenerate coordinate at the canvas edge, and a throw there blanks the
+  // whole plate rather than one pixel.
+  if (!Number.isFinite(nx) || !Number.isFinite(ny)) return false;
   const rows = FONT[digit];
   if (!rows) return false;
   const gx = Math.floor(nx * GLYPH_W);
