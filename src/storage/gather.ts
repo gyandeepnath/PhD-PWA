@@ -58,11 +58,55 @@ export async function gatherSession(sessionId: string): Promise<SessionBundle | 
     bySession<CalibrationRecord>('calibration_data'),
   ]);
 
-  return {
+  return normaliseBundle({
     session,
     participant: participant as ParticipantRecord | undefined,
-    conditions: conditions.sort((a, b) => a.session_position - b.session_position),
-    fatigue, cvsq, tlx, media, comprehension, visualSearch, perception, eyeMetrics, reactionTrials, rtSummaries, calibration,
+    conditions, fatigue, cvsq, tlx, media, comprehension, visualSearch,
+    perception, eyeMetrics, reactionTrials, rtSummaries, calibration,
+  });
+}
+
+/**
+ * Put every store into a deterministic order.
+ *
+ * IndexedDB returns rows in primary-key order, which for uuid keys is arbitrary and can differ
+ * between a first export and a re-export after a reload. The exported bytes then differ for
+ * identical data, and the manifest's per-file checksums stop being able to certify "this is the
+ * same dataset" - which is the only thing they are for. Normalising makes reproducibility a
+ * property of the pipeline rather than an accident of how the store happened to iterate.
+ *
+ * Applied both here and at the export boundary, so a bundle assembled by any other route - a test
+ * fixture, an import, a merge - is exported identically to one that came straight from the store.
+ *
+ * Child stores sort by the serial position of the condition they belong to, so a reader scanning
+ * any file sees the session in the order it was actually run, with the record id breaking ties.
+ */
+export function normaliseBundle(b: SessionBundle): SessionBundle {
+  const conditions = [...b.conditions].sort((x, y) => x.session_position - y.session_position);
+  const positionOf = new Map(conditions.map((c) => [c.condition_id, c.session_position]));
+  const byCondition = <T extends { condition_id?: string | null }>(idKey: (t: T) => string) =>
+    (x: T, y: T) => {
+      const px = positionOf.get(x.condition_id ?? '') ?? Number.MAX_SAFE_INTEGER;
+      const py = positionOf.get(y.condition_id ?? '') ?? Number.MAX_SAFE_INTEGER;
+      return px !== py ? px - py : idKey(x).localeCompare(idKey(y));
+    };
+  return {
+    ...b,
+    conditions,
+    fatigue: [...b.fatigue].sort((x, y) =>
+      (x.stage === 'baseline' ? 0 : 1) - (y.stage === 'baseline' ? 0 : 1)
+      || byCondition<FatigueRecord>((r) => r.fatigue_id)(x, y)),
+    cvsq: [...b.cvsq].sort((x, y) => x.stage.localeCompare(y.stage) || x.cvsq_id.localeCompare(y.cvsq_id)),
+    tlx: [...(b.tlx ?? [])].sort((x, y) => x.tlx_id.localeCompare(y.tlx_id)),
+    media: [...(b.media ?? [])].sort((x, y) => x.captured_at - y.captured_at || x.media_id.localeCompare(y.media_id)),
+    comprehension: [...b.comprehension].sort(byCondition<ComprehensionRecord>((r) => r.comprehension_id)),
+    visualSearch: [...b.visualSearch].sort(byCondition<VisualSearchRecord>((r) => r.condition_id)),
+    perception: [...b.perception].sort(byCondition<DisplayPerceptionRecord>((r) => r.perception_id)),
+    eyeMetrics: [...b.eyeMetrics].sort(byCondition<EyeMetricsRecord>((r) => r.condition_id)),
+    reactionTrials: [...b.reactionTrials].sort((x, y) =>
+      byCondition<ReactionTrialRecord>((r) => r.trial_id)(x, y) || x.trial_number - y.trial_number),
+    rtSummaries: [...b.rtSummaries].sort(byCondition<RtSummaryRecord>((r) => r.condition_id)),
+    calibration: [...b.calibration].sort((x, y) => x.calibration_id.localeCompare(y.calibration_id)),
   };
 }
 

@@ -56,6 +56,11 @@ export async function startNewExperiment(page: Page) {
 export async function handleStage(page: Page, stage: string, opts: { split?: boolean; participantId?: string } = {}): Promise<boolean> {
   if (stage === 'EXPORT_DASHBOARD') return true;
   await page.waitForTimeout(120);
+  // Re-read the stage after settling. The caller sampled it before this await, and a stage whose
+  // handler advances asynchronously can move on in between - leaving the driver acting on a screen
+  // that is no longer rendered. Bailing out lets the loop re-dispatch against the current stage
+  // instead of timing out on a control that has already gone.
+  if ((await stageNow(page)) !== stage) return false;
   switch (stage) {
     case 'SESSION_INIT':
       await setInput(page, 'pid', opts.participantId ?? 'E2E01');
@@ -91,6 +96,9 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
       await waitStageChange(page, stage);
       break;
     case 'COLOR_VISION':
+      // One plate per dispatch: the screen shows five in sequence, so the driver loops back here
+      // until the last is answered. The stale-stage guard at the top of handleStage is what stops
+      // it from clicking into the NEXT screen once the final plate advances.
       await page.getByRole('button', { name: '8', exact: true }).first().click({ force: true });
       break;
     case 'PREFLIGHT':

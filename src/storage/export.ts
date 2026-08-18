@@ -3,7 +3,7 @@
  * per-file checksums. Pure (`buildExportFiles`) so it is fully unit-testable; `downloadExport`
  * is the thin browser wrapper that streams the files to the device.
  */
-import type { SessionBundle } from './gather';
+import { normaliseBundle, type SessionBundle } from './gather';
 import type { SessionRecord } from './types';
 import { summariseLux, LUX_CHECKPOINTS } from '@/experiment/illumination';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
@@ -204,8 +204,12 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '14_nasa_tlx.csv', column: 'performance_load', type: 'number', unit: '0-100', role: 'dv', description: 'Performance after reversal (100 - performance). This is the value that enters raw_tlx.' },
 ];
 
-export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
+export function buildExportFiles(input: SessionBundle): ExportFile[] {
   nonFiniteCells = 0;
+  // Normalise ordering at the boundary so the export is reproducible regardless of how the bundle
+  // was assembled - straight from IndexedDB, from a test fixture, or from an import. Without this
+  // the same data can produce different bytes and the manifest checksums certify nothing.
+  const bundle = normaliseBundle(input);
   const { session, participant } = bundle;
   const pid = session.participant_id;
   const date = new Date(session.session_start_time).toISOString().slice(0, 10);
@@ -440,7 +444,10 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
 
   // JSON bundle
   const jsonBundle = {
-    exported_at: new Date().toISOString(),
+    // NOTE: no exported_at here. An export timestamp describes WHEN the export ran, not what it
+    // contains, and embedding it made the data file's bytes differ for identical data - so its
+    // manifest checksum could not be used to confirm two exports hold the same dataset. The
+    // timestamp lives in the manifest, which is provenance rather than data.
     provenance: session.provenance,
     session, participant,
     conditions: bundle.conditions, fatigue: bundle.fatigue, cvsq: bundle.cvsq, nasa_tlx: bundle.tlx,
