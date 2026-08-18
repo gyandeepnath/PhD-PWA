@@ -54,13 +54,26 @@ const MEASURED_LOOP = LOOP_ORDER.slice(0, TASKS_PER_CONDITION);
 
 export const TOTAL_TRACKED_STEPS = SETUP_STEPS + N_CONDITIONS * TASKS_PER_CONDITION;
 
+/**
+ * Normalise a sitting size to a whole number of conditions.
+ *
+ * Production always passes plan.length, which is an integer, but a fractional or non-finite value
+ * used to make the loop run a different number of conditions than the caller believed - 1.5 ran
+ * two reading tasks. The sitting size decides how many condition records exist, so it must be
+ * exactly what the caller asked for or the default.
+ */
+function sittingSize(n: number): number {
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : N_CONDITIONS;
+}
+
 /** Tracked steps for a sitting that runs `nConditions` conditions (default = full 8). */
-export function totalTrackedSteps(nConditions: number = N_CONDITIONS): number {
-  return SETUP_STEPS + nConditions * TASKS_PER_CONDITION;
+export function totalTrackedSteps(nConditionsRaw: number = N_CONDITIONS): number {
+  return SETUP_STEPS + sittingSize(nConditionsRaw) * TASKS_PER_CONDITION;
 }
 
 /** True when a self-paced break is offered after completing `completedCount` of `nConditions`. */
-export function shouldBreakAfter(completedCount: number, nConditions: number): boolean {
+export function shouldBreakAfter(completedCount: number, nConditionsRaw: number): boolean {
+  const nConditions = sittingSize(nConditionsRaw);
   const every = CONFIG.BREAK_EVERY_N_CONDITIONS;
   return every > 0 && completedCount % every === 0 && completedCount < nConditions;
 }
@@ -80,7 +93,9 @@ export function initialState(): MachineState {
  * single session, 4 for a split sitting); it defaults to the full set so existing callers/tests
  * are unaffected. A self-paced BREAK_SCREEN is inserted after every N completed conditions.
  */
-export function nextState({ stage, stepIndex }: MachineState, nConditions: number = N_CONDITIONS): MachineState {
+export function nextState(state: MachineState, nConditionsRaw: number = N_CONDITIONS): MachineState {
+  const { stage, stepIndex } = state;
+  const nConditions = sittingSize(nConditionsRaw);
   // Setup chain.
   const setupIdx = SETUP_ORDER.indexOf(stage);
   if (setupIdx >= 0 && setupIdx < SETUP_ORDER.length - 1) {
@@ -138,7 +153,8 @@ export function completedSteps({ stage, stepIndex }: MachineState): number {
 }
 
 /** Progress as a 0-100 percentage, relative to this sitting's condition count. */
-export function progressPercent(state: MachineState, nConditions: number = N_CONDITIONS): number {
+export function progressPercent(state: MachineState, nConditionsRaw: number = N_CONDITIONS): number {
+  const nConditions = sittingSize(nConditionsRaw);
   return Math.min(100, (completedSteps(state) / totalTrackedSteps(nConditions)) * 100);
 }
 
