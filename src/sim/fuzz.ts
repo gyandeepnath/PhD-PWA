@@ -109,7 +109,10 @@ export function runFuzz(iterations: number, seed = 1): FuzzFailure[] {
       const fa = randInt(rng, 0, 30);
       const cr = randInt(rng, 0, 30);
       const r = computeSdt({ hits, misses, falseAlarms: fa, correctRejections: cr });
-      if (!Number.isFinite(r.d_prime)) fail('sdt', i, `d' not finite (${hits}/${misses}/${fa}/${cr})`);
+      // d' is null by contract when either response pool is empty - there is no signal-versus-
+      // noise separation to estimate. Only an ESTIMABLE block is required to produce a number.
+      if (r.estimable && !Number.isFinite(r.d_prime)) fail('sdt', i, `d' not finite (${hits}/${misses}/${fa}/${cr})`);
+      if (!r.estimable && (hits + misses > 0 && fa + cr > 0)) fail('sdt', i, `marked unestimable despite both pools having trials (${hits}/${misses}/${fa}/${cr})`);
       // A null SE is the correct answer for an unestimable block; only a present-but-broken
       // value is a failure.
       if (r.estimable && (!Number.isFinite(r.d_prime_se) || (r.d_prime_se ?? -1) < 0)) fail('sdt', i, `SE bad: ${r.d_prime_se}`);

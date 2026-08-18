@@ -45,7 +45,11 @@ function faceSizeFromLandmarks(lm: Point[]): number {
     if (p.y > maxY) maxY = p.y;
   }
   const w = maxX - minX, h = maxY - minY;
-  return w > 0 && h > 0 ? Math.sqrt(w * h) : 0;
+  // NaN, not 0, when the bounding box has no extent. A face size of 0 is a measurement ("the
+  // face occupies none of the frame") that the aggregator would average in as a real value,
+  // dragging face_size_ratio toward zero on exactly the frames where detection failed. The
+  // aggregator filters non-finite on ingest, so NaN is correctly dropped instead.
+  return w > 0 && h > 0 ? Math.sqrt(w * h) : NaN;
 }
 
 interface TrackingApi {

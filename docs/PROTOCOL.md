@@ -211,3 +211,54 @@ Raising reading exposure to 180 s costs ~20 min per sitting (median 93 min, stil
 and needs passages of roughly 650 words. Until that is done, `12_quality_flags.csv` carries
 `blink_count_total` and `insufficient_blinks` so a thin exposure window can never be mistaken for a
 clean null.
+
+---
+
+## Data-integrity guarantees and how to re-check them
+
+Six rounds of stress testing found sixteen defects, every one of the same species: **a function
+returning a plausible number where it had no measurement**. Each was invisible downstream, because
+the output was indistinguishable from a real reading. The worst examples:
+
+- a camera dropout made the EAR baseline NaN, every threshold comparison false, and so **zero
+  blinks detected — reported as an incomplete-blink ratio of 0**, the cleanest possible value for
+  the study's primary outcome, manufactured from nothing;
+- a duplicate `condition_id` made two different display conditions export the **same** blink rates,
+  reaction times and ratings, with correct row counts and every cell populated;
+- `d'` was reported as 1.38 for a reaction-time block containing **no signal trials at all**;
+- head pose reported **0 degrees — "perfectly level"** — for frames whose geometry was never
+  measurable, biasing the postural summary toward good posture exactly where tracking struggled.
+
+The rule those fixes now share is stated once and enforced by `tests/noFabrication.test.ts`:
+
+> Given input carrying no information about a quantity, a function must report the absence — null,
+> or a non-finite value its consumer is documented to filter — and must never return a value that
+> reads as a measurement.
+
+Zero is the dangerous case throughout: zero blinks incomplete, zero degrees of pitch, zero
+sensitivity and zero face size are all substantive claims an analyst will average alongside real
+values, and none of them means "not measured".
+
+### Commands
+
+| Command | What it checks |
+|---|---|
+| `npm test` | 296 unit tests, including the no-fabrication contract |
+| `npm run stress` | Six stress rounds, ~11,500 assertions |
+| `npm run verify:export` | Prints every exported table and traces 366 cells back to source |
+| `npm run simulate:timing` | Session-length distribution for the target population |
+| `npx playwright test` | Six end-to-end specs through the full protocol |
+
+### What the export now guarantees
+
+- **Reproducible.** The same data always produces the same bytes, so the manifest's per-file
+  checksums identify content. Record order is normalised at the boundary; the export timestamp
+  lives in the manifest, not in the data.
+- **Self-auditing.** `16_integrity_report.csv` states whether the joins in that dataset can be
+  trusted, and `export_manifest.json` carries `integrity.joins_sound`. Faults are reported, never
+  silently repaired — de-duplicating quietly would hide the bug that produced the duplicate.
+- **Documented.** `00_CODEBOOK.csv` gives the type, unit, role and meaning of every column, and a
+  test asserts it cannot drift from the writer.
+- **Free of non-finite values.** Anything non-finite is written as the empty missing-marker and
+  counted in `export_manifest.json` as `non_finite_cells`, so an upstream fault stays visible
+  rather than becoming `NA` in R.

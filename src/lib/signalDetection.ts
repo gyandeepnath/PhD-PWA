@@ -66,7 +66,14 @@ export function computeSdt(input: SdtInput): SdtResult {
   const nSignal = hits + misses;
   const nNoise = falseAlarms + correctRejections;
 
-  if (nSignal === 0 && nNoise === 0) {
+  // EITHER pool being empty makes d' unestimable, not just both.
+  //
+  // This read `&&`, so a block with 12 noise trials and no signal trials reported d' = 1.38 with
+  // estimable = true - a real sensitivity estimate from data containing no signal to detect. The
+  // clamp turned the absent rate into 0.5 and probit happily produced a z-score from it.
+  // Sensitivity is the separation between a signal and a noise distribution; with one of them
+  // missing there is no separation to measure, however many trials the other pool holds.
+  if (nSignal === 0 || nNoise === 0) {
     return {
       hit_rate: 0, false_alarm_rate: 0,
       d_prime: null, criterion: null, d_prime_se: null,
