@@ -6,7 +6,7 @@
  * cannot regress silently.
  */
 import { describe, it, expect } from 'vitest';
-import { buildExportFiles, CODEBOOK, safeFilePart, round } from '@/storage/export';
+import { buildExportFiles, CODEBOOK, safeFilePart, round, escapeCsv } from '@/storage/export';
 import { buildFixtureBundle, readingMs, fatigueMean, ibrFor, rtFor } from '@/sim/bundleFixture';
 import { CONDITIONS } from '@/experiment/conditions';
 import { PASSAGES } from '@/experiment/passages';
@@ -234,5 +234,40 @@ describe('export: codebook', () => {
       expect(e.description.length, `${e.file}.${e.column} description`).toBeGreaterThan(20);
       expect(['iv', 'dv', 'primary', 'covariate', 'qc', 'id', 'provenance']).toContain(e.role);
     }
+  });
+});
+
+describe('export: no non-finite value can reach a CSV cell', () => {
+  it('renders NaN and Infinity as the empty missing-marker, never as a literal', () => {
+    // R's read_csv coerces "NaN" to NA and "Infinity" to Inf, so a literal would vanish into the
+    // analysis rather than being noticed.
+    expect(escapeCsv(NaN)).toBe('');
+    expect(escapeCsv(Infinity)).toBe('');
+    expect(escapeCsv(-Infinity)).toBe('');
+    expect(escapeCsv(0)).toBe('0');
+    expect(escapeCsv(-0)).toBe('0');
+  });
+
+  it('contains no "NaN" or "Infinity" token anywhere in the exported bundle', () => {
+    for (const [name, content] of filesOf()) {
+      expect(content, `${name} contains a non-finite literal`).not.toMatch(/(^|[,\n"])(NaN|-?Infinity)([,\n"]|$)/);
+    }
+  });
+
+  it('reports a zero non-finite-cell count for a clean bundle', () => {
+    const files = buildExportFiles(buildFixtureBundle());
+    const manifest = JSON.parse(files.find((f) => f.filename === 'export_manifest.json')!.content);
+    expect(manifest.non_finite_cells).toBe(0);
+  });
+
+  it('counts and empties a deliberately poisoned value instead of leaking it', () => {
+    const b = buildFixtureBundle();
+    // Simulate an upstream fault that produced a NaN.
+    (b.eyeMetrics[0] as { blink_rate: number }).blink_rate = NaN;
+    const files = buildExportFiles(b);
+    const manifest = JSON.parse(files.find((f) => f.filename === 'export_manifest.json')!.content);
+    expect(manifest.non_finite_cells).toBeGreaterThan(0);
+    const eye = files.find((f) => f.filename === '07_eye_metrics.csv')!.content;
+    expect(eye).not.toMatch(/NaN/);
   });
 });

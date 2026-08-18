@@ -110,7 +110,10 @@ export function runFuzz(iterations: number, seed = 1): FuzzFailure[] {
       const cr = randInt(rng, 0, 30);
       const r = computeSdt({ hits, misses, falseAlarms: fa, correctRejections: cr });
       if (!Number.isFinite(r.d_prime)) fail('sdt', i, `d' not finite (${hits}/${misses}/${fa}/${cr})`);
-      if (!Number.isFinite(r.d_prime_se) || r.d_prime_se < 0) fail('sdt', i, `SE bad: ${r.d_prime_se}`);
+      // A null SE is the correct answer for an unestimable block; only a present-but-broken
+      // value is a failure.
+      if (r.estimable && (!Number.isFinite(r.d_prime_se) || (r.d_prime_se ?? -1) < 0)) fail('sdt', i, `SE bad: ${r.d_prime_se}`);
+      if (!r.estimable && (r.d_prime !== null || r.criterion !== null)) fail('sdt', i, 'unestimable block returned a d-prime');
       if (!inUnit(r.hit_rate) || !inUnit(r.false_alarm_rate)) fail('sdt', i, 'rate out of [0,1]');
     });
 
@@ -242,7 +245,7 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
         false_alarms: 0, misses: 0, correct_rejections: 0, hit_rate: r.hit_rate, false_alarm_rate: r.false_alarm_rate,
         error_rate: rng(), rt_cv: rng() < 0.5 ? null : rng(), anticipations: 0, lapse_count: 0, lapse_rate: rng(), inverse_efficiency_ms: rng() < 0.5 ? null : randInt(rng, 200, 1200), first_half_mean_rt_ms: null, second_half_mean_rt_ms: null,
         mean_rt_hits_ms: rng() < 0.5 ? null : randInt(rng, 200, 900), median_rt_hits_ms: null, rt_sd_ms: null,
-        d_prime: r.d_prime, d_prime_se: r.d_prime_se, d_prime_unstable: r.d_prime_unstable, criterion: r.criterion,
+        d_prime: r.d_prime, d_prime_se: r.d_prime_se, d_prime_unstable: r.d_prime_unstable, criterion: r.criterion, d_prime_estimable: r.estimable,
       };
     }),
     calibration: rng() < 0.5 ? [{ calibration_id: 'cal', session_id: sid, is_real_calibration: rng() < 0.5, targets_detected: randInt(rng, 0, 9), targets_total: 9, ear_baseline: rng() < 0.5 ? null : rng(), gaze_h_threshold: null, gaze_v_threshold: null, pitch_baseline_frac: rng() < 0.5 ? null : rng() }] : [],

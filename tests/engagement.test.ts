@@ -22,7 +22,7 @@ const rt = (over: Partial<RtSummaryRecord> = {}): RtSummaryRecord => ({
   anticipations: 0, lapse_count: 0, lapse_rate: 0.05, inverse_efficiency_ms: 460,
   first_half_mean_rt_ms: 450, second_half_mean_rt_ms: 470, mean_rt_hits_ms: 460, median_rt_hits_ms: 455,
   rt_sd_ms: 50,
-  d_prime: 2.8, d_prime_se: 0.4, d_prime_unstable: true, criterion: 0.1, ...over,
+  d_prime: 2.8, d_prime_se: 0.4, d_prime_unstable: true, criterion: 0.1, d_prime_estimable: true, ...over,
 });
 
 describe('conditionEngagement', () => {

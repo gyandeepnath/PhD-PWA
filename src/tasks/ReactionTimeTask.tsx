@@ -55,10 +55,11 @@ export interface RtResult {
     inverse_efficiency_ms: number | null;
     first_half_mean_rt_ms: number | null;
     second_half_mean_rt_ms: number | null;
-    d_prime: number;
-    d_prime_se: number;
+    d_prime: number | null;
+    d_prime_se: number | null;
     d_prime_unstable: boolean;
-    criterion: number;
+    criterion: number | null;
+    d_prime_estimable: boolean;
   };
 }
 
@@ -265,6 +266,7 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
         d_prime_se: sdt.d_prime_se,
         d_prime_unstable: sdt.d_prime_unstable,
         criterion: sdt.criterion,
+        d_prime_estimable: sdt.estimable,
       },
     });
   };

@@ -37,7 +37,7 @@ async function seed() {
     condition_id: 'A', session_id: 'S1', total_trials: 48, signal_trials: 24, hits: 22, false_alarms: 2,
     misses: 2, correct_rejections: 22, hit_rate: 0.92, false_alarm_rate: 0.08, error_rate: 0.1, rt_cv: 0.2, anticipations: 0, lapse_count: 0, lapse_rate: 0, inverse_efficiency_ms: 460, first_half_mean_rt_ms: 450, second_half_mean_rt_ms: 470, mean_rt_hits_ms: 460,
     median_rt_hits_ms: 455, rt_sd_ms: 50,
-    d_prime: 2.8, d_prime_se: 0.45, d_prime_unstable: true, criterion: -0.3,
+    d_prime: 2.8, d_prime_se: 0.45, d_prime_unstable: true, criterion: -0.3, d_prime_estimable: true,
   });
 }
 

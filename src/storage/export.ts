@@ -27,9 +27,24 @@ function luxSummary(session: SessionRecord): { mean: number | null; max_deviatio
   return { mean: s.mean, max_deviation: s.max_deviation };
 }
 
+/**
+ * Count of non-finite numeric cells encountered during the current export.
+ * Reset at the start of buildExportFiles() and surfaced in the manifest.
+ */
+let nonFiniteCells = 0;
+
 /** CSV-escape a single value: wrap in quotes and double internal quotes when needed. */
 export function escapeCsv(value: unknown): string {
   if (value == null) return '';
+  // A non-finite number is not a measurement. Rendering it as the literal "NaN" or "Infinity" is
+  // worse than useless: R's read_csv silently coerces "NaN" to NA and "Infinity" to Inf, so the
+  // anomaly disappears into the analysis instead of being noticed. Emit the same empty marker used
+  // for every other missing value; buildExportFiles counts these and reports the total in the
+  // manifest, so the fact that something went non-finite upstream is still visible.
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    nonFiniteCells++;
+    return '';
+  }
   const s = String(value);
   // Quote when the value contains a quote, comma, or ANY line break (\n or \r) — a bare \r would
   // otherwise be treated as a row terminator by Excel/read.csv and silently misalign columns.
@@ -52,9 +67,14 @@ export function toCsv(headers: string[], rows: Record<string, unknown>[]): strin
  * at the export boundary only, so the stored records and the JSON bundle keep full precision.
  */
 export function round(value: unknown, dp = 4): unknown {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.round(value * 10 ** dp) / 10 ** dp
-    : value;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return value;
+  const scaled = value * 10 ** dp;
+  // Scaling a very large magnitude overflows to Infinity, and rounding must never turn a finite
+  // number into a non-finite one - that would convert a real (if implausible) measurement into a
+  // cell the boundary then blanks. Values too large to scale are already integral at this
+  // precision, so returning them unchanged is exact.
+  if (!Number.isFinite(scaled)) return value;
+  return Math.round(scaled) / 10 ** dp;
 }
 
 /** Make a string safe for a filename on every platform (Windows forbids " < > : | ? * \ /). */
@@ -178,6 +198,7 @@ export const CODEBOOK: Record<string, string>[] = [
 ];
 
 export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
+  nonFiniteCells = 0;
   const { session, participant } = bundle;
   const pid = session.participant_id;
   const date = new Date(session.session_start_time).toISOString().slice(0, 10);
@@ -407,6 +428,12 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
     exported_at: new Date().toISOString(),
     provenance: session.provenance,
     participant_id: pid,
+    /**
+     * How many numeric cells were non-finite and therefore written as empty. After the upstream
+     * guards this should always be 0; any other value means something produced a NaN or Infinity
+     * and the affected columns must be investigated before the data is analysed.
+     */
+    non_finite_cells: nonFiniteCells,
     files: files.map((f) => ({ filename: f.filename, bytes: f.content.length, checksum_fnv1a: fnv1a(f.content) })),
   };
   files.push({ filename: 'export_manifest.json', content: JSON.stringify(manifest, null, 2), mime: 'application/json' });

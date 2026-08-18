@@ -46,7 +46,7 @@ function bundle(): SessionBundle {
     ],
     reactionTrials: Array.from({ length: 48 }, (_, i) => ({ trial_id: `t${i}`, condition_id: 'A', session_id: 'S1', trial_number: i, trial_category: 'signal' as const, is_signal: true, stimulus_onset_time: 0, response_time_ms: 450, accuracy: 'hit' as const, false_start: false, anticipatory: false })),
     rtSummaries: [
-      { condition_id: 'A', session_id: 'S1', total_trials: 48, signal_trials: 24, hits: 22, false_alarms: 2, misses: 2, correct_rejections: 22, hit_rate: 0.92, false_alarm_rate: 0.08, error_rate: 0.1, rt_cv: 0.2, anticipations: 0, lapse_count: 0, lapse_rate: 0, inverse_efficiency_ms: 460, first_half_mean_rt_ms: 450, second_half_mean_rt_ms: 470, mean_rt_hits_ms: 460, median_rt_hits_ms: 455, rt_sd_ms: 50, d_prime: 2.8, d_prime_se: 0.45, d_prime_unstable: true, criterion: -0.3 },
+      { condition_id: 'A', session_id: 'S1', total_trials: 48, signal_trials: 24, hits: 22, false_alarms: 2, misses: 2, correct_rejections: 22, hit_rate: 0.92, false_alarm_rate: 0.08, error_rate: 0.1, rt_cv: 0.2, anticipations: 0, lapse_count: 0, lapse_rate: 0, inverse_efficiency_ms: 460, first_half_mean_rt_ms: 450, second_half_mean_rt_ms: 470, mean_rt_hits_ms: 460, median_rt_hits_ms: 455, rt_sd_ms: 50, d_prime: 2.8, d_prime_se: 0.45, d_prime_unstable: true, d_prime_estimable: true, criterion: -0.3 },
     ],
     calibration: [
       { calibration_id: 'cal1', session_id: 'S1', is_real_calibration: true, targets_detected: 9, targets_total: 9, ear_baseline: 0.31, gaze_h_threshold: 0.12, gaze_v_threshold: 0.1, pitch_baseline_frac: 0.46 },

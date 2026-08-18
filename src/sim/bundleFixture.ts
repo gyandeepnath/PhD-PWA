@@ -319,6 +319,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       d_prime_se: 0.4,
       d_prime_unstable: false,
       criterion: 0.1,
+      d_prime_estimable: true,
     })),
     calibration: [
       {

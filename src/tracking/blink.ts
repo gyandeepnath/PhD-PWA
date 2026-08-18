@@ -51,10 +51,23 @@ export function faceEar(landmarks: Point[]): number {
   return (left + right) / 2;
 }
 
-/** Baseline open-eye EAR = 90th percentile of calibration samples (robust to blinks in the set). */
-export function baselineEar(samples: number[]): number {
-  if (samples.length === 0) return 0.3;
-  const sorted = [...samples].sort((a, b) => a - b);
+/**
+ * Baseline open-eye EAR = 90th percentile of calibration samples (robust to blinks in the set).
+ *
+ * Non-finite samples are DROPPED before the percentile is taken. MediaPipe emits NaN landmark
+ * coordinates when tracking momentarily fails, which makes faceEar() NaN for that frame. A single
+ * such sample used to poison the baseline: NaN sorts unpredictably, the percentile could return
+ * NaN, every subsequent `ear < threshold` comparison is then false, ZERO blinks are detected, and
+ * incomplete_blink_ratio comes out as a clean 0. A camera glitch would have manufactured a
+ * perfect-looking value for the study's primary outcome.
+ *
+ * Returns null when no usable sample survives, so the caller records "not measured" rather than a
+ * fabricated default. The previous 0.3 fallback silently asserted a population-typical eye.
+ */
+export function baselineEar(samples: number[]): number | null {
+  const usable = samples.filter((v) => Number.isFinite(v) && v > 0);
+  if (usable.length === 0) return null;
+  const sorted = usable.sort((a, b) => a - b);
   const idx = Math.floor(0.9 * (sorted.length - 1));
   return sorted[idx];
 }
@@ -78,8 +91,13 @@ export interface EarSample {
  * A blink starts when EAR drops below the partial threshold and ends when it recovers above it;
  * the tier is assigned from the minimum EAR ratio and the duration.
  */
-export function classifyBlinks(samples: EarSample[], baseline: number): BlinkEvent[] {
-  if (baseline <= 0) return [];
+export function classifyBlinks(samples: EarSample[], baseline: number | null): BlinkEvent[] {
+  if (baseline == null || !Number.isFinite(baseline) || baseline <= 0) return [];
+  // Drop frames whose EAR or timestamp is not a finite number. Left in, a NaN sample never
+  // satisfies the entry comparison, so the blink state machine silently skips real closures and
+  // under-counts — which reads downstream as an unusually attentive participant, not as a fault.
+  samples = samples.filter((s) => Number.isFinite(s.ear) && Number.isFinite(s.t_ms));
+  if (samples.length === 0) return [];
   // A blink is entered when EAR drops below the partial threshold (a ≥25% closure).
   const partialT = baseline * EAR_TIERS.partial;
 
@@ -113,8 +131,20 @@ export function classifyBlinks(samples: EarSample[], baseline: number): BlinkEve
   return events;
 }
 
+/**
+ * Blinks per minute.
+ *
+ * Requires a duration of at least one second. `durationMs > 0` was too weak: a condition that
+ * aborted almost immediately yields a duration of a fraction of a millisecond, and dividing by it
+ * produces a rate in the thousands - or Infinity - which then enters the model as a real
+ * observation. Under a second there is no rate to report, so this returns 0 with the count
+ * preserved separately.
+ */
+export const MIN_RATE_WINDOW_MS = 1000;
 export function blinkRatePerMinute(count: number, durationMs: number): number {
-  return durationMs > 0 ? (count / durationMs) * 60000 : 0;
+  if (!Number.isFinite(count) || count < 0) return 0;
+  if (!Number.isFinite(durationMs) || durationMs < MIN_RATE_WINDOW_MS) return 0;
+  return (count / durationMs) * 60000;
 }
 
 export interface BlinkSummary {
@@ -124,8 +154,16 @@ export interface BlinkSummary {
   blink_count_full: number;
   blink_count_micro: number;
   blink_count_incomplete: number;
-  /** incomplete blinks / all blinks (raised under visual/ocular fatigue). */
-  incomplete_blink_ratio: number;
+  /**
+   * Incomplete blinks / all blinks - the study's PRIMARY OUTCOME.
+   *
+   * NULL when no blinks were detected. A proportion of an empty set is undefined, not zero, and
+   * reporting 0 here was the most dangerous default in the codebase: a failed camera, an
+   * uncalibrated baseline or an aborted condition all produce zero events, and a 0 ratio reads as
+   * "this participant blinked perfectly in this condition" - the cleanest possible result,
+   * manufactured from no data.
+   */
+  incomplete_blink_ratio: number | null;
   blink_duration_mean_ms: number | null;
 }
 
@@ -143,7 +181,7 @@ export function summariseBlinks(events: BlinkEvent[], durationMs: number): Blink
     blink_count_full: full,
     blink_count_micro: micro,
     blink_count_incomplete: incomplete,
-    incomplete_blink_ratio: total > 0 ? incomplete / total : 0,
+    incomplete_blink_ratio: total > 0 ? incomplete / total : null,
     blink_duration_mean_ms:
       durations.length > 0 ? durations.reduce((s, d) => s + d, 0) / durations.length : null,
   };
@@ -197,9 +235,12 @@ function median(xs: number[]): number {
  */
 export function computeClosureMetrics(
   samples: EarSample[],
-  baseline: number,
+  baseline: number | null,
   events: BlinkEvent[],
 ): ClosureMetrics {
+  if (baseline == null || !Number.isFinite(baseline)) {
+    return { perclos_p80: null, perclos_p70: null, long_closure_count: 0, long_closure_total_ms: 0, ear_closed_estimate: null };
+  }
   const present = samples.filter((s) => Number.isFinite(s.ear) && s.ear > 0);
   if (present.length < 2 || baseline <= 0) {
     return { perclos_p80: null, perclos_p70: null, long_closure_count: 0, long_closure_total_ms: 0, ear_closed_estimate: null };

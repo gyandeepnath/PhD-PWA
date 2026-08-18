@@ -51,9 +51,9 @@ describe('signal detection (d-prime)', () => {
   it('flags instability with few signal trials (24)', () => {
     const r = computeSdt({ hits: 18, misses: 6, falseAlarms: 4, correctRejections: 20 });
     expect(r.d_prime).toBeGreaterThan(0);
-    expect(r.d_prime_se).toBeGreaterThan(0);
+    expect((r.d_prime_se ?? 0)).toBeGreaterThan(0);
     // With ~24 trials per pool the SE is large.
-    expect(r.d_prime_unstable).toBe(r.d_prime_se > 0.3);
+    expect(r.d_prime_unstable).toBe((r.d_prime_se ?? 0) > 0.3);
   });
 
   it('handles perfect performance without infinities', () => {

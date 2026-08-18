@@ -323,12 +323,18 @@ export interface RtSummaryRecord {
   /** Vigilance: mean hit RT in the first vs second half of the block (rising = within-block fatigue). */
   first_half_mean_rt_ms: number | null;
   second_half_mean_rt_ms: number | null;
-  d_prime: number;
-  /** Standard error of d' (flag if > 0.3 — small-N instability). */
-  d_prime_se: number;
+  /**
+   * Sensitivity d'. NULL when the block produced no trials at all - treat as missing, never as 0.
+   * A 0 is a substantive claim of zero sensitivity and will be averaged alongside real values.
+   */
+  d_prime: number | null;
+  /** Standard error of d' (flag if > 0.3 — small-N instability). Null when d' is not estimable. */
+  d_prime_se: number | null;
   d_prime_unstable: boolean;
   /** SDT response bias c = -0.5·(zH+zF): >0 conservative (fewer responses), <0 liberal. */
-  criterion: number;
+  criterion: number | null;
+  /** False when d'/criterion/SE could not be estimated from the trials recorded. */
+  d_prime_estimable: boolean;
 }
 
 /** Per-task within-window blink bins to capture fatigue *dynamics* (rising rate = fatigue). */
@@ -349,7 +355,11 @@ export interface EyeMetricsRecord {
   // Primary (frame-rate-robust): CVS markers + drowsiness covariates.
   blink_rate: number;
   blink_rate_full: number;
-  incomplete_blink_ratio: number;
+  /**
+   * PRIMARY OUTCOME. Null when no blinks were detected in the condition - a proportion of an empty
+   * set is undefined. Treat null as missing, never as 0.
+   */
+  incomplete_blink_ratio: number | null;
   blink_duration_mean_ms: number | null;
   bins: BlinkBins;
   /** Inter-blink interval (ms) + its CV — longer/erratic with reduced blinking. */

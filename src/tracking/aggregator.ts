@@ -40,7 +40,10 @@ function smooth(xs: number[], window = 5): number[] {
   return xs.map((_, i) => {
     const lo = Math.max(0, i - half);
     const hi = Math.min(xs.length - 1, i + half);
-    return mean(xs.slice(lo, hi + 1));
+    const win = xs.slice(lo, hi + 1);
+    // A smoothing window can be empty only if the caller passed a degenerate range; return the
+    // original sample rather than NaN so one bad index cannot blank the whole smoothed series.
+    return win.length ? mean(win) : xs[i];
   });
 }
 
@@ -104,7 +107,11 @@ export class EyeMetricsAggregator {
   }): EyeMetricsRecord {
     const durationMs =
       this.ear.length > 0 ? this.ear[this.ear.length - 1].t_ms - this.ear[0].t_ms : 0;
-    const baseline = args.baselineEarValue ?? 0.3;
+    // No fabricated fallback. A null baseline means calibration did not produce one, and
+    // substituting a population-typical 0.3 produced blink metrics indistinguishable from a
+    // properly calibrated run. classifyBlinks() returns no events for a null baseline, and
+    // summariseBlinks() then reports a null ratio rather than a clean-looking zero.
+    const baseline = args.baselineEarValue;
     const events = classifyBlinks(this.ear, baseline);
     const blink = summariseBlinks(events, durationMs);
     const fps = effectiveFps(this.frameTimes);
@@ -117,8 +124,10 @@ export class EyeMetricsAggregator {
     const sRoll = smooth(this.roll);
     const movementStd =
       (stdPopulation(sPitch) + stdPopulation(sYaw) + stdPopulation(sRoll)) / 3;
-    const posturalLoad =
-      (mean(sPitch.map(Math.abs)) + mean(sYaw.map(Math.abs)) + mean(sRoll.map(Math.abs))) / 3;
+    // A condition with no captured frames leaves every pose array empty. mean([]) is NaN, and the
+    // three NaNs used to average into a NaN postural_load that then serialised into the CSV.
+    const absMean = (xs: number[]) => (xs.length ? mean(xs.map(Math.abs)) : 0);
+    const posturalLoad = (absMean(sPitch) + absMean(sYaw) + absMean(sRoll)) / 3;
 
     return {
       condition_id: args.conditionId,

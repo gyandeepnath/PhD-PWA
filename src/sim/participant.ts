@@ -35,8 +35,8 @@ export interface ConditionRow {
   passage_id: number;
   // DVs
   mean_rt_hits_ms: number | null;
-  d_prime: number;
-  d_prime_se: number;
+  d_prime: number | null;
+  d_prime_se: number | null;
   comprehension_correct: 0 | 1;
   comprehension_rt_ms: number;
   fatigue_mean: number;

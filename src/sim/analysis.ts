@@ -78,7 +78,9 @@ export function cohortRows(participants: { rows: ConditionRow[] }[]): Record<str
   const out: Record<string, number>[] = [];
   for (const p of participants) {
     for (const r of p.rows) {
-      if (r.mean_rt_hits_ms == null) continue;
+      // Rows without an estimable d' are excluded rather than coerced: a null means the block
+      // produced no trials, and substituting 0 would enter a fabricated sensitivity into the fit.
+      if (r.mean_rt_hits_ms == null || r.d_prime == null || r.d_prime_se == null) continue;
       out.push({
         mean_rt_hits_ms: r.mean_rt_hits_ms,
         log_contrast: r.log_contrast,

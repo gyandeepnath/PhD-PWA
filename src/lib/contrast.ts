@@ -16,14 +16,39 @@ export interface RGB {
   b: number;
 }
 
-/** Parse a #rrggbb hex string to 0-255 RGB. */
-export function hexToRgb(hex: string): RGB {
-  const h = hex.replace('#', '');
+/** Strict #rrggbb / #rgb matcher. Anything else is not a colour this study can measure. */
+const HEX_RE = /^#?(?:([0-9a-fA-F]{3})|([0-9a-fA-F]{6}))$/;
+
+/**
+ * Parse a hex colour, or return null if it is not one.
+ *
+ * The previous parser used parseInt on whatever it was handed, so '', '#GGGGGG' and 'white' all
+ * yielded NaN channels. NaN then flowed straight through relativeLuminance into
+ * wcag_contrast_ratio, which is the analysis covariate `log_contrast` - a silent NaN there
+ * removes the row from the fit without anyone being told a colour was malformed.
+ */
+export function tryHexToRgb(hex: string): RGB | null {
+  const m = HEX_RE.exec(String(hex).trim());
+  if (!m) return null;
+  const h = m[1] ? m[1].split('').map((c) => c + c).join('') : m[2];
   return {
     r: parseInt(h.slice(0, 2), 16),
     g: parseInt(h.slice(2, 4), 16),
     b: parseInt(h.slice(4, 6), 16),
   };
+}
+
+/**
+ * Parse a #rrggbb hex string to 0-255 RGB, THROWING on anything malformed.
+ *
+ * Throwing is deliberate. Every colour in this study comes from the locked CONDITIONS table, so a
+ * malformed value is a programming or data-integrity fault, not a user input - and it must fail
+ * loudly at the point of the mistake rather than travel onward as a plausible number.
+ */
+export function hexToRgb(hex: string): RGB {
+  const rgb = tryHexToRgb(hex);
+  if (!rgb) throw new Error(`Invalid hex colour: ${JSON.stringify(hex)}`);
+  return rgb;
 }
 
 /** sRGB channel (0-255) -> linear-light component, per WCAG 2.x. */
@@ -32,9 +57,12 @@ function linearize(channel: number): number {
   return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
 }
 
-/** WCAG relative luminance (0 = black, 1 = white). */
+/** WCAG relative luminance (0 = black, 1 = white). Throws on a malformed colour. */
 export function relativeLuminance(color: RGB | string): number {
   const { r, g, b } = typeof color === 'string' ? hexToRgb(color) : color;
+  if (![r, g, b].every((c) => Number.isFinite(c))) {
+    throw new Error(`Invalid RGB channels: ${JSON.stringify({ r, g, b })}`);
+  }
   return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
 }
 

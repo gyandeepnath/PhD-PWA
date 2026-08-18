@@ -19,11 +19,21 @@
  */
 import { N_CONDITIONS } from './conditions';
 
+/** Largest square this module will build. Far above any real design; guards Array construction. */
+const MAX_SQUARE_N = 1000;
+
 /**
  * First row of a balanced Latin square for even n (0-indexed):
  * 0, 1, n-1, 2, n-2, 3, n-3, ...
  */
 export function williamsFirstRow(n: number): number[] {
+  // A non-integer or non-finite n reached Array construction and threw "Invalid array length".
+  // The production caller passes N_CONDITIONS, but the fuzz harness and any future caller must
+  // get a defined answer rather than an exception from deep inside the counterbalancer.
+  // Upper bound as well as lower: 1e21 is finite and >= 1, and Array construction throws
+  // "Invalid array length" for it. No design will ever have more conditions than this.
+  if (!Number.isFinite(n) || n < 1 || n > MAX_SQUARE_N) return [];
+  n = Math.floor(n);
   const row: number[] = [];
   for (let j = 0; j < n; j++) {
     if (j === 0) row.push(0);
@@ -35,6 +45,8 @@ export function williamsFirstRow(n: number): number[] {
 
 /** Full balanced Latin square: row i is the first row with +i (mod n) applied to each value. */
 export function williamsSquare(n: number): number[][] {
+  if (!Number.isFinite(n) || n < 1 || n > MAX_SQUARE_N) return [];
+  n = Math.floor(n);
   const first = williamsFirstRow(n);
   return Array.from({ length: n }, (_, i) => first.map((v) => (v + i) % n));
 }

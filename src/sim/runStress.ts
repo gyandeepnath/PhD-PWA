@@ -86,8 +86,8 @@ console.log('='.repeat(72));
   const push = (ear: number, n: number) => { for (let i = 0; i < n; i++) { samples.push({ t_ms: t, ear }); t += 33; } };
   for (let i = 0; i < 20; i++) { push(0.30, 18); push(0.05, 6); push(0.30, 18); push(0.20, 6); }
   const sum = summariseBlinks(classifyBlinks(samples, baseline), samples[samples.length - 1].t_ms);
-  ok('incomplete-blink tier is reachable from the classifier', sum.blink_count_incomplete > 0 && sum.incomplete_blink_ratio > 0,
-    `incomplete=${sum.blink_count_incomplete}, ratio=${sum.incomplete_blink_ratio.toFixed(3)}`);
+  ok('incomplete-blink tier is reachable from the classifier', sum.blink_count_incomplete > 0 && (sum.incomplete_blink_ratio ?? 0) > 0,
+    `incomplete=${sum.blink_count_incomplete}, ratio=${(sum.incomplete_blink_ratio ?? 0).toFixed(3)}`);
 }
 
 console.log('='.repeat(72));

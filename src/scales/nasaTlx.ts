@@ -107,7 +107,11 @@ export type TlxRatings = Record<TlxKey, number>;
  * overall index incoherent: a participant who performed perfectly would look maximally loaded.
  */
 export function tlxContribution(dim: TlxDimension, rating: number): number {
-  return dim.reversed ? TLX_MAX - rating : rating;
+  // Clamp into the scale. The slider cannot produce an out-of-range value, but a stored record
+  // can be corrupted or imported, and an unclamped NaN or Infinity here propagates into raw_tlx -
+  // a single bad subscale would silently take the whole workload index with it.
+  const r = Number.isFinite(rating) ? Math.min(TLX_MAX, Math.max(TLX_MIN, rating)) : TLX_MIN;
+  return dim.reversed ? TLX_MAX - r : r;
 }
 
 export interface TlxScore {

@@ -25,6 +25,7 @@
  * one pair varies polarity with luminance contrast held constant.
  */
 import {
+  tryHexToRgb,
   michelsonContrast,
   wcagContrastRatio,
   wcagLevel,
@@ -96,6 +97,19 @@ export const CONDITIONS: Condition[] = BASE_CONDITIONS.map((c) => {
 });
 
 export const N_CONDITIONS = CONDITIONS.length;
+
+// Load-time integrity assertion over the locked table. A malformed hex would otherwise surface far
+// downstream as a NaN contrast covariate; here it fails on the first import, naming the condition.
+for (const c of CONDITIONS) {
+  for (const [field, value] of [['background', c.background], ['text', c.text]] as const) {
+    if (tryHexToRgb(value) == null) {
+      throw new Error(`Condition ${c.label} has an invalid ${field} colour: ${JSON.stringify(value)}`);
+    }
+  }
+  if (!Number.isFinite(c.wcag_contrast_ratio) || c.wcag_contrast_ratio < 1 || c.wcag_contrast_ratio > 21) {
+    throw new Error(`Condition ${c.label} produced an out-of-range contrast ratio: ${c.wcag_contrast_ratio}`);
+  }
+}
 
 /**
  * Deterministic definition hash (FNV-1a) over the locked hex values + colour names.
