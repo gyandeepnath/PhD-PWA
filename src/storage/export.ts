@@ -9,6 +9,7 @@ import { summariseLux, LUX_CHECKPOINTS } from '@/experiment/illumination';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { PASSAGES } from '@/experiment/passages';
 import { CONDITIONS } from '@/experiment/conditions';
+import { auditBundle } from './integrity';
 
 export interface ExportFile {
   filename: string;
@@ -141,6 +142,12 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '01_session_info.csv', column: 'consent_setup_photos', type: 'boolean', unit: '-', role: 'qc', description: 'Participant permitted two retained setup photographs. Separate, optional grant.' },
   { file: '01_session_info.csv', column: 'consent_annotation_video', type: 'boolean', unit: '-', role: 'qc', description: 'Participant permitted retained reading video for the manual blink-annotation sub-study (validation subsample only).' },
   { file: '01_session_info.csv', column: 'media_items_retained', type: 'integer', unit: 'count', role: 'qc', description: 'How many photo/video files this session actually retained. 0 unless a media grant was given.' },
+
+  // ---- 16_integrity_report.csv
+  { file: '16_integrity_report.csv', column: 'severity', type: 'factor(3)', unit: '-', role: 'qc', description: 'error = a join in this dataset cannot be trusted; warning = something expected is missing; info = all checks passed.' },
+  { file: '16_integrity_report.csv', column: 'check', type: 'string', unit: '-', role: 'qc', description: 'Which integrity assumption was tested, e.g. condition_id_unique, no_orphan_records, complete_coverage.' },
+  { file: '16_integrity_report.csv', column: 'detail', type: 'string', unit: '-', role: 'qc', description: 'What was found and what it means for the analysis. Read this before using the dataset.' },
+  { file: '16_integrity_report.csv', column: 'refs', type: 'string', unit: '-', role: 'qc', description: 'Identifiers involved, pipe-separated, so a finding can be traced to specific records.' },
 
   // ---- 15_media_inventory.csv
   { file: '15_media_inventory.csv', column: 'media_id', type: 'string', unit: '-', role: 'id', description: 'Identifier of one retained photo or video file.' },
@@ -410,6 +417,27 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
       consent_annotation_video: m.consent_snapshot.annotation_video,
     })));
 
+  // 16 - referential-integrity report.
+  // The join onto conditions is only sound if condition_id is unique and every child row points at
+  // a real condition. Neither was previously verified, and a duplicate id makes two different
+  // display conditions report the SAME measurements with nothing in the output looking wrong.
+  // Faults are reported, never silently repaired: quietly de-duplicating would hide the bug that
+  // produced the duplicate.
+  const integrity = auditBundle(bundle);
+  csv('16_integrity_report.csv',
+    ['participant_id', 'session_index', 'severity', 'check', 'detail', 'refs'],
+    integrity.findings.length
+      ? integrity.findings.map((x) => ({
+          participant_id: pid, session_index: session.session_index,
+          severity: x.severity, check: x.check, detail: x.detail, refs: x.refs.join(' | '),
+        }))
+      : [{
+          participant_id: pid, session_index: session.session_index,
+          severity: 'info', check: 'all_checks_passed',
+          detail: 'condition_id and session_position unique; no orphan or duplicate child rows; coverage complete.',
+          refs: '',
+        }]);
+
   // JSON bundle
   const jsonBundle = {
     exported_at: new Date().toISOString(),
@@ -434,6 +462,16 @@ export function buildExportFiles(bundle: SessionBundle): ExportFile[] {
      * and the affected columns must be investigated before the data is analysed.
      */
     non_finite_cells: nonFiniteCells,
+    /**
+     * Referential integrity of the joins this export performed. joins_sound=false means at least
+     * one condition's measurements cannot be trusted to belong to it - see 16_integrity_report.csv
+     * before analysing the data.
+     */
+    integrity: {
+      joins_sound: integrity.joins_sound,
+      errors: integrity.errors,
+      warnings: integrity.warnings,
+    },
     files: files.map((f) => ({ filename: f.filename, bytes: f.content.length, checksum_fnv1a: fnv1a(f.content) })),
   };
   files.push({ filename: 'export_manifest.json', content: JSON.stringify(manifest, null, 2), mime: 'application/json' });

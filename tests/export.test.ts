@@ -101,11 +101,11 @@ describe('export builder', () => {
   const files = buildExportFiles(bundle());
   const names = files.map((f) => f.filename);
 
-  it('produces all 17 CSVs + JSON + manifest', () => {
+  it('produces all 18 CSVs + JSON + manifest', () => {
     expect(names).toContain('00_CODEBOOK.csv');
     expect(names).toContain('10_wide_summary.csv');
     expect(names).toContain('12_quality_flags.csv');
-    expect(names.filter((n) => n.endsWith('.csv'))).toHaveLength(17);
+    expect(names.filter((n) => n.endsWith('.csv'))).toHaveLength(18);
     expect(names).toContain('export_manifest.json');
     expect(names.some((n) => n.startsWith('session_P001_'))).toBe(true);
   });
