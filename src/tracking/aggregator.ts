@@ -63,18 +63,25 @@ export class EyeMetricsAggregator {
 
   ingest(f: FrameSample): void {
     this.framesTotal++;
-    this.frameTimes.push(f.t_ms);
+    if (Number.isFinite(f.t_ms)) this.frameTimes.push(f.t_ms);
     if (f.luma != null && Number.isFinite(f.luma)) this.lumas.push(f.luma);
     if (!f.facePresent) return;
     this.facesDetected++;
-    this.ear.push({ t_ms: f.t_ms, ear: f.ear });
-    this.pitch.push(f.pose.pitch);
-    this.yaw.push(f.pose.yaw);
-    this.roll.push(f.pose.roll);
+    // Every numeric channel is filtered on the way in, not on the way out.
+    //
+    // luma was already guarded here; pose and face size were not, which was an inconsistency
+    // rather than a decision. MediaPipe emits NaN for any of them when a frame is only partially
+    // solved, and a NaN pose survived smoothing (a window of NaNs averages to NaN) to produce a
+    // NaN head_pitch_mean, head_yaw_mean, head_roll_mean and postural_load for the whole
+    // condition. Dropping the bad sample costs one frame; keeping it cost the entire summary.
+    if (Number.isFinite(f.ear)) this.ear.push({ t_ms: f.t_ms, ear: f.ear });
+    if (Number.isFinite(f.pose.pitch)) this.pitch.push(f.pose.pitch);
+    if (Number.isFinite(f.pose.yaw)) this.yaw.push(f.pose.yaw);
+    if (Number.isFinite(f.pose.roll)) this.roll.push(f.pose.roll);
     this.zones.push(f.zone);
     if (f.isCenter) this.centerCount++;
     if (f.offAxis) this.offAxisCount++;
-    this.faceSizes.push(f.faceSize);
+    if (Number.isFinite(f.faceSize)) this.faceSizes.push(f.faceSize);
   }
 
   private zoneTransitions(): number {

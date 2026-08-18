@@ -2,7 +2,7 @@
   "name": "visulab",
   "version": "2.1.0",
   "private": true,
-  "description": "VisuLab — Visual Ergonomics Experiment PWA (reconstructed, scientifically refined source)",
+  "description": "VisuLab \u2014 Visual Ergonomics Experiment PWA (reconstructed, scientifically refined source)",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,8 +16,10 @@
     "predev": "node scripts/copy-mediapipe.mjs",
     "prebuild": "node scripts/copy-mediapipe.mjs",
     "fuzz": "tsx src/sim/runFuzz.ts",
-    "stress": "tsx src/sim/runStress.ts",
-    "icons": "node scripts/make-icons.mjs"
+    "stress": "tsx scripts/stress/adversarial.ts && tsx scripts/stress/pipeline.ts && tsx scripts/stress/statemachine.ts && tsx scripts/stress/metamorphic.ts && tsx scripts/stress/recovery.ts",
+    "icons": "node scripts/make-icons.mjs",
+    "verify:export": "tsx scripts/verifyExport.ts",
+    "simulate:timing": "tsx scripts/simulateParticipant.ts"
   },
   "dependencies": {
     "@mediapipe/face_mesh": "0.4.1633559619",
