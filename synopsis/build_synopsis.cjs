@@ -19,7 +19,7 @@ const md = fs.readFileSync(IN, 'utf8');
 
 const FONT = 'Times New Roman';
 const SIZE = 24;          // 12 pt
-const SIZE_TBL = 16;      // 8 pt inside tables
+const SIZE_TBL = 15;      // 7.5 pt inside tables
 const LINE = 360;         // 1.5 line spacing (240 = single)
 const LINE_REF = 240;     // reference list: single spacing, APA hanging indent
 const REF_HANG = 720;     // 0.5 inch hanging indent (APA 7)
@@ -95,8 +95,24 @@ function buildTable(rows) {
     if (i < n) lens[i] = Math.max(lens[i], Math.min(c.replace(/\*\*|\[|\]\([^)]*\)/g, '').length, 80));
   }));
   const tot = lens.reduce((a, b) => a + b, 0) || n;
-  const w = lens.map((l) => Math.max(650, Math.round((l / tot) * CONTENT_W)));
-  w[n - 1] += CONTENT_W - w.reduce((a, b) => a + b, 0);
+  // Proportional widths with a minimum column width. The floor can push the total past the
+  // content width (many short columns), so the surplus is reclaimed from the columns that are
+  // ABOVE the floor, in proportion to their slack. Dumping it all on the last column, as an
+  // earlier version did, drove that column negative and docx rejected the table outright.
+  const MIN_COL = Math.min(650, Math.floor(CONTENT_W / n));
+  const w = lens.map((l) => Math.max(MIN_COL, Math.round((l / tot) * CONTENT_W)));
+  let delta = CONTENT_W - w.reduce((a, b) => a + b, 0);
+  if (delta < 0) {
+    let slack = w.reduce((a, x) => a + (x - MIN_COL), 0);
+    for (let i = 0; i < n && slack > 0; i++) {
+      const take = Math.min(w[i] - MIN_COL, Math.round((-delta) * (w[i] - MIN_COL) / slack));
+      w[i] -= take;
+    }
+    delta = CONTENT_W - w.reduce((a, b) => a + b, 0);
+  }
+  // Any residual (rounding, or a table too narrow to absorb it) lands on the widest column.
+  const widest = w.indexOf(Math.max(...w));
+  w[widest] = Math.max(MIN_COL, w[widest] + delta);
   const cell = (t, hdr, i) => new TableCell({
     width: { size: w[i], type: WidthType.DXA },
     shading: hdr ? { type: ShadingType.CLEAR, fill: 'E8EEF7', color: 'auto' } : undefined,

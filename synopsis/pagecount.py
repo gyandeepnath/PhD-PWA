@@ -272,7 +272,7 @@ def paginate(B):
 BASE = dict(          # mirrors build_synopsis.cjs as shipped
     line=360, h1_before=140, hn_before=100, h_after=40,
     body_after=0, body_first=360, bullet_after=0, num_after=0, rule_sp=(0, 40),
-    tbl_pt=8, cell_line=240, cell_sp=(0, 0), cell_margin=(60, 60), cell_margin_v=(20, 20),
+    tbl_pt=7.5, cell_line=240, cell_sp=(0, 0), cell_margin=(60, 60), cell_margin_v=(20, 20),
     flow_pt=9, flow_line=240, flow_sp=(10, 10), flow_indent=340,
     arrow_pt=9, arrow_line=160, ref_pagebreak=False,
     ref_line=240, ref_indent=720, ref_after=60,
