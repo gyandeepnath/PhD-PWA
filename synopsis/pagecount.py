@@ -40,6 +40,11 @@ M_L, M_R, M_T, M_B = 1701, 1134, 1440, 1440
 CONTENT_W_TW = PAGE_W - M_L - M_R
 CONTENT_W_PT = CONTENT_W_TW / 20.0
 CONTENT_H_PT = (PAGE_H - M_T - M_B) / 20.0
+# Landscape sections keep the Annexure margins and rotate the sheet, so the usable
+# box is wider and shorter. Wide tables are emitted inside these.
+LAND_W_TW = PAGE_H - M_L - M_R
+LAND_W_PT = LAND_W_TW / 20.0
+LAND_H_PT = (PAGE_W - M_T - M_B) / 20.0
 LH_EM = 1.150
 
 def line_h(size_pt, line_tw):
@@ -98,7 +103,7 @@ def split_row(l):
     if s.endswith('|'):   s = s[:-1]
     return [c.strip() for c in s.split('|')]
 
-def table_rows_h(rows, cfg):
+def table_rows_h(rows, cfg, content_w_tw=None):
     header = split_row(rows[0])
     body = [split_row(r) for r in rows[2:]]
     n = len(header)
@@ -107,9 +112,18 @@ def table_rows_h(rows, cfg):
         for i, c in enumerate(r):
             if i < n:
                 lens[i] = max(lens[i], min(len(re.sub(r'\*\*|\[|\]\([^)]*\)', '', c)), 80))
+    CW = CONTENT_W_TW if content_w_tw is None else content_w_tw
     tot = sum(lens) or n
-    w = [max(650, round(l / tot * CONTENT_W_TW)) for l in lens]
-    w[n - 1] += CONTENT_W_TW - sum(w)
+    MIN_COL = min(650, CW // n)
+    w = [max(MIN_COL, round(l / tot * CW)) for l in lens]
+    delta = CW - sum(w)
+    if delta < 0:                       # reclaim from columns above the floor
+        slack = sum(x - MIN_COL for x in w)
+        if slack > 0:
+            for i in range(n):
+                w[i] -= min(w[i] - MIN_COL, round(-delta * (w[i] - MIN_COL) / slack))
+        delta = CW - sum(w)
+    w[w.index(max(w))] = max(MIN_COL, max(w) + delta)
     cm_l, cm_r = cfg['cell_margin']
     pad = sp(*cfg['cell_sp']) + sum(cfg['cell_margin_v']) / 20.0
     out = []
@@ -129,14 +143,18 @@ def build_blocks(md_path, cfg):
     B, sect = [], 'FRONT MATTER'
     def add(kind, atoms, extra, hard=False, keepnext=False):
         B.append(dict(kind=kind, sect=sect, hard=hard, atoms=atoms,
-                      extra=extra, keepnext=keepnext))
-    i, page_idx = 0, 0
+                      extra=extra, keepnext=keepnext, land=land))
+    i, page_idx, land = 0, 0, False
     while i < len(lines):
         line = lines[i].rstrip()
         if not line.strip():
             i += 1; continue
         s = line.strip()
 
+        if s == '<!--LANDSCAPE-->':
+            add('sectbreak', [], 0.0, hard=True); land = True; i += 1; continue
+        if s == '<!--/LANDSCAPE-->':
+            add('sectbreak', [], 0.0, hard=True); land = False; i += 1; continue
         if s == '<!--PAGEBREAK-->':
             add('pagebreak', [], 0.0, hard=True); page_idx += 1; i += 1; continue
         if re.fullmatch(r'-{3,}', s):
@@ -183,7 +201,7 @@ def build_blocks(md_path, cfg):
             while i < len(lines) and lines[i].strip().startswith('|'):
                 rows.append(lines[i]); i += 1
             if len(rows) >= 2:
-                add('table', table_rows_h(rows, cfg), cfg['spacer'])
+                add('table', table_rows_h(rows, cfg, LAND_W_TW if land else None), cfg['spacer'])
             continue
 
         if s.startswith('>'):
@@ -231,6 +249,7 @@ def build_blocks(md_path, cfg):
 def paginate(B):
     pages, used, carry = 1, 0.0, 0.0     # carry = pending keepNext height
     for bi, blk in enumerate(B):
+        H = LAND_H_PT if blk.get('land') else CONTENT_H_PT
         if blk['hard']:
             if used > 0: pages += 1
             used, carry = 0.0, 0.0
@@ -242,7 +261,7 @@ def paginate(B):
         need = carry + sum(atoms) if blk['keepnext'] else 0.0
         if blk['keepnext']:
             nxt = B[bi + 1]['atoms'][0] if bi + 1 < len(B) and B[bi + 1]['atoms'] else 0.0
-            if used + need + extra + nxt > CONTENT_H_PT and used > 0:
+            if used + need + extra + nxt > H and used > 0:
                 pages += 1; used = 0.0
             used += sum(atoms) + extra
             continue
@@ -250,7 +269,7 @@ def paginate(B):
         k = 0
         n = len(atoms)
         while k < n:
-            rem = CONTENT_H_PT - used
+            rem = H - used
             fit = 0; acc = 0.0
             while k + fit < n and acc + atoms[k + fit] <= rem:
                 acc += atoms[k + fit]; fit += 1
@@ -264,7 +283,7 @@ def paginate(B):
             if k < n:
                 pages += 1; used = 0.0
         used += extra
-        if used > CONTENT_H_PT:
+        if used > H:
             pages += 1; used = 0.0
     return pages
 

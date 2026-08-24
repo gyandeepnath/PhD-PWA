@@ -52,16 +52,32 @@ function inline(text, o = {}) {
 /* Bracketed items the author must still supply are left in the text verbatim
    and marked with a yellow highlight so they cannot be missed at proofing. */
 const PLACEHOLDER = /(\[(?:insert|Insert|Authors)[^\]]*\])/g;
+/* "et al." is a Latin abbreviation and this document's house style sets it in italic.
+   (APA 7 itself sets it roman; the italic form is applied here on the supervisor's
+   instruction.) Done at run level so it works everywhere the abbreviation appears --
+   body text, tables and the reference list -- without marking it up in the source. */
+const ETAL = /(et al\.)/g;
+function pushRun(out, s, size, bold, italics) {
+  if (!s) return;
+  let last = 0, m;
+  ETAL.lastIndex = 0;
+  while ((m = ETAL.exec(s)) !== null) {
+    if (m.index > last) out.push(new TextRun({ text: s.slice(last, m.index), font: FONT, size, bold, italics }));
+    out.push(new TextRun({ text: m[1], font: FONT, size, bold, italics: true }));
+    last = ETAL.lastIndex;
+  }
+  if (last < s.length) out.push(new TextRun({ text: s.slice(last), font: FONT, size, bold, italics }));
+}
 function push(out, t, size, bold, italics) {
   if (!t) return;
   let last = 0, m;
   PLACEHOLDER.lastIndex = 0;
   while ((m = PLACEHOLDER.exec(t)) !== null) {
-    if (m.index > last) out.push(new TextRun({ text: t.slice(last, m.index), font: FONT, size, bold, italics }));
+    if (m.index > last) pushRun(out, t.slice(last, m.index), size, bold, italics);
     out.push(new TextRun({ text: m[1], font: FONT, size, bold, italics, highlight: 'yellow' }));
     last = PLACEHOLDER.lastIndex;
   }
-  if (last < t.length) out.push(new TextRun({ text: t.slice(last), font: FONT, size, bold, italics }));
+  if (last < t.length) pushRun(out, t.slice(last), size, bold, italics);
 }
 function emph(s, size, bB, bI) {
   const out = [];
@@ -86,7 +102,8 @@ const splitRow = (l) => {
   if (s.endsWith('|')) s = s.slice(0, -1);
   return s.split('|').map((c) => c.trim());
 };
-function buildTable(rows) {
+function buildTable(rows, contentW) {
+  const CONTENT_W = contentW;
   const header = splitRow(rows[0]);
   const body = rows.slice(2).map(splitRow);
   const n = header.length;
@@ -139,7 +156,23 @@ function buildTable(rows) {
 
 /* ---------- parse ---------- */
 const lines = md.split('\n');
-const children = [];
+/* The document is emitted as a run of sections rather than one, so that wide tables
+   can sit on their own landscape pages. Margins are held at the Annexure values in
+   both orientations, which keeps the 3.0 cm binding edge on the left of every sheet. */
+const sections = [];
+let children = [];
+let landscape = false;
+function pageProps(land) {
+  return { page: {
+    size: land ? { width: PAGE_H, height: PAGE_W } : { width: PAGE_W, height: PAGE_H },
+    margin: { top: M_TOP, bottom: M_BOTTOM, left: M_LEFT, right: M_RIGHT },
+  } };
+}
+function closeSection() {
+  if (children.length) sections.push({ properties: pageProps(landscape), children });
+  children = [];
+}
+const contentW = () => (landscape ? PAGE_H : PAGE_W) - M_LEFT - M_RIGHT;
 let i = 0, pageIdx = 0;   // 0 = title page, 1 = details page, 2+ = body
 let inRefs = false;       // reference list: single spacing + APA hanging indent
 let afterHeading = false; // first paragraph under a heading takes no first-line indent
@@ -148,6 +181,58 @@ const HL ={ 1: HeadingLevel.HEADING_1, 2: HeadingLevel.HEADING_2, 3: HeadingLeve
 while (i < lines.length) {
   const line = lines[i].trimEnd();
   if (!line.trim()) { i++; continue; }
+
+  if (line.trim() === '<!--LANDSCAPE-->') { closeSection(); landscape = true; i++; continue; }
+  if (line.trim() === '<!--/LANDSCAPE-->') { closeSection(); landscape = false; i++; continue; }
+
+  // --- box-and-arrow diagram: ROW: a | b | c   /   ARROW  ---
+  if (line.trim() === '<!--DIAGRAM-->') {
+    i++;
+    const steps = [];
+    while (i < lines.length && lines[i].trim() !== '<!--/DIAGRAM-->') {
+      const s = lines[i].trim();
+      if (s === 'ARROW') steps.push({ arrow: true });
+      else if (/^ROW:/.test(s)) steps.push({ boxes: s.slice(4).split('|').map((x) => x.trim()) });
+      i++;
+    }
+    i++;
+    const W = contentW();
+    const none = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+    const edge = { style: BorderStyle.SINGLE, size: 6, color: '5B6B7C' };
+    steps.forEach((st, idx) => {
+      if (st.arrow) {
+        children.push(new Paragraph({
+          alignment: AlignmentType.CENTER, spacing: { before: 0, after: 0, line: 180 }, keepNext: true,
+          children: [new TextRun({ text: '\u25BC', font: FONT, size: 18 })],
+        }));
+        return;
+      }
+      const n = st.boxes.length;
+      const w = Math.floor(W / n);
+      children.push(new Table({
+        columnWidths: Array.from({ length: n }, (_, k) => (k === n - 1 ? W - w * (n - 1) : w)),
+        width: { size: W, type: WidthType.DXA },
+        borders: { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none },
+        rows: [new TableRow({
+          children: st.boxes.map((b, k) => new TableCell({
+            width: { size: k === n - 1 ? W - w * (n - 1) : w, type: WidthType.DXA },
+            margins: { top: 60, bottom: 60, left: 100, right: 100 },
+            borders: { top: edge, bottom: edge, left: edge, right: edge },
+            shading: { type: ShadingType.CLEAR, fill: 'EDF2F9', color: 'auto' },
+            children: [new Paragraph({
+              alignment: AlignmentType.CENTER, spacing: { before: 0, after: 0, line: 240 },
+              children: inline(b, { size: 17 }),
+            })],
+          })),
+        })],
+      }));
+      if (idx < steps.length - 1) {
+        children.push(new Paragraph({ spacing: { before: 0, after: 0, line: 60 }, children: [new TextRun({ text: '', size: 4 })] }));
+      }
+    });
+    children.push(new Paragraph({ spacing: { after: 60, line: 120 }, children: [new TextRun({ text: '', size: 8 })] }));
+    continue;
+  }
 
   if (line.trim() === '<!--PAGEBREAK-->') {
     children.push(new Paragraph({ children: [new PageBreak()] }));
@@ -232,7 +317,7 @@ while (i < lines.length) {
     const rows = [];
     while (i < lines.length && lines[i].trim().startsWith('|')) { rows.push(lines[i]); i++; }
     if (rows.length >= 2) {
-      children.push(buildTable(rows));
+      children.push(buildTable(rows, contentW()));
       children.push(new Paragraph({ spacing: { after: 40, line: 120 }, children: [new TextRun({ text: '', size: 8 })] }));
     }
     afterHeading = false; continue;
@@ -300,6 +385,8 @@ while (i < lines.length) {
   i++;
 }
 
+closeSection();
+
 const doc = new Document({
   creator: 'Gyandeep Nath',
   title: 'Ergonomics of Visual Perception — PhD Synopsis',
@@ -320,14 +407,13 @@ const doc = new Document({
       heading4: { run: { font: FONT, size: 24, bold: true, italics: true, color: '000000' }, paragraph: { spacing: { before: 100, after: 40, line: LINE } } },
     },
   },
-  sections: [{
-    properties: { page: { size: { width: PAGE_W, height: PAGE_H }, margin: { top: M_TOP, bottom: M_BOTTOM, left: M_LEFT, right: M_RIGHT } } },
-    children,
-  }],
+  sections,
 });
 
 Packer.toBuffer(doc).then((buf) => {
   fs.writeFileSync(OUT, buf);
-  console.log(`Wrote ${OUT} — ${(buf.length / 1024).toFixed(0)} KB, ${children.length} blocks`);
+  const nBlocks = sections.reduce((a, s) => a + s.children.length, 0);
+  const nLand = sections.filter((s) => s.properties.page.size.width === PAGE_H).length;
+  console.log(`Wrote ${OUT} — ${(buf.length / 1024).toFixed(0)} KB, ${nBlocks} blocks, ${sections.length} sections (${nLand} landscape)`);
   console.log(`Margins: L ${M_LEFT} (3.0cm) R ${M_RIGHT} (2.0cm) T/B ${M_TOP} (2.54cm); font ${FONT} 12pt; line ${LINE} (1.5)`);
 });
