@@ -42,16 +42,17 @@ covariate. C4/C6/C7 are below AA and flagged in the codebook.
 
 ## Stage machine
 `SESSION_INIT → PARTICIPANT_PROFILE → CAMERA_SETUP → CALIBRATION → BASELINE_FATIGUE →`
-`[×8: READING_TASK → COMPREHENSION → DISPLAY_PERCEPTION → POST_FATIGUE → VISUAL_SEARCH →`
+`[×10: READING_TASK → COMPREHENSION → DISPLAY_PERCEPTION → POST_FATIGUE → VISUAL_SEARCH →`
 ` REACTION_TIME → ADAPTATION] → SESSION_COMPLETE → EXPORT_DASHBOARD`
-Progress: 4 setup steps + 8×6 = 52 tracked steps.
+Progress: 4 setup steps + 10×6 = 64 tracked steps. (COMPREHENSION remains ONE tracked step even
+though it administers three items, because the three run inside a single stage.)
 
 ## Task constants (⚠️ VERIFY against bundle while porting)
 | Constant | Bundle value | Doc value | Plan (refined) |
 |---|---|---|---|
 | Reading | per-page ~20 s minimum-unlock (rAF) | 120s min/180s max (stale config) | floor, self-paced beyond; record `reading_time_ms`/wpm |
-| Passages | 8 science topics, ~274–292 words, 2 pages | same | decouple from condition |
-| Comprehension | 1×4-option MCQ, RT recorded, 1 s feedback | same | persist record (was a fixed bug) |
+| Passages | 8 science topics, ~274–292 words, 2 pages | same | **10 topics, ~584 words, 4 pages** — length sets the reading exposure and therefore the precision of the primary outcome; decoupled from condition |
+| Comprehension | 1×4-option MCQ, RT recorded, 1 s feedback | same | **3×4-option MCQ per passage** (gist, inference, detail), each timed from its own mount; one stored row per ITEM, so a per-condition join must aggregate |
 | Visual search | 40 000 ms limit | 60s (doc) / 120s (config) ⚠️ | use ACTUAL occurrence count (see below); record as covariate |
 
 ### Visual-search target counts — bundle bug (fixed)
@@ -72,9 +73,10 @@ original `accuracy_rate = found/target_count` was miscalibrated. Authoritative c
 
 We use the actual count as `searchTargetCount` (the original mismatched values are noted in the
 `passages.ts` source comment for provenance, not carried as a data field). Counts are unequal across
-passages (2–13) but passage↔condition decoupling makes this orthogonal to condition (noise, not
-bias). Rebalancing target words to a tighter 6–11 range is an optional follow-up the researcher can opt into.
-| RT (colour go/no-go) | implemented: 32 trials, go-rate 0.625, target GREEN `#00A651`, distractors red/blue/yellow | (no flanker manipulation) | render on the condition background; report d′ + SE + criterion |
+passages. They were unequal across passages (2–13), which made accuracy_rate incomparable between a
+2-target and a 13-target passage; the rebalancing is **done**, and the set now runs 8–14 with
+`npm run verify:corpus` enforcing the band.
+| RT (go/no-go) | implemented: 32 trials, go-rate 0.625, target GREEN `#00A651`, distractors red/blue/yellow | (no flanker manipulation) | **target is ACHROMATIC and background-relative** (black on light fields, white on dark), since green became a text colour and would otherwise collide with conditions P5/N5; render on the condition background; report d-prime + SE + criterion |
 | RT windows | resp ~1500, fix ~400–600, delay ~800–1500, ITI ~400–700 ms ⚠️ | resp 3000, fix 500–1000, delay 1000–3000, ITI 800–1200 ⚠️ | confirm from bundle, make configurable |
 | Adaptation | 20 000 ms `#808080` | same | 60 s same-polarity / 120 s on polarity switch |
 | Camera | 1280×720 @30fps, process every 2nd frame (~15fps) ⚠️ | 640×480 @30fps ⚠️ | record effective FPS; gate blink tiers ≥25fps |

@@ -71,7 +71,10 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
         .map(([store, n]) => `  ${store}: ${n}`)
         .join('\n');
       const warn = parsed.warnings.length ? `\n\nNote:\n${parsed.warnings.map((w) => `  ${w}`).join('\n')}` : '';
-      window.alert(`Session restored.\n\nRows written:\n${rows}${warn}`);
+      // A counterbalance collision is not a warning about the file; it is a fact about this
+      // device that compromises two participants' condition orders, so it leads.
+      const clash = result.collision ? `\n\nCOUNTERBALANCE PROBLEM\n  ${result.collision}` : '';
+      window.alert(`Session restored.${clash}\n\nRows written:\n${rows}${warn}`);
       await refresh();
     } catch (err) {
       window.alert(`Could not read the file.\n\n${err instanceof Error ? err.message : String(err)}`);

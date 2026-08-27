@@ -186,6 +186,22 @@ manipulation the study exists to measure:
 
 ## 7. Data safety
 
+### Private browsing destroys everything, silently
+
+In a private or incognito window IndexedDB works normally and is discarded when the tab closes. A
+session run that way completes, every write succeeds, nothing reports an error, and the
+participant's data ceases to exist when the window is shut.
+
+The app now checks for this at the pre-flight stage: a device reporting an unusually small storage
+allowance is treated as ephemeral and the session cannot be started. Treat that block as real. Close
+the private window, open the app normally from the home-screen icon, and re-run pre-flight.
+
+Pre-flight also asks the browser for durable storage and reports the free space. A `warn` verdict
+means the data is evictable under storage pressure rather than doomed, and the fix is to install the
+app to the home screen and reopen it from there.
+
+
+
 Everything lives in IndexedDB (`VisualErgonomicsDB`) on the tablet until it is exported. A wiped,
 reset, lost or failed device destroys every unexported session on it, and the participants cannot
 be asked to sit the protocol again.

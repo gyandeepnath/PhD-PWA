@@ -28,7 +28,7 @@
  */
 import { CONFIG, TASKS_PER_CONDITION } from '../src/experiment/config';
 import { CONDITIONS, N_CONDITIONS } from '../src/experiment/conditions';
-import { PASSAGES } from '../src/experiment/passages';
+import { PASSAGES, QUESTIONS_PER_PASSAGE } from '../src/experiment/passages';
 import { blockPlan } from '../src/experiment/counterbalance';
 
 const N = Number(process.argv[process.argv.indexOf('--n') + 1]) || 2000;
@@ -128,7 +128,11 @@ function simulateSitting(p: Person, enrolment: number, block: number, cfg = CONF
     add('reading', readSec);
     totalBlinks += (readSec / 60) * p.blinkRate;
 
-    add('comprehension', (gauss(14, 5) * p.care) + cfg.COMPREHENSION_FEEDBACK_MS / S);
+    // One entry per comprehension ITEM. Each is a separate screen with its own read-and-answer
+    // and its own feedback dwell, so the cost scales with the item count. Charging one item here
+    // while the instrument administers three understated every published feasibility figure.
+    add(`comprehension (${QUESTIONS_PER_PASSAGE} items)`,
+      QUESTIONS_PER_PASSAGE * ((gauss(14, 5) * p.care) + cfg.COMPREHENSION_FEEDBACK_MS / S));
     add('display_perception (2 sliders)', 2 * gauss(4.2, 1.2) * p.care);
     add('fatigue_vas (5 sliders)', 5 * gauss(3.2, 0.9) * p.care);
 

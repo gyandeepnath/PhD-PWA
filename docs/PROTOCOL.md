@@ -139,7 +139,7 @@ additional measures target the *data-quality* and *participant-experience* probl
 gets an **engagement flag** (`good`/`warn`/`bad`) and a 0–1 `quality_score` composed from existing
 signals plus newly recorded questionnaire response times: reading **skim** (reading faster than the
 word-count ÷ 400 wpm floor), **rushed** fatigue/perception ratings, **straight-lined** fatigue
-ratings, RT **disengagement** (high false-alarm/error/lapse rate), a wrong comprehension answer, and
+ratings, RT **disengagement** (high false-alarm/error/lapse rate), comprehension below chance across the three items, and
 low camera face-presence. Exported in `10_wide_summary.csv` (`engagement_flag`, `quality_score`) and
 the dedicated **`12_quality_flags.csv`** (per-signal booleans + reasons). The analysis templates run
 a **sensitivity analysis**: fit on all data and on the clean subset (drop `bad`); agreement means
@@ -196,21 +196,27 @@ Brysbaert's (2019) meta-analytic 238 wpm for dense expository prose, blink rate 
 reading, and two participant-level multipliers so a slow, careful participant is slow throughout
 rather than independently slow at each step.
 
-Result over 2,000 simulated participants: **median 75 min, p95 90 min, p99 96 min** — the
-120-minute gate passes with margin, and no simulated participant exceeded it.
+Result over 2,000 simulated participants: **median 97 min, p95 118 min, p99 130 min**. The
+120-minute gate applies to the median and passes, but 4.0% of simulated participants (81/2000)
+exceed two hours, so the pilot needs to watch the tail rather than the centre.
 
-Where the time goes: adaptation 14.0 min (18.6%), reading 12.1 min (16.1%), RT blocks 10.9 min
-(14.5%), visual search 4.8 min, CVS-Q ×2 6.4 min. Polarity switching costs ~5 min per sitting on
-top of the baseline adaptation, since a Williams row averages 5 switches over 9 transitions.
+Where the time goes: reading 29.6 min (30.3%), adaptation 14.0 min (14.3%), RT blocks 10.9 min
+(11.2%), comprehension 7.5 min (7.7%), visual search 4.8 min, CVS-Q ×2 6.4 min. Polarity switching
+costs ~5 min per sitting on top of the baseline adaptation, since a Williams row averages 5
+switches over 9 transitions.
 
-**Open issue — reading exposure and the precision of the primary outcome.** At ~73 s of reading per
-condition the camera captures only ~16 blinks, so the incomplete-blink ratio for that condition has
-a standard error of about 0.09 (±18 percentage points at 95%). The synopsis's own validation
-sub-study assumes **3-minute** reading segments, which the current ~245-word passages cannot fill.
-Raising reading exposure to 180 s costs ~20 min per sitting (median 93 min, still inside the gate)
-and needs passages of roughly 650 words. Until that is done, `12_quality_flags.csv` carries
-`blink_count_total` and `insufficient_blinks` so a thin exposure window can never be mistaken for a
-clean null.
+Reading now dominates the sitting, which is the intended consequence of lengthening the passages:
+it is the only stage that produces the primary outcome, so time spent there is the time that buys
+precision.
+
+**Resolved — reading exposure and the precision of the primary outcome.** The corpus previously ran
+~245 words, giving ~73 s of reading per condition and only ~16 blinks, so a condition-level
+incomplete-blink ratio carried a standard error near 0.09 (±18 percentage points at 95%) and the
+polarity × colour interaction had 27% power. Passages are now four pages and ~584 words, which
+`npm run verify:corpus` measures at a **178 s mean exposure** (range 174–183 s), roughly 39 blinks,
+and about half the standard error. That is the segment length the validation sub-study already
+assumed. `12_quality_flags.csv` still carries `blink_count_total` and `insufficient_blinks`, so a
+condition that nonetheless captures a thin window cannot be mistaken for a clean null.
 
 ---
 

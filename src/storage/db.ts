@@ -172,6 +172,64 @@ export async function nextEnrolmentNumber(): Promise<number> {
   return next;
 }
 
+/**
+ * Raise the enrolment counter so it will never re-issue a number at or below `used`.
+ *
+ * The enrolment number is the sole input to both the Williams condition order and the illumination
+ * order, so two participants sharing one is not a bookkeeping annoyance: they receive identical
+ * condition orders while the dataset records them as distinct enrolments, and the counterbalance
+ * silently stops being balanced.
+ *
+ * A replacement tablet starts its counter at zero. Restoring a session onto it without this would
+ * leave the device ready to issue enrolment 1 again, to a different participant. Called on import
+ * so the counter always dominates every enrolment number the device has seen.
+ *
+ * Returns the counter value in force afterwards.
+ */
+export async function ensureEnrolmentAtLeast(used: number): Promise<number> {
+  if (!Number.isFinite(used) || used < 1) return peekNextEnrolmentNumber().then((n) => n - 1);
+  const target = Math.floor(used);
+  if (!indexedDBAvailable()) {
+    const meta = memStore('meta');
+    const cur = (meta.get('enrolment_counter') as { key: string; value: number } | undefined)?.value ?? 0;
+    const next = Math.max(cur, target);
+    meta.set('enrolment_counter', { key: 'enrolment_counter', value: next });
+    return next;
+  }
+  const db = await getDB();
+  const tx = db.transaction('meta', 'readwrite');
+  const rec = (await tx.store.get('enrolment_counter')) as { key: string; value: number } | undefined;
+  const next = Math.max(rec?.value ?? 0, target);
+  await tx.store.put({ key: 'enrolment_counter', value: next });
+  await tx.done;
+  return next;
+}
+
+/**
+ * Delete every row in `store` belonging to `conditionId`.
+ *
+ * Resume deliberately reuses the condition_id of an interrupted condition so that redoing it
+ * OVERWRITES its rows rather than creating orphans. That works only for stores whose keyPath IS
+ * condition_id. Three per-condition stores are keyed by their own uuid instead —
+ * comprehension_results, display_perception and fatigue_scores — so a redo appended a second set
+ * beside the first.
+ *
+ * For comprehension that is not merely untidy. The per-condition score is a proportion over the
+ * rows present, so two attempts of a three-item passage yield six rows and a score of 0.5, a value
+ * the codebook states cannot occur. Calling this immediately before rewriting a condition's rows
+ * restores the intended "a redo replaces the attempt" semantics for every store.
+ */
+export async function clearConditionRows(store: StoreName, conditionId: string): Promise<void> {
+  const spec = STORE_SPECS.find((s) => s.name === store);
+  const keyPath = spec?.keyPath;
+  if (!keyPath) return;
+  const rows = await getAllByIndex(store, 'by_condition', conditionId);
+  for (const row of rows) {
+    const key = (row as unknown as Record<string, IDBValidKey>)[keyPath];
+    if (key !== undefined) await remove(store, key);
+  }
+}
+
 /** Test-only: reset the in-memory fallback + cached connection. */
 export function _resetForTests(): void {
   memStores.clear();

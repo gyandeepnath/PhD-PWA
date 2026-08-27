@@ -6,6 +6,7 @@
  * manager live in their own modules; the experiment wires them together in Experiment.tsx.)
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { assessStorageHealth, type StorageHealth } from '@/storage/storageHealth';
 import { CONFIG } from '@/experiment/config';
 import { ILLUMINATION, luxInRange, type IlluminationLevel } from '@/experiment/illumination';
 import type { MediaConsent } from '@/storage/media';
@@ -396,21 +397,23 @@ export function Instructions({ onContinue }: { onContinue: () => void }) {
         <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">Before you begin</p>
         <h1 className="mt-2 font-serif text-4xl font-light">What you’ll be doing</h1>
         <p className="mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]">
-          You’ll see <strong>8 different screen displays</strong> (different background and text
-          colours). For <strong>each</strong> display you’ll complete the same four short tasks, then
-          two quick ratings:
+          You’ll see <strong>10 different screen displays</strong> (different background and text
+          colours). For <strong>each</strong> display you’ll complete the same short tasks in the
+          same order:
         </p>
         <ol className="mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]" style={{ paddingLeft: 18, listStyle: 'decimal' }}>
-          <li><strong>Read</strong> a short passage.</li>
-          <li>Answer <strong>one question</strong> about it.</li>
-          <li><strong>Find &amp; tap</strong> every occurrence of a target word, as fast as you can.</li>
-          <li><strong>Tap</strong> when a centre dot turns the target colour (a quick reaction game).</li>
+          <li><strong>Read</strong> a passage of about four short pages.</li>
+          <li>Answer <strong>three questions</strong> about it.</li>
           <li>Rate the display’s <strong>comfort &amp; clarity</strong>, and how your <strong>eyes feel</strong>.</li>
+          <li><strong>Find &amp; tap</strong> every occurrence of a target word, as fast as you can.</li>
+          <li><strong>Tap</strong> when a plain black or white dot appears, and not when it is
+            coloured (a quick reaction game).</li>
         </ol>
         <p className="mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]">
           Between displays there’s a short rest with a grey screen. Each task shows its own
-          instructions and a “Begin” button, so just follow the prompts. The whole session takes
-          about <strong>60–90 minutes</strong>. You may tell the researcher if you need to stop.
+          instructions and a “Begin” button, so just follow the prompts. The whole session usually
+          takes about <strong>90 minutes to two hours</strong>, and there is a rest break after every
+          two displays. You may tell the researcher if you need to stop, at any point.
         </p>
         <button className={btn} style={{ marginTop: 22, background: '#1a1a2e' }} onClick={onContinue}>
           I understand — start the first display →
@@ -557,11 +560,37 @@ const PREFLIGHT_ITEMS = [
 ];
 export function Preflight({ onDone }: { onDone: () => void }) {
   const [checked, setChecked] = useState<boolean[]>(Array(PREFLIGHT_ITEMS.length).fill(false));
-  const all = checked.every(Boolean);
+  /**
+   * Storage durability is checked here rather than left to the operator's judgement, because the
+   * failure it guards against is invisible: in a private window every write succeeds and the whole
+   * session is discarded when the tab closes. A machine check is the only thing that catches it.
+   */
+  const [storage, setStorage] = useState<StorageHealth | null>(null);
+  useEffect(() => { void assessStorageHealth().then(setStorage); }, []);
+
+  const storageBlocks = storage?.verdict === 'blocked';
+  const all = checked.every(Boolean) && !!storage && !storageBlocks;
+  const tone = { ok: '#22c97a', warn: '#c98a22', blocked: '#e64c4c', unknown: '#5a5a7a' } as const;
   return (
     <div className={shell}>
       <h1 className="font-serif text-4xl font-light">Pre-flight checklist</h1>
       <p className="mt-1 font-lab text-xs text-[#5a5a7a]">Researcher: confirm each item before starting.</p>
+
+      <div
+        data-testid="storage-health"
+        style={{
+          marginTop: 16, maxWidth: 640, padding: '12px 14px', borderRadius: 10,
+          border: `1px solid ${storage ? tone[storage.verdict] : '#e5e2dc'}`,
+          background: storage && storage.verdict !== 'ok' ? `${tone[storage.verdict]}12` : '#fff',
+        }}
+      >
+        <p className="font-lab text-xs uppercase tracking-wide" style={{ color: storage ? tone[storage.verdict] : '#5a5a7a' }}>
+          Device storage {storage ? `— ${storage.verdict}` : '— checking…'}
+        </p>
+        {storage?.messages.map((m, i) => (
+          <p key={i} className="font-lab text-sm" style={{ marginTop: 6, color: '#3a3a4a' }}>{m}</p>
+        ))}
+      </div>
       <div className="mt-5 space-y-2" style={{ maxWidth: 640 }}>
         {PREFLIGHT_ITEMS.map((item, i) => (
           <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e2dc', background: '#fff', cursor: 'pointer' }}>
@@ -570,10 +599,10 @@ export function Preflight({ onDone }: { onDone: () => void }) {
           </label>
         ))}
       </div>
-      <button className={btn} disabled={!all}
+      <button className={btn} disabled={!all} data-testid="preflight-continue"
         style={{ marginTop: 18, background: all ? '#1a1a2e' : '#cfcbc3', cursor: all ? 'pointer' : 'not-allowed' }}
         onClick={() => all && onDone()}>
-        All checks pass — continue →
+        {storageBlocks ? 'Storage problem — cannot start' : 'All checks pass — continue →'}
       </button>
     </div>
   );

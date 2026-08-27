@@ -99,7 +99,11 @@ export function normaliseBundle(b: SessionBundle): SessionBundle {
     cvsq: [...b.cvsq].sort((x, y) => x.stage.localeCompare(y.stage) || x.cvsq_id.localeCompare(y.cvsq_id)),
     tlx: [...(b.tlx ?? [])].sort((x, y) => x.tlx_id.localeCompare(y.tlx_id)),
     media: [...(b.media ?? [])].sort((x, y) => x.captured_at - y.captured_at || x.media_id.localeCompare(y.media_id)),
-    comprehension: [...b.comprehension].sort(byCondition<ComprehensionRecord>((r) => r.comprehension_id)),
+    // Within a condition, order by the item's position in the passage rather than by its uuid, so
+    // 04_comprehension.csv lists gist, inference and detail in the order they were administered.
+    comprehension: [...b.comprehension].sort((x, y) =>
+      byCondition<ComprehensionRecord>((r) => r.comprehension_id)(x, y)
+      || x.question_index - y.question_index),
     visualSearch: [...b.visualSearch].sort(byCondition<VisualSearchRecord>((r) => r.condition_id)),
     perception: [...b.perception].sort(byCondition<DisplayPerceptionRecord>((r) => r.perception_id)),
     eyeMetrics: [...b.eyeMetrics].sort(byCondition<EyeMetricsRecord>((r) => r.condition_id)),

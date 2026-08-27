@@ -23,7 +23,7 @@ import {
 } from '@/storage/backup';
 import { buildFixtureBundle } from '@/sim/bundleFixture';
 import { gatherSession } from '@/storage/gather';
-import { getAll, _resetForTests } from '@/storage/db';
+import { getAll, put, peekNextEnrolmentNumber, nextEnrolmentNumber, _resetForTests } from '@/storage/db';
 import { buildExportFiles } from '@/storage/export';
 
 /**
@@ -179,5 +179,63 @@ describe('restoring into a device', () => {
     // row count: a duplicated import that kept counts but broke keys would be worse than useless.
     const restored = await gatherSession(parsed.backup!.data.session ? (parsed.backup!.data.session as { session_id: string }).session_id : '');
     expect(restored!.conditions).toHaveLength(b.conditions.length);
+  });
+});
+
+describe('restoring carries the enrolment number forward', () => {
+  beforeEach(clearDb);
+
+  it('raises the device counter so a replacement tablet cannot re-issue a used number', async () => {
+    // A fresh device would hand out 1. The restored session already holds its own enrolment
+    // number, and that number is the sole input to the Williams condition order and the
+    // illumination order — two participants sharing one share a condition order.
+    expect(await peekNextEnrolmentNumber()).toBe(1);
+
+    const b = buildFixtureBundle();
+    const enrolment = b.session.enrolment_number;
+    expect(enrolment).toBeGreaterThan(0);
+
+    const parsed = parseSessionBackup(serialiseSessionBackup(b));
+    await importSessionBackup(parsed.backup!);
+
+    expect(await peekNextEnrolmentNumber()).toBe(enrolment + 1);
+  });
+
+  it('never lowers a counter that is already ahead of the backup', async () => {
+    const b = buildFixtureBundle();
+    // This device has already enrolled well past the restored session.
+    for (let i = 0; i < b.session.enrolment_number + 5; i++) await nextEnrolmentNumber();
+    const before = await peekNextEnrolmentNumber();
+
+    const parsed = parseSessionBackup(serialiseSessionBackup(b));
+    await importSessionBackup(parsed.backup!);
+
+    expect(await peekNextEnrolmentNumber()).toBe(before);
+  });
+
+  it('reports a collision when the number is already held by a different participant', async () => {
+    const b = buildFixtureBundle();
+    // Somebody else on this device already has that enrolment number.
+    await put('sessions', {
+      ...b.session,
+      session_id: 'other-session',
+      participant_id: 'SOMEONE-ELSE',
+    });
+
+    const parsed = parseSessionBackup(serialiseSessionBackup(b));
+    const res = await importSessionBackup(parsed.backup!);
+
+    // The restore still succeeds — the data is worth keeping — but it must say so.
+    expect(res.ok).toBe(true);
+    expect(res.collision).toMatch(/already held on this device/i);
+    expect(res.collision).toMatch(/counterbalance/i);
+  });
+
+  it('reports no collision on a clean device', async () => {
+    const b = buildFixtureBundle();
+    const parsed = parseSessionBackup(serialiseSessionBackup(b));
+    const res = await importSessionBackup(parsed.backup!);
+    expect(res.ok).toBe(true);
+    expect(res.collision).toBeUndefined();
   });
 });

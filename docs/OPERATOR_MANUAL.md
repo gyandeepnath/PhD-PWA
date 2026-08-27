@@ -49,6 +49,10 @@ tablet's own camera during the reading task. Two consequences for you:
 - Screen timeout disabled. Do Not Disturb on. Aeroplane mode on.
 - Landscape, fullscreen, launched from the home-screen icon.
 - Battery above 80 per cent, or keep it on charge.
+- **Never run a session in a private or incognito window.** The data is thrown away when the window
+  closes and nothing warns you at the time. Always launch from the home-screen icon. Pre-flight
+  checks this and will refuse to start if it finds ephemeral storage; if it does, close the window
+  and reopen the app properly rather than trying to continue.
 
 **Seating**
 
@@ -207,6 +211,7 @@ Print this.
 - [ ] Landscape, fullscreen, launched from home screen
 - [ ] Viewing distance measured at 50 to 60 cm
 - [ ] Battery above 80 per cent or on charge
+- [ ] Launched from the home-screen icon, NOT a private window; pre-flight storage check reads ok
 
 **Consent**
 - [ ] Participation consented in writing

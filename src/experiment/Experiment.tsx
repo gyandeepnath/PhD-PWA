@@ -15,7 +15,7 @@ import { blockPlan, type PlannedStep } from './counterbalance';
 import { CONFIG } from './config';
 import { initialState, nextState, progressPercent, type MachineState } from './stateMachine';
 import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
-import { put, get, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber } from '@/storage/db';
+import { put, get, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows } from '@/storage/db';
 import {
   noMediaConsent, mayCapture, capturePhoto, recordSegment, checksumOfBlob,
 } from '@/storage/media';
@@ -532,6 +532,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             // One row per item. Written sequentially so a failure part-way through leaves the
             // rows that did land intact and identifiable, rather than a partial batch.
             if (session) {
+              // A redo of this condition must REPLACE its previous attempt, not sit beside it.
+              // These rows are keyed by uuid, so reusing the condition_id is not enough.
+              await clearConditionRows('comprehension_results', conditionId);
               for (const r of results) {
                 await put('comprehension_results', {
                   comprehension_id: uuidv4(), session_id: session.session_id, condition_id: conditionId,
@@ -551,6 +554,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         <DisplayPerceptionRating
           background={cond.background} text={cond.text}
           onComplete={async (r) => {
+            if (session) await clearConditionRows('display_perception', conditionId);
             if (session) await put('display_perception', {
               perception_id: uuidv4(), session_id: session.session_id, condition_id: conditionId,
               display_comfort_score: r.comfort, text_clarity_score: r.clarity,
@@ -571,6 +575,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           text={cond?.text ?? '#1a1a2e'}
           accent={cond?.text ?? '#1a1a2e'}
           onComplete={async (r) => {
+            if (session) await clearConditionRows('fatigue_scores', conditionId);
             if (session) await put('fatigue_scores', {
               fatigue_id: uuidv4(), session_id: session.session_id, condition_id: conditionId,
               stage: 'post_condition', ...r.items, fatigue_mean: r.mean, touched: r.touched, all_touched: true,

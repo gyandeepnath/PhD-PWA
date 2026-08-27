@@ -23,7 +23,7 @@
  *     inventory rows are, flagged blob_present: false, so a restored session reports its media as
  *     missing rather than appearing to still hold it.
  */
-import { get, put } from './db';
+import { get, getAll, put, ensureEnrolmentAtLeast } from './db';
 import { fnv1a } from './export';
 import type { SessionBundle } from './gather';
 import type { StoreName, StoreMap } from './types';
@@ -187,6 +187,12 @@ export interface ImportResult {
   error?: string;
   /** Rows written per store, so the operator can see the restore was complete. */
   written: Record<string, number>;
+  /**
+   * Set when the restored enrolment number was already issued on this device to somebody else.
+   * The restore still succeeds — the data is worth keeping — but the counterbalance is compromised
+   * for both participants and the investigator has to know.
+   */
+  collision?: string;
 }
 
 /**
@@ -202,6 +208,7 @@ export async function importSessionBackup(
   mode: ImportMode = 'refuse-if-present',
 ): Promise<ImportResult> {
   const written: Record<string, number> = {};
+  let collision: string | undefined;
   const data = backup.data;
   const session = data.session as StoreMap['sessions'];
   const sessionId = (session as unknown as { session_id: string }).session_id;
@@ -224,6 +231,26 @@ export async function importSessionBackup(
   await put('sessions', session);
   written.sessions = 1;
 
+  // The enrolment number drives the Williams condition order and the illumination order, and the
+  // counter that issues it is a per-device integer that no backup carried. A replacement tablet
+  // starts at zero, so without this it would hand enrolment 1 to the next participant while the
+  // restored session already holds it: two participants, one condition order, recorded as two
+  // distinct enrolments. Raising the counter here closes that path.
+  const enrolment = (session as unknown as { enrolment_number?: number }).enrolment_number;
+  if (typeof enrolment === 'number' && Number.isFinite(enrolment)) {
+    // Warn if this device already issued the number to somebody else, which the restore cannot
+    // undo and which invalidates the counterbalance for both participants.
+    const pid = (session as unknown as { participant_id?: string }).participant_id;
+    const clash = (await getAll('sessions')).filter((s) => {
+      const r = s as unknown as { enrolment_number?: number; participant_id?: string; session_id?: string };
+      return r.enrolment_number === enrolment && r.participant_id !== pid;
+    });
+    if (clash.length) {
+      collision = `Enrolment number ${enrolment} is already held on this device by a different participant. Both participants now share a condition order, which breaks the counterbalance for each of them. Record this and tell the investigator before collecting more data.`;
+    }
+    await ensureEnrolmentAtLeast(enrolment);
+  }
+
   for (const { key, store } of RESTORE_PLAN) {
     const rows = (data[key] as unknown[]) ?? [];
     for (const row of rows) await put(store, row as StoreMap[typeof store]);
@@ -235,5 +262,5 @@ export async function importSessionBackup(
   for (const row of media) await put('media_captures', row as StoreMap['media_captures']);
   written.media_captures = media.length;
 
-  return { ok: true, sessionId, written };
+  return { ok: true, sessionId, written, collision };
 }
