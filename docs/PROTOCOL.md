@@ -121,7 +121,7 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
   This removes inter-individual face-geometry bias so 0° = that person's straight-ahead. The deg-per-
   unit slope is still a monocular proxy (no depth sensor), so treat pitch magnitude as approximate and
   prefer within-person change. When uncalibrated, a population default zero is used.
-- **Contrast confound**: C4 (yellow-on-white) is below WCAG AA (2.39:1); treat WCAG ratio as a
+- **Contrast confound**: P4 (yellow-on-white) is below WCAG AA (2.39:1); treat WCAG ratio as a
   covariate or reframe as polarity × contrast.
 - **Per-condition d′** rests on ~20 signal (go) trials of 32 (unstable; SE often > 0.3) — report aggregated d′.
 - **Session length** (~60–90 min) accumulates fatigue; `session_position` (0–7) is recorded as a covariate.

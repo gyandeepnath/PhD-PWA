@@ -1,0 +1,139 @@
+name: verify
+
+# Gate every push on every branch, and every pull request.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push to the same ref supersedes the run already in flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Matches the "engines" field in package.json. 20.11 is the real floor:
+  # scripts/buildCodebook.ts uses import.meta.dirname, added in 20.11.
+  NODE_VERSION: '20.x'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Static analysis, unit and property tests, the three scientific-integrity
+  # gates, and the production PWA build. Mirrors `npm run verify` plus the
+  # build, split into separate steps so the failing gate is named in the check
+  # list rather than buried in one long log.
+  # ---------------------------------------------------------------------------
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        # vite.config.ts stamps __GIT_HASH__ from `git rev-parse --short HEAD`
+        # for export provenance; the default shallow clone supplies that.
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        # `npm run build` runs `tsc -b` too, but running it here first names the
+        # failure "Typecheck" instead of burying it in the build step. The build
+        # info file makes the second invocation a no-op.
+        run: npx tsc -b
+
+      - name: Unit and property tests
+        # tests/fuzz.test.ts alone is ~30 s (degenerate-input soak across
+        # several seeds) and dominates this step.
+        run: npm test
+
+      - name: Verify reading corpus
+        # Passage length sets the reading exposure, which sets how many blinks
+        # the primary outcome is estimated from. Difficulty must stay matched
+        # because passage is rotated against display condition.
+        run: npm run verify:corpus
+
+      - name: Verify codebook
+        # Every exported column documented, and no documented column that is
+        # never exported.
+        run: npm run verify:codebook
+
+      - name: Verify export
+        # Referential integrity, reproducibility and no-fabrication checks over
+        # the whole export pipeline.
+        run: npm run verify:export
+
+      - name: Stress suite
+        # Adversarial input, pipeline, state-machine, metamorphic, recovery and
+        # component sweeps. Catches the silent-corruption class that unit tests
+        # by construction do not reach.
+        run: npm run stress
+
+      - name: Production build
+        # `prebuild` vendors the MediaPipe FaceMesh runtime into public/mediapipe
+        # so the service-worker precache covers genuine offline use.
+        run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # Playwright end-to-end suite. No `needs:`, so it runs alongside `checks` and
+  # total wall clock is the slower of the two rather than their sum.
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: e2e (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # playwright.config.ts takes the first EXISTING path from
+      # ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', $CHROME_PATH].
+      # The first is a local sandbox artefact and does not exist on a runner, so
+      # pinning CHROME_PATH empty makes the fall-through to Playwright's own
+      # managed Chromium explicit rather than dependent on the runner image.
+      CHROME_PATH: ''
+      PLAYWRIGHT_HTML_OPEN: never
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium for Playwright
+        # After npm ci, so the browser build matches the installed
+        # @playwright/test. Chromium only: the config defines one project.
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end suite
+        # The config's reporter is 'list', which writes no report directory, so
+        # the html reporter is appended here to produce the upload artefact.
+        run: npm run test:e2e -- --reporter=list,html --trace=on-first-retry
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore

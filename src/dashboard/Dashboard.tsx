@@ -145,9 +145,11 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       {bundle && tab === 'export' && (
         <div style={{ background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 20, maxWidth: 720 }}>
           <p className="font-lab text-sm text-[#5a5a7a]">
-            Exports 14 CSVs + a nested JSON bundle + a master codebook + a provenance manifest (app
-            version, git hash, condition-definition hash, per-file checksums). Analyse with the R /
-            Python mixed-model templates in <code>src/analysis/</code>.
+            Exports 18 CSVs, an analysis JSON, a complete session backup, a master codebook
+            documenting every column, and a provenance manifest (app version, git hash,
+            condition-definition hash, per-file checksums). Analyse with the R / Python mixed-model
+            templates in <code>src/analysis/</code>. Keep the <code>backup_*.json</code>: it is what
+            restores this session if the tablet is lost.
           </p>
           <button onClick={onExport} disabled={exporting}
             className="mt-4 rounded-xl px-8 py-3 font-lab text-sm text-white transition active:scale-95"

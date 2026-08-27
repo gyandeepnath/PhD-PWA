@@ -10,6 +10,7 @@ import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { PASSAGES } from '@/experiment/passages';
 import { CONDITIONS } from '@/experiment/conditions';
 import { auditBundle } from './integrity';
+import { serialiseSessionBackup } from './backup';
 
 export interface ExportFile {
   filename: string;
@@ -671,6 +672,15 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
     rt_summaries: bundle.rtSummaries, reaction_trials_count: bundle.reactionTrials.length,
   };
   files.push({ filename: `session_${safeFilePart(pid)}_${session.session_id.slice(0, 8)}.json`, content: JSON.stringify(jsonBundle, null, 2), mime: 'application/json' });
+
+  // Complete backup. The analysis JSON above is deliberately partial (reaction trials appear only
+  // as a count), so it cannot restore a session. This artefact can, and every export carries one so
+  // that a tablet failing later never costs a session that was already exported once.
+  files.push({
+    filename: `backup_${safeFilePart(pid)}_${session.session_id.slice(0, 8)}.json`,
+    content: serialiseSessionBackup(bundle),
+    mime: 'application/json',
+  });
 
   // Manifest with checksums
   const manifest = {

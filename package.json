@@ -4,6 +4,9 @@
   "private": true,
   "description": "VisuLab \u2014 Visual Ergonomics Experiment PWA (reconstructed, scientifically refined source)",
   "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

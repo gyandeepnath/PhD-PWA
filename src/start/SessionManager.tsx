@@ -3,12 +3,13 @@
  * interrupted sessions, opens completed sessions in the dashboard, and manages a 30-day soft-delete
  * recycle bin (restore / permanent purge). Expired bin entries are auto-purged on mount.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   listSessions, listDeleted, softDeleteSession, restoreSession, purgeSession, purgeExpired,
   renameSession, sessionLabel, BIN_RETENTION_MS,
 } from '@/storage/gather';
 import { loadResume } from '@/storage/sessionPersistence';
+import { parseSessionBackup, importSessionBackup } from '@/storage/backup';
 import { WavyBackground } from '@/components/WavyBackground';
 import type { SessionRecord } from '@/storage/types';
 
@@ -23,6 +24,8 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
   const [active, setActive] = useState<SessionRecord[]>([]);
   const [bin, setBin] = useState<SessionRecord[]>([]);
   const [showBin, setShowBin] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
   const resume = loadResume();
 
   const refresh = useCallback(async () => {
@@ -37,6 +40,45 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
 
   const inProgress = active.filter((s) => s.status === 'in_progress');
   const completed = active.filter((s) => s.status === 'complete');
+
+  /**
+   * Restore from the backup_*.json written into every export. Deliberately noisy: it reports what
+   * it wrote, surfaces every warning, and never overwrites a session already on the device without
+   * the operator saying so, because the copy already here may be the good one.
+   */
+  const onImportFile = async (file: File) => {
+    setImporting(true);
+    try {
+      const parsed = parseSessionBackup(await file.text());
+      if (!parsed.ok || !parsed.backup) {
+        window.alert(`Could not restore this file.\n\n${parsed.error ?? 'Unknown problem.'}`);
+        return;
+      }
+      let result = await importSessionBackup(parsed.backup);
+      if (!result.ok) {
+        const proceed = window.confirm(
+          `${result.error}\n\nOverwrite the copy on this device with the backup?`,
+        );
+        if (!proceed) return;
+        result = await importSessionBackup(parsed.backup, 'overwrite');
+      }
+      if (!result.ok) {
+        window.alert(`Restore failed.\n\n${result.error ?? 'Unknown problem.'}`);
+        return;
+      }
+      const rows = Object.entries(result.written)
+        .filter(([, n]) => n > 0)
+        .map(([store, n]) => `  ${store}: ${n}`)
+        .join('\n');
+      const warn = parsed.warnings.length ? `\n\nNote:\n${parsed.warnings.map((w) => `  ${w}`).join('\n')}` : '';
+      window.alert(`Session restored.\n\nRows written:\n${rows}${warn}`);
+      await refresh();
+    } catch (err) {
+      window.alert(`Could not read the file.\n\n${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const rename = async (s: SessionRecord) => {
     const label = window.prompt('Rename session', sessionLabel(s));
@@ -74,6 +116,27 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
 
         <button onClick={onNew} className="mt-5 w-full rounded-xl py-4 font-lab text-sm uppercase tracking-wide text-white transition active:scale-95" style={{ background: '#1a1a2e' }}>
           + New Session
+        </button>
+
+        {/* Recovery path. A tablet that is wiped or replaced takes every unexported session with
+            it, and the participants cannot be asked to sit the protocol again, so the backup file
+            written into every export must be importable on any device. */}
+        <input
+          ref={fileInput}
+          type="file"
+          accept="application/json,.json"
+          data-testid="import-backup-input"
+          style={{ display: 'none' }}
+          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void onImportFile(f); }}
+        />
+        <button
+          onClick={() => fileInput.current?.click()}
+          disabled={importing}
+          data-testid="import-backup"
+          className="mt-2 w-full rounded-xl py-3 font-lab text-sm transition active:scale-95"
+          style={{ background: '#fff', border: '1px solid #d8d4cc', cursor: importing ? 'default' : 'pointer', opacity: importing ? 0.6 : 1 }}
+        >
+          {importing ? 'Restoring…' : 'Restore session from backup file'}
         </button>
 
         {resume && inProgress.some((s) => s.session_id === resume.sessionId) && (
