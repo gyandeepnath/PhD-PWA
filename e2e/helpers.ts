@@ -149,11 +149,28 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
       }
       break;
     }
-    case 'COMPREHENSION':
-      await page.getByTestId('mcq-option').first().click({ force: true });
-      await click(page, /Submit answer/);
-      await waitStageChange(page, stage);
+    case 'COMPREHENSION': {
+      // Three items run inside this one stage. Only the last one advances the experiment, so the
+      // intermediate submits must NOT wait for a stage change; answer until the final item, which
+      // is the one whose button reads "Submit answer" rather than "Submit and continue".
+      for (let guard = 0; guard < 8; guard++) {
+        await page.getByTestId('mcq-option').first().click({ force: true });
+        const isLast = await page.getByRole('button', { name: /Submit answer/ }).count() > 0;
+        if (isLast) {
+          await click(page, /Submit answer/);
+          await waitStageChange(page, stage);
+          break;
+        }
+        const q = await page.getByTestId('mcq-question').textContent();
+        await click(page, /Submit and continue/);
+        // Wait for the NEXT item to mount, identified by its text changing.
+        await page.waitForFunction(
+          (prev) => document.querySelector('[data-testid="mcq-question"]')?.textContent !== prev,
+          q, { timeout: 15_000 },
+        );
+      }
       break;
+    }
     case 'DISPLAY_PERCEPTION':
       await setAllRanges(page, 70);
       await click(page, /Continue/);

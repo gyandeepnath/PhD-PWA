@@ -54,7 +54,7 @@ export function ReadingTask({ passage, background, text, onComplete }: Props) {
         title="Read the passage"
         lines={[
           'Read the passage carefully at your normal pace.',
-          'A one-question comprehension check follows.',
+          'Three comprehension questions follow.',
           totalPages > 1 ? `There are ${totalPages} short pages.` : '',
           'Tap “Begin reading” when you are ready.',
         ].filter(Boolean)}

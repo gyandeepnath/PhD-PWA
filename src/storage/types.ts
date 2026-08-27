@@ -1,3 +1,4 @@
+import type { QuestionKind } from '@/experiment/passages';
 /**
  * VisuLab data model (IndexedDB schema v6).
  *
@@ -242,11 +243,20 @@ export interface DisplayPerceptionRecord {
   response_time_ms: number | null;
 }
 
+/**
+ * One row per comprehension ITEM, not per condition. Each passage carries three items (gist,
+ * inference, detail), so a condition contributes three of these. Anything joining this store to a
+ * condition must aggregate rather than take the first match.
+ */
 export interface ComprehensionRecord {
   comprehension_id: string;
   session_id: string;
   condition_id: string;
   passage_id: number;
+  /** Position of the item within the passage, 0-based. */
+  question_index: number;
+  /** What the item probes, so accuracy can be reported by item type rather than pooled. */
+  question_kind: QuestionKind;
   selected_index: number;
   correct_index: number;
   is_correct: boolean;

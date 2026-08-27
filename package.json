@@ -19,7 +19,10 @@
     "stress": "tsx scripts/stress/adversarial.ts && tsx scripts/stress/pipeline.ts && tsx scripts/stress/statemachine.ts && tsx scripts/stress/metamorphic.ts && tsx scripts/stress/recovery.ts && tsx scripts/stress/components.ts",
     "icons": "node scripts/make-icons.mjs",
     "verify:export": "tsx scripts/verifyExport.ts",
-    "simulate:timing": "tsx scripts/simulateParticipant.ts"
+    "simulate:timing": "tsx scripts/simulateParticipant.ts",
+    "verify:corpus": "tsx scripts/verifyCorpus.ts",
+    "verify:codebook": "tsx scripts/buildCodebook.ts",
+    "verify": "npm run lint && tsc -b && npm run test && npm run verify:corpus && npm run verify:codebook && npm run verify:export"
   },
   "dependencies": {
     "@mediapipe/face_mesh": "0.4.1633559619",

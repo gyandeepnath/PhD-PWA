@@ -179,7 +179,7 @@ export function conditionEngagement(args: {
   word_count: number | null;
   fatigue?: FatigueRecord;
   perception?: DisplayPerceptionRecord;
-  comprehension?: ComprehensionRecord;
+  comprehension?: ComprehensionRecord[];
   rt?: RtSummaryRecord;
   eye?: EyeMetricsRecord;
 }): EngagementResult {
@@ -211,9 +211,13 @@ export function conditionEngagement(args: {
   const careless_straight_lined = isStraightLined(fatigue);
   if (careless_straight_lined) penalise(0.1, 'fatigue ratings straight-lined (all five identical)');
 
-  // Comprehension miss (weak on its own).
-  const comprehension_wrong = !!comprehension && !comprehension.is_correct;
-  if (comprehension_wrong) penalise(0.1, 'comprehension answer incorrect');
+  // Comprehension miss (weak on its own). With three items per passage a single slip is not
+  // evidence of disengagement, so the flag fires only at or below chance, which for three
+  // 4-option items means fewer than half correct.
+  const compAnswered = comprehension?.length ?? 0;
+  const compCorrect = comprehension?.filter((x) => x.is_correct).length ?? 0;
+  const comprehension_wrong = compAnswered > 0 && compCorrect / compAnswered < 0.5;
+  if (comprehension_wrong) penalise(0.1, `comprehension below chance (${compCorrect}/${compAnswered})`);
 
   // Camera: participant turned away for a large share of the condition.
   const low_face_presence = !!eye && eye.camera_active && eye.face_presence_ratio < ENGAGEMENT.FACE_PRESENCE_MIN;
@@ -252,7 +256,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
   return bundle.conditions.map((c) => {
     const rt = bundle.rtSummaries.find((r) => r.condition_id === c.condition_id);
     const fat = bundle.fatigue.find((f) => f.condition_id === c.condition_id && f.stage === 'post_condition');
-    const comp = bundle.comprehension.find((x) => x.condition_id === c.condition_id);
+    const comp = bundle.comprehension.filter((x) => x.condition_id === c.condition_id);
     const vs = bundle.visualSearch.find((v) => v.condition_id === c.condition_id);
     const perc = bundle.perception.find((p) => p.condition_id === c.condition_id);
     const eye = bundle.eyeMetrics.find((e) => e.condition_id === c.condition_id);
@@ -302,8 +306,11 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       burning: fat?.burning ?? null,
       headache: fat?.headache ?? null,
 
-      comprehension_correct: comp ? (comp.is_correct ? 1 : 0) : null,
-      comprehension_rt_ms: comp?.response_time_ms ?? null,
+      // Proportion of items answered correctly, not a boolean: a passage carries three items, so
+      // this takes the values 0, 1/3, 2/3 or 1. Absent when the condition recorded no item at all,
+      // never 0, which would read as "attempted and got none right".
+      comprehension_correct: comp.length ? comp.filter((x) => x.is_correct).length / comp.length : null,
+      comprehension_rt_ms: comp.length ? comp.reduce((a, x) => a + x.response_time_ms, 0) / comp.length : null,
 
       reading_time_ms: c.reading_time_ms,
       fatigue_response_ms: fat?.response_time_ms ?? null,

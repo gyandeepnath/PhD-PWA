@@ -6,7 +6,7 @@
  * summariseBlinks). The output feeds both the recovery/power analysis and DB/export round-trips.
  */
 import { CONDITIONS } from '@/experiment/conditions';
-import { PASSAGES } from '@/experiment/passages';
+import { QUESTIONS_PER_PASSAGE, PASSAGES } from '@/experiment/passages';
 import { sessionPlan } from '@/experiment/counterbalance';
 import { CONFIG } from '@/experiment/config';
 import { computeSdt } from '@/lib/signalDetection';
@@ -37,7 +37,8 @@ export interface ConditionRow {
   mean_rt_hits_ms: number | null;
   d_prime: number | null;
   d_prime_se: number | null;
-  comprehension_correct: 0 | 1;
+  /** Proportion of the three comprehension items correct: 0, 1/3, 2/3 or 1. */
+  comprehension_correct: number;
   comprehension_rt_ms: number;
   fatigue_mean: number;
   blink_rate: number;
@@ -128,7 +129,11 @@ export function generateParticipant(enrolmentNumber: number, seed: number): SimP
     const pCorrect = logistic(
       GT.comprehension.intercept + GT.comprehension.beta_log_contrast * logC + GT.comprehension.beta_position * pos,
     );
-    const correct = bernoulli(rng, pCorrect);
+    // Three items per passage, each an independent draw at the same underlying probability.
+    // The recorded outcome is the proportion correct, matching ComprehensionRecord aggregation.
+    let nCorrect = 0;
+    for (let q = 0; q < QUESTIONS_PER_PASSAGE; q++) if (bernoulli(rng, pCorrect)) nCorrect++;
+    const correctProportion = nCorrect / QUESTIONS_PER_PASSAGE;
     const comprehensionRt = exGaussian(rng, 2600 + 120 * pos, 500, 900);
 
     // ---- Fatigue (5 VAS items) ----
@@ -166,7 +171,7 @@ export function generateParticipant(enrolmentNumber: number, seed: number): SimP
       mean_rt_hits_ms: allHitRts.length ? mean(allHitRts) : null,
       d_prime: sdt.d_prime,
       d_prime_se: sdt.d_prime_se,
-      comprehension_correct: correct ? 1 : 0,
+      comprehension_correct: correctProportion,
       comprehension_rt_ms: comprehensionRt,
       fatigue_mean: fatigueMean,
       blink_rate: blink.blink_rate,

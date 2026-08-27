@@ -191,20 +191,24 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
         all_touched: true, response_time_ms: 26_000,
       },
     ],
-    comprehension: conditions.map((c, i) => {
-      const correctIndex = PASSAGES[c.passage_id].question.correctIndex;
-      const selected = i % 4;
+    comprehension: conditions.flatMap((c, i) => PASSAGES[c.passage_id].questions.map((q, qi) => {
+      const correctIndex = q.correctIndex;
+      // Vary the selection across BOTH condition and item so the fixture contains partial scores
+      // (0, 1/3, 2/3, 1) rather than only all-right or all-wrong conditions.
+      const selected = (i + qi) % 4;
       return {
-        comprehension_id: `comp-${i}`,
+        comprehension_id: `comp-${i}-${qi}`,
         session_id: sid,
         condition_id: c.condition_id,
         passage_id: c.passage_id,
+        question_index: qi,
+        question_kind: q.kind,
         selected_index: selected,
         correct_index: correctIndex,
         is_correct: selected === correctIndex,
-        response_time_ms: 8000 + i * 50,
+        response_time_ms: 8000 + i * 50 + qi * 400,
       };
-    }),
+    })),
     visualSearch: conditions.map((c, i) => {
       const inSet = PASSAGES[c.passage_id].searchTargetCount;
       const found = Math.max(0, inSet - (i % 3));

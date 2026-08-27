@@ -14,6 +14,7 @@
  * Nothing here mutates or drops data. An integrity fault is reported, never silently repaired:
  * quietly de-duplicating would hide the upstream bug that produced the duplicate.
  */
+import { QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
 import type { SessionBundle } from './gather';
 
 export type IntegritySeverity = 'error' | 'warning' | 'info';
@@ -80,7 +81,6 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
   const childStores: [string, { condition_id: string }[]][] = [
     ['eye_metrics', bundle.eyeMetrics ?? []],
     ['rt_summaries', bundle.rtSummaries ?? []],
-    ['comprehension', bundle.comprehension ?? []],
     ['visual_search', bundle.visualSearch ?? []],
     ['display_perception', bundle.perception ?? []],
   ];
@@ -97,6 +97,52 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
       add('error', 'one_child_row_per_condition',
         `${name}: ${n} rows for condition_id "${id}". The join takes the first and silently ` +
         `discards the rest.`, [id]);
+    }
+  }
+
+  // ---- comprehension is one row per ITEM, so the cardinality rule is the item count, not one.
+  // A condition carrying two rows where the passage defines three means an item was lost between
+  // the participant answering it and the row being written, which no downstream check would
+  // notice: the proportion would simply be computed over a smaller denominator and look valid.
+  {
+    const rows = bundle.comprehension ?? [];
+    const orphans = rows.filter((r) => r.condition_id && !validIds.has(r.condition_id));
+    if (orphans.length) {
+      add('error', 'no_orphan_records',
+        `comprehension: ${orphans.length} row(s) reference a condition_id that does not exist in ` +
+        `this session. They are exported but join to nothing.`, orphans.slice(0, 5).map((o) => o.condition_id));
+    }
+    const byCondition = new Map<string, typeof rows>();
+    for (const r of rows.filter((x) => validIds.has(x.condition_id))) {
+      const list = byCondition.get(r.condition_id) ?? [];
+      list.push(r);
+      byCondition.set(r.condition_id, list);
+    }
+    for (const [id, list] of byCondition) {
+      if (list.length !== QUESTIONS_PER_PASSAGE) {
+        add('error', 'comprehension_item_count',
+          `comprehension: condition "${id}" has ${list.length} item(s) where the passage defines ` +
+          `${QUESTIONS_PER_PASSAGE}. Accuracy for this condition would be computed over the wrong ` +
+          `denominator.`, [id]);
+      }
+      for (const [idx, n] of duplicates(list, (r) => String(r.question_index))) {
+        add('error', 'comprehension_item_unique',
+          `comprehension: condition "${id}" records item ${idx} ${n} times, which double-counts ` +
+          `that answer in the per-condition proportion.`, [id]);
+      }
+      for (const r of list) {
+        if (r.question_index < 0 || r.question_index >= QUESTIONS_PER_PASSAGE) {
+          add('error', 'comprehension_item_range',
+            `comprehension: condition "${id}" records item index ${r.question_index}, outside the ` +
+            `0..${QUESTIONS_PER_PASSAGE - 1} range the passage defines.`, [id]);
+        }
+      }
+    }
+    const missingComp = conditions.filter((c) => !byCondition.has(c.condition_id));
+    if (missingComp.length) {
+      add('warning', 'measurement_coverage',
+        `comprehension: ${missingComp.length} condition(s) recorded no comprehension item at all.`,
+        missingComp.slice(0, 5).map((c) => c.condition_label));
     }
   }
 

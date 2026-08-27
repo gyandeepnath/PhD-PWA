@@ -195,7 +195,13 @@ scenario('200 conditions, every store replicated (10x a real sitting)', (b) => {
   const vs = b.visualSearch[0]; const pe = b.perception[0]; const fa = b.fatigue[1];
   b.eyeMetrics = b.conditions.map((c) => ({ ...e, condition_id: c.condition_id }));
   b.rtSummaries = b.conditions.map((c) => ({ ...r, condition_id: c.condition_id }));
-  b.comprehension = b.conditions.map((c, i) => ({ ...cm, comprehension_id: 'k' + i, condition_id: c.condition_id }));
+  // Three items per condition, matching what the instrument actually writes. Emitting one
+  // would make this a malformed bundle rather than a large one, and the integrity audit
+  // would correctly reject it.
+  b.comprehension = b.conditions.flatMap((c, i) => [0, 1, 2].map((qi) => ({
+    ...cm, comprehension_id: `k${i}-${qi}`, condition_id: c.condition_id,
+    question_index: qi, question_kind: (['gist', 'inference', 'detail'] as const)[qi],
+  })));
   b.visualSearch = b.conditions.map((c) => ({ ...vs, condition_id: c.condition_id }));
   b.perception = b.conditions.map((c, i) => ({ ...pe, perception_id: 'p' + i, condition_id: c.condition_id }));
   b.fatigue = [b.fatigue[0], ...b.conditions.map((c, i) => ({ ...fa, fatigue_id: 'f' + i, condition_id: c.condition_id }))];

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PASSAGES, N_PASSAGES, countWords, countTargetOccurrences } from '@/experiment/passages';
+import { PASSAGES, N_PASSAGES, QUESTIONS_PER_PASSAGE, countWords, countTargetOccurrences } from '@/experiment/passages';
 import { N_CONDITIONS } from '@/experiment/conditions';
 
 describe('passage set', () => {
@@ -25,10 +25,30 @@ describe('passage set', () => {
     }
   });
 
+  it('is long enough to buy the three-minute reading exposure the primary outcome needs', () => {
+    // The incomplete-blink ratio is a binomial proportion, so its precision is set by how many
+    // blinks the reading window captures. At the original ~240 words the exposure measured 73 s,
+    // about 16 blinks, and the polarity x colour interaction had 27% power. Guarding the length
+    // here is the cheapest way to stop an innocuous-looking edit from silently undoing that.
+    const w = PASSAGES.map((p) => p.wordCount);
+    expect(Math.min(...w)).toBeGreaterThanOrEqual(540);
+    expect(Math.max(...w)).toBeLessThanOrEqual(660);
+  });
+
   it('matches passages for length — no passage is an outlier', () => {
     const w = PASSAGES.map((p) => p.wordCount);
-    expect(Math.min(...w)).toBeGreaterThanOrEqual(200);
-    expect(Math.max(...w)).toBeLessThanOrEqual(280);
+    const mean = w.reduce((a, b) => a + b, 0) / w.length;
+    // Passage is rotated against condition, so an outlier would inject variance the rotation
+    // spreads across conditions rather than removing.
+    expect((Math.max(...w) - Math.min(...w)) / mean).toBeLessThan(0.18);
+  });
+
+  it('carries enough search targets for the fixed-time search task to be scorable', () => {
+    // accuracy_rate = found / searchTargetCount. With only 2 targets, as one passage previously
+    // had, that ratio moves in steps of 50% and is not comparable with a passage carrying 13.
+    const n = PASSAGES.map((p) => p.searchTargetCount);
+    expect(Math.min(...n)).toBeGreaterThanOrEqual(6);
+    expect(Math.max(...n)).toBeLessThanOrEqual(18);
   });
 
   it('matches passages for readability — all within one Flesch band', () => {
@@ -49,21 +69,32 @@ describe('passage set', () => {
     }
   });
 
-  it('gives every passage two pages and a well-formed 4-option question', () => {
+  it('gives every passage four pages and three well-formed 4-option items', () => {
     for (const p of PASSAGES) {
-      expect(p.pages).toHaveLength(2);
-      expect(p.question.options).toHaveLength(4);
-      expect(p.question.correctIndex).toBeGreaterThanOrEqual(0);
-      expect(p.question.correctIndex).toBeLessThan(4);
-      expect(new Set(p.question.options).size).toBe(4);
+      expect(p.pages).toHaveLength(4);
+      expect(p.questions).toHaveLength(QUESTIONS_PER_PASSAGE);
+      for (const q of p.questions) {
+        expect(q.options).toHaveLength(4);
+        expect(q.correctIndex).toBeGreaterThanOrEqual(0);
+        expect(q.correctIndex).toBeLessThan(4);
+        expect(new Set(q.options).size).toBe(4);
+        expect(q.text.trim().length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('probes gist, inference and detail once each, as the synopsis specifies', () => {
+    for (const p of PASSAGES) {
+      expect([...p.questions.map((q) => q.kind)].sort()).toEqual(['detail', 'gist', 'inference']);
     }
   });
 
   it('spreads the correct answer across option positions (no positional response bias)', () => {
     const counts = [0, 0, 0, 0];
-    for (const p of PASSAGES) counts[p.question.correctIndex]++;
-    // No single position may carry more than half the answers.
-    expect(Math.max(...counts)).toBeLessThanOrEqual(Math.ceil(N_PASSAGES / 2));
+    for (const p of PASSAGES) for (const q of p.questions) counts[q.correctIndex]++;
+    // A participant who always picks one letter must not beat chance by much.
+    const total = counts.reduce((a, b) => a + b, 0);
+    expect(Math.max(...counts) / total).toBeLessThanOrEqual(0.4);
   });
 
   it('uses a distinct search target per passage', () => {

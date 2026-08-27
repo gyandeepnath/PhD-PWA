@@ -528,12 +528,19 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       if (cond && passage) view = (
         <ComprehensionTask
           passage={passage} background={cond.background} text={cond.text}
-          onComplete={async (r) => {
-            if (session) await put('comprehension_results', {
-              comprehension_id: uuidv4(), session_id: session.session_id, condition_id: conditionId,
-              passage_id: passage.id, selected_index: r.selectedIndex, correct_index: r.correctIndex,
-              is_correct: r.isCorrect, response_time_ms: r.responseTimeMs,
-            });
+          onComplete={async (results) => {
+            // One row per item. Written sequentially so a failure part-way through leaves the
+            // rows that did land intact and identifiable, rather than a partial batch.
+            if (session) {
+              for (const r of results) {
+                await put('comprehension_results', {
+                  comprehension_id: uuidv4(), session_id: session.session_id, condition_id: conditionId,
+                  passage_id: passage.id, question_index: r.questionIndex, question_kind: r.questionKind,
+                  selected_index: r.selectedIndex, correct_index: r.correctIndex,
+                  is_correct: r.isCorrect, response_time_ms: r.responseTimeMs,
+                });
+              }
+            }
             advance();
           }}
         />

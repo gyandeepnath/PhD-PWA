@@ -1,13 +1,23 @@
 /**
- * Single 4-option comprehension MCQ after the passage. Records selection, correctness and RT.
- * Shows 1 s of feedback (correct = green, wrong selection = red) before advancing.
+ * Comprehension check after the passage.
+ *
+ * The synopsis specifies items assessing gist, inference and detail, so each passage carries three
+ * 4-option items and they are administered here in sequence. The component owns the sequence and
+ * reports every result in one call, which keeps COMPREHENSION a single stage in the state machine
+ * and leaves resume-after-reload semantics unchanged: a session interrupted part-way through the
+ * items re-enters at the start of the stage rather than in an undefined half-answered position.
+ *
+ * Each item is timed from its own mount, not from the start of the stage, so response_time_ms
+ * remains a per-item measure and is not inflated by the items preceding it.
  */
 import { useEffect, useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';
 import { now } from '@/lib/timing';
-import type { Passage } from '@/experiment/passages';
+import type { Passage, QuestionKind } from '@/experiment/passages';
 
 export interface ComprehensionResult {
+  questionIndex: number;
+  questionKind: QuestionKind;
   selectedIndex: number;
   correctIndex: number;
   isCorrect: boolean;
@@ -18,30 +28,45 @@ interface Props {
   passage: Passage;
   background: string;
   text: string;
-  onComplete: (r: ComprehensionResult) => void;
+  onComplete: (results: ComprehensionResult[]) => void;
 }
 
 export function ComprehensionTask({ passage, background, text, onComplete }: Props) {
+  const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const start = useRef(now());
-  const q = passage.question;
+  /** Results accumulate in a ref: a state update would re-render mid-advance and lose the last item. */
+  const results = useRef<ComprehensionResult[]>([]);
+
+  const questions = passage.questions;
+  const q = questions[index];
+  const isLast = index === questions.length - 1;
 
   useEffect(() => {
     if (!submitted || selected == null) return;
-    const rt = now() - start.current;
-    const t = setTimeout(
-      () =>
-        onComplete({
-          selectedIndex: selected,
-          correctIndex: q.correctIndex,
-          isCorrect: selected === q.correctIndex,
-          responseTimeMs: rt,
-        }),
-      CONFIG.COMPREHENSION_FEEDBACK_MS,
-    );
+    const responseTimeMs = now() - start.current;
+    const t = setTimeout(() => {
+      results.current.push({
+        questionIndex: index,
+        questionKind: q.kind,
+        selectedIndex: selected,
+        correctIndex: q.correctIndex,
+        isCorrect: selected === q.correctIndex,
+        responseTimeMs,
+      });
+      if (isLast) {
+        onComplete(results.current);
+        return;
+      }
+      // Reset for the next item and restart its clock.
+      setIndex((i) => i + 1);
+      setSelected(null);
+      setSubmitted(false);
+      start.current = now();
+    }, CONFIG.COMPREHENSION_FEEDBACK_MS);
     return () => clearTimeout(t);
-  }, [submitted, selected, onComplete, q.correctIndex]);
+  }, [submitted, selected, onComplete, q.correctIndex, q.kind, index, isLast]);
 
   const optionStyle = (i: number) => {
     if (submitted) {
@@ -58,13 +83,15 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
     <div className="min-h-screen w-full p-[6%] font-sans animate-fade-in" style={{ background, color: text }}>
       <div style={{ width: '100%', maxWidth: 760, margin: '0 auto' }}>
       <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.55, marginBottom: 14 }}>
-        Task 2 of 4 · Comprehension — choose the best answer, then submit
+        Task 2 of 4 · Comprehension {index + 1} of {questions.length} — choose the best answer, then submit
       </p>
-      <h2 style={{ fontSize: 22, fontFamily: 'Roboto', lineHeight: 1.4 }}>{q.text}</h2>
+      <h2 data-testid="mcq-question" style={{ fontSize: 22, fontFamily: 'Roboto', lineHeight: 1.4 }}>{q.text}</h2>
       <div className="mt-8 space-y-3">
         {q.options.map((opt, i) => (
           <button
-            key={i}
+            // Keyed by item as well as position so React replaces the buttons between items
+            // rather than reusing them, which would carry the previous item's focus state over.
+            key={`${index}-${i}`}
             data-testid="mcq-option"
             disabled={submitted}
             onClick={() => setSelected(i)}
@@ -87,6 +114,7 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
         ))}
       </div>
       <button
+        data-testid="mcq-submit"
         disabled={selected == null || submitted}
         onClick={() => setSubmitted(true)}
         className="mt-8 rounded-xl px-8 py-3 font-lab text-sm transition active:scale-95"
@@ -97,7 +125,7 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
           opacity: selected != null && !submitted ? 1 : 0.5,
         }}
       >
-        Submit answer
+        {isLast ? 'Submit answer' : 'Submit and continue'}
       </button>
       </div>
     </div>

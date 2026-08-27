@@ -232,7 +232,10 @@ describe('export: codebook', () => {
     for (const e of CODEBOOK) {
       expect(e.unit, `${e.file}.${e.column} unit`).toBeTruthy();
       expect(e.description.length, `${e.file}.${e.column} description`).toBeGreaterThan(20);
-      expect(['iv', 'dv', 'primary', 'covariate', 'qc', 'id', 'provenance']).toContain(e.role);
+      // 'meta' covers descriptive context that is recorded and reported but never modelled
+      // (device, timestamps, media properties). Keeping it distinct from 'covariate' stops such
+      // columns being swept into a model just because they are numeric.
+      expect(['iv', 'dv', 'primary', 'covariate', 'qc', 'id', 'provenance', 'meta']).toContain(e.role);
     }
   });
 });

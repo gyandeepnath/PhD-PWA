@@ -12,10 +12,11 @@ const perception = (over: Partial<DisplayPerceptionRecord> = {}): DisplayPercept
   perception_id: 'p', session_id: 'S', condition_id: 'A', display_comfort_score: 70,
   text_clarity_score: 80, comfort_touched: true, clarity_touched: true, response_time_ms: 5000, ...over,
 });
-const comprehension = (correct: boolean): ComprehensionRecord => ({
+const comprehension = (correct: boolean): ComprehensionRecord[] => [{
   comprehension_id: 'c', session_id: 'S', condition_id: 'A', passage_id: 0,
+  question_index: 0, question_kind: 'detail',
   selected_index: 0, correct_index: correct ? 0 : 1, is_correct: correct, response_time_ms: 3000,
-});
+}];
 const rt = (over: Partial<RtSummaryRecord> = {}): RtSummaryRecord => ({
   condition_id: 'A', session_id: 'S', total_trials: 32, signal_trials: 20, hits: 18, false_alarms: 1,
   misses: 2, correct_rejections: 11, hit_rate: 0.9, false_alarm_rate: 0.08, error_rate: 0.1, rt_cv: 0.2,
