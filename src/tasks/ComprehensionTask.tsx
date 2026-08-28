@@ -11,6 +11,7 @@
  * remains a per-item measure and is not inflated by the items preceding it.
  */
 import { useEffect, useRef, useState } from 'react';
+import { STIMULUS_FONT_STACK } from '@/lib/fonts';
 import { CONFIG } from '@/experiment/config';
 import { now } from '@/lib/timing';
 import type { Passage, QuestionKind } from '@/experiment/passages';
@@ -85,7 +86,7 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
       <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.55, marginBottom: 14 }}>
         Task 2 of 4 · Comprehension {index + 1} of {questions.length} — choose the best answer, then submit
       </p>
-      <h2 data-testid="mcq-question" style={{ fontSize: 22, fontFamily: 'Roboto', lineHeight: 1.4 }}>{q.text}</h2>
+      <h2 data-testid="mcq-question" style={{ fontSize: 22, fontFamily: STIMULUS_FONT_STACK, lineHeight: 1.4 }}>{q.text}</h2>
       <div className="mt-8 space-y-3">
         {q.options.map((opt, i) => (
           <button
@@ -103,7 +104,7 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
               borderRadius: 12,
               border: '2px solid',
               color: text,
-              fontFamily: 'Roboto',
+              fontFamily: STIMULUS_FONT_STACK,
               fontSize: 17,
               cursor: submitted ? 'default' : 'pointer',
               ...optionStyle(i),

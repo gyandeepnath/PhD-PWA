@@ -21,7 +21,7 @@ import {
   buildSessionBackup, serialiseSessionBackup, parseSessionBackup, importSessionBackup,
   BACKUP_FORMAT_VERSION,
 } from '@/storage/backup';
-import { buildFixtureBundle } from '@/sim/bundleFixture';
+import { buildFixtureBundle, withFixtureMedia } from '@/sim/bundleFixture';
 import { gatherSession } from '@/storage/gather';
 import { get, getAll, put, peekNextEnrolmentNumber, nextEnrolmentNumber, _resetForTests } from '@/storage/db';
 import { buildExportFiles } from '@/storage/export';
@@ -70,16 +70,15 @@ describe('a backup carries everything a session produced', () => {
   });
 
   it('strips media blobs and says so rather than implying the media survived', () => {
-    const b = buildFixtureBundle();
+    const b = withFixtureMedia(buildFixtureBundle());
+    expect(b.media.length).toBeGreaterThan(0);
     const backup = buildSessionBackup(b);
     for (const m of backup.data.media as Record<string, unknown>[]) {
       expect(m.blob).toBeUndefined();
       expect(m.blob_present).toBe(false);
     }
-    if (b.media.length) {
-      const parsed = parseSessionBackup(serialiseSessionBackup(b));
-      expect(parsed.warnings.join(' ')).toMatch(/media/i);
-    }
+    const parsed = parseSessionBackup(serialiseSessionBackup(b));
+    expect(parsed.warnings.join(' ')).toMatch(/media/i);
   });
 
   it('carries no timestamp, so identical data always produces identical bytes', () => {
@@ -247,8 +246,7 @@ describe('a restore does not destroy what is already on the device', () => {
     // put() replaces the whole record, so writing the blob-stripped inventory row straight over a
     // row that still holds its binary would silently destroy consented media. That media is the
     // only material the annotation sub-study can be coded from.
-    const b = buildFixtureBundle();
-    if (!b.media.length) return;
+    const b = withFixtureMedia(buildFixtureBundle());
     const m = b.media[0];
     await put('media_captures', { ...m, blob: new Blob(['pretend-video']) } as never);
 

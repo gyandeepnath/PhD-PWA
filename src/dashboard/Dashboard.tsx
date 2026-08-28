@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { gatherSession, listSessions, type SessionBundle } from '@/storage/gather';
 import { buildConditionSummaries, baselineFatigueMean, type ConditionSummary } from './aggregate';
-import { buildExportFiles, downloadExport } from '@/storage/export';
+import { buildExportFiles, downloadExport, downloadSessionMedia } from '@/storage/export';
 import { BarPanel, LinePanel, type Datum } from './charts';
 import type { SessionRecord } from '@/storage/types';
 
@@ -45,11 +45,30 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
 
   const summaries = useMemo(() => (bundle ? buildConditionSummaries(bundle) : []), [bundle]);
   const baseline = bundle ? baselineFatigueMean(bundle) : null;
+  const mediaCount = (bundle?.media ?? []).length;
 
   const onExport = async () => {
     if (!bundle) return;
     setExporting(true);
     try { await downloadExport(buildExportFiles(bundle)); } finally { setExporting(false); }
+  };
+
+  /**
+   * The consented binaries, separately from the data bundle. Separate because it is a different
+   * act: the CSVs are de-identified measurements, the media are photographs and video of a person,
+   * and the operator should have to choose to put them on the machine rather than receive them as
+   * a side effect of exporting data.
+   */
+  const onExportMedia = async () => {
+    if (!bundle) return;
+    setExporting(true);
+    try {
+      const r = await downloadSessionMedia(bundle);
+      const lost = r.missing.length
+        ? `\n\n${r.missing.length} inventory row(s) no longer have their file on this device (this is expected after a restore from a backup, which carries the inventory but not the binary):\n  ${r.missing.join('\n  ')}`
+        : '';
+      window.alert(`${r.written} media file(s) written.${lost}`);
+    } finally { setExporting(false); }
   };
 
   return (
@@ -156,6 +175,29 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
             style={{ background: '#1a1a2e', cursor: exporting ? 'wait' : 'pointer' }}>
             {exporting ? 'Exporting…' : 'Download data bundle ↓'}
           </button>
+          {mediaCount > 0 && (
+            <>
+              <p className="font-lab text-sm text-[#5a5a7a]" style={{ marginTop: 18 }}>
+                This session holds <strong>{mediaCount}</strong> consented photo/video file(s). They
+                are not part of the data bundle. Each is written under the name given in{' '}
+                <code>15_media_inventory.csv</code>. They contain identifiable images of the
+                participant — store them under the terms of the grant that was given.
+              </p>
+              <button onClick={onExportMedia} disabled={exporting}
+                className="mt-2 rounded-xl px-8 py-3 font-lab text-sm transition active:scale-95"
+                style={{ background: '#fff', border: '1px solid #d8d4cc', cursor: exporting ? 'wait' : 'pointer' }}>
+                Download media files ↓
+              </button>
+            </>
+          )}
+          {bundle.session.status !== 'complete' && (
+            <p className="font-lab text-sm" style={{ marginTop: 18, background: '#fff6e5', border: '1px solid #f0d8a8', borderRadius: 10, padding: 12 }}>
+              This sitting has not finished. Exporting is allowed — a withdrawn or interrupted
+              session is still a record of what happened — but the export carries
+              <code> session_complete=false</code> and only the {bundle.conditions.length} condition(s)
+              that ran. Do not pool it with completed sittings without accounting for that.
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -2,6 +2,8 @@
  * Full-screen task instruction card shown before each task so the participant always knows what to
  * do. Themed to the active condition's colours (or a neutral cream default for setup-level intros).
  */
+import { STIMULUS_FONT_STACK } from '@/lib/fonts';
+
 interface Props {
   eyebrow: string;
   title: string;
@@ -33,7 +35,7 @@ export function TaskIntro({
         </p>
         <h1 style={{ fontFamily: 'Georgia, serif', fontWeight: 300, fontSize: 36, margin: '12px 0 18px' }}>{title}</h1>
         {lines.map((l, i) => (
-          <p key={i} style={{ fontFamily: 'Roboto, sans-serif', fontSize: 17, lineHeight: 1.6, opacity: 0.9, marginBottom: 10 }}>
+          <p key={i} style={{ fontFamily: STIMULUS_FONT_STACK, fontSize: 17, lineHeight: 1.6, opacity: 0.9, marginBottom: 10 }}>
             {l}
           </p>
         ))}

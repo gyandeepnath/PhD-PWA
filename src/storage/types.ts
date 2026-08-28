@@ -114,6 +114,12 @@ export interface SessionRecord {
   condition_order: number[];
   /** Pre-flight checklist fully completed. */
   preflight_complete: boolean;
+  /**
+   * Whether the vendored stimulus typeface was actually available when pre-flight ran. null where
+   * the browser gave no answer. The typeface is part of the display condition, so a session that
+   * rendered the passage in a fallback face is a session whose stimulus differed from the others.
+   */
+  stimulus_font_ok?: boolean | null;
   /** Informed consent recorded. */
   consent_given: boolean;
   consent_time: number | null;

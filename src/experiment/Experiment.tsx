@@ -404,9 +404,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       break;
     case 'PREFLIGHT':
       view = (
-        <Preflight onDone={async () => {
+        <Preflight onDone={async (fontOk) => {
           if (session) {
-            const fresh = { ...session, preflight_complete: true };
+            const fresh = { ...session, preflight_complete: true, stimulus_font_ok: fontOk };
             await put('sessions', fresh);
             setSession(fresh);
           }

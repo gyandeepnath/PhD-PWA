@@ -6,6 +6,7 @@
  * condition's colours.
  */
 import { useEffect, useRef, useState } from 'react';
+import { STIMULUS_FONT_STACK } from '@/lib/fonts';
 import { CONFIG } from '@/experiment/config';
 import { now } from '@/lib/timing';
 import { TaskIntro } from './TaskIntro';
@@ -84,7 +85,7 @@ export function ReadingTask({ passage, background, text, onComplete }: Props) {
       style={{ background, color: text, padding: `56px ${CONFIG.READING_MARGIN_PERCENT}% 3%`, display: 'flex', flexDirection: 'column', height: '100%' }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={{ fontFamily: 'Roboto', fontSize: 13, textTransform: 'uppercase', opacity: 0.5 }}>{passage.title}</span>
+        <span style={{ fontFamily: STIMULUS_FONT_STACK, fontSize: 13, textTransform: 'uppercase', opacity: 0.5 }}>{passage.title}</span>
         <span style={{ fontFamily: '"DM Mono", monospace', fontSize: 12, opacity: 0.6 }}>
           Page {page + 1} of {totalPages}
         </span>
@@ -95,7 +96,7 @@ export function ReadingTask({ passage, background, text, onComplete }: Props) {
 
       <p
         className="scrollable"
-        style={{ flex: 1, minHeight: 0, fontSize: CONFIG.READING_FONT_SIZE_PX, lineHeight: CONFIG.READING_LINE_HEIGHT, fontFamily: 'Roboto', whiteSpace: 'pre-wrap' }}
+        style={{ flex: 1, minHeight: 0, fontSize: CONFIG.READING_FONT_SIZE_PX, lineHeight: CONFIG.READING_LINE_HEIGHT, fontFamily: STIMULUS_FONT_STACK, whiteSpace: 'pre-wrap' }}
       >
         {passage.pages[page]}
       </p>

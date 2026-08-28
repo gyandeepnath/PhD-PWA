@@ -341,3 +341,38 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
   };
   return bundle;
 }
+
+/**
+ * The same bundle, with two consented captures attached.
+ *
+ * Kept OUT of the default fixture on purpose: most of the export surface is exercised by sessions
+ * that gave no media grant, which is the common case, and the default bundle's byte-reproducible
+ * output is depended on by other suites. Tests that care about the media path opt in, and get real
+ * Blobs, because the properties worth checking — that a blob survives a restore, that the inventory
+ * names the file on disk — are invisible when the media array is empty.
+ */
+export function withFixtureMedia(b: SessionBundle): SessionBundle {
+  const sid = b.session.session_id;
+  const consent = { camera_metrics: true, setup_photos: true, annotation_video: true, granted_at: b.session.session_start_time };
+  return {
+    ...b,
+    session: { ...b.session, media_consent: consent },
+    media: [
+      {
+        media_id: 'media-setup-start', session_id: sid, kind: 'photo', checkpoint: 'setup_start',
+        condition_label: null, captured_at: b.session.session_start_time + 1000,
+        mime: 'image/jpeg', bytes: 12, width: 640, height: 480, duration_ms: null,
+        checksum_fnv1a: '00000000', consent_snapshot: consent,
+        blob: new Blob(['setup-photo-'], { type: 'image/jpeg' }),
+      },
+      {
+        media_id: 'media-reading-01', session_id: sid, kind: 'video', checkpoint: 'reading_segment',
+        condition_label: b.conditions[0]?.condition_label ?? 'P1',
+        captured_at: b.session.session_start_time + 2000,
+        mime: 'video/webm', bytes: 14, width: 640, height: 480, duration_ms: 20_000,
+        checksum_fnv1a: '00000001', consent_snapshot: consent,
+        blob: new Blob(['reading-video-'], { type: 'video/webm' }),
+      },
+    ] as SessionBundle['media'],
+  };
+}

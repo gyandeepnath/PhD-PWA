@@ -3,6 +3,9 @@ import {
   noMediaConsent, mayCapture, requiredGrant, fnv1aBytes, formatBytes,
   type MediaConsent,
 } from '@/storage/media';
+import { buildExportFiles, mediaFilename } from '@/storage/export';
+import { buildFixtureBundle, withFixtureMedia } from '@/sim/bundleFixture';
+import { splitCsvRow, singleRow } from './helpers/csv';
 
 const grant = (o: Partial<MediaConsent>): MediaConsent => ({ ...noMediaConsent(), ...o });
 
@@ -75,5 +78,91 @@ describe('formatBytes', () => {
     expect(formatBytes(512)).toBe('512 B');
     expect(formatBytes(2048)).toBe('2 KB');
     expect(formatBytes(5 * 1024 * 1024)).toBe('5.0 MB');
+  });
+});
+
+/**
+ * The media files and the incomplete-session export.
+ *
+ * Two failures motivated these. First, the binaries were reachable only by opening IndexedDB by
+ * hand, so the material the annotation sub-study is coded from could not leave the tablet, and the
+ * inventory row that describes a file was joined to it by nothing at all. Second, the export was
+ * offered for completed sessions only, while the operator manual instructs the operator to export
+ * what exists when a participant withdraws — an instruction that could not be followed.
+ *
+ * The risk in fixing the second is worse than the bug: a truncated series pooled with completed
+ * sittings is unbalanced with respect to the Williams order, so it biases every within-participant
+ * contrast toward whichever conditions come early. The export therefore has to declare it.
+ */
+describe('consented media can actually leave the device', () => {
+  const withMedia = () => withFixtureMedia(buildFixtureBundle());
+
+  it('gives every capture a filename the inventory row also carries', () => {
+    const b = withMedia();
+    expect(b.media.length).toBeGreaterThan(0);
+    const inv = buildExportFiles(b).find((f) => f.filename === '15_media_inventory.csv')!;
+    const rows = inv.content.split('\n');
+    const cols = splitCsvRow(rows[0]);
+    const idIdx = cols.indexOf('media_id');
+    const nameIdx = cols.indexOf('filename');
+    expect(nameIdx).toBeGreaterThanOrEqual(0);
+
+    for (const m of b.media) {
+      const row = rows.slice(1).find((r) => splitCsvRow(r)[idIdx] === m.media_id)!;
+      expect(row).toBeDefined();
+      expect(splitCsvRow(row)[nameIdx]).toBe(mediaFilename(b.session, m));
+    }
+  });
+
+  it('names files portably, and distinctly per capture', () => {
+    const b = withMedia();
+    const names = b.media.map((m) => mediaFilename(b.session, m));
+    expect(new Set(names).size).toBe(names.length);
+    for (const n of names) {
+      expect(n).toMatch(/^[A-Za-z0-9._-]+$/);
+      expect(n).toMatch(/\.(jpg|png|webp|webm|mp4|bin)$/);
+    }
+  });
+
+  it('carries the condition a capture belongs to into its name', () => {
+    const b = withMedia();
+    const m = b.media.find((x) => x.condition_label)!;
+    expect(m).toBeDefined();
+    expect(mediaFilename(b.session, m)).toContain(m.condition_label!.replace(/[^A-Za-z0-9._-]/g, '_'));
+  });
+});
+
+describe('an unfinished session exports, and says that it is unfinished', () => {
+  const sessionInfo = (b: ReturnType<typeof buildFixtureBundle>) =>
+    singleRow(buildExportFiles(b).find((x) => x.filename === '01_session_info.csv')!.content);
+
+  it('reports a completed sitting as complete', () => {
+    const b = buildFixtureBundle();
+    const info = sessionInfo(b);
+    expect(info.session_status).toBe('complete');
+    expect(Number(info.conditions_completed)).toBe(b.conditions.length);
+    expect(info.session_complete).toBe('true');
+  });
+
+  it('reports a withdrawal as incomplete rather than letting it pass as a full sitting', () => {
+    // A participant leaves after three conditions. The rows that exist are real measurements and
+    // are worth keeping; what must not happen is that they look like a finished sitting.
+    const full = buildFixtureBundle();
+    const b = {
+      ...full,
+      session: { ...full.session, status: 'in_progress' as const },
+      conditions: full.conditions.slice(0, 3),
+    };
+    const info = sessionInfo(b);
+    expect(info.session_status).toBe('in_progress');
+    expect(Number(info.conditions_completed)).toBe(3);
+    expect(info.session_complete).toBe('false');
+    expect(Number(info.conditions_per_session)).toBeGreaterThan(3);
+  });
+
+  it('is false when the sitting closed but conditions are missing', () => {
+    const full = buildFixtureBundle();
+    const b = { ...full, conditions: full.conditions.slice(0, 2) };
+    expect(sessionInfo(b).session_complete).toBe('false');
   });
 });

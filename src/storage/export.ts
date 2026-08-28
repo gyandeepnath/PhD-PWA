@@ -5,6 +5,7 @@
  */
 import { normaliseBundle, type SessionBundle } from './gather';
 import type { SessionRecord } from './types';
+import type { MediaRecord } from './media';
 import { summariseLux, LUX_CHECKPOINTS } from '@/experiment/illumination';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { PASSAGES } from '@/experiment/passages';
@@ -27,6 +28,31 @@ function luxAt(session: SessionRecord, cp: 'start' | 'middle' | 'end'): number |
 function luxSummary(session: SessionRecord): { mean: number | null; max_deviation: number | null } {
   const s = summariseLux(session.ambient_illumination_level, session.lux_readings);
   return { mean: s.mean, max_deviation: s.max_deviation };
+}
+
+/** Extension for a stored capture, from its recorded MIME type. */
+function mediaExtension(mime: string): string {
+  const m = mime.split(';')[0].trim().toLowerCase();
+  const known: Record<string, string> = {
+    'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
+    'video/webm': 'webm', 'video/mp4': 'mp4',
+  };
+  return known[m] ?? (m.split('/')[1]?.replace(/[^a-z0-9]/g, '') || 'bin');
+}
+
+/**
+ * The name a consented photo or video is written under.
+ *
+ * Deliberately derived, not chosen at download time, so `15_media_inventory.csv` can name the file
+ * it describes. Without that the inventory row and the file on disk are joined only by whatever
+ * order the browser happened to write them in, and a coder working on the annotation sub-study has
+ * no way to tell which video belongs to which condition — which is the whole point of the row.
+ * Restricted to characters that survive every filesystem the data will pass through.
+ */
+export function mediaFilename(session: SessionRecord, m: MediaRecord): string {
+  const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, '_');
+  const where = m.condition_label ? safe(m.condition_label) : 'session';
+  return `media_${safe(session.participant_id)}_S${session.session_index}_${safe(m.checkpoint)}_${where}_${safe(m.media_id)}.${mediaExtension(m.mime)}`;
 }
 
 /**
@@ -253,6 +279,9 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '00_condition_reference.csv', column: 'text_color', type: 'string', unit: 'hex', role: 'iv', description: 'Text colour as an sRGB hex triplet, exactly as rendered.' },
   { file: '00_condition_reference.csv', column: 'wcag_level', type: 'string', unit: '-', role: 'covariate', description: 'Accessibility band implied by the contrast ratio: AAA, AA, AA Large, or Fail. Descriptive; model the continuous ratio, not this band.' },
   { file: '01_session_info.csv', column: 'experiment_date', type: 'string', unit: 'ISO 8601', role: 'meta', description: 'Date the sitting was run. Used to check the 48 to 72 hour spacing between a participant two sessions.' },
+  { file: '01_session_info.csv', column: 'session_status', type: 'factor(2)', unit: '-', role: 'qc', description: 'in_progress or complete. An export may be taken at any time, including from a withdrawn or interrupted sitting, so this states whether the sitting actually finished.' },
+  { file: '01_session_info.csv', column: 'conditions_completed', type: 'integer', unit: 'count', role: 'qc', description: 'Condition rows this export actually contains. Below conditions_per_session the series is truncated and the remaining conditions were never presented.' },
+  { file: '01_session_info.csv', column: 'session_complete', type: 'boolean', unit: '-', role: 'qc', description: 'True only when the sitting was closed AND every planned condition ran. Filter on this before pooling sittings: a truncated series is unbalanced with respect to the Williams order.' },
   { file: '01_session_info.csv', column: 'conditions_per_session', type: 'integer', unit: '5 or 10', role: 'meta', description: 'Conditions presented in this sitting. 10 is the whole illumination block in one sitting; 5 means the block was split in two under the feasibility gate.' },
   { file: '01_session_info.csv', column: 'ambient_lux', type: 'number', unit: 'lux', role: 'iv', description: 'Measured room illuminance at the participant eye position for this sitting. The manipulated illumination factor; use the measured value, not the nominal level.' },
   { file: '01_session_info.csv', column: 'brightness_percent', type: 'number', unit: '0-100', role: 'covariate', description: 'Display brightness setting. Held fixed across conditions; recorded so any drift between sittings is detectable.' },
@@ -262,6 +291,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '01_session_info.csv', column: 'screen_resolution', type: 'string', unit: 'px', role: 'meta', description: 'Viewport resolution in pixels. Affects line length and words per page.' },
   { file: '01_session_info.csv', column: 'consent_given', type: 'boolean', unit: '-', role: 'meta', description: 'Whether written informed consent was recorded before any measurement began.' },
   { file: '01_session_info.csv', column: 'preflight_complete', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the pre-session environment and device checks were completed. False indicates a session started outside protocol.' },
+  { file: '01_session_info.csv', column: 'stimulus_font_ok', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the vendored stimulus typeface (Roboto 400) was available when pre-flight ran. Empty where the browser gave no answer. False means the reading passage was rendered in a fallback face, which changes letter shape and stroke weight and so changes the display condition.' },
   { file: '01_session_info.csv', column: 'gaze_calibration_valid', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the nine-point gaze mapping met its acceptance criterion. When false, gaze columns are coarse-zone only and should not be treated as calibrated.' },
   { file: '01_session_info.csv', column: 'calibration_ear_baseline', type: 'number', unit: 'ratio', role: 'qc', description: 'Open-eye eye-aspect-ratio baseline for this participant. Every blink threshold is expressed as a fraction of this, so it is referenced to the individual rather than a population default.' },
   { file: '01_session_info.csv', column: 'calibration_pitch_baseline_frac', type: 'number', unit: 'ratio', role: 'qc', description: 'Frontal head-pose reference captured at calibration. Head-pose columns are relative to this when head_pitch_calibrated is true.' },
@@ -417,6 +447,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '15_media_inventory.csv', column: 'width', type: 'integer', unit: 'px', role: 'meta', description: 'Pixel width, where applicable.' },
   { file: '15_media_inventory.csv', column: 'height', type: 'integer', unit: 'px', role: 'meta', description: 'Pixel height, where applicable.' },
   { file: '15_media_inventory.csv', column: 'duration_ms', type: 'number', unit: 'ms', role: 'meta', description: 'Duration for video segments; blank for photographs.' },
+  { file: '15_media_inventory.csv', column: 'filename', type: 'string', unit: '-', role: 'meta', description: 'The name this capture is written under when the media files are downloaded, so an inventory row can be matched to the file on disk without relying on write order.' },
   { file: '15_media_inventory.csv', column: 'consent_setup_photos', type: 'boolean', unit: '-', role: 'meta', description: 'The setup-photograph permission in force at the moment of capture. Stored with the file so a recording is never separable from the basis on which it was taken.' },
 ];
 
@@ -459,10 +490,22 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'preflight_complete', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected'],
+    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'session_status', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'preflight_complete', 'stimulus_font_ok', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
-      session_index: session.session_index, conditions_per_session: session.conditions_per_session, condition_offset: session.condition_offset,
+      session_index: session.session_index,
+      // Completeness, declared rather than inferred. An export can now be taken from a session that
+      // is still running or that a participant withdrew from part-way, and such a session is a
+      // legitimate — sometimes the only — record of what happened. But its condition rows are a
+      // truncated series, not a balanced set, and pooling them with completed sittings without
+      // noticing would bias every within-participant contrast toward the conditions that come
+      // early in the Williams order. These three columns make that visible in the first file an
+      // analyst opens.
+      session_status: session.status,
+      conditions_completed: bundle.conditions.length,
+      session_complete: session.status === 'complete'
+        && bundle.conditions.length === session.conditions_per_session,
+      conditions_per_session: session.conditions_per_session, condition_offset: session.condition_offset,
       ambient_lux: session.ambient_lux, ambient_illumination_level: session.ambient_illumination_level,
       illumination_block: session.illumination_block, illumination_order_first: session.illumination_order_first,
       lux_start: luxAt(session, 'start'), lux_middle: luxAt(session, 'middle'), lux_end: luxAt(session, 'end'),
@@ -486,6 +529,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       consent_annotation_video: session.media_consent?.annotation_video ?? '',
       media_items_retained: (bundle.media ?? []).length,
       preflight_complete: session.preflight_complete,
+      stimulus_font_ok: session.stimulus_font_ok ?? '',
       gaze_calibration_valid: bundle.calibration[0]?.is_real_calibration ?? '',
       calibration_ear_baseline: bundle.calibration[0]?.ear_baseline ?? '',
       calibration_pitch_baseline_frac: bundle.calibration[0]?.pitch_baseline_frac ?? '',
@@ -626,10 +670,12 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
   csv('15_media_inventory.csv',
     ['participant_id', 'session_index', 'media_id', 'kind', 'checkpoint', 'condition_label',
      'captured_at', 'mime', 'bytes', 'width', 'height', 'duration_ms', 'checksum_fnv1a',
-     'blob_present', 'consent_setup_photos', 'consent_annotation_video'],
+     'blob_present', 'filename', 'consent_setup_photos', 'consent_annotation_video'],
     (bundle.media ?? []).map((m) => ({
       participant_id: pid, session_index: session.session_index,
       media_id: m.media_id, kind: m.kind, checkpoint: m.checkpoint,
+      // The name the file is written under by Export → Download media files.
+      filename: mediaFilename(session, m),
       // Whether the file itself is still on this device. A backup carries the inventory row but
       // not the binary, so after a restore this is false and the row describes a file that no
       // longer exists. Without the column the inventory asserts the file is present.
@@ -714,6 +760,41 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
   files.push({ filename: 'export_manifest.json', content: JSON.stringify(manifest, null, 2), mime: 'application/json' });
 
   return files;
+}
+
+/**
+ * Browser-only: stream the consented photo and video files themselves to the device.
+ *
+ * The CSV bundle carries only the inventory — id, checkpoint, byte count and checksum — because a
+ * blob embedded in a CSV would make the CSV unusable. That left the binaries reachable only by
+ * opening IndexedDB by hand, so the material the annotation sub-study is coded from could not
+ * actually leave the tablet, and a wiped device destroyed it. Each file is written under the name
+ * `15_media_inventory.csv` gives it, so the two can always be joined.
+ *
+ * Returns what was written and what was missing. A row whose blob is gone — after a restore from a
+ * backup, which carries the inventory but not the binary — is reported, never skipped silently.
+ */
+export async function downloadSessionMedia(
+  bundle: SessionBundle,
+): Promise<{ written: number; missing: string[] }> {
+  const { session } = bundle;
+  const missing: string[] = [];
+  let written = 0;
+  for (const m of bundle.media ?? []) {
+    const blob = (m as unknown as { blob?: Blob }).blob;
+    if (!(blob instanceof Blob)) { missing.push(m.media_id); continue; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = mediaFilename(session, m);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    written++;
+    await new Promise((r) => setTimeout(r, 130));
+  }
+  return { written, missing };
 }
 
 /** Browser-only: stream the files to the device (staggered to avoid the download-blocker). */

@@ -23,6 +23,7 @@
     "icons": "node scripts/make-icons.mjs",
     "verify:export": "tsx scripts/verifyExport.ts",
     "simulate:timing": "tsx scripts/simulateParticipant.ts",
+    "vendor:fonts": "node scripts/vendor-fonts.mjs",
     "verify:corpus": "tsx scripts/verifyCorpus.ts",
     "verify:codebook": "tsx scripts/buildCodebook.ts",
     "verify": "npm run lint && tsc -b && npm run test && npm run verify:corpus && npm run verify:codebook && npm run verify:export"

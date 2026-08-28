@@ -73,6 +73,12 @@ description survives its column.
 checksum. Those checksums are meaningful because the export is byte-reproducible: the same data
 always produces the same bytes, which is enforced by `tests/reproducibility.test.ts`.
 
+Consented photographs and video are **not** in the bundle: the CSV carries the inventory — id,
+checkpoint, condition, byte count, checksum and the filename — and *Export → Download media files*
+writes the binaries under exactly those names. A session that has not finished can be exported as
+well, from the Session Manager, and declares itself with `session_status`, `conditions_completed`
+and `session_complete` in `01_session_info.csv`.
+
 `backup_<participant>_<session>.json` is a **complete** copy of the session, reaction-time trials
 included, and can be restored on any device. The analysis `session_*.json` is deliberately partial
 (it carries `reaction_trials_count`, not the trials) and is **not** a backup — the app refuses it
@@ -98,6 +104,13 @@ with an explanation if you try.
 - **Nothing is fabricated.** A function given input carrying no information reports absence — null,
   or a non-finite value its consumer filters — and never a plausible number. `tests/noFabrication.
   test.ts` states this as a contract and checks every summary-producing function against it.
+- **The stimulus typeface is a control, not decoration.** Roboto is vendored into the build rather
+  than fetched from a CDN, every stimulus surface names a full fallback stack, and pre-flight
+  records whether the face actually loaded (`stimulus_font_ok`). Sessions run in aeroplane mode, so
+  a CDN font meant the reading passage silently rendered in an unknown platform face.
+- **A new build cannot take over a running session.** The service worker installs and waits rather
+  than claiming an open page, because claiming it would break the two lazily-loaded chunks: the
+  dashboard, which is the only export path, and MediaPipe, which produces the primary outcome.
 - Webcam metrics are reported honestly: uncalibrated-gaze flag, sub-Nyquist blink tiers gated, and
   the blink count behind each primary-outcome ratio exported alongside it.
 
@@ -107,10 +120,10 @@ with an explanation if you try.
 
 | Gate | What it covers |
 |---|---|
-| 326 unit and property tests | scoring, counterbalancing balance, contrast, storage, screening, gaze calibration, ocular metrics, backup/restore, no-fabrication contract |
+| 342 unit and property tests | scoring, counterbalancing balance, contrast, storage, screening, gaze calibration, ocular metrics, backup/restore, media export, stimulus-typeface control, no-fabrication contract |
 | 6 Playwright E2E tests across 4 spec files | full no-camera run, input gating, double-click → single session, reload → resume, split session |
 | 6 stress rounds: 28 scenarios, 2,393 checks, 0 failures | adversarial input, pipeline joins, state machine, metamorphic properties, crash recovery |
-| Export verification, 579 checks | referential integrity, reproducibility, codebook coverage, filename portability |
+| Export verification, 584 checks | referential integrity, reproducibility, codebook coverage, filename portability |
 | Corpus and codebook gates | passage length and difficulty matching; complete data dictionary |
 
 CI runs all of it on every push: [`.github/workflows/verify.yml`](.github/workflows/verify.yml).

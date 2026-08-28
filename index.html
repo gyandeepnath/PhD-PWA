@@ -9,9 +9,11 @@
   <link rel="icon" type="image/png" href="/icon-192.png" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
   <title>VisuLab — Visual Ergonomics Experiment</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet" />
+  <!-- Self-hosted. The stimulus typeface is an experimental control and every session runs in
+       aeroplane mode, so a CDN font meant the reading passage silently fell back to an unknown
+       platform face. See src/lib/fonts.ts and scripts/vendor-fonts.mjs. -->
+  <link rel="preload" href="/fonts/Roboto-400-normal-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/fonts/fonts.css" />
 </head>
 <body>
   <div id="root"></div>

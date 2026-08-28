@@ -155,6 +155,12 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
               {resume?.sessionId === s.session_id && (
                 <Btn onClick={() => onResume(s.session_id, resume.nextStepIndex)} color="#4f8ef7">Resume</Btn>
               )}
+              {/* A participant may withdraw at any point, and the operator manual tells the
+                  operator to export what exists when they do. Without this the dashboard — and so
+                  the only export path — was reachable for COMPLETED sessions only, and a withdrawn
+                  sitting could not be got off the tablet at all. The export declares its own
+                  incompleteness, so allowing it here cannot silently contaminate the analysis. */}
+              <Btn onClick={() => onOpen(s.session_id)} color="#1a1a2e" outline>Export</Btn>
               <Btn onClick={() => del(s)} color="#e64c4c" outline>Delete</Btn>
             </Row>
           ))}

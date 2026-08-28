@@ -16,7 +16,7 @@ npm run build   # prebuild vendors MediaPipe, then tsc -b && vite build
 ```
 
 `npm run build` writes `dist/`, which is about **21 MB on disk**. Most of that is the self-hosted
-MediaPipe FaceMesh runtime and the source maps. The service worker precaches **31 entries, roughly
+MediaPipe FaceMesh runtime and the source maps. The service worker precaches **44 entries, roughly
 17 MB**; that number is printed at the end of the build and is worth reading, because it is what
 determines whether the app works with the network off.
 
@@ -121,10 +121,14 @@ a lab room with no reliable connection, and it is the one section 5 assumes.
 
 ## 4. Offline and the service worker
 
-`vite-plugin-pwa` runs in `generateSW` mode and precaches every `js, css, html, ico, png, svg, wasm,
-tflite, binarypb, data` asset up to 12 MB each. That glob is what pulls in the MediaPipe model
-files, which is deliberate: MediaPipe is normally fetched from a CDN, and a CDN fetch in a room
-with no network means no face tracking and therefore no primary outcome.
+`vite-plugin-pwa` runs in `generateSW` mode and precaches every `js, css, html, ico, png, svg,
+woff2, wasm, tflite, binarypb, data` asset up to 12 MB each. That glob is what pulls in the
+MediaPipe model files, which is deliberate: MediaPipe is normally fetched from a CDN, and a CDN
+fetch in a room with no network means no face tracking and therefore no primary outcome. The same
+reasoning covers `woff2`: the reading passage's typeface is an experimental control, it is served
+from this origin rather than Google Fonts, and a font that is not precached means the passage is
+rendered in whatever face the tablet falls back to. Pre-flight checks that the face actually loaded
+and records the answer as `stimulus_font_ok` in `01_session_info.csv`.
 
 **Confirming a device is genuinely offline-ready** — do this once per tablet, before it is used:
 
@@ -134,20 +138,29 @@ with no network means no face tracking and therefore no primary outcome.
 3. Put the device in aeroplane mode.
 4. Force-close the browser and reopen the app.
 5. It must load, and the camera preview must still find a face.
+6. On the pre-flight screen, there must be **no** "Stimulus typeface — not loaded" warning. If
+   there is, the fonts did not precache and the reading stimulus will not match other devices.
 
-If step 5 fails, the precache did not complete; repeat from step 1 on a better connection.
+If step 5 or 6 fails, the precache did not complete; repeat from step 1 on a better connection.
 
 ---
 
 ## 5. Updates during data collection
 
-`registerType` is `autoUpdate`. A new deployment will be picked up and activated by any device that
-touches the network. That is right for ordinary web apps and wrong for a study in progress: it means
-the instrument can change between participant 40 and participant 41 without anyone deciding that it
-should.
+`registerType` is `prompt`, with `skipWaiting` and `clientsClaim` both off. A new deployment is
+downloaded by a device that touches the network, but it **waits**: it takes control only after
+every window of the app has been closed, which on a study tablet means between sessions.
 
-**The rule for a live study: install once, then keep the tablet offline for the duration.** Run
-section 3(c), then leave the device in aeroplane mode except when exporting.
+This is not a preference about refresh behaviour. Under the previous `autoUpdate` setting a new
+worker could claim a page that was already open — a participant part-way through the protocol. The
+new worker replaces the precache, the running build's content-hashed chunks stop resolving, and the
+two things this app loads on demand are the dashboard, which is the only way to export, and
+MediaPipe, which produces the primary outcome. There is no recovering that session.
+
+**The rule for a live study is unchanged: install once, then keep the tablet offline for the
+duration.** Run section 3(c), then leave the device in aeroplane mode except when exporting. The
+waiting-worker policy is the second line of defence, for the moment the tablet is put online to
+copy an export off it.
 
 If an update genuinely must go out mid-study:
 

@@ -12,6 +12,7 @@ import { ILLUMINATION, luxInRange, type IlluminationLevel } from '@/experiment/i
 import type { MediaConsent } from '@/storage/media';
 import { WavyBackground } from '@/components/WavyBackground';
 import { now } from '@/lib/timing';
+import { stimulusFontLoaded } from '@/lib/fonts';
 import type { CameraStatus } from '@/storage/types';
 
 const shell = 'min-h-screen w-full bg-cream p-[6%] font-sans text-[#1a1a2e] animate-fade-in';
@@ -558,7 +559,7 @@ const PREFLIGHT_ITEMS = [
   'No strong light source behind the participant (no backlight)',
   'Device on a stand at ~50–60 cm viewing distance, landscape',
 ];
-export function Preflight({ onDone }: { onDone: () => void }) {
+export function Preflight({ onDone }: { onDone: (fontOk: boolean | null) => void }) {
   const [checked, setChecked] = useState<boolean[]>(Array(PREFLIGHT_ITEMS.length).fill(false));
   /**
    * Storage durability is checked here rather than left to the operator's judgement, because the
@@ -568,8 +569,17 @@ export function Preflight({ onDone }: { onDone: () => void }) {
   const [storage, setStorage] = useState<StorageHealth | null>(null);
   useEffect(() => { void assessStorageHealth().then(setStorage); }, []);
 
+  /**
+   * The stimulus typeface is part of the display condition. Checked by machine, for the same
+   * reason storage is: a fallback face looks like a slightly different font, not like a fault, so
+   * an operator would never catch it. Reported and recorded rather than blocking — the session is
+   * still worth running, but the analysis has to know the stimulus was not the intended one.
+   */
+  const [fontOk, setFontOk] = useState<boolean | null | undefined>(undefined);
+  useEffect(() => { void stimulusFontLoaded().then(setFontOk); }, []);
+
   const storageBlocks = storage?.verdict === 'blocked';
-  const all = checked.every(Boolean) && !!storage && !storageBlocks;
+  const all = checked.every(Boolean) && !!storage && !storageBlocks && fontOk !== undefined;
   const tone = { ok: '#22c97a', warn: '#c98a22', blocked: '#e64c4c', unknown: '#5a5a7a' } as const;
   return (
     <div className={shell}>
@@ -591,6 +601,17 @@ export function Preflight({ onDone }: { onDone: () => void }) {
           <p key={i} className="font-lab text-sm" style={{ marginTop: 6, color: '#3a3a4a' }}>{m}</p>
         ))}
       </div>
+      {fontOk === false && (
+        <div data-testid="font-warning" style={{ marginTop: 12, maxWidth: 640, padding: '12px 14px', borderRadius: 10, border: '1px solid #c98a22', background: '#c98a2212' }}>
+          <p className="font-lab text-xs uppercase tracking-wide" style={{ color: '#c98a22' }}>Stimulus typeface — not loaded</p>
+          <p className="font-lab text-sm" style={{ marginTop: 6, color: '#3a3a4a' }}>
+            The reading passage will be rendered in a fallback face. The session can still be run
+            and this is recorded in the export as <code>stimulus_font_ok=false</code>, but the
+            stimulus will not match the other sessions. Reload the app from the home-screen icon
+            before starting if you can.
+          </p>
+        </div>
+      )}
       <div className="mt-5 space-y-2" style={{ maxWidth: 640 }}>
         {PREFLIGHT_ITEMS.map((item, i) => (
           <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e2dc', background: '#fff', cursor: 'pointer' }}>
@@ -601,7 +622,7 @@ export function Preflight({ onDone }: { onDone: () => void }) {
       </div>
       <button className={btn} disabled={!all} data-testid="preflight-continue"
         style={{ marginTop: 18, background: all ? '#1a1a2e' : '#cfcbc3', cursor: all ? 'pointer' : 'not-allowed' }}
-        onClick={() => all && onDone()}>
+        onClick={() => all && onDone(fontOk ?? null)}>
         {storageBlocks ? 'Storage problem — cannot start' : 'All checks pass — continue →'}
       </button>
     </div>

@@ -4,6 +4,7 @@
  * stale-closure bug capturing zeros at mount). Denominator is the AUTHORITATIVE occurrence count.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { STIMULUS_FONT_STACK } from '@/lib/fonts';
 import { CONFIG } from '@/experiment/config';
 import { now } from '@/lib/timing';
 import { TaskIntro } from './TaskIntro';
@@ -127,7 +128,7 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
         </span>{' '}
         <span style={{ opacity: 0.6 }}>({foundIdx.size}/{totalTargets})</span>
       </p>
-      <div className="scrollable" style={{ flex: 1, marginTop: 16, fontSize: 19, lineHeight: 1.9, fontFamily: 'Roboto', whiteSpace: 'pre-wrap' }}>
+      <div className="scrollable" style={{ flex: 1, marginTop: 16, fontSize: 19, lineHeight: 1.9, fontFamily: STIMULUS_FONT_STACK, whiteSpace: 'pre-wrap' }}>
         {tokens.map((tok) =>
           tok.isWord ? (
             <span

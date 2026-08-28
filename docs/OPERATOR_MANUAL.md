@@ -167,7 +167,7 @@ never re-checked is a session where you do not know what the illuminance was.
 | App reloads mid-session | Browser reclaimed memory, or the tablet slept | Reopen. Session Manager offers **Resume** at the next condition. Data already written is safe. Note the interruption. |
 | Battery low | Not charged | Plug in. Do not let it die mid-condition. |
 | Participant wants a break outside the scheduled one | Fatigue, discomfort | Allow it. Take it **between** conditions, never inside the reading task. Note it. |
-| Participant withdraws | Their right, at any time | Stop immediately. Do not ask why. Export what exists; the session is recorded as incomplete. |
+| Participant withdraws | Their right, at any time | Stop immediately. Do not ask why. Session Manager → the session under **In progress** → **Export**. The export records the sitting as incomplete and lists only the conditions that ran. |
 | Participant reports significant symptoms | | Stop if they wish. Advise a full optometric examination. Record it. |
 
 ---
@@ -178,7 +178,14 @@ never re-checked is a session where you do not know what the illuminance was.
    early loses the key secondary outcome, which is the change in CVS-Q from baseline.
 2. Take the closing setup photograph if that grant was given.
 3. **Export.** Dashboard → Export. This writes 18 CSVs, an analysis JSON, a codebook, a provenance
-   manifest and a `backup_*.json`.
+   manifest and a `backup_*.json`. If the session was consented for photographs or video, a second
+   button, **Download media files**, writes the picture and video files themselves; they are not in
+   the data bundle. Each is named in `15_media_inventory.csv`, so a file can always be traced back
+   to the condition and the consent it was taken under. Those files show the participant's face:
+   keep them under the terms of the grant that was given, not with the CSVs.
+
+   A session that did **not** finish can be exported too — Session Manager → **In progress** →
+   **Export**. It carries `session_complete=false` and only the conditions that actually ran.
 4. **Check the export before the participant leaves the building.** Open:
    - `16_integrity_report.csv` — should read `all_checks_passed`. Anything else, read it.
    - `12_quality_flags.csv` — look at `engagement_flag` and `reasons`.
