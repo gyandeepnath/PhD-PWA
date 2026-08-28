@@ -34,8 +34,9 @@ tablet's own camera during the reading task. Two consequences for you:
   - **Dim: 10 lux** (acceptable 5 to 15)
   - **Moderate: 150 lux** (acceptable 130 to 170)
 - Measure with the lux meter at **two points**: the participant's eye position, facing the display,
-  and the display plane. Record both. If either is outside the accepted range, adjust the lighting
-  before the participant arrives, not during the session.
+  and the display plane. If either is outside the accepted range, adjust the lighting before the
+  participant arrives, not during the session. The app has one lux field and it is the **eye-position**
+  reading; record the display-plane reading on the session sheet.
 - Keep the lamp type and colour temperature identical between the two sittings. Only the
   illuminance is meant to differ.
 
@@ -119,17 +120,22 @@ default, so a rushed calibration degrades every ocular measure for the whole ses
 
 ## 5. Running the ten conditions
 
-Each condition runs the same seven stages:
+Each condition runs the same six measured stages, in this order:
 
 | Stage | What happens | Your job |
 |---|---|---|
-| `ADAPTATION` | Neutral grey field, 60 s (120 s when polarity switches) | Nothing. Let it run. |
 | `READING_TASK` | Four pages, about 600 words, in the active condition | **Silence.** This is the measurement window. |
 | `COMPREHENSION` | Three questions: gist, inference, detail | Do not hint. Do not confirm answers. |
 | `DISPLAY_PERCEPTION` | Comfort and clarity ratings | Do not comment on the display. |
 | `POST_FATIGUE` | Five visual-fatigue items, 0 to 10 | Let them answer at their own pace. |
 | `VISUAL_SEARCH` | Tap every occurrence of a target word, fixed time limit | Do not point. |
 | `REACTION_TIME` | Go/no-go, 32 trials | Nothing. |
+| `ADAPTATION` | Neutral grey field, 60 s (120 s when polarity switches) | Nothing. Let it run. |
+
+`ADAPTATION` closes each condition rather than opening it, and it is skipped after the last one, so
+it runs nine times across the ten conditions. There is no grey screen before the first condition.
+The ratings come immediately after reading, while the impression is fresh, and before the search and
+reaction-time tasks.
 
 A self-paced rest break is offered **after every two conditions**. Let the participant take it.
 
@@ -205,7 +211,7 @@ Print this.
 
 **Before**
 - [ ] Daylight excluded; lamp type unchanged from the other sitting
-- [ ] Lux measured at eye position and display plane, both in range, both recorded
+- [ ] Lux measured at eye position (entered in the app) and display plane (on the sheet), both in range
 - [ ] Screen cleaned; brightness fixed; auto-brightness OFF; blue-light filter OFF
 - [ ] Screen timeout off; Do Not Disturb on; aeroplane mode on
 - [ ] Landscape, fullscreen, launched from home screen

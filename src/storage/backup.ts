@@ -24,6 +24,7 @@
  *     missing rather than appearing to still hold it.
  */
 import { get, getAll, put, ensureEnrolmentAtLeast } from './db';
+import { purgeSession } from './gather';
 import { fnv1a } from './export';
 import type { SessionBundle } from './gather';
 import type { StoreName, StoreMap } from './types';
@@ -187,6 +188,8 @@ export interface ImportResult {
   error?: string;
   /** Rows written per store, so the operator can see the restore was complete. */
   written: Record<string, number>;
+  /** Non-fatal observations from the write itself, distinct from the file's own warnings. */
+  warnings?: string[];
   /**
    * Set when the restored enrolment number was already issued on this device to somebody else.
    * The restore still succeeds — the data is worth keeping — but the counterbalance is compromised
@@ -208,6 +211,7 @@ export async function importSessionBackup(
   mode: ImportMode = 'refuse-if-present',
 ): Promise<ImportResult> {
   const written: Record<string, number> = {};
+  const warnings: string[] = [];
   let collision: string | undefined;
   const data = backup.data;
   const session = data.session as StoreMap['sessions'];
@@ -218,8 +222,18 @@ export async function importSessionBackup(
     return {
       ok: false,
       written,
+      warnings,
       error: `A session with this id is already on this device. Importing would overwrite it. Choose overwrite only if you are sure the copy on the device is the damaged one.`,
     };
+  }
+
+  // 'overwrite' has to MEAN overwrite. Putting the backup's rows without removing what is already
+  // here merges the two: rows the device holds and the backup lacks survive, producing a session
+  // that never existed — the backup's session record joined to a superset of its measurements —
+  // which auditBundle then certifies as sound because every row it can see is internally
+  // consistent. Purging first makes the result exactly the backup, which is what was promised.
+  if (existing && mode === 'overwrite') {
+    await purgeSession(sessionId);
   }
 
   // Participant first: several stores are only interpretable with it, and it is shared across a
@@ -251,16 +265,53 @@ export async function importSessionBackup(
     await ensureEnrolmentAtLeast(enrolment);
   }
 
-  for (const { key, store } of RESTORE_PLAN) {
-    const rows = (data[key] as unknown[]) ?? [];
-    for (const row of rows) await put(store, row as StoreMap[typeof store]);
-    written[store] = rows.length;
+  // From here on a failure leaves the device holding a PARTIAL copy. IndexedDB gives no
+  // transaction across this many stores through the wrapper in use, so the next best thing is to
+  // report the partial state precisely rather than let the exception escape: SessionManager's
+  // catch would otherwise tell the operator "Could not read the file", for a file it read
+  // perfectly and half-imported. A half-restored session also re-exports as a fresh,
+  // checksum-valid backup that looks complete, so the operator has to be told now.
+  try {
+    for (const { key, store } of RESTORE_PLAN) {
+      const rows = (data[key] as unknown[]) ?? [];
+      for (const row of rows) await put(store, row as StoreMap[typeof store]);
+      written[store] = rows.length;
+    }
+
+    // Media: the backup carries the inventory row but never the binary. Writing that row straight
+    // over the device's row would DESTROY a blob that is still here, because put() replaces the
+    // whole record rather than merging fields. Carry any surviving blob forward.
+    const media = (data.media as unknown[]) ?? [];
+    let blobsKept = 0;
+    for (const row of media) {
+      const r = row as unknown as Record<string, unknown> & { media_id?: string };
+      const prev = r.media_id ? await get('media_captures', r.media_id) : undefined;
+      const prevBlob = (prev as unknown as { blob?: unknown } | undefined)?.blob;
+      if (prevBlob) {
+        await put('media_captures', { ...r, blob: prevBlob, blob_present: true } as unknown as StoreMap['media_captures']);
+        blobsKept++;
+      } else {
+        await put('media_captures', row as StoreMap['media_captures']);
+      }
+    }
+    written.media_captures = media.length;
+    if (blobsKept) {
+      warnings.push(`${blobsKept} media file(s) were already on this device and their contents have been kept; the rest are listed in the inventory but their files are gone.`);
+    }
+  } catch (err) {
+    const stores = Object.entries(written).filter(([, n]) => n > 0).map(([s, n]) => `${s}: ${n}`).join(', ');
+    return {
+      ok: false,
+      sessionId,
+      written,
+      collision,
+      warnings,
+      error: `The file was read and verified, but writing it to this device failed part-way through. `
+        + `The device now holds a PARTIAL copy of this session (${stores || 'nothing written'}). `
+        + `Do not export it as if it were complete. Free up storage and import the same file again, `
+        + `which will overwrite what landed. Underlying error: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 
-  // Media inventory is restored so the session reports what WAS captured; the blobs are gone.
-  const media = (data.media as unknown[]) ?? [];
-  for (const row of media) await put('media_captures', row as StoreMap['media_captures']);
-  written.media_captures = media.length;
-
-  return { ok: true, sessionId, written, collision };
+  return { ok: true, sessionId, written, collision, warnings };
 }

@@ -33,11 +33,11 @@ Contrast is auto-computed (`src/lib/contrast.ts`) and stored per condition as an
 covariate. C4/C6/C7 are below AA and flagged in the codebook.
 
 ## Counterbalancing
-- Williams balanced Latin square, first row `[0,1,7,2,6,3,5,4]` (N=8). Row = `(enrolment−1) % 8`.
+- Williams balanced Latin square, first row `[0,1,9,2,8,3,7,4,6,5]` (N=10). Row = `(enrolment−1) % 10`.
 - **Enrolment number is a sequential index** assigned at session creation (NOT a hash of the
   arbitrary participant ID — the late builds' hashing broke balance).
-- Passage decoupled: `passage(condition, p) = (conditionIndex + (p−1) % 8) % 8` → every
-  condition meets every passage once per block of 8 participants. (Original build yoked
+- Passage decoupled: `passage(condition, p) = (conditionIndex + (p−1) % 10) % 10` → every
+  condition meets every passage once per block of 10 participants. (Original build yoked
   `passage = conditionIndex`, a confound.)
 
 ## Stage machine
@@ -96,7 +96,7 @@ within-task blink bins, consent record, provenance (app version/git hash/conditi
 `session_position`, adaptation ms per transition, slider `touched` flags, CVS-Q baseline/end.
 
 ## Export
-14 CSVs + JSON bundle + master codebook + per-export manifest (schema version, app version, git
+18 CSVs (00_CODEBOOK.csv among them) + analysis JSON + complete session backup + per-export manifest, 21 files in all (schema version, app version, git
 hash, condition-def hash, checksums).
 
 ## Scoring formulae (verified)
@@ -150,8 +150,10 @@ The implemented stage order was corrected during the workflow-logic review — s
 `docs/PROTOCOL.md` (authoritative). Key changes vs the original bundle order:
 - Setup: SESSION_INIT → CONSENT → PARTICIPANT_PROFILE → **PREFLIGHT → COLOR_VISION** (preflight now
   before colour-vision so night-shift is off) → CAMERA_SETUP → CALIBRATION → CVSQ_BASELINE → BASELINE_FATIGUE.
-- Per condition: READING → COMPREHENSION → VISUAL_SEARCH → REACTION_TIME → **DISPLAY_PERCEPTION →
-  POST_FATIGUE** → ADAPTATION (subjective ratings moved to the END, after the performance tasks).
+- Per condition: READING → COMPREHENSION → **DISPLAY_PERCEPTION → POST_FATIGUE** → VISUAL_SEARCH →
+  REACTION_TIME → ADAPTATION. The subjective ratings sit immediately after reading, while the
+  impression is fresh and before the attention tasks add their own load; ADAPTATION closes the
+  condition and is skipped after the last one, so it runs nine times across ten conditions.
 - Consent recorded at the CONSENT stage (not pre-emptively at session creation).
 - Double-tap guards (session re-entry, advance lock, scale/screening submit) and condition-level
   resume (interrupted condition restarted, not stitched).

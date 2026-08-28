@@ -18,15 +18,15 @@ session, and the known limitations a PhD write-up should disclose.
   is recorded as a covariate (see §5).
 - **Condition order**: balanced Williams Latin square, assigned by a **sequential enrolment index**
   (controls first-order carryover; every condition appears in every serial position equally over
-  each block of 8 participants).
+  each block of 10 participants).
 - **Passage assignment**: rotated independently of condition (each condition meets each passage
-  equally over a block of 8) so passage difficulty is **orthogonal to display condition**.
+  equally over a block of 10 (illumination-order balance completes at 20)) so passage difficulty is **orthogonal to display condition**.
 
 ## 2. Session flow (as implemented)
 
 ```
 SESSION_INIT            researcher: participant ID, ambient lux, (optional) screen luminance + brightness,
-                        session structure (single 8-condition sitting, or split 4+4)
+                        session structure (single 10-condition sitting, or split 5+5)
   → CONSENT             participant: informed consent (recorded here, not pre-emptively)
   → PARTICIPANT_PROFILE demographics + vision covariates (age 18–80, correction, self-report CVD…)
   → PREFLIGHT           researcher: display/room configured (brightness fixed, night-shift OFF, …)
@@ -40,7 +40,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
   → [×10 conditions per illumination block]
         READING_TASK        intro → passage (self-paced beyond a per-page floor); exposure +
                             eye-tracking window; reading time → words/min recorded
-        → COMPREHENSION     1×4-option MCQ (accuracy + RT)
+        → COMPREHENSION     3×4-option MCQ per passage — gist, inference, detail — one row per item (accuracy + RT)
         → DISPLAY_PERCEPTION comfort + clarity, rated IMMEDIATELY after reading (perception fresh)
         → POST_FATIGUE       5-item VAS, immediately after the strongest fatigue inducer (reading)
         → VISUAL_SEARCH     intro → tap every target word, 40 s limit (selective attention)
@@ -56,7 +56,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
   → EXPORT_DASHBOARD    researcher: charts, QC, CSV/JSON export
 ```
 
-Progress bar tracks 8 setup steps + 8×6 measured sub-stages = **56 steps**.
+Progress bar tracks 9 setup steps + 10×6 measured sub-stages = **69 steps** (39 for a split sitting of five).
 
 ## 3. Workflow-logic cross-check — issues found & resolved
 
@@ -93,7 +93,7 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
    landscape, no backlight).
 3. Run **colour-vision screening**, allow the **camera**, complete **calibration**, then the
    baseline questionnaires. The participant then completes the 10 conditions of the assigned
-   illumination block (~60–120 min), closing with the end CVS-Q and NASA-TLX.
+   illumination block (median ~97 min, p95 ~118 min), closing with the end CVS-Q and NASA-TLX.
 4. At the end, open the session from the manager → **Export** the CSV + JSON bundle.
 5. Analyse with the **mixed-model templates** in `src/analysis/analysis_template.{R,py}` (random
    intercept per participant; contrast as a covariate; d′ aggregated across conditions).
@@ -107,7 +107,7 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
 - **Blink metrics distinguish two constructs.** For **visual/ocular fatigue (CVS — this study)** the
   validated markers are a **reduced blink rate** and a **raised incomplete-blink ratio** (Portello &
   Rosenfield, *Optom Vis Sci* 2013), read with the within-task first/second-half bins and inter-blink
-  interval. For **drowsiness/sleepiness** (a confound over a 60–90 min session) **PERCLOS** (% time
+  interval. For **drowsiness/sleepiness** (a confound over a session of roughly an hour and a half) **PERCLOS** (% time
   eyes ≥70/80% closed) and **long-closure events** are the validated, frame-rate-robust covariates
   (Dinges & Grace, FHWA 1998). Blink rate is **non-monotonic** w.r.t. fatigue (drops with
   concentration/reading, rises with sleepiness) — never read "higher = more fatigued" in isolation;
@@ -124,11 +124,11 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
 - **Contrast confound**: P4 (yellow-on-white) is below WCAG AA (2.39:1); treat WCAG ratio as a
   covariate or reframe as polarity × contrast.
 - **Per-condition d′** rests on ~20 signal (go) trials of 32 (unstable; SE often > 0.3) — report aggregated d′.
-- **Session length** (~60–90 min) accumulates fatigue; `session_position` (0–7) is recorded as a covariate.
+- **Session length** (median ~97 min) accumulates fatigue; `session_position` (0 … conditions_per_session − 1, so 0–9 for a full sitting) is recorded as a covariate.
 
 ## 7. Boredom / disengagement vs. fatigue
 
-The session repeats the same 4-task loop ×8, so **boredom and disengagement accumulate with
+The session repeats the same 6-stage loop ×10, so **boredom and disengagement accumulate with
 time-on-task and mimic visual fatigue** — slower and more variable RT, attention lapses, careless
 or straight-lined ratings, and skim-reading. Left unaddressed this adds noise (lowers power), risks
 careless data contaminating the fatigue/comprehension measures, and risks dropout. The Williams
@@ -150,8 +150,8 @@ remaining) and a **self-paced rest break after every 2 conditions** reduce monot
 is **no gamification or performance feedback** — telling participants their scores would
 differentially change effort across conditions and confound the display manipulation.
 
-**Methodology (shorten each sitting).** The session can be **split** (4 conditions per sitting, a
-later sitting for the remaining 4). The participant's enrolment number — which drives the Williams
+**Methodology (shorten each sitting).** The session can be **split** (5 conditions per sitting, a
+later sitting for the remaining 5). The participant's enrolment number — which drives the Williams
 order — is **reused across sittings**, and the next sitting resumes at the global serial position
 where the last stopped, so each condition is still run exactly once. `session_index` (sitting
 number) is recorded and added as a covariate when sittings vary; baseline fatigue and CVS-Q are
@@ -249,11 +249,11 @@ values, and none of them means "not measured".
 
 | Command | What it checks |
 |---|---|
-| `npm test` | 296 unit tests, including the no-fabrication contract |
+| `npm test` | 326 unit and property tests, including the no-fabrication contract |
 | `npm run stress` | Six stress rounds, ~11,500 assertions |
-| `npm run verify:export` | Prints every exported table and traces 366 cells back to source |
+| `npm run verify:export` | Prints every exported table and runs 579 checks over the export pipeline |
 | `npm run simulate:timing` | Session-length distribution for the target population |
-| `npx playwright test` | Six end-to-end specs through the full protocol |
+| `npx playwright test` | 6 end-to-end tests across 4 spec files |
 
 ### What the export now guarantees
 

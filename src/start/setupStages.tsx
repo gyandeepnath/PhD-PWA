@@ -122,7 +122,7 @@ export function SessionInit({
           />
           <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: -6 }}>
             {sitting === 'single'
-              ? `Single sitting: all ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT} conditions (~60–90 min).`
+              ? `Single sitting: all ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT} conditions (about 90 min to 2 h).`
               : `Split: ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2} conditions now, the remaining ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2} in a later sitting (re-enter the same Participant ID; the condition order is preserved).`}
           </p>
         </div>

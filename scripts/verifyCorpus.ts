@@ -133,6 +133,50 @@ for (const { p } of rows) {
   }
 }
 console.log(`   ${nQ} items across ${PASSAGES.length} passages`);
+// LENGTH PARITY. A keyed option that is visibly longer than its distractors is a cue: "pick the
+// longest" is the best-known multiple-choice heuristic, and options are rendered in authored order,
+// so the cue is identical for every participant. When this was first measured the key was the unique
+// longest option in 25 of 30 items and in 10 of 10 gist and 10 of 10 inference items, which let a
+// participant who never read the passage score 83% against 25% for chance. That inflation would land
+// in every condition, compress the between-condition variance the study is powered to detect, and
+// destroy the item-kind contrast. Position bias is checked above; length is the same defect wearing
+// a different hat.
+let keyIsLongest = 0;
+let overLong = 0;
+for (const { p } of rows) {
+  for (const q of p.questions) {
+    const lens = q.options.map((o) => o.length);
+    const max = Math.max(...lens);
+    if (lens.filter((l) => l === max).length === 1 && lens[q.correctIndex] === max) keyIsLongest++;
+    const median = [...lens].sort((a, b) => a - b)[Math.floor(lens.length / 2)];
+    // No single option may tower over the middle of its own item.
+    if (max > median * 1.6) {
+      overLong++;
+      fail(`passage ${p.id} item "${q.text.slice(0, 44)}" has an option ${Math.round((max / median - 1) * 100)}% longer than the item median`);
+    }
+  }
+}
+// Raw ordering overstates the risk once the options are close: a key two characters longer than
+// its nearest rival is not something a participant can see. What matters is whether the key stands
+// out by a VISIBLE margin, so that is what fails the gate; the raw count is reported alongside it
+// because a systematic drift in the ordering is still worth noticing.
+let keyLongestByMargin = 0;
+for (const { p } of rows) {
+  for (const q of p.questions) {
+    const lens = q.options.map((o) => o.length);
+    const keyLen = lens[q.correctIndex];
+    const runnerUp = Math.max(...lens.filter((_, i) => i !== q.correctIndex));
+    if (keyLen > runnerUp * 1.15) keyLongestByMargin++;
+  }
+}
+const longestShare = nQ ? keyIsLongest / nQ : 0;
+const marginShare = nQ ? keyLongestByMargin / nQ : 0;
+console.log(`   key is the longest option in ${keyIsLongest}/${nQ} items (${(100 * longestShare).toFixed(0)}%), by a visible margin in ${keyLongestByMargin} (${(100 * marginShare).toFixed(0)}%)`);
+if (marginShare > 0.2) {
+  fail(`the key stands out by length in ${(100 * marginShare).toFixed(0)}% of items — "pick the longest" is a usable strategy`);
+}
+if (overLong === 0) console.log('   no option towers over the median of its own item');
+
 console.log(`   correct-answer positions  A:${posCounts[0]}  B:${posCounts[1]}  C:${posCounts[2]}  D:${posCounts[3]}`);
 // A guessing participant who always picks one letter must not beat chance by much.
 if (nQ && Math.max(...posCounts) / nQ > 0.4) fail(`answer key is positionally biased: one position holds ${(100 * Math.max(...posCounts) / nQ).toFixed(0)}% of keys`);

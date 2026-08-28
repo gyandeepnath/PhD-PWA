@@ -107,10 +107,10 @@ with an explanation if you try.
 
 | Gate | What it covers |
 |---|---|
-| 311 unit and property tests | scoring, counterbalancing balance, contrast, storage, screening, gaze calibration, ocular metrics, backup/restore, no-fabrication contract |
-| 6 Playwright E2E specs | full no-camera run, input gating, double-click → single session, reload → resume, split session |
-| 28 stress scenarios, 1197 checks | adversarial input, pipeline joins, state machine, metamorphic properties, crash recovery |
-| Export verification, 578 checks | referential integrity, reproducibility, codebook coverage, filename portability |
+| 326 unit and property tests | scoring, counterbalancing balance, contrast, storage, screening, gaze calibration, ocular metrics, backup/restore, no-fabrication contract |
+| 6 Playwright E2E tests across 4 spec files | full no-camera run, input gating, double-click → single session, reload → resume, split session |
+| 6 stress rounds: 28 scenarios, 2,393 checks, 0 failures | adversarial input, pipeline joins, state machine, metamorphic properties, crash recovery |
+| Export verification, 579 checks | referential integrity, reproducibility, codebook coverage, filename portability |
 | Corpus and codebook gates | passage length and difficulty matching; complete data dictionary |
 
 CI runs all of it on every push: [`.github/workflows/verify.yml`](.github/workflows/verify.yml).

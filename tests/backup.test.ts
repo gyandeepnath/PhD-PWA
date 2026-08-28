@@ -23,7 +23,7 @@ import {
 } from '@/storage/backup';
 import { buildFixtureBundle } from '@/sim/bundleFixture';
 import { gatherSession } from '@/storage/gather';
-import { getAll, put, peekNextEnrolmentNumber, nextEnrolmentNumber, _resetForTests } from '@/storage/db';
+import { get, getAll, put, peekNextEnrolmentNumber, nextEnrolmentNumber, _resetForTests } from '@/storage/db';
 import { buildExportFiles } from '@/storage/export';
 
 /**
@@ -237,5 +237,47 @@ describe('restoring carries the enrolment number forward', () => {
     const res = await importSessionBackup(parsed.backup!);
     expect(res.ok).toBe(true);
     expect(res.collision).toBeUndefined();
+  });
+});
+
+describe('a restore does not destroy what is already on the device', () => {
+  beforeEach(clearDb);
+
+  it('keeps a media blob that is still here, because the backup carries only the inventory row', async () => {
+    // put() replaces the whole record, so writing the blob-stripped inventory row straight over a
+    // row that still holds its binary would silently destroy consented media. That media is the
+    // only material the annotation sub-study can be coded from.
+    const b = buildFixtureBundle();
+    if (!b.media.length) return;
+    const m = b.media[0];
+    await put('media_captures', { ...m, blob: new Blob(['pretend-video']) } as never);
+
+    const parsed = parseSessionBackup(serialiseSessionBackup(b));
+    const res = await importSessionBackup(parsed.backup!, 'overwrite');
+    expect(res.ok).toBe(true);
+
+    const after = await get('media_captures', m.media_id);
+    expect((after as unknown as { blob?: unknown }).blob).toBeTruthy();
+    expect((after as unknown as { blob_present?: boolean }).blob_present).toBe(true);
+    expect(res.warnings?.join(' ')).toMatch(/kept/i);
+  });
+
+  it('overwrite REPLACES rather than merges, so no hybrid session survives', async () => {
+    const b = buildFixtureBundle();
+    const parsed = parseSessionBackup(serialiseSessionBackup(b));
+    await importSessionBackup(parsed.backup!);
+
+    // The device copy acquires a row the backup does not have — the shape a damaged copy takes.
+    await put('comprehension_results', {
+      ...b.comprehension[0], comprehension_id: 'stray-row', question_index: 0,
+    });
+    expect((await getAll('comprehension_results')).length).toBe(b.comprehension.length + 1);
+
+    await importSessionBackup(parsed.backup!, 'overwrite');
+
+    // Exactly the backup, not the union of the two.
+    const rows = await getAll('comprehension_results');
+    expect(rows.length).toBe(b.comprehension.length);
+    expect(rows.some((r) => r.comprehension_id === 'stray-row')).toBe(false);
   });
 });
