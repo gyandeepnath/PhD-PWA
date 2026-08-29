@@ -54,6 +54,9 @@ file**. A 30-day recycle bin holds soft-deleted sessions.
   checklist.
 - **[`docs/PROTOCOL.md`](docs/PROTOCOL.md)** — the authoritative stage sequence and scientific
   rationale.
+- **[`docs/LITERATURE_VALIDATION.md`](docs/LITERATURE_VALIDATION.md)** — what a literature sweep
+  found for and against the protocol's scientific claims, and the design decisions it raises.
+  **Every citation in it is unverified and must be resolved before use.**
 - **[`spec/CONSTANTS.md`](spec/CONSTANTS.md)** — values extracted from the original bundle, the
   IndexedDB schema, and every refinement made.
 - Analysis templates: `src/analysis/analysis_template.R` and `.py` (mixed models; random intercept

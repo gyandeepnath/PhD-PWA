@@ -10,6 +10,7 @@ import {
   blinkRatePerMinute,
   effectiveFps,
   fpsAdequateForTiers,
+  fpsAdequateForRatio,
   computeClosureMetrics,
   interBlinkInterval,
   type EarSample,
@@ -142,6 +143,7 @@ export class EyeMetricsAggregator {
       camera_active: args.cameraActive,
       effective_fps: fps,
       fps_adequate_for_tiers: fpsAdequateForTiers(fps),
+      fps_adequate_for_ratio: fpsAdequateForRatio(fps),
 
       blink_rate: blink.blink_rate,
       blink_rate_full: blink.blink_rate_full,
@@ -209,6 +211,7 @@ export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeM
     camera_active: false,
     effective_fps: null,
     fps_adequate_for_tiers: false,
+    fps_adequate_for_ratio: false,
     blink_rate: null,
     blink_rate_full: null,
     incomplete_blink_ratio: null,

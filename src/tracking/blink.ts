@@ -33,6 +33,31 @@ export const RIGHT_EYE_EAR = [362, 385, 387, 263, 373, 380];
 export const EAR_TIERS = { full: 0.6, partial: 0.75, micro: 0.88 } as const;
 export const FPS_TIER_THRESHOLD = 25;
 
+/**
+ * Frame rate below which the incomplete-blink RATIO itself is not trustworthy.
+ *
+ * The tier threshold above governs the duration-based measures. The ratio — the study's primary
+ * outcome — was gated by nothing: a condition captured at 12 fps produced a ratio that entered the
+ * analysis indistinguishable from one captured at 30.
+ *
+ * That is not a safe default, because classifying a blink as complete or incomplete depends on
+ * catching the frame at its minimum aperture, and a blink lasts on the order of 100-150 ms. At 30
+ * fps a blink spans roughly 3-5 frames; at 15 fps it may span one, and the single sampled frame is
+ * unlikely to be the deepest. Undersampling therefore does not add symmetric noise — it biases the
+ * measured minimum EAR upward, which systematically inflates the incomplete-blink ratio.
+ *
+ * Set at 30 fps on the strength of an external recommendation that is RECORDED BUT NOT YET
+ * VERIFIED (see docs/LITERATURE_VALIDATION.md, claim "ear-webcam-validity"); the constant is named
+ * here so that it can be moved once that reference is checked.
+ *
+ * This FLAGS, it does not drop. Discarding conditions below the threshold would bias the sample
+ * toward whichever devices, participants and — critically — ambient illumination levels sustain a
+ * high frame rate, and ambient illumination is a between-sitting independent variable in this
+ * design. A flagged condition stays in the export with its frame rate attached, so the analysis can
+ * decide.
+ */
+export const FPS_RATIO_THRESHOLD = 30;
+
 function dist(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
@@ -197,6 +222,14 @@ export function effectiveFps(frameTimestampsMs: number[]): number | null {
 
 export function fpsAdequateForTiers(fps: number | null): boolean {
   return fps != null && fps >= FPS_TIER_THRESHOLD;
+}
+
+/**
+ * Whether the frame rate supports the incomplete-blink ratio. Null fps returns false: an unknown
+ * frame rate is not an adequate one.
+ */
+export function fpsAdequateForRatio(fps: number | null): boolean {
+  return fps != null && fps >= FPS_RATIO_THRESHOLD;
 }
 
 // --- PERCLOS + closure dynamics (frame-rate-robust ocular-fatigue / drowsiness metrics) ----------

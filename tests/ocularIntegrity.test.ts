@@ -111,3 +111,53 @@ describe('closure metrics degrade to null rather than guessing', () => {
     }
   });
 });
+
+/**
+ * The frame rate behind the primary outcome.
+ *
+ * The duration-based tiers were gated at 25 fps; the incomplete-blink RATIO — the study's primary
+ * outcome — was gated by nothing, so a condition captured at 12 fps entered the analysis
+ * indistinguishable from one captured at 30. That is not a conservative default: classifying a
+ * blink as complete or incomplete needs the frame at its minimum aperture, and a blink lasts
+ * ~100-150 ms, so undersampling biases the measured minimum EAR UPWARD and inflates the ratio.
+ * Directional bias, not symmetric noise.
+ */
+describe('the primary outcome carries its own frame-rate qualification', () => {
+  it('flags a frame rate too low for the ratio, separately from the duration tiers', async () => {
+    const { fpsAdequateForRatio, fpsAdequateForTiers, FPS_RATIO_THRESHOLD, FPS_TIER_THRESHOLD } =
+      await import('@/tracking/blink');
+
+    // The gap between the two thresholds is the whole point: 27 fps is fine for the tiers and
+    // not fine for the ratio, and before this the second half of that sentence had no expression.
+    expect(FPS_RATIO_THRESHOLD).toBeGreaterThan(FPS_TIER_THRESHOLD);
+    const between = (FPS_TIER_THRESHOLD + FPS_RATIO_THRESHOLD) / 2;
+    expect(fpsAdequateForTiers(between)).toBe(true);
+    expect(fpsAdequateForRatio(between)).toBe(false);
+
+    expect(fpsAdequateForRatio(FPS_RATIO_THRESHOLD)).toBe(true);
+    expect(fpsAdequateForRatio(FPS_RATIO_THRESHOLD - 0.1)).toBe(false);
+    // An unknown frame rate is not an adequate one.
+    expect(fpsAdequateForRatio(null)).toBe(false);
+  });
+
+  it('flags rather than drops, because frame rate covaries with an independent variable', async () => {
+    const { buildConditionSummaries } = await import('@/dashboard/aggregate');
+    const { buildFixtureBundle } = await import('@/sim/bundleFixture');
+    const b = buildFixtureBundle();
+    const bundle = {
+      ...b,
+      eyeMetrics: b.eyeMetrics.map((e, i) =>
+        i === 0 ? { ...e, effective_fps: 14, fps_adequate_for_ratio: false } : e),
+    };
+    const sums = buildConditionSummaries(bundle);
+    const s = sums.find((x) => x.condition_id === b.eyeMetrics[0].condition_id)!;
+
+    // Still present — dropping it would bias the sample toward the illumination level that
+    // sustains a high frame rate.
+    expect(s).toBeDefined();
+    expect(s.engagement_reasons.join(' ')).toMatch(/fps/i);
+    expect(s.engagement_reasons.join(' ')).toMatch(/biased upward/i);
+    // Every other condition is unaffected.
+    expect(sums.filter((x) => x.engagement_reasons.some((r: string) => /fps/i.test(r)))).toHaveLength(1);
+  });
+});

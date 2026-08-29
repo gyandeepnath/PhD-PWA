@@ -4,6 +4,7 @@
  * charts/tables and the wide-format CSV, so the numbers are guaranteed consistent.
  */
 import type { SessionBundle } from '@/storage/gather';
+import { FPS_RATIO_THRESHOLD } from '@/tracking/blink';
 import type { FatigueRecord, DisplayPerceptionRecord, ComprehensionRecord, RtSummaryRecord, EyeMetricsRecord } from '@/storage/types';
 import { PASSAGES } from '@/experiment/passages';
 
@@ -237,6 +238,20 @@ export function conditionEngagement(args: {
     && blinkCount < ENGAGEMENT.MIN_BLINKS_FOR_RATIO;
   if (insufficient_blinks) {
     reasons.push(`only ${blinkCount} blinks captured — incomplete-blink ratio is imprecise (need >= ${ENGAGEMENT.MIN_BLINKS_FOR_RATIO})`);
+  }
+
+  // Frame rate too low for the PRIMARY OUTCOME. Reported, not penalised and not dropped: a low
+  // frame rate is a property of the device and the light, not of the participant's engagement, and
+  // dropping these conditions would bias the sample toward whichever ambient illumination sustains
+  // a high frame rate — and ambient illumination is an independent variable in this design.
+  // Undersampling biases the sampled minimum EAR upward, so the ratio is inflated, directionally.
+  const low_fps_for_ratio = !!eye && eye.camera_active && !eye.fps_adequate_for_ratio;
+  if (low_fps_for_ratio) {
+    const fps = eye!.effective_fps;
+    reasons.push(
+      `${fps == null ? 'unknown' : fps.toFixed(1)} fps — below the ${FPS_RATIO_THRESHOLD} fps needed for the `
+      + `incomplete-blink ratio; the ratio for this condition is biased upward`,
+    );
   }
 
   const quality_score = Math.max(0, Math.round(score * 100) / 100);

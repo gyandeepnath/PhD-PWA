@@ -395,6 +395,13 @@ export interface EyeMetricsRecord {
   effective_fps: number | null;
   /** True when effective_fps >= 25; gates the micro/partial blink tiers. */
   fps_adequate_for_tiers: boolean;
+  /**
+   * Whether the frame rate supports the PRIMARY OUTCOME. Undersampling biases the measured minimum
+   * EAR upward and so inflates incomplete_blink_ratio; it is not symmetric noise. False does not
+   * mean the condition should be dropped — see FPS_RATIO_THRESHOLD — but it does mean the ratio
+   * carries a known directional bias and must be modelled or sensitivity-tested.
+   */
+  fps_adequate_for_ratio: boolean;
 
   // Primary (frame-rate-robust): CVS markers + drowsiness covariates.
   /**
