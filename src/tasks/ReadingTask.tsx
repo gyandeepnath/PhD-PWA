@@ -17,9 +17,11 @@ interface Props {
   background: string;
   text: string;
   onComplete: (readingTimeMs: number) => void;
+  /** Fired when the participant starts reading — the true opening of the measurement window. */
+  onBegin?: () => void;
 }
 
-export function ReadingTask({ passage, background, text, onComplete }: Props) {
+export function ReadingTask({ passage, background, text, onComplete, onBegin }: Props) {
   const [started, setStarted] = useState(false);
   const [page, setPage] = useState(0);
   const [unlocked, setUnlocked] = useState(false);
@@ -64,6 +66,7 @@ export function ReadingTask({ passage, background, text, onComplete }: Props) {
         text={text}
         onBegin={() => {
           taskStart.current = now();
+          onBegin?.();
           setStarted(true);
         }}
       />

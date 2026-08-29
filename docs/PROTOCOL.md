@@ -28,7 +28,7 @@ session, and the known limitations a PhD write-up should disclose.
 SESSION_INIT            researcher: participant ID, ambient lux, (optional) screen luminance + brightness,
                         session structure (single 10-condition sitting, or split 5+5)
   → CONSENT             participant: informed consent (recorded here, not pre-emptively)
-  → PARTICIPANT_PROFILE demographics + vision covariates (age 18–80, correction, self-report CVD…)
+  → PARTICIPANT_PROFILE demographics + vision covariates (age 18–35 per protocol, correction, self-report CVD…)
   → PREFLIGHT           researcher: display/room configured (brightness fixed, night-shift OFF, …)
   → COLOR_VISION        digital Ishihara screening (runs AFTER night-shift is off)
   → CAMERA_SETUP        webcam permission (or skip → no eye tracking)
@@ -68,7 +68,7 @@ Reviewing the sequence as a PhD data-collection protocol surfaced these logic fl
 | 2 | Colour-vision screening ran **before** the pre-flight checklist that disables night-shift; a blue-light filter invalidates red-green plates. | PREFLIGHT now precedes COLOR_VISION. |
 | 3 | Order of the subjective ratings. | Per the author's framework (reading is the exposure + strongest fatigue inducer; perception must be captured fresh), the preference rating and fatigue VAS are collected **immediately after reading**, then search and reaction follow. (An interim build had moved them to the end; reverted to match the design.) |
 | 4 | Rapid double-tap could create **duplicate sessions** / **skip a stage**. | Re-entry guard on session creation + an `advance()` transition lock; scales/screening guard double-submit. |
-| 5 | Interruption mid-session lost progress. | Condition-level resume pointer; an interrupted condition is **restarted** (not stitched) for data integrity. |
+| 5 | Interruption mid-session lost progress. | Per-session condition-level resume pointer, held on the session record as well as in localStorage; an interrupted condition is **restarted** (not stitched) for data integrity. A resume re-runs camera setup and calibration first, because the remount clears the participant's own EAR baseline that every blink threshold is a fraction of. |
 | 6 | Stale local session state reverted `preflight_complete` on the final write. | Local session state is refreshed after each session update. |
 
 Earlier scientific-audit fixes also baked in: passage↔condition decoupling, colour-vision screening,
@@ -169,9 +169,9 @@ numeric ocular measures and the pixels are discarded. Two things need pixels, an
 
 | Grant | What it permits | Why it exists |
 |---|---|---|
-| `camera_metrics` | Numeric blink / head-pose measures. No pixels stored. | The ocular outcomes. Refusable — §3.10 requires it. |
+| `camera_metrics` | Numeric blink / head-pose measures. No pixels stored. | The ocular outcomes. Refusable — §3.10 requires it. **Enforced at the camera stage**, not merely recorded: a refusal skips the camera path entirely, and `auditBundle` reports any camera-active row on a session lacking the grant. |
 | `setup_photos` | One still at session start, one at session end. | Documents seating distance and room lighting, so setup compliance is evidenced rather than asserted. |
-| `annotation_video` | One 3-minute reading segment per session. | Objective 4 cannot be met without video a human can code frame by frame. Validation subsample only. |
+| `annotation_video` | One 3-minute reading segment per session. | Objective 4 cannot be met without video a human can code frame by frame. Validation subsample only — membership is derived from the enrolment number (`isAnnotationSubsample`), fixed before the participant arrives, so the subsample is not selected at the bench on whatever the operator noticed about the participant. |
 
 Enforcement is in `src/storage/media.ts`, not the UI:
 

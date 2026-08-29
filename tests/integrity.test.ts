@@ -24,7 +24,9 @@ describe('a sound bundle passes cleanly', () => {
     const b = buildFixtureBundle();
     const keep = b.conditions[0].condition_id;
     b.conditions = b.conditions.slice(0, 1);
-    for (const k of ['eyeMetrics', 'rtSummaries', 'comprehension', 'visualSearch', 'perception'] as const) {
+    // reactionTrials included: the audit now checks the trial store too, and trials left behind
+    // by a trimmed condition list are orphans — which is precisely what it should report.
+    for (const k of ['eyeMetrics', 'rtSummaries', 'reactionTrials', 'comprehension', 'visualSearch', 'perception'] as const) {
       (b[k] as { condition_id: string }[]) = (b[k] as { condition_id: string }[]).filter((x) => x.condition_id === keep);
     }
     b.fatigue = b.fatigue.filter((x) => x.stage === 'baseline' || x.condition_id === keep);

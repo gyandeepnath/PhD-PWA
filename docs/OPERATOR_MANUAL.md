@@ -78,12 +78,24 @@ later ones as if they follow from the first.
    A participant who declines is **still fully enrolled**. Every questionnaire, reading,
    comprehension, search and reaction-time measure still runs. Record the refusal; do not try to
    persuade.
+
+   The app enforces the refusal itself: instead of the camera-setup screen it shows *Camera
+   measurement declined* and moves on. There is no button to enable the camera anyway, by design.
+   If a participant changes their mind, that is a change of consent and has to be taken again from
+   the consent screen.
 3. **Setup photographs.** A separate grant, defaulting to no. Two photographs, at the start and end
    of the session, showing seating distance and room lighting, so that setup compliance is evidenced
    rather than asserted.
 4. **Annotation video.** A separate grant, defaulting to no, and only for participants in the
    validation subsample. A short segment of reading video, coded frame by frame by a human, which is
    what lets us check the automatic blink measure against a person.
+
+   **You do not choose who is in the validation subsample.** Membership follows from the enrolment
+   number and is fixed before the participant arrives, so the checkbox simply appears for those
+   participants and not for others. This is deliberate: choosing at the bench would select the
+   subsample on whatever you happened to notice about the participant, which is precisely the
+   sample the validation must not be conditioned on. If the checkbox is not there, this participant
+   is not in the subsample.
 
 Granting 3 does not imply 4, and neither is implied by 2. The permission in force at the moment of
 capture is stored with each file, so a recording can never be separated from the basis on which it
@@ -103,6 +115,11 @@ invalidate the red-green plates.
 
 Alongside the app, complete the clinical screening: visual acuity, non-cycloplegic refraction, cover
 test, near point of convergence.
+
+**Eligibility.** The profile form accepts ages **18 to 35**, the protocol's range. Contact-lens wear
+on a test day and colour-vision deficiency are exclusions, and the app records them as such: a
+participant who reports either is written out with `eligible=false` and the reasons listed, so the
+confirmatory analysis can drop them. Enter what is true rather than what will let you proceed.
 
 **If screening turns up an abnormality** — reduced acuity, uncorrected refractive error, a binocular
 anomaly, a colour-vision deficiency:
@@ -139,6 +156,12 @@ reaction-time tasks.
 
 A self-paced rest break is offered **after every two conditions**. Let the participant take it.
 
+**Pausing.** The ⏸ Pause button exits to the Session Manager and the session resumes later. Where
+you pause matters, and the confirmation box tells you which case you are in: pausing *during* a
+condition restarts that condition on resume, so its measurements are taken again; pausing on the
+grey rest screen keeps the condition you have just finished and resumes at the next one. Prefer the
+rest screen.
+
 **Things you must not do, at any point:**
 
 - Give performance feedback of any kind. Not "well done", not "you got that one". Feedback changes
@@ -164,7 +187,8 @@ never re-checked is a session where you do not know what the illuminance was.
 | Face not detected at setup | Too dark, too far, backlit, camera covered | Check the lens, the distance, and that the participant is not silhouetted against a lamp. |
 | "Low frame rate" or a QC warning | Tablet under load | Close other apps, reboot, retry. Below about 25 fps the duration-based blink measures are gated off. |
 | Glasses reflecting the screen | Lamp or screen reflecting off the lenses | Tilt the tablet slightly, or move the lamp. Do not ask them to remove correction. |
-| App reloads mid-session | Browser reclaimed memory, or the tablet slept | Reopen. Session Manager offers **Resume** at the next condition. Data already written is safe. Note the interruption. |
+| App reloads mid-session | Browser reclaimed memory, or the tablet slept | Reopen. Session Manager offers **Resume** for every session still in progress, each at its own next condition. Data already written is safe. Note the interruption. |
+| After a resume, the app asks for the camera and runs calibration again | Expected | The blink thresholds are fractions of *this participant's* own open-eye baseline, and a reload clears it. Re-running calibration is required for the resumed conditions to carry any ocular data at all. Take it at the normal pace. |
 | Battery low | Not charged | Plug in. Do not let it die mid-condition. |
 | Participant wants a break outside the scheduled one | Fatigue, discomfort | Allow it. Take it **between** conditions, never inside the reading task. Note it. |
 | Participant withdraws | Their right, at any time | Stop immediately. Do not ask why. Session Manager → the session under **In progress** → **Export**. The export records the sitting as incomplete and lists only the conditions that ran. |
@@ -175,7 +199,9 @@ never re-checked is a session where you do not know what the illuminance was.
 ## 7. Ending the session
 
 1. The app runs the closing CVS-Q and the NASA Task Load Index. Let it finish; a session closed
-   early loses the key secondary outcome, which is the change in CVS-Q from baseline.
+   early loses the key secondary outcome, which is the change in CVS-Q from baseline. The sitting is
+   recorded as complete the moment the last Task Load Index slider is submitted, so closing the app
+   on the thank-you screen no longer leaves it looking unfinished.
 2. Take the closing setup photograph if that grant was given.
 3. **Export.** Dashboard → Export. This writes 18 CSVs, an analysis JSON, a codebook, a provenance
    manifest and a `backup_*.json`. If the session was consented for photographs or video, a second

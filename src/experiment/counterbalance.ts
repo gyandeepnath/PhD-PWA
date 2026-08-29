@@ -104,10 +104,44 @@ export function sessionPlan(enrolmentNumber: number): PlannedStep[] {
  * preserves complete balance across each block of ten participants (each row is still used once)
  * while decorrelating position from condition within a participant.
  *
- * Passage assignment advances with the block too, so no participant reads the same passage twice.
+ * Passage assignment advances with the block too, which decorrelates passage from CONDITION across
+ * the two sittings.
+ *
+ * It does NOT prevent a re-read, and an earlier version of this note wrongly claimed it did. There
+ * are ten passages and twenty condition-runs per participant, so every passage is necessarily read
+ * once per block — the rotation only changes which condition it is paired with. That matters:
+ * illumination is perfectly confounded with session order within a participant, so the practice
+ * effect from re-reading (faster reading, better comprehension, known target locations in the
+ * search text) loads entirely onto the illumination main effect, which is the whole-plot factor.
+ *
+ * The exported `passage_repeat_number` on 02_conditions.csv makes the exposure explicit so it can
+ * be modelled rather than silently absorbed. Removing the re-read altogether would need a second
+ * set of ten length- and difficulty-matched passages.
  */
 export function blockPlan(enrolmentNumber: number, block: number): PlannedStep[] {
   const n = Number.isFinite(enrolmentNumber) ? Math.floor(enrolmentNumber) : 1;
   const b = Number.isFinite(block) ? Math.floor(block) : 0;
   return sessionPlan(n + b);
+}
+
+/**
+ * Whether this participant is in the pre-specified validation subsample that contributes video for
+ * manual blink annotation (Objective 4).
+ *
+ * Derived from the enrolment number, deliberately, so membership is fixed before the participant
+ * arrives and is not an operator's judgement call. Letting the operator decide would select the
+ * subsample on whatever they noticed about the participant — a good tracking face, a cooperative
+ * manner — which is exactly the sample the criterion-validity estimate must not be conditioned on.
+ *
+ * Modulus 7 over the 145 enrolments the protocol plans yields 21 participants, against the 20 the
+ * synopsis specifies, and the selected enrolments fall on all ten Williams rows evenly, so the
+ * subsample is balanced across condition orders rather than concentrated in a few.
+ *
+ * Membership only makes the video grant OFFERABLE. It is still refusable, and defaults to refused.
+ */
+export const ANNOTATION_SUBSAMPLE_MODULUS = 7;
+
+export function isAnnotationSubsample(enrolmentNumber: number): boolean {
+  if (!Number.isFinite(enrolmentNumber) || enrolmentNumber < 1) return false;
+  return Math.floor(enrolmentNumber) % ANNOTATION_SUBSAMPLE_MODULUS === 1;
 }

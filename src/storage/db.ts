@@ -50,7 +50,7 @@ function indexedDBAvailable(): boolean {
 function getDB(): Promise<IDBPDatabase> {
   if (_dbPromise) return _dbPromise;
   _dbPromise = openDB(DB_NAME, DB_VERSION, {
-    upgrade(db) {
+    upgrade(db, _oldVersion, _newVersion, tx) {
       // Additive: create any store that does not yet exist (covers fresh installs and
       // forward-migration from an older version that lacks the v6 stores).
       for (const spec of STORE_SPECS) {
@@ -59,6 +59,18 @@ function getDB(): Promise<IDBPDatabase> {
           for (const idx of spec.indexes ?? []) {
             store.createIndex(idx.name, idx.keyPath);
           }
+          continue;
+        }
+
+        // The store already exists, but an index added in a later schema version does NOT appear
+        // just because the store does. Without this, a device upgraded from an earlier version
+        // keeps a store that is missing an index the code now reads through, and gatherSession's
+        // getAllByIndex(store, 'by_session', ...) throws NotFoundError on a store full of real
+        // data — a tablet mid-study that can no longer open its own sessions. Indexes can only be
+        // created inside the version-change transaction, which is what `tx` is.
+        const store = tx.objectStore(spec.name);
+        for (const idx of spec.indexes ?? []) {
+          if (!store.indexNames.contains(idx.name)) store.createIndex(idx.name, idx.keyPath);
         }
       }
     },
@@ -226,6 +238,35 @@ export async function clearConditionRows(store: StoreName, conditionId: string):
   const rows = await getAllByIndex(store, 'by_condition', conditionId);
   for (const row of rows) {
     const key = (row as unknown as Record<string, IDBValidKey>)[keyPath];
+    if (key !== undefined) await remove(store, key);
+  }
+}
+
+/**
+ * Remove a session's rows for one CVS-Q stage, so re-administering it replaces rather than appends.
+ *
+ * A crash between the closing CVS-Q and the NASA-TLX left the resume pointer past the last
+ * condition, which resumes at CVSQ_END — so the participant answered the sixteen items a second
+ * time and the session shipped two `session_end` rows with different totals. The integrity audit
+ * checked only that each stage was PRESENT, so it reported nothing, and the CVS-Q change score —
+ * the study's key secondary outcome — became ambiguous for that participant, with whichever row the
+ * analyst's join happened to pick being the post-rest one and biased low.
+ */
+export async function clearSessionStageRows(
+  store: 'cvsq_scores' | 'fatigue_scores',
+  sessionId: string,
+  stage: string,
+): Promise<void> {
+  const spec = STORE_SPECS.find((s) => s.name === store);
+  const keyPath = spec?.keyPath;
+  if (!keyPath) return;
+  const rows = await getAllByIndex(store, 'by_session', sessionId);
+  for (const row of rows) {
+    const r = row as unknown as Record<string, unknown>;
+    if (r.stage !== stage) continue;
+    // Only session-level rows: a post-condition fatigue row belongs to its condition, not here.
+    if (r.condition_id != null) continue;
+    const key = r[keyPath] as IDBValidKey | undefined;
     if (key !== undefined) await remove(store, key);
   }
 }

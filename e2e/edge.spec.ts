@@ -47,7 +47,10 @@ test('reload mid-session offers resume and continues at a condition', async ({ p
   await expect(page.getByText(/In progress \(1\)/)).toBeVisible();
   await page.getByRole('button', { name: /Resume/ }).first().click({ force: true });
 
-  // Resumes into the experiment at the (restarted) condition.
+  // A resume re-enters the CAMERA path first, by design: the app remounts, so the participant's
+  // own open-eye EAR baseline — which every blink threshold is a fraction of — is gone. Jumping
+  // straight back into the reading task, as this used to, meant every condition after an
+  // interruption was recorded with the camera off and no ocular data at all.
   await page.waitForSelector('[data-stage]', { timeout: 20_000 });
   await page.waitForFunction(
     () => {
@@ -57,8 +60,29 @@ test('reload mid-session offers resume and continues at a condition', async ({ p
     null,
     { timeout: 20_000 },
   );
+  expect(await stageNow(page)).toBe('CAMERA_SETUP');
+
+  // Through camera setup and calibration, the run must land back in the CONDITION LOOP — not at
+  // the baseline questionnaires, and not at condition 1 of a session already under way.
+  await click(page, /Continue without camera/);
+  await page.waitForFunction(
+    () => document.querySelector('[data-stage]')?.getAttribute('data-stage') !== 'CAMERA_SETUP',
+    null,
+    { timeout: 20_000 },
+  );
+  if (await stageNow(page) === 'CALIBRATION') {
+    await click(page, /Continue|Record baseline/);
+    await page.waitForFunction(
+      () => document.querySelector('[data-stage]')?.getAttribute('data-stage') !== 'CALIBRATION',
+      null,
+      { timeout: 20_000 },
+    );
+  }
   const stage = await stageNow(page);
   expect(['READING_TASK', 'COMPREHENSION', 'DISPLAY_PERCEPTION']).toContain(stage);
+  // Specifically NOT back into setup: re-administering the baseline CVS-Q and baseline fatigue
+  // would destroy the two measurements every change score is computed FROM.
+  expect(['CVSQ_BASELINE', 'BASELINE_FATIGUE', 'INSTRUCTIONS']).not.toContain(stage);
 
   // The session remains a single in-progress record (no duplicate from resume).
   const c = await dbCounts(page, ['sessions']);

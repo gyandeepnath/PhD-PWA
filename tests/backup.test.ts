@@ -279,3 +279,119 @@ describe('a restore does not destroy what is already on the device', () => {
     expect(rows.some((r) => r.comprehension_id === 'stray-row')).toBe(false);
   });
 });
+
+/**
+ * Structural validation, which the checksum does not provide.
+ *
+ * The checksum proves the file has not changed since it was written. It proves nothing about
+ * whether what was written made sense: a build with a bug, a hand-edited file that was
+ * re-checksummed, or a backup from a schema this build does not know all produce a file that passes
+ * the checksum and then writes damaged records into IndexedDB. The worst of these is a row carrying
+ * a DIFFERENT session's id — it is written successfully and then joins into the restored session's
+ * export as if it had been measured there.
+ */
+describe('a structurally invalid backup is refused before anything is written', () => {
+  const rewrite = (mutate: (d: Record<string, unknown>) => void) => {
+    const b = buildFixtureBundle();
+    const parsedGood = JSON.parse(serialiseSessionBackup(b));
+    mutate(parsedGood.data);
+    // Re-checksum, so the file is internally consistent and only the STRUCTURE is wrong. Without
+    // this the checksum check would fire first and the structural check would never be exercised.
+    parsedGood.checksum_fnv1a = null;
+    return parsedGood;
+  };
+
+  it('rejects a row that has no primary key', () => {
+    const obj = rewrite((d) => {
+      const rows = d.conditions as Record<string, unknown>[];
+      delete rows[0].condition_id;
+    });
+    // Give it a valid checksum for its (mutated) data so the structural check is what fires.
+    const r = parseSessionBackup(withChecksum(obj));
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/condition_id/);
+  });
+
+  it('rejects two rows sharing one primary key, which would silently become one row', () => {
+    const obj = rewrite((d) => {
+      const rows = d.reactionTrials as Record<string, unknown>[];
+      rows[1].trial_id = rows[0].trial_id;
+    });
+    const r = parseSessionBackup(withChecksum(obj));
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/appears more than once|replace/i);
+  });
+
+  it("rejects a row belonging to a different session, which would join into this one's export", () => {
+    const obj = rewrite((d) => {
+      const rows = d.eyeMetrics as Record<string, unknown>[];
+      rows[0].session_id = 'some-other-session';
+    });
+    const r = parseSessionBackup(withChecksum(obj));
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/belongs to session/);
+  });
+
+  it('rejects a collection that is not a list of records', () => {
+    const obj = rewrite((d) => { d.comprehension = { not: 'a list' }; });
+    const r = parseSessionBackup(withChecksum(obj));
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/not a list/);
+  });
+
+  it('writes nothing at all when the file is refused', async () => {
+    clearDb();
+    const obj = rewrite((d) => {
+      const rows = d.conditions as Record<string, unknown>[];
+      delete rows[0].condition_id;
+    });
+    const r = parseSessionBackup(withChecksum(obj));
+    expect(r.ok).toBe(false);
+    // The whole point of validating at parse time: the operator cannot get a half-import.
+    expect(await getAll('conditions')).toHaveLength(0);
+    expect(await getAll('sessions')).toHaveLength(0);
+  });
+
+  it('still accepts a backup that is merely unusual but sound', () => {
+    // An empty collection is legitimate (a session that ran no reaction block), and must not be
+    // confused with a damaged one.
+    const obj = rewrite((d) => { d.tlx = []; });
+    expect(parseSessionBackup(withChecksum(obj)).ok).toBe(true);
+  });
+});
+
+/** Recompute the file's checksum over its own (possibly mutated) data, as the writer would. */
+function withChecksum(obj: Record<string, unknown>): string {
+  const canonicalValue = (v: unknown): unknown => {
+    if (v === undefined) return { __undefined__: true };
+    if (v === null || typeof v !== 'object') return v;
+    if (Array.isArray(v)) return v.map(canonicalValue);
+    const src = v as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(src).sort()) out[k] = canonicalValue(src[k]);
+    return out;
+  };
+  const fnv = (s: string) => {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+    return (h >>> 0).toString(16).padStart(8, '0');
+  };
+  obj.checksum_fnv1a = fnv(JSON.stringify(canonicalValue(obj.data)));
+  return JSON.stringify(obj);
+}
+
+describe('the checksum survives a change in field order', () => {
+  it('hashes the DATA, not the order the fields happened to be written in', () => {
+    // The v1 canonicaliser sorted only the outer collection names, so a record rebuilt with its
+    // fields in a different order hashed differently and the operator was told a good file was
+    // damaged. Rebuilding a row's fields in reverse must not change the verdict.
+    const b = buildFixtureBundle();
+    const original = JSON.parse(serialiseSessionBackup(b));
+    const shuffled = JSON.parse(JSON.stringify(original));
+    shuffled.data.conditions = shuffled.data.conditions.map((c: Record<string, unknown>) =>
+      Object.fromEntries(Object.entries(c).reverse()));
+
+    const r = parseSessionBackup(JSON.stringify(shuffled));
+    expect(r.ok).toBe(true);
+  });
+});

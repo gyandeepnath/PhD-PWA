@@ -227,7 +227,12 @@ export function conditionEngagement(args: {
   // dropped: the run's other measures are still valid, and silently discarding it would bias the
   // sample toward high blinkers. This does not penalise the participant's engagement score, since a
   // low blink count is a measurement-window property, not evidence of carelessness.
-  const blinkCount = eye ? (eye.blink_count_full + eye.blink_count_micro + eye.blink_count_incomplete) : null;
+  // Null when the camera was off: the counts are absent, not zero, so there is no blink count to
+  // judge as insufficient. Summing them as 0 would report "0 blinks captured" for a condition that
+  // was never observed, which is the same fabrication the null encoding exists to prevent.
+  const blinkCount = eye && eye.blink_count_full != null && eye.blink_count_micro != null
+    ? eye.blink_count_full + eye.blink_count_micro + eye.blink_count_incomplete
+    : null;
   const insufficient_blinks = !!eye && eye.camera_active && blinkCount != null
     && blinkCount < ENGAGEMENT.MIN_BLINKS_FOR_RATIO;
   if (insufficient_blinks) {

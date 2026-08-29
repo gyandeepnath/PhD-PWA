@@ -8,7 +8,7 @@ import {
   listSessions, listDeleted, softDeleteSession, restoreSession, purgeSession, purgeExpired,
   renameSession, sessionLabel, BIN_RETENTION_MS,
 } from '@/storage/gather';
-import { loadResume } from '@/storage/sessionPersistence';
+import { listResumable, type ResumePointer } from '@/storage/sessionPersistence';
 import { parseSessionBackup, importSessionBackup } from '@/storage/backup';
 import { WavyBackground } from '@/components/WavyBackground';
 import type { SessionRecord } from '@/storage/types';
@@ -26,12 +26,20 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
   const [showBin, setShowBin] = useState(false);
   const [importing, setImporting] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const resume = loadResume();
+  /**
+   * One pointer per in-progress session, read from IndexedDB rather than from a single localStorage
+   * key. With one key, starting a second session made the first unresumable while all of its data
+   * sat on the device — and two sittings are in progress at once whenever a participant is part-way
+   * through and the next is started.
+   */
+  const [resumable, setResumable] = useState<Record<string, ResumePointer>>({});
 
   const refresh = useCallback(async () => {
     await purgeExpired();
     setActive(await listSessions());
     setBin(await listDeleted());
+    const list = await listResumable();
+    setResumable(Object.fromEntries(list.map((r) => [r.sessionId, r])));
   }, []);
 
   useEffect(() => {
@@ -40,6 +48,13 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
 
   const inProgress = active.filter((s) => s.status === 'in_progress');
   const completed = active.filter((s) => s.status === 'complete');
+
+  // The banner offers the most recently touched one; every other in-progress session still gets its
+  // own Resume button on its own row, so none of them is stranded.
+  const mostRecent = inProgress
+    .filter((s) => resumable[s.session_id])
+    .map((s) => ({ session: s, pointer: resumable[s.session_id] }))
+    .sort((a, b) => b.pointer.savedAt - a.pointer.savedAt)[0];
 
   /**
    * Restore from the backup_*.json written into every export. Deliberately noisy: it reports what
@@ -91,6 +106,15 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
     }
   };
   const del = async (s: SessionRecord) => {
+    // Confirmed, like purge is. Delete sits next to Resume and Export on a row of small buttons, on
+    // a touch screen, operated by someone standing next to a participant. The bin makes it
+    // recoverable for thirty days, which is a reason to keep the wording calm — not a reason to
+    // make a destructive action a single unconfirmed tap.
+    const label = sessionLabel(s);
+    const extra = s.status === 'in_progress'
+      ? '\n\nThis session is still IN PROGRESS. Deleting it ends it; it cannot be resumed from the bin.'
+      : '';
+    if (!window.confirm(`Move ${label} to the recycle bin?${extra}\n\nIt is recoverable for ${BIN_RETENTION_MS / 86400000} days.`)) return;
     await softDeleteSession(s.session_id);
     await refresh();
   };
@@ -142,18 +166,21 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
           {importing ? 'Restoring…' : 'Restore session from backup file'}
         </button>
 
-        {resume && inProgress.some((s) => s.session_id === resume.sessionId) && (
+        {mostRecent && (
           <div style={{ marginTop: 14, background: '#eef3ff', border: '1px solid #cdd8f0', borderRadius: 12, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span className="font-lab text-sm">Resume in-progress session (next condition {resume.nextStepIndex + 1}/{inProgress.find((s) => s.session_id === resume.sessionId)?.conditions_per_session ?? 8})</span>
-            <button onClick={() => onResume(resume.sessionId, resume.nextStepIndex)} className="font-lab text-sm text-white" style={{ background: '#4f8ef7', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer' }}>Resume →</button>
+            <span className="font-lab text-sm">
+              Resume {sessionLabel(mostRecent.session)} (next condition {mostRecent.pointer.nextStepIndex + 1}/{mostRecent.session.conditions_per_session})
+              {Object.keys(resumable).length > 1 && ` · ${Object.keys(resumable).length} sessions in progress`}
+            </span>
+            <button onClick={() => onResume(mostRecent.pointer.sessionId, mostRecent.pointer.nextStepIndex)} className="font-lab text-sm text-white" style={{ background: '#4f8ef7', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer' }}>Resume →</button>
           </div>
         )}
 
         <Section title={`In progress (${inProgress.length})`}>
           {inProgress.map((s) => (
             <Row key={s.session_id} s={s}>
-              {resume?.sessionId === s.session_id && (
-                <Btn onClick={() => onResume(s.session_id, resume.nextStepIndex)} color="#4f8ef7">Resume</Btn>
+              {resumable[s.session_id] && (
+                <Btn onClick={() => onResume(s.session_id, resumable[s.session_id].nextStepIndex)} color="#4f8ef7">Resume</Btn>
               )}
               {/* A participant may withdraw at any point, and the operator manual tells the
                   operator to export what exists when they do. Without this the dashboard — and so

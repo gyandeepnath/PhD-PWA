@@ -199,7 +199,8 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
     background_color: '#FFFFFF', text_color: '#000000', color_name: rng() < 0.5 ? 'black' : torture(), ink_name: rng() < 0.5 ? 'black' : torture(), passage_id: k % N_PASSAGES,
     wcag_contrast_ratio: wcagContrastRatio('#FFFFFF', '#000000'), wcag_level: 'AAA' as const,
     michelson_contrast: 1, below_wcag_aa: false, started_at: 1, completed_at: rng() < 0.5 ? 2 : null,
-    condition_duration_sec: 1, adaptation_ms_before: 0, reading_time_ms: null
+    condition_duration_sec: 1, passage_repeat_number: 1,
+    adaptation_ms_before: 0, reading_time_ms: null
   }));
   const has = () => rng() < 0.6;
   return {

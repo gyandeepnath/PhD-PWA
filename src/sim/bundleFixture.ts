@@ -49,6 +49,105 @@ export interface FixtureOptions {
   luxDeviationNote?: string | null;
 }
 
+
+/**
+ * The full 32-trial go/no-go block for one condition, and the summary DERIVED from it.
+ *
+ * The fixture used to write four trial rows next to a summary asserting 32 trials, 20 signals and
+ * 19 hits. Nothing checked the two against each other, so every test that touched reaction data was
+ * operating on a bundle whose summary was not a summary of anything. The integrity audit's new
+ * summary_matches_trials check found it immediately — which is the point of the check: rt_summaries
+ * is what the analysis templates read, the trials are what a reviewer would re-derive it from, and
+ * a fixture in which those disagree cannot demonstrate that the real pipeline keeps them in step.
+ *
+ * Deterministic: trial outcomes are a function of the trial index, so the export stays
+ * byte-reproducible.
+ */
+const RT_TOTAL_TRIALS = 32;
+
+function rtTrialsFor(conditionId: string, sid: string, i: number) {
+  return Array.from({ length: RT_TOTAL_TRIALS }, (_, t) => {
+    // First 20 positions in the shuffled block are signals; a fixed pattern, not a random one.
+    const isSignal = (t * 5) % 8 < 5;
+    // One miss and one false alarm per condition, at fixed positions, so the summary has something
+    // other than a perfect score to summarise.
+    const miss = isSignal && t === 3;
+    const falseAlarm = !isSignal && t === 6;
+    const responded = (isSignal && !miss) || falseAlarm;
+    const accuracy = miss ? 'miss' : isSignal ? 'hit' : falseAlarm ? 'false_alarm' : 'correct_rejection';
+    return {
+      trial_id: `rt-${i}-${t}`,
+      condition_id: conditionId,
+      session_id: sid,
+      trial_number: t + 1,
+      trial_category: (isSignal ? 'signal' : 'noise') as 'signal' | 'noise',
+      is_signal: isSignal,
+      stimulus_onset_time: 1000 + t * 1500,
+      response_time_ms: responded ? 320 + i + (t % 7) * 6 : null,
+      accuracy: accuracy as 'hit' | 'miss' | 'false_alarm' | 'correct_rejection',
+      false_start: false,
+      anticipatory: false,
+    };
+  });
+}
+
+function rtSummaryFor(conditionId: string, sid: string, i: number) {
+  const trials = rtTrialsFor(conditionId, sid, i);
+  const signals = trials.filter((r) => r.is_signal);
+  const noise = trials.filter((r) => !r.is_signal);
+  const hits = trials.filter((r) => r.accuracy === 'hit');
+  const fas = trials.filter((r) => r.accuracy === 'false_alarm');
+  const rts = hits.map((r) => r.response_time_ms as number);
+  const mean = rts.reduce((a, b) => a + b, 0) / rts.length;
+  const sorted = [...rts].sort((a, b) => a - b);
+  const median = sorted.length % 2
+    ? sorted[(sorted.length - 1) / 2]
+    : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+  const sd = Math.sqrt(rts.reduce((a, b) => a + (b - mean) ** 2, 0) / (rts.length - 1));
+  const round2 = (x: number) => Math.round(x * 100) / 100;
+  const hitRate = hits.length / signals.length;
+  const faRate = fas.length / noise.length;
+  // Log-linear correction, matching the production scorer's treatment of extreme rates.
+  const z = (pr: number) => {
+    const p = Math.min(Math.max(pr, 1e-6), 1 - 1e-6);
+    // Acklam-style inverse normal, sufficient for a fixture.
+    const a = 0.147;
+    const x = 2 * p - 1;
+    const ln = Math.log(1 - x * x);
+    const s = 2 / (Math.PI * a) + ln / 2;
+    return Math.sign(x) * Math.sqrt(Math.sqrt(s * s - ln / a) - s) * Math.SQRT2;
+  };
+  const dPrime = round2(z(hitRate) - z(faRate));
+  return {
+    condition_id: conditionId,
+    session_id: sid,
+    total_trials: trials.length,
+    signal_trials: signals.length,
+    hits: hits.length,
+    false_alarms: fas.length,
+    misses: signals.length - hits.length,
+    correct_rejections: noise.length - fas.length,
+    hit_rate: round2(hitRate),
+    false_alarm_rate: round2(faRate),
+    mean_rt_hits_ms: rtFor(i),
+    median_rt_hits_ms: median,
+    rt_sd_ms: round2(sd),
+    error_rate: round2((signals.length - hits.length + fas.length) / trials.length),
+    rt_cv: round2(sd / mean),
+    anticipations: 0,
+    lapse_count: i % 2,
+    lapse_rate: round2((i % 2) / signals.length),
+    inverse_efficiency_ms: round2(mean / (1 - (signals.length - hits.length + fas.length) / trials.length)),
+    first_half_mean_rt_ms: round2(rts.slice(0, Math.floor(rts.length / 2)).reduce((a, b) => a + b, 0) / Math.floor(rts.length / 2)),
+    second_half_mean_rt_ms: round2(rts.slice(Math.floor(rts.length / 2)).reduce((a, b) => a + b, 0) / (rts.length - Math.floor(rts.length / 2))),
+    d_prime: dPrime,
+    d_prime_se: 0.4,
+    d_prime_unstable: false,
+    criterion: round2(-(z(hitRate) + z(faRate)) / 2),
+    d_prime_estimable: true,
+  };
+}
+
 export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
   const { pid, sid, enrolment, block, t0 } = FIXTURE;
   const level = illuminationForBlock(enrolment, block);
@@ -81,6 +180,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       started_at: t0 + 100_000 + i * 600_000,
       completed_at: t0 + 100_000 + i * 600_000 + 540_000,
       condition_duration_sec: 540,
+      passage_repeat_number: 1,
       adaptation_ms_before: i === 0 ? 0 : 60_000,
       reading_time_ms: readingMs(i),
     };
@@ -282,49 +382,8 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       mean_face_luma: 120,
       lighting_quality: 'good',
     })),
-    reactionTrials: conditions.flatMap((c, i) =>
-      Array.from({ length: 4 }, (_, t) => ({
-        trial_id: `rt-${i}-${t}`,
-        condition_id: c.condition_id,
-        session_id: sid,
-        trial_number: t + 1,
-        trial_category: (t % 2 === 0 ? 'signal' : 'noise') as 'signal' | 'noise',
-        is_signal: t % 2 === 0,
-        stimulus_onset_time: 1000 + t,
-        response_time_ms: t % 2 === 0 ? 320 + i : null,
-        accuracy: (t % 2 === 0 ? 'hit' : 'correct_rejection') as 'hit' | 'correct_rejection',
-        false_start: false,
-        anticipatory: false,
-      })),
-    ),
-    rtSummaries: conditions.map((c, i) => ({
-      condition_id: c.condition_id,
-      session_id: sid,
-      total_trials: 32,
-      signal_trials: 20,
-      hits: 19,
-      false_alarms: 1,
-      misses: 1,
-      correct_rejections: 11,
-      hit_rate: 0.95,
-      false_alarm_rate: 1 / 12,
-      mean_rt_hits_ms: rtFor(i),
-      median_rt_hits_ms: 335,
-      rt_sd_ms: 55,
-      error_rate: 2 / 32,
-      rt_cv: 0.16,
-      anticipations: 0,
-      lapse_count: i % 2,
-      lapse_rate: (i % 2) / 20,
-      inverse_efficiency_ms: 360,
-      first_half_mean_rt_ms: 330,
-      second_half_mean_rt_ms: 350,
-      d_prime: Math.round((2.9 - i * 0.05) * 100) / 100,
-      d_prime_se: 0.4,
-      d_prime_unstable: false,
-      criterion: 0.1,
-      d_prime_estimable: true,
-    })),
+    reactionTrials: conditions.flatMap((c, i) => rtTrialsFor(c.condition_id, sid, i)),
+    rtSummaries: conditions.map((c, i) => rtSummaryFor(c.condition_id, sid, i)),
     calibration: [
       {
         calibration_id: 'cal-1',

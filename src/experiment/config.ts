@@ -6,6 +6,14 @@
  * floor rather than a hard cutoff). All are centralised here so a protocol change is one edit.
  */
 const BASE_CONFIG = {
+  /**
+   * Inclusion age band, from the protocol. Named here rather than written inline so the profile
+   * form's gate, the eligibility computation and the exported codebook cannot drift apart — which
+   * they had: the code accepted 18 to 80 while the synopsis and the codebook both said 18 to 35.
+   */
+  MIN_AGE: 18,
+  MAX_AGE: 35,
+
   // Reading: per-page minimum dwell (rAF-gated). The Next button unlocks after this; the
   // participant may take longer (self-paced). reading_time_ms is recorded.
   READING_PAGE_MIN_MS: 20000,

@@ -5,6 +5,7 @@
  * pipeline works), and runs a Monte-Carlo power curve. Prints a human-readable report.
  */
 import { generateCohort } from './participant';
+import { N_CONDITIONS } from '@/experiment/conditions';
 import { GROUND_TRUTH as GT } from './effects';
 import { cohortRows, ols, powerForN } from './analysis';
 
@@ -26,7 +27,9 @@ function main(): void {
 
   const cohort = generateCohort(N, seed);
   const rows = cohortRows(cohort);
-  console.log(`Condition rows with valid RT: ${rows.length} (of ${N * 8})\n`);
+  // N_CONDITIONS, not a literal 8: the design moved to ten conditions and this denominator did
+  // not, so the line read "400 (of 320)" — a total larger than the total it was reported against.
+  console.log(`Condition rows with valid RT: ${rows.length} (of ${N * N_CONDITIONS})\n`);
 
   // --- Effect recovery: RT model ---
   const rt = ols(['log_contrast', 'negative_polarity', 'session_position'], rows, 'mean_rt_hits_ms');

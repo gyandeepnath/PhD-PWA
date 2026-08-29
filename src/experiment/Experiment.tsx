@@ -11,11 +11,11 @@ import {
   N_ILLUMINATION_BLOCKS,
 } from '@/experiment/illumination';
 import { PASSAGES } from './passages';
-import { blockPlan, type PlannedStep } from './counterbalance';
+import { blockPlan, isAnnotationSubsample, type PlannedStep } from './counterbalance';
 import { CONFIG } from './config';
 import { initialState, nextState, progressPercent, type MachineState } from './stateMachine';
 import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
-import { put, get, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows } from '@/storage/db';
+import { put, get, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows, clearSessionStageRows } from '@/storage/db';
 import {
   noMediaConsent, mayCapture, capturePhoto, recordSegment, checksumOfBlob,
 } from '@/storage/media';
@@ -39,7 +39,7 @@ import { Cvsq } from '@/scales/Cvsq';
 import { NasaTlx } from '@/scales/NasaTlx';
 import { LuxCheckpointPanel } from '@/start/LuxCheckpoint';
 import {
-  SessionInit, ParticipantProfile, CameraSetup, Calibration, AdaptationScreen, SessionComplete,
+  SessionInit, ParticipantProfile, CameraSetup, CameraDeclined, Calibration, AdaptationScreen, SessionComplete,
   Consent, Preflight, Instructions, type SessionInitData, type ProfileData,
 } from '@/start/setupStages';
 import { CalibrationRoutine } from '@/start/CalibrationRoutine';
@@ -82,6 +82,32 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     setMachine((m) => nextState(m, nConditionsRef.current));
   }, []);
 
+  /**
+   * Where the loop should re-enter after a resumed session has re-run camera setup and calibration.
+   *
+   * A resume cannot simply advance() out of CALIBRATION: the setup sequence continues into the
+   * baseline CVS-Q and baseline fatigue, which would re-administer the two instruments the change
+   * scores are measured FROM, and then start the condition loop at zero. This ref is the landing
+   * point, set by the resume effect and consumed once.
+   */
+  const resumeJumpTo = useRef<number | null>(null);
+
+  /**
+   * Milliseconds of grey-field adaptation actually delivered before the NEXT condition. Written by
+   * the ADAPTATION screen, consumed by ensureCondition. Zero on a cold entry — the first condition
+   * of a sitting, or one reached through the resume path, which shows no adaptation screen.
+   */
+  const adaptationDelivered = useRef(0);
+
+  /** advance(), unless a resume is waiting to re-enter the loop at a specific condition. */
+  const advanceOrResume = useCallback(() => {
+    const target = resumeJumpTo.current;
+    if (target == null) { advance(); return; }
+    resumeJumpTo.current = null;
+    transitioning.current = true;
+    setMachine({ stage: 'READING_TASK', stepIndex: target });
+  }, [advance]);
+
   useEffect(() => {
     transitioning.current = false;
   }, [machine]);
@@ -119,9 +145,26 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       setPlan(sittingPlan);
       setBaselineFatigue(baseline ? baseline.fatigue_mean : null);
       const idx = resume.nextStepIndex;
+      /**
+       * Re-enter the camera path before resuming the loop.
+       *
+       * This used to jump straight to READING_TASK. App.tsx remounts Experiment on resume, so
+       * useTracking() came back at status 'unavailable' with its EAR and gaze baselines — which
+       * live in refs — cleared. CAMERA_SETUP and CALIBRATION were both skipped, so every condition
+       * after the interruption took the camera-off branch and wrote a row with no ocular data at
+       * all, silently, with nothing on screen to say the camera was not running. An interruption is
+       * the single most likely event in a 90-minute session on a tablet.
+       *
+       * Calibration has to be redone rather than reused: the thresholds are expressed as fractions
+       * of this participant's own open-eye baseline, and that baseline is gone.
+       */
+      const wantsCamera = s.media_consent?.camera_metrics === true;
+      resumeJumpTo.current = idx < sittingPlan.length && wantsCamera ? idx : null;
       setMachine(idx >= sittingPlan.length
         ? { stage: 'CVSQ_END', stepIndex: sittingPlan.length - 1 }
-        : { stage: 'READING_TASK', stepIndex: idx });
+        : wantsCamera
+          ? { stage: 'CAMERA_SETUP', stepIndex: idx }
+          : { stage: 'READING_TASK', stepIndex: idx });
       setResuming(false);
     })();
     return () => {
@@ -305,19 +348,81 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   // --- PARTICIPANT PROFILE ---
   const saveProfile = useCallback(async (d: ProfileData) => {
     if (!session) return;
+    /**
+     * Eligibility encodes the PROTOCOL's criteria, not just a sanity check on age.
+     *
+     * It used to be `age >= 18 && age <= 80`, while the synopsis specifies 18 to 35 and lists
+     * colour-vision deficiency and contact-lens wear on test days as exclusions — and the exported
+     * codebook says so in the same repository ("The sample is delimited to 18 to 35"; "Contact-lens
+     * wear on test days is an exclusion"; "Rows with false must be excluded from the confirmatory
+     * analysis"). So a 52-year-old contact-lens wearer who failed the Ishihara screen was written
+     * out as eligible=TRUE with an empty exclusion_reason, and an analyst following the codebook's
+     * own instruction would keep them in the confirmatory analysis of a text-colour factor they
+     * cannot perceive normally.
+     *
+     * Reasons accumulate rather than short-circuit: an excluded participant's record should say
+     * everything that excluded them, not only the first thing checked. Colour vision is re-evaluated
+     * after the Ishihara stage, which runs later — see the COLOR_VISION handler.
+     */
+    const reasons: string[] = [];
+    if (d.age < CONFIG.MIN_AGE || d.age > CONFIG.MAX_AGE) {
+      reasons.push(`age ${d.age} outside the ${CONFIG.MIN_AGE}–${CONFIG.MAX_AGE} inclusion range`);
+    }
+    if (d.correctionType === 'contacts') {
+      reasons.push('contact-lens wear on a test day is an exclusion');
+    }
+    if (d.cvdSelfReport) {
+      reasons.push('self-reported colour-vision deficiency');
+    }
+    const eligible = reasons.length === 0;
+
+    /**
+     * The participant record is created once and SHARED across a participant's two sittings, so
+     * sitting 2 runs this stage against a row that already holds sitting 1's screening. Writing a
+     * fresh object destroyed it: the Ishihara result reverted to null, a screen_failed colour-vision
+     * status reverted to the self-report, and the measured baseline_fatigue reverted to 0 — for
+     * BOTH sittings, because there is only one row. None of it was recoverable and nothing reported
+     * it, because a row with ishihara_correct=null is exactly what a participant who was never
+     * screened looks like.
+     *
+     * So: merge. Traits the profile stage actually asks about are taken from this sitting's answers
+     * (a participant may have changed correction between sittings, and should be recorded as such).
+     * Everything measured elsewhere is preserved unless this sitting has something better.
+     */
+    const prior = await get('participants', session.participant_id);
+
     await put('participants', {
+      ...(prior ?? {}),
       participant_id: session.participant_id,
-      enrolment_number: enrolment,
+      // The enrolment number is fixed at first enrolment: it is the sole input to the Williams
+      // condition order, so re-deriving it at sitting 2 would give the participant two orders.
+      enrolment_number: prior?.enrolment_number ?? enrolment,
       age: d.age, gender: d.gender, daily_screen_hours: d.dailyScreenHours,
       device_familiarity: d.deviceFamiliarity, lighting_habit: d.lightingHabit,
       correction_type: d.correctionType,
-      cvd_status: d.cvdSelfReport ? 'self_reported_deficient' : 'normal',
-      ishihara_correct: null, ishihara_total: null,
-      caffeine_today: d.caffeineToday, hours_since_sleep: d.hoursSinceSleep,
-      eligible: d.age >= 18 && d.age <= 80,
-      exclusion_reason: d.age >= 18 && d.age <= 80 ? null : `Age ${d.age} outside the 18–80 inclusion range`,
-      baseline_fatigue: 0, session_id: session.session_id,
+      // A failed screening outranks a self-report and must not be undone by re-answering the
+      // self-report question at sitting 2.
+      cvd_status: prior?.cvd_status === 'screen_failed'
+        ? 'screen_failed'
+        : d.cvdSelfReport ? 'self_reported_deficient' : (prior?.cvd_status ?? 'normal'),
+      ishihara_correct: prior?.ishihara_correct ?? null,
+      ishihara_total: prior?.ishihara_total ?? null,
+      // First-sitting values, kept for continuity; the per-sitting values go on the session below.
+      caffeine_today: prior?.caffeine_today ?? d.caffeineToday,
+      hours_since_sleep: prior?.hours_since_sleep ?? d.hoursSinceSleep,
+      eligible,
+      exclusion_reason: eligible ? null : reasons.join('; '),
+      baseline_fatigue: prior?.baseline_fatigue ?? 0,
+      // Points at the sitting that created the record, not the most recent one to touch it.
+      session_id: prior?.session_id ?? session.session_id,
     });
+
+    // Caffeine and sleep are STATE, not trait: they are asked at every sitting because they differ
+    // between them. Recorded on the session so both sittings' values survive.
+    const fresh = { ...session, caffeine_today: d.caffeineToday, hours_since_sleep: d.hoursSinceSleep };
+    await put('sessions', fresh);
+    setSession(fresh);
+
     advance();
   }, [session, enrolment, advance]);
 
@@ -326,10 +431,20 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     if (!session || !cond || !step) return;
     if (writtenConditions.current.has(machine.stepIndex)) return;
     writtenConditions.current.add(machine.stepIndex);
-    const prev = plan[machine.stepIndex - 1];
-    const switched = prev && CONDITIONS[prev.conditionIndex].polarity !== cond.polarity;
-    const adaptationBefore = machine.stepIndex === 0 ? 0
-      : switched ? CONFIG.ADAPTATION_SWITCH_POLARITY_MS : CONFIG.ADAPTATION_SAME_POLARITY_MS;
+    /**
+     * What the grey field ACTUALLY delivered, not what the plan intended.
+     *
+     * This used to be derived from the plan alone, so a condition entered through the resume path —
+     * which shows no adaptation screen at all — recorded a full 60 s or 120 s of grey-field
+     * adaptation that never happened. The column exists to verify the polarity-switch after-effect
+     * control, and to covary it out; a value that describes the protocol rather than the run is
+     * worse than no column, because it cannot be distinguished from a real one.
+     *
+     * adaptationDelivered is set by the ADAPTATION screen when it completes and consumed here. Zero
+     * when this condition was entered cold: the first of a sitting, or a resume.
+     */
+    const adaptationBefore = adaptationDelivered.current;
+    adaptationDelivered.current = 0;
     await put('conditions', {
       condition_id: conditionId, session_id: session.session_id,
       // Global serial position (offset + local index) so split sittings keep a 0..9 covariate.
@@ -340,17 +455,19 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       michelson_contrast: cond.michelson_contrast, below_wcag_aa: cond.below_wcag_aa,
       started_at: Date.now(), completed_at: null, condition_duration_sec: null,
       adaptation_ms_before: adaptationBefore, reading_time_ms: null,
+      // Block 0 is the participant's first exposure to every passage, block 1 the second.
+      passage_repeat_number: (session.illumination_block ?? 0) + 1,
     });
     conditionStarted.current[machine.stepIndex] = Date.now();
     // Coarse resume pointer: an interruption during this condition resumes by redoing it.
     saveResume(session.session_id, machine.stepIndex);
-    // Eye-tracking window spans the reading task (begins here, ends at reading complete).
-    tracking.beginCondition();
+    // NOTE: tracking.beginCondition() is deliberately NOT called here. See the ReadingTask
+    // onBegin handler — the exposure window has to start when the participant starts reading.
     // Annotation video for the validation sub-study: one segment per session, taken during the
     // first condition's reading so it always lands inside a real exposure window. Fire-and-forget —
     // recording must never delay stimulus onset, and mayCapture() gates it on the video grant.
     if (machine.stepIndex === 0) void captureMedia('reading_segment', cond?.label ?? null);
-  }, [session, cond, step, conditionId, machine.stepIndex, plan, tracking, captureMedia]);
+  }, [session, cond, step, conditionId, machine.stepIndex, captureMedia]);
 
   // ===== RENDER =====
   const nConditions = plan.length || N_CONDITIONS;
@@ -369,7 +486,16 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       view = <SessionInit resolveAssignment={resolveAssignment} onSubmit={beginSession} />;
       break;
     case 'CONSENT':
-      view = <Consent onConsent={async (media) => {
+      /**
+       * The annotation-video grant is offered only to the pre-specified validation subsample — and
+       * it IS now offered. The prop defaults to false and no caller ever passed it, so the checkbox
+       * was unreachable, media_consent.annotation_video was false for every session ever recorded,
+       * and mayCapture() turned back every reading-segment capture. Objective 4 depends entirely on
+       * that video: without it there is no material from which a human can code blinks frame by
+       * frame, and so no criterion validity for the automated incomplete-blink classifier that
+       * produces the primary outcome. The sub-study could not have collected a single segment.
+       */
+      view = <Consent askAnnotationVideo={isAnnotationSubsample(enrolment)} onConsent={async (media) => {
         if (session) {
           // Persist the media grants alongside the participation consent, in one write, so a
           // capture can never find consent_given=true with the grants still unset.
@@ -429,11 +555,18 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     case 'CVSQ_END':
       view = (
         <Cvsq stage="session_end" onComplete={async (r) => {
-          if (session) await put('cvsq_scores', {
-            cvsq_id: uuidv4(), session_id: session.session_id, stage: 'session_end',
-            frequency: r.frequency, intensity: r.intensity, total_score: r.total, symptomatic: r.symptomatic,
-            response_time_ms: r.responseTimeMs,
-          });
+          if (session) {
+            // Replace any prior attempt. A crash between here and the NASA-TLX leaves the resume
+            // pointer past the last condition, which resumes at this stage — so without this the
+            // session ships two session_end rows with different totals and the CVS-Q change score
+            // is ambiguous for that participant.
+            await clearSessionStageRows('cvsq_scores', session.session_id, 'session_end');
+            await put('cvsq_scores', {
+              cvsq_id: uuidv4(), session_id: session.session_id, stage: 'session_end',
+              frequency: r.frequency, intensity: r.intensity, total_score: r.total, symptomatic: r.symptomatic,
+              response_time_ms: r.responseTimeMs,
+            });
+          }
           advance();
         }} />
       );
@@ -455,17 +588,50 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               all_touched: Object.values(r.touched).every(Boolean),
               response_time_ms: r.responseTimeMs,
             });
+            /**
+             * The sitting is complete HERE, when the last instrument is submitted — not when the
+             * operator taps the researcher button on the thank-you screen.
+             *
+             * That button was the only place status became 'complete'. A sitting whose participant
+             * had answered everything, and whose operator simply closed the app or let the tablet
+             * sleep, stayed `in_progress` with a null end time and a live resume pointer: it
+             * exported as session_complete=false and would be excluded as truncated, and tapping
+             * Resume to "finish it off" re-administered the closing CVS-Q and TLX with nobody left
+             * to answer them.
+             */
+            await put('sessions', { ...session, status: 'complete', session_end_time: Date.now() });
+            clearResume(session.session_id);
           }
           advance();
         }} />
       );
       break;
     case 'CAMERA_SETUP':
-      view = (
+      /**
+       * The grant is ENFORCED here, not merely recorded.
+       *
+       * Consent offers "Use the camera for blink and head-position measures" as a separate,
+       * default-off grant, and tells the participant that declining means the eye measures are not
+       * collected for them. That flag was written to the session and exported as
+       * consent_camera_metrics — and read by nothing. The very next screen offered "Enable camera",
+       * the operator tapped it because the manual says to, and FaceMesh ran for the whole sitting.
+       * The export then carried consent_camera_metrics=false beside ten rows of real blink data:
+       * the study's primary outcome, measured on a participant who refused that measurement.
+       *
+       * A refusal now skips the camera path outright. It cannot be undone by an operator tapping
+       * the wrong button, because the button is not there.
+       */
+      view = session?.media_consent?.camera_metrics === true ? (
         <CameraSetup
           onAllow={async () => { await tracking.start(); advance(); }}
-          onSkip={() => advance()}
+          onSkip={() => advanceOrResume()}
+          retains={{
+            setupPhotos: session?.media_consent?.setup_photos === true,
+            annotationVideo: session?.media_consent?.annotation_video === true,
+          }}
         />
+      ) : (
+        <CameraDeclined onContinue={() => advanceOrResume()} />
       );
       break;
     case 'CALIBRATION':
@@ -475,10 +641,10 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           beginGazeCalibration={tracking.beginGazeCalibration}
           sampleGazeTarget={tracking.sampleGazeTarget}
           endGazeCalibration={tracking.endGazeCalibration}
-          onDone={() => { void captureMedia('session_start').then(advance); }}
+          onDone={() => { void captureMedia('session_start').then(advanceOrResume); }}
         />
       ) : (
-        <Calibration cameraStatus={tracking.status} onDone={advance} />
+        <Calibration cameraStatus={tracking.status} onDone={advanceOrResume} />
       );
       break;
     case 'BASELINE_FATIGUE':
@@ -512,6 +678,22 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         view = (
           <ReadingTask
             passage={passage} background={cond.background} text={cond.text}
+            /**
+             * The ocular exposure window opens when the participant taps "Begin reading", not when
+             * the stage mounts.
+             *
+             * It used to open on mount, while ReadingTask was still showing its instruction card.
+             * The aggregator's denominator is the span of its own samples, so blink_rate and every
+             * PERCLOS proportion were computed over instruction-dwell plus reading, while
+             * reading_time_ms covered reading alone — and the codebook asserted the two were the
+             * same window. Worse, the first/second-half bins were split at the midpoint of the
+             * inflated window, so a participant who paused 40 s on the card had that low-demand
+             * period charged to the first-half bin, manufacturing an apparent within-task decline
+             * in blink rate out of nothing. Instruction dwell is self-paced, so it varied by
+             * condition and by participant: uncontrolled noise injected straight into the primary
+             * outcome.
+             */
+            onBegin={() => tracking.beginCondition()}
             onComplete={async (readingTimeMs) => {
               if (session) {
                 await tracking.endCondition(conditionId, session.session_id);
@@ -613,6 +795,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           practiceTrials={machine.stepIndex === 0 && (session?.condition_offset ?? 0) === 0 ? CONFIG.RT_PRACTICE_TRIALS : 0}
           onComplete={async (res) => {
             if (session) {
+              // Replace, do not append. Every other per-condition store either replaces (keyed by
+              // condition_id) or is cleared first; reaction_trials is keyed by a fresh uuid per row
+              // and was neither, so a condition that ran twice — a redo after an interruption —
+              // left 64 rows under one condition_id, numbered 1..32 twice, while rt_summaries still
+              // reported 32. Every rate re-derived from the trial file was then over a doubled
+              // denominator, and nothing in the export looked wrong.
+              await clearConditionRows('reaction_trials', conditionId);
               for (const t of res.trials) {
                 await put('reaction_trials', {
                   trial_id: uuidv4(), condition_id: conditionId, session_id: session.session_id, ...t,
@@ -643,7 +832,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       const switched = prev && nextStep && CONDITIONS[prev.conditionIndex].polarity !== CONDITIONS[nextStep.conditionIndex].polarity;
       const dur = switched ? CONFIG.ADAPTATION_SWITCH_POLARITY_MS : CONFIG.ADAPTATION_SAME_POLARITY_MS;
       const label = nextStep ? `Next: ${CONDITIONS[nextStep.conditionIndex].polarity === 'positive' ? 'Light' : 'Dark'} background` : '';
-      view = <AdaptationScreen durationMs={dur} nextLabel={label} onDone={advance} />;
+      view = <AdaptationScreen durationMs={dur} nextLabel={label} onDone={() => {
+        // Record what was actually delivered, for the next condition's adaptation_ms_before.
+        adaptationDelivered.current = dur;
+        advance();
+      }} />;
       break;
     }
     case 'BREAK_SCREEN':
@@ -682,7 +875,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         // capture failure cannot leave the session marked complete without its end photo attempted.
         await captureMedia('session_end');
         if (session) {
-          await put('sessions', { ...session, status: 'complete', session_end_time: Date.now() });
+          // Completion is already recorded at NASA_TLX; this only attaches the closing photograph
+          // and keeps an end time for a session that somehow reached here without one.
+          const fresh = await get('sessions', session.session_id);
+          await put('sessions', {
+            ...(fresh ?? session),
+            status: 'complete',
+            session_end_time: fresh?.session_end_time ?? Date.now(),
+          });
           clearResume(session.session_id);
         }
         tracking.stop();
@@ -731,8 +931,21 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       {canPause && (
         <button
           onClick={() => {
-            if (session && window.confirm('Pause and exit to the session manager? This condition will be restarted on resume.')) {
-              saveResume(session.session_id, machine.stepIndex);
+            if (!session) return;
+            /**
+             * A pause during ADAPTATION comes AFTER the condition is finished — the grey field is a
+             * rest, not part of the run. Saving machine.stepIndex there rewound the pointer over a
+             * completed condition, so the resume replayed a passage the participant had just read
+             * (inflating comprehension and reading speed through prior exposure) and appended a
+             * second set of reaction trials under the same condition_id.
+             */
+            const done = machine.stage === 'ADAPTATION';
+            const target = done ? machine.stepIndex + 1 : machine.stepIndex;
+            const msg = done
+              ? 'Pause and exit to the session manager? This condition is complete; the session will resume at the next one.'
+              : 'Pause and exit to the session manager? This condition will be restarted on resume.';
+            if (window.confirm(msg)) {
+              saveResume(session.session_id, target);
               tracking.stop();
               onExit();
             }

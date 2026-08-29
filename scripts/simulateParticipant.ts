@@ -274,6 +274,17 @@ function powerT(n: number, dz: number): number {
 console.log('\n' + '='.repeat(96));
 console.log('POWER UNDER MEASUREMENT ERROR — what the shipped exposure actually buys');
 console.log('='.repeat(96));
+/**
+ * Derived from the simulation, never hard-coded.
+ *
+ * Both tables below used to be anchored on a literal 73, the exposure the corpus delivered before
+ * it was rebuilt. After the rebuild the base simulation read the real passages (~178 s) while the
+ * tables still called 73 s "as shipped" and added their increments on top of a base that already
+ * contained 178 s — so the row labelled "as shipped" described a build that no longer existed, and
+ * every raised-exposure row double-counted. Figures from this script have reached the synopsis
+ * before; a stale constant here becomes a false claim in a thesis.
+ */
+const SHIPPED_SEC = Math.round((base.agg['reading'] / N_CONDITIONS) * 60);
 const SIGMA_TRUE = 0.10;   // between-participant SD of the true within-participant difference
 const N_ANALYSED = 130;
 console.log(`Assumes a between-participant SD of the true difference score of ${SIGMA_TRUE}, n = ${N_ANALYSED}.`);
@@ -281,7 +292,8 @@ console.log('');
 console.log('  reading    blinks   SE per      MAIN EFFECT (5v5)          INTERACTION (1v1)');
 console.log('  exposure   /cond    condition   d_z obs   power           d_z obs   power');
 console.log('  ' + '-'.repeat(88));
-for (const sec of [73, 120, 180, 240, 300]) {
+const EXPOSURES = [...new Set([73, 120, SHIPPED_SEC, 240, 300])].sort((a, b) => a - b);
+for (const sec of EXPOSURES) {
   const blinks = (sec / 60) * 13;
   const se = seOfRatio(blinks);
   // main effect: mean of 5 conditions each side, difference of two means
@@ -291,7 +303,7 @@ for (const sec of [73, 120, 180, 240, 300]) {
   const att = (sm: number) => Math.sqrt(SIGMA_TRUE ** 2 / (SIGMA_TRUE ** 2 + sm ** 2));
   const dzMain = 0.30 * att(seMain);
   const dzInter = 0.25 * att(seInter);
-  const flag = sec === 73 ? '  <- as shipped' : sec === 180 ? '  <- synopsis assumes 3-min segments' : '';
+  const flag = sec === SHIPPED_SEC ? '  <- as shipped' : sec === 73 ? '  <- the corpus before it was rebuilt' : '';
   console.log(`  ${String(sec).padStart(4)}s     ${blinks.toFixed(0).padStart(5)}    ${se.toFixed(3)}       ` +
     `${dzMain.toFixed(3)}   ${(powerT(N_ANALYSED, dzMain) * 100).toFixed(0).padStart(3)}%            ` +
     `${dzInter.toFixed(3)}   ${(powerT(N_ANALYSED, dzInter) * 100).toFixed(0).padStart(3)}%${flag}`);
@@ -303,10 +315,11 @@ console.log('  The interaction is the binding constraint AND the contrast most e
 console.log('\n' + '='.repeat(96));
 console.log('SESSION LENGTH IF READING EXPOSURE IS RAISED');
 console.log('='.repeat(96));
-for (const sec of [73, 120, 180, 240]) {
-  const extra = (sec - 73) * N_CONDITIONS / 60;
+for (const sec of EXPOSURES) {
+  const extra = (sec - SHIPPED_SEC) * N_CONDITIONS / 60;
   const med = pct(base.totals, 0.5) + extra;
   const p95 = pct(base.totals, 0.95) + extra;
   console.log(`  ${String(sec).padStart(4)}s/condition -> median ${med.toFixed(0).padStart(3)} min, p95 ${p95.toFixed(0).padStart(3)} min  ` +
-    `${med <= 120 ? 'gate PASS' : 'gate FAIL'}${p95 > 120 ? '  (tail exceeds 120)' : ''}`);
+    `${med <= 120 ? 'gate PASS' : 'gate FAIL'}${p95 > 120 ? '  (tail exceeds 120)' : ''}` +
+    `${sec === SHIPPED_SEC ? '  <- as shipped' : ''}`);
 }

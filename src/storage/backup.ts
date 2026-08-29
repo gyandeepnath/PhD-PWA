@@ -30,7 +30,7 @@ import type { SessionBundle } from './gather';
 import type { StoreName, StoreMap } from './types';
 
 /** Bumped when the payload shape changes in a way an older reader could misread. */
-export const BACKUP_FORMAT_VERSION = 1;
+export const BACKUP_FORMAT_VERSION = 2;
 
 export interface SessionBackup {
   format: 'visulab.session-backup';
@@ -71,8 +71,40 @@ interface BackupData {
  * Keys are serialised in a fixed order so the checksum depends on the DATA and not on the order a
  * JavaScript engine happened to enumerate properties in. Without this, two backups of an identical
  * session could differ in bytes and the checksum would stop being a statement about content.
+ *
+ * Sorting is applied at EVERY level, not just the top. The previous version sorted only the outer
+ * collection names, which left every record's own field order to whatever order the fields happened
+ * to be assigned in. That order survives a round trip through IndexedDB's structured clone, so the
+ * checksum held in practice — but it held by luck, not by construction: a record rebuilt with its
+ * fields in a different order (a restore, a re-export, a refactor of the object literal that writes
+ * it) produces a different checksum for identical data, and the operator is told the file is
+ * damaged when it is not.
+ *
+ * `undefined` is encoded explicitly. JSON.stringify silently omits a key whose value is undefined,
+ * so a field that vanished upstream and a field that was never defined hash identically, and the
+ * checksum cannot tell them apart. The marker makes the absence part of what is signed.
  */
+function canonicalValue(v: unknown): unknown {
+  if (v === undefined) return { __undefined__: true };
+  if (v === null || typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map(canonicalValue);
+  const src = v as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(src).sort()) out[k] = canonicalValue(src[k]);
+  return out;
+}
+
 function canonical(data: BackupData): string {
+  return JSON.stringify(canonicalValue(data));
+}
+
+/**
+ * The version-1 checksum: top-level keys only. Kept so a backup written by an earlier build still
+ * verifies instead of being rejected as damaged. A backup file is the last copy of a session that
+ * a wiped tablet took with it; breaking the ability to read one is not a cost worth paying for a
+ * tidier code path.
+ */
+function canonicalV1(data: BackupData): string {
   const ordered: Record<string, unknown> = {};
   for (const k of Object.keys(data).sort()) ordered[k] = (data as unknown as Record<string, unknown>)[k];
   return JSON.stringify(ordered);
@@ -162,14 +194,32 @@ export function parseSessionBackup(text: string): ParseResult {
   if (!b.data || typeof b.data !== 'object') {
     return { ok: false, warnings, error: 'The backup contains no data section.' };
   }
-  const actual = fnv1a(canonical(b.data as BackupData));
-  if (actual !== b.checksum_fnv1a) {
+  // Verify with the scheme that matches the file's own format version, so a version-1 backup is
+  // still readable rather than being reported as damaged.
+  const expected = b.format_version >= 2
+    ? fnv1a(canonical(b.data as BackupData))
+    : fnv1a(canonicalV1(b.data as BackupData));
+  if (expected !== b.checksum_fnv1a) {
     return { ok: false, warnings, error: 'The backup failed its checksum. The file has been altered or damaged since it was written; do not import it.' };
   }
   const session = (b.data as BackupData).session as { session_id?: string } | null;
   if (!session?.session_id) {
     return { ok: false, warnings, error: 'The backup has no session record, so there is nothing to restore.' };
   }
+  const problems = validateStructure(b.data as BackupData, session.session_id);
+  if (problems.length) {
+    const shown = problems.slice(0, 6).map((p) => `  - ${p}`).join('\n');
+    const more = problems.length > 6 ? `\n  ...and ${problems.length - 6} more.` : '';
+    return {
+      ok: false,
+      warnings,
+      error: `The backup passed its checksum but its contents are not structurally valid, so importing `
+        + `it would write damaged records into this device:\n${shown}${more}\n\n`
+        + `The checksum only proves the file has not changed since it was written. Keep the file and `
+        + `send it to the investigator rather than deleting it.`,
+    };
+  }
+
   const media = (b.data as BackupData).media ?? [];
   if (media.length) {
     warnings.push(`${media.length} media file(s) are listed in the inventory but their contents are not carried in a backup. The restored session will show them as missing.`);
@@ -178,6 +228,91 @@ export function parseSessionBackup(text: string): ParseResult {
     warnings.push('This backup carries no participant record; demographic and screening covariates will be absent.');
   }
   return { ok: true, backup: b as SessionBackup, warnings };
+}
+
+/**
+ * Structural validation of a backup's rows, before a single one is written.
+ *
+ * The checksum proves the file is unaltered since it was written. It proves nothing about whether
+ * what was written made sense — a build with a bug, a hand-edited file that was re-checksummed, or
+ * a backup from a future schema all produce a file that passes the checksum and then writes
+ * nonsense into IndexedDB. put() keys each row by its own identifier, so a row missing that
+ * identifier is rejected by IndexedDB mid-restore, leaving a partial copy; and a row carrying a
+ * DIFFERENT session's id is worse, because it is written successfully and then silently joins into
+ * the restored session's export as if it had been measured there.
+ *
+ * `keyPath` on RESTORE_PLAN existed for this and was never read. This is what reads it.
+ *
+ * Refuses rather than repairs. A backup is a last copy; quietly dropping the rows that look wrong
+ * would hand the operator a file that imported "successfully" and lost data.
+ */
+function validateStructure(data: BackupData, sessionId: string): string[] {
+  const problems: string[] = [];
+
+  for (const { key, store, keyPath } of RESTORE_PLAN) {
+    const rows = data[key];
+    if (rows === undefined || rows === null) continue;
+    if (!Array.isArray(rows)) {
+      problems.push(`"${key}" is not a list of records.`);
+      continue;
+    }
+    const seen = new Set<string>();
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+        problems.push(`${store}[${i}] is not a record.`);
+        continue;
+      }
+      const r = row as Record<string, unknown>;
+
+      const id = r[keyPath];
+      if (typeof id !== 'string' || id === '') {
+        problems.push(`${store}[${i}] has no ${keyPath}. IndexedDB keys this store on that field, so the row cannot be written.`);
+      } else if (seen.has(id)) {
+        // Two rows sharing a key means the second overwrites the first: the restore would report
+        // writing N rows while the device ends up with fewer, and nothing downstream would notice.
+        problems.push(`${store}: ${keyPath} "${id}" appears more than once. One of these records would silently replace the other.`);
+      } else {
+        seen.add(id);
+      }
+
+      // A row belonging to a different session joins into this one's export as if it had been
+      // measured here. Stores keyed on condition_id carry session_id too; check whatever is there.
+      if ('session_id' in r && r.session_id !== sessionId) {
+        problems.push(`${store}[${i}] belongs to session "${String(r.session_id)}", not to the session this backup restores ("${sessionId}").`);
+      }
+    }
+  }
+
+  // The media inventory is written through its own path, but the same two rules apply to it.
+  const media = data.media;
+  if (media !== undefined && media !== null) {
+    if (!Array.isArray(media)) {
+      problems.push('"media" is not a list of records.');
+    } else {
+      const seen = new Set<string>();
+      for (let i = 0; i < media.length; i++) {
+        const r = media[i] as Record<string, unknown> | null;
+        if (r === null || typeof r !== 'object') { problems.push(`media_captures[${i}] is not a record.`); continue; }
+        const id = r.media_id;
+        if (typeof id !== 'string' || id === '') problems.push(`media_captures[${i}] has no media_id.`);
+        else if (seen.has(id)) problems.push(`media_captures: media_id "${id}" appears more than once.`);
+        else seen.add(id);
+        if ('session_id' in r && r.session_id !== sessionId) {
+          problems.push(`media_captures[${i}] belongs to session "${String(r.session_id)}", not to this one.`);
+        }
+      }
+    }
+  }
+
+  const participant = data.participant as Record<string, unknown> | null | undefined;
+  if (participant && typeof participant === 'object') {
+    if (typeof participant.participant_id !== 'string' || participant.participant_id === '') {
+      problems.push('The participant record has no participant_id and cannot be written.');
+    }
+  }
+
+  return problems;
 }
 
 export type ImportMode = 'refuse-if-present' | 'overwrite';

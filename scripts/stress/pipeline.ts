@@ -118,6 +118,9 @@ scenario('one condition only, all stores consistent (crashed after the first)', 
   b.comprehension = b.comprehension.filter((x) => x.condition_id === keep);
   b.visualSearch = b.visualSearch.filter((x) => x.condition_id === keep);
   b.perception = b.perception.filter((x) => x.condition_id === keep);
+  // reaction_trials is a store like any other: "all stores consistent" has to include it, or the
+  // trials of the nine dropped conditions are left orphaned and the bundle is damaged after all.
+  b.reactionTrials = b.reactionTrials.filter((x) => x.condition_id === keep);
   b.fatigue = b.fatigue.filter((x) => x.stage === 'baseline' || x.condition_id === keep);
   b.session.conditions_per_session = 1;
 });
@@ -205,12 +208,66 @@ scenario('200 conditions, every store replicated (10x a real sitting)', (b) => {
   b.visualSearch = b.conditions.map((c) => ({ ...vs, condition_id: c.condition_id }));
   b.perception = b.conditions.map((c, i) => ({ ...pe, perception_id: 'p' + i, condition_id: c.condition_id }));
   b.fatigue = [b.fatigue[0], ...b.conditions.map((c, i) => ({ ...fa, fatigue_id: 'f' + i, condition_id: c.condition_id }))];
+  // Reaction trials must be replicated too, and consistently with their summaries: the audit now
+  // checks that a summary is a true summary of the trials beneath it, and that each condition's
+  // trial numbering is a complete 1..N run. Leaving the original 320 trials pointing at the ten
+  // condition_ids this scenario just replaced would make it a MALFORMED bundle rather than a large
+  // one — the same distinction the comprehension rows above are careful about.
+  const t0 = b.reactionTrials[0];
+  const perCondition = 8;
+  b.reactionTrials = b.conditions.flatMap((c, ci) =>
+    Array.from({ length: perCondition }, (_, k) => ({
+      ...t0,
+      trial_id: `t${ci}-${k}`,
+      condition_id: c.condition_id,
+      trial_number: k + 1,
+      is_signal: k % 2 === 0,
+      trial_category: (k % 2 === 0 ? 'signal' : 'noise') as 'signal' | 'noise',
+      accuracy: (k % 2 === 0 ? 'hit' : 'correct_rejection') as 'hit' | 'correct_rejection',
+      response_time_ms: k % 2 === 0 ? 320 : null,
+    })));
+  const sig = Math.ceil(perCondition / 2);
+  b.rtSummaries = b.rtSummaries.map((r) => ({
+    ...r,
+    total_trials: perCondition,
+    signal_trials: sig,
+    hits: sig,
+    false_alarms: 0,
+    misses: 0,
+    correct_rejections: perCondition - sig,
+  }));
 }, { expect: (f) => (rowsOf(f, '02_conditions.csv') === 200 ? null : 'expected 200 condition rows') });
 
 scenario('50,000 reaction trials', (b) => {
   const t = b.reactionTrials[0];
-  b.reactionTrials = Array.from({ length: 50000 }, (_, i) => ({ ...t, trial_id: 't' + i, trial_number: i }));
-}, (f) => (rowsOf(f, '08_reaction_trials.csv') === 50000 ? null : 'expected 50000 trial rows'));
+  // Spread across the session's real conditions, numbered 1..N within each, with the summaries
+  // updated to match. Piling all 50,000 onto one condition_id numbered from zero would be a
+  // corrupt bundle, not a big one, and the audit would be right to say so — this scenario is
+  // about throughput.
+  const conds = b.conditions;
+  const per = Math.floor(50000 / conds.length);
+  b.reactionTrials = conds.flatMap((c, ci) =>
+    Array.from({ length: per }, (_, k) => ({
+      ...t,
+      trial_id: `t${ci}-${k}`,
+      condition_id: c.condition_id,
+      trial_number: k + 1,
+      is_signal: k % 2 === 0,
+      trial_category: (k % 2 === 0 ? 'signal' : 'noise') as 'signal' | 'noise',
+      accuracy: (k % 2 === 0 ? 'hit' : 'correct_rejection') as 'hit' | 'correct_rejection',
+      response_time_ms: k % 2 === 0 ? 320 : null,
+    })));
+  const sig = Math.ceil(per / 2);
+  b.rtSummaries = b.rtSummaries.map((r) => ({
+    ...r,
+    total_trials: per,
+    signal_trials: sig,
+    hits: sig,
+    false_alarms: 0,
+    misses: 0,
+    correct_rejections: per - sig,
+  }));
+}, (f) => (rowsOf(f, '08_reaction_trials.csv') === Math.floor(50000 / 10) * 10 ? null : 'expected 50000 trial rows'));
 
 scenario('participant id of 10,000 characters', (b) => {
   b.session.participant_id = 'x'.repeat(10000);

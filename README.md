@@ -92,7 +92,10 @@ with an explanation if you try.
   is 2.39:1, below WCAG AA; conditions below AA are balanced two per polarity so polarity is not
   confounded with accessibility compliance.
 - **Passages are decoupled from conditions** by a rotating Latin square, so passage difficulty stays
-  orthogonal to display condition.
+  orthogonal to display condition. It does not prevent a re-read: ten passages cover twenty
+  condition-runs, so each is read once per sitting. Because illumination is confounded with session
+  order within a participant, the practice effect would otherwise load onto the illumination main
+  effect, so `passage_repeat_number` is exported and must be modelled.
 - **Passage length is load-bearing.** Each passage is four pages and about 600 words, which buys a
   ~180 s reading exposure. At the earlier ~240 words the exposure was 73 s, about 16 blinks, and the
   polarity × colour interaction had 27% power. `npm run verify:corpus` guards this.
@@ -101,6 +104,14 @@ with an explanation if you try.
 - Colour-vision screening on the study display, display photometry, validated **CVS-Q**, real
   per-participant gaze calibration, FPS-gated blink tiers, an achromatic background-relative RT
   target, longer adaptation on polarity switches, and build-provenance stamping.
+- **Consent is enforced, not just recorded.** A participant who declines camera measurement never
+  reaches a camera screen, and `auditBundle` reports any ocular row collected without that grant.
+  The annotation-video grant is offered only to the pre-specified validation subsample, and
+  membership follows from the enrolment number rather than from an operator's judgement at the
+  bench.
+- **The ocular exposure window is the reading exposure**, opened when the participant starts
+  reading rather than when the stage mounts, so blink rates and the within-task halves are computed
+  over the window the codebook says they are.
 - **Nothing is fabricated.** A function given input carrying no information reports absence — null,
   or a non-finite value its consumer filters — and never a plausible number. `tests/noFabrication.
   test.ts` states this as a contract and checks every summary-producing function against it.
@@ -120,10 +131,10 @@ with an explanation if you try.
 
 | Gate | What it covers |
 |---|---|
-| 342 unit and property tests | scoring, counterbalancing balance, contrast, storage, screening, gaze calibration, ocular metrics, backup/restore, media export, stimulus-typeface control, no-fabrication contract |
+| 364 unit and property tests | scoring, counterbalancing balance, contrast, storage, screening, gaze calibration, ocular metrics, backup/restore, media export, schema migration, consent enforcement, stimulus-typeface control, no-fabrication contract |
 | 6 Playwright E2E tests across 4 spec files | full no-camera run, input gating, double-click → single session, reload → resume, split session |
 | 6 stress rounds: 28 scenarios, 2,393 checks, 0 failures | adversarial input, pipeline joins, state machine, metamorphic properties, crash recovery |
-| Export verification, 584 checks | referential integrity, reproducibility, codebook coverage, filename portability |
+| Export verification, 587 checks | referential integrity, reproducibility, codebook coverage, filename portability |
 | Corpus and codebook gates | passage length and difficulty matching; complete data dictionary |
 
 CI runs all of it on every push: [`.github/workflows/verify.yml`](.github/workflows/verify.yml).

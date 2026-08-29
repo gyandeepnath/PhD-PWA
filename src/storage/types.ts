@@ -64,7 +64,11 @@ export interface ParticipantRecord {
   /** Digital Ishihara screening score (plates correct / total), null if not run. */
   ishihara_correct: number | null;
   ishihara_total: number | null;
-  /** Optional context covariates. */
+  /**
+   * The FIRST sitting's values, kept for continuity. Per-sitting values are on the session record:
+   * this row is shared across a participant's sittings and cannot hold two of anything that varies
+   * between them. Analyses that need caffeine or sleep as a covariate must read the session's.
+   */
   caffeine_today: boolean | null;
   hours_since_sleep: number | null;
   /** Eligibility gate outcome. */
@@ -114,6 +118,23 @@ export interface SessionRecord {
   condition_order: number[];
   /** Pre-flight checklist fully completed. */
   preflight_complete: boolean;
+  /**
+   * Condition index this sitting should resume at, 0-based. Held here as well as in localStorage
+   * because the two are evicted independently: a browser that clears site data partially can take
+   * the localStorage pointer while leaving every measurement in IndexedDB, which turned a resumable
+   * session into an uncontinuable one with all its data intact.
+   */
+  resume_next_index?: number;
+  /**
+   * State covariates recorded at THIS sitting's profile stage.
+   *
+   * They live here and not on the participant record because they legitimately differ between the
+   * two sittings — that is the point of collecting them — while the participant record is created
+   * once and shared across both. Holding them there meant sitting 2 overwrote sitting 1's values
+   * and the analysis saw one participant with a single caffeine/sleep state for both sessions.
+   */
+  caffeine_today?: boolean | null;
+  hours_since_sleep?: number | null;
   /**
    * Whether the vendored stimulus typeface was actually available when pre-flight ran. null where
    * the browser gave no answer. The typeface is part of the display condition, so a session that
@@ -168,6 +189,13 @@ export interface ConditionRecord {
   condition_duration_sec: number | null;
   /** Adaptation duration that preceded this condition (ms) — varies on polarity switch. */
   adaptation_ms_before: number;
+  /**
+   * How many times this participant has now read this passage, counting this run: 1 in the first
+   * sitting, 2 in the second. There are ten passages and twenty condition-runs, so every passage is
+   * re-read. Illumination is confounded with session order within a participant, so without this
+   * column the practice effect is indistinguishable from the illumination main effect.
+   */
+  passage_repeat_number: number;
   /** Total time spent on the reading task (ms), self-paced; null until reading completes. */
   reading_time_ms: number | null;
 }
@@ -369,8 +397,13 @@ export interface EyeMetricsRecord {
   fps_adequate_for_tiers: boolean;
 
   // Primary (frame-rate-robust): CVS markers + drowsiness covariates.
-  blink_rate: number;
-  blink_rate_full: number;
+  /**
+   * Null when the camera was not running. Not 0 — a zero blink rate is a measurement, and reporting
+   * one for a condition that was never observed manufactures the cleanest possible datum out of no
+   * data. See the note on incomplete_blink_ratio.
+   */
+  blink_rate: number | null;
+  blink_rate_full: number | null;
   /**
    * PRIMARY OUTCOME. Null when no blinks were detected in the condition - a proportion of an empty
    * set is undefined. Treat null as missing, never as 0.
@@ -385,13 +418,13 @@ export interface EyeMetricsRecord {
   perclos_p80: number | null;
   perclos_p70: number | null;
   /** Sustained eye-closure (>500 ms) events — long-closure / micro-sleep proxy. */
-  long_closure_count: number;
-  long_closure_total_ms: number;
+  long_closure_count: number | null;
+  long_closure_total_ms: number | null;
 
   // Diagnostic only (sub-Nyquist below ~25 fps; JSON bundle only, not in the CSV bundle)
-  blink_rate_micro: number;
-  blink_count_full: number;
-  blink_count_micro: number;
+  blink_rate_micro: number | null;
+  blink_count_full: number | null;
+  blink_count_micro: number | null;
   blink_count_incomplete: number;
 
   ear_baseline: number | null;

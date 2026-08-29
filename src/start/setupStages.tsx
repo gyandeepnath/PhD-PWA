@@ -184,16 +184,16 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
   const [caffeine, setCaffeine] = useState<boolean | null>(null);
   const [sinceSleep, setSinceSleep] = useState('');
   const ageN = Number(age);
-  const valid = ageN >= 18 && ageN <= 80 && gender && hours !== '' && fam && light && corr && cvd != null
+  const valid = ageN >= CONFIG.MIN_AGE && ageN <= CONFIG.MAX_AGE && gender && hours !== '' && fam && light && corr && cvd != null
     && caffeine != null && sinceSleep !== '' && Number.isFinite(Number(sinceSleep));
 
   return (
     <div className={shell}>
       <div style={{ width: '100%', maxWidth: 640, margin: '0 auto' }}>
       <h1 className="font-serif text-4xl font-light">Participant profile</h1>
-      <p className="mt-1 font-lab text-xs text-[#5a5a7a]">Eligibility: ages 18–80.</p>
+      <p className="mt-1 font-lab text-xs text-[#5a5a7a]">Eligibility: ages {CONFIG.MIN_AGE}–{CONFIG.MAX_AGE}. Contact-lens wear on a test day and colour-vision deficiency are exclusions.</p>
       <div className="mt-6 space-y-4" style={{ maxWidth: 640 }}>
-        <Field label="Age (18–80)"><input data-testid="age" className="vl-input" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} /></Field>
+        <Field label={`Age (${CONFIG.MIN_AGE}–${CONFIG.MAX_AGE})`}><input data-testid="age" className="vl-input" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} /></Field>
         <Pick label="Gender" value={gender} set={setGender} opts={['male', 'female', 'non-binary', 'prefer not to say']} />
         <Field label="Daily screen hours"><input data-testid="hours" className="vl-input" inputMode="numeric" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="6" /></Field>
         <Pick label="Device familiarity" value={fam} set={(v) => setFam(v as ProfileData['deviceFamiliarity'])} opts={['low', 'moderate', 'high']} />
@@ -226,7 +226,12 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
 }
 
 // ---- CAMERA SETUP (with live preview) ----
-export function CameraSetup({ onAllow, onSkip }: { onAllow: () => void; onSkip: () => void }) {
+export function CameraSetup({ onAllow, onSkip, retains }: {
+  onAllow: () => void;
+  onSkip: () => void;
+  /** The photo/video grants actually in force, so the privacy notice can tell the truth. */
+  retains?: { setupPhotos: boolean; annotationVideo: boolean };
+}) {
   const [step, setStep] = useState<'notice' | 'preview' | 'denied'>('notice');
   const [errMsg, setErrMsg] = useState('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -272,9 +277,26 @@ export function CameraSetup({ onAllow, onSkip }: { onAllow: () => void; onSkip: 
 
         {step === 'notice' && (
           <>
+            {/* Conditional, because the unconditional version was false for anyone who had ticked
+                a retention grant on the immediately preceding screen: they were told in writing
+                that nothing was kept, while two photographs of them were written to storage. In a
+                consent record for an ethics-approved protocol that is not a wording problem. */}
             <div className="mt-4 rounded-xl border border-[#cdd8f0] bg-[#eef3ff] p-4 font-lab text-sm">
-              <strong>Privacy:</strong> no video or images are recorded or stored. The camera only
-              estimates blink rate, head position and gaze zone — and only those numbers are saved.
+              {!retains?.setupPhotos && !retains?.annotationVideo ? (
+                <>
+                  <strong>Privacy:</strong> no video or images are recorded or stored. The camera only
+                  estimates blink rate, head position and gaze zone — and only those numbers are saved.
+                </>
+              ) : (
+                <>
+                  <strong>Privacy:</strong> the camera estimates blink rate, head position and gaze
+                  zone, and those numbers are saved. In addition, you agreed that we may keep
+                  {retains.setupPhotos && ' two photographs of you at the device (one now, one at the end)'}
+                  {retains.setupPhotos && retains.annotationVideo && ' and'}
+                  {retains.annotationVideo && ' a short video segment of you reading, for a person to code frame by frame'}
+                  . Nothing else is recorded, and you can change your mind at any time.
+                </>
+              )}
             </div>
             <p className="mt-4 font-lab text-sm text-[#5a5a7a]">
               Sit directly facing the screen, ~50–60 cm away, with your face clearly visible and
@@ -332,6 +354,39 @@ export function CameraSetup({ onAllow, onSkip }: { onAllow: () => void; onSkip: 
 }
 
 // ---- CALIBRATION ----
+/**
+ * Shown in place of camera setup when the participant declined the camera-measurement grant.
+ *
+ * There is deliberately no way to enable the camera from here. The grant was refused on a screen
+ * that promised the refusal would be honoured, and an "are you sure?" affordance next to that
+ * promise invites an operator to talk a participant round — which the manual explicitly forbids.
+ * Changing it means going back to consent.
+ */
+export function CameraDeclined({ onContinue }: { onContinue: () => void }) {
+  return (
+    <div className={shell} style={{ position: 'relative' }}>
+      <WavyBackground opacity={0.05} />
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', margin: '0 auto', maxWidth: 620 }}>
+        <h1 className="font-serif text-4xl font-light">Camera measurement declined</h1>
+        <div className="mt-4 rounded-xl border border-[#cdd8f0] bg-[#eef3ff] p-4 font-lab text-sm">
+          This participant did not consent to camera measurement, so the camera will not be used at
+          any point in this session and no blink, gaze or head-position data will be collected.
+        </div>
+        <p className="mt-4 font-lab text-sm text-[#5a5a7a]">
+          Everything else runs exactly as normal: every questionnaire, the reading and comprehension
+          tasks, visual search and the reaction-time blocks. The session is complete and fully
+          usable without the ocular measures — do not try to persuade the participant otherwise.
+        </p>
+        <div className="mt-6">
+          <button className={btn} style={{ background: '#1a1a2e' }} data-testid="camera-declined-continue" onClick={onContinue}>
+            Continue →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Calibration({ cameraStatus, onDone }: { cameraStatus: CameraStatus; onDone: () => void }) {
   const [counting, setCounting] = useState(false);
   return (

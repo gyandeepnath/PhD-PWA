@@ -188,6 +188,20 @@ export class EyeMetricsAggregator {
 }
 
 /** Zeroed metrics for when the camera is denied/failed (matches the original disabledMetrics). */
+/**
+ * The row written for a condition in which the camera was not running.
+ *
+ * Every count and rate here is NULL, not 0. This module's own contract, stated in blink.ts and
+ * enforced by tests/noFabrication.test.ts, is that a function given input carrying no information
+ * reports absence and never a plausible number — and a zero incomplete-blink ratio is the most
+ * plausible number there is. It reads as "this participant blinked perfectly in this condition",
+ * the cleanest possible result, manufactured from nothing. Ten of them, for a participant who
+ * declined the camera or whose session was resumed without it, pull every condition mean toward
+ * zero in an analysis that filters on nothing but the outcome column.
+ *
+ * camera_active=false is not a sufficient guard on its own: it puts the burden on every downstream
+ * consumer to remember to filter, and the app's own dashboard did not.
+ */
 export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeMetricsRecord {
   return {
     condition_id: conditionId,
@@ -195,20 +209,20 @@ export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeM
     camera_active: false,
     effective_fps: null,
     fps_adequate_for_tiers: false,
-    blink_rate: 0,
-    blink_rate_full: 0,
-    incomplete_blink_ratio: 0,
+    blink_rate: null,
+    blink_rate_full: null,
+    incomplete_blink_ratio: null,
     blink_duration_mean_ms: null,
     bins: { first_half_blink_rate: null, second_half_blink_rate: null },
     mean_inter_blink_interval_ms: null,
     inter_blink_interval_cv: null,
     perclos_p80: null,
     perclos_p70: null,
-    long_closure_count: 0,
-    long_closure_total_ms: 0,
-    blink_rate_micro: 0,
-    blink_count_full: 0,
-    blink_count_micro: 0,
+    long_closure_count: null,
+    long_closure_total_ms: null,
+    blink_rate_micro: null,
+    blink_count_full: null,
+    blink_count_micro: null,
     blink_count_incomplete: 0,
     ear_baseline: null,
     ear_threshold_used: null,

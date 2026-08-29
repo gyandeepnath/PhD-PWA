@@ -185,9 +185,164 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
       `the key secondary outcome is the CVS-Q CHANGE score, which needs both a baseline and a ` +
       `session_end record; found: ${[...cvsqStages].join(', ') || 'neither'}.`);
   }
+  // Presence is not enough: the change score needs exactly ONE row per stage. Two session_end rows
+  // — which a crash between the closing CVS-Q and the NASA-TLX used to produce — make the key
+  // secondary outcome ambiguous, and whichever row a join picks is the post-rest one.
+  for (const stage of ['baseline', 'session_end'] as const) {
+    const n = (bundle.cvsq ?? []).filter((c) => c.stage === stage).length;
+    if (n > 1) {
+      add('error', 'one_cvsq_per_stage',
+        `${n} CVS-Q records for stage "${stage}"; exactly one is expected. The CVS-Q change score ` +
+        `is the key secondary outcome and cannot be computed unambiguously from duplicates.`);
+    }
+  }
+
   if ((bundle.tlx ?? []).length > 1) {
     add('error', 'one_tlx_per_session',
       `NASA-TLX is administered once per session; found ${bundle.tlx.length} records.`);
+  }
+
+  // ---- reaction TRIALS: the largest store, and the only trial-level observation in the study
+  //
+  // Nothing checked it. It is the one store whose rows the analysis JSON deliberately drops (it
+  // keeps only reaction_trials_count), so a fault here survives every other check: the per-condition
+  // rt_summaries row is computed from the trials at collection time, exported, and then agrees with
+  // itself for ever after, whatever the trials underneath it say. An analyst who re-derives d' or a
+  // median RT from 08_reaction_trials.csv would get a different answer from 09_rt_summary.csv and
+  // have no way to tell which is right.
+  {
+    const trials = bundle.reactionTrials ?? [];
+    const summaries = bundle.rtSummaries ?? [];
+
+    for (const [id, n] of duplicates(trials, (r) => r.trial_id)) {
+      add('error', 'trial_id_unique',
+        `reaction_trials: trial_id "${id}" appears ${n} times. A duplicated trial is counted ${n} ` +
+        `times in every rate derived from the trials.`, [id]);
+    }
+
+    const orphanTrials = trials.filter((r) => r.condition_id && !validIds.has(r.condition_id));
+    if (orphanTrials.length) {
+      add('error', 'no_orphan_records',
+        `reaction_trials: ${orphanTrials.length} trial(s) reference a condition_id that does not ` +
+        `exist in this session, so they belong to no display condition.`,
+        [...new Set(orphanTrials.map((o) => o.condition_id))].slice(0, 5));
+    }
+
+    // Trial numbering must be a complete 1..N run within each condition. A gap means a trial was
+    // lost between the participant responding and the row being written, and every rate for that
+    // condition is then computed over a smaller denominator and looks perfectly valid.
+    const byCond = new Map<string, typeof trials>();
+    for (const r of trials.filter((x) => validIds.has(x.condition_id))) {
+      const list = byCond.get(r.condition_id) ?? [];
+      list.push(r);
+      byCond.set(r.condition_id, list);
+    }
+    for (const [id, list] of byCond) {
+      for (const [num, n] of duplicates(list, (r) => String(r.trial_number))) {
+        add('error', 'trial_number_unique',
+          `reaction_trials: condition "${id}" records trial_number ${num} ${n} times.`, [id]);
+      }
+      const nums = new Set(list.map((r) => r.trial_number));
+      const missing = [];
+      for (let i = 1; i <= list.length; i++) if (!nums.has(i)) missing.push(i);
+      if (missing.length) {
+        add('error', 'trial_sequence_complete',
+          `reaction_trials: condition "${id}" has ${list.length} trials but its numbering is not a ` +
+          `complete 1..${list.length} run (missing ${missing.slice(0, 5).join(', ')}). Trials were ` +
+          `lost, and every rate for this condition is computed over the wrong denominator.`, [id]);
+      }
+
+      // A response time on a trial with no response, or a missing one on a trial that had a
+      // response, means accuracy and RT disagree about what happened.
+      for (const r of list) {
+        const responded = r.response_time_ms != null;
+        const claimsResponse = r.accuracy === 'hit' || r.accuracy === 'false_alarm';
+        if (claimsResponse && !responded) {
+          add('error', 'trial_internally_consistent',
+            `reaction_trials: trial ${r.trial_id} is scored "${r.accuracy}" but carries no response ` +
+            `time. One of the two is wrong.`, [r.trial_id]);
+        }
+        if (responded && r.response_time_ms !== null && !Number.isFinite(r.response_time_ms)) {
+          add('error', 'trial_rt_finite',
+            `reaction_trials: trial ${r.trial_id} has a non-finite response time.`, [r.trial_id]);
+        }
+        if (r.is_signal !== (r.trial_category === 'signal')) {
+          add('error', 'trial_category_consistent',
+            `reaction_trials: trial ${r.trial_id} has is_signal=${r.is_signal} but ` +
+            `trial_category="${r.trial_category}".`, [r.trial_id]);
+        }
+      }
+    }
+
+    // ---- the summary must be a true summary of the trials it claims to summarise
+    //
+    // This is the check that matters most. rt_summaries is what the analysis templates read; the
+    // trials are what a reviewer would re-derive it from. If they disagree, the published numbers
+    // are not the numbers in the data.
+    for (const s of summaries) {
+      if (!validIds.has(s.condition_id)) continue;
+      const list = byCond.get(s.condition_id) ?? [];
+      if (!list.length) {
+        add('error', 'summary_has_trials',
+          `rt_summaries: condition "${s.condition_id}" has a summary row but no trials. Its hit ` +
+          `rate, d' and RT cannot be checked against anything.`, [s.condition_id]);
+        continue;
+      }
+      if (s.total_trials !== list.length) {
+        add('error', 'summary_matches_trials',
+          `rt_summaries: condition "${s.condition_id}" reports total_trials=${s.total_trials} but ` +
+          `${list.length} trial rows exist. Every rate in the summary is over the wrong denominator.`,
+          [s.condition_id]);
+      }
+      const signals = list.filter((r) => r.is_signal).length;
+      if (s.signal_trials !== signals) {
+        add('error', 'summary_matches_trials',
+          `rt_summaries: condition "${s.condition_id}" reports signal_trials=${s.signal_trials} but ` +
+          `${signals} trials are signals. The hit rate and d' are computed over the wrong base.`,
+          [s.condition_id]);
+      }
+      const hits = list.filter((r) => r.accuracy === 'hit').length;
+      if (s.hits !== hits) {
+        add('error', 'summary_matches_trials',
+          `rt_summaries: condition "${s.condition_id}" reports hits=${s.hits} but ${hits} trials are ` +
+          `scored as hits.`, [s.condition_id]);
+      }
+      const fa = list.filter((r) => r.accuracy === 'false_alarm').length;
+      if (s.false_alarms !== fa) {
+        add('error', 'summary_matches_trials',
+          `rt_summaries: condition "${s.condition_id}" reports false_alarms=${s.false_alarms} but ` +
+          `${fa} trials are scored as false alarms.`, [s.condition_id]);
+      }
+    }
+
+    // A condition that ran the RT block but wrote no trials at all.
+    if (summaries.length || trials.length) {
+      const missing = conditions.filter((c) => !byCond.has(c.condition_id));
+      if (missing.length) {
+        add(missing.length === conditions.length ? 'warning' : 'error', 'complete_coverage',
+          `reaction_trials: no trial rows for ${missing.length}/${conditions.length} condition(s)` +
+          (missing.length === conditions.length ? ' (the whole store is absent for this session)' : ''),
+          missing.slice(0, 5).map((c) => c.condition_label));
+      }
+    }
+  }
+
+  // ---- ocular data must never exist without the grant that authorises it
+  //
+  // The camera_metrics grant was recorded and exported but enforced nowhere, so a session could
+  // ship consent_camera_metrics=false beside ten rows of real blink data. The app now gates the
+  // camera on the grant; this is the check that says so in the data, for any session collected
+  // before that gate existed or by a build that regresses it.
+  {
+    const granted = bundle.session?.media_consent?.camera_metrics === true;
+    const measured = (bundle.eyeMetrics ?? []).filter((e) => e.camera_active);
+    if (!granted && measured.length) {
+      add('error', 'ocular_requires_consent',
+        `${measured.length} condition(s) recorded camera-active ocular measurements, but this ` +
+        `session's camera_metrics consent grant is not present. The primary outcome was measured ` +
+        `on a participant who did not consent to that measurement.`,
+        measured.slice(0, 5).map((e) => e.condition_id));
+    }
   }
 
   // ---- media must never exist without the grant that authorises it
