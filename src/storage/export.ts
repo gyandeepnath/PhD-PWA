@@ -293,6 +293,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '01_session_info.csv', column: 'screen_resolution', type: 'string', unit: 'px', role: 'meta', description: 'Viewport resolution in pixels. Affects line length and words per page.' },
   { file: '01_session_info.csv', column: 'consent_given', type: 'boolean', unit: '-', role: 'meta', description: 'Whether written informed consent was recorded before any measurement began.' },
   { file: '01_session_info.csv', column: 'preflight_complete', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the pre-session environment and device checks were completed. False indicates a session started outside protocol.' },
+  { file: '01_session_info.csv', column: 'e2e_timing', type: 'boolean', unit: '-', role: 'qc', description: 'TRUE means this session ran under the end-to-end test harness, in which every protocol duration — reading floor, adaptation, search limit, reaction-time block — is collapsed to a token value. Such a row is a test artefact and must never be pooled with collected data.' },
   { file: '01_session_info.csv', column: 'stimulus_font_ok', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the vendored stimulus typeface (Roboto 400) was available when pre-flight ran. Empty where the browser gave no answer. False means the reading passage was rendered in a fallback face, which changes letter shape and stroke weight and so changes the display condition.' },
   { file: '01_session_info.csv', column: 'caffeine_today_session', type: 'boolean', unit: '-', role: 'covariate', description: "Caffeine in roughly the four hours before THIS sitting. Recorded per sitting because it varies between them; the participant record's copy is the first sitting's and must not be used as a per-session covariate." },
   { file: '01_session_info.csv', column: 'hours_since_sleep_session', type: 'float', unit: 'hours', role: 'covariate', description: 'Hours since waking, at THIS sitting. Per-sitting for the same reason as caffeine_today_session. Bears on blink rate and on the drowsiness covariates.' },
@@ -501,7 +502,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'session_status', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'preflight_complete', 'stimulus_font_ok', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected', 'calibration_runs'],
+    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'session_status', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'preflight_complete', 'e2e_timing', 'stimulus_font_ok', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected', 'calibration_runs'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
       session_index: session.session_index,
@@ -540,6 +541,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       consent_annotation_video: session.media_consent?.annotation_video ?? '',
       media_items_retained: (bundle.media ?? []).length,
       preflight_complete: session.preflight_complete,
+      e2e_timing: session.e2e_timing ?? false,
       stimulus_font_ok: session.stimulus_font_ok ?? '',
       caffeine_today_session: session.caffeine_today ?? '',
       hours_since_sleep_session: session.hours_since_sleep ?? '',

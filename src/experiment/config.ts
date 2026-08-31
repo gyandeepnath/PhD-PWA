@@ -109,7 +109,19 @@ const BASE_CONFIG = {
   PROCESS_EVERY_N_FRAMES: 1,
 };
 
-/** True when running under the E2E harness (?e2e=1) — collapses long waits for fast tests. */
+/**
+ * True when running under the E2E harness (?e2e=1) — collapses long waits for fast tests.
+ *
+ * Exported, because a run with collapsed timing must be identifiable in the DATA. Every duration in
+ * the protocol — the reading floor, the adaptation field, the search limit, the RT block — is
+ * replaced with a token value, and nothing on screen, in the session record or in the export said
+ * so. A tablet left on a bookmarked ?e2e URL would have produced a full, plausible, exportable
+ * session whose every timing constant was wrong, and it would have pooled with real data.
+ */
+export function isE2ETimingActive(): boolean {
+  return isE2E();
+}
+
 function isE2E(): boolean {
   try {
     return typeof location !== 'undefined' && new URLSearchParams(location.search).has('e2e');

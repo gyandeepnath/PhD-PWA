@@ -21,7 +21,7 @@ function makeSession(id: string, participant: string, enrolment: number): Sessio
     session_end_time: null,
     randomisation_seed: 12345,
     condition_order: [0, 1, 7, 2, 6, 3, 5, 4],
-    preflight_complete: true,
+    preflight_complete: true, e2e_timing: false,
     consent_given: true,
     consent_time: Date.now(), media_consent: { camera_metrics: true, setup_photos: false, annotation_video: false, granted_at: null },
     provenance: {

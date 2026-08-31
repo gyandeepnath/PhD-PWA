@@ -112,10 +112,11 @@ function simulateSitting(p: Person, enrolment: number, block: number, cfg = CONF
     const switched = prev != null && prev.polarity !== cond.polarity;
     if (switched) polaritySwitches++;
 
-    // Adaptation: none before the first condition; doubled on a polarity switch.
-    if (i > 0) {
-      add('adaptation', (switched ? cfg.ADAPTATION_SWITCH_POLARITY_MS : cfg.ADAPTATION_SAME_POLARITY_MS) / S);
-    }
+    // Adaptation: a grey field before EVERY condition, including the first, and doubled on a
+    // polarity switch. The pre-first field was added because without it condition 0 began from the
+    // light cream setup UI, so adaptation state at onset was a function of the condition's own
+    // polarity — an asymmetry confounded with the study's primary factor. It costs 60 s once.
+    add('adaptation', (switched ? cfg.ADAPTATION_SWITCH_POLARITY_MS : cfg.ADAPTATION_SAME_POLARITY_MS) / S);
 
     // Reading: self-paced above a per-page floor.
     const words = PASSAGES[plan[i].passageIndex].wordCount;

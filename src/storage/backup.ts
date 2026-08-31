@@ -276,10 +276,26 @@ function validateStructure(data: BackupData, sessionId: string): string[] {
         seen.add(id);
       }
 
-      // A row belonging to a different session joins into this one's export as if it had been
-      // measured here. Stores keyed on condition_id carry session_id too; check whatever is there.
-      if ('session_id' in r && r.session_id !== sessionId) {
-        problems.push(`${store}[${i}] belongs to session "${String(r.session_id)}", not to the session this backup restores ("${sessionId}").`);
+      /**
+       * session_id must be PRESENT and correct, not merely correct if present.
+       *
+       * `'session_id' in r` let a row lacking the field skip the check entirely. Such a row is
+       * written to IndexedDB perfectly happily and is then invisible to every read path in the app,
+       * because gatherSession reads each child store through getAllByIndex(store, 'by_session', …)
+       * and an absent key is not indexed. The restore reports N rows written, the session opens
+       * with fewer, and nothing anywhere says a row was lost — the worst shape a data-loss bug can
+       * take.
+       *
+       * The participant record is the one exception: it is keyed by participant_id and shared
+       * across a participant's two sittings, so its session_id points at whichever sitting created
+       * it and need not match this one.
+       */
+      if (store !== 'participants') {
+        if (typeof r.session_id !== 'string' || r.session_id === '') {
+          problems.push(`${store}[${i}] has no session_id. It would be written but invisible to every read path, so the restore would silently lose it.`);
+        } else if (r.session_id !== sessionId) {
+          problems.push(`${store}[${i}] belongs to session "${String(r.session_id)}", not to the session this backup restores ("${sessionId}").`);
+        }
       }
     }
   }
@@ -298,7 +314,9 @@ function validateStructure(data: BackupData, sessionId: string): string[] {
         if (typeof id !== 'string' || id === '') problems.push(`media_captures[${i}] has no media_id.`);
         else if (seen.has(id)) problems.push(`media_captures: media_id "${id}" appears more than once.`);
         else seen.add(id);
-        if ('session_id' in r && r.session_id !== sessionId) {
+        if (typeof r.session_id !== 'string' || r.session_id === '') {
+          problems.push(`media_captures[${i}] has no session_id and would be invisible after import.`);
+        } else if (r.session_id !== sessionId) {
           problems.push(`media_captures[${i}] belongs to session "${String(r.session_id)}", not to this one.`);
         }
       }

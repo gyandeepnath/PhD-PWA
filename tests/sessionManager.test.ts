@@ -15,7 +15,7 @@ function makeSession(id: string, over: Partial<SessionRecord> = {}): SessionReco
     session_id: id, participant_id: `P-${id}`, enrolment_number: 1, status: 'complete',
     deleted_at: null, display_label: null, ambient_lux: 350, ambient_illumination_level: null, illumination_block: 0, illumination_order_first: 'dim' as const, lux_readings: [], lux_all_in_range: null, lux_deviation_note: null, screen_white_luminance_cd_m2: null,
     brightness_percent: null, session_start_time: Date.now(), session_end_time: Date.now(),
-    randomisation_seed: 1, condition_order: [0], preflight_complete: true, consent_given: true,
+    randomisation_seed: 1, condition_order: [0], preflight_complete: true, e2e_timing: false, consent_given: true,
     consent_time: 1, media_consent: { camera_metrics: true, setup_photos: false, annotation_video: false, granted_at: null }, provenance: prov, device_type: 'X', browser: 'Y', screen_resolution: '1x1',
     conditions_per_session: 8, condition_offset: 0, session_index: 1,
     ...over,

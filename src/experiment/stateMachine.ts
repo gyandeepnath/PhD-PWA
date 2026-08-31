@@ -102,7 +102,20 @@ export function nextState(state: MachineState, nConditionsRaw: number = N_CONDIT
     return { stage: SETUP_ORDER[setupIdx + 1], stepIndex: 0 };
   }
   if (stage === 'INSTRUCTIONS') {
-    return { stage: 'READING_TASK', stepIndex: 0 };
+    /**
+     * The FIRST condition gets a grey field too.
+     *
+     * Adaptation only ever followed a condition, so condition 0 began from whatever the participant
+     * had been looking at — the cream setup UI, which is light. A negative-polarity condition at
+     * position 0 therefore started light-adapted while a positive-polarity one started already
+     * matched to its own background. Adaptation state at onset was thus a function of polarity, for
+     * the one position in the sitting where the Williams square puts every condition equally often
+     * across participants: an asymmetry confounded with the study's primary factor, in a design
+     * whose whole purpose is to separate them.
+     *
+     * The grey field costs 60 s once per sitting, which the feasibility simulation absorbs.
+     */
+    return { stage: 'ADAPTATION', stepIndex: -1 };
   }
 
   // Condition loop.
@@ -115,6 +128,9 @@ export function nextState(state: MachineState, nConditionsRaw: number = N_CONDIT
         : { stage: 'CVSQ_END', stepIndex };
     }
     if (stage === 'ADAPTATION') {
+      // stepIndex -1 is the pre-first-condition grey field: go straight into condition 0, with no
+      // break (nothing has happened yet to rest from).
+      if (stepIndex < 0) return { stage: 'READING_TASK', stepIndex: 0 };
       // After resting, optionally insert a self-paced break, then move to the next condition.
       return shouldBreakAfter(stepIndex + 1, nConditions)
         ? { stage: 'BREAK_SCREEN', stepIndex }

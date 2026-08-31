@@ -207,7 +207,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       session_end_time: t0 + 7_500_000,
       randomisation_seed: enrolment,
       condition_order: plan.map((s) => s.conditionIndex),
-      preflight_complete: true,
+      preflight_complete: true, e2e_timing: false,
       consent_given: true,
       consent_time: t0 + 50_000, media_consent: { camera_metrics: true, setup_photos: false, annotation_video: false, granted_at: null },
       provenance: {

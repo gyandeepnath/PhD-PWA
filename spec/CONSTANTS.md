@@ -153,7 +153,9 @@ The implemented stage order was corrected during the workflow-logic review — s
 - Per condition: READING → COMPREHENSION → **DISPLAY_PERCEPTION → POST_FATIGUE** → VISUAL_SEARCH →
   REACTION_TIME → ADAPTATION. The subjective ratings sit immediately after reading, while the
   impression is fresh and before the attention tasks add their own load; ADAPTATION closes the
-  condition and is skipped after the last one, so it runs nine times across ten conditions.
+  condition, plus once before the first, and is skipped after the last one, so it runs ten times
+  across ten conditions. The pre-first field prevents adaptation state at onset from being a
+  function of the first condition's own polarity.
 - Consent recorded at the CONSENT stage (not pre-emptively at session creation).
 - Double-tap guards (session re-entry, advance lock, scale/screening submit) and condition-level
   resume (interrupted condition restarted, not stitched).

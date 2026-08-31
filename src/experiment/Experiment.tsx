@@ -12,7 +12,7 @@ import {
 } from '@/experiment/illumination';
 import { PASSAGES } from './passages';
 import { blockPlan, isAnnotationSubsample, type PlannedStep } from './counterbalance';
-import { CONFIG } from './config';
+import { CONFIG, isE2ETimingActive } from './config';
 import { initialState, nextState, progressPercent, firstUnsatisfiedSetupStage, type MachineState } from './stateMachine';
 import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
 import { put, get, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows, clearSessionStageRows } from '@/storage/db';
@@ -352,6 +352,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       randomisation_seed: enrol,
       condition_order: sittingPlan.map((s) => s.conditionIndex),
       preflight_complete: false,
+      // Stamped at creation, so a session run on a bookmarked ?e2e URL can never be mistaken for
+      // real data: every protocol duration in it was a token value.
+      e2e_timing: isE2ETimingActive(),
       // Consent is captured at the CONSENT stage (below), not pre-emptively at session creation.
       consent_given: false,
       consent_time: null,
@@ -883,7 +886,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       );
       break;
     case 'ADAPTATION': {
-      const prev = plan[machine.stepIndex];
+      // stepIndex -1 is the grey field BEFORE the first condition: there is no previous condition,
+      // so it is never a "switch", and the next step is condition 0.
+      const prev = machine.stepIndex >= 0 ? plan[machine.stepIndex] : undefined;
       const nextStep = plan[machine.stepIndex + 1];
       const switched = prev && nextStep && CONDITIONS[prev.conditionIndex].polarity !== CONDITIONS[nextStep.conditionIndex].polarity;
       const dur = switched ? CONFIG.ADAPTATION_SWITCH_POLARITY_MS : CONFIG.ADAPTATION_SAME_POLARITY_MS;

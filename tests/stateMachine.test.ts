@@ -55,9 +55,23 @@ describe('stage machine', () => {
     expect(readings.map((r) => r.stepIndex)).toEqual(Array.from({ length: N_CONDITIONS }, (_, i) => i));
   });
 
-  it('has N-1 adaptations (skipped after the final condition)', () => {
+  it('has N adaptations: one before the first condition and one after each but the last', () => {
+    // The pre-first grey field is not cosmetic. Without it, condition 0 began from the cream setup
+    // UI, so a negative-polarity condition at position 0 started light-adapted while a
+    // positive-polarity one started already matched — adaptation state at onset was a function of
+    // polarity, at the one position where the Williams square puts every condition equally often.
     const adaptations = walk().filter((v) => v.stage === 'ADAPTATION');
-    expect(adaptations).toHaveLength(N_CONDITIONS - 1);
+    expect(adaptations).toHaveLength(N_CONDITIONS);
+    expect(adaptations[0].stepIndex).toBe(-1);
+    expect(adaptations.slice(1).map((a) => a.stepIndex))
+      .toEqual(Array.from({ length: N_CONDITIONS - 1 }, (_, i) => i));
+  });
+
+  it('puts the pre-first grey field immediately before the first reading task', () => {
+    const stages = walk().map((v) => v.stage);
+    const firstReading = stages.indexOf('READING_TASK');
+    expect(stages[firstReading - 1]).toBe('ADAPTATION');
+    expect(stages[firstReading - 2]).toBe('INSTRUCTIONS');
   });
 
   it('REACTION_TIME (last task) of the final condition goes to the end CVS-Q', () => {

@@ -149,8 +149,11 @@ Each condition runs the same six measured stages, in this order:
 | `REACTION_TIME` | Go/no-go, 32 trials | Nothing. |
 | `ADAPTATION` | Neutral grey field, 60 s (120 s when polarity switches) | Nothing. Let it run. |
 
-`ADAPTATION` closes each condition rather than opening it, and it is skipped after the last one, so
-it runs nine times across the ten conditions. There is no grey screen before the first condition.
+`ADAPTATION` runs a grey field **before the first condition** and then after every condition except
+the last, so it appears ten times across the ten conditions. The one before the first exists because
+without it condition 1 would begin from the light cream setup screen: a dark-background condition
+would start light-adapted while a light-background one started already matched, making adaptation
+state at the start of the sitting depend on the very factor the study is trying to isolate.
 The ratings come immediately after reading, while the impression is fresh, and before the search and
 reaction-time tasks.
 

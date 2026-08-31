@@ -119,6 +119,11 @@ export interface SessionRecord {
   /** Pre-flight checklist fully completed. */
   preflight_complete: boolean;
   /**
+   * True when this session ran with the E2E harness's collapsed timing constants. Such a session is
+   * a test artefact, not data: every protocol duration was replaced with a token value.
+   */
+  e2e_timing: boolean;
+  /**
    * Condition index this sitting should resume at, 0-based. Held here as well as in localStorage
    * because the two are evicted independently: a browser that clears site data partially can take
    * the localStorage pointer while leaving every measurement in IndexedDB, which turned a resumable
