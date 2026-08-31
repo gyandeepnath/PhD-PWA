@@ -75,7 +75,12 @@ export interface ParticipantRecord {
   eligible: boolean;
   exclusion_reason: string | null;
 
-  baseline_fatigue: number;
+  /**
+   * The FIRST sitting's pre-condition fatigue rating; null when none was administered. Per-sitting
+   * baselines live in fatigue_scores (stage='baseline'), which is what fatigue_delta uses — this
+   * record is shared across sittings and cannot hold two.
+   */
+  baseline_fatigue: number | null;
   session_id: string;
 }
 

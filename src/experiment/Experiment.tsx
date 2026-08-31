@@ -441,7 +441,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       hours_since_sleep: prior?.hours_since_sleep ?? d.hoursSinceSleep,
       eligible,
       exclusion_reason: eligible ? null : reasons.join('; '),
-      baseline_fatigue: prior?.baseline_fatigue ?? 0,
+      // null, not 0: a baseline that was never administered is missing, and 0 is a
+      // measurement — the lowest possible fatigue rating.
+      baseline_fatigue: prior?.baseline_fatigue ?? null,
       // Points at the sitting that created the record, not the most recent one to touch it.
       session_id: prior?.session_id ?? session.session_id,
     });
@@ -492,11 +494,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     saveResume(session.session_id, machine.stepIndex);
     // NOTE: tracking.beginCondition() is deliberately NOT called here. See the ReadingTask
     // onBegin handler — the exposure window has to start when the participant starts reading.
-    // Annotation video for the validation sub-study: one segment per session, taken during the
-    // first condition's reading so it always lands inside a real exposure window. Fire-and-forget —
-    // recording must never delay stimulus onset, and mayCapture() gates it on the video grant.
-    if (machine.stepIndex === 0) void captureMedia('reading_segment', cond?.label ?? null);
-  }, [session, cond, step, conditionId, machine.stepIndex, captureMedia]);
+    // NOTE: the annotation video is started from ReadingTask's onBegin, not here. See that handler.
+  }, [session, cond, step, conditionId, machine.stepIndex]);
 
   // ===== RENDER =====
   const nConditions = plan.length || N_CONDITIONS;
@@ -719,7 +718,19 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               });
               // Propagate the measured baseline into the participant record (was hard-wired to 0).
               const p = await get('participants', session.participant_id);
-              if (p) await put('participants', { ...p, baseline_fatigue: r.mean });
+              /**
+               * FIRST sitting only. The participant record is shared across a participant's two
+               * sittings, so writing each sitting's baseline here made the column last-write-wins:
+               * after sitting 2, sitting 1's reference value — the one every fatigue_delta in that
+               * sitting was computed against — was gone, and nothing recorded that it had changed.
+               *
+               * Both sittings' baselines are in 03_fatigue_scores.csv, keyed by session and tagged
+               * stage='baseline'. That is the authoritative per-sitting record; this column is a
+               * convenience copy of the first.
+               */
+              if (p && p.baseline_fatigue == null) {
+                await put('participants', { ...p, baseline_fatigue: r.mean });
+              }
             }
             setBaselineFatigue(r.mean);
             advance();
@@ -752,7 +763,24 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
              * condition and by participant: uncontrolled noise injected straight into the primary
              * outcome.
              */
-            onBegin={() => tracking.beginCondition()}
+            onBegin={() => {
+              tracking.beginCondition();
+              /**
+               * The annotation clip has to cover the SAME window the automated measure does.
+               *
+               * It used to start when the reading stage mounted, which is while the instruction
+               * card is still up. So the segment a human codes frame by frame began during the
+               * intro — sometimes tens of seconds of it, since the card is self-paced — and ran on
+               * past the point where reading ended. Objective 4 compares the automated
+               * incomplete-blink classification against that manual coding; comparing two measures
+               * taken over different windows estimates the disagreement between the windows, not
+               * the validity of the classifier.
+               *
+               * Fire-and-forget: recording must never delay stimulus onset, and mayCapture() gates
+               * it on the annotation-video grant.
+               */
+              if (machine.stepIndex === 0) void captureMedia('reading_segment', cond?.label ?? null);
+            }}
             onComplete={async (readingTimeMs) => {
               if (session) {
                 await tracking.endCondition(conditionId, session.session_id);
