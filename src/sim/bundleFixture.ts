@@ -364,7 +364,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       blink_count_micro: 2,
       blink_count_incomplete: 8,
       ear_baseline: 0.312,
-      ear_threshold_used: 0.234,
+      ear_threshold_used: 0.234, ear_complete_threshold: 0.234,
       head_pitch_mean: -3.2,
       head_pitch_calibrated: true,
       head_yaw_mean: 1.1,

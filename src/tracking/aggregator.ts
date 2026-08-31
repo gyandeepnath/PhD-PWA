@@ -133,6 +133,8 @@ export class EyeMetricsAggregator {
     cameraActive: boolean;
     baselineEarValue: number | null;
     earThresholdUsed: number | null;
+    /** The complete/incomplete boundary, exported beside the detection threshold. */
+    earCompleteThreshold?: number | null;
     gazeCalibrated: boolean;
     /** True when head pitch was measured against the participant's calibrated frontal baseline. */
     headPitchCalibrated: boolean;
@@ -212,6 +214,7 @@ export class EyeMetricsAggregator {
 
       ear_baseline: args.baselineEarValue,
       ear_threshold_used: args.earThresholdUsed,
+      ear_complete_threshold: args.earCompleteThreshold ?? null,
 
       /**
        * Null, not zero, when the face was never found.
@@ -286,6 +289,7 @@ export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeM
     blink_count_incomplete: null,
     ear_baseline: null,
     ear_threshold_used: null,
+    ear_complete_threshold: null,
     head_pitch_mean: null,
     head_pitch_calibrated: false,
     head_yaw_mean: null,

@@ -29,6 +29,9 @@ type Key = (typeof ITEMS)[number]['key'];
 
 interface Props {
   prompt: string;
+  /** No longer used: the participant is shown neither a score nor a delta. See the note in the
+   *  render body — feeding a comparative judgement back into a repeated self-report outcome is
+   *  the same feedback the operator manual forbids the operator from giving. */
   baselineMean?: number;
   accent?: string;
   /** Condition colours (post-condition rating runs under the active display); default = neutral cream. */
@@ -37,7 +40,7 @@ interface Props {
   onComplete: (r: FatigueResult) => void;
 }
 
-export function FatigueScale({ prompt, baselineMean, accent = '#4f8ef7', background = '#F8F7F5', text = '#1a1a2e', onComplete }: Props) {
+export function FatigueScale({ prompt, accent = '#4f8ef7', background = '#F8F7F5', text = '#1a1a2e', onComplete }: Props) {
   const muted = text + '99';
   const trackEmpty = text + '22';
   const [values, setValues] = useState<Record<Key, number>>({
@@ -92,13 +95,22 @@ export function FatigueScale({ prompt, baselineMean, accent = '#4f8ef7', backgro
         ))}
       </div>
 
-      <div className="mt-6 font-lab text-sm">
-        Composite: <strong>{allTouched ? composite.toFixed(1) : 'Set all sliders to see score'}</strong>
-        {baselineMean != null && allTouched && (
-          <span style={{ marginLeft: 12, color: composite - baselineMean > 0 ? '#e64c4c' : '#22c97a' }}>
-            Δ {(composite - baselineMean >= 0 ? '+' : '') + (composite - baselineMean).toFixed(1)} vs baseline
-          </span>
-        )}
+      {/*
+        No score and no delta are shown to the participant.
+        This screen used to display the composite and, beside it, a colour-coded
+        "Δ +2.3 vs baseline" — red when worse, green when better — after every one of the ten
+        conditions. That is performance feedback on a repeated self-report outcome, and it is the
+        strongest kind: a comparative judgement against the participant's own earlier state,
+        colour-coded for valence. It feeds each rating back into the next one, invites consistency
+        or contrast effects, and makes the fatigue trajectory partly a report of what the
+        participant was just told about themselves.
+        The operator manual forbids the operator from giving feedback of any kind, for exactly this
+        reason. The instrument should not do what the operator is instructed not to do. The
+        composite and the delta are both computed and exported; they belong in the dashboard, which
+        is researcher-facing, not here.
+      */}
+      <div className="mt-6 font-lab text-sm text-[#5a5a7a]">
+        {allTouched ? 'Thank you — tap Continue.' : 'Set all sliders to continue.'}
       </div>
 
       <button

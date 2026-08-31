@@ -65,10 +65,28 @@ export function fitGazeCalibration(raw: Record<string, GazeSample[]>): GazeCalib
   const hThreshold = Math.max(0.06, (safe(centerSpreadH) + safe(edgeH)) / 2);
   const vThreshold = Math.max(0.06, (safe(centerSpreadV) + safe(edgeV)) / 2);
 
-  // Valid only if the edges are clearly separable from the centre on at least one axis.
-  const totalSamples = Object.values(samplesByTarget).reduce((n, a) => n + a.length, 0);
-  const separable = edgeH > centerSpreadH * 1.5 || edgeV > centerSpreadV * 1.5;
-  const valid = totalSamples >= GAZE_TARGETS.length && center.length > 0 && separable;
+  /**
+   * Validity is judged on COVERAGE and on both axes, not on a bare sample count.
+   *
+   * The old test was `totalSamples >= GAZE_TARGETS.length`, i.e. nine samples across all nine
+   * targets combined. Two targets producing five samples each satisfied it while seven targets
+   * contributed nothing — a fit through two points reported as a nine-point calibration. And
+   * `separable` accepted either axis alone, so a run that separated horizontally but not vertically
+   * left the vertical threshold at its unfitted floor (DEFAULT_GAZE_THRESHOLD) while
+   * gaze_calibrated was exported as TRUE. Every vertical gaze zone in that sitting was then a
+   * guess presented as a measurement.
+   *
+   * Both axes must now separate, and at least two thirds of the targets must have produced
+   * samples, with the centre among them.
+   */
+  const targetsWithSamples = Object.values(samplesByTarget).filter((a) => a.length > 0).length;
+  const MIN_TARGETS = Math.ceil(GAZE_TARGETS.length * (2 / 3));
+  const separableH = edgeH > centerSpreadH * 1.5;
+  const separableV = edgeV > centerSpreadV * 1.5;
+  const valid = targetsWithSamples >= MIN_TARGETS
+    && center.length > 0
+    && separableH
+    && separableV;
 
   return {
     h0, v0,

@@ -435,7 +435,11 @@ export interface EyeMetricsRecord {
   blink_count_incomplete: number | null;
 
   ear_baseline: number | null;
+  /** EAR at which a blink is REGISTERED (0.75 x this participant's baseline). */
   ear_threshold_used: number | null;
+  /** EAR at or below which a blink counts as COMPLETE (0.60 x baseline). Both are needed to
+   *  reproduce the classification from the exported data. */
+  ear_complete_threshold: number | null;
 
   // Head pose (continuous; thresholds raised; smoothed)
   head_pitch_mean: number | null;
@@ -500,6 +504,13 @@ export interface CalibrationRecord {
   /** Participant's frontal nose fraction (pitch zero); null if not captured. Lets head pitch be
    *  reported relative to this person's natural straight-ahead posture rather than a population mean. */
   pitch_baseline_frac: number | null;
+  /**
+   * When this calibration was taken. Required to choose between two of them: a resume re-runs
+   * calibration, so a session can hold more than one, and the export used to take whichever sorted
+   * first by random uuid — a coin toss between the calibration that governed the first half of the
+   * sitting and the one that governed the second.
+   */
+  calibrated_at?: number;
 }
 
 /** Maps store names to their record types for type-safe DB access. */

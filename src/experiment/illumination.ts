@@ -87,7 +87,14 @@ export const N_ILLUMINATION_BLOCKS = ILLUMINATION_LEVELS.length;
  *
  * That gives a 5/5 split within every block of ten (so order is not confounded with recruitment
  * date either) while making each Williams row appear with BOTH orders exactly once across twenty
- * participants. Balance therefore completes at n = 20, which divides the target of 130 evenly.
+ * participants. Balance therefore completes at n = 20.
+ *
+ * 20 does NOT divide the target of 130 — 130/20 is 6.5 — and an earlier version of this note
+ * claimed it did. At n = 130 the last block of twenty is half-filled, so each Williams row ends up
+ * with a 7/6 rather than an even split of the two illumination orders. That residual imbalance is
+ * small and is absorbed by carrying illumination order as a covariate, which the analysis templates
+ * already do; but it is an imbalance, and stating otherwise would have put a false claim of exact
+ * balance into the thesis. Recruiting 140 rather than 130 for analysis would close it exactly.
  */
 export function illuminationOrderFor(enrolmentNumber: number): IlluminationLevel[] {
   const n = Number.isFinite(enrolmentNumber) ? Math.floor(enrolmentNumber) : 1;

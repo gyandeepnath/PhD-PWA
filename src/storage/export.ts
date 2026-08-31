@@ -185,7 +185,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '15_media_inventory.csv', column: 'consent_annotation_video', type: 'boolean', unit: '-', role: 'qc', description: 'The consent state in force when this item was captured, snapshotted onto the record so a file can never be separated from its permission.' },
 
   // ---- 02_conditions.csv
-  { file: '02_conditions.csv', column: 'session_position', type: 'integer', unit: '-', role: 'covariate', description: 'Serial position within the sitting, 0-based. Enter in models: absorbs the vigilance decrement and fatigue accumulation.' },
+  { file: '02_conditions.csv', column: 'session_position', type: 'integer', unit: '0-9', role: 'covariate', description: 'Serial position within the illumination BLOCK, 0-based — on a split sitting the second sitting continues the numbering rather than restarting, so this is not the position within the sitting. Enter in models: absorbs the vigilance decrement and fatigue accumulation.' },
   { file: '02_conditions.csv', column: 'passage_id', type: 'integer', unit: '-', role: 'covariate', description: 'Reading passage shown. Rotated independently of condition, so passage difficulty is orthogonal to display condition.' },
   { file: '02_conditions.csv', column: 'adaptation_ms_before', type: 'integer', unit: 'ms', role: 'qc', description: 'Grey-field adaptation before this condition. Doubled on a polarity switch; 0 for the first condition.' },
   { file: '02_conditions.csv', column: 'passage_repeat_number', type: 'integer', unit: 'count', role: 'covariate', description: "How many times this participant has read this passage, counting this run: 1 in the first sitting, 2 in the second. Ten passages cover twenty condition-runs, so every passage is re-read. Illumination is confounded with session order within a participant, so the practice effect loads onto the illumination main effect unless this is modelled." },
@@ -271,8 +271,8 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '10_wide_summary.csv', column: 'condition_label', type: 'string', unit: '-', role: 'id', description: 'Condition code. P1-P5 positive polarity, N1-N5 negative. Same coding as 00_condition_reference.csv.' },
   { file: '12_quality_flags.csv', column: 'condition_label', type: 'string', unit: '-', role: 'id', description: 'Condition code. P1-P5 positive polarity, N1-N5 negative. Same coding as 00_condition_reference.csv.' },
   { file: '15_media_inventory.csv', column: 'condition_label', type: 'string', unit: '-', role: 'id', description: 'Condition code. P1-P5 positive polarity, N1-N5 negative. Same coding as 00_condition_reference.csv.' },
-  { file: '10_wide_summary.csv', column: 'session_position', type: 'integer', unit: '1-10', role: 'covariate', description: 'Serial position of the condition within the sitting. Counterbalanced by a Williams square and entered as a covariate; a position effect is otherwise indistinguishable from a condition effect.' },
-  { file: '12_quality_flags.csv', column: 'session_position', type: 'integer', unit: '1-10', role: 'covariate', description: 'Serial position of the condition within the sitting. Counterbalanced by a Williams square and entered as a covariate; a position effect is otherwise indistinguishable from a condition effect.' },
+  { file: '10_wide_summary.csv', column: 'session_position', type: 'integer', unit: '0-9', role: 'covariate', description: 'Serial position of the condition within the illumination BLOCK, 0-based. On a split sitting the second sitting continues the block numbering rather than restarting, so this is not the position within the sitting. Counterbalanced by a Williams square and entered as a covariate; a position effect is otherwise indistinguishable from a condition effect.' },
+  { file: '12_quality_flags.csv', column: 'session_position', type: 'integer', unit: '0-9', role: 'covariate', description: 'Serial position of the condition within the illumination BLOCK, 0-based. On a split sitting the second sitting continues the block numbering rather than restarting, so this is not the position within the sitting. Counterbalanced by a Williams square and entered as a covariate; a position effect is otherwise indistinguishable from a condition effect.' },
   { file: '02_conditions.csv', column: 'passage_id', type: 'integer', unit: '0-9', role: 'covariate', description: 'Which reading passage was shown. Rotated against condition so passage difficulty stays orthogonal to display condition.' },
   { file: '04_comprehension.csv', column: 'passage_id', type: 'integer', unit: '0-9', role: 'covariate', description: 'Which reading passage was shown. Rotated against condition so passage difficulty stays orthogonal to display condition.' },
   { file: '05_visual_search.csv', column: 'passage_id', type: 'integer', unit: '0-9', role: 'covariate', description: 'Which reading passage was shown. Rotated against condition so passage difficulty stays orthogonal to display condition.' },
@@ -296,6 +296,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '01_session_info.csv', column: 'stimulus_font_ok', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the vendored stimulus typeface (Roboto 400) was available when pre-flight ran. Empty where the browser gave no answer. False means the reading passage was rendered in a fallback face, which changes letter shape and stroke weight and so changes the display condition.' },
   { file: '01_session_info.csv', column: 'caffeine_today_session', type: 'boolean', unit: '-', role: 'covariate', description: "Caffeine in roughly the four hours before THIS sitting. Recorded per sitting because it varies between them; the participant record's copy is the first sitting's and must not be used as a per-session covariate." },
   { file: '01_session_info.csv', column: 'hours_since_sleep_session', type: 'float', unit: 'hours', role: 'covariate', description: 'Hours since waking, at THIS sitting. Per-sitting for the same reason as caffeine_today_session. Bears on blink rate and on the drowsiness covariates.' },
+  { file: '01_session_info.csv', column: 'calibration_runs', type: 'integer', unit: 'count', role: 'qc', description: 'How many calibrations this sitting recorded. More than one means the session was interrupted and re-calibrated; the calibration_* columns describe the most recent, and per-condition ear_baseline in 07_eye_metrics.csv is what each condition actually used.' },
   { file: '01_session_info.csv', column: 'gaze_calibration_valid', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the nine-point gaze mapping met its acceptance criterion. When false, gaze columns are coarse-zone only and should not be treated as calibrated.' },
   { file: '01_session_info.csv', column: 'calibration_ear_baseline', type: 'number', unit: 'ratio', role: 'qc', description: 'Open-eye eye-aspect-ratio baseline for this participant. Every blink threshold is expressed as a fraction of this, so it is referenced to the individual rather than a population default.' },
   { file: '01_session_info.csv', column: 'calibration_pitch_baseline_frac', type: 'number', unit: 'ratio', role: 'qc', description: 'Frontal head-pose reference captured at calibration. Head-pose columns are relative to this when head_pitch_calibrated is true.' },
@@ -348,6 +349,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '07_eye_metrics.csv', column: 'first_half_blink_rate', type: 'number', unit: 'blinks/min', role: 'dv', description: 'Blink rate over the first half of the condition. Paired with the second half to expose within-condition drift.' },
   { file: '07_eye_metrics.csv', column: 'second_half_blink_rate', type: 'number', unit: 'blinks/min', role: 'dv', description: 'Blink rate over the second half of the condition.' },
   { file: '07_eye_metrics.csv', column: 'ear_threshold_used', type: 'number', unit: 'ratio', role: 'qc', description: 'Eye-aspect-ratio threshold actually applied, expressed as a fraction of the participant calibrated baseline. Recorded so classification can be reproduced or re-cut later.' },
+  { file: '07_eye_metrics.csv', column: 'ear_complete_threshold', type: 'float', unit: 'EAR', role: 'provenance', description: 'EAR at or below which a blink was counted as COMPLETE (0.60 x this participant\u2019s open-eye baseline). With ear_threshold_used, which is the registration cut at 0.75 x baseline, the complete/incomplete classification can be reproduced from the exported data.' },
   { file: '07_eye_metrics.csv', column: 'head_pitch_mean', type: 'number', unit: 'degrees', role: 'covariate', description: 'Mean head pitch. Relative to the participant calibrated frontal posture when head_pitch_calibrated is true, otherwise to a population default.' },
   { file: '07_eye_metrics.csv', column: 'head_yaw_mean', type: 'number', unit: 'degrees', role: 'covariate', description: 'Mean head yaw over the condition.' },
   { file: '07_eye_metrics.csv', column: 'head_roll_mean', type: 'number', unit: 'degrees', role: 'covariate', description: 'Mean head roll over the condition.' },
@@ -465,6 +467,11 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
   const pid = session.participant_id;
   const date = new Date(session.session_start_time).toISOString().slice(0, 10);
   const summaries = buildConditionSummaries(bundle);
+  // Most recent calibration by the time it was taken, falling back to document order for records
+  // written before calibrated_at existed. Never an arbitrary uuid sort — see 01_session_info.
+  const latestCalibration = [...bundle.calibration].sort(
+    (a, b) => (a.calibrated_at ?? 0) - (b.calibrated_at ?? 0),
+  ).at(-1);
   const files: ExportFile[] = [];
   const csv = (filename: string, headers: string[], rows: Record<string, unknown>[]) =>
     files.push({ filename, content: toCsv(headers, rows), mime: 'text/csv' });
@@ -494,7 +501,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'session_status', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'preflight_complete', 'stimulus_font_ok', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected'],
+    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'session_status', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'preflight_complete', 'stimulus_font_ok', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected', 'calibration_runs'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
       session_index: session.session_index,
@@ -536,10 +543,21 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       stimulus_font_ok: session.stimulus_font_ok ?? '',
       caffeine_today_session: session.caffeine_today ?? '',
       hours_since_sleep_session: session.hours_since_sleep ?? '',
-      gaze_calibration_valid: bundle.calibration[0]?.is_real_calibration ?? '',
-      calibration_ear_baseline: bundle.calibration[0]?.ear_baseline ?? '',
-      calibration_pitch_baseline_frac: bundle.calibration[0]?.pitch_baseline_frac ?? '',
-      calibration_targets_detected: bundle.calibration[0] ? `${bundle.calibration[0].targets_detected}/${bundle.calibration[0].targets_total}` : '',
+      /**
+       * The calibration that was actually in force for the LATEST part of the sitting, plus a count
+       * so the reader knows there was more than one.
+       *
+       * These columns used to read `bundle.calibration[0]`, and the bundle is sorted by
+       * calibration_id — a uuid. A resume re-runs calibration, so a session can hold two, and the
+       * export picked between them at random: the participant's open-eye EAR baseline reported at
+       * session level might be the one from before the interruption or the one from after, with
+       * nothing to say which. Every blink threshold in the run is a fraction of that baseline.
+       */
+      gaze_calibration_valid: latestCalibration?.is_real_calibration ?? '',
+      calibration_ear_baseline: latestCalibration?.ear_baseline ?? '',
+      calibration_pitch_baseline_frac: latestCalibration?.pitch_baseline_frac ?? '',
+      calibration_targets_detected: latestCalibration ? `${latestCalibration.targets_detected}/${latestCalibration.targets_total}` : '',
+      calibration_runs: bundle.calibration.length,
     }]);
 
   // 02 — conditions (+ reading speed in words/min, derived from passage length & reading time)
@@ -573,7 +591,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 07 — eye metrics
   csv('07_eye_metrics.csv',
-    ['participant_id', 'condition_id', 'camera_active', 'effective_fps', 'fps_adequate_for_tiers', 'fps_adequate_for_ratio', 'blink_rate', 'blink_rate_full', 'incomplete_blink_ratio', 'mean_inter_blink_interval_ms', 'inter_blink_interval_cv', 'perclos_p80', 'perclos_p70', 'long_closure_count', 'long_closure_total_ms', 'blink_duration_mean_ms', 'first_half_blink_rate', 'second_half_blink_rate', 'ear_baseline', 'ear_threshold_used', 'head_pitch_mean', 'head_pitch_calibrated', 'head_yaw_mean', 'head_roll_mean', 'head_movement_std', 'postural_load', 'head_stability_score', 'off_axis_ratio', 'gaze_calibrated', 'gaze_deviation_ratio', 'zone_center_ratio', 'zone_transition_count', 'face_presence_ratio', 'face_size_ratio', 'mean_face_luma', 'lighting_quality'],
+    ['participant_id', 'condition_id', 'camera_active', 'effective_fps', 'fps_adequate_for_tiers', 'fps_adequate_for_ratio', 'blink_rate', 'blink_rate_full', 'incomplete_blink_ratio', 'mean_inter_blink_interval_ms', 'inter_blink_interval_cv', 'perclos_p80', 'perclos_p70', 'long_closure_count', 'long_closure_total_ms', 'blink_duration_mean_ms', 'first_half_blink_rate', 'second_half_blink_rate', 'ear_baseline', 'ear_threshold_used', 'ear_complete_threshold', 'head_pitch_mean', 'head_pitch_calibrated', 'head_yaw_mean', 'head_roll_mean', 'head_movement_std', 'postural_load', 'head_stability_score', 'off_axis_ratio', 'gaze_calibrated', 'gaze_deviation_ratio', 'zone_center_ratio', 'zone_transition_count', 'face_presence_ratio', 'face_size_ratio', 'mean_face_luma', 'lighting_quality'],
     bundle.eyeMetrics.map((e) => ({
       participant_id: pid, condition_id: e.condition_id, camera_active: e.camera_active,
       effective_fps: e.effective_fps, fps_adequate_for_tiers: e.fps_adequate_for_tiers,
@@ -584,6 +602,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       blink_duration_mean_ms: e.blink_duration_mean_ms,
       first_half_blink_rate: e.bins.first_half_blink_rate, second_half_blink_rate: e.bins.second_half_blink_rate,
       ear_baseline: e.ear_baseline, ear_threshold_used: e.ear_threshold_used,
+      ear_complete_threshold: e.ear_complete_threshold,
       head_pitch_mean: e.head_pitch_mean, head_pitch_calibrated: e.head_pitch_calibrated, head_yaw_mean: e.head_yaw_mean, head_roll_mean: e.head_roll_mean,
       head_movement_std: e.head_movement_std,
       postural_load: e.postural_load, head_stability_score: e.head_stability_score, off_axis_ratio: e.off_axis_ratio,

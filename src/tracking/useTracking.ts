@@ -12,7 +12,7 @@
  */
 import { useCallback, useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';
-import { faceEar, baselineEar, type Point } from './blink';
+import { faceEar, baselineEar, EAR_TIERS, type Point } from './blink';
 import { estimateHeadPose, isOffAxis, noseVerticalFraction } from './headPose';
 import { estimateGaze } from './gaze';
 import { meanLumaFromRGBA } from './lighting';
@@ -273,6 +273,7 @@ export function useTracking(): TrackingApi {
       gaze_h_threshold: cal.valid ? cal.hThreshold : null,
       gaze_v_threshold: cal.valid ? cal.vThreshold : null,
       pitch_baseline_frac: pitchBaselineFracRef.current,
+      calibrated_at: Date.now(),
     });
     return cal.valid;
   }, []);
@@ -292,7 +293,13 @@ export function useTracking(): TrackingApi {
         sessionId,
         cameraActive: true,
         baselineEarValue: baselineEarRef.current,
-        earThresholdUsed: baselineEarRef.current != null ? baselineEarRef.current * 0.6 : null,
+        // The BLINK-DETECTION threshold, which is what a blink is registered at, not the
+        // completeness cut. This exported 0.6 x baseline — the boundary between complete and
+        // incomplete — while classification actually keys on 0.75 x baseline, so a reader could not
+        // reproduce the classification from the CSV as the codebook promised. Both are now
+        // exported: the detection threshold here, the completeness cut beside it.
+        earThresholdUsed: baselineEarRef.current != null ? baselineEarRef.current * EAR_TIERS.partial : null,
+        earCompleteThreshold: baselineEarRef.current != null ? baselineEarRef.current * EAR_TIERS.full : null,
         gazeCalibrated: gazeCalRef.current?.valid ?? false,
         headPitchCalibrated: pitchBaselineFracRef.current != null,
       });

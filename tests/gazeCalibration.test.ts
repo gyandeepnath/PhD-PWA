@@ -56,3 +56,58 @@ describe('estimateGaze with fitted neutral bias', () => {
     expect(cal.isCenter).toBe(true);
   });
 });
+
+/**
+ * What counts as a valid calibration.
+ *
+ * `gaze_calibrated` is exported as a boolean and the analysis is told that gaze zones are
+ * meaningful only when it is true. So the bar for true has to be a real one. It was not: the test
+ * was nine samples across all nine targets COMBINED, which two targets could satisfy on their own,
+ * and separability on EITHER axis was enough — leaving the other axis's threshold at an unfitted
+ * default while the flag still said calibrated.
+ */
+describe('calibration validity requires coverage and both axes', () => {
+  const spread = (h: number, v: number, n = 6) =>
+    Array.from({ length: n }, () => ({ h, v }));
+
+  /** A well-covered calibration: centre tight, edges displaced on both axes. */
+  const goodSamples = () => ({
+    cc: spread(0, 0),
+    ml: spread(-0.20, 0), mr: spread(0.20, 0),
+    tc: spread(0, -0.20), bc: spread(0, 0.20),
+    tl: spread(-0.18, -0.18), tr: spread(0.18, -0.18),
+    bl: spread(-0.18, 0.18), br: spread(0.18, 0.18),
+  });
+
+  it('accepts a properly covered nine-point run', async () => {
+    const { fitGazeCalibration } = await import('@/tracking/gazeCalibration');
+    expect(fitGazeCalibration(goodSamples()).valid).toBe(true);
+  });
+
+  it('rejects a run where only two targets produced samples', async () => {
+    // Ten samples in total — enough to pass the old count-based test — from two targets.
+    const { fitGazeCalibration } = await import('@/tracking/gazeCalibration');
+    const sparse = { cc: spread(0, 0, 5), mr: spread(0.2, 0, 5) };
+    expect(fitGazeCalibration(sparse).valid).toBe(false);
+  });
+
+  it('rejects a run that separates horizontally but not vertically', async () => {
+    // The vertical threshold would otherwise stay at its unfitted floor while the flag said TRUE,
+    // making every vertical gaze zone in the sitting a guess presented as a measurement.
+    const { fitGazeCalibration } = await import('@/tracking/gazeCalibration');
+    const s = goodSamples();
+    for (const id of ['tc', 'bc', 'tl', 'tr', 'bl', 'br'] as const) {
+      s[id] = s[id].map((p) => ({ h: p.h, v: 0 }));
+    }
+    expect(fitGazeCalibration(s).valid).toBe(false);
+  });
+
+  it('falls back to the default thresholds when it declares itself invalid', async () => {
+    const { fitGazeCalibration } = await import('@/tracking/gazeCalibration');
+    const { DEFAULT_GAZE_THRESHOLD } = await import('@/tracking/gaze');
+    const r = fitGazeCalibration({ cc: spread(0, 0, 5), mr: spread(0.2, 0, 5) });
+    expect(r.valid).toBe(false);
+    expect(r.hThreshold).toBe(DEFAULT_GAZE_THRESHOLD);
+    expect(r.vThreshold).toBe(DEFAULT_GAZE_THRESHOLD);
+  });
+});
