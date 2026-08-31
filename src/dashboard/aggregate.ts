@@ -232,6 +232,7 @@ export function conditionEngagement(args: {
   // judge as insufficient. Summing them as 0 would report "0 blinks captured" for a condition that
   // was never observed, which is the same fabrication the null encoding exists to prevent.
   const blinkCount = eye && eye.blink_count_full != null && eye.blink_count_micro != null
+    && eye.blink_count_incomplete != null
     ? eye.blink_count_full + eye.blink_count_micro + eye.blink_count_incomplete
     : null;
   const insufficient_blinks = !!eye && eye.camera_active && blinkCount != null

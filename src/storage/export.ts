@@ -577,6 +577,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
     bundle.eyeMetrics.map((e) => ({
       participant_id: pid, condition_id: e.condition_id, camera_active: e.camera_active,
       effective_fps: e.effective_fps, fps_adequate_for_tiers: e.fps_adequate_for_tiers,
+      fps_adequate_for_ratio: e.fps_adequate_for_ratio,
       blink_rate: e.blink_rate, blink_rate_full: e.blink_rate_full, incomplete_blink_ratio: e.incomplete_blink_ratio,
       mean_inter_blink_interval_ms: e.mean_inter_blink_interval_ms, inter_blink_interval_cv: e.inter_blink_interval_cv,
       perclos_p80: e.perclos_p80, perclos_p70: e.perclos_p70, long_closure_count: e.long_closure_count, long_closure_total_ms: e.long_closure_total_ms,

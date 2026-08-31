@@ -164,3 +164,48 @@ export function isSetup(stage: Stage): boolean {
 export function isInLoop(stage: Stage): boolean {
   return LOOP_ORDER.includes(stage);
 }
+
+/**
+ * What a resumed session still owes, before it may re-enter the condition loop.
+ *
+ * A resume used to jump straight to the first reading task. That was safe only while a resume
+ * pointer existed exclusively for sessions that had already reached the loop. Once every
+ * in-progress session became resumable — which it had to, so that a second participant could not
+ * strand the first — a session interrupted anywhere in the ten-stage setup chain was offered as
+ * "Resume (next condition 1/10)" and, on tapping it, dropped the participant straight into the
+ * reading task.
+ *
+ * Everything the setup chain establishes was then silently absent: no consent record, no
+ * participant row (so age, correction, colour vision, eligibility and exclusion_reason are
+ * permanently unrecoverable), no pre-flight, no calibration, and neither baseline instrument — so
+ * the CVS-Q change score, the key secondary outcome, cannot be computed, and every fatigue_delta
+ * is null. The sitting nonetheless completed ten conditions, so `session_complete` was TRUE and
+ * the codebook's own filter admitted it.
+ *
+ * This returns the first setup stage whose product is missing, or null when the chain is complete.
+ * Pure, so it can be tested without a database.
+ */
+export interface ResumePrerequisites {
+  consentGiven: boolean;
+  hasParticipantRecord: boolean;
+  preflightComplete: boolean;
+  colourVisionScreened: boolean;
+  hasBaselineCvsq: boolean;
+  hasBaselineFatigue: boolean;
+  /** Whether this participant consented to camera measurement; drives re-calibration. */
+  wantsCamera: boolean;
+}
+
+export function firstUnsatisfiedSetupStage(p: ResumePrerequisites): Stage | null {
+  if (!p.consentGiven) return 'CONSENT';
+  if (!p.hasParticipantRecord) return 'PARTICIPANT_PROFILE';
+  if (!p.preflightComplete) return 'PREFLIGHT';
+  if (!p.colourVisionScreened) return 'COLOR_VISION';
+  // Camera setup and calibration are re-run on EVERY resume when the grant is present, not only
+  // when they were missed: the app remounts, and the EAR and gaze baselines that every blink
+  // threshold is a fraction of live in refs that the remount cleared.
+  if (p.wantsCamera) return 'CAMERA_SETUP';
+  if (!p.hasBaselineCvsq) return 'CVSQ_BASELINE';
+  if (!p.hasBaselineFatigue) return 'BASELINE_FATIGUE';
+  return null;
+}

@@ -28,6 +28,11 @@ export interface ResumePointer {
   sessionId: string;
   /** Condition index to resume at (0-based). At or past the sitting's length: go to the close. */
   nextStepIndex: number;
+  /**
+   * Whether this session ever entered the condition loop. False means it was interrupted somewhere
+   * in setup and nextStepIndex is a default, not a record of progress.
+   */
+  reachedLoop?: boolean;
   savedAt: number;
 }
 
@@ -128,8 +133,17 @@ export async function listResumable(): Promise<ResumePointer[]> {
   for (const s of sessions) {
     if (s.status !== 'in_progress' || s.deleted_at) continue;
     const cached = cache[s.session_id];
-    const idx = s.resume_next_index ?? cached?.nextStepIndex ?? 0;
-    out.push({ sessionId: s.session_id, nextStepIndex: idx, savedAt: cached?.savedAt ?? s.session_start_time });
+    const recorded = s.resume_next_index ?? cached?.nextStepIndex ?? null;
+    // reachedLoop distinguishes "interrupted at condition 1" from "interrupted during setup and
+    // never got as far as condition 1". Both are resumable; they resume to different places, and
+    // conflating them dropped a participant into the reading task with no consent record, no
+    // screening and no baselines. A synthesised 0 is not evidence that the loop was ever entered.
+    out.push({
+      sessionId: s.session_id,
+      nextStepIndex: recorded ?? 0,
+      reachedLoop: recorded != null,
+      savedAt: cached?.savedAt ?? s.session_start_time,
+    });
   }
   return out.sort((a, b) => b.savedAt - a.savedAt);
 }

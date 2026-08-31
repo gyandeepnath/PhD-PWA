@@ -12,7 +12,7 @@ import { LazyDashboard as Dashboard } from '@/dashboard/LazyDashboard';
 type View =
   | { mode: 'landing' }
   | { mode: 'manager' }
-  | { mode: 'experiment'; resume?: { sessionId: string; nextStepIndex: number } }
+  | { mode: 'experiment'; resume?: { sessionId: string; nextStepIndex: number; reachedLoop?: boolean } }
   | { mode: 'dashboard'; sessionId: string };
 
 export default function App() {
@@ -26,7 +26,7 @@ export default function App() {
       return (
         <SessionManager
           onNew={() => setView({ mode: 'experiment' })}
-          onResume={(sessionId, nextStepIndex) => setView({ mode: 'experiment', resume: { sessionId, nextStepIndex } })}
+          onResume={(sessionId, nextStepIndex, reachedLoop) => setView({ mode: 'experiment', resume: { sessionId, nextStepIndex, reachedLoop } })}
           onOpen={(sessionId) => setView({ mode: 'dashboard', sessionId })}
           onHome={() => setView({ mode: 'landing' })}
         />

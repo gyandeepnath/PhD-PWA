@@ -91,11 +91,31 @@ export class EyeMetricsAggregator {
     return t;
   }
 
-  private binnedBlinkRates(events: BlinkEvent[], durationMs: number) {
+  /**
+   * Blink rate in the first and second halves of the exposure.
+   *
+   * `originMs` is the timestamp of the FIRST sample in the condition, and it is required, not
+   * optional. A blink's `onset_ms` is copied from `EarSample.t_ms`, which is `performance.now()` —
+   * milliseconds since the PAGE LOADED, not since the condition started. `durationMs` is a span.
+   * Comparing the two directly is comparing an absolute clock to a relative one.
+   *
+   * The consequence was total and silent. By the first reading exposure — after consent, profile,
+   * Ishihara, camera setup, a nine-point calibration and two baseline questionnaires —
+   * performance.now() is already several hundred thousand milliseconds, while `mid` is about
+   * 90,000. So `onset_ms < mid` was false for every blink in every condition of every real run:
+   * first_half_blink_rate was exactly 0 and second_half_blink_rate was exactly double the true
+   * rate. The codebook sells the pair as evidence of within-condition drift, so the thesis would
+   * have reported a 100% within-condition rise in blink rate from a floor of zero, in 100% of
+   * rows, entirely an artefact of the clock origin.
+   *
+   * Every fixture and unit test started its clock at 0, which is why nothing caught it.
+   */
+  private binnedBlinkRates(events: BlinkEvent[], durationMs: number, originMs: number) {
     if (durationMs <= 0) return { first_half_blink_rate: null, second_half_blink_rate: null };
     const mid = durationMs / 2;
-    const first = events.filter((e) => e.onset_ms < mid).length;
-    const second = events.filter((e) => e.onset_ms >= mid).length;
+    const rel = (e: BlinkEvent) => e.onset_ms - originMs;
+    const first = events.filter((e) => rel(e) < mid).length;
+    const second = events.filter((e) => rel(e) >= mid).length;
     return {
       first_half_blink_rate: blinkRatePerMinute(first, mid),
       second_half_blink_rate: blinkRatePerMinute(second, durationMs - mid),
@@ -123,7 +143,9 @@ export class EyeMetricsAggregator {
     const events = classifyBlinks(this.ear, baseline);
     const blink = summariseBlinks(events, durationMs);
     const fps = effectiveFps(this.frameTimes);
-    const bins = this.binnedBlinkRates(events, durationMs);
+    // The origin of the condition's own clock, not zero: see binnedBlinkRates.
+    const originMs = this.ear.length ? this.ear[0].t_ms : 0;
+    const bins = this.binnedBlinkRates(events, durationMs, originMs);
     const closure = computeClosureMetrics(this.ear, baseline, events);
     const ibi = interBlinkInterval(events);
 
@@ -226,7 +248,7 @@ export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeM
     blink_rate_micro: null,
     blink_count_full: null,
     blink_count_micro: null,
-    blink_count_incomplete: 0,
+    blink_count_incomplete: null,
     ear_baseline: null,
     ear_threshold_used: null,
     head_pitch_mean: 0,

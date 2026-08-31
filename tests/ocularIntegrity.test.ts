@@ -161,3 +161,66 @@ describe('the primary outcome carries its own frame-rate qualification', () => {
     expect(sums.filter((x) => x.engagement_reasons.some((r: string) => /fps/i.test(r)))).toHaveLength(1);
   });
 });
+
+/**
+ * The within-condition blink bins, against a realistic clock.
+ *
+ * EarSample.t_ms is performance.now() — milliseconds since the page loaded — while the bin midpoint
+ * is half of a SPAN. Comparing them directly meant that once the session had been running for more
+ * than a couple of minutes, every blink sorted into the second half: first_half_blink_rate was
+ * exactly 0 and second_half_blink_rate exactly double the truth, in every condition of every real
+ * run. Every fixture started its clock at zero, which is precisely why no test caught it.
+ *
+ * So these run the aggregator twice over an IDENTICAL blink stream, differing only in clock origin.
+ * The bins must agree.
+ */
+describe('within-condition bins are computed on the condition clock, not the page clock', () => {
+  const runAt = async (t0: number) => {
+    const { EyeMetricsAggregator } = await import('@/tracking/aggregator');
+    const agg = new EyeMetricsAggregator();
+    const BASE = 0.30;
+    const fps = 30, secs = 180, step = 1000 / fps;
+    // A steady 15 blinks/min: one blink every 4 s, each three frames deep.
+    const blinkAt = new Set<number>();
+    for (let s = 2; s < secs; s += 4) blinkAt.add(Math.round((s * 1000) / step));
+    for (let i = 0; i < fps * secs; i++) {
+      const t = t0 + i * step;
+      const deep = blinkAt.has(i) || blinkAt.has(i - 1) || blinkAt.has(i - 2);
+      agg.ingest({
+        t_ms: t,
+        ear: deep ? BASE * 0.5 : BASE,
+        pose: { pitch: 0, yaw: 0, roll: 0 },
+        zone: 'cc' as const, isCenter: true, offAxis: false,
+        facePresent: true, faceSize: 0.3, luma: 120,
+      });
+    }
+    return agg.finalize({
+      conditionId: 'c', sessionId: 's', cameraActive: true, baselineEarValue: BASE,
+      earThresholdUsed: BASE * 0.6, gazeCalibrated: true, headPitchCalibrated: true,
+    });
+  };
+
+  it('gives the same answer whether the page loaded a second ago or ten minutes ago', async () => {
+    const atZero = await runAt(0);
+    const tenMinutesIn = await runAt(600_000);
+
+    expect(atZero.bins.first_half_blink_rate).not.toBeNull();
+    // The bug: with a realistic origin the first half emptied out completely.
+    expect(tenMinutesIn.bins.first_half_blink_rate).not.toBe(0);
+    expect(tenMinutesIn.bins.first_half_blink_rate).toBeCloseTo(atZero.bins.first_half_blink_rate!, 5);
+    expect(tenMinutesIn.bins.second_half_blink_rate).toBeCloseTo(atZero.bins.second_half_blink_rate!, 5);
+  });
+
+  it('splits a steady blink stream evenly between the halves', async () => {
+    // A constant rate must not produce apparent within-condition drift.
+    const r = await runAt(600_000);
+    const a = r.bins.first_half_blink_rate!;
+    const b = r.bins.second_half_blink_rate!;
+    expect(a).toBeGreaterThan(0);
+    expect(b).toBeGreaterThan(0);
+    expect(Math.abs(a - b) / ((a + b) / 2)).toBeLessThan(0.2);
+    // And both must be near the true 15/min, not 0 and 30.
+    expect(a).toBeGreaterThan(10);
+    expect(a).toBeLessThan(20);
+  });
+});

@@ -95,7 +95,14 @@ const BASE_CONFIG = {
   // Camera.
   CAMERA_WIDTH: 1280,
   CAMERA_HEIGHT: 720,
-  CAMERA_FPS: 30,
+  /**
+   * Frame rate REQUESTED from the camera. Deliberately above FPS_RATIO_THRESHOLD (30), the rate the
+   * primary outcome needs: an achieved rate always sits a little below the requested one, so asking
+   * for exactly 30 would leave every condition in the study below the gate and the gate carrying no
+   * information. Devices that cannot deliver 60 fall back to whatever they can, which is recorded
+   * per condition as effective_fps.
+   */
+  CAMERA_FPS: 60,
   // Process every camera frame: blinks last 100-400 ms, so ~30 fps is the literature minimum for
   // valid blink detection (sub-Nyquist below ~25 fps). Raise to 2 only if a slow tablet can't keep
   // up — effective_fps records the true achieved rate and gates the duration-based tiers.

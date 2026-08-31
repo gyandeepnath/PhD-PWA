@@ -13,7 +13,7 @@ import {
 import { PASSAGES } from './passages';
 import { blockPlan, isAnnotationSubsample, type PlannedStep } from './counterbalance';
 import { CONFIG } from './config';
-import { initialState, nextState, progressPercent, type MachineState } from './stateMachine';
+import { initialState, nextState, progressPercent, firstUnsatisfiedSetupStage, type MachineState } from './stateMachine';
 import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
 import { put, get, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows, clearSessionStageRows } from '@/storage/db';
 import {
@@ -53,7 +53,7 @@ function provenance(): Provenance {
 
 interface ExperimentProps {
   /** When set, rehydrate and resume an in-progress session at the given condition index. */
-  resume?: { sessionId: string; nextStepIndex: number };
+  resume?: { sessionId: string; nextStepIndex: number; reachedLoop?: boolean };
   /** Return to the session manager (pause/exit or after completion). */
   onExit: () => void;
 }
@@ -145,26 +145,52 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       setPlan(sittingPlan);
       setBaselineFatigue(baseline ? baseline.fatigue_mean : null);
       const idx = resume.nextStepIndex;
+
       /**
-       * Re-enter the camera path before resuming the loop.
+       * Re-enter the SETUP chain at the first stage whose product is missing, and only then the
+       * condition loop.
        *
-       * This used to jump straight to READING_TASK. App.tsx remounts Experiment on resume, so
-       * useTracking() came back at status 'unavailable' with its EAR and gaze baselines — which
-       * live in refs — cleared. CAMERA_SETUP and CALIBRATION were both skipped, so every condition
-       * after the interruption took the camera-off branch and wrote a row with no ocular data at
-       * all, silently, with nothing on screen to say the camera was not running. An interruption is
-       * the single most likely event in a 90-minute session on a tablet.
+       * This used to jump straight to READING_TASK, which was safe only while a resume pointer
+       * existed exclusively for sessions that had already reached the loop. Once every in-progress
+       * session became resumable — which it had to be, so a second participant could not strand the
+       * first — a session interrupted during setup was offered as "Resume (next condition 1/10)"
+       * and dropped the participant into the reading task with no consent record, no participant
+       * row, no screening, no calibration and neither baseline instrument. Ten conditions later it
+       * exported with session_complete=TRUE and the codebook's own filter admitted it.
        *
-       * Calibration has to be redone rather than reused: the thresholds are expressed as fractions
-       * of this participant's own open-eye baseline, and that baseline is gone.
+       * Camera setup and calibration are re-run on every resume even when they were completed:
+       * App.tsx remounts Experiment, so useTracking() comes back at status 'unavailable' with the
+       * EAR and gaze baselines — which live in refs — cleared. Those thresholds are fractions of
+       * this participant's own open-eye baseline, so they cannot be inherited.
        */
+      const participantRow = await get('participants', s.participant_id);
+      const cvsqRows = await getAllByIndex('cvsq_scores', 'by_session', s.session_id);
       const wantsCamera = s.media_consent?.camera_metrics === true;
-      resumeJumpTo.current = idx < sittingPlan.length && wantsCamera ? idx : null;
-      setMachine(idx >= sittingPlan.length
-        ? { stage: 'CVSQ_END', stepIndex: sittingPlan.length - 1 }
-        : wantsCamera
-          ? { stage: 'CAMERA_SETUP', stepIndex: idx }
-          : { stage: 'READING_TASK', stepIndex: idx });
+      const owed = firstUnsatisfiedSetupStage({
+        consentGiven: s.consent_given === true,
+        hasParticipantRecord: !!participantRow,
+        preflightComplete: s.preflight_complete === true,
+        colourVisionScreened: participantRow?.ishihara_total != null,
+        hasBaselineCvsq: cvsqRows.some((c) => c.stage === 'baseline'),
+        hasBaselineFatigue: !!baseline,
+        wantsCamera,
+      });
+
+      // Where the loop should pick up once setup is satisfied. reachedLoop distinguishes a genuine
+      // condition pointer from the default 0 given to a session that never got that far.
+      const loopTarget = resume.reachedLoop ? idx : 0;
+
+      if (idx >= sittingPlan.length && resume.reachedLoop) {
+        // Every condition ran; only the closing instruments remain.
+        resumeJumpTo.current = null;
+        setMachine({ stage: 'CVSQ_END', stepIndex: sittingPlan.length - 1 });
+      } else if (owed) {
+        resumeJumpTo.current = loopTarget;
+        setMachine({ stage: owed, stepIndex: loopTarget });
+      } else {
+        resumeJumpTo.current = null;
+        setMachine({ stage: 'READING_TASK', stepIndex: loopTarget });
+      }
       setResuming(false);
     })();
     return () => {
@@ -516,10 +542,40 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             if (session) {
               const p = await get('participants', session.participant_id);
               if (p) {
-                const status = r.status === 'normal' ? 'normal'
-                  : r.status === 'screen_failed' ? 'screen_failed' : p.cvd_status;
+                /**
+                 * A failed screen has to reach `eligible`, and must not be undone at sitting 2.
+                 *
+                 * Two faults sat here. The handler wrote cvd_status and nothing else, so a
+                 * participant who failed the plates was exported as eligible=TRUE with an empty
+                 * exclusion_reason — while the codebook instructs the analyst to drop rows where
+                 * eligible is false, and the protocol excludes colour-vision deficiency outright.
+                 * The confirmatory analysis of the TEXT-COLOUR factor would then have included a
+                 * participant who cannot perceive those colours normally. And because the
+                 * participant record is shared across sittings and the plate set is identical and
+                 * deterministically seeded, a pass at sitting 2 overwrote a sitting-1
+                 * `screen_failed` with `normal`, erasing the exclusion entirely.
+                 *
+                 * A failure is therefore sticky, and it propagates into eligibility.
+                 */
+                const status = p.cvd_status === 'screen_failed'
+                  ? 'screen_failed'
+                  : r.status === 'screen_failed' ? 'screen_failed'
+                    : r.status === 'normal' ? 'normal' : p.cvd_status;
+
+                const failsColourVision = status === 'screen_failed' || status === 'self_reported_deficient';
+                const priorReasons = (p.exclusion_reason ?? '')
+                  .split(';').map((x) => x.trim()).filter(Boolean)
+                  .filter((x) => !/colour-vision|colour vision/i.test(x));
+                if (failsColourVision) {
+                  priorReasons.push(status === 'screen_failed'
+                    ? 'failed the colour-vision screening'
+                    : 'self-reported colour-vision deficiency');
+                }
                 await put('participants', {
-                  ...p, ishihara_correct: r.testCorrect, ishihara_total: r.testTotal, cvd_status: status,
+                  ...p,
+                  ishihara_correct: r.testCorrect, ishihara_total: r.testTotal, cvd_status: status,
+                  eligible: p.eligible && !failsColourVision,
+                  exclusion_reason: priorReasons.length ? priorReasons.join('; ') : null,
                 });
               }
             }

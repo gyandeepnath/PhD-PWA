@@ -15,7 +15,7 @@ import type { SessionRecord } from '@/storage/types';
 
 interface Props {
   onNew: () => void;
-  onResume: (sessionId: string, nextStepIndex: number) => void;
+  onResume: (sessionId: string, nextStepIndex: number, reachedLoop: boolean) => void;
   onOpen: (sessionId: string) => void;
   onHome: () => void;
 }
@@ -169,10 +169,16 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
         {mostRecent && (
           <div style={{ marginTop: 14, background: '#eef3ff', border: '1px solid #cdd8f0', borderRadius: 12, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="font-lab text-sm">
-              Resume {sessionLabel(mostRecent.session)} (next condition {mostRecent.pointer.nextStepIndex + 1}/{mostRecent.session.conditions_per_session})
+              {/* A session interrupted during setup has no condition pointer; saying "next
+                  condition 1/10" for it implied progress that had not happened, and the resume
+                  dropped the participant straight into the reading task. */}
+              Resume {sessionLabel(mostRecent.session)}{' '}
+              {mostRecent.pointer.reachedLoop
+                ? `(next condition ${mostRecent.pointer.nextStepIndex + 1}/${mostRecent.session.conditions_per_session})`
+                : '(interrupted during setup — setup will be completed first)'}
               {Object.keys(resumable).length > 1 && ` · ${Object.keys(resumable).length} sessions in progress`}
             </span>
-            <button onClick={() => onResume(mostRecent.pointer.sessionId, mostRecent.pointer.nextStepIndex)} className="font-lab text-sm text-white" style={{ background: '#4f8ef7', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer' }}>Resume →</button>
+            <button onClick={() => onResume(mostRecent.pointer.sessionId, mostRecent.pointer.nextStepIndex, mostRecent.pointer.reachedLoop === true)} className="font-lab text-sm text-white" style={{ background: '#4f8ef7', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer' }}>Resume →</button>
           </div>
         )}
 
@@ -180,7 +186,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
           {inProgress.map((s) => (
             <Row key={s.session_id} s={s}>
               {resumable[s.session_id] && (
-                <Btn onClick={() => onResume(s.session_id, resumable[s.session_id].nextStepIndex)} color="#4f8ef7">Resume</Btn>
+                <Btn onClick={() => onResume(s.session_id, resumable[s.session_id].nextStepIndex, resumable[s.session_id].reachedLoop === true)} color="#4f8ef7">Resume</Btn>
               )}
               {/* A participant may withdraw at any point, and the operator manual tells the
                   operator to export what exists when they do. Without this the dashboard — and so

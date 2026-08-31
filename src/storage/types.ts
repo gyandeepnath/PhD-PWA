@@ -432,7 +432,7 @@ export interface EyeMetricsRecord {
   blink_rate_micro: number | null;
   blink_count_full: number | null;
   blink_count_micro: number | null;
-  blink_count_incomplete: number;
+  blink_count_incomplete: number | null;
 
   ear_baseline: number | null;
   ear_threshold_used: number | null;
