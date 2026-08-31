@@ -11,6 +11,7 @@ import {
   effectiveFps,
   fpsAdequateForTiers,
   fpsAdequateForRatio,
+  observedDurationMs,
   computeClosureMetrics,
   interBlinkInterval,
   type EarSample,
@@ -75,7 +76,10 @@ export class EyeMetricsAggregator {
     // solved, and a NaN pose survived smoothing (a window of NaNs averages to NaN) to produce a
     // NaN head_pitch_mean, head_yaw_mean, head_roll_mean and postural_load for the whole
     // condition. Dropping the bad sample costs one frame; keeping it cost the entire summary.
-    if (Number.isFinite(f.ear)) this.ear.push({ t_ms: f.t_ms, ear: f.ear });
+    // BOTH fields, not just the EAR. A sample with a good EAR and a NaN timestamp cannot be placed
+    // in the series: it has no position for the within-condition bins, no interval for the gap
+    // detector, and it poisons the frame-rate estimate that now derives from these timestamps.
+    if (Number.isFinite(f.ear) && Number.isFinite(f.t_ms)) this.ear.push({ t_ms: f.t_ms, ear: f.ear });
     if (Number.isFinite(f.pose.pitch)) this.pitch.push(f.pose.pitch);
     if (Number.isFinite(f.pose.yaw)) this.yaw.push(f.pose.yaw);
     if (Number.isFinite(f.pose.roll)) this.roll.push(f.pose.roll);
@@ -133,8 +137,21 @@ export class EyeMetricsAggregator {
     /** True when head pitch was measured against the participant's calibrated frontal baseline. */
     headPitchCalibrated: boolean;
   }): EyeMetricsRecord {
-    const durationMs =
+    /**
+     * Two different durations, because they answer two different questions.
+     *
+     * `spanMs` is wall-clock first-to-last, and is what the within-condition halves are split on:
+     * the bins are about WHEN in the exposure a blink happened.
+     *
+     * `observedMs` excludes every dropout, and is the denominator for every RATE. Charging
+     * unobserved time to a rate made a tracking failure look exactly like the effect under study —
+     * a face present for half the exposure halved the apparent blink rate, and a reduced blink rate
+     * is this protocol's own marker of visual fatigue.
+     */
+    const spanMs =
       this.ear.length > 0 ? this.ear[this.ear.length - 1].t_ms - this.ear[0].t_ms : 0;
+    const observedMs = observedDurationMs(this.ear);
+    const durationMs = observedMs;
     // No fabricated fallback. A null baseline means calibration did not produce one, and
     // substituting a population-typical 0.3 produced blink metrics indistinguishable from a
     // properly calibrated run. classifyBlinks() returns no events for a null baseline, and
@@ -142,10 +159,19 @@ export class EyeMetricsAggregator {
     const baseline = args.baselineEarValue;
     const events = classifyBlinks(this.ear, baseline);
     const blink = summariseBlinks(events, durationMs);
-    const fps = effectiveFps(this.frameTimes);
+    /**
+     * Measured on the EAR SERIES, not on the frame loop.
+     *
+     * effectiveFps(this.frameTimes) counted every frame the pipeline processed, including those in
+     * which no face was found and no EAR sample was produced. So a condition where the face was
+     * detected in half the frames still reported ~30 fps and satisfied the primary outcome's
+     * frame-rate gate, while the measurement series behind the ratio was actually sampled at ~15.
+     * The gate has to describe the series it is gating.
+     */
+    const fps = effectiveFps(this.ear.map((s) => s.t_ms));
     // The origin of the condition's own clock, not zero: see binnedBlinkRates.
     const originMs = this.ear.length ? this.ear[0].t_ms : 0;
-    const bins = this.binnedBlinkRates(events, durationMs, originMs);
+    const bins = this.binnedBlinkRates(events, spanMs, originMs);
     const closure = computeClosureMetrics(this.ear, baseline, events);
     const ibi = interBlinkInterval(events);
 
@@ -187,14 +213,23 @@ export class EyeMetricsAggregator {
       ear_baseline: args.baselineEarValue,
       ear_threshold_used: args.earThresholdUsed,
 
-      head_pitch_mean: this.pitch.length ? mean(sPitch) : 0,
+      /**
+       * Null, not zero, when the face was never found.
+       *
+       * A condition in which the camera ran but no face was ever detected used to report
+       * head_pitch_mean 0, head_movement_std 0 and — worst — head_stability_score exactly 1.0: the
+       * best possible score, meaning a perfectly still participant, produced by observing nobody.
+       * camera_active was true and face_presence_ratio was 0, so the row looked like a real
+       * measurement to anything that did not additionally check the presence ratio.
+       */
+      head_pitch_mean: this.pitch.length ? mean(sPitch) : null,
       head_pitch_calibrated: args.headPitchCalibrated,
-      head_yaw_mean: this.yaw.length ? mean(sYaw) : 0,
-      head_roll_mean: this.roll.length ? mean(sRoll) : 0,
-      head_movement_std: movementStd,
-      postural_load: posturalLoad,
-      head_stability_score: 1 / (1 + movementStd),
-      off_axis_ratio: this.facesDetected > 0 ? this.offAxisCount / this.facesDetected : 0,
+      head_yaw_mean: this.yaw.length ? mean(sYaw) : null,
+      head_roll_mean: this.roll.length ? mean(sRoll) : null,
+      head_movement_std: this.pitch.length ? movementStd : null,
+      postural_load: this.pitch.length ? posturalLoad : null,
+      head_stability_score: this.pitch.length ? 1 / (1 + movementStd) : null,
+      off_axis_ratio: this.facesDetected > 0 ? this.offAxisCount / this.facesDetected : null,
 
       gaze_calibrated: args.gazeCalibrated,
       gaze_deviation_ratio:
@@ -251,14 +286,14 @@ export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeM
     blink_count_incomplete: null,
     ear_baseline: null,
     ear_threshold_used: null,
-    head_pitch_mean: 0,
+    head_pitch_mean: null,
     head_pitch_calibrated: false,
-    head_yaw_mean: 0,
-    head_roll_mean: 0,
-    head_movement_std: 0,
-    postural_load: 0,
-    head_stability_score: 0,
-    off_axis_ratio: 0,
+    head_yaw_mean: null,
+    head_roll_mean: null,
+    head_movement_std: null,
+    postural_load: null,
+    head_stability_score: null,
+    off_axis_ratio: null,
     gaze_calibrated: false,
     gaze_deviation_ratio: 0,
     zone_center_ratio: 0,

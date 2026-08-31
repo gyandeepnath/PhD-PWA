@@ -438,16 +438,16 @@ export interface EyeMetricsRecord {
   ear_threshold_used: number | null;
 
   // Head pose (continuous; thresholds raised; smoothed)
-  head_pitch_mean: number;
+  head_pitch_mean: number | null;
   /** True when head_pitch_mean is relative to the participant's calibrated frontal posture (0° =
    *  their straight-ahead), vs the uncalibrated population default. */
   head_pitch_calibrated: boolean;
-  head_yaw_mean: number;
-  head_roll_mean: number;
-  head_movement_std: number;
-  postural_load: number;
-  head_stability_score: number;
-  off_axis_ratio: number;
+  head_yaw_mean: number | null;
+  head_roll_mean: number | null;
+  head_movement_std: number | null;
+  postural_load: number | null;
+  head_stability_score: number | null;
+  off_axis_ratio: number | null;
 
   // Gaze (only meaningful if real calibration ran)
   gaze_calibrated: boolean;

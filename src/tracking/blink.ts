@@ -68,17 +68,55 @@ function dist(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-/** EAR for one eye from 6 points in [p1,p2,p3,p4,p5,p6] order. */
+/**
+ * Smallest plausible eye width, in normalised landmark units.
+ *
+ * A degenerate solve collapses the six eye landmarks toward a single point. The old denominator
+ * `2 * dist(p1, p4) + 1e-6` then evaluated to ~1e-6 against a numerator of ~0, and returned a
+ * finite EAR of 0 — which is not a missing value but the deepest possible closure, so every
+ * downstream filter accepted it and the classifier scored it as a maximally deep COMPLETE blink.
+ * A face that momentarily fails to solve therefore manufactured blinks rather than losing them.
+ *
+ * At a 50-60 cm viewing distance an eye spans roughly 4-8% of the frame width; anything below 1%
+ * is not an eye.
+ */
+const MIN_EYE_WIDTH = 0.01;
+
+/**
+ * EAR for one eye from 6 points in [p1,p2,p3,p4,p5,p6] order.
+ *
+ * Returns NaN — never a number — when the geometry cannot support the ratio. NaN is what every
+ * consumer here already treats as "this frame carried no information": ingest() drops it,
+ * classifyBlinks() filters it, and the baseline percentile excludes it.
+ */
 export function eyeAspectRatio(p: Point[]): number {
+  if (p.length < 6) return NaN;
+  for (const q of p) {
+    if (!q || !Number.isFinite(q.x) || !Number.isFinite(q.y)) return NaN;
+  }
   const [p1, p2, p3, p4, p5, p6] = p;
-  const denom = 2 * dist(p1, p4) + 1e-6;
-  return (dist(p2, p6) + dist(p3, p5)) / denom;
+  const width = dist(p1, p4);
+  if (!(width > MIN_EYE_WIDTH)) return NaN;
+  return (dist(p2, p6) + dist(p3, p5)) / (2 * width);
 }
 
-/** Mean EAR across both eyes given the full landmark array. */
+/**
+ * Mean EAR across both eyes given the full landmark array.
+ *
+ * Tolerates a short or partially-solved array rather than throwing on it. MediaPipe can return
+ * fewer landmarks than the full mesh, and indexing past the end gave `undefined`, on which `dist`
+ * threw a TypeError. That exception propagated out of the per-frame handler, so the frame vanished
+ * from the EAR series, from the face-presence denominator and from the frame-rate estimate at once
+ * — the same crash the pose and gaze modules were already hardened against.
+ *
+ * If either eye is unusable the frame is NaN: half a face is not a measurement of blink depth.
+ */
 export function faceEar(landmarks: Point[]): number {
-  const left = eyeAspectRatio(LEFT_EYE_EAR.map((i) => landmarks[i]));
-  const right = eyeAspectRatio(RIGHT_EYE_EAR.map((i) => landmarks[i]));
+  if (!Array.isArray(landmarks)) return NaN;
+  const pick = (idx: number[]) => idx.map((i) => landmarks[i]);
+  const left = eyeAspectRatio(pick(LEFT_EYE_EAR));
+  const right = eyeAspectRatio(pick(RIGHT_EYE_EAR));
+  if (!Number.isFinite(left) || !Number.isFinite(right)) return NaN;
   return (left + right) / 2;
 }
 
@@ -122,6 +160,47 @@ export interface EarSample {
  * A blink starts when EAR drops below the partial threshold and ends when it recovers above it;
  * the tier is assigned from the minimum EAR ratio and the duration.
  */
+/**
+ * How large an inter-sample interval counts as a GAP rather than as normal jitter.
+ *
+ * Derived from the series itself rather than assumed, because the achieved frame rate varies by
+ * device and by ambient light. The median interval is the run's nominal sampling period; anything
+ * beyond a generous multiple of it is a dropout, not jitter. Floored so that a very slow but steady
+ * series is not treated as one long gap.
+ */
+export const GAP_MULTIPLE = 4;
+export const MIN_GAP_MS = 250;
+
+export function samplingGapThreshold(samples: EarSample[]): number {
+  if (samples.length < 3) return Number.POSITIVE_INFINITY;
+  const deltas: number[] = [];
+  for (let i = 1; i < samples.length; i++) deltas.push(samples[i].t_ms - samples[i - 1].t_ms);
+  deltas.sort((a, b) => a - b);
+  const median = deltas[Math.floor(deltas.length / 2)];
+  if (!Number.isFinite(median) || median <= 0) return Number.POSITIVE_INFINITY;
+  return Math.max(MIN_GAP_MS, median * GAP_MULTIPLE);
+}
+
+/**
+ * Total time actually OBSERVED in a sample series: the span, minus every dropout.
+ *
+ * blink_rate's denominator used to be the plain first-to-last span, so time in which the
+ * participant was not being watched was charged to the rate as if they had been. A condition in
+ * which the face was present for 90 s of a 180 s exposure reported half the true blink rate, and a
+ * reduced blink rate is the study's own marker of visual fatigue — so a tracking failure was
+ * indistinguishable from the effect being measured.
+ */
+export function observedDurationMs(samples: EarSample[]): number {
+  if (samples.length < 2) return 0;
+  const gap = samplingGapThreshold(samples);
+  let total = 0;
+  for (let i = 1; i < samples.length; i++) {
+    const d = samples[i].t_ms - samples[i - 1].t_ms;
+    if (d > 0 && d <= gap) total += d;
+  }
+  return total;
+}
+
 export function classifyBlinks(samples: EarSample[], baseline: number | null): BlinkEvent[] {
   if (baseline == null || !Number.isFinite(baseline) || baseline <= 0) return [];
   // Drop frames whose EAR or timestamp is not a finite number. Left in, a NaN sample never
@@ -131,6 +210,23 @@ export function classifyBlinks(samples: EarSample[], baseline: number | null): B
   if (samples.length === 0) return [];
   // A blink is entered when EAR drops below the partial threshold (a ≥25% closure).
   const partialT = baseline * EAR_TIERS.partial;
+
+  /**
+   * The EAR series is not continuous. Frames in which the face was not detected contribute no
+   * sample at all, so consecutive array entries can be seconds apart — the participant looked
+   * away, the tracker lost them, the tablet dropped frames under load.
+   *
+   * Treating that array as contiguous meant a blink still open when the face was lost stayed open
+   * across the gap, and its duration was measured to the far side: a face-loss of four seconds
+   * produced a single "blink" of 4,000 ms, which then also counted as a long-closure event and so
+   * as a micro-sleep in the drowsiness covariate. Both are fabrications — nothing was observed in
+   * between.
+   *
+   * A gap therefore ABANDONS the blink in progress rather than closing it. The event is discarded,
+   * not emitted with a guessed duration: its depth and length are genuinely unknown, and the
+   * no-fabrication rule says report absence.
+   */
+  const gapMs = samplingGapThreshold(samples);
 
   const events: BlinkEvent[] = [];
   let inBlink = false;
@@ -144,6 +240,20 @@ export function classifyBlinks(samples: EarSample[], baseline: number | null): B
       onset = s.t_ms;
       minEar = s.ear;
     } else if (inBlink) {
+      // A gap since the previous sample: the face was absent, so this blink was not observed to
+      // its end and cannot be measured. Abandon it.
+      const prev = samples[i - 1];
+      if (prev && s.t_ms - prev.t_ms > gapMs) {
+        inBlink = false;
+        minEar = Infinity;
+        // Re-test this sample as a possible fresh onset rather than skipping it.
+        if (s.ear < partialT) {
+          inBlink = true;
+          onset = s.t_ms;
+          minEar = s.ear;
+        }
+        continue;
+      }
       minEar = Math.min(minEar, s.ear);
       if (s.ear >= partialT || i === samples.length - 1) {
         const duration = s.t_ms - onset;
