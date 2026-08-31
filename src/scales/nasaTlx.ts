@@ -29,8 +29,13 @@ export interface TlxDimension {
   question: string;
   /**
    * True when a HIGH rating means a LOW workload contribution, so the raw response must be
-   * reversed before averaging. Performance is the only such dimension: the original anchors it
-   * "Perfect" to "Failure", i.e. good performance sits at the low-numbered end.
+   * reversed before averaging.
+   *
+   * No dimension is currently reversed, and Performance — the usual candidate — must not be.
+   * It is anchored "Perfect" (low) to "Failure" (high), so a higher mark already means worse
+   * performance and therefore MORE load: it is aligned with the other five as presented, and
+   * reversing it flips a correctly-aligned subscale. The field is kept because an implementation
+   * that anchored Performance the other way round (Failure low, Perfect high) would need it.
    */
   reversed: boolean;
 }
@@ -73,8 +78,25 @@ export const TLX_DIMENSIONS: TlxDimension[] = [
     label: 'Performance',
     low: 'Perfect',
     high: 'Failure',
-    question: 'How successful were you in doing what you were asked to do?',
-    reversed: true,
+    /**
+     * The original wording. The previous phrasing — "How successful were you in doing what you were
+     * asked to do?" — reads so that MORE is better, while the anchors put better at the left. A
+     * participant answering the question rather than reading the anchors marked in the opposite
+     * direction from one who read them, which is a between-participant sign flip on a single item.
+     */
+    question: 'How successful were you in accomplishing what you were asked to do? How satisfied were you with your performance?',
+    /**
+     * NOT reversed. This subscale runs Perfect(0) to Failure(100), so the mark as given is already
+     * in the load direction, and Raw TLX is the unweighted mean of the six ratings AS MARKED.
+     *
+     * It used to be true, and the effect was a sign flip on one of six subscales. A participant
+     * who marked 10 — near "Perfect" — contributed 90, near-maximal load: precisely the outcome
+     * the comment on tlxContribution() said reversal existed to prevent. Worse than an offset:
+     * if a condition genuinely degraded performance, marks moved toward Failure, the contribution
+     * moved DOWN, and raw_tlx moved down with it — masking the very effect the instrument is here
+     * to detect.
+     */
+    reversed: false,
   },
   {
     key: 'effort',
@@ -102,9 +124,9 @@ export const TLX_STEP = 5;
 export type TlxRatings = Record<TlxKey, number>;
 
 /**
- * Reverse the Performance subscale so every dimension points the same way (higher = more load).
- * Reporting a raw Performance rating alongside the others, as some implementations do, makes the
- * overall index incoherent: a participant who performed perfectly would look maximally loaded.
+ * The load contribution of one subscale: the rating as marked, unless the dimension declares that
+ * its high end means LOW load. With the anchors used here, none does — see the `reversed` note on
+ * the Performance dimension.
  */
 export function tlxContribution(dim: TlxDimension, rating: number): number {
   // Clamp into the scale. The slider cannot produce an out-of-range value, but a stored record

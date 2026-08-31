@@ -162,12 +162,29 @@ export interface EngagementResult {
   low_face_presence: boolean;
 }
 
-/** True when all five fatigue items are identical (straight-lining), only if actually answered. */
+/**
+ * True when all five fatigue items are identical AND that value is not the floor.
+ *
+ * Straight-lining is a careless-responding signature, but "0 on every item" is also the expected
+ * HONEST answer for a healthy 18-35 participant early in a sitting. Flagging it penalised exactly
+ * the least symptomatic participants at exactly the earliest conditions — and since the
+ * pre-registered sensitivity analysis re-fits the models excluding flagged conditions, it would
+ * have removed preferentially the low-fatigue, early-position runs, biasing both the time-on-task
+ * and the condition effects upward.
+ *
+ * The ceiling is exempted for the same reason in the other direction: five 10s late in a sitting
+ * is a plausible report, not evidence of carelessness.
+ */
 function isStraightLined(fat?: FatigueRecord): boolean {
   if (!fat || !fat.all_touched) return false;
   const v = [fat.eye_strain, fat.dryness, fat.blur, fat.burning, fat.headache];
-  return v.every((x) => x === v[0]);
+  if (!v.every((x) => x === v[0])) return false;
+  return v[0] !== FATIGUE_MIN && v[0] !== FATIGUE_MAX;
 }
+
+/** Endpoints of the 0-10 per-item fatigue scale. */
+const FATIGUE_MIN = 0;
+const FATIGUE_MAX = 10;
 
 /**
  * Per-condition engagement / careless-responding assessment. Pure and unit-tested. Each fired

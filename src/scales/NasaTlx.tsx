@@ -95,14 +95,17 @@ export function NasaTlx({
           ))}
         </div>
 
-        <div className="mt-6 font-lab text-sm">
-          Raw TLX:{' '}
-          <strong>{allTouched ? score.raw_tlx.toFixed(1) : 'Set all six sliders to see score'}</strong>
-          {allTouched && (
-            <span style={{ marginLeft: 12, color: muted }}>
-              unweighted mean of the six subscales, 0–100
-            </span>
-          )}
+        {/*
+          No score readout. The same argument as the fatigue scale: this is the only instrument
+          administered at BOTH sittings, and the between-sitting illumination contrast is the one
+          comparison it is claimed to support. Showing "Raw TLX: 62.5" at sitting 1 gives the
+          participant a number to anchor on 48-72 hours later, so part of the contrast becomes a
+          report of what they were told about themselves. Within the screen it also lets them tune
+          the composite — nudging Frustration until the displayed figure looks right is one visible
+          action. The score is computed and exported; it belongs in the researcher-facing dashboard.
+        */}
+        <div className="mt-6 font-lab text-sm" style={{ color: muted }}>
+          {allTouched ? 'Thank you — tap Continue.' : 'Set all six sliders to continue.'}
         </div>
 
         <button

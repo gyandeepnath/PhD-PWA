@@ -194,10 +194,12 @@ describe('export: derived values trace to source', () => {
 });
 
 describe('export: NASA-TLX', () => {
-  it('reverses Performance exactly once and averages the load-aligned columns', () => {
+  it('averages the six ratings as marked, with no subscale reversed', () => {
+    // Performance runs Perfect(0) to Failure(100), so it is already in the load direction.
+    // Reversing it flipped the sign of one subscale in six and pushed raw_tlx DOWN when
+    // performance degraded — masking the effect the instrument exists to detect.
     const r = table(filesOf().get('14_nasa_tlx.csv')!).rows[0];
-    expect(Number(r.performance) + Number(r.performance_load)).toBe(100);
-    const mean = ['mental_demand', 'physical_demand', 'temporal_demand', 'performance_load', 'effort', 'frustration']
+    const mean = ['mental_demand', 'physical_demand', 'temporal_demand', 'performance', 'effort', 'frustration']
       .map((k) => Number(r[k])).reduce((a, b) => a + b, 0) / 6;
     expect(Number(r.raw_tlx)).toBeCloseTo(mean, 2);
   });

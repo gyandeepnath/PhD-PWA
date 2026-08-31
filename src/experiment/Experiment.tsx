@@ -35,6 +35,7 @@ import { ComprehensionTask } from '@/tasks/ComprehensionTask';
 import { VisualSearchTask } from '@/tasks/VisualSearchTask';
 import { ReactionTimeTask } from '@/tasks/ReactionTimeTask';
 import { IshiharaTest } from '@/screening/IshiharaTest';
+import { resolveCvdStatus } from '@/screening/ishihara';
 import { Cvsq } from '@/scales/Cvsq';
 import { NasaTlx } from '@/scales/NasaTlx';
 import { LuxCheckpointPanel } from '@/start/LuxCheckpoint';
@@ -559,11 +560,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                  *
                  * A failure is therefore sticky, and it propagates into eligibility.
                  */
-                const status = p.cvd_status === 'screen_failed'
-                  ? 'screen_failed'
-                  : r.status === 'screen_failed' ? 'screen_failed'
-                    : r.status === 'normal' ? 'normal' : p.cvd_status;
+                const status = resolveCvdStatus(p.cvd_status, r.status);
 
+                // 'screen_inconclusive' does NOT exclude — nothing was measured, so there is no
+                // basis to exclude — but it is recorded, so the analyst can see the screen did not
+                // produce a result rather than reading an absent one as a pass.
                 const failsColourVision = status === 'screen_failed' || status === 'self_reported_deficient';
                 const priorReasons = (p.exclusion_reason ?? '')
                   .split(';').map((x) => x.trim()).filter(Boolean)
@@ -641,7 +642,6 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               performance: r.ratings.performance,
               effort: r.ratings.effort,
               frustration: r.ratings.frustration,
-              performance_load: r.contributions.performance,
               raw_tlx: r.raw_tlx,
               all_touched: Object.values(r.touched).every(Boolean),
               response_time_ms: r.responseTimeMs,

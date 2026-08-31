@@ -231,7 +231,6 @@ export const CODEBOOK: Record<string, string>[] = [
   // ---- 14_nasa_tlx.csv
   { file: '14_nasa_tlx.csv', column: 'raw_tlx', type: 'number', unit: '0-100', role: 'dv', description: 'Unweighted mean of the six LOAD-aligned subscales (Performance reversed). Session-level: supports inference about the illumination contrast only.' },
   { file: '14_nasa_tlx.csv', column: 'performance', type: 'number', unit: '0-100', role: 'dv', description: 'RAW response. Anchored Perfect(0) to Failure(100), so LOW means good performance.' },
-  { file: '14_nasa_tlx.csv', column: 'performance_load', type: 'number', unit: '0-100', role: 'dv', description: 'Performance after reversal (100 - performance). This is the value that enters raw_tlx.' },
 
   // ---------------------------------------------------------------------------------------
   // Completion pass. Every exported column is documented; scripts/buildCodebook.ts enforces
@@ -416,7 +415,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '11_participant.csv', column: 'device_familiarity', type: 'factor(3)', unit: '-', role: 'covariate', description: 'Self-rated digital literacy: low, moderate or high. A pre-specified moderator.' },
   { file: '11_participant.csv', column: 'lighting_habit', type: 'factor(3)', unit: '-', role: 'covariate', description: 'Typical ambient lighting when using a screen: bright, moderate or dim. A pre-specified moderator.' },
   { file: '11_participant.csv', column: 'correction_type', type: 'factor(3)', unit: '-', role: 'covariate', description: 'Refractive correction worn during testing: none, glasses or contacts. Contact-lens wear on test days is an exclusion, so this should not read contacts for an included participant.' },
-  { file: '11_participant.csv', column: 'cvd_status', type: 'factor(4)', unit: '-', role: 'covariate', description: 'Colour-vision status: normal, self_reported_deficient, screen_failed or unknown. Anything other than normal bears directly on the text-colour factor.' },
+  { file: '11_participant.csv', column: 'cvd_status', type: 'factor(5)', unit: '-', role: 'covariate', description: "Colour-vision status: normal, self_reported_deficient, screen_failed, screen_inconclusive or unknown. screen_inconclusive means the greyscale control plate was missed, so the attempt measured nothing — it is NOT a pass and NOT an exclusion, and such a participant should be re-screened before their text-colour data is analysed. Anything other than normal bears directly on the text-colour factor." },
   { file: '11_participant.csv', column: 'ishihara_correct', type: 'integer', unit: 'count', role: 'qc', description: 'Ishihara plates identified correctly on the study display. Null when the screening was not run.' },
   { file: '11_participant.csv', column: 'ishihara_total', type: 'integer', unit: 'count', role: 'qc', description: 'Plates presented. The denominator for ishihara_correct.' },
   { file: '11_participant.csv', column: 'caffeine_today', type: 'boolean', unit: '-', role: 'covariate', description: 'Whether caffeine was consumed before the sitting. An arousal covariate for the vigilance measures.' },
@@ -677,10 +676,16 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
     }));
 
   // NASA-TLX: session-level, one row per session. `performance` is the raw response (low = good,
-  // per the original anchors); `performance_load` is it reversed, which is what enters raw_tlx.
+  // per the original anchors), and it enters raw_tlx as marked — no reversal.
+  //
+  // There used to be a `performance_load` column holding 100 - performance, and raw_tlx was built
+  // from it. That flipped the sign of one subscale in six: a participant marking near "Perfect"
+  // contributed near-maximal load, and a condition that genuinely degraded performance pushed
+  // raw_tlx DOWN. The column is gone rather than kept as an identity, because a duplicate of
+  // `performance` under a name implying a transformation is how the confusion started.
   csv('14_nasa_tlx.csv',
     ['participant_id', 'session_index', 'ambient_illumination_level', 'raw_tlx',
-     'mental_demand', 'physical_demand', 'temporal_demand', 'performance', 'performance_load',
+     'mental_demand', 'physical_demand', 'temporal_demand', 'performance',
      'effort', 'frustration', 'all_touched', 'response_time_ms'],
     (bundle.tlx ?? []).map((t) => ({
       participant_id: pid, session_index: session.session_index,
@@ -688,7 +693,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       raw_tlx: round(t.raw_tlx, 2),
       mental_demand: t.mental_demand, physical_demand: t.physical_demand,
       temporal_demand: t.temporal_demand, performance: t.performance,
-      performance_load: t.performance_load, effort: t.effort, frustration: t.frustration,
+      effort: t.effort, frustration: t.frustration,
       all_touched: t.all_touched, response_time_ms: t.response_time_ms,
     })));
 

@@ -99,3 +99,34 @@ export function scoreIshihara(plates: Plate[], answers: Record<number, string>):
 
   return { responses, correct, total: plates.length, testCorrect, testTotal: test.length, status };
 }
+
+/**
+ * Fold a screening outcome into the participant's stored colour-vision status.
+ *
+ * Pure, and separated from the stage handler, because the ordering here is the whole substance:
+ *
+ *  - A FAILURE is sticky. The plate set is identical and deterministically seeded between the two
+ *    sittings, so a participant who failed at sitting 1 may well "pass" at sitting 2 from memory.
+ *  - An INVALID attempt (the greyscale control plate missed) is recorded as such. It used to fall
+ *    through to the participant's existing status, which for someone who self-reported no
+ *    deficiency is 'normal' — so mis-tapping the control while scoring 3 of 5 test plates left them
+ *    normal and eligible, where the same 3 of 5 with the control correct would have been excluded.
+ *  - A SELF-REPORTED deficiency is not overturned by this screen. The module header above calls it
+ *    a screening aid and names formal Ishihara/Farnsworth plates as the standard for exclusion.
+ *
+ * 'screen_inconclusive' is deliberately neither a pass nor an exclusion: nothing was measured, so
+ * there is no basis to exclude, but the analyst must be able to see that the screen produced no
+ * result rather than read an absent one as a pass.
+ */
+export type StoredCvdStatus =
+  | 'normal' | 'self_reported_deficient' | 'screen_failed' | 'screen_inconclusive' | 'unknown';
+
+export function resolveCvdStatus(
+  prior: StoredCvdStatus,
+  result: IshiharaResult['status'],
+): StoredCvdStatus {
+  if (prior === 'screen_failed' || result === 'screen_failed') return 'screen_failed';
+  if (prior === 'self_reported_deficient') return 'self_reported_deficient';
+  if (result === 'normal') return 'normal';
+  return 'screen_inconclusive';
+}

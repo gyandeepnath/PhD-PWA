@@ -286,8 +286,9 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
         tlx_id: 'tlx-1', session_id: sid,
         mental_demand: 65, physical_demand: 30, temporal_demand: 45,
         performance: 25, effort: 70, frustration: 35,
-        performance_load: 75,
-        raw_tlx: (65 + 30 + 45 + 75 + 70 + 35) / 6,
+        // The mean of the six ratings AS MARKED. The 75 that used to sit in the performance slot
+        // here was 100 - 25, the reversed contribution; the reversal was the defect.
+        raw_tlx: (65 + 30 + 45 + 25 + 70 + 35) / 6,
         all_touched: true, response_time_ms: 26_000,
       },
     ],

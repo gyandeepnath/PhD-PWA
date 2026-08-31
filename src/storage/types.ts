@@ -60,7 +60,7 @@ export interface ParticipantRecord {
   // --- Vision covariates (audit additions) ---
   correction_type: 'none' | 'glasses' | 'contacts';
   /** Self-reported / screened colour-vision status. */
-  cvd_status: 'normal' | 'self_reported_deficient' | 'screen_failed' | 'unknown';
+  cvd_status: 'normal' | 'self_reported_deficient' | 'screen_failed' | 'screen_inconclusive' | 'unknown';
   /** Digital Ishihara screening score (plates correct / total), null if not run. */
   ishihara_correct: number | null;
   ishihara_total: number | null;
@@ -269,7 +269,6 @@ export interface NasaTlxRecord {
   /** Unweighted mean of the six load-aligned subscales (Performance reversed), 0-100. */
   raw_tlx: number;
   /** Performance after reversal, stored so the composite is reproducible from the columns. */
-  performance_load: number;
   /** Every slider must be touched before submit; retained as a data-quality flag. */
   all_touched: boolean;
   response_time_ms: number | null;

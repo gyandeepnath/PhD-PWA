@@ -214,7 +214,7 @@ for (const f of files.filter((x) => x.filename.endsWith('.csv'))) {
 
 // ================================================================ 6. NASA-TLX
 log('\n' + '='.repeat(104));
-log('6. NASA-TLX — one session-level row, Performance reversed exactly once');
+log('6. NASA-TLX — one session-level row, raw_tlx is the mean of the six ratings as marked');
 log('='.repeat(104));
 const tl = table(F.get('14_nasa_tlx.csv')!);
 eq('tlx row count', tl.rows.length, 1);
@@ -222,9 +222,7 @@ const t0 = tl.rows[0] ?? {};
 const T = bundle.tlx[0];
 eq('raw_tlx (rounded to 2dp for presentation)', t0.raw_tlx, Math.round(T.raw_tlx * 100) / 100);
 eq('performance (raw response)', t0.performance, T.performance);
-eq('performance_load (reversed)', t0.performance_load, T.performance_load);
-eq('performance + performance_load = 100', Number(t0.performance) + Number(t0.performance_load), 100);
-const manualMean = (['mental_demand', 'physical_demand', 'temporal_demand', 'performance_load', 'effort', 'frustration']
+const manualMean = (['mental_demand', 'physical_demand', 'temporal_demand', 'performance', 'effort', 'frustration']
   .map((k) => Number(t0[k])).reduce((a, b) => a + b, 0)) / 6;
 eq('raw_tlx equals the mean of the six LOAD-aligned columns', Number(t0.raw_tlx).toFixed(2), manualMean.toFixed(2));
 eq('tlx carries the session illumination level', t0.ambient_illumination_level, S.ambient_illumination_level);

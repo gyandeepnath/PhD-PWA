@@ -79,3 +79,42 @@ describe('CVS-Q scoring (Seguí 2015)', () => {
     expect(r.symptomatic).toBe(true);
   });
 });
+
+/**
+ * How a screening result becomes the stored colour-vision status.
+ *
+ * scoreIshihara returns 'inconclusive' when the greyscale control plate is missed — the attempt
+ * measured nothing. That status was not in the stored union, so it fell through to whatever
+ * cvd_status the participant already had, which for someone who self-reported no deficiency is
+ * 'normal'. Mis-tapping the control while scoring 3 of 5 test plates therefore left them normal and
+ * eligible, where the SAME 3 of 5 with the control correct would have been screen_failed and
+ * excluded: performing worse made them eligible.
+ */
+describe('resolving a screening result into the stored status', () => {
+  it('never turns an invalid attempt into a pass', async () => {
+    const { resolveCvdStatus } = await import('@/screening/ishihara');
+    expect(resolveCvdStatus('normal', 'inconclusive')).toBe('screen_inconclusive');
+    expect(resolveCvdStatus('unknown', 'inconclusive')).toBe('screen_inconclusive');
+  });
+
+  it('keeps a failure sticky across the second sitting', async () => {
+    // The plates are identical and deterministically seeded, so a participant who failed at
+    // sitting 1 may well "pass" at sitting 2 from memory. The exclusion must survive that.
+    const { resolveCvdStatus } = await import('@/screening/ishihara');
+    expect(resolveCvdStatus('screen_failed', 'normal')).toBe('screen_failed');
+    expect(resolveCvdStatus('screen_failed', 'inconclusive')).toBe('screen_failed');
+  });
+
+  it('does not let the screen overturn a self-reported deficiency', async () => {
+    // The module's own header calls this a screening aid and names formal plates as the standard
+    // for exclusion, so it has no business clearing someone who reports a diagnosed deficiency.
+    const { resolveCvdStatus } = await import('@/screening/ishihara');
+    expect(resolveCvdStatus('self_reported_deficient', 'normal')).toBe('self_reported_deficient');
+  });
+
+  it('records a clean pass and a clean failure as themselves', async () => {
+    const { resolveCvdStatus } = await import('@/screening/ishihara');
+    expect(resolveCvdStatus('normal', 'normal')).toBe('normal');
+    expect(resolveCvdStatus('normal', 'screen_failed')).toBe('screen_failed');
+  });
+});
