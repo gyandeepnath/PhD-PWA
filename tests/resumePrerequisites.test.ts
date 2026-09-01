@@ -78,3 +78,44 @@ describe('a resume re-enters setup at the first thing that is missing', () => {
     expect(firstUnsatisfiedSetupStage(noConsentButOtherwiseReady)).toBe('CONSENT');
   });
 });
+
+/**
+ * A resume must never skip a PRE-EXPOSURE measurement.
+ *
+ * The baseline CVS-Q and the baseline fatigue scale are taken before any condition runs, and they
+ * cannot be taken afterwards. `firstUnsatisfiedSetupStage` used to `return 'CAMERA_SETUP'`
+ * unconditionally when the camera was consented — which is the ordinary case — making the two
+ * checks below it unreachable. A session interrupted after the colour-vision screen and resumed
+ * went camera, calibration, then straight into condition 1. Both baselines were never administered,
+ * so the CVS-Q change score (the key secondary outcome) and every fatigue_delta were lost for that
+ * sitting, and it still exported session_complete=TRUE.
+ */
+describe('a resumed session still owes its pre-exposure baselines', () => {
+  const withCamera: ResumePrerequisites = { ...complete, wantsCamera: true };
+
+  it('reports that baselines are owed even when the camera path comes first', async () => {
+    const { resumeOwesBaselines } = await import('@/experiment/stateMachine');
+    // The camera re-run is a device re-initialisation, not a missing measurement, so it must not
+    // mask a missing one.
+    expect(resumeOwesBaselines({ ...withCamera, hasBaselineCvsq: false })).toBe(true);
+    expect(resumeOwesBaselines({ ...withCamera, hasBaselineFatigue: false })).toBe(true);
+    expect(resumeOwesBaselines(withCamera)).toBe(false);
+  });
+
+  it('still sends a camera session to camera setup first, since it comes earlier in the chain', () => {
+    // CAMERA_SETUP precedes the baselines in SETUP_ORDER, so it is the correct entry point — the
+    // defect was that it also ENDED the walk.
+    expect(firstUnsatisfiedSetupStage({ ...withCamera, hasBaselineCvsq: false })).toBe('CAMERA_SETUP');
+  });
+
+  it('sends a camera-refusing session straight to the missing baseline', () => {
+    expect(firstUnsatisfiedSetupStage({ ...complete, hasBaselineCvsq: false })).toBe('CVSQ_BASELINE');
+    expect(firstUnsatisfiedSetupStage({ ...complete, hasBaselineFatigue: false })).toBe('BASELINE_FATIGUE');
+  });
+
+  it('owes nothing once both baselines exist and the camera is refused', async () => {
+    const { resumeOwesBaselines } = await import('@/experiment/stateMachine');
+    expect(firstUnsatisfiedSetupStage(complete)).toBeNull();
+    expect(resumeOwesBaselines(complete)).toBe(false);
+  });
+});

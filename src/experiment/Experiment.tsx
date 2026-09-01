@@ -4,6 +4,7 @@
  * completion. EXPORT_DASHBOARD renders the full researcher dashboard + CSV/JSON export.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { acquireScreenWakeLock } from '@/lib/wakeLock';
 import { v4 as uuidv4 } from 'uuid';
 import { CONDITIONS, conditionDefinitionHash, N_CONDITIONS } from './conditions';
 import {
@@ -13,7 +14,10 @@ import {
 import { PASSAGES } from './passages';
 import { blockPlan, isAnnotationSubsample, type PlannedStep } from './counterbalance';
 import { CONFIG, isE2ETimingActive } from './config';
-import { initialState, nextState, progressPercent, firstUnsatisfiedSetupStage, type MachineState } from './stateMachine';
+import {
+  initialState, nextState, progressPercent, firstUnsatisfiedSetupStage, resumeOwesBaselines,
+  type MachineState,
+} from './stateMachine';
 import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
 import { put, get, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows, clearSessionStageRows } from '@/storage/db';
 import {
@@ -100,10 +104,22 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    */
   const adaptationDelivered = useRef(0);
 
+  /**
+   * Which stage is allowed to consume the resume jump.
+   *
+   * When only the camera needs re-initialising, calibration is the end of what the resume owes and
+   * it may go straight back to the loop. When a PRE-EXPOSURE measurement is also missing — the
+   * baseline CVS-Q or the baseline fatigue scale — it may not: those cannot be taken after the
+   * conditions have run, so the resume has to walk the rest of the setup chain and only re-enter
+   * the loop at INSTRUCTIONS. Jumping at calibration in that case silently skipped both, losing
+   * the CVS-Q change score and every fatigue_delta for a sitting that still exported as complete.
+   */
+  const resumeConsumeAt = useRef<'CALIBRATION' | 'INSTRUCTIONS'>('CALIBRATION');
+
   /** advance(), unless a resume is waiting to re-enter the loop at a specific condition. */
-  const advanceOrResume = useCallback(() => {
+  const advanceOrResume = useCallback((from: 'CALIBRATION' | 'INSTRUCTIONS' = 'CALIBRATION') => {
     const target = resumeJumpTo.current;
-    if (target == null) { advance(); return; }
+    if (target == null || from !== resumeConsumeAt.current) { advance(); return; }
     resumeJumpTo.current = null;
     transitioning.current = true;
     setMachine({ stage: 'READING_TASK', stepIndex: target });
@@ -111,7 +127,29 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
 
   useEffect(() => {
     transitioning.current = false;
+    // Entering a new reaction-time block means trials are running again.
+    if (machine.stage === 'REACTION_TIME') setRtBlockFinished(false);
   }, [machine]);
+
+  /**
+   * Hold a screen wake lock for the whole run.
+   *
+   * The manual's substitute — "screen timeout disabled" — cannot be followed on stock Android,
+   * where the longest timeout is 30 minutes against a 90-minute sitting; and on iPadOS Low Power
+   * Mode overrides Auto-Lock → Never. A tablet that sleeps during a reading page stops
+   * requestAnimationFrame, which stops the FaceMesh pump, so the exposure's ocular samples simply
+   * end — and on iOS the capture session may be suspended outright.
+   */
+  const [wakeLockUnsupported, setWakeLockUnsupported] = useState(false);
+  /** Surfaced when creating the session record failed, so the operator is not left tapping. */
+  const [sessionCreateError, setSessionCreateError] = useState<string | null>(null);
+  /** True once the RT block has stopped presenting trials and is only persisting them. */
+  const [rtBlockFinished, setRtBlockFinished] = useState(false);
+  useEffect(() => {
+    const lock = acquireScreenWakeLock();
+    setWakeLockUnsupported(!lock.supported);
+    return () => { void lock.release(); };
+  }, []);
 
   // --- RESUME: rehydrate an interrupted session at the next condition ---
   useEffect(() => {
@@ -187,6 +225,17 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         setMachine({ stage: 'CVSQ_END', stepIndex: sittingPlan.length - 1 });
       } else if (owed) {
         resumeJumpTo.current = loopTarget;
+        // A missing baseline means the whole remaining setup chain has to run, so the jump is
+        // consumed at INSTRUCTIONS rather than at calibration.
+        resumeConsumeAt.current = resumeOwesBaselines({
+          consentGiven: s.consent_given === true,
+          hasParticipantRecord: !!participantRow,
+          preflightComplete: s.preflight_complete === true,
+          colourVisionScreened: participantRow?.cvd_screen_total != null,
+          hasBaselineCvsq: cvsqRows.some((c) => c.stage === 'baseline'),
+          hasBaselineFatigue: !!baseline,
+          wantsCamera,
+        }) ? 'INSTRUCTIONS' : 'CALIBRATION';
         setMachine({ stage: owed, stepIndex: loopTarget });
       } else {
         resumeJumpTo.current = null;
@@ -368,11 +417,26 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       condition_offset: offset,
       session_index: prior.sittings + 1,
     };
-    await put('sessions', rec);
-    setSession(rec);
-    setEnrolment(enrol);
-    setPlan(sittingPlan);
-    advance();
+    /**
+     * The latch must be released whatever happens.
+     *
+     * It was set and never reset on the failure path, so when this write rejected — quota, or the
+     * database open blocked by a second tab — advance() never ran and every subsequent tap of an
+     * enabled-looking "Begin setup" silently returned. The operator taps it repeatedly with the
+     * participant watching, and only a force-quit recovers; the enrolment number has already been
+     * consumed by then.
+     */
+    try {
+      await put('sessions', rec);
+      setSession(rec);
+      setEnrolment(enrol);
+      setPlan(sittingPlan);
+      advance();
+    } catch (err) {
+      setSessionCreateError(err instanceof Error ? err.message : String(err));
+    } finally {
+      creatingSession.current = false;
+    }
   }, [advance]);
 
   // --- PARTICIPANT PROFILE ---
@@ -717,10 +781,10 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           beginGazeCalibration={tracking.beginGazeCalibration}
           sampleGazeTarget={tracking.sampleGazeTarget}
           endGazeCalibration={tracking.endGazeCalibration}
-          onDone={() => { void captureMedia('session_start').then(advanceOrResume); }}
+          onDone={() => { void captureMedia('session_start').finally(() => advanceOrResume('CALIBRATION')); }}
         />
       ) : (
-        <Calibration cameraStatus={tracking.status} onDone={advanceOrResume} />
+        <Calibration cameraStatus={tracking.status} onDone={() => advanceOrResume('CALIBRATION')} />
       );
       break;
     case 'BASELINE_FATIGUE':
@@ -757,7 +821,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       );
       break;
     case 'INSTRUCTIONS':
-      view = <Instructions onContinue={advance} />;
+      // The resume's jump is consumed HERE when a pre-exposure baseline had to be re-taken.
+      view = <Instructions onContinue={() => advanceOrResume('INSTRUCTIONS')} />;
       break;
     case 'READING_TASK':
       if (cond && passage) {
@@ -912,6 +977,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           text={cond?.text ?? '#1a1a2e'}
           practiceTrials={machine.stepIndex === 0 && (session?.condition_offset ?? 0) === 0 ? CONFIG.RT_PRACTICE_TRIALS : 0}
           onComplete={async (res) => {
+            // Trials are over; only writes remain, so Pause becomes available again.
+            setRtBlockFinished(true);
             if (session) {
               // Replace, do not append. Every other per-condition store either replaces (keyed by
               // condition_id) or is cleared first; reaction_trials is keyed by a fresh uuid per row
@@ -1035,7 +1102,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
 
   // Pause control: available during the per-condition loop. Exits to the manager; the session
   // remains in-progress and can be resumed from the start of the current condition.
-  const canPause = isInLoop(machine.stage) && machine.stage !== 'REACTION_TIME' && !!session;
+  /**
+   * Pause is hidden during the reaction-time block so a tap cannot interrupt a trial — but it must
+   * come back once the block has finished and the app is only writing, because that is exactly the
+   * moment a rejected write can strand the operator with no control at all.
+   */
+  const canPause = isInLoop(machine.stage)
+    && (machine.stage !== 'REACTION_TIME' || rtBlockFinished)
+    && !!session;
 
   return (
     <div data-stage={machine.stage} style={{ height: '100%' }}>
@@ -1047,6 +1121,28 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           conditionTotal={conditionTotal}
           timeRemainingMin={timeRemainingMin}
         />
+      )}
+      {/* If the device has no wake-lock API, the operator has to know: the manual's fallback
+          ("screen timeout disabled") is not achievable on stock Android, where the longest timeout
+          is 30 minutes against a 90-minute sitting. */}
+      {sessionCreateError && (
+        <div
+          data-testid="session-create-error"
+          className="font-lab text-sm"
+          style={{ position: 'fixed', inset: 'auto 12px 12px 12px', zIndex: 60, padding: '12px 14px', borderRadius: 10, border: '1px solid #e64c4c', background: 'rgba(255,240,240,0.97)', color: '#7a1010' }}
+        >
+          Could not create the session record: {sessionCreateError}. Nothing has been lost. Check
+          free space and whether the app is open in another tab, then tap Begin setup again.
+        </div>
+      )}
+      {wakeLockUnsupported && (
+        <div
+          data-testid="wake-lock-warning"
+          className="font-lab text-xs"
+          style={{ position: 'fixed', top: 10, right: 12, zIndex: 46, padding: '5px 10px', borderRadius: 8, border: '1px solid #c98a22', background: 'rgba(255,246,229,0.95)', color: '#7a5a10' }}
+        >
+          No screen wake lock on this device — confirm the screen timeout is longer than the sitting
+        </div>
       )}
       {canPause && (
         <button

@@ -175,8 +175,37 @@ export function useTracking(): TrackingApi {
       video.srcObject = stream;
       video.muted = true;
       video.playsInline = true;
+      /**
+       * Attached to the document, not left detached.
+       *
+       * A never-appended <video> producing frames is version-dependent on iPadOS Safari; if play()
+       * rejects there, the whole start() falls through to catch and the sitting runs with no ocular
+       * data. Off-screen and inert rather than hidden with display:none, which suspends decoding.
+       */
+      video.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px';
+      video.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(video);
       await video.play();
       videoRef.current = video;
+
+      /**
+       * A track that ENDS mid-condition must be detected.
+       *
+       * Nothing listened for it. iOS hands the camera to an incoming call, a second app claims it,
+       * or the OS drops it — the track fires `ended`, fm.send() then throws into the pump's empty
+       * catch, and onResults simply stops firing. The aggregator's denominators are its own
+       * samples, so the row still reports camera_active TRUE, effective_fps ~30 and
+       * face_presence_ratio ~0.95, with an incomplete-blink ratio computed over whatever fraction
+       * of the exposure it saw. Indistinguishable from a good row — and the operator manual tells
+       * the operator to check exactly those two fields.
+       */
+      for (const track of stream.getVideoTracks()) {
+        track.addEventListener('ended', () => {
+          setStatus('failed');
+          trackEndedRef.current = true;
+        });
+      }
+      trackEndedRef.current = false;
       // Small canvas for downsampled luminance sampling (lighting QC) — cheap to read each frame.
       const lumaCanvas = document.createElement('canvas');
       lumaCanvas.width = 32;
@@ -233,6 +262,9 @@ export function useTracking(): TrackingApi {
       return s;
     }
   }, [ingestResult]);
+
+  /** Set when a video track ended after the camera had started. See start(). */
+  const trackEndedRef = useRef(false);
 
   const stop = useCallback(() => {
     if (rafRef.current != null) cancelAnimationFrame(rafRef.current);

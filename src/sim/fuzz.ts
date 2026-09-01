@@ -229,7 +229,7 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
     perception: [],
     eyeMetrics: conditions.filter(has).map((c) => ({
       condition_id: c.condition_id, session_id: sid, camera_active: rng() < 0.5, effective_fps: rng() < 0.5 ? null : rng() * 40,
-      fps_adequate_for_tiers: false, fps_adequate_for_ratio: false, blink_rate: rng() * 30, blink_rate_full: rng() * 30, incomplete_blink_ratio: rng(),
+      fps_adequate_for_tiers: false, fps_adequate_for_ratio: false, observed_duration_ms: 178000, ear_sample_count: 5340, blink_rate: rng() * 30, blink_rate_full: rng() * 30, incomplete_blink_ratio: rng(),
       blink_duration_mean_ms: null, bins: { first_half_blink_rate: null, second_half_blink_rate: null },
       mean_inter_blink_interval_ms: rng() < 0.5 ? null : rng() * 10000, inter_blink_interval_cv: rng() < 0.5 ? null : rng(),
       perclos_p80: rng() < 0.5 ? null : rng(), perclos_p70: rng() < 0.5 ? null : rng(),

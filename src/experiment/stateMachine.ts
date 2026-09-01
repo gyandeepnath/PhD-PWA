@@ -217,11 +217,35 @@ export function firstUnsatisfiedSetupStage(p: ResumePrerequisites): Stage | null
   if (!p.hasParticipantRecord) return 'PARTICIPANT_PROFILE';
   if (!p.preflightComplete) return 'PREFLIGHT';
   if (!p.colourVisionScreened) return 'COLOR_VISION';
-  // Camera setup and calibration are re-run on EVERY resume when the grant is present, not only
-  // when they were missed: the app remounts, and the EAR and gaze baselines that every blink
-  // threshold is a fraction of live in refs that the remount cleared.
+  /**
+   * Camera setup and calibration are re-run on EVERY resume when the grant is present, not only
+   * when they were missed: the app remounts, and the EAR and gaze baselines that every blink
+   * threshold is a fraction of live in refs that the remount cleared.
+   *
+   * CAMERA_SETUP sits before the baselines in SETUP_ORDER, so returning it here is correct — but
+   * it must NOT hide the two checks below it. It used to `return` unconditionally, which made them
+   * unreachable in the ordinary case where the camera is consented: a session interrupted after
+   * the colour-vision screen and resumed went camera → calibration → straight into condition 1,
+   * and the baseline CVS-Q and baseline fatigue were never administered. They are pre-exposure
+   * measurements and cannot be taken afterwards, so the CVS-Q change score — the key secondary
+   * outcome — and every fatigue_delta were lost for that sitting, which still exported
+   * session_complete=TRUE. See `resumeOwesBaselines`, which is what tells the resume whether it
+   * may enter the condition loop straight after calibration.
+   */
   if (p.wantsCamera) return 'CAMERA_SETUP';
   if (!p.hasBaselineCvsq) return 'CVSQ_BASELINE';
   if (!p.hasBaselineFatigue) return 'BASELINE_FATIGUE';
   return null;
+}
+
+/**
+ * Whether a resumed session still owes a PRE-EXPOSURE measurement.
+ *
+ * Distinct from firstUnsatisfiedSetupStage because the camera path is a re-initialisation, not a
+ * missing prerequisite: when only the camera is owed, the resume may re-enter the condition loop
+ * as soon as calibration finishes. When a baseline is missing it may not — it has to walk the rest
+ * of the setup chain first, or the sitting loses a measurement that cannot be recovered.
+ */
+export function resumeOwesBaselines(p: ResumePrerequisites): boolean {
+  return !p.hasBaselineCvsq || !p.hasBaselineFatigue;
 }

@@ -458,6 +458,14 @@ export interface EyeMetricsRecord {
    * carries a known directional bias and must be modelled or sensitivity-tested.
    */
   fps_adequate_for_ratio: boolean;
+  /**
+   * Milliseconds of the exposure actually observed, dropouts excluded. Compare against
+   * reading_time_ms: a large shortfall means the camera stopped part-way and every rate in this row
+   * describes only the fraction that was seen.
+   */
+  observed_duration_ms: number | null;
+  /** EAR samples behind this row. Zero means nothing was measured, whatever the other columns say. */
+  ear_sample_count: number;
 
   // Primary (frame-rate-robust): CVS markers + drowsiness covariates.
   /**

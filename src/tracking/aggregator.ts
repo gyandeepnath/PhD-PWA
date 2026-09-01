@@ -194,6 +194,17 @@ export class EyeMetricsAggregator {
       effective_fps: fps,
       fps_adequate_for_tiers: fpsAdequateForTiers(fps),
       fps_adequate_for_ratio: fpsAdequateForRatio(fps),
+      /**
+       * How much of the exposure was actually OBSERVED, and how many samples it rests on.
+       *
+       * Without these a condition in which the camera died 25 s into a 110 s reading is
+       * indistinguishable from a complete one: every rate is computed over the aggregator's own
+       * samples, so effective_fps, face_presence_ratio and the blink ratio all look normal. The
+       * analyst can now compare observed_duration_ms against reading_time_ms and drop or model the
+       * difference.
+       */
+      observed_duration_ms: Math.round(observedMs),
+      ear_sample_count: this.ear.length,
 
       blink_rate: blink.blink_rate,
       blink_rate_full: blink.blink_rate_full,
@@ -281,6 +292,8 @@ export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeM
     effective_fps: null,
     fps_adequate_for_tiers: false,
     fps_adequate_for_ratio: false,
+    observed_duration_ms: null,
+    ear_sample_count: 0,
     blink_rate: null,
     blink_rate_full: null,
     incomplete_blink_ratio: null,

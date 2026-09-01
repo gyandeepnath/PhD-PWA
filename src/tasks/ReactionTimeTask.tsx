@@ -392,6 +392,18 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
         </div>
       )}
 
+      {/* The 'done' phase used to render nothing at all — a blank condition-coloured screen. The
+          block's completion handler then awaits ~35 database writes with no try/catch, and Pause is
+          deliberately hidden during REACTION_TIME, so a single rejected write left the participant
+          facing an empty screen with no control and no browser chrome. Only a force-quit recovered,
+          losing the condition. */}
+      {phase === 'done' && (
+        <div style={{ textAlign: 'center', color: text, fontFamily: '"DM Mono", monospace', maxWidth: 480, padding: 24 }}>
+          <p style={{ fontSize: 18 }}>Block complete.</p>
+          <p style={{ fontSize: 14, opacity: 0.7, marginTop: 8 }}>Saving — this takes a moment.</p>
+        </div>
+      )}
+
       {phase === 'practice_done' && (
         <div style={{ textAlign: 'center', color: text, fontFamily: '"DM Mono", monospace', maxWidth: 480, padding: 24 }}>
           <p style={{ fontSize: 18 }}>Practice complete.</p>
