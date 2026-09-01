@@ -222,7 +222,7 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
     visualSearch: conditions.filter(has).map((c) => ({
       condition_id: c.condition_id, session_id: sid, passage_id: c.passage_id, search_target: 'x',
       targets_in_set: randInt(rng, 0, 12), search_time_ms: randInt(rng, 0, 40000), time_to_first_target_ms: null,
-      targets_found: randInt(rng, 0, 12), targets_missed: 0, false_detections: 0,
+      targets_found: randInt(rng, 0, 12), targets_missed: 0, false_detections: 0, search_d_prime: 2.1, distractor_words: 560,
       accuracy_rate: rng(), search_efficiency: rng() * 30, mean_inter_target_interval_ms: null,
       termination_mode: 'time_limit' as const,
     })),

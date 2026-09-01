@@ -799,11 +799,23 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                */
               if (machine.stepIndex === 0) void captureMedia('reading_segment', cond?.label ?? null);
             }}
-            onComplete={async (readingTimeMs) => {
+            onComplete={async (r) => {
               if (session) {
                 await tracking.endCondition(conditionId, session.session_id);
                 const existing = await get('conditions', conditionId);
-                if (existing) await put('conditions', { ...existing, reading_time_ms: Math.round(readingTimeMs) });
+                if (existing) {
+                  await put('conditions', {
+                    ...existing,
+                    // Hidden time removed: the clock used to run while the tablet was backgrounded,
+                    // and this span is also the reading-speed denominator.
+                    reading_time_ms: r.readingTimeMs,
+                    reading_wall_clock_ms: r.wallClockMs,
+                    reading_hidden_ms: r.hiddenMs,
+                    // The per-page dwells make a skim locatable rather than merely suspected.
+                    reading_page_dwells_ms: r.pageDwellsMs,
+                    reading_min_page_dwell_ms: r.pageDwellsMs.length ? Math.min(...r.pageDwellsMs) : null,
+                  });
+                }
               }
               advance();
             }}
@@ -884,6 +896,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               search_time_ms: r.searchTimeMs, time_to_first_target_ms: r.timeToFirstTargetMs,
               targets_found: r.targetsFound, targets_missed: r.targetsMissed,
               false_detections: r.falseDetections, accuracy_rate: r.accuracyRate,
+              search_d_prime: r.dPrime, distractor_words: r.distractorWords,
               search_efficiency: r.searchEfficiency, mean_inter_target_interval_ms: r.meanInterTargetIntervalMs,
               termination_mode: r.terminationMode,
             });

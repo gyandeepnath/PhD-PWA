@@ -35,7 +35,7 @@ function bundle(): SessionBundle {
       { comprehension_id: 'c1', session_id: 'S1', condition_id: 'A', passage_id: 3, question_index: 0, question_kind: 'detail', selected_index: 2, correct_index: 2, is_correct: true, response_time_ms: 2500 },
     ],
     visualSearch: [
-      { condition_id: 'A', session_id: 'S1', passage_id: 3, search_target: 'plate', targets_in_set: 5, search_time_ms: 12000, time_to_first_target_ms: 800, targets_found: 5, targets_missed: 0, false_detections: 1, accuracy_rate: 1, search_efficiency: 25, mean_inter_target_interval_ms: 2000, termination_mode: 'voluntary_full' },
+      { condition_id: 'A', session_id: 'S1', passage_id: 3, search_target: 'plate', targets_in_set: 5, search_time_ms: 12000, time_to_first_target_ms: 800, targets_found: 5, targets_missed: 0, false_detections: 1, search_d_prime: 2.1, distractor_words: 560, accuracy_rate: 1, search_efficiency: 25, mean_inter_target_interval_ms: 2000, termination_mode: 'voluntary_full' },
     ],
     perception: [
       { perception_id: 'p1', session_id: 'S1', condition_id: 'A', display_comfort_score: 80, text_clarity_score: 90, comfort_touched: true, clarity_touched: true, response_time_ms: 5000 },

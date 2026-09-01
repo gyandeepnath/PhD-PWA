@@ -217,7 +217,16 @@ export interface ConditionRecord {
    */
   passage_repeat_number: number;
   /** Total time spent on the reading task (ms), self-paced; null until reading completes. */
+  /** Reading exposure, with any time the app spent hidden already subtracted. */
   reading_time_ms: number | null;
+  /** The unadjusted span, so the adjustment is auditable rather than silent. */
+  reading_wall_clock_ms?: number | null;
+  /** Time the app was backgrounded or the screen off during the passage. */
+  reading_hidden_ms?: number | null;
+  /** Dwell on each page in order. */
+  reading_page_dwells_ms?: number[];
+  /** Shortest single-page dwell. The skim signal: a page finished at its unlock was not read. */
+  reading_min_page_dwell_ms?: number | null;
 }
 
 export type FatigueStage = 'baseline' | 'post_condition';
@@ -344,6 +353,10 @@ export interface VisualSearchRecord {
   targets_found: number;
   targets_missed: number;
   false_detections: number;
+  /** Sensitivity over words as trials. Immune to a tap-everything strategy, which accuracy_rate is not. */
+  search_d_prime: number | null;
+  /** Non-target words available to be wrongly tapped. */
+  distractor_words: number;
   accuracy_rate: number;
   search_efficiency: number; // hits per minute
   mean_inter_target_interval_ms: number | null;

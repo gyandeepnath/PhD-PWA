@@ -4,6 +4,7 @@
  * charts/tables and the wide-format CSV, so the numbers are guaranteed consistent.
  */
 import type { SessionBundle } from '@/storage/gather';
+import { CONFIG } from '@/experiment/config';
 import { FPS_RATIO_THRESHOLD } from '@/tracking/blink';
 import type { FatigueRecord, DisplayPerceptionRecord, ComprehensionRecord, RtSummaryRecord, EyeMetricsRecord } from '@/storage/types';
 import { PASSAGES } from '@/experiment/passages';
@@ -26,6 +27,13 @@ export const ENGAGEMENT = {
   PERCEPTION_RUSHED_MS: 2000,
   /** Reading faster than wordCount / this (wpm) is an implausible skim (normal reading ≤ ~400 wpm). */
   SKIM_WPM_CEILING: 400,
+  /**
+   * A page advanced within this long of its own unlock was waited out, not read. Generous enough
+   * that a reader who finishes just as the button becomes live is not flagged for a fast page.
+   */
+  PAGE_UNLOCK_GRACE_MS: 1500,
+  /** Hidden time during a passage beyond this means the exposure window is not what it claims. */
+  READING_HIDDEN_MAX_MS: 5000,
   /** RT block is disengaged if any of these existing rates exceed their cutoff. */
   RT_FALSE_ALARM_MAX: 0.3,
   RT_ERROR_MAX: 0.3,
@@ -101,6 +109,8 @@ export interface ConditionSummary {
   careless_rushed_fatigue: boolean;
   careless_rushed_perception: boolean;
   reading_skim: boolean;
+  /** The app was backgrounded or the screen went off during the reading exposure. */
+  reading_interrupted: boolean;
   comprehension_wrong: boolean;
   rt_disengaged: boolean;
   low_face_presence: boolean;
@@ -157,6 +167,7 @@ export interface EngagementResult {
   careless_rushed_fatigue: boolean;
   careless_rushed_perception: boolean;
   reading_skim: boolean;
+  reading_interrupted: boolean;
   comprehension_wrong: boolean;
   rt_disengaged: boolean;
   low_face_presence: boolean;
@@ -194,6 +205,10 @@ const FATIGUE_MAX = 10;
  */
 export function conditionEngagement(args: {
   reading_time_ms: number | null;
+  /** Shortest single-page dwell; the per-page skim signal. */
+  reading_min_page_dwell_ms?: number | null;
+  /** Time the app was hidden during the passage. */
+  reading_hidden_ms?: number | null;
   word_count: number | null;
   fatigue?: FatigueRecord;
   perception?: DisplayPerceptionRecord;
@@ -201,15 +216,44 @@ export function conditionEngagement(args: {
   rt?: RtSummaryRecord;
   eye?: EyeMetricsRecord;
 }): EngagementResult {
-  const { reading_time_ms, word_count, fatigue, perception, comprehension, rt, eye } = args;
+  const {
+    reading_time_ms, reading_min_page_dwell_ms, reading_hidden_ms,
+    word_count, fatigue, perception, comprehension, rt, eye,
+  } = args;
   const reasons: string[] = [];
   let score = 1;
   const penalise = (amount: number, reason: string) => { score -= amount; reasons.push(reason); };
 
-  // Reading skim — faster than the fastest plausible reading speed.
+  /**
+   * Reading skim, judged PER PAGE rather than over the whole passage.
+   *
+   * The whole-passage rule could barely fire. The dwell gate guarantees at least
+   * 4 x 20 s = 80 s, while the corpus skim floor is 85.7-90.2 s, so the flag lived in a 5.6-10.2 s
+   * band: a participant who waited out each countdown and paused two seconds longer per page was
+   * never flagged, and a genuinely fast reader at ~440 wpm was flagged and had their fastest
+   * conditions dropped.
+   *
+   * A page finished within a moment of its own unlock was not read — the participant was waiting,
+   * not reading — and that is true regardless of how long they lingered on the others. The
+   * whole-passage rule is kept as a second, independent signal.
+   */
   const skimFloorMs = word_count != null && word_count > 0 ? (word_count / ENGAGEMENT.SKIM_WPM_CEILING) * 60000 : null;
-  const reading_skim = reading_time_ms != null && skimFloorMs != null && reading_time_ms < skimFloorMs;
-  if (reading_skim) penalise(0.3, `reading skimmed (${Math.round(reading_time_ms!)}ms < ${Math.round(skimFloorMs!)}ms floor)`);
+  const wholePassageSkim = reading_time_ms != null && skimFloorMs != null && reading_time_ms < skimFloorMs;
+  const pageWaitedOut = reading_min_page_dwell_ms != null
+    && reading_min_page_dwell_ms < CONFIG.READING_PAGE_MIN_MS + ENGAGEMENT.PAGE_UNLOCK_GRACE_MS;
+  const reading_skim = wholePassageSkim || pageWaitedOut;
+  if (wholePassageSkim) {
+    penalise(0.3, `reading skimmed (${Math.round(reading_time_ms!)}ms < ${Math.round(skimFloorMs!)}ms floor)`);
+  } else if (pageWaitedOut) {
+    penalise(0.3, `a page was advanced ${Math.round(reading_min_page_dwell_ms! - CONFIG.READING_PAGE_MIN_MS)}ms after its unlock — waited out, not read`);
+  }
+
+  // Time the app spent hidden during the passage: the participant was not looking at the stimulus,
+  // and if it is large the ocular measures for this condition cover a window that includes it.
+  const reading_interrupted = reading_hidden_ms != null && reading_hidden_ms > ENGAGEMENT.READING_HIDDEN_MAX_MS;
+  if (reading_interrupted) {
+    penalise(0.25, `app was hidden for ${Math.round(reading_hidden_ms! / 1000)}s during reading`);
+  }
 
   // RT block disengagement — reuse existing rates.
   const rt_disengaged = !!rt && (
@@ -284,7 +328,7 @@ export function conditionEngagement(args: {
     engagement, quality_score, reasons,
     blink_count_total: blinkCount, insufficient_blinks,
     careless_straight_lined, careless_rushed_fatigue, careless_rushed_perception,
-    reading_skim, comprehension_wrong, rt_disengaged, low_face_presence,
+    reading_skim, reading_interrupted, comprehension_wrong, rt_disengaged, low_face_presence,
   };
 }
 
@@ -318,6 +362,8 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
 
     const eng = conditionEngagement({
       reading_time_ms: c.reading_time_ms,
+      reading_min_page_dwell_ms: c.reading_min_page_dwell_ms ?? null,
+      reading_hidden_ms: c.reading_hidden_ms ?? null,
       word_count: PASSAGES[c.passage_id]?.wordCount ?? null,
       fatigue: fat, perception: perc, comprehension: comp, rt, eye,
     });
@@ -367,6 +413,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       careless_rushed_fatigue: eng.careless_rushed_fatigue,
       careless_rushed_perception: eng.careless_rushed_perception,
       reading_skim: eng.reading_skim,
+      reading_interrupted: eng.reading_interrupted,
       comprehension_wrong: eng.comprehension_wrong,
       rt_disengaged: eng.rt_disengaged,
       low_face_presence: eng.low_face_presence,

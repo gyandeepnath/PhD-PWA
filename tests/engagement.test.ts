@@ -82,3 +82,81 @@ describe('conditionEngagement', () => {
     expect(e.low_face_presence).toBe(false);
   });
 });
+
+/**
+ * Two ways a condition could look like good data when it was not.
+ *
+ * The reading skim rule was almost unfirable: the four 20 s page unlocks guarantee at least 80 s,
+ * while the corpus skim floor is 85.7-90.2 s, so the whole-passage flag lived in a 5.6-10.2 s band.
+ * A participant who waited out each countdown and paused two seconds more per page was never
+ * flagged; a genuinely fast reader at ~440 wpm was, and had their fastest conditions dropped.
+ *
+ * And the reading clock ran while the app was backgrounded, so a notification dealt with mid-passage
+ * inflated the exposure — the same span that is the reading-speed denominator.
+ */
+describe('a waited-out page is detected even when the passage total looks normal', () => {
+  const base = {
+    word_count: 590,
+    fatigue: undefined, perception: undefined, comprehension: undefined, rt: undefined, eye: undefined,
+  };
+
+  it('flags a page advanced at its own unlock, whatever the passage total', async () => {
+    const { conditionEngagement } = await import('@/dashboard/aggregate');
+    const { CONFIG } = await import('@/experiment/config');
+    // 95 s total clears the 88.5 s whole-passage floor for 590 words, so the old rule saw nothing.
+    const r = conditionEngagement({
+      ...base,
+      reading_time_ms: 95_000,
+      reading_min_page_dwell_ms: CONFIG.READING_PAGE_MIN_MS + 200,
+      reading_hidden_ms: 0,
+    });
+    expect(r.reading_skim).toBe(true);
+    expect(r.reasons.join(' ')).toMatch(/waited out/i);
+  });
+
+  it('does not flag a reader who simply read each page briskly but genuinely', async () => {
+    const { conditionEngagement } = await import('@/dashboard/aggregate');
+    const { CONFIG } = await import('@/experiment/config');
+    const r = conditionEngagement({
+      ...base,
+      reading_time_ms: 120_000,
+      reading_min_page_dwell_ms: CONFIG.READING_PAGE_MIN_MS + 6_000,
+      reading_hidden_ms: 0,
+    });
+    expect(r.reading_skim).toBe(false);
+  });
+
+  it('flags a passage during which the app was hidden', async () => {
+    const { conditionEngagement } = await import('@/dashboard/aggregate');
+    const r = conditionEngagement({
+      ...base,
+      reading_time_ms: 100_000,
+      reading_min_page_dwell_ms: 25_000,
+      reading_hidden_ms: 90_000,
+    });
+    expect(r.reading_interrupted).toBe(true);
+    expect(r.quality_score).toBeLessThan(1);
+  });
+
+  it('is silent when nothing about the reading is suspicious', async () => {
+    const { conditionEngagement } = await import('@/dashboard/aggregate');
+    const r = conditionEngagement({
+      ...base, reading_time_ms: 178_000, reading_min_page_dwell_ms: 40_000, reading_hidden_ms: 0,
+    });
+    expect(r.reading_skim).toBe(false);
+    expect(r.reading_interrupted).toBe(false);
+  });
+});
+
+describe('visual search cannot be gamed by tapping everything', () => {
+  it("gives a tap-everything strategy a poor d' despite a perfect accuracy_rate", async () => {
+    const { computeSdt } = await import('@/lib/signalDetection');
+    // 10 targets in a ~590-word passage. The gamer taps ~390 words: every target found, so
+    // accuracy_rate = 1.0 and search_efficiency is their best of the study.
+    const gamed = computeSdt({ hits: 10, misses: 0, falseAlarms: 380, correctRejections: 200 });
+    const honest = computeSdt({ hits: 9, misses: 1, falseAlarms: 2, correctRejections: 578 });
+    expect(honest.d_prime).not.toBeNull();
+    expect(gamed.d_prime).not.toBeNull();
+    expect(gamed.d_prime!).toBeLessThan(honest.d_prime!);
+  });
+});

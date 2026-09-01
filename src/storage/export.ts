@@ -192,6 +192,9 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '02_conditions.csv', column: 'adaptation_ms_before', type: 'integer', unit: 'ms', role: 'qc', description: 'Grey-field adaptation before this condition. Doubled on a polarity switch; 0 for the first condition.' },
   { file: '02_conditions.csv', column: 'passage_repeat_number', type: 'integer', unit: 'count', role: 'covariate', description: "How many times this participant has read this passage, counting this run: 1 in the first sitting, 2 in the second. Ten passages cover twenty condition-runs, so every passage is re-read. Illumination is confounded with session order within a participant, so the practice effect loads onto the illumination main effect unless this is modelled." },
   { file: '02_conditions.csv', column: 'reading_time_ms', type: 'integer', unit: 'ms', role: 'dv', description: 'Self-paced reading duration. This is also the ocular-metrics exposure window.' },
+  { file: '02_conditions.csv', column: 'reading_wall_clock_ms', type: 'integer', unit: 'ms', role: 'qc', description: 'Unadjusted first-to-last span of the reading task, before hidden time was subtracted. reading_time_ms is this minus reading_hidden_ms; both are exported so the adjustment is auditable rather than silent.' },
+  { file: '02_conditions.csv', column: 'reading_hidden_ms', type: 'integer', unit: 'ms', role: 'qc', description: 'Time the app spent backgrounded or the screen off during the passage. Already subtracted from reading_time_ms. Large values mean the participant was not looking at the stimulus for part of the window the ocular measures cover.' },
+  { file: '02_conditions.csv', column: 'reading_min_page_dwell_ms', type: 'integer', unit: 'ms', role: 'qc', description: 'Shortest single-page dwell in the passage. A page advanced within about a second of its own 20 s unlock was waited out, not read — which the whole-passage skim rule could not detect, because the four unlocks guarantee 80 s against a skim floor of 86-90 s.' },
   { file: '02_conditions.csv', column: 'reading_speed_wpm', type: 'integer', unit: 'words/min', role: 'dv', description: 'Derived: passage word count / reading_time_ms. Word counts are computed from the passage text, not declared.' },
 
   // ---- 03_fatigue_scores.csv
@@ -333,6 +336,8 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '05_visual_search.csv', column: 'targets_found', type: 'integer', unit: 'count', role: 'dv', description: 'Number of correct target taps. The numerator of accuracy_rate.' },
   { file: '05_visual_search.csv', column: 'targets_missed', type: 'integer', unit: 'count', role: 'dv', description: 'Targets present but never tapped.' },
   { file: '05_visual_search.csv', column: 'false_detections', type: 'integer', unit: 'count', role: 'dv', description: 'Taps on words that were not the target. A rise here with stable accuracy indicates a criterion shift rather than a sensitivity change.' },
+  { file: '05_visual_search.csv', column: 'search_d_prime', type: 'number', unit: "d'", role: 'dv', description: "Sensitivity over WORDS as trials: targets found are hits, non-target words tapped are false alarms, the rest are correct rejections. Prefer this to accuracy_rate as the search outcome. accuracy_rate ignores false detections entirely, so a participant who taps every word finds all targets in seconds and scores 1.0 with an efficiency three times their own mean, while no quality flag fires; d-prime cannot be inflated that way." },
+  { file: '05_visual_search.csv', column: 'distractor_words', type: 'integer', unit: 'count', role: 'meta', description: 'Non-target words in the passage: the correct-rejection pool behind search_d_prime.' },
   { file: '05_visual_search.csv', column: 'accuracy_rate', type: 'number', unit: '0-1', role: 'dv', description: 'targets_found divided by targets_in_set. Comparable across passages only because target counts are held in a narrow band.' },
   { file: '05_visual_search.csv', column: 'search_efficiency', type: 'number', unit: 'hits/min', role: 'dv', description: 'Correct taps per minute. Combines speed and accuracy into one rate.' },
   { file: '05_visual_search.csv', column: 'mean_inter_target_interval_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Mean interval between successive correct taps. Rising within a block indicates slowing.' },
@@ -441,6 +446,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '12_quality_flags.csv', column: 'careless_rushed_fatigue', type: 'boolean', unit: '-', role: 'qc', description: 'True when the fatigue scale was submitted too quickly to have been read.' },
   { file: '12_quality_flags.csv', column: 'careless_rushed_perception', type: 'boolean', unit: '-', role: 'qc', description: 'True when the comfort and clarity ratings were submitted too quickly to have been read.' },
   { file: '12_quality_flags.csv', column: 'careless_straight_lined', type: 'boolean', unit: '-', role: 'qc', description: 'True when all five fatigue items received an identical value, the classic straight-lining signature.' },
+  { file: '12_quality_flags.csv', column: 'reading_interrupted', type: 'boolean', unit: '-', role: 'qc', description: 'The app was backgrounded or the screen went off for more than 5 s during the reading exposure. The ocular measures for this condition therefore cover a window that includes time the participant was not looking at the stimulus.' },
   { file: '12_quality_flags.csv', column: 'comprehension_wrong', type: 'boolean', unit: '-', role: 'qc', description: 'True when the participant scored below chance across the three items for this condition. A single slip does not fire it.' },
   { file: '12_quality_flags.csv', column: 'low_face_presence', type: 'boolean', unit: '-', role: 'qc', description: 'True when a face was detected for too little of the condition for the ocular measures to be trustworthy.' },
   { file: '12_quality_flags.csv', column: 'reasons', type: 'string', unit: '-', role: 'qc', description: 'Human-readable list of every penalty that fired, semicolon separated. Read this before excluding a row.' },
@@ -573,7 +579,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 02 — conditions (+ reading speed in words/min, derived from passage length & reading time)
   csv('02_conditions.csv',
-    ['participant_id', 'session_id', 'session_index', 'condition_id', 'session_position', 'condition_label', 'polarity', 'background_color', 'text_color', 'color_name', 'ink_name', 'passage_id', 'wcag_contrast_ratio', 'wcag_level', 'michelson_contrast', 'below_wcag_aa', 'adaptation_ms_before', 'passage_repeat_number', 'reading_time_ms', 'reading_speed_wpm', 'condition_duration_sec'],
+    ['participant_id', 'session_id', 'session_index', 'condition_id', 'session_position', 'condition_label', 'polarity', 'background_color', 'text_color', 'color_name', 'ink_name', 'passage_id', 'wcag_contrast_ratio', 'wcag_level', 'michelson_contrast', 'below_wcag_aa', 'adaptation_ms_before', 'passage_repeat_number', 'reading_time_ms', 'reading_wall_clock_ms', 'reading_hidden_ms', 'reading_min_page_dwell_ms', 'reading_speed_wpm', 'condition_duration_sec'],
     bundle.conditions.map((c) => {
       const words = PASSAGES[c.passage_id]?.wordCount ?? null;
       const wpm = words != null && c.reading_time_ms ? Math.round(words / (c.reading_time_ms / 60000)) : '';
@@ -592,7 +598,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 05 — visual search
   csv('05_visual_search.csv',
-    ['participant_id', 'condition_id', 'passage_id', 'search_target', 'targets_in_set', 'search_time_ms', 'time_to_first_target_ms', 'targets_found', 'targets_missed', 'false_detections', 'accuracy_rate', 'search_efficiency', 'mean_inter_target_interval_ms', 'termination_mode'],
+    ['participant_id', 'condition_id', 'passage_id', 'search_target', 'targets_in_set', 'search_time_ms', 'time_to_first_target_ms', 'targets_found', 'targets_missed', 'false_detections', 'search_d_prime', 'distractor_words', 'accuracy_rate', 'search_efficiency', 'mean_inter_target_interval_ms', 'termination_mode'],
     bundle.visualSearch.map((v) => ({ participant_id: pid, ...v })));
 
   // 06 — display perception
@@ -654,13 +660,13 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 12 — engagement / careless-responding quality flags (boredom & disengagement detection)
   csv('12_quality_flags.csv',
-    ['participant_id', 'session_index', 'condition_label', 'session_position', 'engagement_flag', 'quality_score', 'blink_count_total', 'insufficient_blinks', 'reading_time_ms', 'fatigue_response_ms', 'perception_response_ms', 'reading_skim', 'rt_disengaged', 'careless_rushed_fatigue', 'careless_rushed_perception', 'careless_straight_lined', 'comprehension_wrong', 'low_face_presence', 'reasons'],
+    ['participant_id', 'session_index', 'condition_label', 'session_position', 'engagement_flag', 'quality_score', 'blink_count_total', 'insufficient_blinks', 'reading_time_ms', 'fatigue_response_ms', 'perception_response_ms', 'reading_skim', 'reading_interrupted', 'rt_disengaged', 'careless_rushed_fatigue', 'careless_rushed_perception', 'careless_straight_lined', 'comprehension_wrong', 'low_face_presence', 'reasons'],
     summaries.map((s) => ({
       participant_id: pid, session_index: session.session_index, condition_label: s.condition_label,
       session_position: s.session_position, engagement_flag: s.engagement, quality_score: s.quality_score,
       blink_count_total: s.blink_count_total, insufficient_blinks: s.insufficient_blinks,
       reading_time_ms: s.reading_time_ms, fatigue_response_ms: s.fatigue_response_ms, perception_response_ms: s.perception_response_ms,
-      reading_skim: s.reading_skim, rt_disengaged: s.rt_disengaged, careless_rushed_fatigue: s.careless_rushed_fatigue,
+      reading_skim: s.reading_skim, reading_interrupted: s.reading_interrupted, rt_disengaged: s.rt_disengaged, careless_rushed_fatigue: s.careless_rushed_fatigue,
       careless_rushed_perception: s.careless_rushed_perception, careless_straight_lined: s.careless_straight_lined,
       comprehension_wrong: s.comprehension_wrong, low_face_presence: s.low_face_presence, reasons: s.engagement_reasons.join('; '),
     })));

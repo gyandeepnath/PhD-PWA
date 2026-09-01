@@ -323,7 +323,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
         time_to_first_target_ms: 2500 + i * 10,
         targets_found: found,
         targets_missed: inSet - found,
-        false_detections: i % 2,
+        false_detections: i % 2, search_d_prime: 2.1, distractor_words: 560,
         accuracy_rate: inSet > 0 ? found / inSet : 0,
         search_efficiency: found / ((30_000 + i * 200) / 60_000),
         mean_inter_target_interval_ms: found > 1 ? 4000 : null,

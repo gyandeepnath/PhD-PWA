@@ -12,11 +12,22 @@ import { now } from '@/lib/timing';
 import { TaskIntro } from './TaskIntro';
 import type { Passage } from '@/experiment/passages';
 
+export interface ReadingResult {
+  /** Wall-clock reading time MINUS any time the app spent hidden. The exposure. */
+  readingTimeMs: number;
+  /** Unadjusted span, kept so the adjustment is auditable rather than silent. */
+  wallClockMs: number;
+  /** Time the app was backgrounded or the screen off during the passage. */
+  hiddenMs: number;
+  /** Dwell on each page, in order. Lets a skim be located rather than only suspected. */
+  pageDwellsMs: number[];
+}
+
 interface Props {
   passage: Passage;
   background: string;
   text: string;
-  onComplete: (readingTimeMs: number) => void;
+  onComplete: (r: ReadingResult) => void;
   /** Fired when the participant starts reading — the true opening of the measurement window. */
   onBegin?: () => void;
 }
@@ -28,8 +39,41 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
   const [secsLeft, setSecsLeft] = useState(Math.ceil(CONFIG.READING_PAGE_MIN_MS / 1000));
   const taskStart = useRef(now());
   const pageStart = useRef(now());
+  /**
+   * Per-page dwell, and time the app spent hidden.
+   *
+   * reading_time_ms was a single wall-clock span with nothing subtracted and nothing decomposed.
+   * The clock ran while the tablet was backgrounded or dimmed, so a notification dealt with during
+   * page 3 inflated the whole exposure — and because that span is also the reading-speed
+   * denominator, it silently halved the reported reading speed with no way to locate the gap
+   * afterwards.
+   *
+   * The per-page array also makes the skim rule work. The dwell gate guarantees at least
+   * 4 x 20 s = 80 s, while the corpus skim floor is 85.7-90.2 s, so the old whole-passage flag
+   * could only fire inside a 5.6-10.2 s band: a participant who waited out each countdown and then
+   * paused a couple of seconds more was never flagged, and a genuinely fast reader was.
+   */
+  const pageDwells = useRef<number[]>([]);
+  const hiddenMs = useRef(0);
+  const hiddenAt = useRef<number | null>(null);
   const totalPages = passage.pages.length;
   const isLast = page === totalPages - 1;
+
+  useEffect(() => {
+    // The dwell countdown uses performance.now() deltas, so it is unaffected by backgrounding; this
+    // only accumulates the hidden time so it can be subtracted from, and reported alongside, the
+    // exposure.
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt.current = now();
+      } else if (hiddenAt.current != null) {
+        hiddenMs.current += now() - hiddenAt.current;
+        hiddenAt.current = null;
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
 
   useEffect(() => {
     if (!started) return;
@@ -75,8 +119,22 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
 
   const next = () => {
     if (!unlocked) return;
-    if (isLast) onComplete(now() - taskStart.current);
-    else setPage((p) => p + 1);
+    pageDwells.current.push(Math.round(now() - pageStart.current));
+    if (isLast) {
+      // Any hidden interval still open at submit is closed first, so a participant who returns to
+      // the app and immediately taps Next does not carry that gap into the exposure.
+      if (hiddenAt.current != null) {
+        hiddenMs.current += now() - hiddenAt.current;
+        hiddenAt.current = null;
+      }
+      const wall = now() - taskStart.current;
+      onComplete({
+        readingTimeMs: Math.max(0, Math.round(wall - hiddenMs.current)),
+        wallClockMs: Math.round(wall),
+        hiddenMs: Math.round(hiddenMs.current),
+        pageDwellsMs: [...pageDwells.current],
+      });
+    } else setPage((p) => p + 1);
   };
 
   const minSecs = Math.ceil(CONFIG.READING_PAGE_MIN_MS / 1000);

@@ -4,6 +4,7 @@
  * stale-closure bug capturing zeros at mount). Denominator is the AUTHORITATIVE occurrence count.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { computeSdt } from '@/lib/signalDetection';
 import { STIMULUS_FONT_STACK } from '@/lib/fonts';
 import { CONFIG } from '@/experiment/config';
 import { now } from '@/lib/timing';
@@ -19,6 +20,20 @@ export interface SearchResult {
   accuracyRate: number;
   searchEfficiency: number;
   meanInterTargetIntervalMs: number | null;
+  /**
+   * Sensitivity over WORDS as trials: hits = targets found, false alarms = non-target words tapped,
+   * with the remaining words as correct rejections.
+   *
+   * accuracy_rate and search_efficiency both ignore false detections entirely, so a participant who
+   * drags a finger across the passage tapping every word finds all the targets in seconds and
+   * scores a perfect accuracy_rate with a search_efficiency three times their own mean — their best
+   * condition in the study — while false_detections sits at several hundred and no quality flag
+   * fires. d-prime cannot be inflated that way: tapping everything raises the false-alarm rate as
+   * fast as the hit rate.
+   */
+  dPrime: number | null;
+  /** Non-target words available to be wrongly tapped: the correct-rejection pool. */
+  distractorWords: number;
   terminationMode: 'time_limit' | 'voluntary_full' | 'voluntary_early';
 }
 
@@ -72,6 +87,15 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
       falseDetections: falseDet.current,
       accuracyRate: totalTargets > 0 ? found / totalTargets : 0,
       searchEfficiency: elapsed > 0 ? found / (elapsed / 60000) : 0,
+      // Words as trials. Uses the same signal-detection machinery as the reaction-time block, so a
+      // tap-everything strategy cannot produce a good score.
+      dPrime: computeSdt({
+        hits: found,
+        misses: Math.max(0, totalTargets - found),
+        falseAlarms: falseDet.current,
+        correctRejections: Math.max(0, tokens.length - totalTargets - falseDet.current),
+      }).d_prime,
+      distractorWords: Math.max(0, tokens.length - totalTargets),
       meanInterTargetIntervalMs: intervals.length
         ? intervals.reduce((s, v) => s + v, 0) / intervals.length
         : null,
