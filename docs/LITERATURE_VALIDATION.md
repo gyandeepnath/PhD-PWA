@@ -1181,3 +1181,105 @@ These remain open. Each is a question the design depends on.
 
 Re-running them: the workflow script is preserved and resumable, so the six completed searches
 replay from cache and only the missing ones cost anything.
+
+---
+
+## Addendum: the CVS-Q recall window — targeted search, and what was changed
+
+This section is later and narrower than the rest of the file, and its retrieval status is
+different, so it is set out separately.
+
+**What was asked.** What recall window does the CVS-Q specify, and is a within-session change score
+a defensible use of it?
+
+**What could NOT be confirmed.** Seguí et al. (2015) is closed access and could not be retrieved:
+the publisher, Europe PMC and the author institution's repository were all unreachable from this
+session. **The published question stem has not been read verbatim and is not reproduced here.**
+
+**What WAS established, from sources that were retrieved.** Two facts settle the question without
+needing the stem, and both come from papers co-authored by the instrument's developers or from
+primary validations of its translations:
+
+1. **The frequency anchors are defined in events per week** — "never: the symptom does not occur at
+   all"; "occasionally: sporadic episodes or once a week"; "often or always: 2 or 3 times a week to
+   almost every day".
+2. **The case criterion is "occurrence of at least one symptom two or three times a week"**, stated
+   identically in the Italian, Persian and adolescent validations, each attributing it to the
+   original.
+
+And the test-retest design confirms the intent: intervals of 7-15 days across the Italian,
+Portuguese and teen versions, with the Italian paper reporting "no differences ... between the mean
+scores obtained before and after (p = 0.440) ... good stability over time". **The retest exists to
+show the score does not move.** The shortest repeated administration found anywhere in the family is
+one week. No published use of a CVS-Q change score across a single session was found in PubMed,
+Scite or Consensus — absence of evidence across three databases, not proof of absence.
+
+**No MCID or MDC has been published for the CVS-Q.** The only raw-score SEM retrieved is 1.915
+(Persian version), which would imply an MDC95 of roughly 5 points on the 0-32 scale — about a sixth
+of the range — for a construct its own validation shows to be stable over a fortnight. That
+arithmetic is this project's, not a published figure.
+
+### What was changed in the instrument
+
+The screen previously asked, at BOTH administrations, "How often, and how strongly, have you felt
+each symptom?" — with no period at all, which matches no validated version. That is worse than
+either horn of the dilemma: a participant reading it habitually reported the same thing twice and
+produced a change of zero, while one reading it as present-state produced a change of several
+points, and nothing in the export recorded which reading they had used.
+
+The frame is now explicit and differs by stage:
+
+- **Baseline** carries the validated habitual frame, anchored to computer work, with the per-week
+  anchor definitions shown to the participant.
+- **Session close** is deliberately re-anchored to the session just completed, with anchors that
+  mean something over ninety minutes.
+
+Each row records which frame was used, in a new `frame` column on `13_cvsq.csv`, and the codebook
+states that a `this_session` total must not be read against the published cut-off or against
+published norms.
+
+### The decision this does NOT make
+
+Re-anchoring makes the closing administration a coherent question. It does not make it the CVS-Q,
+and a baseline-to-close difference is now explicitly a difference between two different questions.
+The recommendation from the search is to **demote the CVS-Q to a screening-time covariate** — used
+for what it was validated to do, case definition and stratification — and to add a purpose-built
+acute instrument as the pre/post endpoint. The candidate with the clearest supporting evidence is
+the VRSQ (Ames, Wolffsohn & McBrien 2005), which was explicitly validated for pre/post differencing,
+with the caveat from that paper that symptoms dissipate and the post measure must be taken within
+five minutes of task end. Singh, Downie & Anderson (2022) is the closest precedent for a
+within-session symptom change in diagnosed CVS patients over a two-hour task.
+
+That is a change to the study's key secondary outcome and is the candidate's and supervisor's to
+make, so it has not been made here. If the within-session CVS-Q change is retained, the searches
+suggest reporting it as exploratory, scoring it in Rasch logits using the published conversion
+tables rather than raw sums, and stating the stability-by-design limitation explicitly.
+
+### References for this addendum
+
+All retrieved this session via PubMed, PubMed Central, Scite or Consensus. **Still unverified in the
+sense that applies to the rest of this file** — resolve each before it reaches the synopsis.
+
+- Seguí MM, Cabrero-García J, Crespo A, Verdú J, Ronda E. A reliable and valid questionnaire was
+  developed to measure computer vision syndrome at the workplace. *J Clin Epidemiol.*
+  2015;68(6):662-73. https://doi.org/10.1016/j.jclinepi.2015.01.015 — **abstract and metadata only;
+  full text NOT obtained.**
+- Cantó-Sancho N, et al. Prevalence and risk factors of computer vision syndrome. *PeerJ.*
+  2023;11:e14937. https://doi.org/10.7717/peerj.14937
+- Cantó-Sancho N, et al. Rasch-Validated Italian Scale for Diagnosing Digital Eye Strain: the
+  CVS-Q IT. *Int J Environ Res Public Health.* 2022;19(8):4506.
+  https://doi.org/10.3390/ijerph19084506
+- Qolami M, et al. Translation, cross-cultural adaptation and validation of the CVS-Q into Persian.
+  *Int Ophthalmol.* 2022;42(11):3407-20. https://doi.org/10.1007/s10792-022-02340-3
+- Seguí-Crespo M, et al. CVS-Q teen. *Sci Rep.* 2024. https://doi.org/10.1038/s41598-024-70821-9
+- Sánchez-Brau M, et al. Computer vision syndrome in presbyopic digital device workers.
+  *Ophthalmic Physiol Opt.* 2021;41(4):922-31. https://doi.org/10.1111/opo.12832
+- Ames SL, Wolffsohn JS, McBrien NA. The development of a symptom questionnaire for assessing
+  virtual reality viewing using a head-mounted display. *Optom Vis Sci.* 2005;82(3):168-76.
+  https://doi.org/10.1097/01.opx.0000156307.95086.6
+- Singh S, Downie LE, Anderson AJ. Is critical flicker-fusion frequency a valid measure of visual
+  fatigue? *Ophthalmic Physiol Opt.* 2022;43(2):176-82. https://doi.org/10.1111/opo.13073
+
+One source retrieved during this search, Marques-Jorge et al. (*J Pers Med.* 2025;15(5):168,
+https://doi.org/10.3390/jpm15050168), describes the CVS-Q response scale in a way that contradicts
+the developer-authored descriptions above. **Do not cite it for the scale structure.**

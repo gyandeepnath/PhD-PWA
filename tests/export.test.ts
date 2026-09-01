@@ -114,7 +114,7 @@ describe('export builder', () => {
     const p = files.find((f) => f.filename === '11_participant.csv')!;
     expect(p).toBeTruthy();
     const pHeader = p.content.split('\n')[0];
-    for (const col of ['age', 'gender', 'cvd_status', 'ishihara_correct', 'hours_since_sleep']) {
+    for (const col of ['age', 'gender', 'cvd_status', 'cvd_screen_correct', 'hours_since_sleep']) {
       expect(pHeader).toContain(col);
     }
     const q = files.find((f) => f.filename === '13_cvsq.csv')!;

@@ -34,7 +34,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
   → CAMERA_SETUP        webcam permission (or skip → no eye tracking)
   → CALIBRATION         9-point gaze calibration + EAR baseline + per-person frontal-pitch baseline
                           (head frontal during calibration → pitch zero) / positioning check
-  → CVSQ_BASELINE       validated CVS-Q (16 items)
+  → CVSQ_BASELINE       CVS-Q (16 items), validated habitual frame — see the CVS-Q note below
   → BASELINE_FATIGUE    5-item VAS baseline
   → INSTRUCTIONS        participant overview of the per-condition tasks
   → [×10 conditions per illumination block]
@@ -268,3 +268,27 @@ values, and none of them means "not measured".
 - **Free of non-finite values.** Anything non-finite is written as the empty missing-marker and
   counted in `export_manifest.json` as `non_finite_cells`, so an upstream fault stays visible
   rather than becoming `NA` in R.
+
+---
+
+## A note on the CVS-Q, and the frame it is asked in
+
+The CVS-Q's frequency anchors are defined in **events per week** ("occasionally" = sporadic or about
+once a week; "often or always" = 2-3 times a week to almost every day), its case criterion is at
+least one symptom two or three times a week, and its test-retest validations use a 7-15 day interval
+expressly to show that the score does **not** move. It is a habitual measure anchored to computer
+work, not a present-state one.
+
+The instrument therefore asks it in two deliberately different frames, and records which was used in
+the `frame` column of `13_cvsq.csv`:
+
+- **Baseline** — the validated habitual frame, with the per-week anchor definitions shown.
+- **Session close** — re-anchored to the session just completed, so that "occasionally" means
+  something over ninety minutes.
+
+The closing administration is a **documented deviation**: its total must not be compared with the
+published >= 6 cut-off or with published norms, and a baseline-to-close difference is a difference
+between two different questions. Whether the within-session change should remain the key secondary
+outcome at all is an open design question — see the addendum in
+[`LITERATURE_VALIDATION.md`](LITERATURE_VALIDATION.md), which sets out the evidence and the
+alternative (demote the CVS-Q to a screening covariate and add a purpose-built acute instrument).

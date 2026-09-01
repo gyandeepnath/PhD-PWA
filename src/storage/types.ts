@@ -61,9 +61,19 @@ export interface ParticipantRecord {
   correction_type: 'none' | 'glasses' | 'contacts';
   /** Self-reported / screened colour-vision status. */
   cvd_status: 'normal' | 'self_reported_deficient' | 'screen_failed' | 'screen_inconclusive' | 'unknown';
-  /** Digital Ishihara screening score (plates correct / total), null if not run. */
-  ishihara_correct: number | null;
-  ishihara_total: number | null;
+  /**
+   * The app's own six-plate digital screen: plates correct / total, null if not run.
+   *
+   * NOT the Ishihara test, and no longer named as though it were. It has no published operating
+   * characteristics and is a covariate and a flag, never the basis for exclusion.
+   */
+  cvd_screen_correct: number | null;
+  cvd_screen_total: number | null;
+  /**
+   * The operator's FORMAL plate result (Ishihara or Farnsworth), which the operator manual already
+   * requires alongside the app. This is what excludes.
+   */
+  cvd_clinical: 'normal' | 'deficient' | 'not_done';
   /**
    * The FIRST sitting's values, kept for continuity. Per-sitting values are on the session record:
    * this row is shared across a participant's sittings and cannot hold two of anything that varies
@@ -238,6 +248,16 @@ export interface FatigueRecord {
 
 /** Validated CVS-Q (Seguí 2015): 16 items, frequency x intensity, cutoff >=6. Baseline + end only. */
 export interface CvsqRecord {
+  /**
+   * The recall frame the participant was given.
+   *
+   * 'habitual_computer_work' is the validated CVS-Q frame, whose frequency anchors are defined in
+   * events per week and whose >= 6 cut-off is calibrated against it. 'this_session' is a deliberate
+   * re-anchoring to the ~90-minute exposure: a coherent question, but a DEVIATION from the
+   * validated instrument, so its total must not be read against the published cut-off or against
+   * published norms. Recorded per row because the two are otherwise indistinguishable in the data.
+   */
+  frame: 'habitual_computer_work' | 'this_session';
   cvsq_id: string;
   session_id: string;
   stage: 'baseline' | 'session_end';

@@ -118,3 +118,72 @@ describe('resolving a screening result into the stored status', () => {
     expect(resolveCvdStatus('normal', 'screen_failed')).toBe('screen_failed');
   });
 });
+
+/**
+ * The two cues a pseudoisochromatic set has to avoid.
+ *
+ * Matching mean luminance is not enough if the figure is consistently the DARKER region: an
+ * observer with no chromatic discrimination can learn "the digit is the darker patch" and apply it
+ * to every plate. Measured across the original five test plates the figure was darker on all five —
+ * contrast ratios of only 1.03 to 1.10, but unanimous in direction, which is what makes a cue
+ * usable.
+ *
+ * And the set was a fixed module constant while the screen runs in BOTH sittings, so a participant
+ * who failed at sitting 1 could pass at sitting 2 by recalling six digits.
+ */
+describe('the screening set carries no learnable non-chromatic cue', () => {
+  it('does not put the figure on the same side of the luminance boundary every time', async () => {
+    const { buildScreeningPlates, luminancePolarityBalance } = await import('@/screening/ishihara');
+    for (const seed of [0, 1, 2, 7, 42, 999]) {
+      const b = luminancePolarityBalance(buildScreeningPlates(seed));
+      expect(b.total).toBe(5);
+      // Balanced, not merely random: no administration may present an all-one-way set.
+      expect(b.figureLighter).toBeGreaterThan(0);
+      expect(b.figureLighter).toBeLessThan(b.total);
+    }
+  });
+
+  it('keeps figure and background close in luminance on every confusion plate', async () => {
+    // The chromatic difference has to be the signal; a large luminance step would let anyone read
+    // the digit regardless of colour vision.
+    const { buildScreeningPlates } = await import('@/screening/ishihara');
+    const rel = (hex: string) => {
+      const h = hex.replace('#', '');
+      const chan = (o: number) => {
+        const c = parseInt(h.slice(o, o + 2), 16) / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * chan(0) + 0.7152 * chan(2) + 0.0722 * chan(4);
+    };
+    const meanLum = (cs: string[]) => cs.reduce((s, c) => s + rel(c), 0) / cs.length;
+    for (const p of buildScreeningPlates(3).filter((x) => x.axis !== 'control')) {
+      const f = meanLum(p.figureColors);
+      const b = meanLum(p.backgroundColors);
+      const ratio = (Math.max(f, b) + 0.05) / (Math.min(f, b) + 0.05);
+      expect(ratio).toBeLessThan(1.2);
+    }
+  });
+
+  it('gives the two sittings different plates, so a retest is not a memory test', async () => {
+    const { buildScreeningPlates } = await import('@/screening/ishihara');
+    const sitting1 = buildScreeningPlates(7 * 101 + 1);
+    const sitting2 = buildScreeningPlates(7 * 101 + 2);
+    expect(sitting1.map((p) => p.digit).join('')).not.toBe(sitting2.map((p) => p.digit).join(''));
+  });
+
+  it('is deterministic for a given seed, so a set can be reconstructed from the data', async () => {
+    const { buildScreeningPlates } = await import('@/screening/ishihara');
+    const a = buildScreeningPlates(11);
+    const b = buildScreeningPlates(11);
+    expect(a.map((p) => `${p.digit}:${p.figureColors.join('')}`))
+      .toEqual(b.map((p) => `${p.digit}:${p.figureColors.join('')}`));
+  });
+
+  it('always includes exactly one greyscale control plate', async () => {
+    const { buildScreeningPlates } = await import('@/screening/ishihara');
+    for (const seed of [0, 5, 60]) {
+      const controls = buildScreeningPlates(seed).filter((p) => p.axis === 'control');
+      expect(controls).toHaveLength(1);
+    }
+  });
+});

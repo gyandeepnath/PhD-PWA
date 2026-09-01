@@ -171,7 +171,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         consentGiven: s.consent_given === true,
         hasParticipantRecord: !!participantRow,
         preflightComplete: s.preflight_complete === true,
-        colourVisionScreened: participantRow?.ishihara_total != null,
+        colourVisionScreened: participantRow?.cvd_screen_total != null,
         hasBaselineCvsq: cvsqRows.some((c) => c.stage === 'baseline'),
         hasBaselineFatigue: !!baseline,
         wantsCamera,
@@ -404,6 +404,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     if (d.cvdSelfReport) {
       reasons.push('self-reported colour-vision deficiency');
     }
+    // The FORMAL plate result is what excludes. The app's own six-plate digital screen has no
+    // published operating characteristics and is a flag, not a criterion — using it to exclude
+    // contradicted its own module header, which names formal plates as the standard.
+    if (d.cvdClinical === 'deficient') {
+      reasons.push('colour-vision deficiency on formal plates');
+    }
     const eligible = reasons.length === 0;
 
     /**
@@ -412,7 +418,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
      * fresh object destroyed it: the Ishihara result reverted to null, a screen_failed colour-vision
      * status reverted to the self-report, and the measured baseline_fatigue reverted to 0 — for
      * BOTH sittings, because there is only one row. None of it was recoverable and nothing reported
-     * it, because a row with ishihara_correct=null is exactly what a participant who was never
+     * it, because a row with cvd_screen_correct=null is exactly what a participant who was never
      * screened looks like.
      *
      * So: merge. Traits the profile stage actually asks about are taken from this sitting's answers
@@ -435,8 +441,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       cvd_status: prior?.cvd_status === 'screen_failed'
         ? 'screen_failed'
         : d.cvdSelfReport ? 'self_reported_deficient' : (prior?.cvd_status ?? 'normal'),
-      ishihara_correct: prior?.ishihara_correct ?? null,
-      ishihara_total: prior?.ishihara_total ?? null,
+      cvd_screen_correct: prior?.cvd_screen_correct ?? null,
+      cvd_screen_total: prior?.cvd_screen_total ?? null,
+      // A 'deficient' result at either sitting stands; 'not_done' never overwrites a real result.
+      cvd_clinical: prior?.cvd_clinical === 'deficient' ? 'deficient'
+        : d.cvdClinical !== 'not_done' ? d.cvdClinical : (prior?.cvd_clinical ?? 'not_done'),
       // First-sitting values, kept for continuity; the per-sitting values go on the session below.
       caffeine_today: prior?.caffeine_today ?? d.caffeineToday,
       hours_since_sleep: prior?.hours_since_sleep ?? d.hoursSinceSleep,
@@ -541,6 +550,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     case 'COLOR_VISION':
       view = (
         <IshiharaTest
+          /**
+           * Seeded by the participant AND the sitting, so the two administrations are different
+           * plates in a different order with a different luminance polarity. The set used to be a
+           * fixed module constant, which made a retest at sitting 2 a test of whether the
+           * participant remembered six digits.
+           */
+          seed={(session?.enrolment_number ?? 1) * 101 + (session?.session_index ?? 1)}
           onComplete={async (r) => {
             if (session) {
               const p = await get('participants', session.participant_id);
@@ -576,7 +592,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 }
                 await put('participants', {
                   ...p,
-                  ishihara_correct: r.testCorrect, ishihara_total: r.testTotal, cvd_status: status,
+                  cvd_screen_correct: r.testCorrect, cvd_screen_total: r.testTotal, cvd_status: status,
                   eligible: p.eligible && !failsColourVision,
                   exclusion_reason: priorReasons.length ? priorReasons.join('; ') : null,
                 });
@@ -605,6 +621,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           if (session) await put('cvsq_scores', {
             cvsq_id: uuidv4(), session_id: session.session_id, stage: 'baseline',
             frequency: r.frequency, intensity: r.intensity, total_score: r.total, symptomatic: r.symptomatic,
+              frame: r.frame,
             response_time_ms: r.responseTimeMs,
           });
           advance();
@@ -623,6 +640,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             await put('cvsq_scores', {
               cvsq_id: uuidv4(), session_id: session.session_id, stage: 'session_end',
               frequency: r.frequency, intensity: r.intensity, total_score: r.total, symptomatic: r.symptomatic,
+              frame: r.frame,
               response_time_ms: r.responseTimeMs,
             });
           }

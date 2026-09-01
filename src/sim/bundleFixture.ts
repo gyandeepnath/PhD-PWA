@@ -234,8 +234,8 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       lighting_habit: 'dim',
       correction_type: 'glasses',
       cvd_status: 'normal',
-      ishihara_correct: 5,
-      ishihara_total: 5,
+      cvd_screen_correct: 5,
+      cvd_screen_total: 5, cvd_clinical: 'normal' as const,
       caffeine_today: true,
       hours_since_sleep: 6,
       eligible: true,
@@ -270,12 +270,12 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
     ],
     cvsq: [
       {
-        cvsq_id: 'cvsq-base', session_id: sid, stage: 'baseline',
+        cvsq_id: 'cvsq-base', session_id: sid, stage: 'baseline', frame: 'habitual_computer_work' as const,
         frequency: Array(16).fill(0), intensity: Array(16).fill(0),
         total_score: 3, symptomatic: false, response_time_ms: 41_000,
       },
       {
-        cvsq_id: 'cvsq-end', session_id: sid, stage: 'session_end',
+        cvsq_id: 'cvsq-end', session_id: sid, stage: 'session_end', frame: 'this_session' as const,
         frequency: Array(16).fill(1), intensity: Array(16).fill(1),
         total_score: 11, symptomatic: true, response_time_ms: 38_000,
       },

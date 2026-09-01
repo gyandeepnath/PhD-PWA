@@ -121,6 +121,19 @@ on a test day and colour-vision deficiency are exclusions, and the app records t
 participant who reports either is written out with `eligible=false` and the reasons listed, so the
 confirmatory analysis can drop them. Enter what is true rather than what will let you proceed.
 
+**Colour vision — two separate things, and only one of them excludes.**
+
+- The **formal plates you administer** (Ishihara or Farnsworth, part of the clinical screening) are
+  the basis for exclusion. Record the result in the profile form: normal, deficient, or not done.
+  Record *not done* honestly if you did not do it; it is not a pass.
+- The **app's own six-plate screen** is a screening aid and a covariate. It is not the Ishihara
+  test — it has no published sensitivity or specificity — and it never excludes anyone on its own.
+  Its digits, plate order and colours differ between the two sittings by design, so a participant
+  cannot pass the second one from memory; for the same reason the two scores are not directly
+  comparable with each other.
+
+If the two disagree, record both and note it. The formal result is what the analysis uses.
+
 **If screening turns up an abnormality** — reduced acuity, uncorrected refractive error, a binocular
 anomaly, a colour-vision deficiency:
 
@@ -263,6 +276,7 @@ Print this.
 
 **Setup**
 - [ ] Clinical screening complete; any abnormality recorded and referred
+- [ ] Formal colour-vision plates administered, and the result entered in the profile form
 - [ ] Camera preview shows a face box
 - [ ] Calibration completed unhurried
 - [ ] Baseline CVS-Q and fatigue done

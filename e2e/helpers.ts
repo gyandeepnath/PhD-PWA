@@ -88,8 +88,11 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
       await click(page, /^high$/);
       await click(page, /^dim$/);
       await click(page, /^glasses$/);
-      // Two no/yes groups now: colour-vision self-report (first) and caffeine (second).
+      // Two no/yes groups: colour-vision self-report (first) and caffeine (second). Between them
+      // sits the operator's formal colour-vision plate result, which is what actually excludes —
+      // the app's own digital screen is a covariate only.
       await page.getByRole('button', { name: /^no$/ }).first().click({ force: true });
+      await click(page, /^normal$/);
       await page.getByRole('button', { name: /^no$/ }).nth(1).click({ force: true });
       await setInput(page, 'since-sleep', '3');
       await click(page, /Continue/);
@@ -116,7 +119,15 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
       break;
     case 'CVSQ_BASELINE':
     case 'CVSQ_END':
-      for (const b of await page.getByRole('button', { name: 'Never' }).all()) await b.click({ force: true });
+      // The zero-frequency option is labelled per stage: "Never" at baseline, which carries the
+      // validated habitual frame, and "Not at all" at the close, which is re-anchored to the
+      // session just completed.
+      {
+        const zero = stage === 'CVSQ_BASELINE' ? 'Never' : 'Not at all';
+        for (const b of await page.getByRole('button', { name: zero, exact: true }).all()) {
+          await b.click({ force: true });
+        }
+      }
       await click(page, /Continue/);
       await waitStageChange(page, stage);
       break;

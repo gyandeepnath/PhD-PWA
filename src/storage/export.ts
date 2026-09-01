@@ -224,6 +224,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '10_wide_summary.csv', column: 'quality_score', type: 'number', unit: '0-1', role: 'qc', description: 'Composite data-quality score for the condition-run.' },
 
   // ---- 13_cvsq.csv
+  { file: '13_cvsq.csv', column: 'frame', type: 'factor(2)', unit: '-', role: 'provenance', description: "The recall frame the participant was given. 'habitual_computer_work' is the validated CVS-Q frame, whose frequency anchors are defined in events per week (occasionally = sporadic or about once a week; often/always = 2-3 times a week to almost every day) and against which the >= 6 cut-off is calibrated. 'this_session' is a deliberate re-anchoring to the ~90-minute exposure and is a DOCUMENTED DEVIATION: its total must not be read against the published cut-off or against published norms, and a baseline-to-close difference is a difference between two different questions. See docs/LITERATURE_VALIDATION.md." },
   { file: '13_cvsq.csv', column: 'total_score', type: 'integer', unit: '0-32', role: 'dv', description: 'CVS-Q total. The KEY SECONDARY outcome is the session_end minus baseline change. Cut-off 6 for symptomatic.' },
   { file: '13_cvsq.csv', column: 'freq_1..16', type: 'integer', unit: '0-2', role: 'dv', description: 'Per-item frequency: 0 never, 1 occasionally, 2 often/always.' },
   { file: '13_cvsq.csv', column: 'intensity_1..16', type: 'integer', unit: '0-2', role: 'dv', description: 'Per-item intensity: 1 moderate, 2 intense; 0 when frequency is 0.' },
@@ -416,8 +417,9 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '11_participant.csv', column: 'lighting_habit', type: 'factor(3)', unit: '-', role: 'covariate', description: 'Typical ambient lighting when using a screen: bright, moderate or dim. A pre-specified moderator.' },
   { file: '11_participant.csv', column: 'correction_type', type: 'factor(3)', unit: '-', role: 'covariate', description: 'Refractive correction worn during testing: none, glasses or contacts. Contact-lens wear on test days is an exclusion, so this should not read contacts for an included participant.' },
   { file: '11_participant.csv', column: 'cvd_status', type: 'factor(5)', unit: '-', role: 'covariate', description: "Colour-vision status: normal, self_reported_deficient, screen_failed, screen_inconclusive or unknown. screen_inconclusive means the greyscale control plate was missed, so the attempt measured nothing — it is NOT a pass and NOT an exclusion, and such a participant should be re-screened before their text-colour data is analysed. Anything other than normal bears directly on the text-colour factor." },
-  { file: '11_participant.csv', column: 'ishihara_correct', type: 'integer', unit: 'count', role: 'qc', description: 'Ishihara plates identified correctly on the study display. Null when the screening was not run.' },
-  { file: '11_participant.csv', column: 'ishihara_total', type: 'integer', unit: 'count', role: 'qc', description: 'Plates presented. The denominator for ishihara_correct.' },
+  { file: '11_participant.csv', column: 'cvd_clinical', type: 'factor(3)', unit: '-', role: 'covariate', description: "The operator's FORMAL colour-vision plate result (Ishihara or Farnsworth), taken alongside the app: normal, deficient or not_done. This is the basis for exclusion; a 'deficient' result sets eligible=false. 'not_done' means no formal screening was performed and is not a pass." },
+  { file: '11_participant.csv', column: 'cvd_screen_correct', type: 'integer', unit: 'count', role: 'qc', description: "Plates identified correctly on the app's own six-plate digital screen, run on the study display. Null when it was not run. This is NOT the Ishihara test: it is a home-made screen with no published sensitivity or specificity, and it is a covariate and a flag, never a criterion for exclusion. Digits, plate order and luminance polarity vary per administration, so the two sittings are not the same test and the counts are not directly comparable between them." },
+  { file: '11_participant.csv', column: 'cvd_screen_total', type: 'integer', unit: 'count', role: 'qc', description: 'Plates presented. The denominator for cvd_screen_correct.' },
   { file: '11_participant.csv', column: 'caffeine_today', type: 'boolean', unit: '-', role: 'covariate', description: 'Whether caffeine was consumed before the sitting. An arousal covariate for the vigilance measures.' },
   { file: '11_participant.csv', column: 'hours_since_sleep', type: 'number', unit: 'hours', role: 'covariate', description: 'Hours awake at the start of the sitting. A sleepiness covariate, read alongside PERCLOS.' },
   { file: '11_participant.csv', column: 'eligible', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the participant met every eligibility criterion. Rows with false must be excluded from the confirmatory analysis.' },
@@ -638,7 +640,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
     })));
 
   csv('11_participant.csv',
-    ['participant_id', 'enrolment_number', 'age', 'gender', 'daily_screen_hours', 'device_familiarity', 'lighting_habit', 'correction_type', 'cvd_status', 'ishihara_correct', 'ishihara_total', 'caffeine_today', 'hours_since_sleep', 'eligible', 'exclusion_reason', 'baseline_fatigue'],
+    ['participant_id', 'enrolment_number', 'age', 'gender', 'daily_screen_hours', 'device_familiarity', 'lighting_habit', 'correction_type', 'cvd_status', 'cvd_clinical', 'cvd_screen_correct', 'cvd_screen_total', 'caffeine_today', 'hours_since_sleep', 'eligible', 'exclusion_reason', 'baseline_fatigue'],
     participant ? [{ ...participant }] : []);
 
   // 12 — engagement / careless-responding quality flags (boredom & disengagement detection)
@@ -664,10 +666,10 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
     ...Array.from({ length: maxCvsqItems }, (_, i) => `intensity_${i + 1}`),
   ];
   csv('13_cvsq.csv',
-    ['participant_id', 'stage', 'total_score', 'symptomatic', 'response_time_ms', ...cvsqItemCols],
+    ['participant_id', 'stage', 'frame', 'total_score', 'symptomatic', 'response_time_ms', ...cvsqItemCols],
     bundle.cvsq.map((c) => {
       const row: Record<string, unknown> = {
-        participant_id: pid, stage: c.stage, total_score: c.total_score,
+        participant_id: pid, stage: c.stage, frame: c.frame, total_score: c.total_score,
         symptomatic: c.symptomatic, response_time_ms: c.response_time_ms,
       };
       c.frequency.forEach((f, i) => { row[`freq_${i + 1}`] = f; });

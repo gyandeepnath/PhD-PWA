@@ -169,6 +169,16 @@ export interface ProfileData {
   lightingHabit: 'bright' | 'moderate' | 'dim';
   correctionType: 'none' | 'glasses' | 'contacts';
   cvdSelfReport: boolean;
+  /**
+   * The FORMAL colour-vision result from the operator's clinical screening (Ishihara or Farnsworth
+   * plates), which the operator manual already requires alongside the app.
+   *
+   * This, not the app's own six-plate digital screen, is the basis for exclusion. The digital
+   * screen has no published operating characteristics, and using it to exclude contradicted its own
+   * module header, which names formal plates as the standard. 'not_done' is recorded honestly
+   * rather than being treated as a pass.
+   */
+  cvdClinical: 'normal' | 'deficient' | 'not_done';
   /** Fatigue/alertness covariates captured at intake. */
   caffeineToday: boolean;
   hoursSinceSleep: number;
@@ -182,9 +192,10 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
   const [corr, setCorr] = useState<ProfileData['correctionType'] | ''>('');
   const [cvd, setCvd] = useState<boolean | null>(null);
   const [caffeine, setCaffeine] = useState<boolean | null>(null);
+  const [clinicalCvd, setClinicalCvd] = useState('');
   const [sinceSleep, setSinceSleep] = useState('');
   const ageN = Number(age);
-  const valid = ageN >= CONFIG.MIN_AGE && ageN <= CONFIG.MAX_AGE && gender && hours !== '' && fam && light && corr && cvd != null
+  const valid = ageN >= CONFIG.MIN_AGE && ageN <= CONFIG.MAX_AGE && gender && hours !== '' && fam && light && corr && cvd != null && clinicalCvd !== ''
     && caffeine != null && sinceSleep !== '' && Number.isFinite(Number(sinceSleep));
 
   return (
@@ -200,6 +211,12 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
         <Pick label="Typical lighting" value={light} set={(v) => setLight(v as ProfileData['lightingHabit'])} opts={['bright', 'moderate', 'dim']} />
         <Pick label="Vision correction" value={corr} set={(v) => setCorr(v as ProfileData['correctionType'])} opts={['none', 'glasses', 'contacts']} />
         <Pick label="Any colour-vision deficiency? (self-report; full screening added later)" value={cvd == null ? '' : cvd ? 'yes' : 'no'} set={(v) => setCvd(v === 'yes')} opts={['no', 'yes']} />
+        <Pick
+          label="Formal colour-vision plates (operator's clinical screening)"
+          value={clinicalCvd}
+          set={setClinicalCvd}
+          opts={['normal', 'deficient', 'not done']}
+        />
         <Pick label="Caffeine in the last ~4 hours?" value={caffeine == null ? '' : caffeine ? 'yes' : 'no'} set={(v) => setCaffeine(v === 'yes')} opts={['no', 'yes']} />
         <Field label="Hours since you woke up today"><input data-testid="since-sleep" className="vl-input" inputMode="numeric" value={sinceSleep} onChange={(e) => setSinceSleep(e.target.value)} placeholder="3" /></Field>
       </div>
@@ -213,6 +230,7 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
           lightingHabit: light as ProfileData['lightingHabit'],
           correctionType: corr as ProfileData['correctionType'],
           cvdSelfReport: !!cvd,
+          cvdClinical: (clinicalCvd === 'not done' ? 'not_done' : clinicalCvd) as ProfileData['cvdClinical'],
           caffeineToday: !!caffeine,
           hoursSinceSleep: Number(sinceSleep),
         })}

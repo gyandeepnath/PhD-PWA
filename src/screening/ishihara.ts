@@ -1,10 +1,32 @@
 /**
- * Digital Ishihara-style colour-vision SCREENING (not a clinical diagnosis).
+ * Digital pseudoisochromatic colour-vision SCREEN — a screening aid, NOT a clinical test.
  *
- * A digit is rendered as a mosaic of dots whose figure/background colours sit on the red-green
- * confusion axis at similar luminance, so red-green CVD observers struggle to read it. This is a
- * screening aid to flag participants for the colour conditions; formal Ishihara/Farnsworth plates
- * remain the gold standard for exclusion. The score and classification are stored as covariates.
+ * A digit is rendered as a mosaic of dots whose figure and background palettes differ in hue at
+ * closely matched luminance, so an observer who cannot use the chromatic difference has little
+ * left to read the digit by.
+ *
+ * WHAT THIS IS NOT. It is not the Ishihara test. It is six home-made plates with no published
+ * operating characteristics: the sensitivity and specificity of the "allow one slip" rule are
+ * unknown, and while the palettes are intended to lie on a red-green (protan/deutan) confusion
+ * line, that has been asserted here rather than verified colorimetrically. The exported columns and
+ * this module were previously named "ishihara", which asserted a validated plate test to anyone
+ * reading the data; they are now named for what they are. Formal Ishihara or Farnsworth plates,
+ * administered by the operator, remain the basis for exclusion — see `cvd_clinical` on the
+ * participant record.
+ *
+ * TWO CUES THIS SET HAS TO AVOID.
+ *
+ * 1. RESIDUAL LUMINANCE. Matching mean luminance is not enough if the figure is consistently the
+ *    darker region: an observer with no chromatic discrimination can still learn "the digit is the
+ *    darker patch" and apply it to every plate. Measured across the original five test plates the
+ *    figure was darker on all five (contrast ratios 1.03-1.10, small but unanimous in direction).
+ *    The polarity is now balanced within the set and varies between administrations, so a constant
+ *    direction cannot be learned. `luminancePolarityBalance()` is what the test asserts against.
+ *
+ * 2. MEMORY. The plate set, the digits and the order were fixed constants, and the screen runs in
+ *    BOTH sittings. A participant who failed at sitting 1 could "pass" at sitting 2 by recalling
+ *    six digits, so the retest measured recall rather than colour vision. Digits, order and
+ *    polarity are now drawn from a per-administration seed.
  */
 
 /** 5x7 dot-matrix glyphs for digits 0-9 (rows top→bottom, '1' = lit). */
@@ -53,15 +75,120 @@ export interface Plate {
   backgroundColors: string[];
 }
 
-/** Default screening set: 5 red-green confusion plates + 1 control everyone should pass. */
-export const PLATES: Plate[] = [
-  { id: 1, digit: '8', axis: 'control', figureColors: ['#3a3a3a', '#2e2e2e', '#444'], backgroundColors: ['#cfcfcf', '#dcdcdc', '#c4c4c4'] },
-  { id: 2, digit: '5', axis: 'protan-deutan', figureColors: ['#d98a6a', '#e0996f', '#cf7e5e'], backgroundColors: ['#9aa86a', '#8fa15c', '#aeb57a'] },
-  { id: 3, digit: '2', axis: 'protan-deutan', figureColors: ['#c97f5c', '#d98a66', '#bf7450'], backgroundColors: ['#8ca15f', '#9caf6c', '#7d9455'] },
-  { id: 4, digit: '7', axis: 'protan-deutan', figureColors: ['#cf8a72', '#dd987f', '#c47e66'], backgroundColors: ['#9aa56a', '#88a05c', '#a7b178'] },
-  { id: 5, digit: '6', axis: 'protan-deutan', figureColors: ['#d28a64', '#e0966f', '#c67d58'], backgroundColors: ['#93a463', '#86a058', '#a3b074'] },
-  { id: 6, digit: '3', axis: 'protan-deutan', figureColors: ['#cd8568', '#db9276', '#c17a5d'], backgroundColors: ['#8fa260', '#9bae6b', '#7e9555'] },
+/**
+ * A confusion-axis palette pair. Which member becomes the FIGURE is chosen per administration, so
+ * that residual luminance does not point the same way on every plate.
+ *
+ * `warm` (salmon) is the darker member of each pair and `cool` (olive) the lighter, by 3-10% of
+ * relative luminance. Putting the cool palette in the figure makes the digit the LIGHTER region.
+ */
+interface PalettePair {
+  warm: string[];
+  cool: string[];
+}
+
+const CONFUSION_PAIRS: PalettePair[] = [
+  { warm: ['#d98a6a', '#e0996f', '#cf7e5e'], cool: ['#9aa86a', '#8fa15c', '#aeb57a'] },
+  { warm: ['#c97f5c', '#d98a66', '#bf7450'], cool: ['#8ca15f', '#9caf6c', '#7d9455'] },
+  { warm: ['#cf8a72', '#dd987f', '#c47e66'], cool: ['#9aa56a', '#88a05c', '#a7b178'] },
+  { warm: ['#d28a64', '#e0966f', '#c67d58'], cool: ['#93a463', '#86a058', '#a3b074'] },
+  { warm: ['#cd8568', '#db9276', '#c17a5d'], cool: ['#8fa260', '#9bae6b', '#7e9555'] },
 ];
+
+const CONTROL_FIGURE = ['#3a3a3a', '#2e2e2e', '#444'];
+const CONTROL_BACKGROUND = ['#cfcfcf', '#dcdcdc', '#c4c4c4'];
+
+/** Digits available to the generator. '1' is excluded: its glyph is thin and easy to guess. */
+const DIGIT_POOL = ['2', '3', '4', '5', '6', '7', '8', '9'];
+
+/** Deterministic 32-bit PRNG, so a given seed always yields the same plate set. */
+function rng(seed: number): () => number {
+  let s = (Math.floor(seed) || 1) >>> 0;
+  return () => {
+    s ^= s << 13; s >>>= 0;
+    s ^= s >> 17;
+    s ^= s << 5; s >>>= 0;
+    return s / 0x100000000;
+  };
+}
+
+function shuffle<T>(items: T[], next: () => number): T[] {
+  const a = [...items];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(next() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/**
+ * Build one administration's plate set: a greyscale control plate everyone should pass, then five
+ * confusion plates whose digits, order and luminance polarity all derive from `seed`.
+ *
+ * Polarity is BALANCED, not merely randomised: two or three of the five carry the figure in the
+ * lighter palette whatever the seed, so no administration can present a set in which the digit is
+ * always the darker region.
+ */
+export function buildScreeningPlates(seed: number): Plate[] {
+  const next = rng(seed + 1);
+  const digits = shuffle(DIGIT_POOL, next);
+  const pairs = shuffle(CONFUSION_PAIRS, next);
+
+  // Balanced polarity: exactly two of the five put the figure in the cool (lighter) palette, and
+  // which two varies with the seed.
+  const coolFigure = new Set(shuffle([0, 1, 2, 3, 4], next).slice(0, 2));
+
+  const plates: Plate[] = [
+    {
+      id: 1,
+      digit: digits[5],
+      axis: 'control',
+      figureColors: CONTROL_FIGURE,
+      backgroundColors: CONTROL_BACKGROUND,
+    },
+  ];
+  for (let i = 0; i < 5; i++) {
+    const pair = pairs[i];
+    const figureIsCool = coolFigure.has(i);
+    plates.push({
+      id: i + 2,
+      digit: digits[i],
+      axis: 'protan-deutan',
+      figureColors: figureIsCool ? pair.cool : pair.warm,
+      backgroundColors: figureIsCool ? pair.warm : pair.cool,
+    });
+  }
+  return plates;
+}
+
+/**
+ * How many of a set's confusion plates carry the figure in the lighter palette.
+ *
+ * Exposed so the test can assert the balance directly rather than re-deriving luminance from hex.
+ */
+export function luminancePolarityBalance(plates: Plate[]): { figureLighter: number; total: number } {
+  const rel = (hex: string) => {
+    const h = hex.replace('#', '');
+    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+    const chan = (o: number) => {
+      const c = parseInt(full.slice(o, o + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * chan(0) + 0.7152 * chan(2) + 0.0722 * chan(4);
+  };
+  const meanLum = (cs: string[]) => cs.reduce((s, c) => s + rel(c), 0) / cs.length;
+  const test = plates.filter((p) => p.axis !== 'control');
+  return {
+    figureLighter: test.filter((p) => meanLum(p.figureColors) > meanLum(p.backgroundColors)).length,
+    total: test.length,
+  };
+}
+
+/**
+ * The default set, used where no per-administration seed is available (tests, the fixture).
+ * A real session passes its own seed so that the two sittings differ.
+ */
+export const PLATES: Plate[] = buildScreeningPlates(0);
 
 export interface IshiharaResponse {
   plateId: number;

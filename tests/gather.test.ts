@@ -75,7 +75,7 @@ describe('gather → aggregate → export integration (fake IndexedDB)', () => {
     await put('participants', {
       participant_id: 'P001', enrolment_number: 1, age: 25, gender: 'f', daily_screen_hours: 6,
       device_familiarity: 'high', lighting_habit: 'moderate', correction_type: 'none', cvd_status: 'normal',
-      ishihara_correct: 14, ishihara_total: 14, caffeine_today: null, hours_since_sleep: null,
+      cvd_screen_correct: 14, cvd_screen_total: 14, cvd_clinical: 'normal' as const, caffeine_today: null, hours_since_sleep: null,
       eligible: true, exclusion_reason: null, baseline_fatigue: 1, session_id: 'S1',
     });
     await purgeSession('S1');

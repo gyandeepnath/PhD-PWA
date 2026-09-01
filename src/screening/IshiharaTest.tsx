@@ -5,7 +5,7 @@
  */
 import { useMemo, useRef, useState } from 'react';
 import { makeRng } from '@/sim/rng';
-import { PLATES, isFigurePixel, scoreIshihara, type Plate, type IshiharaResult } from './ishihara';
+import { buildScreeningPlates, isFigurePixel, scoreIshihara, type Plate, type IshiharaResult } from './ishihara';
 
 const D = 280;
 const GLYPH_W_FRAC = 0.46; // glyph box width as fraction of disk diameter
@@ -40,7 +40,9 @@ function generateDots(plate: Plate, seed: number): Dot[] {
 }
 
 function PlateSvg({ plate }: { plate: Plate }) {
-  const dots = useMemo(() => generateDots(plate, plate.id * 1000 + 7), [plate]);
+  // Seeded by the plate's digit as well as its id, so the dot mosaic differs between
+  // administrations along with everything else.
+  const dots = useMemo(() => generateDots(plate, plate.id * 1000 + plate.digit.charCodeAt(0) * 31 + 7), [plate]);
   return (
     <svg width={D} height={D} style={{ borderRadius: '50%', background: '#efece6' }} aria-label="colour vision plate">
       {dots.map((d, i) => (
@@ -52,21 +54,28 @@ function PlateSvg({ plate }: { plate: Plate }) {
 
 interface Props {
   onComplete: (r: IshiharaResult) => void;
+  /**
+   * Per-administration seed. The digits, plate order and luminance polarity all derive from it, so
+   * a participant's second sitting is not the same six plates in the same order — which would make
+   * the retest a memory test rather than a colour-vision one.
+   */
+  seed: number;
 }
 
-export function IshiharaTest({ onComplete }: Props) {
+export function IshiharaTest({ onComplete, seed }: Props) {
+  const plates = useMemo(() => buildScreeningPlates(seed), [seed]);
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const busy = useRef(false); // guard against double-taps advancing or completing twice
-  const plate = PLATES[idx];
-  const isLast = idx === PLATES.length - 1;
+  const plate = plates[idx];
+  const isLast = idx === plates.length - 1;
 
   const answer = (val: string) => {
     if (busy.current) return;
     busy.current = true;
     const next = { ...answers, [plate.id]: val };
     setAnswers(next);
-    if (isLast) onComplete(scoreIshihara(PLATES, next));
+    if (isLast) onComplete(scoreIshihara(plates, next));
     else {
       setIdx((i) => i + 1);
       busy.current = false; // allow the next plate's answer
@@ -76,7 +85,7 @@ export function IshiharaTest({ onComplete }: Props) {
   return (
     <div className="min-h-screen w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div style={{ maxWidth: 560, width: '100%', textAlign: 'center' }}>
-        <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">Colour-vision screening · {idx + 1}/{PLATES.length}</p>
+        <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">Colour-vision screening · {idx + 1}/{plates.length}</p>
         <h1 className="mt-2 font-serif text-3xl font-light">Which number do you see?</h1>
         <p className="mt-1 font-lab text-xs text-[#5a5a7a]">Screening aid only — not a clinical diagnosis.</p>
 
