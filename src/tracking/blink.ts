@@ -282,16 +282,30 @@ export function classifyBlinks(samples: EarSample[], baseline: number | null): B
  * preserved separately.
  */
 export const MIN_RATE_WINDOW_MS = 1000;
-export function blinkRatePerMinute(count: number, durationMs: number): number {
-  if (!Number.isFinite(count) || count < 0) return 0;
-  if (!Number.isFinite(durationMs) || durationMs < MIN_RATE_WINDOW_MS) return 0;
+/**
+ * Blinks per minute, or null when the window is too short to support a rate.
+ *
+ * This returned 0 for an unmeasurable window, which every other absent quantity in this module
+ * reports as null — and 0 is the worst possible choice here specifically. The hypothesis under test
+ * is that blink rate FALLS with display-induced strain, so a fabricated zero does not merely add
+ * noise: it supports the hypothesis. A condition in which the face was found for a few hundred
+ * milliseconds exported blink_rate 0.0 as a measurement, and the engagement penalty for low face
+ * presence was small enough that the row still passed as "good".
+ *
+ * The count is preserved separately, so nothing is lost by declining to divide by a window that
+ * cannot carry a rate.
+ */
+export function blinkRatePerMinute(count: number, durationMs: number): number | null {
+  if (!Number.isFinite(count) || count < 0) return null;
+  if (!Number.isFinite(durationMs) || durationMs < MIN_RATE_WINDOW_MS) return null;
   return (count / durationMs) * 60000;
 }
 
 export interface BlinkSummary {
-  blink_rate: number;
-  blink_rate_full: number;
-  blink_rate_micro: number;
+  /** Null when the observation window was too short to support a rate. See blinkRatePerMinute. */
+  blink_rate: number | null;
+  blink_rate_full: number | null;
+  blink_rate_micro: number | null;
   blink_count_full: number;
   blink_count_micro: number;
   blink_count_incomplete: number;

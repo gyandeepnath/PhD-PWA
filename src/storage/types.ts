@@ -390,7 +390,9 @@ export interface RtSummaryRecord {
   anticipations: number;
   /** Valid hits slower than the lapse threshold, and the rate over hits — PVT attention-lapse index. */
   lapse_count: number;
-  lapse_rate: number;
+  /** Lapses as a proportion of VALID hits. Null when there were none — a condition in which the
+   *  participant stopped responding has no lapse rate, and 0 would be the best possible value. */
+  lapse_rate: number | null;
   /** Inverse efficiency score = mean RT / proportion correct — speed-accuracy tradeoff control. */
   inverse_efficiency_ms: number | null;
   /** Vigilance: mean hit RT in the first vs second half of the block (rising = within-block fatigue). */
@@ -484,12 +486,12 @@ export interface EyeMetricsRecord {
 
   // Gaze (only meaningful if real calibration ran)
   gaze_calibrated: boolean;
-  gaze_deviation_ratio: number;
-  zone_center_ratio: number;
+  gaze_deviation_ratio: number | null;
+  zone_center_ratio: number | null;
   zone_transition_count: number;
 
-  face_presence_ratio: number;
-  face_size_ratio: number;
+  face_presence_ratio: number | null;
+  face_size_ratio: number | null;
 
   /** Mean frame luminance (0-255, BT.601) over the condition — webcam exposure / room-light QC. */
   mean_face_luma: number | null;

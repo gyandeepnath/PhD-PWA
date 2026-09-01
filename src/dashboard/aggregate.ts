@@ -215,7 +215,7 @@ export function conditionEngagement(args: {
   const rt_disengaged = !!rt && (
     rt.false_alarm_rate > ENGAGEMENT.RT_FALSE_ALARM_MAX ||
     rt.error_rate > ENGAGEMENT.RT_ERROR_MAX ||
-    rt.lapse_rate > ENGAGEMENT.RT_LAPSE_MAX
+    (rt.lapse_rate != null && rt.lapse_rate > ENGAGEMENT.RT_LAPSE_MAX)
   );
   if (rt_disengaged) penalise(0.3, 'reaction-time block shows disengagement (high FA/error/lapse rate)');
 
@@ -238,8 +238,13 @@ export function conditionEngagement(args: {
   if (comprehension_wrong) penalise(0.1, `comprehension below chance (${compCorrect}/${compAnswered})`);
 
   // Camera: participant turned away for a large share of the condition.
-  const low_face_presence = !!eye && eye.camera_active && eye.face_presence_ratio < ENGAGEMENT.FACE_PRESENCE_MIN;
-  if (low_face_presence) penalise(0.1, `low face presence (${Math.round((eye!.face_presence_ratio) * 100)}%)`);
+  // Null face presence means no face was ever found; that is not "low presence", it is no
+  // measurement at all, and it is already reported by camera_active plus the null ocular columns.
+  const low_face_presence = !!eye && eye.camera_active && eye.face_presence_ratio != null
+    && eye.face_presence_ratio < ENGAGEMENT.FACE_PRESENCE_MIN;
+  // Raised from 0.1: at 0.1 a condition whose face was found in a third of frames still scored 0.9
+  // and passed as "good", so the pre-registered drop-disengaged filter did not remove it.
+  if (low_face_presence) penalise(0.25, `low face presence (${Math.round((eye!.face_presence_ratio as number) * 100)}%)`);
 
   // Too few blinks for the PRIMARY outcome to mean anything in this condition. Flagged rather than
   // dropped: the run's other measures are still valid, and silently discarding it would bias the

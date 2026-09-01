@@ -235,13 +235,22 @@ export class EyeMetricsAggregator {
       off_axis_ratio: this.facesDetected > 0 ? this.offAxisCount / this.facesDetected : null,
 
       gaze_calibrated: args.gazeCalibrated,
+      /**
+       * Null when no face was ever found. These three were 0, and 0 is not "unknown" for any of
+       * them — it is the BEST possible value. gaze_deviation_ratio 0 reads as "gaze never left the
+       * reading region", and it is documented as a dv whose only caveat is gaze_calibrated, not
+       * camera_active, so an analyst following the codebook would include those rows. Worse, 0 and
+       * 0 for gaze_deviation_ratio and zone_center_ratio are mutually contradictory: the first is
+       * defined as one minus the second.
+       */
       gaze_deviation_ratio:
-        this.facesDetected > 0 ? 1 - this.centerCount / this.facesDetected : 0,
-      zone_center_ratio: this.facesDetected > 0 ? this.centerCount / this.facesDetected : 0,
+        this.facesDetected > 0 ? 1 - this.centerCount / this.facesDetected : null,
+      zone_center_ratio:
+        this.facesDetected > 0 ? this.centerCount / this.facesDetected : null,
       zone_transition_count: this.zoneTransitions(),
 
-      face_presence_ratio: this.framesTotal > 0 ? this.facesDetected / this.framesTotal : 0,
-      face_size_ratio: this.faceSizes.length ? mean(this.faceSizes) : 0,
+      face_presence_ratio: this.framesTotal > 0 ? this.facesDetected / this.framesTotal : null,
+      face_size_ratio: this.faceSizes.length ? mean(this.faceSizes) : null,
 
       mean_face_luma: this.lumas.length ? mean(this.lumas) : null,
       lighting_quality: this.lumas.length ? classifyLighting(mean(this.lumas)) : null,
@@ -299,11 +308,11 @@ export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeM
     head_stability_score: null,
     off_axis_ratio: null,
     gaze_calibrated: false,
-    gaze_deviation_ratio: 0,
-    zone_center_ratio: 0,
+    gaze_deviation_ratio: null,
+    zone_center_ratio: null,
     zone_transition_count: 0,
-    face_presence_ratio: 0,
-    face_size_ratio: 0,
+    face_presence_ratio: null,
+    face_size_ratio: null,
     mean_face_luma: null,
     lighting_quality: null,
   };

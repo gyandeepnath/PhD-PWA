@@ -106,7 +106,8 @@ describe('EAR & blink classification', () => {
   it('blink rate per minute', () => {
     expect(blinkRatePerMinute(10, 60000)).toBe(10);
     expect(blinkRatePerMinute(5, 30000)).toBe(10);
-    expect(blinkRatePerMinute(0, 0)).toBe(0);
+    // No window is not a rate of zero — see blinkRatePerMinute.
+    expect(blinkRatePerMinute(0, 0)).toBeNull();
   });
 
   it('classifyBlinks produces incomplete blinks end-to-end (regression: ratio was stuck at 0)', () => {

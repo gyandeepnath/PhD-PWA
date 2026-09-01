@@ -41,12 +41,24 @@ clean_ids <- quality %>% filter(engagement_flag != "bad") %>% select(participant
 # --- Build a per-condition modelling frame -------------------------------------------------
 # Contrast (WCAG ratio), session_position (0-9 fatigue accumulation) and session_index (sitting
 # number for split sessions) are recorded as covariates; log-transform contrast.
+# JOIN ON condition_id, NEVER on participant_id + condition_label.
+#
+# Each participant runs all ten condition labels in EACH illumination block, so "P1" occurs twice
+# per participant on both sides of a label join: 2 x 2 = four rows per condition, half of them
+# carrying the wrong sitting and therefore the wrong illumination level. The illumination main
+# effect — the whole-plot factor — is then attenuated toward zero while n is inflated fourfold and
+# every standard error halves: a false negative with false precision, on the study's headline
+# contrast. 02_conditions.csv now carries session_id and session_index, and 10_wide_summary.csv
+# carries condition_id, so the key path exists.
+#
+# The participant table is one row per EXPORT, i.e. per sitting, and its mutable covariates can
+# differ between them, so it is de-duplicated before joining rather than silently multiplying rows.
 cond <- conditions %>%
-  left_join(wide %>% select(participant_id, condition_label, session_index, engagement_flag),
-            by = c("participant_id", "condition_label")) %>%
-  left_join(participant %>% select(participant_id, age, gender, daily_screen_hours,
-                                    correction_type, cvd_status),
-            by = "participant_id") %>%   # participant covariates for adjustment (e.g. + age)
+  left_join(wide %>% select(condition_id, engagement_flag), by = "condition_id") %>%
+  left_join(participant %>%
+              select(participant_id, age, gender, daily_screen_hours, correction_type, cvd_status) %>%
+              distinct(participant_id, .keep_all = TRUE),
+            by = "participant_id") %>%
   # Session-level (whole-plot) columns: the illumination factor lives on the SESSION record, not
   # the condition record, so it must be joined in before it can enter the model.
   left_join(session_info %>% select(participant_id, session_index, ambient_illumination_level,
@@ -95,8 +107,17 @@ cat("\n=== Fatigue mixed model ===\n"); print(summary(m_fat))
 
 # --- Comprehension accuracy (logistic mixed model) -----------------------------------------
 comp <- comprehension %>% left_join(cond, by = c("participant_id", "condition_id"))
+# (1 | participant_id/condition_id), not (1 | participant_id) alone.
+#
+# 04_comprehension.csv is one row per ITEM, three per condition, and the three share a passage, a
+# display condition and a single reading episode. Without a condition-level random effect they are
+# treated as conditionally independent — textbook pseudo-replication, which inflates the test
+# statistic for every CONDITION-level predictor (polarity, contrast, illumination) because the
+# effective N is roughly three times too large. illumination and question_kind are entered too;
+# the model previously omitted the whole-plot factor entirely.
 m_comp <- glmer(
-  as.formula(paste0("is_correct ~ log_contrast + polarity + session_position", si_term, " + (1 | participant_id)")),
+  as.formula(paste0("is_correct ~ log_contrast + polarity * illumination + question_kind + session_position",
+                    si_term, " + (1 | participant_id/condition_id)")),
   data = comp, family = binomial
 )
 cat("\n=== Comprehension logistic mixed model ===\n"); print(summary(m_comp))
@@ -131,30 +152,113 @@ eye <- eye_metrics %>% left_join(cond, by = c("participant_id", "condition_id"))
 #   1. drop the random slope for polarity
 #   2. drop the session intercept
 # ===========================================================================================
-EPS <- 1e-3   # keeps logit finite when a condition yields a ratio of exactly 0 or 1
+# The primary outcome is a BINOMIAL PROPORTION, and is modelled as one.
+#
+# incomplete_blink_ratio = incomplete / (incomplete + full + micro), and that denominator varies
+# from a handful of blinks to several dozen. A Gaussian model of the naked proportion gives a ratio
+# from 8 blinks exactly the weight of one from 60, and the earlier logit transform made it worse: a
+# fixed epsilon mapped EVERY zero-incomplete condition to logit(0.001) = -6.91 regardless of whether
+# it rested on 8 blinks or 40, creating high-leverage points concentrated wherever blink capture is
+# thin — which, per the codebook's own note on fps_adequate_for_ratio, covaries with ambient
+# illumination. That is a leverage pattern aligned with the whole-plot factor.
+#
+# The counts are now exported, so the model takes them directly.
 eye <- eye %>% mutate(
-  ibr = pmin(pmax(incomplete_blink_ratio, EPS), 1 - EPS),
-  ibr_logit = log(ibr / (1 - ibr))
-)
+  blink_total = blink_count_incomplete + blink_count_full + blink_count_micro,
+  eff_fps_c   = as.numeric(scale(effective_fps, scale = FALSE))
+) %>% filter(!is.na(blink_total), blink_total > 0)
 
-# Maximal model, then the pre-specified reductions on non-convergence.
-f_primary <- ibr_logit ~ polarity * colour * illumination + session_position + illumination_order_first
-m_primary <- tryCatch(
-  lmer(update(f_primary, . ~ . + (1 + polarity | participant_id) + (1 | participant_id:session_index)),
-       data = eye, REML = TRUE),
-  error = function(e) NULL, warning = function(w) NULL
-)
-if (is.null(m_primary)) {
-  message("Maximal random structure did not converge -> dropping the polarity slope (reduction 1).")
-  m_primary <- tryCatch(
-    lmer(update(f_primary, . ~ . + (1 | participant_id) + (1 | participant_id:session_index)),
-         data = eye, REML = TRUE),
-    error = function(e) NULL, warning = function(w) NULL
+# effective_fps enters as a covariate because undersampling biases the measured minimum EAR upward
+# and so inflates the ratio — a DIRECTIONAL bias, and one that covaries with ambient illumination.
+# Without it a camera artefact is indistinguishable from the illumination effect being tested.
+# passage_repeat_number is the PERIOD term: every passage is re-read in the second sitting, and
+# illumination is confounded with sitting order within a participant.
+f_primary <- cbind(blink_count_incomplete, blink_count_full + blink_count_micro) ~
+  polarity * colour * illumination + session_position + illumination_order_first +
+  passage_repeat_number + eff_fps_c
+
+# Fit maximal, then reduce in the PRE-SPECIFIED order. Warnings are RECORDED, not used to discard a
+# fitted model: a `boundary (singular) fit` on a random slope is routine, and treating it as failure
+# silently walked the model all the way down to (1 | participant_id) — which drops the sitting
+# stratum entirely and tests the whole-plot factor against within-sitting residual df. That
+# understates the standard error on illumination by roughly the square root of the number of
+# conditions per sitting, and can turn a null into p < 0.05.
+fit_noting <- function(formula) {
+  notes <- character(0)
+  m <- withCallingHandlers(
+    tryCatch(glmer(formula, data = eye, family = binomial), error = function(e) NULL),
+    warning = function(w) { notes <<- c(notes, conditionMessage(w)); invokeRestart("muffleWarning") }
   )
+  list(model = m, notes = notes)
 }
-if (is.null(m_primary)) {
-  message("Reduction 1 did not converge -> dropping the session intercept (reduction 2).")
-  m_primary <- lmer(update(f_primary, . ~ . + (1 | participant_id)), data = eye, REML = TRUE)
+
+primary_structure <- "maximal: (1 + polarity | participant) + (1 | participant:sitting)"
+fit <- fit_noting(update(f_primary, . ~ . + (1 + polarity | participant_id) + (1 | participant_id:session_index)))
+if (is.null(fit$model) || isSingular(fit$model)) {
+  primary_structure <- "reduction 1: (1 | participant) + (1 | participant:sitting)"
+  fit <- fit_noting(update(f_primary, . ~ . + (1 | participant_id) + (1 | participant_id:session_index)))
+}
+if (is.null(fit$model)) {
+  # Reduction 2 removes the SITTING stratum, so the illumination contrast is no longer tested
+  # against the right unit of replication. It is reported loudly, at the top of the output, and any
+  # illumination inference drawn from it has to be labelled accordingly.
+  primary_structure <- "reduction 2: (1 | participant) ONLY - NO SITTING STRATUM, ILLUMINATION INFERENCE IS NOT VALID"
+  fit <- fit_noting(update(f_primary, . ~ . + (1 | participant_id)))
+}
+m_primary <- fit$model
+stopifnot(!is.null(m_primary))
+
+cat("\n################################################################\n")
+cat("PRIMARY MODEL RANDOM STRUCTURE: ", primary_structure, "\n")
+if (length(fit$notes)) cat("fit notes:\n  ", paste(fit$notes, collapse = "\n  "), "\n")
+cat("################################################################\n")
+
+# The frame-rate confound, made visible before any inference is drawn from the model above.
+cat("\nframe-rate adequacy by illumination (the primary outcome's known directional bias):\n")
+print(table(eye$illumination, eye$fps_adequate_for_ratio))
+
+# Pre-specified sensitivity refit on adequately-sampled conditions only. If the illumination effect
+# only exists in the flagged subset, it is a camera artefact.
+if (any(eye$fps_adequate_for_ratio)) {
+  m_primary_fps <- fit_noting(update(f_primary, . ~ . + (1 | participant_id) + (1 | participant_id:session_index)))$model
+  eye_ok <- eye %>% filter(fps_adequate_for_ratio)
+  if (nrow(eye_ok) > 0) {
+    m_fps_ok <- tryCatch(glmer(update(f_primary, . ~ . + (1 | participant_id) + (1 | participant_id:session_index)),
+                               data = eye_ok, family = binomial), error = function(e) NULL)
+    if (!is.null(m_fps_ok)) {
+      cat("\n=== PRIMARY refit on fps_adequate_for_ratio conditions only (sensitivity) ===\n")
+      print(summary(m_fps_ok))
+    }
+  }
+}
+
+# ===========================================================================================
+# KEY SECONDARY: CVS-Q change, contrasted across the illumination levels.
+#
+# This was read at the top of the file and then never modelled. 13_cvsq.csv now carries
+# session_index and ambient_illumination_level, so the paired change is attributable to a sitting —
+# which is the entire reason for administering it twice.
+#
+# IMPORTANT, and see docs/LITERATURE_VALIDATION.md: the baseline and closing administrations use
+# DIFFERENT recall frames (`frame` column). The baseline carries the validated habitual frame; the
+# close is re-anchored to the session. A baseline-to-close difference is therefore a difference
+# between two different questions, and the CVS-Q's own validation is built on the score being stable
+# over 7-15 days. Report this as exploratory.
+# ===========================================================================================
+cvsq_change <- cvsq %>%
+  select(participant_id, session_index, ambient_illumination_level, stage, total_score) %>%
+  tidyr::pivot_wider(names_from = stage, values_from = total_score) %>%
+  filter(!is.na(baseline), !is.na(session_end)) %>%
+  mutate(change = session_end - baseline,
+         illumination = factor(ambient_illumination_level))
+
+if (nrow(cvsq_change) > 0 && dplyr::n_distinct(cvsq_change$illumination) > 1) {
+  m_cvsq <- lmer(change ~ illumination + (1 | participant_id), data = cvsq_change)
+  cat("\n=== KEY SECONDARY (EXPLORATORY): CVS-Q change by illumination ===\n")
+  cat("NOTE: baseline and close use different recall frames; see LITERATURE_VALIDATION.md.\n")
+  print(summary(m_cvsq))
+} else {
+  cat("\n[CVS-Q change not modelled: needs both stages and both illumination levels]\n")
 }
 cat("\n=== PRIMARY: incomplete-blink ratio, logit scale, split-plot random structure ===\n")
 print(summary(m_primary))

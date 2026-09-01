@@ -49,9 +49,10 @@ describe('the primary outcome never invents a value', () => {
   });
 
   it('returns a rate of zero only for a real window with no blinks, never for no window', () => {
-    // A rate of 0 over a measured minute IS a finding; a rate over no window is not.
+    // A rate of 0 over a measured minute IS a finding; a rate over no window is not — and it used
+    // to be reported as 0, which is the direction the hypothesis predicts.
     expect(blinkRatePerMinute(0, 60000)).toBe(0);
-    expect(blinkRatePerMinute(5, 1)).toBe(0);
+    expect(blinkRatePerMinute(5, 1)).toBeNull();
   });
 });
 

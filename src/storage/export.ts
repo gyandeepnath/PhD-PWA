@@ -185,6 +185,8 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '15_media_inventory.csv', column: 'consent_annotation_video', type: 'boolean', unit: '-', role: 'qc', description: 'The consent state in force when this item was captured, snapshotted onto the record so a file can never be separated from its permission.' },
 
   // ---- 02_conditions.csv
+  { file: '02_conditions.csv', column: 'session_id', type: 'string', unit: '-', role: 'id', description: 'The sitting this condition ran in. Without it a pooled dataset has no key path from a condition row to its ambient illumination level, and a join on participant_id + condition_label matches each label twice per participant — once per illumination block.' },
+  { file: '02_conditions.csv', column: 'session_index', type: 'integer', unit: '1 or 2', role: 'iv', description: 'Which sitting this condition ran in. Join key to 01_session_info.csv for the whole-plot illumination factor.' },
   { file: '02_conditions.csv', column: 'session_position', type: 'integer', unit: '0-9', role: 'covariate', description: 'Serial position within the illumination BLOCK, 0-based — on a split sitting the second sitting continues the numbering rather than restarting, so this is not the position within the sitting. Enter in models: absorbs the vigilance decrement and fatigue accumulation.' },
   { file: '02_conditions.csv', column: 'passage_id', type: 'integer', unit: '-', role: 'covariate', description: 'Reading passage shown. Rotated independently of condition, so passage difficulty is orthogonal to display condition.' },
   { file: '02_conditions.csv', column: 'adaptation_ms_before', type: 'integer', unit: 'ms', role: 'qc', description: 'Grey-field adaptation before this condition. Doubled on a polarity switch; 0 for the first condition.' },
@@ -230,7 +232,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '13_cvsq.csv', column: 'intensity_1..16', type: 'integer', unit: '0-2', role: 'dv', description: 'Per-item intensity: 1 moderate, 2 intense; 0 when frequency is 0.' },
 
   // ---- 14_nasa_tlx.csv
-  { file: '14_nasa_tlx.csv', column: 'raw_tlx', type: 'number', unit: '0-100', role: 'dv', description: 'Unweighted mean of the six LOAD-aligned subscales (Performance reversed). Session-level: supports inference about the illumination contrast only.' },
+  { file: '14_nasa_tlx.csv', column: 'raw_tlx', type: 'number', unit: '0-100', role: 'dv', description: 'Unweighted mean of the six subscales AS MARKED. Performance is anchored Perfect(0) to Failure(100), so it already points in the load direction and is NOT reversed; reversing it flips the sign of one subscale in six. Session-level: supports inference about the illumination contrast only.' },
   { file: '14_nasa_tlx.csv', column: 'performance', type: 'number', unit: '0-100', role: 'dv', description: 'RAW response. Anchored Perfect(0) to Failure(100), so LOW means good performance.' },
 
   // ---------------------------------------------------------------------------------------
@@ -271,6 +273,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '10_wide_summary.csv', column: 'condition_label', type: 'string', unit: '-', role: 'id', description: 'Condition code. P1-P5 positive polarity, N1-N5 negative. Same coding as 00_condition_reference.csv.' },
   { file: '12_quality_flags.csv', column: 'condition_label', type: 'string', unit: '-', role: 'id', description: 'Condition code. P1-P5 positive polarity, N1-N5 negative. Same coding as 00_condition_reference.csv.' },
   { file: '15_media_inventory.csv', column: 'condition_label', type: 'string', unit: '-', role: 'id', description: 'Condition code. P1-P5 positive polarity, N1-N5 negative. Same coding as 00_condition_reference.csv.' },
+  { file: '10_wide_summary.csv', column: 'condition_id', type: 'string', unit: '-', role: 'id', description: 'The condition-run this summary row describes. Join on this, never on participant_id + condition_label: each label occurs twice per participant, once per illumination block.' },
   { file: '10_wide_summary.csv', column: 'session_position', type: 'integer', unit: '0-9', role: 'covariate', description: 'Serial position of the condition within the illumination BLOCK, 0-based. On a split sitting the second sitting continues the block numbering rather than restarting, so this is not the position within the sitting. Counterbalanced by a Williams square and entered as a covariate; a position effect is otherwise indistinguishable from a condition effect.' },
   { file: '12_quality_flags.csv', column: 'session_position', type: 'integer', unit: '0-9', role: 'covariate', description: 'Serial position of the condition within the illumination BLOCK, 0-based. On a split sitting the second sitting continues the block numbering rather than restarting, so this is not the position within the sitting. Counterbalanced by a Williams square and entered as a covariate; a position effect is otherwise indistinguishable from a condition effect.' },
   { file: '02_conditions.csv', column: 'passage_id', type: 'integer', unit: '0-9', role: 'covariate', description: 'Which reading passage was shown. Rotated against condition so passage difficulty stays orthogonal to display condition.' },
@@ -341,6 +344,9 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '06_display_perception.csv', column: 'response_time_ms', type: 'number', unit: 'ms', role: 'qc', description: 'Time from the rating screen appearing to submission. Very short values feed the rushed-response flag.' },
   { file: '07_eye_metrics.csv', column: 'camera_active', type: 'boolean', unit: '-', role: 'qc', description: 'Whether camera measurement ran for this condition. False when the participant declined camera consent or the camera failed; every ocular column is then missing rather than zero.' },
   { file: '07_eye_metrics.csv', column: 'blink_rate_full', type: 'number', unit: 'blinks/min', role: 'dv', description: 'Rate of FULL (complete) blinks only. Read alongside blink_rate: a stable total with a falling full rate is the composition shift the study is designed to detect.' },
+  { file: '07_eye_metrics.csv', column: 'blink_count_incomplete', type: 'integer', unit: 'count', role: 'primary', description: 'NUMERATOR of the primary outcome: blinks in which the lid crossed the registration threshold but never reached full closure. Null when the camera was not running.' },
+  { file: '07_eye_metrics.csv', column: 'blink_count_full', type: 'integer', unit: 'count', role: 'primary', description: 'Complete blinks. With blink_count_micro and blink_count_incomplete this gives the DENOMINATOR of incomplete_blink_ratio, which is what makes a binomial model of the primary outcome possible: a ratio from 8 blinks carries far less information than one from 60, and a Gaussian model of the naked proportion treats them as equal.' },
+  { file: '07_eye_metrics.csv', column: 'blink_count_micro', type: 'integer', unit: 'count', role: 'primary', description: 'Complete but very brief blinks (< 40 ms). Part of the denominator of incomplete_blink_ratio.' },
   { file: '07_eye_metrics.csv', column: 'mean_inter_blink_interval_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Mean interval between blinks. Lengthens as blinking is suppressed.' },
   { file: '07_eye_metrics.csv', column: 'inter_blink_interval_cv', type: 'number', unit: 'ratio', role: 'dv', description: 'Coefficient of variation of the inter-blink interval. Erratic blinking shows here before mean rate moves.' },
   { file: '07_eye_metrics.csv', column: 'perclos_p70', type: 'number', unit: '0-1', role: 'covariate', description: 'Proportion of time the eyes were at least 70 per cent closed. A more permissive companion to perclos_p80; a sleepiness covariate, not a visual-fatigue outcome.' },
@@ -438,6 +444,8 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '12_quality_flags.csv', column: 'comprehension_wrong', type: 'boolean', unit: '-', role: 'qc', description: 'True when the participant scored below chance across the three items for this condition. A single slip does not fire it.' },
   { file: '12_quality_flags.csv', column: 'low_face_presence', type: 'boolean', unit: '-', role: 'qc', description: 'True when a face was detected for too little of the condition for the ocular measures to be trustworthy.' },
   { file: '12_quality_flags.csv', column: 'reasons', type: 'string', unit: '-', role: 'qc', description: 'Human-readable list of every penalty that fired, semicolon separated. Read this before excluding a row.' },
+  { file: '13_cvsq.csv', column: 'session_index', type: 'integer', unit: '1 or 2', role: 'iv', description: 'Which sitting this administration belongs to. The CVS-Q is given twice per sitting and each sitting is a different illumination level, so without this a pooled dataset has four indistinguishable rows per participant and the illumination contrast — the reason for collecting it twice — is unrecoverable.' },
+  { file: '13_cvsq.csv', column: 'ambient_illumination_level', type: 'factor(2)', unit: '-', role: 'iv', description: "The sitting's illumination level, carried here so the CVS-Q change score can be contrasted across it without a join." },
   { file: '13_cvsq.csv', column: 'stage', type: 'factor(2)', unit: '-', role: 'iv', description: 'When the questionnaire was administered: baseline or session_end. The key secondary outcome is the change between them.' },
   { file: '13_cvsq.csv', column: 'symptomatic', type: 'boolean', unit: '-', role: 'dv', description: 'Whether the total reached the validated cut-off for computer vision syndrome.' },
   { file: '13_cvsq.csv', column: 'response_time_ms', type: 'number', unit: 'ms', role: 'qc', description: 'Time taken to complete the questionnaire.' },
@@ -565,11 +573,11 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 02 — conditions (+ reading speed in words/min, derived from passage length & reading time)
   csv('02_conditions.csv',
-    ['participant_id', 'condition_id', 'session_position', 'condition_label', 'polarity', 'background_color', 'text_color', 'color_name', 'ink_name', 'passage_id', 'wcag_contrast_ratio', 'wcag_level', 'michelson_contrast', 'below_wcag_aa', 'adaptation_ms_before', 'passage_repeat_number', 'reading_time_ms', 'reading_speed_wpm', 'condition_duration_sec'],
+    ['participant_id', 'session_id', 'session_index', 'condition_id', 'session_position', 'condition_label', 'polarity', 'background_color', 'text_color', 'color_name', 'ink_name', 'passage_id', 'wcag_contrast_ratio', 'wcag_level', 'michelson_contrast', 'below_wcag_aa', 'adaptation_ms_before', 'passage_repeat_number', 'reading_time_ms', 'reading_speed_wpm', 'condition_duration_sec'],
     bundle.conditions.map((c) => {
       const words = PASSAGES[c.passage_id]?.wordCount ?? null;
       const wpm = words != null && c.reading_time_ms ? Math.round(words / (c.reading_time_ms / 60000)) : '';
-      return { participant_id: pid, ...c, reading_speed_wpm: wpm };
+      return { participant_id: pid, session_index: session.session_index, ...c, reading_speed_wpm: wpm };
     }));
 
   // 03 — fatigue
@@ -594,12 +602,13 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 07 — eye metrics
   csv('07_eye_metrics.csv',
-    ['participant_id', 'condition_id', 'camera_active', 'effective_fps', 'fps_adequate_for_tiers', 'fps_adequate_for_ratio', 'blink_rate', 'blink_rate_full', 'incomplete_blink_ratio', 'mean_inter_blink_interval_ms', 'inter_blink_interval_cv', 'perclos_p80', 'perclos_p70', 'long_closure_count', 'long_closure_total_ms', 'blink_duration_mean_ms', 'first_half_blink_rate', 'second_half_blink_rate', 'ear_baseline', 'ear_threshold_used', 'ear_complete_threshold', 'head_pitch_mean', 'head_pitch_calibrated', 'head_yaw_mean', 'head_roll_mean', 'head_movement_std', 'postural_load', 'head_stability_score', 'off_axis_ratio', 'gaze_calibrated', 'gaze_deviation_ratio', 'zone_center_ratio', 'zone_transition_count', 'face_presence_ratio', 'face_size_ratio', 'mean_face_luma', 'lighting_quality'],
+    ['participant_id', 'condition_id', 'camera_active', 'effective_fps', 'fps_adequate_for_tiers', 'fps_adequate_for_ratio', 'blink_rate', 'blink_rate_full', 'incomplete_blink_ratio', 'blink_count_incomplete', 'blink_count_full', 'blink_count_micro', 'mean_inter_blink_interval_ms', 'inter_blink_interval_cv', 'perclos_p80', 'perclos_p70', 'long_closure_count', 'long_closure_total_ms', 'blink_duration_mean_ms', 'first_half_blink_rate', 'second_half_blink_rate', 'ear_baseline', 'ear_threshold_used', 'ear_complete_threshold', 'head_pitch_mean', 'head_pitch_calibrated', 'head_yaw_mean', 'head_roll_mean', 'head_movement_std', 'postural_load', 'head_stability_score', 'off_axis_ratio', 'gaze_calibrated', 'gaze_deviation_ratio', 'zone_center_ratio', 'zone_transition_count', 'face_presence_ratio', 'face_size_ratio', 'mean_face_luma', 'lighting_quality'],
     bundle.eyeMetrics.map((e) => ({
       participant_id: pid, condition_id: e.condition_id, camera_active: e.camera_active,
       effective_fps: e.effective_fps, fps_adequate_for_tiers: e.fps_adequate_for_tiers,
       fps_adequate_for_ratio: e.fps_adequate_for_ratio,
       blink_rate: e.blink_rate, blink_rate_full: e.blink_rate_full, incomplete_blink_ratio: e.incomplete_blink_ratio,
+      blink_count_incomplete: e.blink_count_incomplete, blink_count_full: e.blink_count_full, blink_count_micro: e.blink_count_micro,
       mean_inter_blink_interval_ms: e.mean_inter_blink_interval_ms, inter_blink_interval_cv: e.inter_blink_interval_cv,
       perclos_p80: e.perclos_p80, perclos_p70: e.perclos_p70, long_closure_count: e.long_closure_count, long_closure_total_ms: e.long_closure_total_ms,
       blink_duration_mean_ms: e.blink_duration_mean_ms,
@@ -626,7 +635,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 10 — wide one-row-per-condition summary (joined)
   csv('10_wide_summary.csv',
-    ['participant_id', 'session_index', 'condition_label', 'session_position', 'polarity', 'color_name', 'wcag_contrast_ratio', 'below_wcag_aa', 'passage_id', 'mean_rt_hits_ms', 'd_prime', 'd_prime_se', 'criterion', 'fatigue_mean', 'fatigue_delta', 'comprehension_correct', 'search_accuracy', 'search_efficiency', 'comfort_score', 'clarity_score', 'blink_rate', 'blink_rate_full', 'effective_fps', 'face_presence_ratio', 'qc_overall', 'engagement_flag', 'quality_score'],
+    ['participant_id', 'session_index', 'condition_id', 'condition_label', 'session_position', 'polarity', 'color_name', 'wcag_contrast_ratio', 'below_wcag_aa', 'passage_id', 'mean_rt_hits_ms', 'd_prime', 'd_prime_se', 'criterion', 'fatigue_mean', 'fatigue_delta', 'comprehension_correct', 'search_accuracy', 'search_efficiency', 'comfort_score', 'clarity_score', 'blink_rate', 'blink_rate_full', 'effective_fps', 'face_presence_ratio', 'qc_overall', 'engagement_flag', 'quality_score'],
     summaries.map((s) => ({
       participant_id: pid, session_index: session.session_index, condition_label: s.condition_label, session_position: s.session_position,
       polarity: s.polarity, color_name: s.color_name, wcag_contrast_ratio: s.wcag_contrast_ratio,
@@ -666,10 +675,12 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
     ...Array.from({ length: maxCvsqItems }, (_, i) => `intensity_${i + 1}`),
   ];
   csv('13_cvsq.csv',
-    ['participant_id', 'stage', 'frame', 'total_score', 'symptomatic', 'response_time_ms', ...cvsqItemCols],
+    ['participant_id', 'session_index', 'ambient_illumination_level', 'stage', 'frame', 'total_score', 'symptomatic', 'response_time_ms', ...cvsqItemCols],
     bundle.cvsq.map((c) => {
       const row: Record<string, unknown> = {
-        participant_id: pid, stage: c.stage, frame: c.frame, total_score: c.total_score,
+        participant_id: pid, session_index: session.session_index,
+        ambient_illumination_level: session.ambient_illumination_level,
+        stage: c.stage, frame: c.frame, total_score: c.total_score,
         symptomatic: c.symptomatic, response_time_ms: c.response_time_ms,
       };
       c.frequency.forEach((f, i) => { row[`freq_${i + 1}`] = f; });

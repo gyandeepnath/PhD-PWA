@@ -174,8 +174,10 @@ export function generateParticipant(enrolmentNumber: number, seed: number): SimP
       comprehension_correct: correctProportion,
       comprehension_rt_ms: comprehensionRt,
       fatigue_mean: fatigueMean,
-      blink_rate: blink.blink_rate,
-      blink_rate_full: blink.blink_rate_full,
+      // The simulator always produces a full-length window, so these are never null here;
+      // the ?? 0 keeps the synthetic row's type simple rather than encoding an absence.
+      blink_rate: blink.blink_rate ?? 0,
+      blink_rate_full: blink.blink_rate_full ?? 0,
       search_time_ms: searchTimeMs,
       search_accuracy: searchAccuracy,
       comfort_score: comfort,

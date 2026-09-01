@@ -73,11 +73,13 @@ describe('the primary outcome is null, never a clean zero, when unmeasurable', (
 });
 
 describe('blink rate cannot be manufactured from a vanishing window', () => {
-  it('returns 0 below the minimum rate window rather than dividing by a sliver', () => {
+  it('reports NULL below the minimum rate window rather than dividing by a sliver', () => {
     // `durationMs > 0` was too weak: an instantly-aborted condition gave a rate in the thousands.
-    expect(blinkRatePerMinute(1, 1e-308)).toBe(0);
-    expect(blinkRatePerMinute(5, 10)).toBe(0);
-    expect(blinkRatePerMinute(5, MIN_RATE_WINDOW_MS - 1)).toBe(0);
+    // And the answer is null, not 0: the hypothesis under test is that blink rate FALLS under
+    // strain, so a fabricated zero does not merely add noise, it supports the hypothesis.
+    expect(blinkRatePerMinute(1, 1e-308)).toBeNull();
+    expect(blinkRatePerMinute(5, 10)).toBeNull();
+    expect(blinkRatePerMinute(5, MIN_RATE_WINDOW_MS - 1)).toBeNull();
   });
 
   it('computes a normal rate above the window', () => {
@@ -85,11 +87,11 @@ describe('blink rate cannot be manufactured from a vanishing window', () => {
   });
 
   it.each([NaN, Infinity, -1])('rejects a non-sensical count %s', (c) => {
-    expect(blinkRatePerMinute(c, 60000)).toBe(0);
+    expect(blinkRatePerMinute(c, 60000)).toBeNull();
   });
 
   it.each([NaN, Infinity, -1])('rejects a non-sensical duration %s', (d) => {
-    expect(blinkRatePerMinute(10, d)).toBe(0);
+    expect(blinkRatePerMinute(10, d)).toBeNull();
   });
 });
 

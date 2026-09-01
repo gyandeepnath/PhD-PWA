@@ -51,7 +51,7 @@ export interface RtResult {
     rt_cv: number | null;
     anticipations: number;
     lapse_count: number;
-    lapse_rate: number;
+    lapse_rate: number | null;
     inverse_efficiency_ms: number | null;
     first_half_mean_rt_ms: number | null;
     second_half_mean_rt_ms: number | null;
@@ -258,7 +258,20 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
         rt_cv: meanRt && sdRt != null && meanRt > 0 ? sdRt / meanRt : null,
         anticipations,
         lapse_count: lapseCount,
-        lapse_rate: hits.length ? lapseCount / hits.length : 0,
+        /**
+         * Denominator = VALID hits, matching the numerator and matching the codebook.
+         *
+         * lapseCount is counted among validHitRts (non-anticipatory, with a recorded RT) while the
+         * denominator was all hits. The deflation scales with the anticipation count, and
+         * anticipations rise with disengagement — so the index the codebook calls a fatigue-
+         * sensitive measure was shrunk hardest exactly where fatigue was greatest, attenuating the
+         * position and condition effects toward null. It also feeds the disengagement flag, which
+         * therefore under-fired for the most disengaged blocks.
+         *
+         * Null, not 0, for an empty denominator: a condition in which the participant stopped
+         * responding altogether used to export the best possible lapse rate as a measurement.
+         */
+        lapse_rate: validHitRts.length ? lapseCount / validHitRts.length : null,
         inverse_efficiency_ms: ies,
         first_half_mean_rt_ms: halfRt(0, mid),
         second_half_mean_rt_ms: halfRt(mid, recs.length),
