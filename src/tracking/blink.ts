@@ -394,15 +394,33 @@ export function computeClosureMetrics(
   if (present.length < 2 || baseline <= 0) {
     return { perclos_p80: null, perclos_p70: null, long_closure_count: 0, long_closure_total_ms: 0, ear_closed_estimate: null };
   }
+  /**
+   * Openness is measured against the CALIBRATED OPEN BASELINE, not against this condition's own
+   * blink minima.
+   *
+   * The scale used to run from `median(blink minima)` to the baseline. That made PERCLOS a function
+   * of how this participant blinks in this condition — and specifically of the depth of their
+   * blinks, which is the primary outcome. A participant whose blinks are mostly INCOMPLETE has a
+   * high median minimum, so the openness scale was compressed into the top of their range and
+   * ordinary partial dips were rescaled into the "closed" region. PERCLOS rose exactly when the
+   * incomplete-blink ratio rose.
+   *
+   * PERCLOS exists in this protocol as a DROWSINESS covariate — the thing that lets an analyst
+   * separate sleepiness from display-induced visual fatigue. A covariate computed from the outcome
+   * it is meant to adjust for cannot do that: adjusting for it would partial out part of the effect
+   * under study.
+   *
+   * So openness is now simply the aperture as a fraction of this participant's own open baseline,
+   * which is the textbook PERCLOS definition (percentage of time the eye is more than 80% closed
+   * relative to fully open) applied to EAR. It depends on calibration alone, and on nothing that
+   * happened during the condition.
+   *
+   * `ear_closed_estimate` is still reported, for transparency about how deep this participant's
+   * blinks actually went, but it no longer defines the scale.
+   */
   const earsAsc = present.map((s) => s.ear).sort((a, b) => a - b);
   const earClosed = events.length > 0 ? median(events.map((e) => e.min_ear)) : percentileSorted(earsAsc, 0.02);
-  const earOpen = Math.max(baseline, earClosed + 1e-3);
-  // If the EAR never dropped meaningfully below the open baseline, no closures occurred — the eyes
-  // were effectively open throughout (avoids a degenerate openness scale collapsing to "all closed").
-  if (earOpen - earClosed < baseline * 0.15) {
-    return { perclos_p80: 0, perclos_p70: 0, long_closure_count: 0, long_closure_total_ms: 0, ear_closed_estimate: earClosed };
-  }
-  const openness = (ear: number) => Math.max(0, Math.min(1, (ear - earClosed) / (earOpen - earClosed)));
+  const openness = (ear: number) => Math.max(0, Math.min(1, ear / baseline));
 
   let p80 = 0;
   let p70 = 0;

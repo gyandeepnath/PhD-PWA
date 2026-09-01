@@ -71,10 +71,41 @@ export function estimateGaze(
   const hR = ((irisR.x - lm[EYE_BOX.rightInner].x) / rightBoxW - 0.5) * 2;
   const h = (hL + hR) / 2;
 
-  const leftBoxH = lm[EYE_BOX.botL].y - lm[EYE_BOX.topL].y + 1e-6;
-  const rightBoxH = lm[EYE_BOX.botR].y - lm[EYE_BOX.topR].y + 1e-6;
-  const vL = ((irisL.y - lm[EYE_BOX.topL].y) / leftBoxH - 0.5) * 2;
-  const vR = ((irisR.y - lm[EYE_BOX.topR].y) / rightBoxH - 0.5) * 2;
+  /**
+   * Vertical gaze is scaled by eye WIDTH, and a blink yields no gaze sample at all.
+   *
+   * It used to be scaled by the eyelid APERTURE (botL.y - topL.y). The aperture collapses toward
+   * zero during a blink, so the division blew up and the iris appeared hugely displaced: every
+   * blink was scored as a vertical gaze excursion. That inflated zone_transition_count and
+   * gaze_deviation_ratio, and — worse — it coupled them to blink behaviour, which is the primary
+   * outcome. A participant who blinked more looked, in the data, like a participant whose gaze
+   * wandered more.
+   *
+   * Eye width does not change when the lid closes, so it is a stable scale for both axes. And a
+   * frame in which the lid is mostly shut carries no usable information about gaze direction
+   * regardless of scaling, so it is reported unresolved — which the aggregator already treats as
+   * "not measured" rather than as a centred gaze.
+   *
+   * Calibration consumes the same function, so the fitted thresholds are in these same units.
+   */
+  const leftAperture = lm[EYE_BOX.botL].y - lm[EYE_BOX.topL].y;
+  const rightAperture = lm[EYE_BOX.botR].y - lm[EYE_BOX.topR].y;
+  const leftWidth = Math.abs(leftBoxW);
+  const rightWidth = Math.abs(rightBoxW);
+
+  // Aperture-to-width ratio of a normally open eye is roughly 0.25-0.45; below this the lid is
+  // far enough down that the iris centre is unreliable.
+  const MIN_APERTURE_RATIO = 0.12;
+  const openEnough = leftAperture / (leftWidth + 1e-6) > MIN_APERTURE_RATIO
+    && rightAperture / (rightWidth + 1e-6) > MIN_APERTURE_RATIO;
+  if (!openEnough) {
+    return { zone: 'cc', isCenter: false, h: NaN, v: NaN };
+  }
+
+  const leftCentreY = (lm[EYE_BOX.topL].y + lm[EYE_BOX.botL].y) / 2;
+  const rightCentreY = (lm[EYE_BOX.topR].y + lm[EYE_BOX.botR].y) / 2;
+  const vL = ((irisL.y - leftCentreY) / (leftWidth + 1e-6)) * 2;
+  const vR = ((irisR.y - rightCentreY) / (rightWidth + 1e-6)) * 2;
   const v = (vL + vR) / 2;
 
   // Subtract the fitted neutral bias before thresholding.
