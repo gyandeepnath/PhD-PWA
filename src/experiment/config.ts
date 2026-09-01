@@ -22,7 +22,22 @@ const BASE_CONFIG = {
   READING_MARGIN_PERCENT: 10,
 
   // Comprehension: post-answer feedback dwell.
-  COMPREHENSION_FEEDBACK_MS: 1000,
+  /**
+   * Post-answer dwell. ZERO: the comprehension screen must not tell the participant whether they
+   * were right.
+   *
+   * It used to hold for a second while outlining the correct option green and the chosen one red.
+   * That is performance feedback, delivered 30 times a sitting and 60 across the study, and the
+   * protocol forbids it in five separate places — the synopsis rests the whole no-differential-
+   * effort argument on its absence, and the operator manual forbids the OPERATOR from saying
+   * exactly what the screen was showing. It also biased effort in a way correlated with earlier
+   * luck rather than with the display, and the marker colours were hard-coded, so they were 4.5x
+   * more visible in negative polarity and near-invisible against the red and green inks.
+   *
+   * Kept as a named constant at 0 rather than deleted so the intent is explicit and a future edit
+   * cannot reintroduce it by accident.
+   */
+  COMPREHENSION_FEEDBACK_MS: 0,
 
   // Visual search: hard time limit.
   VS_TIME_LIMIT_MS: 40000,
@@ -64,8 +79,35 @@ const BASE_CONFIG = {
    */
   RT_TARGET_LIGHT_BG: '#000000',
   RT_TARGET_DARK_BG: '#FFFFFF',
-  /** Distractors: the four chromatic text colours from the condition set. */
-  RT_DISTRACTOR_COLORS: ['#C81E1E', '#1E4ED8', '#C9A400', '#00A651'],
+  /**
+   * Distractors: LUMINANCE-MATCHED, for the same reason the target is background-relative.
+   *
+   * The target was contrast-matched and the distractors were not, which fixed the wrong half of the
+   * problem: what the participant actually performs is a DISCRIMINATION, and its difficulty is set
+   * by the distractor-to-target separation, not by the target alone. With the old set — the four
+   * chromatic text colours — that separation was, measured against the achromatic target:
+   *
+   *     on white (target black)   red 3.66  blue 3.14  yellow 8.79  green 6.57   mean 5.54
+   *     on black (target white)   red 5.74  blue 6.70  yellow 2.39  green 3.19   mean 4.50
+   *
+   * The ordering is exactly reversed between polarities and the mean separation is ~23% larger in
+   * positive polarity — so no-go discriminability was a function of the study's primary factor. On
+   * a black field the yellow distractor sat 2.39:1 from the white target, which is a hue judgement
+   * on a small peripheral dot at 10 lux. That inflates false alarms in negative polarity, lowers
+   * d-prime there, and — because false_alarm_rate and error_rate drive the disengagement flag —
+   * ALSO gets negative-polarity conditions preferentially dropped by the quality filter. A
+   * manufactured polarity effect plus differential attrition on the same factor.
+   *
+   * conditions.ts already sets out the arithmetic that makes this unavoidable for any fixed set:
+   * contrast against white is 1.05/(L+0.05) while contrast against black is (L+0.05)/0.05, so the
+   * rank correlation between the two polarities is exactly -1 for ANY palette.
+   *
+   * The escape is a palette whose members sit at the luminance where BOTH expressions give the
+   * same value. At relative luminance 0.178 every hue separates ~4.55:1 from black and ~4.6:1 from
+   * white, so one set serves both polarities and every hue is equally discriminable from the
+   * target. These are those colours, keeping the original red/blue/yellow/green hue directions.
+   */
+  RT_DISTRACTOR_COLORS: ['#E42222', '#2869FF', '#8D7300', '#008742'],
 
   // Adaptation: longer than the original 20 s; doubled on a polarity switch.
   ADAPTATION_SAME_POLARITY_MS: 60000,

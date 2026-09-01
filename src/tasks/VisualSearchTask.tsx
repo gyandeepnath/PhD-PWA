@@ -136,8 +136,15 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
               onClick={() => tap(tok)}
               style={{
                 cursor: 'pointer',
-                backgroundColor: foundIdx.has(tok.i) ? '#22c97a30' : 'transparent',
-                borderBottom: foundIdx.has(tok.i) ? '2px solid #22c97a' : '2px solid transparent',
+                /* The condition's own ink, not a fixed green. #22c97a measured 2.16:1 against the
+                   light backgrounds and 9.70:1 against the dark ones — 4.5x more visible in one
+                   polarity — and 1.48:1 against the green ink, invisible in exactly the condition
+                   it was marking. This marker is the participant's only record of which occurrences
+                   they have already tapped, and a re-tap is silently ignored, so a lost marker costs
+                   search time without leaving any trace: a display-legibility artefact recorded as a
+                   search-performance deficit, aligned with polarity across all five colours. */
+                backgroundColor: foundIdx.has(tok.i) ? text + '30' : 'transparent',
+                borderBottom: foundIdx.has(tok.i) ? `2px solid ${text}` : '2px solid transparent',
                 transition: 'background-color 0.1s, border-color 0.1s',
               }}
             >

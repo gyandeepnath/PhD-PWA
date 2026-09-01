@@ -350,7 +350,14 @@ export interface VisualSearchRecord {
   termination_mode: SearchTermination;
 }
 
-export type RtAccuracy = 'hit' | 'miss' | 'false_alarm' | 'correct_rejection';
+/**
+ * 'anticipation' is its own outcome, not a hit or a false alarm.
+ *
+ * A response faster than the anticipation cutoff cannot reflect stimulus processing. Folding it
+ * into hit/false_alarm credited a participant who had stopped watching with detections, and the
+ * credit was largest exactly where disengagement was largest.
+ */
+export type RtAccuracy = 'hit' | 'miss' | 'false_alarm' | 'correct_rejection' | 'anticipation';
 
 export interface ReactionTrialRecord {
   trial_id: string;

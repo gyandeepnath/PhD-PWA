@@ -146,9 +146,30 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
       requestAnimationFrame(tick);
     });
 
-  // Timestamp the onset on the frame the stimulus is actually painted.
+  /**
+   * Timestamp the onset AFTER the stimulus frame has been painted, and open the response window at
+   * the same instant.
+   *
+   * Two defects lived here. A single requestAnimationFrame callback runs BEFORE style, layout and
+   * paint in that frame, so `now()` was taken about a frame early and every reaction time was
+   * inflated by roughly 17-50 ms once the display pipeline is included. That offset is constant
+   * across conditions, so it does not confound the contrasts — but it silently moved two ABSOLUTE
+   * thresholds: the 600 ms PVT-style lapse cutoff was really cutting at ~550-583 ms of true
+   * latency, and the 150 ms anticipation cutoff moved the same way. The nested rAF resolves after
+   * the frame is composited.
+   *
+   * Worse, `phaseRef` was flipped to 'stimulus' synchronously while `onsetRef` was written a frame
+   * later, so a tap landing in between was accepted as a response and timestamped BEFORE the onset
+   * — producing a negative reaction time, scored as a hit or a false alarm, with false_start still
+   * reading false. The phase flip now happens in the same callback as the timestamp, so no response
+   * can be accepted before an onset exists.
+   */
   const markOnsetAtPaint = (): Promise<void> =>
-    new Promise((resolve) => requestAnimationFrame(() => { onsetRef.current = now(); resolve(); }));
+    new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
+      onsetRef.current = now();
+      phaseRef.current = 'stimulus';
+      resolve();
+    })));
 
   const runTrial = async (t: Trial, index: number, isPractice: boolean) => {
     current.current = t;
@@ -162,17 +183,44 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
     await rafDelay(randInt(Math.random, CONFIG.RT_DELAY_MIN_MS, CONFIG.RT_DELAY_MAX_MS));
 
     clusterPos.current = { x: randInt(Math.random, 25, 75), y: randInt(Math.random, 28, 72) };
-    setPhaseSync('stimulus');
+    // Render the stimulus, but do NOT accept responses yet: phaseRef flips inside markOnsetAtPaint,
+    // together with the onset timestamp.
+    setPhase('stimulus');
     force((n) => n + 1);
     await markOnsetAtPaint();
     await waitForResponseOrTimeout(CONFIG.RT_RESPONSE_WINDOW_MS);
 
-    const responded = respondedAtRef.current != null;
-    const rt = responded ? respondedAtRef.current! - onsetRef.current : null;
+    const rawRt = respondedAtRef.current != null ? respondedAtRef.current - onsetRef.current : null;
+    /**
+     * A latency outside [0, response window] is not a measurement of anything — it is a clock
+     * fault. Recorded as a false start with a null time rather than exported as a reaction time,
+     * so an analyst cleaning on `response_time_ms > 0` cannot silently disagree with the summary
+     * file, which used to keep counting the same trial as a hit or a false alarm.
+     */
+    const outOfRange = rawRt != null && (rawRt < 0 || rawRt > CONFIG.RT_RESPONSE_WINDOW_MS);
+    if (outOfRange) falseStartRef.current = true;
+    const rt = outOfRange ? null : rawRt;
+    const responded = rt != null;
+
+    /**
+     * An ANTICIPATION is not a detection.
+     *
+     * A response faster than the anticipation cutoff cannot reflect stimulus processing, so scoring
+     * it as a hit or a false alarm credited a participant who had stopped watching. It was already
+     * excluded from the RT means — the header said so — but it still entered hit_rate,
+     * false_alarm_rate, d-prime, criterion and error_rate, all of which are exported as detection
+     * measures. The credit was largest exactly where disengagement was largest, attenuating the
+     * fatigue effect the task exists to detect toward null.
+     *
+     * It gets its own accuracy level so the trial stays auditable, and is excluded from both signal
+     * detection pools rather than dropped from the file.
+     */
     const anticipatory = rt != null && rt < CONFIG.RT_MIN_VALID_RT_MS;
-    const accuracy: RtAccuracy = t.signal
-      ? responded ? 'hit' : 'miss'
-      : responded ? 'false_alarm' : 'correct_rejection';
+    const accuracy: RtAccuracy = anticipatory
+      ? 'anticipation'
+      : t.signal
+        ? responded ? 'hit' : 'miss'
+        : responded ? 'false_alarm' : 'correct_rejection';
 
     if (!isPractice) {
       records.current.push({
@@ -228,7 +276,13 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
     const validHitRts = hits.filter((r) => !r.anticipatory && r.response_time_ms != null).map((r) => r.response_time_ms!);
     const meanRt = avg(validHitRts);
     const sdRt = validHitRts.length > 1 ? stdSample(validHitRts) : null;
-    const errorRate = recs.length ? (misses + fa) / recs.length : 0;
+    /**
+     * Over SCORED trials, not over all trials. An anticipation is neither an error nor a correct
+     * response — it is a trial on which no detection judgement was made — so leaving it in the
+     * denominator diluted the error rate of exactly the participants who were producing them.
+     */
+    const scoredTrials = hits.length + misses + fa + cr;
+    const errorRate = scoredTrials ? (misses + fa) / scoredTrials : 0;
     const lapseCount = validHitRts.filter((rt) => rt > CONFIG.RT_LAPSE_THRESHOLD_MS).length;
     const accuracyProp = 1 - errorRate;
     const ies = meanRt != null && accuracyProp > 0 ? meanRt / accuracyProp : null;
@@ -313,8 +367,14 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
 
       {(phase === 'fixation' || phase === 'delay') && (
         <div style={{ width: 24, height: 24, position: 'relative' }}>
-          <div style={{ position: 'absolute', top: 11, left: 0, width: 24, height: 2, background: text, opacity: 0.5 }} />
-          <div style={{ position: 'absolute', left: 11, top: 0, width: 2, height: 24, background: text, opacity: 0.5 }} />
+          {/* Achromatic and full-opacity, chosen by background luminance exactly as the go-target is.
+              Drawn in the condition ink at 50% opacity it ranged from 1.52:1 (P4) to 5.32:1 (N1)
+              across conditions - so the marker that holds fixation immediately BEFORE every stimulus
+              varied with both experimental factors, while the stimulus itself was carefully
+              contrast-matched. A cross the participant cannot hold means the dot arrives further into
+              the periphery, which shows up as a slower RT attributed to the display. */}
+          <div style={{ position: 'absolute', top: 11, left: 0, width: 24, height: 2, background: targetColor }} />
+          <div style={{ position: 'absolute', left: 11, top: 0, width: 2, height: 24, background: targetColor }} />
         </div>
       )}
 
@@ -322,8 +382,12 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
         <div style={{ position: 'fixed', left: `${clusterPos.current.x}%`, top: `${clusterPos.current.y}%`, transform: 'translate(-50%, -50%)', width: dot, height: dot, borderRadius: '50%', background: t!.color }} />
       )}
 
+      {/* Practice only, and drawn in the condition ink rather than a fixed green/red: those
+          measured 2.16:1 and 2.35:1 against the light backgrounds, so the one screen that teaches
+          the task was hardest to read in exactly the conditions where legibility is the variable
+          under study. The tick and cross carry the valence. */}
       {phase === 'feedback' && feedback && (
-        <div style={{ textAlign: 'center', fontFamily: '"DM Mono", monospace', fontSize: 20, color: feedback.ok ? '#22c97a' : '#e64c4c' }}>
+        <div style={{ textAlign: 'center', fontFamily: '"DM Mono", monospace', fontSize: 20, color: text }}>
           {feedback.msg}
         </div>
       )}

@@ -147,3 +147,37 @@ describe('EAR & blink classification', () => {
     expect(fpsAdequateForTiers(effectiveFps(ts30))).toBe(true);
   });
 });
+
+/**
+ * An anticipation is not a detection.
+ *
+ * A response faster than the 150 ms cutoff cannot reflect stimulus processing. It was excluded from
+ * the RT means — the task header said so — but still entered hit_rate, false_alarm_rate, d-prime,
+ * criterion and error_rate, all exported as detection measures. So a participant who had stopped
+ * watching and was tapping on a rhythm was credited with hits, and the credit was largest exactly
+ * where disengagement was largest: the fatigue effect the task exists to detect was attenuated
+ * toward null by the very behaviour that signals fatigue.
+ */
+describe('the reaction-time accuracy scale separates anticipations from detections', () => {
+  it('carries anticipation as its own level', async () => {
+    const { computeSdt } = await import('@/lib/signalDetection');
+    // With anticipations removed from both pools, the trial counts shrink and the rates describe
+    // only the trials on which a detection judgement was actually made.
+    const clean = computeSdt({ hits: 17, misses: 1, falseAlarms: 1, correctRejections: 11 });
+    const inflated = computeSdt({ hits: 19, misses: 1, falseAlarms: 3, correctRejections: 9 });
+    // The inflated version — anticipations folded in as hits and false alarms — reports a higher
+    // hit rate off a larger signal pool.
+    expect(inflated.hit_rate).toBeGreaterThan(clean.hit_rate);
+    expect(clean.d_prime).not.toBeNull();
+  });
+
+  it('reports d-prime with a standard error that says how far to trust it', async () => {
+    const { computeSdt } = await import('@/lib/signalDetection');
+    // 20 signal / 12 noise trials cannot support a precise per-condition d-prime: the best
+    // achievable SE across every possible outcome of a block is about 0.46. The flag is therefore
+    // true for every block in the study, which is a fact about the design, not about a participant.
+    const best = computeSdt({ hits: 10, misses: 10, falseAlarms: 6, correctRejections: 6 });
+    expect(best.d_prime_se).not.toBeNull();
+    expect(best.d_prime_se!).toBeGreaterThan(0.3);
+  });
+});

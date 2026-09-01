@@ -119,9 +119,34 @@ describe('reaction-time go-target (synopsis §3.6)', () => {
     expect(stimulusInks.has('#00A651')).toBe(true); // green is now a stimulus, not the target
   });
 
-  it('uses all four chromatic text colours as distractors', () => {
-    expect([...CONFIG.RT_DISTRACTOR_COLORS].sort()).toEqual(
-      ['#00A651', '#1E4ED8', '#C81E1E', '#C9A400'],
-    );
+  it('separates every distractor from the go-target EQUALLY in both polarities', () => {
+    // The defect this replaces: the distractors were the four chromatic text colours, which are
+    // not luminance-matched. Measured against the achromatic target their separation was
+    //   on white  red 3.66  blue 3.14  yellow 8.79  green 6.57   (mean 5.54)
+    //   on black  red 5.74  blue 6.70  yellow 2.39  green 3.19   (mean 4.50)
+    // — the ordering exactly reversed, and yellow at 2.39:1 from the target on black. So no-go
+    // DISCRIMINABILITY, which is what the participant actually performs, was a function of the
+    // study's primary factor: inflated false alarms and depressed d-prime under negative polarity,
+    // and — because those drive the disengagement flag — differential dropping of those conditions
+    // by the pre-registered quality filter too.
+    //
+    // conditions.ts sets out why no fixed palette can avoid this: contrast against white is
+    // 1.05/(L+0.05) and against black is (L+0.05)/0.05, so the rank correlation between polarities
+    // is exactly -1. The escape is to sit every distractor at the luminance where the two
+    // expressions agree.
+    for (const d of CONFIG.RT_DISTRACTOR_COLORS) {
+      const onLight = wcagContrastRatio(d, CONFIG.RT_TARGET_LIGHT_BG);
+      const onDark = wcagContrastRatio(d, CONFIG.RT_TARGET_DARK_BG);
+      expect(Math.abs(onLight - onDark)).toBeLessThan(0.25);
+      // And far enough from the target that the discrimination is a real one in both polarities.
+      expect(Math.min(onLight, onDark)).toBeGreaterThan(3);
+    }
+  });
+
+  it('keeps every distractor equally discriminable from the target as every other', () => {
+    // Otherwise one no-go hue is systematically harder than the rest, and since the hues are drawn
+    // at random per trial that is noise in the RT block rather than a clean discrimination.
+    const seps = CONFIG.RT_DISTRACTOR_COLORS.map((d) => wcagContrastRatio(d, CONFIG.RT_TARGET_LIGHT_BG));
+    expect(Math.max(...seps) - Math.min(...seps)).toBeLessThan(0.25);
   });
 });

@@ -69,16 +69,27 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
     return () => clearTimeout(t);
   }, [submitted, selected, onComplete, q.correctIndex, q.kind, index, isLast]);
 
-  const optionStyle = (i: number) => {
-    if (submitted) {
-      if (i === q.correctIndex) return { borderColor: '#22c97a', background: '#22c97a15' };
-      if (i === selected) return { borderColor: '#e64c4c', background: '#e64c4c15' };
-      return { borderColor: text + '30', background: 'transparent' };
-    }
-    return i === selected
+  /**
+   * No correctness feedback, ever.
+   *
+   * This used to outline the correct option green and the chosen one red for a second after each
+   * answer. The protocol forbids performance feedback in five places, and the design's own
+   * rationale — that effort is not differentially modulated across conditions — depends on its
+   * absence. Thirty verdicts a sitting is enough to change how hard a participant works in the
+   * conditions that follow, correlated with their earlier luck rather than with the display.
+   *
+   * The marker colours were also hard-coded, which made them a colour-factor confound in their own
+   * right: #22c97a is 2.16:1 against the light backgrounds and 9.70:1 against the dark ones, and
+   * 1.48:1 against the green ink — invisible in exactly the condition it marked.
+   *
+   * The selection highlight below is drawn from the condition's own ink, so it says only "this is
+   * what you chose", equally legibly in every condition.
+   */
+  const optionStyle = (i: number) => (
+    i === selected
       ? { borderColor: text, background: text + '15' }
-      : { borderColor: text + '30', background: 'transparent' };
-  };
+      : { borderColor: text + '30', background: 'transparent' }
+  );
 
   return (
     <div className="min-h-screen w-full p-[6%] font-sans animate-fade-in" style={{ background, color: text }}>

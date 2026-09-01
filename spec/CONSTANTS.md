@@ -52,7 +52,7 @@ though it administers three items, because the three run inside a single stage.)
 |---|---|---|---|
 | Reading | per-page ~20 s minimum-unlock (rAF) | 120s min/180s max (stale config) | floor, self-paced beyond; record `reading_time_ms`/wpm |
 | Passages | 8 science topics, ~274–292 words, 2 pages | same | **10 topics, ~584 words, 4 pages** — length sets the reading exposure and therefore the precision of the primary outcome; decoupled from condition |
-| Comprehension | 1×4-option MCQ, RT recorded, 1 s feedback | same | **3×4-option MCQ per passage** (gist, inference, detail), each timed from its own mount; one stored row per ITEM, so a per-condition join must aggregate |
+| Comprehension | 1×4-option MCQ, RT recorded, 1 s feedback | **NO feedback** — see below | **3×4-option MCQ per passage** (gist, inference, detail), each timed from its own mount; one stored row per ITEM, so a per-condition join must aggregate |
 | Visual search | 40 000 ms limit | 60s (doc) / 120s (config) ⚠️ | use ACTUAL occurrence count (see below); record as covariate |
 
 ### Visual-search target counts — bundle bug (fixed)
@@ -159,3 +159,26 @@ The implemented stage order was corrected during the workflow-logic review — s
 - Consent recorded at the CONSENT stage (not pre-emptively at session creation).
 - Double-tap guards (session re-entry, advance lock, scale/screening submit) and condition-level
   resume (interrupted condition restarted, not stitched).
+
+---
+
+## Comprehension feedback: removed, deliberately
+
+The original bundle held each answered comprehension item for one second while outlining the correct
+option in green and the participant's choice in red. That constant (`COMPREHENSION_FEEDBACK_MS`) is
+now **0**, and the correctness colouring is gone.
+
+It is performance feedback, delivered thirty times a sitting and sixty across the study. The
+protocol forbids it in five separate places: the synopsis rests its whole
+no-differential-effort argument on its absence, the operator manual forbids the *operator* from
+saying exactly what the screen was showing, and `dashboard/aggregate.ts` asserts of its own quality
+flags that "nothing extra is shown to the participant (no performance feedback → no confound)". A
+participant told they are failing raises effort in the conditions that follow — correlated with
+their earlier luck rather than with the display — and nothing in the export recorded that it had
+happened.
+
+The marker colours were a second, independent confound: `#22c97a` is 2.16:1 against the light
+backgrounds and 9.70:1 against the dark ones, so the feedback itself was 4.5x more legible in
+negative polarity, and 1.48:1 against the green ink — invisible in the very condition it marked.
+
+**Any pilot data collected with feedback enabled cannot be pooled with main-study data.**
