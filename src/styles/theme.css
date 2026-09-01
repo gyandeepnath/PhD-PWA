@@ -54,6 +54,13 @@ body {
   width: calc(100% / var(--vl-scale));
   height: calc(100% / var(--vl-scale));
   background: #f8f7f5;
+  /*
+   * overflow: hidden is deliberate — the stimulus screens must not scroll, because a scrolled
+   * reading page changes the exposure. It means, though, that any screen taller than the viewport
+   * has content that no gesture can reach (body also carries touch-action: none). Screens that can
+   * legitimately exceed the viewport — the setup forms, the questionnaires — must therefore carry
+   * their own scroll container; see the `shell` class in setupStages.tsx and `.scrollable` below.
+   */
   overflow: hidden;
   isolation: isolate;
 }

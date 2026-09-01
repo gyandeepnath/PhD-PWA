@@ -191,7 +191,19 @@ export function useTracking(): TrackingApi {
           send: (i: { image: HTMLVideoElement }) => Promise<void>;
         };
       };
-      const fm = new mod.FaceMesh({ locateFile: (f) => `/mediapipe/${f}` });
+      /**
+       * Resolved against the app's own base URL, not the domain root.
+       *
+       * `/mediapipe/${f}` is root-absolute, so it only works when the app is served from `/`.
+       * vite.config.ts sets `base: './'` and DEPLOYMENT.md recommends GitHub Pages, whose project
+       * sites are always `https://user.github.io/repo/` — where every wasm and model fetch would
+       * 404. getUserMedia still succeeds and the preview still shows a face, so the operator ticks
+       * every checklist box; the FaceMesh init then throws into start()'s catch, status becomes
+       * 'failed', and every condition writes disabledEyeMetrics. No primary outcome for any
+       * participant on that deployment, with nothing on screen to say so.
+       */
+      const base = new URL(import.meta.env.BASE_URL ?? './', document.baseURI);
+      const fm = new mod.FaceMesh({ locateFile: (f) => new URL(`mediapipe/${f}`, base).toString() });
       fm.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
       // One ingest per result → EAR is sampled at the real FaceMesh throughput.
       fm.onResults((r) => ingestResult(r.multiFaceLandmarks?.[0] ?? null));

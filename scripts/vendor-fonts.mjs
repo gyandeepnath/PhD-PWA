@@ -64,7 +64,10 @@ for (const raw of blocks) {
     // `block` rather than `swap`: a flash of the fallback face mid-reading would be a change of
     // stimulus during the measurement window. Better a brief blank than a typeface that shifts.
     '  font-display: block;',
-    `  src: url('/fonts/${file}') format('woff2');`,
+    // Relative to the stylesheet, not root-absolute: the app is built with base './' so it can be
+    // served from a subdirectory, where /fonts/ would 404 and the stimulus typeface — an
+    // experimental control — would silently fall back to a platform default.
+    `  src: url('${file}') format('woff2');`,
     ...(range ? [`  unicode-range: ${range};`] : []),
     '}',
   ].join('\n'));

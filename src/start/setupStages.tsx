@@ -15,7 +15,24 @@ import { now } from '@/lib/timing';
 import { stimulusFontLoaded } from '@/lib/fonts';
 import type { CameraStatus } from '@/storage/types';
 
-const shell = 'min-h-screen w-full bg-cream p-[6%] font-sans text-[#1a1a2e] animate-fade-in';
+/**
+ * The setup screens must SCROLL when they are taller than the viewport.
+ *
+ * `#root` is `overflow: hidden` and `body` carries `touch-action: none`, so anything below the fold
+ * on a setup screen is not merely off-screen — it is unreachable by any gesture. Measured on the
+ * participant profile at iPad 11" landscape (1194x834), the mandated orientation: content height
+ * 1167 against a viewport of 834, with the caffeine yes/no buttons AND the Continue button both
+ * past the bottom edge. The operator fills in the form and there is no way to submit it, and no way
+ * to scroll to find one. iPad 10.2" landscape is the same. Portrait fits, which is why it was not
+ * noticed.
+ *
+ * The E2E suite could not catch it either: every click in e2e/helpers.ts passes `force: true`,
+ * which skips Playwright's actionability checks and dispatches the click wherever the element is,
+ * so the full run passes on screens no finger can reach.
+ *
+ * min-h-0 is what lets the flex child actually shrink to its container instead of growing.
+ */
+const shell = 'h-full w-full bg-cream p-[6%] font-sans text-[#1a1a2e] animate-fade-in overflow-y-auto';
 const btn = 'rounded-xl px-8 py-3 font-lab text-sm text-white transition active:scale-95';
 
 // ---- SESSION INIT ----

@@ -33,9 +33,33 @@ describe('the stimulus typeface is served from this origin', () => {
     const files = readdirSync(resolve(root, 'public/fonts'));
     expect(files).toContain('Roboto-400-normal-latin.woff2');
     const css = read('public/fonts/fonts.css');
-    expect(css).toMatch(/src: url\('\/fonts\/[^']+\.woff2'\)/);
+    /**
+     * RELATIVE to the stylesheet, not root-absolute.
+     *
+     * This used to assert `url('/fonts/…')` — and so locked in a real defect. vite.config.ts sets
+     * `base: './'` precisely so the app can be served from a subdirectory, and DEPLOYMENT.md
+     * recommends GitHub Pages, whose project sites are always https://user.github.io/repo/. A
+     * root-absolute font URL 404s there, and the stimulus typeface — an experimental control —
+     * silently falls back to whatever the tablet's default sans happens to be.
+     */
+    expect(css).toMatch(/src: url\('[A-Za-z][^'/]*\.woff2'\)/);
+    expect(css).not.toMatch(/url\('\//);
     // Nothing in the generated stylesheet may reach back out to the network.
     expect(css).not.toMatch(/https?:/);
+  });
+
+  it('references its assets relatively everywhere, so a subdirectory deployment works', () => {
+    // index.html and the MediaPipe loader had the same root-absolute assumption. MediaPipe is the
+    // worst of the three: getUserMedia still succeeds and the preview still shows a face, so the
+    // operator ticks every checklist box, and then every condition writes disabledEyeMetrics —
+    // no primary outcome for any participant on that deployment, with nothing on screen saying so.
+    // Only the <link> hrefs: the module entry `src="/src/main.tsx"` is Vite's dev-server path and
+    // is rewritten to a relative asset URL at build time, which dist/index.html confirms.
+    const html = read('index.html');
+    expect(html).not.toMatch(/href="\/(?!\/)/);
+    const tracking = read('src/tracking/useTracking.ts');
+    expect(tracking).not.toMatch(/locateFile:.*`\/mediapipe\//);
+    expect(tracking).toMatch(/BASE_URL/);
   });
 
   it('blocks rather than swaps, so the face cannot change mid-passage', () => {

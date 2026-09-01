@@ -144,7 +144,15 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
   };
 
   return (
-    <div className="min-h-screen w-full animate-fade-in" style={{ background, color: text, padding: '4% 8%', display: 'flex', flexDirection: 'column' }}>
+    /*
+      height: '100%' — matching ReadingTask, which has it — is what bounds this flex column.
+      With only min-h-screen the column is unbounded, so the flex:1 passage div grows to its full
+      content height instead of scrolling, and everything below it is pushed outside #root, which
+      is overflow:hidden with touch-action:none on the body. The end-of-block button then sits
+      beyond the bottom edge with no way to reach it, so the block can only ever end on the 40 s
+      cap and termination_mode can never be voluntary_early.
+    */
+    <div className="min-h-screen w-full animate-fade-in" style={{ background, color: text, padding: '4% 8%', display: 'flex', flexDirection: 'column', height: '100%' }}>
       <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 15 }}>
         <strong>Find and tap every occurrence of:</strong>{' '}
         <span style={{ padding: '2px 10px', borderRadius: 4, border: `1.5px solid ${text}80`, fontWeight: 700 }}>
@@ -152,7 +160,7 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
         </span>{' '}
         <span style={{ opacity: 0.6 }}>({foundIdx.size}/{totalTargets})</span>
       </p>
-      <div className="scrollable" style={{ flex: 1, marginTop: 16, fontSize: 19, lineHeight: 1.9, fontFamily: STIMULUS_FONT_STACK, whiteSpace: 'pre-wrap' }}>
+      <div className="scrollable" style={{ flex: 1, minHeight: 0, marginTop: 16, fontSize: 19, lineHeight: 1.9, fontFamily: STIMULUS_FONT_STACK, whiteSpace: 'pre-wrap' }}>
         {tokens.map((tok) =>
           tok.isWord ? (
             <span
