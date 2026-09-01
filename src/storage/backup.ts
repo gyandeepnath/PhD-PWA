@@ -304,6 +304,37 @@ function validateStructure(data: BackupData, sessionId: string, participantId: s
     }
   }
 
+  /**
+   * Every child row's condition_id must name a condition IN THIS BACKUP.
+   *
+   * visual_search, eye_metrics and rt_summaries are keyed on condition_id alone, so put() replaces
+   * whatever is already under that key. A self-consistent file carrying a condition_id that belongs
+   * to another participant's already-collected session would overwrite THEIR eye-metrics row — the
+   * primary outcome — and move it under this session in the by_session index. The victim's next
+   * export raises a coverage error, but if they were already exported the device copy is silently
+   * wrong and a re-export would differ from the dataset in hand.
+   */
+  {
+    const known = new Set(
+      (Array.isArray(data.conditions) ? data.conditions : [])
+        .map((c) => (c as Record<string, unknown>)?.condition_id)
+        .filter((id): id is string => typeof id === 'string'),
+    );
+    for (const { key, store } of RESTORE_PLAN) {
+      const rows = data[key];
+      if (!Array.isArray(rows) || store === 'conditions') continue;
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i] as Record<string, unknown> | null;
+        if (!r || typeof r !== 'object') continue;
+        const cid = r.condition_id;
+        if (cid === undefined || cid === null) continue;
+        if (typeof cid !== 'string' || !known.has(cid)) {
+          problems.push(`${store}[${i}] references condition "${String(cid)}", which is not one of this backup's own conditions.`);
+        }
+      }
+    }
+  }
+
   // The media inventory is written through its own path, but the same two rules apply to it.
   const media = data.media;
   if (media !== undefined && media !== null) {
@@ -455,7 +486,21 @@ export async function importSessionBackup(
     await put('participants', data.participant as StoreMap['participants']);
     written.participants = 1;
     }
-    await put('sessions', session);
+    /**
+     * Normalised, not written verbatim.
+     *
+     * deleted_at and status came straight from the file. A backup taken from a session that was in
+     * the recycle bin — or one whose deleted_at was corrupted — restored INTO the bin: the operator
+     * saw "Session restored" and then could not find it anywhere in the active list, because
+     * listSessions filters deleted rows out. Thirty days later the auto-purge destroyed it.
+     */
+    await put('sessions', {
+      ...(session as unknown as Record<string, unknown>),
+      deleted_at: null,
+      status: (session as unknown as { session_end_time?: number | null }).session_end_time != null
+        ? 'complete'
+        : (session as unknown as { status?: string }).status === 'complete' ? 'complete' : 'in_progress',
+    } as StoreMap['sessions']);
     written.sessions = 1;
 
     // The enrolment number drives the Williams condition order and the illumination order, and the

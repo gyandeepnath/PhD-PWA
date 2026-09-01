@@ -395,3 +395,69 @@ describe('the checksum survives a change in field order', () => {
     expect(r.ok).toBe(true);
   });
 });
+
+/**
+ * Three more shapes a self-consistent backup could take, each of which used to get through.
+ *
+ * The checksum proves the file has not changed since it was written. It proves nothing about
+ * whether what was written made sense, so a buggy build — or a hand-edited, re-checksummed file —
+ * can carry any of these.
+ */
+describe('a structurally plausible but wrong backup is still refused', () => {
+  const rebuild = (mutate: (d: Record<string, unknown>) => void) => {
+    const obj = JSON.parse(serialiseSessionBackup(buildFixtureBundle()));
+    mutate(obj.data);
+    return withChecksum(obj);
+  };
+
+  it('refuses a participant record keyed differently from the session', () => {
+    // It restores "successfully" and reports participants: 1, and then gatherSession finds nothing
+    // — 11_participant.csv exports as headers only, with no eligible and no exclusion_reason,
+    // beside an integrity report reading joins_sound with zero errors.
+    const r = parseSessionBackup(rebuild((d) => {
+      (d.participant as Record<string, unknown>).participant_id = 'SOMEONE-ELSE';
+    }));
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/keyed .* but the session names/i);
+  });
+
+  it('refuses an enrolment number that would freeze the device counter', () => {
+    // Above 2^53 the counter can no longer increment, so every later participant on that tablet
+    // shares one number — and therefore one Williams order and one illumination assignment.
+    const r = parseSessionBackup(rebuild((d) => {
+      (d.session as Record<string, unknown>).enrolment_number = 1e17;
+    }));
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/enrolment/i);
+  });
+
+  it("refuses a child row pointing at a condition the backup does not contain", () => {
+    // eye_metrics is keyed on condition_id alone, so put() would replace whatever is under that
+    // key — including another participant's already-collected primary outcome.
+    const r = parseSessionBackup(rebuild((d) => {
+      (d.eyeMetrics as Record<string, unknown>[])[0].condition_id = 'someone-elses-condition';
+    }));
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/not one of this backup/i);
+  });
+});
+
+describe('a restored session lands where the operator can see it', () => {
+  beforeEach(clearDb);
+
+  it('never restores into the recycle bin', async () => {
+    // deleted_at used to be written verbatim, so a backup taken from a binned session restored
+    // straight back into the bin: "Session restored", then nothing in the active list, then
+    // destroyed by the auto-purge thirty days later.
+    const b = buildFixtureBundle();
+    const obj = JSON.parse(serialiseSessionBackup(b));
+    (obj.data.session as Record<string, unknown>).deleted_at = Date.now() - 1000;
+    const parsed = parseSessionBackup(withChecksum(obj));
+    expect(parsed.ok).toBe(true);
+
+    const res = await importSessionBackup(parsed.backup!);
+    expect(res.ok).toBe(true);
+    const stored = await get('sessions', res.sessionId!);
+    expect((stored as unknown as { deleted_at: number | null }).deleted_at).toBeNull();
+  });
+});

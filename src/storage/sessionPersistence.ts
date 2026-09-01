@@ -19,7 +19,7 @@
  * a synchronous fast path for the Session Manager's first paint — it is an optimisation, and losing
  * it costs nothing.
  */
-import { get, getAll, put } from './db';
+import { get, getAll, getAllByIndex, put } from './db';
 import type { SessionRecord } from './types';
 
 const KEY = 'visulab_resume';
@@ -133,7 +133,35 @@ export async function listResumable(): Promise<ResumePointer[]> {
   for (const s of sessions) {
     if (s.status !== 'in_progress' || s.deleted_at) continue;
     const cached = cache[s.session_id];
-    const recorded = s.resume_next_index ?? cached?.nextStepIndex ?? null;
+
+    /**
+     * The CONDITION ROWS are the authority, not the pointer.
+     *
+     * Both copies of the pointer are caches, and both are losable: localStorage is separately
+     * evictable, and the IndexedDB copy is written without an await and with its failure
+     * discarded. When both were missing, `reachedLoop` was false and the resume restarted at
+     * condition 0 — silently replaying conditions the participant had already completed. The redo
+     * reuses each position's existing condition_id, so it OVERWRITES the first attempt everywhere,
+     * and the resulting dataset has ten conditions, unique ids, full coverage and joins_sound:
+     * true. Nothing anywhere records that six of them were read twice.
+     *
+     * A completed condition row is not a cache. Counting them recovers the position from data.
+     */
+    let completed = 0;
+    try {
+      const rows = await getAllByIndex('conditions', 'by_session', s.session_id);
+      completed = (rows as { completed_at: number | null }[]).filter((c) => c.completed_at != null).length;
+    } catch {
+      /* fall back to the pointer below */
+    }
+
+    const cachedIdx = s.resume_next_index ?? cached?.nextStepIndex ?? null;
+    // Take whichever is further on: a pointer ahead of the condition rows means the last condition
+    // finished but its row had not been stamped yet, and a condition count ahead of the pointer
+    // means the pointer was lost. Neither may send the participant backwards over finished work.
+    const recorded = completed > 0 || cachedIdx != null
+      ? Math.max(completed, cachedIdx ?? 0)
+      : null;
     // reachedLoop distinguishes "interrupted at condition 1" from "interrupted during setup and
     // never got as far as condition 1". Both are resumable; they resume to different places, and
     // conflating them dropped a participant into the reading task with no consent record, no
