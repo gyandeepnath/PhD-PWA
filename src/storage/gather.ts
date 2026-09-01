@@ -216,10 +216,59 @@ export async function purgeSession(sessionId: string): Promise<void> {
 }
 
 /** Auto-purge bin entries older than the retention window. Returns how many were purged. */
-export async function purgeExpired(now = Date.now()): Promise<number> {
-  const expired = (await listDeleted()).filter((s) => now - (s.deleted_at ?? 0) > BIN_RETENTION_MS);
-  for (const s of expired) await purgeSession(s.session_id);
-  return expired.length;
+/**
+ * Auto-purge of the recycle bin. Runs unattended whenever the Session Manager mounts, and destroys
+ * a whole sitting across every store, so what it REFUSES to touch matters more than what it takes.
+ *
+ * Three guards, each for a way it could have destroyed unrecoverable data silently:
+ *
+ *  - THE CLOCK. deleted_at is wall-clock. A tablet that fully discharges and boots offline — which
+ *    this study's tablets do, in aeroplane mode — comes up with a reset clock, so a session deleted
+ *    in that window carries a deleted_at years in the past and was purged instantly on the next
+ *    mount, with no thirty-day window at all. A deleted_at earlier than the session's own start is
+ *    impossible and proves the clock moved, so such a session is never auto-purged.
+ *  - EXPORT. A session that was never exported exists only on this device. It now needs a
+ *    deliberate purge from the bin, not a timer.
+ *  - IN PROGRESS. A sitting deleted while a participant was part-way through went down the same
+ *    path as a finished one.
+ *
+ * Returns what it purged AND what it declined to, so the caller can tell the operator rather than
+ * discarding the number.
+ */
+export interface PurgeOutcome {
+  purged: number;
+  /** Sessions past the retention window that were deliberately NOT purged, with the reason. */
+  retained: { session_id: string; reason: string }[];
+}
+
+export async function purgeExpired(now = Date.now()): Promise<PurgeOutcome> {
+  const outcome: PurgeOutcome = { purged: 0, retained: [] };
+  for (const s of await listDeleted()) {
+    const deletedAt = s.deleted_at ?? 0;
+    if (now - deletedAt <= BIN_RETENTION_MS) continue;
+
+    if (deletedAt < s.session_start_time) {
+      outcome.retained.push({
+        session_id: s.session_id,
+        reason: 'its deletion timestamp precedes the session itself, so the device clock moved; the retention window cannot be trusted',
+      });
+      continue;
+    }
+    if (s.status === 'in_progress') {
+      outcome.retained.push({ session_id: s.session_id, reason: 'the sitting is still marked in progress' });
+      continue;
+    }
+    if (s.exported_at == null) {
+      outcome.retained.push({
+        session_id: s.session_id,
+        reason: 'it was never exported, so this device holds the only copy',
+      });
+      continue;
+    }
+    await purgeSession(s.session_id);
+    outcome.purged++;
+  }
+  return outcome;
 }
 
 export function sessionLabel(s: SessionRecord): string {

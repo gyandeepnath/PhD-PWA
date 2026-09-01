@@ -134,6 +134,11 @@ export interface SessionRecord {
   /** Pre-flight checklist fully completed. */
   preflight_complete: boolean;
   /**
+   * When this session was last exported. Null means this device holds the only copy of it, which
+   * is why the recycle bin refuses to auto-purge such a session however long it has been there.
+   */
+  exported_at?: number | null;
+  /**
    * True when this session ran with the E2E harness's collapsed timing constants. Such a session is
    * a test artefact, not data: every protocol duration was replaced with a token value.
    */

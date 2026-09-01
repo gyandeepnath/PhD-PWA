@@ -5,6 +5,7 @@
  * non-monotonic w.r.t. fatigue; small-N d').
  */
 import { useEffect, useMemo, useState } from 'react';
+import { get, put } from '@/storage/db';
 import { gatherSession, listSessions, type SessionBundle } from '@/storage/gather';
 import { buildConditionSummaries, baselineFatigueMean, type ConditionSummary } from './aggregate';
 import { buildExportFiles, downloadExport, downloadSessionMedia } from '@/storage/export';
@@ -50,7 +51,16 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   const onExport = async () => {
     if (!bundle) return;
     setExporting(true);
-    try { await downloadExport(buildExportFiles(bundle)); } finally { setExporting(false); }
+    try {
+      await downloadExport(buildExportFiles(bundle));
+      /**
+       * Record that this session has left the device. The recycle bin refuses to auto-purge a
+       * session that was never exported, because such a session exists only here — and the bin's
+       * timer used to destroy one regardless, unattended, on a Session Manager mount.
+       */
+      const fresh = await get('sessions', bundle.session.session_id);
+      if (fresh) await put('sessions', { ...fresh, exported_at: Date.now() });
+    } finally { setExporting(false); }
   };
 
   /**

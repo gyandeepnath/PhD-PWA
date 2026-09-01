@@ -68,12 +68,60 @@ describe('session manager admin', () => {
     expect(await getAll('rt_summaries')).toHaveLength(0);
   });
 
-  it('auto-purges only bin entries older than 30 days', async () => {
-    await put('sessions', makeSession('OLD', { deleted_at: Date.now() - BIN_RETENTION_MS - 1000 }));
+  it('auto-purges only bin entries older than 30 days, and only ones already exported', async () => {
+    // exported_at is the new precondition: a session that never left this device exists only here,
+    // so a timer must not destroy it however long it has been in the bin.
+    // A session deleted 30+ days ago necessarily STARTED before that; a start after its own
+    // deletion is the clock-skew signature the bin now refuses to act on.
+    await put('sessions', makeSession('OLD', {
+      session_start_time: Date.now() - BIN_RETENTION_MS - 10_000,
+      deleted_at: Date.now() - BIN_RETENTION_MS - 1000,
+      exported_at: Date.now() - BIN_RETENTION_MS,
+    }));
     await put('sessions', makeSession('NEW', { deleted_at: Date.now() - 1000 }));
-    const purged = await purgeExpired();
-    expect(purged).toBe(1);
+    const r = await purgeExpired();
+    expect(r.purged).toBe(1);
     expect((await listDeleted()).map((s) => s.session_id)).toEqual(['NEW']);
+  });
+
+  it('refuses to auto-purge a session that was never exported, and says why', async () => {
+    await put('sessions', makeSession('NEVER_EXPORTED', {
+      session_start_time: Date.now() - BIN_RETENTION_MS - 10_000,
+      deleted_at: Date.now() - BIN_RETENTION_MS - 1000,
+    }));
+    const r = await purgeExpired();
+    expect(r.purged).toBe(0);
+    expect(r.retained).toHaveLength(1);
+    expect(r.retained[0].reason).toMatch(/never exported/i);
+    expect((await listDeleted()).map((s) => s.session_id)).toEqual(['NEVER_EXPORTED']);
+  });
+
+  it('refuses to auto-purge when the device clock has clearly moved', async () => {
+    // A tablet that discharges and boots offline comes up with a reset clock, so a session deleted
+    // in that window carries a deleted_at years before the session itself — and used to be
+    // destroyed instantly on the next mount, with no retention window at all.
+    const s = makeSession('CLOCK_SKEW', {
+      deleted_at: 1000,
+      exported_at: Date.now(),
+    });
+    s.session_start_time = Date.now();
+    await put('sessions', s);
+    const r = await purgeExpired();
+    expect(r.purged).toBe(0);
+    expect(r.retained[0].reason).toMatch(/clock/i);
+  });
+
+  it('refuses to auto-purge a sitting still marked in progress', async () => {
+    const s = makeSession('MID', {
+      session_start_time: Date.now() - BIN_RETENTION_MS - 10_000,
+      deleted_at: Date.now() - BIN_RETENTION_MS - 1000,
+      exported_at: Date.now() - BIN_RETENTION_MS,
+    });
+    s.status = 'in_progress';
+    await put('sessions', s);
+    const r = await purgeExpired();
+    expect(r.purged).toBe(0);
+    expect(r.retained[0].reason).toMatch(/in progress/i);
   });
 
   it('backfills status for legacy sessions missing v7 fields', async () => {

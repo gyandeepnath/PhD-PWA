@@ -23,7 +23,7 @@
  *     inventory rows are, flagged blob_present: false, so a restored session reports its media as
  *     missing rather than appearing to still hold it.
  */
-import { get, getAll, put, ensureEnrolmentAtLeast } from './db';
+import { get, getAll, put, ensureEnrolmentAtLeast, MAX_PLAUSIBLE_ENROLMENT } from './db';
 import { purgeSession } from './gather';
 import { fnv1a } from './export';
 import type { SessionBundle } from './gather';
@@ -206,7 +206,11 @@ export function parseSessionBackup(text: string): ParseResult {
   if (!session?.session_id) {
     return { ok: false, warnings, error: 'The backup has no session record, so there is nothing to restore.' };
   }
-  const problems = validateStructure(b.data as BackupData, session.session_id);
+  const problems = validateStructure(
+    b.data as BackupData,
+    session.session_id,
+    (session as unknown as { participant_id?: string }).participant_id ?? '',
+  );
   if (problems.length) {
     const shown = problems.slice(0, 6).map((p) => `  - ${p}`).join('\n');
     const more = problems.length > 6 ? `\n  ...and ${problems.length - 6} more.` : '';
@@ -246,7 +250,7 @@ export function parseSessionBackup(text: string): ParseResult {
  * Refuses rather than repairs. A backup is a last copy; quietly dropping the rows that look wrong
  * would hand the operator a file that imported "successfully" and lost data.
  */
-function validateStructure(data: BackupData, sessionId: string): string[] {
+function validateStructure(data: BackupData, sessionId: string, participantId: string): string[] {
   const problems: string[] = [];
 
   for (const { key, store, keyPath } of RESTORE_PLAN) {
@@ -327,6 +331,34 @@ function validateStructure(data: BackupData, sessionId: string): string[] {
   if (participant && typeof participant === 'object') {
     if (typeof participant.participant_id !== 'string' || participant.participant_id === '') {
       problems.push('The participant record has no participant_id and cannot be written.');
+    } else if (participant.participant_id !== participantId) {
+      /**
+       * It must EQUAL the id the session names, because that is the only key it is ever read back
+       * by. A mismatch — even a difference of case — restores "successfully", reports
+       * participants: 1, and then gatherSession finds nothing: 11_participant.csv exports as
+       * headers only, with no age, no correction_type, no cvd_status, no eligible and no
+       * exclusion_reason, while the integrity report still reads joins_sound with zero errors.
+       */
+      problems.push(
+        `The participant record is keyed "${String(participant.participant_id)}" but the session `
+        + `names participant "${participantId}". Nothing would ever read it back, so every `
+        + 'demographic and eligibility covariate would be silently absent.',
+      );
+    }
+  }
+
+  const enrolment = (data.session as Record<string, unknown> | null)?.enrolment_number;
+  if (enrolment !== undefined) {
+    // A wild enrolment number does not merely mislabel this session: importSessionBackup raises the
+    // device counter to it, and above 2^53 the counter can no longer increment, so every later
+    // participant on that tablet would share one number and therefore one condition order.
+    if (typeof enrolment !== 'number' || !Number.isSafeInteger(enrolment)
+        || enrolment < 1 || enrolment > MAX_PLAUSIBLE_ENROLMENT) {
+      problems.push(
+        `The session's enrolment_number (${String(enrolment)}) is not a plausible enrolment. `
+        + 'Importing it would raise this device\u2019s counter beyond the point where it can be '
+        + 'incremented, and every subsequent participant would receive the same counterbalancing.',
+      );
     }
   }
 
@@ -366,6 +398,8 @@ export async function importSessionBackup(
   const written: Record<string, number> = {};
   const warnings: string[] = [];
   let collision: string | undefined;
+  /** The device's participant row, kept across a purge when the backup carries none. */
+  let priorParticipant: unknown = null;
   const data = backup.data;
   const session = data.session as StoreMap['sessions'];
   const sessionId = (session as unknown as { session_id: string }).session_id;
@@ -385,26 +419,52 @@ export async function importSessionBackup(
   // that never existed — the backup's session record joined to a superset of its measurements —
   // which auditBundle then certifies as sound because every row it can see is internally
   // consistent. Purging first makes the result exactly the backup, which is what was promised.
-  if (existing && mode === 'overwrite') {
-    await purgeSession(sessionId);
-  }
+  /**
+   * From HERE, not fifty lines further down, the writes are protected.
+   *
+   * purgeSession destroys the device copy, and the three writes that followed it — participant,
+   * session, enrolment counter — sat OUTSIDE the try that exists precisely so a half-import is
+   * reported as a half-import. A quota failure on the session write therefore escaped the function
+   * entirely and surfaced through SessionManager's catch as "Could not read the file" — for a file
+   * that was read perfectly, while the device copy had already been deleted. The operator is told
+   * to blame the last remaining copy of the data.
+   */
+  try {
+    if (existing && mode === 'overwrite') {
+      /**
+       * purgeSession removes the participant record too, when no OTHER session references it. The
+       * re-write below is conditional on the backup carrying one, and a participant-less backup is
+       * explicitly admitted with only a warning — so overwriting with a backup taken before the
+       * profile stage silently destroyed the participant's demographics, vision covariates,
+       * colour-vision result and eligibility decision, for BOTH sittings, since the record is
+       * shared. Carry it forward.
+       */
+      priorParticipant = data.participant
+        ? null
+        : ((await get('participants', (session as unknown as { participant_id: string }).participant_id)) ?? null);
+      await purgeSession(sessionId);
+      if (priorParticipant) {
+        await put('participants', priorParticipant as StoreMap['participants']);
+        written.participants = 1;
+      }
+    }
 
-  // Participant first: several stores are only interpretable with it, and it is shared across a
-  // participant's two sittings, so it may already exist from the other session.
-  if (data.participant) {
+    // Participant first: several stores are only interpretable with it, and it is shared across a
+    // participant's two sittings, so it may already exist from the other session.
+    if (data.participant) {
     await put('participants', data.participant as StoreMap['participants']);
     written.participants = 1;
-  }
-  await put('sessions', session);
-  written.sessions = 1;
+    }
+    await put('sessions', session);
+    written.sessions = 1;
 
-  // The enrolment number drives the Williams condition order and the illumination order, and the
-  // counter that issues it is a per-device integer that no backup carried. A replacement tablet
-  // starts at zero, so without this it would hand enrolment 1 to the next participant while the
-  // restored session already holds it: two participants, one condition order, recorded as two
-  // distinct enrolments. Raising the counter here closes that path.
-  const enrolment = (session as unknown as { enrolment_number?: number }).enrolment_number;
-  if (typeof enrolment === 'number' && Number.isFinite(enrolment)) {
+    // The enrolment number drives the Williams condition order and the illumination order, and the
+    // counter that issues it is a per-device integer that no backup carried. A replacement tablet
+    // starts at zero, so without this it would hand enrolment 1 to the next participant while the
+    // restored session already holds it: two participants, one condition order, recorded as two
+    // distinct enrolments. Raising the counter here closes that path.
+    const enrolment = (session as unknown as { enrolment_number?: number }).enrolment_number;
+    if (typeof enrolment === 'number' && Number.isFinite(enrolment)) {
     // Warn if this device already issued the number to somebody else, which the restore cannot
     // undo and which invalidates the counterbalance for both participants.
     const pid = (session as unknown as { participant_id?: string }).participant_id;
@@ -416,15 +476,14 @@ export async function importSessionBackup(
       collision = `Enrolment number ${enrolment} is already held on this device by a different participant. Both participants now share a condition order, which breaks the counterbalance for each of them. Record this and tell the investigator before collecting more data.`;
     }
     await ensureEnrolmentAtLeast(enrolment);
-  }
+    }
 
-  // From here on a failure leaves the device holding a PARTIAL copy. IndexedDB gives no
-  // transaction across this many stores through the wrapper in use, so the next best thing is to
-  // report the partial state precisely rather than let the exception escape: SessionManager's
-  // catch would otherwise tell the operator "Could not read the file", for a file it read
-  // perfectly and half-imported. A half-restored session also re-exports as a fresh,
-  // checksum-valid backup that looks complete, so the operator has to be told now.
-  try {
+    // From here on a failure leaves the device holding a PARTIAL copy. IndexedDB gives no
+    // transaction across this many stores through the wrapper in use, so the next best thing is to
+    // report the partial state precisely rather than let the exception escape: SessionManager's
+    // catch would otherwise tell the operator "Could not read the file", for a file it read
+    // perfectly and half-imported. A half-restored session also re-exports as a fresh,
+    // checksum-valid backup that looks complete, so the operator has to be told now.
     for (const { key, store } of RESTORE_PLAN) {
       const rows = (data[key] as unknown[]) ?? [];
       for (const row of rows) await put(store, row as StoreMap[typeof store]);

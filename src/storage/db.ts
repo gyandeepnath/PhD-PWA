@@ -50,6 +50,29 @@ function indexedDBAvailable(): boolean {
 function getDB(): Promise<IDBPDatabase> {
   if (_dbPromise) return _dbPromise;
   _dbPromise = openDB(DB_NAME, DB_VERSION, {
+    /**
+     * A second tab, or a service-worker update that bumps DB_VERSION, must not hang every write.
+     *
+     * `upgrade` used to be the only callback. Without `blocking`, a tab holding an open connection
+     * never closes it when another tab opens a newer version, so the newer tab's openDB promise
+     * NEVER SETTLES and every `await put(...)` there waits for ever. It does not reject, so
+     * main.tsx's unhandledrejection panel never fires either: the screen simply stops advancing,
+     * mid-condition, with nothing anywhere saying why. Without `terminated`, a connection the
+     * browser reclaims — WebKit does this to backgrounded tabs — leaves the cached promise
+     * resolving to a closed database, and every later call rejects for the rest of the session
+     * with no attempt to reopen.
+     */
+    blocked() {
+      console.error('[visulab] The database is open in another tab, which is blocking an upgrade. Close the other tab.');
+    },
+    blocking(_cur, _next, ev) {
+      // This connection is the one in the way. Release it; the next call here reopens.
+      _dbPromise = null;
+      (ev.target as IDBDatabase | null)?.close();
+    },
+    terminated() {
+      _dbPromise = null;
+    },
     upgrade(db, _oldVersion, _newVersion, tx) {
       // Additive: create any store that does not yet exist (covers fresh installs and
       // forward-migration from an older version that lacks the v6 stores).
@@ -75,6 +98,8 @@ function getDB(): Promise<IDBPDatabase> {
       }
     },
   });
+  // A failed open must not be cached as a permanent rejection: the next call should try again.
+  _dbPromise.catch(() => { _dbPromise = null; });
   return _dbPromise;
 }
 
@@ -179,6 +204,16 @@ export async function nextEnrolmentNumber(): Promise<number> {
     | { key: string; value: number }
     | undefined;
   const next = (rec?.value ?? 0) + 1;
+  // If the counter did not actually advance, the stored value is beyond safe integer arithmetic and
+  // every subsequent participant would share this number — and therefore share a condition order
+  // and an illumination assignment — while being recorded as a distinct enrolment.
+  if (!Number.isSafeInteger(next) || next <= (rec?.value ?? 0)) {
+    throw new Error(
+      `Enrolment counter is corrupt (${String(rec?.value)}): it can no longer be incremented, so `
+      + 'every further participant would receive the same counterbalancing. Stop and fix this '
+      + 'device before enrolling anyone else.',
+    );
+  }
   await tx.store.put({ key: 'enrolment_counter', value: next });
   await tx.done;
   return next;
@@ -198,8 +233,23 @@ export async function nextEnrolmentNumber(): Promise<number> {
  *
  * Returns the counter value in force afterwards.
  */
+/**
+ * Upper bound on a plausible enrolment number for this study (target n = 130, 145 enrolled).
+ * Generous by two orders of magnitude, and far below where integer arithmetic stops incrementing.
+ */
+export const MAX_PLAUSIBLE_ENROLMENT = 100_000;
+
 export async function ensureEnrolmentAtLeast(used: number): Promise<number> {
-  if (!Number.isFinite(used) || used < 1) return peekNextEnrolmentNumber().then((n) => n - 1);
+  /**
+   * Number.isFinite admits 1e17. Above 2^53 the IEEE-754 spacing exceeds 1, so `value + 1 === value`
+   * and nextEnrolmentNumber() returns the SAME number for ever. The enrolment number is the sole
+   * input to the Williams condition order and the illumination assignment, so every participant
+   * enrolled afterwards would receive an identical order while being recorded as a distinct
+   * enrolment. Nothing lowers the counter, so it is not recoverable in the field.
+   */
+  if (!Number.isSafeInteger(used) || used < 1 || used > MAX_PLAUSIBLE_ENROLMENT) {
+    return peekNextEnrolmentNumber().then((n) => n - 1);
+  }
   const target = Math.floor(used);
   if (!indexedDBAvailable()) {
     const meta = memStore('meta');

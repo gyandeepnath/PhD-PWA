@@ -24,6 +24,8 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
   const [active, setActive] = useState<SessionRecord[]>([]);
   const [bin, setBin] = useState<SessionRecord[]>([]);
   const [showBin, setShowBin] = useState(false);
+  /** What the auto-purge declined to destroy, and why. */
+  const [binNotice, setBinNotice] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   /**
@@ -35,7 +37,20 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
   const [resumable, setResumable] = useState<Record<string, ResumePointer>>({});
 
   const refresh = useCallback(async () => {
-    await purgeExpired();
+    /**
+     * The bin reports what it declined to destroy as well as what it destroyed. It used to discard
+     * the count entirely, so a session it purged — or refused to purge — left no trace anywhere.
+     */
+    const purge = await purgeExpired();
+    if (purge.retained.length) {
+      setBinNotice(
+        `${purge.retained.length} session(s) are past the 30-day window but were NOT auto-deleted:\n`
+        + purge.retained.map((r) => `  ${r.session_id} — ${r.reason}`).join('\n')
+        + '\n\nPurge them from the bin deliberately once you are sure they are safe to lose.',
+      );
+    } else {
+      setBinNotice(null);
+    }
     setActive(await listSessions());
     setBin(await listDeleted());
     const list = await listResumable();
@@ -212,6 +227,11 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
         </Section>
 
         <div style={{ marginTop: 18 }}>
+          {binNotice && (
+            <p className="font-lab text-sm" style={{ marginBottom: 8, background: '#fff6e5', border: '1px solid #f0d8a8', borderRadius: 10, padding: 12, whiteSpace: 'pre-wrap' }}>
+              {binNotice}
+            </p>
+          )}
           <button onClick={() => setShowBin((b) => !b)} className="font-lab text-sm text-[#5a5a7a]" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
             {showBin ? '▾' : '▸'} Recycle bin ({bin.length}) · auto-purged after 30 days
           </button>

@@ -134,8 +134,26 @@ export async function assessStorageHealth(): Promise<StorageHealth> {
     messages.push(`Only about ${availableMb} MB of storage is free. A sitting needs roughly ${REQUIRED_HEADROOM_MB} MB, more when video is consented. Export and remove older sessions before continuing.`);
   }
 
+  /**
+   * A quota check that could not run has NOT passed.
+   *
+   * The module's own contract says absence is reported as unknown, never as fine — and this branch
+   * violated it: when navigator.storage.estimate is missing or throws, availableMb stays null, the
+   * headroom test is skipped entirely, the verdict stays ok, and the operator was shown the literal
+   * string "Storage is durable and about ? MB is free." A tablet with 40 MB left passed pre-flight
+   * green and then started rejecting writes at condition 6, with the participant in the chair.
+   */
+  if (availableMb == null) {
+    worse('unknown');
+    messages.push(
+      'Free space could NOT be measured on this device, so the headroom check did not run. '
+      + 'A 90-minute sitting needs room for several hundred rows and, if media is consented, '
+      + 'video. Check available storage manually before starting.',
+    );
+  }
+
   if (verdict === 'ok') {
-    messages.push(`Storage is durable and about ${availableMb ?? '?'} MB is free.`);
+    messages.push(`Storage is durable and about ${availableMb} MB is free.`);
   }
 
   return { verdict, persisted, usageBytes, quotaBytes, availableMb, messages };
