@@ -146,23 +146,61 @@ export function pickVideoMime(): string | null {
  * segment length per condition (the synopsis specifies two 3-minute segments per participant), and
  * an open-ended recording risks filling device storage mid-session and losing the run.
  */
-export async function recordSegment(
-  stream: MediaStream,
-  durationMs: number,
-): Promise<{ blob: Blob; mime: string; duration_ms: number } | null> {
+export interface SegmentRecording {
+  /** Resolves when the recorder has stopped and the blob is assembled. */
+  done: Promise<{ blob: Blob; mime: string; duration_ms: number } | null>;
+  /** Stop early — called when the reading exposure ends. Idempotent. */
+  stop: () => void;
+}
+
+/**
+ * Time-boxed, but STOPPABLE.
+ *
+ * The clip must cover the same window the automated measure does. The recorder used to run a fixed
+ * ANNOTATION_SEGMENT_MS and stop on its own timer, while the automated measurement closes at the
+ * end of reading — so the clip routinely continued 30-100 s past it, through the comprehension
+ * questions and the display-perception ratings. Objective 4 compares human frame-by-frame blink
+ * coding against the classifier; coding a window that includes the participant answering
+ * multiple-choice questions estimates the disagreement between windows, not the validity of the
+ * classifier. The caller now stops it when reading ends, and the timer is only an upper bound.
+ *
+ * setTimeout is also throttled or suspended while the app is backgrounded, which extended the
+ * overrun further; an explicit stop is immune to that.
+ */
+export function recordSegment(stream: MediaStream, maxDurationMs: number): SegmentRecording {
   const mime = pickVideoMime();
-  if (!mime) return null;
-  const rec = new MediaRecorder(stream, { mimeType: mime });
+  if (!mime) return { done: Promise.resolve(null), stop: () => {} };
+
+  const rec = new MediaRecorder(stream, {
+    mimeType: mime,
+    // An explicit bitrate. The default is unbounded, and a 1080p front camera can produce well over
+    // 100 MB for three minutes — enough to exhaust the device quota and take the numeric writes of
+    // later conditions down with it. 1.2 Mbps is ample for frame-by-frame blink coding.
+    videoBitsPerSecond: 1_200_000,
+  });
   const chunks: Blob[] = [];
   rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
   const started = Date.now();
-  const done = new Promise<void>((res) => { rec.onstop = () => res(); });
+  let settled = false;
+  const stop = () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    if (rec.state !== 'inactive') rec.stop();
+  };
+
+  const done = new Promise<{ blob: Blob; mime: string; duration_ms: number } | null>((res) => {
+    rec.onstop = () => {
+      res(chunks.length ? { blob: new Blob(chunks, { type: mime }), mime, duration_ms: Date.now() - started } : null);
+    };
+    // An errored recorder never fires onstop, which used to leave the promise pending for ever.
+    rec.onerror = () => { settled = true; clearTimeout(timer); res(null); };
+  });
+
+  const timer = setTimeout(stop, maxDurationMs);
   rec.start();
-  await new Promise((r) => setTimeout(r, durationMs));
-  if (rec.state !== 'inactive') rec.stop();
-  await done;
-  if (chunks.length === 0) return null;
-  return { blob: new Blob(chunks, { type: mime }), mime, duration_ms: Date.now() - started };
+  return { done, stop };
 }
 
 /** Human-readable size, for the researcher-facing media list. */

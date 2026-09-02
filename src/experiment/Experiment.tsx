@@ -104,6 +104,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    */
   const adaptationDelivered = useRef(0);
 
+  /** The annotation clip in progress, so the reading task can close it at the right moment. */
+  const annotationRecording = useRef<{ stop: () => void } | null>(null);
+
   /**
    * Which stage is allowed to consume the resume jump.
    *
@@ -130,6 +133,33 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     // Entering a new reaction-time block means trials are running again.
     if (machine.stage === 'REACTION_TIME') setRtBlockFinished(false);
   }, [machine]);
+
+  /**
+   * A rotation to portrait invalidates the calibration for the rest of the sitting.
+   *
+   * The manifest requests landscape, which Android Chrome honours for an installed PWA and iPadOS
+   * WebKit does not — so DEPLOYMENT.md's claim that orientation is "locked" is only half true. When
+   * the tablet rotates, the camera moves from the long edge to the short one and the getUserMedia
+   * frame rotates with it, so MediaPipe's landmark frame turns 90 degrees: the vertical iris offset
+   * that calibration mapped to the 3x3 screen zones now measures HORIZONTAL eye movement, and the
+   * frontal nose-vertical zero no longer corresponds to any head posture. Every gaze and head-pose
+   * column becomes noise while gaze_calibrated and head_pitch_calibrated keep exporting TRUE.
+   *
+   * Reading is not clipped — the layout is a proper flex/scroll box — but line length drops from
+   * about 100 to 70 characters mid-passage, which is itself a determinant of reading rate.
+   *
+   * So: lock where the API exists, and block with an overlay where it does not.
+   */
+  const [portrait, setPortrait] = useState(false);
+  useEffect(() => {
+    const so = (screen as Screen & { orientation?: { lock?: (o: string) => Promise<void> } }).orientation;
+    void so?.lock?.('landscape').catch(() => { /* unsupported or not fullscreen — the overlay covers it */ });
+    const mq = window.matchMedia('(orientation: portrait)');
+    const sync = () => setPortrait(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
 
   /**
    * Hold a screen wake lock for the whole run.
@@ -329,7 +359,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       let duration: number | null = null;
       let mime: string;
       if (checkpoint === 'reading_segment') {
-        const seg = await recordSegment(src.stream, CONFIG.ANNOTATION_SEGMENT_MS);
+        // Stoppable: the clip must end when the reading exposure ends, so it covers the same window
+        // the automated blink measure does. The timer is only an upper bound now.
+        const rec = recordSegment(src.stream, CONFIG.ANNOTATION_SEGMENT_MS);
+        annotationRecording.current = rec;
+        const seg = await rec.done;
+        annotationRecording.current = null;
         if (!seg) return;
         blob = seg.blob; mime = seg.mime; duration = seg.duration_ms;
       } else {
@@ -865,6 +900,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               if (machine.stepIndex === 0) void captureMedia('reading_segment', cond?.label ?? null);
             }}
             onComplete={async (r) => {
+              // Close the annotation clip at the SAME instant the automated measurement window
+              // closes, so a human coder and the classifier see the same footage.
+              annotationRecording.current?.stop();
               if (session) {
                 await tracking.endCondition(conditionId, session.session_id);
                 const existing = await get('conditions', conditionId);
@@ -1125,6 +1163,23 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       {/* If the device has no wake-lock API, the operator has to know: the manual's fallback
           ("screen timeout disabled") is not achievable on stock Android, where the longest timeout
           is 30 minutes against a 90-minute sitting. */}
+      {/* Blocking, not advisory: continuing in portrait silently invalidates every gaze and
+          head-pose measure for the rest of the sitting. */}
+      {portrait && (
+        <div
+          data-testid="portrait-block"
+          style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#1a1a2e', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32 }}
+        >
+          <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 300 }}>Rotate the tablet back to landscape</h1>
+          <p className="font-lab" style={{ fontSize: 15, color: '#c8d8f0', maxWidth: 460, marginTop: 14, lineHeight: 1.6 }}>
+            The eye calibration was taken in landscape. Continuing in portrait would make every gaze
+            and head-position measure for the rest of this sitting meaningless.
+          </p>
+          <p className="font-lab" style={{ fontSize: 14, color: '#8fa0c0', marginTop: 12 }}>
+            The task resumes as soon as the tablet is landscape again.
+          </p>
+        </div>
+      )}
       {sessionCreateError && (
         <div
           data-testid="session-create-error"

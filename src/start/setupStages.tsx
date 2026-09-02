@@ -13,6 +13,7 @@ import type { MediaConsent } from '@/storage/media';
 import { WavyBackground } from '@/components/WavyBackground';
 import { now } from '@/lib/timing';
 import { stimulusFontLoaded } from '@/lib/fonts';
+import { startFaceProbe, type FaceProbeResult, type FaceProbeStatus } from '@/screening/faceProbe';
 import type { CameraStatus } from '@/storage/types';
 
 /**
@@ -261,6 +262,19 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
 }
 
 // ---- CAMERA SETUP (with live preview) ----
+const FACE_LABEL: Record<FaceProbeStatus, string> = {
+  loading: 'Loading face tracking…',
+  searching: 'No face detected yet',
+  detected: 'Face detected',
+  unavailable: 'Face tracking UNAVAILABLE',
+};
+const FACE_TONE: Record<FaceProbeStatus, string> = {
+  loading: '#c98a22',
+  searching: '#c98a22',
+  detected: '#22c97a',
+  unavailable: '#e64c4c',
+};
+
 export function CameraSetup({ onAllow, onSkip, retains }: {
   onAllow: () => void;
   onSkip: () => void;
@@ -268,6 +282,14 @@ export function CameraSetup({ onAllow, onSkip, retains }: {
   retains?: { setupPhotos: boolean; annotationVideo: boolean };
 }) {
   const [step, setStep] = useState<'notice' | 'preview' | 'denied'>('notice');
+  /** Live face detection in the preview — see startFaceProbe for why this is not cosmetic. */
+  const [face, setFace] = useState<FaceProbeResult>({ status: 'loading', box: null, ear: null, error: null });
+
+  useEffect(() => {
+    if (step !== 'preview' || !videoRef.current) return;
+    const probe = startFaceProbe(videoRef.current, setFace);
+    return () => probe.stop();
+  }, [step]);
   const [errMsg, setErrMsg] = useState('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -352,13 +374,46 @@ export function CameraSetup({ onAllow, onSkip, retains }: {
             <p className="mt-3 font-lab text-sm text-[#5a5a7a]">
               Check the preview: your whole face should be centred, in frame, and well-lit.
             </p>
+            {/*
+              A REAL face box, drawn from FaceMesh, not a hard-coded "Camera active" chip.
+              Three documents tell the operator to check for a face box before starting; there was
+              none, and no detection at all. This also probes MediaPipe itself — the model is not
+              otherwise loaded until after the preview closes, so a device whose model files did not
+              precache passed every documented check and then collected a study with no ocular data.
+            */}
             <div style={{ marginTop: 12, borderRadius: 16, overflow: 'hidden', background: '#000', width: 'min(480px, 70vw)', aspectRatio: '4 / 3', position: 'relative' }}>
               <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
-              <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.4)', borderRadius: 20, padding: '4px 10px' }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c97a' }} />
-                <span style={{ color: '#fff', fontFamily: '"DM Mono", monospace', fontSize: 11 }}>Camera active</span>
+              {face.box && (
+                <div
+                  data-testid="face-box"
+                  style={{
+                    position: 'absolute',
+                    // Mirrored to match the preview's scaleX(-1).
+                    left: `${(1 - face.box.x - face.box.w) * 100}%`,
+                    top: `${face.box.y * 100}%`,
+                    width: `${face.box.w * 100}%`,
+                    height: `${face.box.h * 100}%`,
+                    border: '2px solid #22c97a',
+                    borderRadius: 8,
+                    boxShadow: '0 0 0 9999px rgba(0,0,0,0.12)',
+                  }}
+                />
+              )}
+              <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.55)', borderRadius: 20, padding: '4px 10px' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: FACE_TONE[face.status] }} />
+                <span data-testid="face-status" style={{ color: '#fff', fontFamily: '"DM Mono", monospace', fontSize: 11 }}>
+                  {FACE_LABEL[face.status]}
+                </span>
               </div>
             </div>
+            {face.status === 'unavailable' && (
+              <div className="mt-3 rounded-xl border border-[#e64c4c] bg-[#fff0f0] p-3 font-lab text-sm" style={{ color: '#7a1010' }}>
+                The face-tracking model could not be loaded on this device, so no blink, gaze or
+                head-position data can be collected in this session — the primary outcome would be
+                empty for every condition. Check the device is fully set up (see DEPLOYMENT.md
+                section 4) before running a participant.{face.error ? ` Details: ${face.error}` : ''}
+              </div>
+            )}
             <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <button className={btn} style={{ background: '#1a1a2e' }} onClick={() => { stopPreview(); onAllow(); }}>
                 My face is centred — continue →
