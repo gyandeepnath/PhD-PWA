@@ -3,6 +3,7 @@ import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './styles/theme.css';
 import { installViewportScale } from './lib/viewportScale';
+import { installUpdateWatch } from './lib/swUpdate';
 
 /**
  * Surface asynchronous failures, which the React error boundary cannot see.
@@ -62,6 +63,14 @@ window.addEventListener('error', (e) => {
  * Continue button could not be pressed at all.
  */
 installViewportScale();
+
+/*
+ * Watch for a newer build. vite.config.ts registers with 'prompt' precisely so a new worker cannot
+ * seize a running session — but nothing was listening for the prompt, so an installed tablet served
+ * its original build forever and no amount of closing tabs or reinstalling the shortcut changed it.
+ * UpdateBanner offers the waiting build on the between-sessions screens only.
+ */
+void installUpdateWatch();
 
 // Note: StrictMode is intentionally omitted — its dev double-invocation of effects double-requests
 // the camera and re-runs FaceMesh init (the original VisuLab was a production build with no

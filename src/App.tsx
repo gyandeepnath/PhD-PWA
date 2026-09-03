@@ -3,6 +3,7 @@ import Experiment from '@/experiment/Experiment';
 import { LandingPage } from '@/start/LandingPage';
 import { SessionManager } from '@/start/SessionManager';
 import { LazyDashboard as Dashboard } from '@/dashboard/LazyDashboard';
+import { UpdateBanner, BuildStamp } from '@/components/UpdateBanner';
 
 /**
  * Top-level shell / router. Landing → session manager → (new or resumed experiment) → back to
@@ -21,15 +22,26 @@ export default function App() {
 
   switch (view.mode) {
     case 'landing':
-      return <LandingPage onEnter={toManager} />;
+      return (
+        <>
+          <LandingPage onEnter={toManager} />
+          {/* Between-sessions screens only: applying an update reloads the app, which would cost a
+              sitting if it happened mid-protocol. */}
+          <UpdateBanner />
+          <BuildStamp />
+        </>
+      );
     case 'manager':
       return (
+        <>
         <SessionManager
           onNew={() => setView({ mode: 'experiment' })}
           onResume={(sessionId, nextStepIndex, reachedLoop) => setView({ mode: 'experiment', resume: { sessionId, nextStepIndex, reachedLoop } })}
           onOpen={(sessionId) => setView({ mode: 'dashboard', sessionId })}
           onHome={() => setView({ mode: 'landing' })}
         />
+        <UpdateBanner />
+        </>
       );
     case 'experiment':
       // Remount per entry (key) so a fresh or resumed run starts from clean component state.
