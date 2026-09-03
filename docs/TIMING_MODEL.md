@@ -171,3 +171,59 @@ the sitting to reduce dropout achieves the opposite of its purpose.
 Interaction power is **45% at full exposure**, against a synopsis target of 81%. That is not
 created by any of the shortening options — it is there now, and it is the reason reading exposure
 is the most expensive thing in the protocol to cut. It needs addressing on its own terms.
+
+---
+
+# What the literature changes
+
+A literature search on short-protocol precedent has run; **every citation below is awaiting
+independent DOI verification and must not be quoted until that resolves.** The findings that bear
+on the timing decision:
+
+## Reading exposure is already below the shortest published precedent
+
+The shortest per-condition reading exposure retrieved with the *primary outcome* (blink rate and
+incomplete-blink proportion) as its endpoint is **6 minutes** across six conditions. This protocol
+runs **~3 minutes** per condition. Cutting reading exposure further therefore moves the study below
+the precedent it would need to cite in defence — which closes off the only lever that reduces total
+contact time. The interaction power problem and the exposure problem are the same problem.
+
+## Adaptation on a polarity switch rests on analogy, not citation
+
+No retrieved study measures the time course of adaptation to a display *polarity* switch. What
+exists is the general chromatic and light-adaptation literature: chromatic adaptation ~90% complete
+at approximately 60 s, 60–100 s found suitable for repeated pupillary measures, and light
+adaptation (as opposed to dark) too fast to time at 30-second resolution. The current 120 s is
+defensible by analogy but not by direct citation, and nothing retrieved requires it.
+
+## The go/no-go block is not free to halve
+
+RT-power methodology favours more participants with fewer trials each, which argues for a shorter
+block. But the frontier now reports what it costs: d′ standard error rises from **0.623 to 0.831**
+(+33%) at 32 → 16 trials, because the false-alarm rate comes from the minority no-go trials and is
+always the noisier half.
+
+## Session length past 30 minutes has documented consequences
+
+Vigilance decrement is documented at 30 minutes with a further attentional cost at 60. A
+98-minute sitting therefore measures its later conditions in a materially different attentional
+state from its earlier ones. The Williams square counterbalances position, so this is inflated
+error variance rather than bias — but it is inflated error variance on top of an interaction that
+is already underpowered.
+
+## The package that costs nothing
+
+| variant | sitting | visits | contact | power int | d′ SE |
+|---|---|---|---|---|---|
+| as shipped | 93.4m | 2 | 187m | 45% | 0.623 |
+| **90s switch + CVS-Q once per participant** | **84.5m** | 2 | **169m** | 45% | 0.623 |
+| **60s switch + CVS-Q once per participant** | **82.0m** | 2 | **164m** | 45% | 0.623 |
+| all three cuts (incl. 16 RT trials) | 79.0m | 2 | 158m | 45% | **0.831** |
+| CONFIG cuts + 5 conditions/sitting | 45.5m | 4 | 182m | 45% | 0.831 |
+
+Moving the CVS-Q to a once-per-participant covariate and trimming the polarity-switch adaptation
+takes **9–11 minutes off every sitting and 18–23 minutes off total contact, at zero cost to any
+outcome**. Neither touches reading exposure, condition count, or the number of visits.
+
+That is the whole of what is free. Everything beyond it is paid for in d′ precision, in interaction
+power, or in retention.

@@ -19,10 +19,11 @@
  *   npx tsx scripts/protocolFrontier.ts
  *   npx tsx scripts/protocolFrontier.ts --n 4000
  */
+import { CONFIG } from '../src/experiment/config';
 import { N_CONDITIONS } from '../src/experiment/conditions';
 import {
   type SittingSpec, samplePerson, simulateSitting, reseed, clamp,
-  seOfRatio, powerT, attenuatedDz, CONTRAST, SYNOPSIS,
+  seOfRatio, powerT, attenuatedDz, CONTRAST, SYNOPSIS, dPrimeSe,
 } from './lib/timingModel';
 
 const N = Number(process.argv[process.argv.indexOf('--n') + 1]) || 2000;
@@ -45,6 +46,8 @@ interface Variant {
   spec: Partial<SittingSpec>;
   /** Conditions run per sitting; drives how many sittings a participant must attend. */
   perSitting: number;
+  /** CONFIG overrides, for levers that live in the instrument rather than in the schedule. */
+  cfg?: Partial<typeof CONFIG>;
 }
 
 function evaluate(v: Variant) {
@@ -54,7 +57,7 @@ function evaluate(v: Variant) {
   const blinks: number[] = [];
   for (let k = 0; k < N; k++) {
     const p = samplePerson();
-    const r = simulateSitting(p, (k % N_CONDITIONS) + 1, k % 2, undefined, {
+    const r = simulateSitting(p, (k % N_CONDITIONS) + 1, k % 2, { ...CONFIG, ...v.cfg }, {
       illumination: 'dim', first: k % 2 === 0, dimReadingPenalty: 0,
       conditionsThisSitting: v.perSitting,
       ...v.spec,
@@ -74,6 +77,7 @@ function evaluate(v: Variant) {
     se: seOfRatio(b),
     powerMain: powerT(N_PARTICIPANTS, attenuatedDz(TRUE_DZ_MAIN, SIGMA_TRUE, CONTRAST.main(seOfRatio(b), N_CONDITIONS))),
     powerInter: powerT(N_PARTICIPANTS, attenuatedDz(TRUE_DZ_INTERACTION, SIGMA_TRUE, CONTRAST.interaction(seOfRatio(b)))),
+    dSe: dPrimeSe(v.cfg?.RT_TRIALS_PER_CONDITION ?? CONFIG.RT_TRIALS_PER_CONDITION, CONFIG.RT_GO_RATE),
   };
 }
 
@@ -89,6 +93,22 @@ const VARIANTS: Variant[] = [
   { label: '4 cond, 60% passage', perSitting: 4, note: '', spec: { cvsq: 'none', readingFraction: 0.6 } },
   { label: '4 cond, 40% passage', perSitting: 4, note: '~234 words per condition', spec: { cvsq: 'none', readingFraction: 0.4 } },
   { label: '2 cond, 40% passage', perSitting: 2, note: 'closest approach to 20 min', spec: { cvsq: 'none', readingFraction: 0.4 } },
+
+  // ---- levers that live in CONFIG rather than in the schedule -------------------------------
+  // Adaptation on a polarity switch, 120s -> 90s. Fairchild & Reniff (1995) put chromatic
+  // adaptation ~90% complete at ~60s and Belgers et al. (2025) found 60-100s suitable for
+  // repeated measures; nothing retrieved requires 120s, and no study measures adaptation to a
+  // POLARITY switch as such, so 120s rests on analogy rather than citation.
+  { label: 'adaptation switch 120->90s', perSitting: 10, note: '5 switches x 30s saved', spec: {}, cfg: { ADAPTATION_SWITCH_POLARITY_MS: 90000 } },
+  { label: 'adaptation switch 120->60s', perSitting: 10, note: 'at the Fairchild criterion', spec: {}, cfg: { ADAPTATION_SWITCH_POLARITY_MS: 60000 } },
+  // Go/no-go block, 32 -> 16 trials. Miller (2023) finds RT power is usually maximised by more
+  // participants with fewer trials each. This costs d-prime precision per condition; it is listed
+  // to price the minutes, not to recommend it.
+  { label: 'RT block 32 -> 16 trials', perSitting: 10, note: 'halves the RT cost', spec: {}, cfg: { RT_TRIALS_PER_CONDITION: 16 } },
+  { label: '90s switch + CVS-Q once', perSitting: 10, note: 'NO d-prime cost — the free package', spec: { cvsq: 'none' }, cfg: { ADAPTATION_SWITCH_POLARITY_MS: 90000 } },
+  { label: '60s switch + CVS-Q once', perSitting: 10, note: 'NO d-prime cost, at the Fairchild criterion', spec: { cvsq: 'none' }, cfg: { ADAPTATION_SWITCH_POLARITY_MS: 60000 } },
+  { label: 'all three CONFIG cuts', perSitting: 10, note: '90s switch + 16 RT + CVS-Q once', spec: { cvsq: 'none' }, cfg: { ADAPTATION_SWITCH_POLARITY_MS: 90000, RT_TRIALS_PER_CONDITION: 16 } },
+  { label: 'CONFIG cuts + 5 cond/sitting', perSitting: 5, note: 'best sitting length with full reading', spec: { cvsq: 'none' }, cfg: { ADAPTATION_SWITCH_POLARITY_MS: 90000, RT_TRIALS_PER_CONDITION: 16 } },
 ];
 
 console.log('='.repeat(112));
@@ -99,10 +119,15 @@ console.log(`  Power assumes n=${N_PARTICIPANTS}, true d_z=${TRUE_DZ_MAIN}, betw
 console.log(`  Every participant must accumulate ${RUNS_PER_PARTICIPANT} condition-runs (${N_CONDITIONS} conditions x 2 illumination levels).`);
 console.log('  "contact" is median sitting length x sittings: the participant\'s total time in the lab.\n');
 
+console.log("  The power columns are the PRIMARY outcome only — the incomplete-blink ratio. They are");
+console.log("  blind to what a shorter go/no-go block costs, so d' SE is reported alongside them: it is");
+console.log("  the per-participant, per-condition standard error of d-prime at a hit rate of .95 and a");
+console.log("  false-alarm rate of .10. A variant that leaves the power columns untouched but raises");
+console.log("  d' SE is NOT free — it has moved the cost onto a secondary outcome.\n");
 const hdr = [
   'variant'.padEnd(28), 'cond'.padStart(5), 'sitting'.padStart(9), 'p95'.padStart(7),
   'visits'.padStart(7), 'contact'.padStart(9), 'blinks'.padStart(7), 'SE'.padStart(7),
-  'pwr main'.padStart(9), 'pwr int'.padStart(8),
+  'pwr main'.padStart(9), 'pwr int'.padStart(8), "d' SE".padStart(7),
 ].join(' ');
 console.log('  ' + hdr);
 console.log('  ' + '-'.repeat(hdr.length));
@@ -120,6 +145,7 @@ for (const r of results) {
     r.se.toFixed(3).padStart(7),
     `${(r.powerMain * 100).toFixed(0)}%`.padStart(9),
     `${(r.powerInter * 100).toFixed(0)}%`.padStart(8),
+    r.dSe.toFixed(3).padStart(7),
   ].join(' ') + (r.v.note ? `   ${r.v.note}` : ''));
 }
 

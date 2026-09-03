@@ -6,19 +6,32 @@ PROTOCOL FRONTIER — what each way of shortening a sitting costs
   Every participant must accumulate 20 condition-runs (10 conditions x 2 illumination levels).
   "contact" is median sitting length x sittings: the participant's total time in the lab.
 
-  variant                       cond   sitting     p95  visits   contact  blinks      SE  pwr main  pwr int
-  ---------------------------------------------------------------------------------------------------------
-  as shipped                      10     93.4m    116m       2      187m      38   0.059       89%      45%   10 conditions, full passages, CVS-Q twice
-  CVS-Q once per participant      10     87.1m    107m       2      174m      38   0.059       89%      45%   demote to a screening covariate
-  CVS-Q end of sitting only       10     90.2m    112m       2      180m      39   0.059       89%      45%   drop the within-sitting baseline
-  5 cond/sitting                   5     55.8m     70m       4      223m      38   0.059       89%      45%   balanced incomplete block, 4 visits
-  5 cond + CVS-Q once              5     49.3m     62m       4      197m      38   0.059       89%      45%
-  4 cond/sitting                   4     41.5m     53m       5      207m      39   0.059       89%      45%   5 visits
-  2 cond/sitting                   2     26.0m     35m      10      260m      38   0.059       89%      45%   10 visits
-  5 cond, 60% passage              5     43.5m     55m       4      174m      23   0.076       87%      34%   ~350 words per condition
-  4 cond, 60% passage              4     36.7m     47m       5      184m      23   0.076       87%      34%
-  4 cond, 40% passage              4     34.3m     44m       5      172m      15   0.093       84%      26%   ~234 words per condition
-  2 cond, 40% passage              2     22.4m     31m      10      224m      15   0.093       84%      26%   closest approach to 20 min
+  The power columns are the PRIMARY outcome only — the incomplete-blink ratio. They are
+  blind to what a shorter go/no-go block costs, so d' SE is reported alongside them: it is
+  the per-participant, per-condition standard error of d-prime at a hit rate of .95 and a
+  false-alarm rate of .10. A variant that leaves the power columns untouched but raises
+  d' SE is NOT free — it has moved the cost onto a secondary outcome.
+
+  variant                       cond   sitting     p95  visits   contact  blinks      SE  pwr main  pwr int   d' SE
+  -----------------------------------------------------------------------------------------------------------------
+  as shipped                      10     93.4m    116m       2      187m      38   0.059       89%      45%   0.623   10 conditions, full passages, CVS-Q twice
+  CVS-Q once per participant      10     87.1m    107m       2      174m      38   0.059       89%      45%   0.623   demote to a screening covariate
+  CVS-Q end of sitting only       10     90.2m    112m       2      180m      39   0.059       89%      45%   0.623   drop the within-sitting baseline
+  5 cond/sitting                   5     55.8m     70m       4      223m      38   0.059       89%      45%   0.623   balanced incomplete block, 4 visits
+  5 cond + CVS-Q once              5     49.3m     62m       4      197m      38   0.059       89%      45%   0.623
+  4 cond/sitting                   4     41.5m     53m       5      207m      39   0.059       89%      45%   0.623   5 visits
+  2 cond/sitting                   2     26.0m     35m      10      260m      38   0.059       89%      45%   0.623   10 visits
+  5 cond, 60% passage              5     43.5m     55m       4      174m      23   0.076       87%      34%   0.623   ~350 words per condition
+  4 cond, 60% passage              4     36.7m     47m       5      184m      23   0.076       87%      34%   0.623
+  4 cond, 40% passage              4     34.3m     44m       5      172m      15   0.093       84%      26%   0.623   ~234 words per condition
+  2 cond, 40% passage              2     22.4m     31m      10      224m      15   0.093       84%      26%   0.623   closest approach to 20 min
+  adaptation switch 120->90s      10     90.7m    113m       2      181m      38   0.059       89%      45%   0.623   5 switches x 30s saved
+  adaptation switch 120->60s      10     88.2m    111m       2      176m      38   0.059       89%      45%   0.623   at the Fairchild criterion
+  RT block 32 -> 16 trials        10     87.9m    111m       2      176m      38   0.059       89%      45%   0.831   halves the RT cost
+  90s switch + CVS-Q once         10     84.5m    104m       2      169m      38   0.059       89%      45%   0.623   NO d-prime cost — the free package
+  60s switch + CVS-Q once         10     82.0m    101m       2      164m      38   0.059       89%      45%   0.623   NO d-prime cost, at the Fairchild criterion
+  all three CONFIG cuts           10     79.0m     98m       2      158m      38   0.059       89%      45%   0.831   90s switch + 16 RT + CVS-Q once
+  CONFIG cuts + 5 cond/sitting     5     45.5m     58m       4      182m      38   0.059       89%      45%   0.831   best sitting length with full reading
 
 ================================================================================================================
 THE FIXED-OVERHEAD WALL — why 20 minutes is not a matter of trimming
