@@ -85,23 +85,74 @@ function rtBlockSeconds(nTrials: number, meanRtMs = 360): number {
 
 interface Breakdown { [k: string]: number }
 
-function simulateSitting(p: Person, enrolment: number, block: number, cfg = CONFIG) {
+/**
+ * Where each step's duration comes from. This is the distinction that matters when someone asks
+ * whether the total is over-estimated, because only one of the three can be argued down.
+ *
+ *   'enforced'  the app will not advance before this much time has passed. Read from CONFIG.
+ *               Not an estimate at all — a lower bound the instrument imposes.
+ *   'corpus'    arithmetic over fixed content: words in the passage divided by a reading rate.
+ *               The word count is exact; only the rate is assumed, and it is the best-evidenced
+ *               assumption in the model (Brysbaert 2019, 190 studies).
+ *   'estimated' my per-item guess for a motivated young adult. This is the ONLY tier where
+ *               estimation error lives, so it is the only tier that responds to being challenged.
+ */
+type Provenance = 'enforced' | 'corpus' | 'estimated';
+const PROVENANCE: Record<string, Provenance> = {
+  'adaptation': 'enforced',
+  'rt_block': 'enforced',
+  'rt_practice (once)': 'enforced',
+  'reading': 'corpus',
+};
+const provenanceOf = (k: string): Provenance => PROVENANCE[k] ?? 'estimated';
+
+interface SittingSpec {
+  /** Room illumination for this sitting. Orthogonal to `first` by design (§ counterbalance). */
+  illumination: 'dim' | 'bright';
+  /** True for a participant's first sitting; the second skips the per-participant setup stages. */
+  first: boolean;
+  /**
+   * Fractional slowing of reading rate under 10 lux relative to 150 lux. ASSUMED, not measured —
+   * and deliberately exposed as a knob rather than baked in, because the size of this effect is
+   * one of the things the study exists to estimate. Assuming it is large would beg the question;
+   * assuming it is zero would understate the dim sitting. Reported across 0 / 0.05 / 0.10.
+   */
+  dimReadingPenalty: number;
+}
+
+function simulateSitting(
+  p: Person,
+  enrolment: number,
+  block: number,
+  cfg = CONFIG,
+  spec: SittingSpec = { illumination: 'dim', first: true, dimReadingPenalty: 0 },
+) {
   const plan = blockPlan(enrolment, block);
   const b: Breakdown = {};
   const add = (k: string, v: number) => { b[k] = (b[k] ?? 0) + v; };
 
-  // ---- setup chain (10 stages before the first condition)
+  /**
+   * Deliberation multiplier. On a second sitting the participant already knows every screen, the
+   * slider idiom and the task instructions, so self-paced steps run faster. 10% is an estimate.
+   */
+  const care = p.care * (spec.first ? 1 : 0.9);
+
+  // ---- setup chain. Which stages run is decided by firstUnsatisfiedSetupStage()'s predicates,
+  // and those predicates read from different scopes: consent and the two baselines are SESSION
+  // fields, so they repeat every sitting; the profile and the colour-vision screen are PARTICIPANT
+  // fields, so they run once in a participant's life. Mirroring that split here rather than
+  // assuming it is what makes the second-sitting figure a property of the code and not a guess.
   add('session_init (researcher)', gauss(110, 30) / 1);
-  add('consent', gauss(170, 50) * p.care);
-  add('participant_profile', gauss(115, 30) * p.care);
+  add('consent', gauss(170, 50) * care * (spec.first ? 1 : 0.45)); // re-affirmed, not re-read
+  if (spec.first) add('participant_profile', gauss(115, 30) * care);
   add('preflight_checklist', gauss(55, 15));
-  add('colour_vision (5 plates)', gauss(80, 20) * p.care);
+  if (spec.first) add('colour_vision (5 plates)', gauss(80, 20) * care);
   add('camera_setup', gauss(90, 30));
   add('calibration (9-pt + EAR + pitch)', gauss(150, 40));
   // CVS-Q: 16 items, each a frequency choice plus a conditional intensity choice.
-  add('cvsq_baseline (16 items)', 16 * gauss(13, 3) * p.care / 1);
-  add('baseline_fatigue (5 sliders)', 5 * gauss(3.4, 1) * p.care);
-  add('instructions', gauss(55, 18) * p.care);
+  add('cvsq_baseline (16 items)', 16 * gauss(13, 3) * care / 1);
+  add('baseline_fatigue (5 sliders)', 5 * gauss(3.4, 1) * care);
+  add('instructions', gauss(55, 18) * care * (spec.first ? 1 : 0.6));
 
   // ---- per-condition loop
   let polaritySwitches = 0;
@@ -123,7 +174,8 @@ function simulateSitting(p: Person, enrolment: number, block: number, cfg = CONF
     const pages = PASSAGES[plan[i].passageIndex].pages.length;
     // Low-contrast conditions slow reading a little; this is the effect under study, so keep it modest.
     const contrastPenalty = cond.below_wcag_aa ? 1.08 : 1.0;
-    const natural = (words / p.wpm) * 60 * contrastPenalty * gauss(1, 0.08);
+    const dimPenalty = spec.illumination === 'dim' ? 1 + spec.dimReadingPenalty : 1.0;
+    const natural = (words / p.wpm) * 60 * contrastPenalty * dimPenalty * gauss(1, 0.08);
     const floor = (pages * cfg.READING_PAGE_MIN_MS) / S;
     const readSec = Math.max(floor, natural);
     add('reading', readSec);
@@ -133,15 +185,15 @@ function simulateSitting(p: Person, enrolment: number, block: number, cfg = CONF
     // and its own feedback dwell, so the cost scales with the item count. Charging one item here
     // while the instrument administers three understated every published feasibility figure.
     add(`comprehension (${QUESTIONS_PER_PASSAGE} items)`,
-      QUESTIONS_PER_PASSAGE * ((gauss(14, 5) * p.care) + cfg.COMPREHENSION_FEEDBACK_MS / S));
-    add('display_perception (2 sliders)', 2 * gauss(4.2, 1.2) * p.care);
-    add('fatigue_vas (5 sliders)', 5 * gauss(3.2, 0.9) * p.care);
+      QUESTIONS_PER_PASSAGE * ((gauss(14, 5) * care) + cfg.COMPREHENSION_FEEDBACK_MS / S));
+    add('display_perception (2 sliders)', 2 * gauss(4.2, 1.2) * care);
+    add('fatigue_vas (5 sliders)', 5 * gauss(3.2, 0.9) * care);
 
     // Visual search: bounded by the hard limit; careful searchers use more of the window.
-    add('visual_search', Math.min(cfg.VS_TIME_LIMIT_MS / S, gauss(30, 8) * p.care));
+    add('visual_search', Math.min(cfg.VS_TIME_LIMIT_MS / S, gauss(30, 8) * care));
 
     // RT: an instruction screen each time, plus the block itself, plus one practice block overall.
-    add('rt_instructions', gauss(9, 3) * p.care);
+    add('rt_instructions', gauss(9, 3) * care);
     add('rt_block', rtBlockSeconds(cfg.RT_TRIALS_PER_CONDITION));
     if (i === 0 && cfg.RT_PRACTICE_TRIALS > 0) {
       add('rt_practice (once)', rtBlockSeconds(cfg.RT_PRACTICE_TRIALS) + cfg.RT_PRACTICE_TRIALS * 1.2);
@@ -155,8 +207,8 @@ function simulateSitting(p: Person, enrolment: number, block: number, cfg = CONF
   }
 
   // ---- close
-  add('cvsq_end (16 items)', 16 * gauss(11, 3) * p.care);
-  add('nasa_tlx (6 sliders)', 6 * gauss(6.5, 2) * p.care + gauss(20, 6) * p.care);
+  add('cvsq_end (16 items)', 16 * gauss(11, 3) * care);
+  add('nasa_tlx (6 sliders)', 6 * gauss(6.5, 2) * care + gauss(20, 6) * care);
   add('session_complete', gauss(35, 12));
 
   const total = Object.values(b).reduce((s, v) => s + v, 0);
@@ -170,14 +222,18 @@ const pct = (xs: number[], q: number) => {
 };
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
-function run(cfg: typeof CONFIG, label: string) {
+function run(
+  cfg: typeof CONFIG,
+  label: string,
+  spec: SittingSpec = { illumination: 'dim', first: true, dimReadingPenalty: 0 },
+) {
   const totals: number[] = [];
   const switches: number[] = [];
   const blinks: number[] = [];
   const agg: Breakdown = {};
   for (let k = 0; k < N; k++) {
     const p = samplePerson();
-    const r = simulateSitting(p, (k % N_CONDITIONS) + 1, k % 2, cfg);
+    const r = simulateSitting(p, (k % N_CONDITIONS) + 1, k % 2, cfg, spec);
     totals.push(r.total / 60);
     switches.push(r.polaritySwitches);
     blinks.push(r.blinksPerCondition);
@@ -219,6 +275,68 @@ for (const q of [0.05, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]) {
 const over = base.totals.filter((t) => t > 120).length;
 console.log(`\n  FEASIBILITY GATE (median <= 120 min): median ${pct(base.totals, 0.5).toFixed(1)} min -> ${pct(base.totals, 0.5) <= 120 ? 'PASS' : 'FAIL'}`);
 console.log(`  Participants exceeding 120 min: ${over} / ${N} (${((over / N) * 100).toFixed(1)}%)`);
+
+console.log('\n' + '='.repeat(96));
+console.log('IS THIS TOTAL AN OVER-ESTIMATE? — the same minutes split by where the number comes from');
+console.log('='.repeat(96));
+console.log('  Only the third tier is a guess. The first is what the code enforces; the second is');
+console.log('  the corpus word count divided by a reading rate.\n');
+{
+  const tiers: Record<Provenance, number> = { enforced: 0, corpus: 0, estimated: 0 };
+  for (const [k, v] of Object.entries(base.agg)) tiers[provenanceOf(k)] += v;
+  const label: Record<Provenance, string> = {
+    enforced: 'ENFORCED by CONFIG (cannot be argued down)',
+    corpus: 'CORPUS arithmetic (word count / reading rate)',
+    estimated: 'ESTIMATED by me (the only tier with guess error)',
+  };
+  for (const t of ['enforced', 'corpus', 'estimated'] as Provenance[]) {
+    const v = tiers[t];
+    console.log(`  ${label[t].padEnd(48)} ${v.toFixed(1).padStart(6)} min  ${((v / totalMean) * 100).toFixed(0).padStart(3)}%`);
+    for (const [k, x] of Object.entries(base.agg).filter(([k]) => provenanceOf(k) === t).sort((a, b) => b[1] - a[1])) {
+      console.log(`      ${k.padEnd(42)} ${x.toFixed(1).padStart(6)} min`);
+    }
+  }
+  console.log(`\n  ${'TOTAL'.padEnd(48)} ${totalMean.toFixed(1).padStart(6)} min`);
+
+  console.log('\n  If every one of MY estimates is wrong in the optimistic direction:');
+  for (const cut of [0, 0.2, 0.3, 0.5, 0.7, 1.0]) {
+    const t = tiers.enforced + tiers.corpus + tiers.estimated * (1 - cut);
+    const tag = cut === 0 ? '  <- as modelled' : cut === 1 ? '  <- estimates set to ZERO: the arithmetic floor' : '';
+    console.log(`    estimates ${(cut * 100).toFixed(0).padStart(3)}% too high -> ${t.toFixed(1).padStart(6)} min${tag}`);
+  }
+  const fastRead = (PASSAGES.reduce((a, x) => a + x.wordCount, 0) / 300) ;
+  console.log(`\n  Hardest possible floor: enforced ${tiers.enforced.toFixed(1)} min + all ${PASSAGES.reduce((a, x) => a + x.wordCount, 0)} corpus words`);
+  console.log(`  read at a brisk 300 wpm (${fastRead.toFixed(1)} min) + zero deliberation = ${(tiers.enforced + fastRead).toFixed(1)} min.`);
+  console.log('  That floor is a property of the design, not of how fast the participant is.');
+}
+
+console.log('\n' + '='.repeat(96));
+console.log('THE FOUR CELLS — illumination x sitting order (they are orthogonal by design)');
+console.log('='.repeat(96));
+console.log('  Illumination order is counterbalanced against sitting order, so "the dim sitting" is');
+console.log('  the FIRST visit for half the sample and the SECOND for the other half. The two factors');
+console.log('  act on different things: illumination on reading rate, sitting order on setup burden.');
+console.log('  The second sitting skips PARTICIPANT_PROFILE and COLOR_VISION because their predicates');
+console.log('  read participant-scoped fields; consent and both baselines repeat because theirs are');
+console.log('  session-scoped.\n');
+for (const pen of [0, 0.05, 0.10]) {
+  console.log(`  -- assuming dim slows reading by ${(pen * 100).toFixed(0)}% ` + '-'.repeat(58));
+  const cells: Array<[string, number]> = [];
+  for (const illum of ['dim', 'bright'] as const) {
+    for (const first of [true, false]) {
+      const r = run(CONFIG, '', { illumination: illum, first, dimReadingPenalty: pen });
+      const m = mean(r.totals);
+      cells.push([`${illum.padEnd(6)} / ${first ? '1st visit' : '2nd visit'}`, m]);
+      console.log(`     ${illum.padEnd(6)} ${first ? '1st visit' : '2nd visit'}   mean ${m.toFixed(1).padStart(6)} min   median ${pct(r.totals, 0.5).toFixed(1).padStart(6)} min   p95 ${pct(r.totals, 0.95).toFixed(1).padStart(6)} min`);
+    }
+  }
+  // A participant runs exactly one 1st visit and one 2nd visit, one dim and one bright.
+  const dim1 = cells.find(([k]) => k.startsWith('dim') && k.includes('1st'))![1];
+  const dim2 = cells.find(([k]) => k.startsWith('dim') && k.includes('2nd'))![1];
+  const br1 = cells.find(([k]) => k.startsWith('bright') && k.includes('1st'))![1];
+  const br2 = cells.find(([k]) => k.startsWith('bright') && k.includes('2nd'))![1];
+  console.log(`     total contact per participant: dim-first ${(dim1 + br2).toFixed(1)} min, bright-first ${(br1 + dim2).toFixed(1)} min`);
+}
 
 console.log('\n' + '-'.repeat(96));
 console.log('POLARITY SWITCHES — the hidden cost of the Williams order');
