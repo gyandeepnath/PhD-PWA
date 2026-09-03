@@ -1,0 +1,68 @@
+name: deploy
+
+# Publishes the built app as a web page so it can be opened on the tablet by URL,
+# with no software to install on either machine. GitHub serves Pages over HTTPS,
+# which is what makes the camera work: browsers grant camera access only on a
+# secure address, and the only insecure one they exempt is the machine you are
+# sitting at. A tablet opening a plain http:// address on the local network gets
+# no camera and no warning — every ocular measurement silently comes out empty.
+#
+# Runs only on the default branch, and only when told to. It never publishes a
+# work-in-progress branch by accident.
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+# Pages needs to write the deployment; nothing else does.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One live deployment at a time. A newer push waits rather than racing, so the
+# published site is never a half-finished mixture of two builds.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Publishing a broken instrument is worse than publishing nothing, so the
+      # same gate that guards every push guards the deployment too.
+      - name: Verify
+        run: npm run verify
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
