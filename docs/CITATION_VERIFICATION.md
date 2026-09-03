@@ -108,17 +108,60 @@ RTs after invalid cues for the endogenous condition only, appearing after 60 min
 
 **Relevance:** a 98-minute sitting runs past both documented thresholds.
 
+### 6. Lin, M. et al. (2025) — the nearest content analogue
+**Status: CONFIRMED. The volume/year pairing that looked wrong is correct.** PMID 41058350 · DOI [10.1016/j.clae.2025.102515](https://doi.org/10.1016/j.clae.2025.102515)
+
+> Lin, M., Zheng, X., He, C., Li, M., Lu, F., & Hu, L. (2025). Effects of ambient illuminance and
+> mobile phone screen brightness on tear film stability, visual fatigue, and blink patterns during
+> reading. *Contact Lens and Anterior Eye, 49*(1), 102515.
+
+Every field matches, author list included. Volume 49 issue 1 with a 2025 date was flagged as
+internally suspect during triage; PubMed confirms it is right. The suspicion was mine and it was
+wrong — recorded here because a rejected doubt is as much part of the record as a caught error.
+
+Abstract confirms the design: 30 subjects, **four** conditions crossing ambient illuminance with
+screen brightness (bright/dark room × bright/dark screen), and a **30-minute** reading task in each.
+*"The incomplete blink rate in all the groups tended to increase over time (all P < 0.05)."* Reading
+in a dark room with a bright screen produced the largest effect on every tear-film indicator.
+
+**Why this matters to the design decision.** This is the closest published study to the present one,
+and it spends **30 minutes per condition across only four conditions**. Set against Argilés
+(6 min × 6 conditions), the field's range for this outcome is 6–30 minutes per condition. This
+protocol runs **~3 minutes across ten conditions** — below the floor of that range on exposure and
+above the top of it on condition count, simultaneously. That is the shape of the problem.
+
+**A caution on the letters.** A Letter to the Editor and an authors' Reply were reported as attached
+to this paper. Neither has been independently confirmed and neither is cited here. If this paper is
+used, the correspondence must be located and read first.
+
+### 7. Talens-Estarelles et al. (2022b)
+**Status: METADATA CONFIRMED. SUBSTANTIVE CLAIM NOT CONFIRMED.** PMID 35394083 · DOI [10.1111/opo.12987](https://doi.org/10.1111/opo.12987)
+
+> Talens-Estarelles, C., García-Marqués, J. V., Cerviño, A., & García-Lázaro, S. (2022). Digital
+> display use and contact lens wear: Effects on dry eye signs and symptoms. *Ophthalmic &
+> Physiological Optics, 42*(4), 797–806.
+
+Metadata matches field for field. The abstract confirms n = 34 (aged 20.87 ± 2.33) and a **20-minute
+reading task** on a computer and a smartphone, with and without contact lenses and with artificial
+tears — six condition combinations.
+
+**What is NOT confirmed:** the claim that these six conditions were run as **six separate sessions
+one week apart, each with a 15-minute acclimatisation**. That was reported from a full-text source
+and cannot be checked here — this environment's egress proxy blocks `doi.org` and Crossref, so no
+full text is reachable. The abstract does not state the session structure.
+
+This distinction is the whole point of this file. The paper is real and the exposure duration is
+verified; **the multi-session structure is the part being used as precedent, and it is exactly the
+part still unverified.** Do not cite it for that until the full text is in hand. It is the single
+highest-priority item to obtain.
+
 ---
 
 ## UNRESOLVED — do not cite until checked
 
-- Lin, M. et al. (2025), *Contact Lens and Anterior Eye* — citation matching returned **7 ambiguous
-  candidates**. The supplied volume/year pairing (vol. 49 dated 2025) is internally suspect and must
-  be resolved before use. A Letter to the Editor and authors' Reply were reported as attached to
-  this paper; both need independent confirmation.
-- Talens-Estarelles et al. (2022a, 2022b, 2022c) — three separate papers, not yet individually
-  resolved. **2022b is load-bearing** for the multi-session argument (reported as running six
-  conditions as six separate weekly sessions).
+- The Letter to the Editor and authors' Reply reported against Lin et al. (2025) — not located.
+- Talens-Estarelles et al. (2022a) and (2022c) — not yet individually resolved. (2022b is confirmed
+  above, but its session structure is not.)
 - Fan et al. (2024), *Sensors* — reported as the closest structural analogue (5 text colours,
   negative polarity, illumination as a day-level factor).
 - Miller (2023/2024), *Behavior Research Methods* — supplied as vol. 56 (2024 volume) dated 2023;
@@ -155,3 +198,16 @@ Verification is by DOI wherever possible, never by author-and-year matching. Ite
 demonstrates why: an author + journal + year lookup returned two PMIDs, one of which was an
 unrelated paper by an overlapping author group. Author-year matching cannot distinguish these; a
 DOI can.
+
+**Metadata verification and substance verification are different things, and this file tracks them
+separately.** A confirmed DOI proves the paper exists and that the citation points at it. It proves
+nothing about whether the paper says what it is being cited for. Where a claim is load-bearing, the
+abstract has been quoted verbatim above; where the claim lives in a Methods section that cannot be
+reached from here, the item is marked `SUBSTANTIVE CLAIM NOT CONFIRMED` no matter how clean its
+metadata is. Item 7 is the current example.
+
+**Environment limitation.** This session's egress proxy blocks `doi.org`, `api.crossref.org` and
+publisher domains. Verification is therefore limited to what PubMed indexes and to abstracts. Items
+not indexed in PubMed — the psychology, survey-methodology, lighting and experimental-design sources
+— cannot be verified here at all and remain listed as unresolved. They must be checked from an
+unrestricted network before any of them is cited.
