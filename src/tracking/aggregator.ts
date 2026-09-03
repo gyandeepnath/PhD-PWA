@@ -126,6 +126,27 @@ export class EyeMetricsAggregator {
     };
   }
 
+  /**
+   * Blink counts so far in this condition, for the operator's live monitor.
+   *
+   * Runs the SAME `classifyBlinks` the exported record uses, over the samples collected so far, so
+   * the number on screen is the number that will be analysed rather than a parallel approximation
+   * that could drift from it. Returns nulls when no baseline has been fitted, because without one
+   * `classifyBlinks` cannot identify a blink at all and a zero would read as "no blinks occurred"
+   * rather than "blinks are not being counted".
+   */
+  liveCounts(baseline: number | null): { blinks: number | null; incomplete: number | null } {
+    if (baseline == null || !Number.isFinite(baseline) || baseline <= 0) {
+      return { blinks: null, incomplete: null };
+    }
+    const events = classifyBlinks(this.ear, baseline);
+    return {
+      blinks: events.length,
+      // 'incomplete' is the tier the primary outcome counts; 'micro' and 'full' are the others.
+      incomplete: events.filter((e) => e.tier === 'incomplete').length,
+    };
+  }
+
   /** Produce the record. `baselineEarValue` comes from calibration. */
   finalize(args: {
     conditionId: string;

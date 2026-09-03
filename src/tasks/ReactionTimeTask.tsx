@@ -16,6 +16,7 @@
  */
 import { useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';
+import { nonAgingDelay, planRuns } from '@/lib/foreperiod';
 import { relativeLuminance } from '@/lib/contrast';
 import { rafDelay, randInt, now } from '@/lib/timing';
 import { median, stdSample } from '@/lib/stats';
@@ -79,18 +80,36 @@ export function goTargetColor(background: string): string {
   return relativeLuminance(background) > 0.5 ? CONFIG.RT_TARGET_LIGHT_BG : CONFIG.RT_TARGET_DARK_BG;
 }
 
+/**
+ * Build a block whose go/no-go order carries no long runs.
+ *
+ * The previous version shuffled a fixed 20 go and 12 no-go without constraint. Runs of six or seven
+ * gos occur by chance and prime a response hard enough that the next no-go draws a false alarm that
+ * reflects the run rather than the display — and since the counts are fixed, once the last no-go
+ * has been seen every remaining trial is a go, so the tail of the block is deterministic.
+ */
+/**
+ * The go-target of the previous block in this sitting, or null before the first.
+ *
+ * Module scope, deliberately: the task component is remounted for every condition, so nothing in
+ * component state survives to say what the rule was last time — and the whole point is to detect
+ * the transition between blocks.
+ */
+let lastTargetColor: string | null = null;
+
+/** Reset between participants. A stale value would suppress the banner on a new participant's
+ *  first block, or raise it spuriously. */
+export function resetRtTargetMemory(): void {
+  lastTargetColor = null;
+}
+
 function buildTrials(n: number, goRate: number, background: string): Trial[] {
   const TARGET = goTargetColor(background);
   const { RT_DISTRACTOR_COLORS: DIST } = CONFIG;
   const pick = () => DIST[Math.floor(Math.random() * DIST.length)];
   const nGo = Math.round(n * goRate);
-  const trials: Trial[] = [];
-  for (let i = 0; i < n; i++) trials.push(i < nGo ? { signal: true, color: TARGET } : { signal: false, color: pick() });
-  for (let i = trials.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [trials[i], trials[j]] = [trials[j], trials[i]];
-  }
-  return trials;
+  const { order } = planRuns(nGo, n - nGo, CONFIG.RT_MAX_RUN);
+  return order.map((isGo) => (isGo ? { signal: true, color: TARGET } : { signal: false, color: pick() }));
 }
 
 const avg = (xs: number[]): number | null => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
@@ -119,6 +138,14 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
   // Achromatic go-target, resolved from the active background (black on light, white on dark).
   const targetColor = goTargetColor(background);
   const targetName = targetColor === CONFIG.RT_TARGET_LIGHT_BG ? 'black' : 'white';
+  /*
+   * Whether the go rule inverted since the previous block of this sitting.
+   *
+   * Held at module scope because this component is remounted per condition, so component state
+   * cannot remember the previous block. Captured once on mount, before `run()` updates it, so the
+   * banner reflects the transition into THIS block rather than the block itself.
+   */
+  const targetChanged = useRef(lastTargetColor !== null && lastTargetColor !== targetColor).current;
   const [, force] = useState(0);
 
   const setPhaseSync = (p: Phase) => {
@@ -180,7 +207,13 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
     setPhaseSync('fixation');
     await rafDelay(randInt(Math.random, CONFIG.RT_FIXATION_MIN_MS, CONFIG.RT_FIXATION_MAX_MS));
     setPhaseSync('delay');
-    await rafDelay(randInt(Math.random, CONFIG.RT_DELAY_MIN_MS, CONFIG.RT_DELAY_MAX_MS));
+    /*
+     * Truncated exponential, not uniform. A bounded uniform has a rising hazard: on the previous
+     * 400-900 ms the chance of onset within the next 100 ms went from 5% to 100% across the range,
+     * so a participant learned the timing implicitly and RT fell with foreperiod length. Constant
+     * hazard means having waited tells them nothing. See src/lib/foreperiod.ts.
+     */
+    await rafDelay(nonAgingDelay(CONFIG.RT_DELAY_MIN_MS, CONFIG.RT_DELAY_MAX_MS, CONFIG.RT_DELAY_MEAN_MS));
 
     clusterPos.current = { x: randInt(Math.random, 25, 75), y: randInt(Math.random, 28, 72) };
     // Render the stimulus, but do NOT accept responses yet: phaseRef flips inside markOnsetAtPaint,
@@ -256,6 +289,9 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
   };
 
   const run = async () => {
+    // Record the rule for this block only once it actually starts, so the next block compares
+    // against a block that was really presented rather than one merely rendered and abandoned.
+    lastTargetColor = targetColor;
     for (let i = 0; i < practice.current.length; i++) await runTrial(practice.current[i], i, true);
     if (practice.current.length > 0) {
       setPhaseSync('practice_done');
@@ -351,11 +387,43 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
       {phase === 'instruction' && (
         <div style={{ textAlign: 'center', color: text, fontFamily: '"DM Mono", monospace', maxWidth: 540, padding: 24 }}>
           <h2 style={{ fontSize: 24, marginBottom: 16 }}>Task 4 of 4 · Reaction</h2>
-          <p style={{ fontSize: 16, lineHeight: 1.6, marginBottom: 24 }}>
+          <p style={{ fontSize: 16, lineHeight: 1.6, marginBottom: 20 }}>
             A dot will appear at a random spot. Tap the screen as fast as you can ONLY when it is{' '}
             <span style={{ color: targetColor, fontWeight: 700, textShadow: `0 0 1px ${text}` }}>{targetName}</span>.
             Do not tap for any coloured dot.{practiceTrials > 0 ? ' A short practice comes first.' : ''}
           </p>
+
+          {/*
+            Show the actual target, at the size it will appear.
+
+            The target is achromatic and follows the BACKGROUND, so it is black in every
+            positive-polarity condition and white in every negative one. The Williams order groups
+            those: for some enrolment numbers all five positive conditions run before all five
+            negative, so a participant can spend five blocks tapping for black and then have the
+            rule invert with nothing but one word changing on a screen they have already read four
+            times. A missed switch does not look like an error in the data — it looks like a
+            polarity effect on d-prime, which is precisely the comparison this study makes.
+          */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginBottom: 22 }}>
+            <div aria-hidden style={{
+              width: CONFIG.RT_DOT_PX, height: CONFIG.RT_DOT_PX, borderRadius: '50%',
+              background: targetColor, border: `1px solid ${text}`, opacity: 0.95,
+            }} />
+            <span style={{ fontSize: 14, opacity: 0.85, textAlign: 'left' }}>
+              this dot → tap<br />any other colour → do not tap
+            </span>
+          </div>
+
+          {targetChanged && (
+            /* Only when the rule has actually inverted since the previous block. Shown every time
+               would train the operator to skip it, which is how the switch got missed. */
+            <p role="alert" style={{
+              fontSize: 15, lineHeight: 1.5, marginBottom: 22, padding: '10px 14px',
+              border: `2px solid ${targetColor}`, borderRadius: 10, fontWeight: 700,
+            }}>
+              The target colour has CHANGED for this block — it is now {targetName}.
+            </p>
+          )}
           <button
             onPointerDown={(e) => { e.stopPropagation(); void run(); }}
             style={{ background: text, color: background, border: 'none', borderRadius: 12, padding: '14px 28px', fontFamily: '"DM Mono", monospace', fontSize: 14, cursor: 'pointer' }}

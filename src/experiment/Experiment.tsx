@@ -37,7 +37,7 @@ import { DisplayPerceptionRating } from '@/scales/DisplayPerceptionRating';
 import { ReadingTask } from '@/tasks/ReadingTask';
 import { ComprehensionTask } from '@/tasks/ComprehensionTask';
 import { VisualSearchTask } from '@/tasks/VisualSearchTask';
-import { ReactionTimeTask } from '@/tasks/ReactionTimeTask';
+import { ReactionTimeTask, resetRtTargetMemory } from '@/tasks/ReactionTimeTask';
 import { IshiharaTest } from '@/screening/IshiharaTest';
 import { resolveCvdStatus } from '@/screening/ishihara';
 import { Cvsq } from '@/scales/Cvsq';
@@ -49,6 +49,8 @@ import {
 } from '@/start/setupStages';
 import { CalibrationRoutine } from '@/start/CalibrationRoutine';
 import { currentScale, layoutViewport } from '@/lib/viewportScale';
+import { TrackingMonitor } from '@/components/TrackingMonitor';
+import { FPS_RATIO_THRESHOLD } from '@/tracking/blink';
 
 function provenance(): Provenance {
   return {
@@ -417,6 +419,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     conditionIds.current = sittingPlan.map(() => uuidv4());
     writtenConditions.current = new Set();
     const sid = uuidv4();
+    /*
+     * A new sitting starts with no previous go rule. The RT task remembers the last block's target
+     * at module scope, so without this a fresh participant could be shown "the target colour has
+     * CHANGED" on their very first block, or — worse — have a genuine change suppressed because the
+     * previous participant happened to end on the same polarity.
+     */
+    resetRtTargetMemory();
+
     const rec: SessionRecord = {
       session_id: sid,
       participant_id: d.participantId,
@@ -1159,6 +1169,24 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
 
   return (
     <div data-stage={machine.stage} style={{ height: '100%' }}>
+      {/*
+        Live tracking readout, corner-pinned and pointer-transparent.
+
+        Deliberately hidden during READING and ADAPTATION. Reading is where the blink data actually
+        comes from, and a number changing in peripheral vision is a competing stimulus — an operator
+        aid that altered reading behaviour would corrupt the measurement it exists to protect.
+        Adaptation is a controlled grey field and must stay uniform.
+      */}
+      <TrackingMonitor
+        subscribe={tracking.subscribeLive}
+        visible={
+          tracking.status === 'active'
+          && isInLoop(machine.stage)
+          && machine.stage !== 'READING_TASK'
+          && machine.stage !== 'ADAPTATION'
+        }
+        fpsFloor={FPS_RATIO_THRESHOLD}
+      />
       {showProgress && (
         <ExperimentProgress
           percent={percent}

@@ -13,6 +13,16 @@
 import { useCallback, useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';
 import { faceEar, baselineEar, EAR_TIERS, type Point } from './blink';
+
+/**
+ * How often the operator's live readout updates, in hertz.
+ *
+ * Deliberately far below the frame rate. The monitor is an operator aid; re-rendering it on every
+ * FaceMesh result would compete for the main thread with the tracker itself, and the tracker is the
+ * one thing in this app that must never be starved — a dropped frame is a lost EAR sample and the
+ * primary outcome is a count of events in that series.
+ */
+const LIVE_HZ = 4;
 import { estimateHeadPose, isOffAxis, noseVerticalFraction } from './headPose';
 import { estimateGaze } from './gaze';
 import { meanLumaFromRGBA } from './lighting';
@@ -53,8 +63,41 @@ function faceSizeFromLandmarks(lm: Point[]): number {
   return w > 0 && h > 0 ? Math.sqrt(w * h) : NaN;
 }
 
+/**
+ * A live readout of what the tracker is doing right now.
+ *
+ * Nothing in the app showed this once a session had started. The operator confirmed the face box at
+ * camera setup and then ran ninety minutes on trust, and every way tracking can fail mid-session —
+ * the participant leaning out of frame, the room going too dark for detection, the frame rate
+ * collapsing — is silent until the export is opened. `blinks` in particular is the count feeding
+ * the primary outcome, so watching it advance is the difference between knowing data is being
+ * collected and assuming it.
+ *
+ * Every field is nullable and null means "not measured", never a stand-in zero: a face size of 0 or
+ * a blink rate of 0 would read as a measurement of an absent face rather than as absence.
+ */
+export interface LiveTrackingStats {
+  facePresent: boolean;
+  /** Eye-aspect-ratio this frame; null when no face is in view. */
+  ear: number | null;
+  /** EAR relative to the participant's calibrated baseline, so 1.0 is their own open eye. */
+  earRatio: number | null;
+  /** Blinks counted since the current condition began; null when no baseline has been fitted. */
+  blinks: number | null;
+  /** Of those, how many failed to close fully — the primary outcome as it accumulates. */
+  incomplete: number | null;
+  /** Achieved FaceMesh throughput, frames per second. */
+  fps: number | null;
+  /** Face bounding-box size as a fraction of the frame; a proxy for viewing distance. */
+  faceSize: number | null;
+  /** Whether gaze is currently in the central zone. */
+  onScreen: boolean;
+}
+
 interface TrackingApi {
   status: CameraStatus;
+  /** Subscribe to the live readout. Returns an unsubscribe function. */
+  subscribeLive: (fn: (s: LiveTrackingStats) => void) => () => void;
   /** Request camera + init FaceMesh. Returns the resulting status. */
   start: () => Promise<CameraStatus>;
   stop: () => void;
@@ -116,6 +159,37 @@ export function useTracking(): TrackingApi {
   // Ingest exactly ONE sample per FaceMesh result, so the EAR series is sampled at the true
   // measurement rate (not the display refresh rate). The previous build ran a free-running 60 fps
   // sampler over stale landmarks, duplicating samples and overstating effective_fps.
+  /*
+   * Live-readout plumbing. Emission is throttled to LIVE_HZ rather than fired per frame: the
+   * monitor is an operator aid and re-rendering it 30 times a second would compete with the
+   * tracker for the main thread, which is the one thing that must never be starved.
+   */
+  const liveSubs = useRef(new Set<(s: LiveTrackingStats) => void>());
+  const lastLiveEmit = useRef(0);
+  const frameTimes = useRef<number[]>([]);
+
+  const subscribeLive = useCallback((fn: (s: LiveTrackingStats) => void) => {
+    liveSubs.current.add(fn);
+    return () => { liveSubs.current.delete(fn); };
+  }, []);
+
+  const emitLive = useCallback((t: number, stats: Omit<LiveTrackingStats, 'fps'>) => {
+    // Achieved throughput over a short window, which is what the FPS gate on the primary outcome
+    // actually depends on.
+    frameTimes.current.push(t);
+    while (frameTimes.current.length > 0 && t - frameTimes.current[0] > 2000) frameTimes.current.shift();
+    const span = frameTimes.current.length > 1
+      ? (frameTimes.current[frameTimes.current.length - 1] - frameTimes.current[0]) / 1000
+      : 0;
+    const fps = span > 0.5 ? (frameTimes.current.length - 1) / span : null;
+
+    if (t - lastLiveEmit.current < 1000 / LIVE_HZ) return;
+    lastLiveEmit.current = t;
+    if (liveSubs.current.size === 0) return;
+    const payload: LiveTrackingStats = { ...stats, fps };
+    for (const fn of liveSubs.current) fn(payload);
+  }, []);
+
   const ingestResult = useCallback((lm: Point[] | null) => {
     const t = now();
     const luma = sampleLuma();
@@ -148,7 +222,23 @@ export function useTracking(): TrackingApi {
           luma,
         });
       }
+      const live = agg?.liveCounts(baselineEarRef.current);
+      emitLive(t, {
+        facePresent: true,
+        ear: Number.isFinite(ear) ? ear : null,
+        earRatio: baselineEarRef.current && Number.isFinite(ear) ? ear / baselineEarRef.current : null,
+        blinks: live?.blinks ?? null,
+        incomplete: live?.incomplete ?? null,
+        faceSize: (() => { const f = faceSizeFromLandmarks(lm); return Number.isFinite(f) ? f : null; })(),
+        onScreen: gazeNow.isCenter,
+      });
     } else if (aggRef.current) {
+      const live = aggRef.current.liveCounts(baselineEarRef.current);
+      emitLive(t, {
+        facePresent: false, ear: null, earRatio: null,
+        blinks: live.blinks, incomplete: live.incomplete,
+        faceSize: null, onScreen: false,
+      });
       aggRef.current.ingest({
         t_ms: t,
         ear: 0,
@@ -161,7 +251,7 @@ export function useTracking(): TrackingApi {
         luma,
       });
     }
-  }, []);
+  }, [emitLive]);
 
   const start = useCallback(async (): Promise<CameraStatus> => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
@@ -362,7 +452,8 @@ export function useTracking(): TrackingApi {
   }, []);
 
   return {
-    status, start, stop, calibrate, mediaSource,
+    status,
+    subscribeLive, start, stop, calibrate, mediaSource,
     beginGazeCalibration, sampleGazeTarget, endGazeCalibration,
     beginCondition, endCondition,
   };

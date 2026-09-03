@@ -51,10 +51,30 @@ const BASE_CONFIG = {
   RT_PRACTICE_TRIALS: 6,
   /** Max time to respond; the trial ends the instant a response is made (only no-go trials wait it out). */
   RT_RESPONSE_WINDOW_MS: 1000,
-  RT_FIXATION_MIN_MS: 300,
-  RT_FIXATION_MAX_MS: 500,
-  RT_DELAY_MIN_MS: 400,
-  RT_DELAY_MAX_MS: 900,
+  /**
+   * Fixation is now a FIXED duration and the anticipation-resistant randomness lives entirely in
+   * the delay below. Splitting the foreperiod across two uniform draws was what made it
+   * anticipatable: see src/lib/foreperiod.ts.
+   */
+  RT_FIXATION_MIN_MS: 400,
+  RT_FIXATION_MAX_MS: 400,
+  /**
+   * Foreperiod delay, drawn from a truncated exponential rather than a uniform, so its hazard is
+   * flat and waiting tells the participant nothing about when the dot will arrive. On the previous
+   * uniform 400-900 ms the chance of onset within the next 100 ms rose from 5% to 100% across the
+   * range; RT then depended on trial timing, in a study that attributes RT to the display.
+   *
+   * The mean total foreperiod is preserved at about 1.02 s, so block duration is unchanged.
+   */
+  RT_DELAY_MIN_MS: 300,
+  RT_DELAY_MAX_MS: 1600,
+  RT_DELAY_MEAN_MS: 650,
+  /**
+   * Longest permitted run of consecutive go or no-go trials. A run of six or seven gos primes a
+   * response hard enough that the next no-go draws a false alarm which says more about the run than
+   * about the display.
+   */
+  RT_MAX_RUN: 3,
   RT_ITI_MIN_MS: 300,
   RT_ITI_MAX_MS: 500,
   RT_DOT_PX: 52,
@@ -181,9 +201,10 @@ const E2E_OVERRIDES: Partial<typeof BASE_CONFIG> = {
   RT_PRACTICE_TRIALS: 1,
   RT_RESPONSE_WINDOW_MS: 120,
   RT_FIXATION_MIN_MS: 30,
-  RT_FIXATION_MAX_MS: 40,
-  RT_DELAY_MIN_MS: 30,
-  RT_DELAY_MAX_MS: 50,
+  RT_FIXATION_MAX_MS: 30,
+  RT_DELAY_MIN_MS: 20,
+  RT_DELAY_MAX_MS: 60,
+  RT_DELAY_MEAN_MS: 30,
   RT_ITI_MIN_MS: 20,
   RT_ITI_MAX_MS: 30,
   ADAPTATION_SAME_POLARITY_MS: 200,
