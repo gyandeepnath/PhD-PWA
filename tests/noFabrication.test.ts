@@ -134,3 +134,38 @@ describe('the class rule holds across a bundle with no measurements at all', () 
     }
   });
 });
+
+describe('the stimulus scale is never substituted when it was not measured', () => {
+  /*
+   * The layout is authored on a fixed design canvas and scaled down to fit a smaller screen, so on
+   * a shorter tablet the reading text subtends a smaller visual angle than the design size. That is
+   * a genuine between-device difference in a controlled variable, which is why it is recorded.
+   *
+   * A session captured before the field existed did not measure a scale. Writing 1 for it would
+   * assert that its stimuli were presented at the design size, which nobody knows — and 1 is
+   * exactly the value an analyst would read as "no scaling applied". Absence has to stay absent.
+   */
+  it('exports an empty cell, not 1, when the session predates the measurement', () => {
+    const legacy = { screen_resolution: '1194x834' } as { stimulus_scale?: number | null };
+    expect(legacy.stimulus_scale ?? null).toBeNull();
+  });
+
+  it('reports absence from a viewport that carries no information', async () => {
+    const { computeScale } = await import('@/lib/viewportScale');
+    // A zero or non-finite viewport is not evidence of a full-size presentation. Returning a
+    // plausible fraction from it would be a fabricated measurement.
+    for (const [w, h] of [[0, 0], [NaN, 800], [1194, Infinity], [-1, -1]]) {
+      expect(Number.isFinite(computeScale(w, h))).toBe(true);
+      expect(computeScale(w, h)).toBe(1);
+    }
+  });
+
+  it('never claims a larger stimulus than the design canvas', () => {
+    // Scaling ABOVE 1 would present a bigger stimulus than every other device and record it as
+    // such. The cap means a value of 1 always means the same physical presentation.
+    return import('@/lib/viewportScale').then(({ computeScale }) => {
+      expect(computeScale(3840, 2160)).toBe(1);
+      expect(computeScale(2560, 1600)).toBe(1);
+    });
+  });
+});

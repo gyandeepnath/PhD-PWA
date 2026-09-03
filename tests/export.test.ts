@@ -15,7 +15,7 @@ function bundle(): SessionBundle {
       screen_white_luminance_cd_m2: 120, brightness_percent: 80, session_start_time: 1700000000000,
       session_end_time: 1700000600000, randomisation_seed: 1, condition_order: [0, 1],
       preflight_complete: true, e2e_timing: false, consent_given: true, consent_time: 1, media_consent: { camera_metrics: true, setup_photos: false, annotation_video: false, granted_at: null }, provenance: prov,
-      device_type: 'Android', browser: 'Chrome', screen_resolution: '2880x1800',
+      device_type: 'Android', browser: 'Chrome', screen_resolution: '2880x1800', stimulus_scale: 1, layout_viewport: '1194x834',
       conditions_per_session: 8, condition_offset: 0, session_index: 1,
     },
     participant: undefined,

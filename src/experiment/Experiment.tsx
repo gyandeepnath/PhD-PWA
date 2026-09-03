@@ -48,6 +48,7 @@ import {
   Consent, Preflight, Instructions, type SessionInitData, type ProfileData,
 } from '@/start/setupStages';
 import { CalibrationRoutine } from '@/start/CalibrationRoutine';
+import { currentScale, layoutViewport } from '@/lib/viewportScale';
 
 function provenance(): Provenance {
   return {
@@ -448,6 +449,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       device_type: navigator.userAgent.includes('Android') ? 'Android' : 'Other',
       browser: navigator.userAgent.slice(0, 60),
       screen_resolution: `${screen.width}x${screen.height}`,
+      /*
+       * Visual angle is a controlled variable, and the root scaler changes it on any device
+       * smaller than the design canvas. Recording the factor here is what keeps that an analysable
+       * covariate rather than an unstated difference between tablets.
+       */
+      stimulus_scale: currentScale(),
+      layout_viewport: layoutViewport(),
       conditions_per_session: sittingPlan.length,
       condition_offset: offset,
       session_index: prior.sittings + 1,

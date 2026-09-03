@@ -299,6 +299,8 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '01_session_info.csv', column: 'git_hash', type: 'string', unit: '-', role: 'provenance', description: 'Short commit hash of the build. Together with app_version this identifies the exact code that collected the data.' },
   { file: '01_session_info.csv', column: 'device_type', type: 'string', unit: '-', role: 'meta', description: 'Device the session ran on. Findings are device-specific, so this bounds generalisation.' },
   { file: '01_session_info.csv', column: 'screen_resolution', type: 'string', unit: 'px', role: 'meta', description: 'Viewport resolution in pixels. Affects line length and words per page.' },
+  { file: '01_session_info.csv', column: 'stimulus_scale', type: 'number', unit: '0-1', role: 'covariate', description: 'Factor the interface and stimuli were rendered at. The layout is authored on a fixed canvas and scaled down to fit a smaller screen, so a value below 1 means the reading text subtended a smaller visual angle than the design size. 1 = presented at design size. Empty for sessions recorded before this was captured.' },
+  { file: '01_session_info.csv', column: 'layout_viewport', type: 'string', unit: 'px', role: 'meta', description: 'The viewport the scale was fitted to, WxH in CSS pixels. Differs from screen_resolution, which is the physical panel and ignores space taken by the browser address bar.' },
   { file: '01_session_info.csv', column: 'consent_given', type: 'boolean', unit: '-', role: 'meta', description: 'Whether written informed consent was recorded before any measurement began.' },
   { file: '01_session_info.csv', column: 'preflight_complete', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the pre-session environment and device checks were completed. False indicates a session started outside protocol.' },
   { file: '01_session_info.csv', column: 'e2e_timing', type: 'boolean', unit: '-', role: 'qc', description: 'TRUE means this session ran under the end-to-end test harness, in which every protocol duration — reading floor, adaptation, search limit, reaction-time block — is collapsed to a token value. Such a row is a test artefact and must never be pooled with collected data.' },
@@ -519,7 +521,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'session_status', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'preflight_complete', 'e2e_timing', 'stimulus_font_ok', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected', 'calibration_runs'],
+    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'session_status', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'stimulus_scale', 'layout_viewport', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'preflight_complete', 'e2e_timing', 'stimulus_font_ok', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected', 'calibration_runs'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
       session_index: session.session_index,
@@ -552,6 +554,13 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       app_version: session.provenance.app_version, git_hash: session.provenance.git_hash,
       condition_def_hash: session.provenance.condition_def_hash, schema_version: session.provenance.schema_version,
       device_type: session.device_type, screen_resolution: session.screen_resolution,
+      /*
+       * `?? null` rather than a default: a session recorded before this field existed did not
+       * measure a scale, and writing 1 there would assert that its stimuli were presented at the
+       * design size when nobody knows whether they were.
+       */
+      stimulus_scale: session.stimulus_scale ?? null,
+      layout_viewport: session.layout_viewport ?? null,
       consent_given: session.consent_given,
       consent_camera_metrics: session.media_consent?.camera_metrics ?? '',
       consent_setup_photos: session.media_consent?.setup_photos ?? '',

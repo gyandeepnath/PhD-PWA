@@ -219,7 +219,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       },
       device_type: 'Android',
       browser: 'Chrome/verify',
-      screen_resolution: '1600x2560',
+      screen_resolution: '1600x2560', stimulus_scale: 1, layout_viewport: '1194x834',
       conditions_per_session: plan.length,
       condition_offset: 0,
       session_index: 2,

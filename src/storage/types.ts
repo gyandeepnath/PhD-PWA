@@ -179,6 +179,23 @@ export interface SessionRecord {
   device_type: string;
   browser: string;
   screen_resolution: string;
+  /**
+   * The factor the whole interface — stimuli included — was rendered at on this device.
+   *
+   * The layout is authored on a fixed design canvas and scaled down to fit a smaller screen, so a
+   * shorter tablet presents the reading text at a smaller physical size and therefore a smaller
+   * visual angle. That is a real difference between devices and it must not be silent: 1 means the
+   * stimulus was presented at the design size, and anything below it means it was not. Null only
+   * for sessions recorded before this was captured — never a substituted 1, which would assert a
+   * measurement that was not made.
+   */
+  stimulus_scale: number | null;
+  /**
+   * The viewport the scale was computed from, "WxH" in CSS pixels. Recorded alongside the scale
+   * because `screen_resolution` is the physical panel and says nothing about the space the browser
+   * actually gave the app once its address bar is showing.
+   */
+  layout_viewport: string | null;
 
   // --- Split-session / boredom-mitigation fields ---
   /** How many of the 8 conditions are run in this sitting (8 = single session, 4 = split). */

@@ -100,6 +100,19 @@ export function currentScale(): number {
 }
 
 /**
+ * The viewport the current scale was computed from, as "WxH" in CSS pixels.
+ *
+ * Distinct from `screen.width`/`screen.height`, which describe the physical panel and are the same
+ * whether or not the browser's address bar is eating 70px of it. This is the box the layout was
+ * actually fitted to.
+ */
+export function layoutViewport(): string {
+  const w = Number.isFinite(floorW) ? floorW : measure().w;
+  const h = Number.isFinite(floorH) ? floorH : measure().h;
+  return `${Math.round(w)}x${Math.round(h)}`;
+}
+
+/**
  * Forget the running minimum. Called on an orientation change, where a portrait minimum says
  * nothing useful about the landscape shape that follows.
  */
