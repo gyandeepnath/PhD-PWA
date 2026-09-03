@@ -94,3 +94,80 @@ npx tsx scripts/simulateParticipant.ts --n 2000
 Every app-controlled duration is read from the real `CONFIG`, so this file cannot drift from what
 the instrument does. Every participant-controlled duration is drawn from a distribution whose basis
 is stated in the script's header comment. Nothing in the table above is typed in by hand.
+
+---
+
+# The frontier: what each way of shortening a sitting costs
+
+`scripts/protocolFrontier.ts` prices every shortening lever against the same simulated participant
+stream and the same power assumptions the main simulation uses (both now read them from one
+`SYNOPSIS` block in `scripts/lib/timingModel.ts`, so the two scripts cannot reach different
+verdicts on the same design). Full output in `docs/PROTOCOL_FRONTIER_OUTPUT.txt`.
+
+Two quantities are conserved, and they are why shortening is not free:
+
+1. **Total condition-runs** = `n × runs-per-participant`. Halving the conditions in a sitting does
+   not halve the study — it doubles the visits or the participants.
+2. **Blinks per condition.** The primary outcome is a binomial proportion, so its SE is set by the
+   blink *count*. Cutting reading exposure cuts blinks one for one.
+
+## The result
+
+| variant | cond | sitting | visits | contact | SE | power main | power interaction |
+|---|---|---|---|---|---|---|---|
+| as shipped | 10 | 93m | 2 | 187m | 0.059 | 89% | 45% |
+| CVS-Q once per participant | 10 | 87m | 2 | 174m | 0.059 | 89% | 45% |
+| 5 cond/sitting | 5 | 56m | 4 | 223m | 0.059 | 89% | 45% |
+| 4 cond/sitting | 4 | 41m | 5 | 207m | 0.059 | 89% | 45% |
+| 2 cond/sitting | 2 | 26m | 10 | 260m | 0.059 | 89% | 45% |
+| 4 cond, 60% passage | 4 | 37m | 5 | 183m | 0.076 | 87% | 34% |
+| 2 cond, 40% passage | 2 | 22m | 10 | 224m | 0.093 | 84% | 27% |
+
+**Cutting conditions per sitting costs no statistical power at all.** Every condition-count variant
+holds identical power, because the condition-runs are conserved however they are packaged. What it
+costs is *visits* — and therefore total contact time, which goes **up**, because the fixed overhead
+is paid once per visit.
+
+**Cutting reading exposure is the only lever that reduces total contact time, and the only one that
+costs power.** It costs it unevenly: the polarity main effect barely moves, while the polarity ×
+colour interaction falls fastest, because it contrasts single conditions instead of averaging five
+per side (`CONTRAST.interaction` is `2 × se`; `CONTRAST.main` is `se × √2/√5`).
+
+## The fixed-overhead wall
+
+A sitting costs `T(k) = overhead + 7.13 × k` minutes for `k` conditions.
+
+| overhead variant | first visit | repeat visit | conditions a 20-min sitting affords |
+|---|---|---|---|
+| as shipped | 22.0 min | 16.0 min | 0 |
+| CVS-Q end of sitting only | 18.5 min | 12.8 min | 1 |
+| CVS-Q once per participant | 15.6 min | 10.1 min | 1 |
+
+The overhead alone exceeds 20 minutes on a first visit and nearly exhausts it on a repeat. Twenty
+minutes is therefore not reachable by trimming; it is reachable only by moving the CVS-Q out of the
+sitting **and** running one or two conditions per visit **and** truncating the passages.
+
+## Why that makes the dropout worry worse, not better
+
+Every visit after the first is an opportunity not to come back. If the per-return dropout
+probability is `q`, a design needing `v` visits retains `(1 − q)^(v−1)`.
+
+| visits | sitting | contact | retained @ q=5% | @ q=10% | @ q=15% | recruit for n=130 @ q=10% |
+|---|---|---|---|---|---|---|
+| 2 | 94m | 188m | 95% | 90% | 85% | 145 |
+| 4 | 56m | 223m | 86% | 73% | 61% | 179 |
+| 5 | 41m | 206m | 81% | 66% | 52% | 199 |
+| 10 | 26m | 261m | 63% | 39% | 23% | 336 |
+
+`q` is a swept parameter, **not a measured value** — substitute a figure from a pilot or from the
+literature before quoting any of this.
+
+The 20-minute design turns two 93-minute visits into ten 22-minute ones, with *more* total contact
+time (224 vs 187 min), worse retention, and interaction power falling from 45% to 27%. Shortening
+the sitting to reduce dropout achieves the opposite of its purpose.
+
+## The pre-existing problem this exposed
+
+Interaction power is **45% at full exposure**, against a synopsis target of 81%. That is not
+created by any of the shortening options — it is there now, and it is the reason reading exposure
+is the most expensive thing in the protocol to cut. It needs addressing on its own terms.

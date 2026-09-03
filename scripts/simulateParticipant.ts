@@ -27,195 +27,16 @@
  *   npx tsx scripts/simulateParticipant.ts --n 5000
  */
 import { CONFIG, TASKS_PER_CONDITION } from '../src/experiment/config';
-import { CONDITIONS, N_CONDITIONS } from '../src/experiment/conditions';
-import { PASSAGES, QUESTIONS_PER_PASSAGE } from '../src/experiment/passages';
-import { blockPlan } from '../src/experiment/counterbalance';
+import { N_CONDITIONS } from '../src/experiment/conditions';
+import { PASSAGES } from '../src/experiment/passages';
+import {
+  type Breakdown, type Person, type Provenance, type SittingSpec,
+  PROVENANCE, provenanceOf, clamp, gauss, rtBlockSeconds, samplePerson, simulateSitting, reseed, S,
+  seOfRatio, powerT, attenuatedDz, CONTRAST, SYNOPSIS,
+} from './lib/timingModel';
 
 const N = Number(process.argv[process.argv.indexOf('--n') + 1]) || 2000;
 
-// ---------------------------------------------------------------- rng
-let seed = 20260817;
-function rnd(): number {
-  seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-  return seed / 0x7fffffff;
-}
-function gauss(mean: number, sd: number): number {
-  const u = Math.max(1e-9, rnd()), v = rnd();
-  return mean + sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
-const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
-const S = 1000;
-
-// ---------------------------------------------------------------- population model
-interface Person {
-  /** Words per minute on dense expository prose, read for comprehension. */
-  wpm: number;
-  /** Deliberation multiplier: scales every self-paced rating/questionnaire step. */
-  care: number;
-  /** Break-taking multiplier. */
-  restiness: number;
-  /** Blinks per minute while reading. */
-  blinkRate: number;
-  /** Baseline proportion of blinks that fail to close fully. */
-  incompleteP: number;
-}
-function samplePerson(): Person {
-  return {
-    wpm: clamp(gauss(215, 45), 90, 400),
-    care: clamp(gauss(1.0, 0.28), 0.5, 2.4),
-    restiness: clamp(gauss(1.0, 0.5), 0.2, 3.5),
-    blinkRate: clamp(gauss(13, 4), 4, 28),
-    incompleteP: clamp(gauss(0.16, 0.11), 0.01, 0.6),
-  };
-}
-
-// ---------------------------------------------------------------- per-step models (seconds)
-/** Mean seconds the RT block takes, from the real trial-structure constants. */
-function rtBlockSeconds(nTrials: number, meanRtMs = 360): number {
-  const fix = (CONFIG.RT_FIXATION_MIN_MS + CONFIG.RT_FIXATION_MAX_MS) / 2;
-  const del = (CONFIG.RT_DELAY_MIN_MS + CONFIG.RT_DELAY_MAX_MS) / 2;
-  const iti = (CONFIG.RT_ITI_MIN_MS + CONFIG.RT_ITI_MAX_MS) / 2;
-  const nGo = Math.round(nTrials * CONFIG.RT_GO_RATE);
-  const nNo = nTrials - nGo;
-  // A go trial ends on response; a no-go trial waits the whole response window out.
-  const go = fix + del + meanRtMs + iti;
-  const no = fix + del + CONFIG.RT_RESPONSE_WINDOW_MS + iti;
-  return (nGo * go + nNo * no) / S;
-}
-
-interface Breakdown { [k: string]: number }
-
-/**
- * Where each step's duration comes from. This is the distinction that matters when someone asks
- * whether the total is over-estimated, because only one of the three can be argued down.
- *
- *   'enforced'  the app will not advance before this much time has passed. Read from CONFIG.
- *               Not an estimate at all — a lower bound the instrument imposes.
- *   'corpus'    arithmetic over fixed content: words in the passage divided by a reading rate.
- *               The word count is exact; only the rate is assumed, and it is the best-evidenced
- *               assumption in the model (Brysbaert 2019, 190 studies).
- *   'estimated' my per-item guess for a motivated young adult. This is the ONLY tier where
- *               estimation error lives, so it is the only tier that responds to being challenged.
- */
-type Provenance = 'enforced' | 'corpus' | 'estimated';
-const PROVENANCE: Record<string, Provenance> = {
-  'adaptation': 'enforced',
-  'rt_block': 'enforced',
-  'rt_practice (once)': 'enforced',
-  'reading': 'corpus',
-};
-const provenanceOf = (k: string): Provenance => PROVENANCE[k] ?? 'estimated';
-
-interface SittingSpec {
-  /** Room illumination for this sitting. Orthogonal to `first` by design (§ counterbalance). */
-  illumination: 'dim' | 'bright';
-  /** True for a participant's first sitting; the second skips the per-participant setup stages. */
-  first: boolean;
-  /**
-   * Fractional slowing of reading rate under 10 lux relative to 150 lux. ASSUMED, not measured —
-   * and deliberately exposed as a knob rather than baked in, because the size of this effect is
-   * one of the things the study exists to estimate. Assuming it is large would beg the question;
-   * assuming it is zero would understate the dim sitting. Reported across 0 / 0.05 / 0.10.
-   */
-  dimReadingPenalty: number;
-}
-
-function simulateSitting(
-  p: Person,
-  enrolment: number,
-  block: number,
-  cfg = CONFIG,
-  spec: SittingSpec = { illumination: 'dim', first: true, dimReadingPenalty: 0 },
-) {
-  const plan = blockPlan(enrolment, block);
-  const b: Breakdown = {};
-  const add = (k: string, v: number) => { b[k] = (b[k] ?? 0) + v; };
-
-  /**
-   * Deliberation multiplier. On a second sitting the participant already knows every screen, the
-   * slider idiom and the task instructions, so self-paced steps run faster. 10% is an estimate.
-   */
-  const care = p.care * (spec.first ? 1 : 0.9);
-
-  // ---- setup chain. Which stages run is decided by firstUnsatisfiedSetupStage()'s predicates,
-  // and those predicates read from different scopes: consent and the two baselines are SESSION
-  // fields, so they repeat every sitting; the profile and the colour-vision screen are PARTICIPANT
-  // fields, so they run once in a participant's life. Mirroring that split here rather than
-  // assuming it is what makes the second-sitting figure a property of the code and not a guess.
-  add('session_init (researcher)', gauss(110, 30) / 1);
-  add('consent', gauss(170, 50) * care * (spec.first ? 1 : 0.45)); // re-affirmed, not re-read
-  if (spec.first) add('participant_profile', gauss(115, 30) * care);
-  add('preflight_checklist', gauss(55, 15));
-  if (spec.first) add('colour_vision (5 plates)', gauss(80, 20) * care);
-  add('camera_setup', gauss(90, 30));
-  add('calibration (9-pt + EAR + pitch)', gauss(150, 40));
-  // CVS-Q: 16 items, each a frequency choice plus a conditional intensity choice.
-  add('cvsq_baseline (16 items)', 16 * gauss(13, 3) * care / 1);
-  add('baseline_fatigue (5 sliders)', 5 * gauss(3.4, 1) * care);
-  add('instructions', gauss(55, 18) * care * (spec.first ? 1 : 0.6));
-
-  // ---- per-condition loop
-  let polaritySwitches = 0;
-  let totalBlinks = 0;
-  for (let i = 0; i < plan.length; i++) {
-    const cond = CONDITIONS[plan[i].conditionIndex];
-    const prev = i > 0 ? CONDITIONS[plan[i - 1].conditionIndex] : null;
-    const switched = prev != null && prev.polarity !== cond.polarity;
-    if (switched) polaritySwitches++;
-
-    // Adaptation: a grey field before EVERY condition, including the first, and doubled on a
-    // polarity switch. The pre-first field was added because without it condition 0 began from the
-    // light cream setup UI, so adaptation state at onset was a function of the condition's own
-    // polarity — an asymmetry confounded with the study's primary factor. It costs 60 s once.
-    add('adaptation', (switched ? cfg.ADAPTATION_SWITCH_POLARITY_MS : cfg.ADAPTATION_SAME_POLARITY_MS) / S);
-
-    // Reading: self-paced above a per-page floor.
-    const words = PASSAGES[plan[i].passageIndex].wordCount;
-    const pages = PASSAGES[plan[i].passageIndex].pages.length;
-    // Low-contrast conditions slow reading a little; this is the effect under study, so keep it modest.
-    const contrastPenalty = cond.below_wcag_aa ? 1.08 : 1.0;
-    const dimPenalty = spec.illumination === 'dim' ? 1 + spec.dimReadingPenalty : 1.0;
-    const natural = (words / p.wpm) * 60 * contrastPenalty * dimPenalty * gauss(1, 0.08);
-    const floor = (pages * cfg.READING_PAGE_MIN_MS) / S;
-    const readSec = Math.max(floor, natural);
-    add('reading', readSec);
-    totalBlinks += (readSec / 60) * p.blinkRate;
-
-    // One entry per comprehension ITEM. Each is a separate screen with its own read-and-answer
-    // and its own feedback dwell, so the cost scales with the item count. Charging one item here
-    // while the instrument administers three understated every published feasibility figure.
-    add(`comprehension (${QUESTIONS_PER_PASSAGE} items)`,
-      QUESTIONS_PER_PASSAGE * ((gauss(14, 5) * care) + cfg.COMPREHENSION_FEEDBACK_MS / S));
-    add('display_perception (2 sliders)', 2 * gauss(4.2, 1.2) * care);
-    add('fatigue_vas (5 sliders)', 5 * gauss(3.2, 0.9) * care);
-
-    // Visual search: bounded by the hard limit; careful searchers use more of the window.
-    add('visual_search', Math.min(cfg.VS_TIME_LIMIT_MS / S, gauss(30, 8) * care));
-
-    // RT: an instruction screen each time, plus the block itself, plus one practice block overall.
-    add('rt_instructions', gauss(9, 3) * care);
-    add('rt_block', rtBlockSeconds(cfg.RT_TRIALS_PER_CONDITION));
-    if (i === 0 && cfg.RT_PRACTICE_TRIALS > 0) {
-      add('rt_practice (once)', rtBlockSeconds(cfg.RT_PRACTICE_TRIALS) + cfg.RT_PRACTICE_TRIALS * 1.2);
-    }
-
-    // Self-paced break after every N conditions, never after the last of the sitting.
-    const done = i + 1;
-    if (cfg.BREAK_EVERY_N_CONDITIONS > 0 && done % cfg.BREAK_EVERY_N_CONDITIONS === 0 && done < plan.length) {
-      add('breaks', clamp(gauss(45, 25) * p.restiness, 8, 300));
-    }
-  }
-
-  // ---- close
-  add('cvsq_end (16 items)', 16 * gauss(11, 3) * care);
-  add('nasa_tlx (6 sliders)', 6 * gauss(6.5, 2) * care + gauss(20, 6) * care);
-  add('session_complete', gauss(35, 12));
-
-  const total = Object.values(b).reduce((s, v) => s + v, 0);
-  return { breakdown: b, total, polaritySwitches, blinksPerCondition: totalBlinks / plan.length };
-}
-
-// ---------------------------------------------------------------- run
 const pct = (xs: number[], q: number) => {
   const s = [...xs].sort((a, c) => a - c);
   return s[clamp(Math.floor(q * (s.length - 1)), 0, s.length - 1)];
@@ -376,19 +197,6 @@ export { simulateSitting, samplePerson, rtBlockSeconds, run };
 //   - the polarity MAIN effect averages 5 conditions per side, so error shrinks by sqrt(5)
 //   - the polarity x colour INTERACTION contrasts single conditions, so it carries the full error
 // ================================================================================================
-function seOfRatio(blinks: number, p = 0.16): number {
-  return Math.sqrt((p * (1 - p)) / blinks);
-}
-/** Power of a two-sided one-sample t-test at alpha=.05, via a normal approximation to the t. */
-function powerT(n: number, dz: number): number {
-  if (dz <= 0) return 0.05;
-  const ncp = dz * Math.sqrt(n);
-  const crit = 1.96 + 1.5 / n; // small-sample nudge toward the t critical value
-  const z = ncp - crit;
-  // standard normal CDF
-  const cdf = (x: number) => 0.5 * (1 + Math.sign(x) * Math.sqrt(1 - Math.exp((-2 / Math.PI) * x * x)));
-  return cdf(z);
-}
 
 console.log('\n' + '='.repeat(96));
 console.log('POWER UNDER MEASUREMENT ERROR — what the shipped exposure actually buys');
@@ -404,8 +212,7 @@ console.log('='.repeat(96));
  * before; a stale constant here becomes a false claim in a thesis.
  */
 const SHIPPED_SEC = Math.round((base.agg['reading'] / N_CONDITIONS) * 60);
-const SIGMA_TRUE = 0.10;   // between-participant SD of the true within-participant difference
-const N_ANALYSED = 130;
+const { SIGMA_TRUE, N_ANALYSED, TRUE_DZ_MAIN, TRUE_DZ_INTERACTION } = SYNOPSIS;
 console.log(`Assumes a between-participant SD of the true difference score of ${SIGMA_TRUE}, n = ${N_ANALYSED}.`);
 console.log('');
 console.log('  reading    blinks   SE per      MAIN EFFECT (5v5)          INTERACTION (1v1)');
@@ -415,20 +222,17 @@ const EXPOSURES = [...new Set([73, 120, SHIPPED_SEC, 240, 300])].sort((a, b) => 
 for (const sec of EXPOSURES) {
   const blinks = (sec / 60) * 13;
   const se = seOfRatio(blinks);
-  // main effect: mean of 5 conditions each side, difference of two means
-  const seMain = se / Math.sqrt(5) * Math.SQRT2;
-  // interaction: a difference of differences over 4 single conditions
-  const seInter = se * 2;
-  const att = (sm: number) => Math.sqrt(SIGMA_TRUE ** 2 / (SIGMA_TRUE ** 2 + sm ** 2));
-  const dzMain = 0.30 * att(seMain);
-  const dzInter = 0.25 * att(seInter);
+  const seMain = CONTRAST.main(se, N_CONDITIONS);
+  const seInter = CONTRAST.interaction(se);
+  const dzMain = attenuatedDz(TRUE_DZ_MAIN, SIGMA_TRUE, seMain);
+  const dzInter = attenuatedDz(TRUE_DZ_INTERACTION, SIGMA_TRUE, seInter);
   const flag = sec === SHIPPED_SEC ? '  <- as shipped' : sec === 73 ? '  <- the corpus before it was rebuilt' : '';
   console.log(`  ${String(sec).padStart(4)}s     ${blinks.toFixed(0).padStart(5)}    ${se.toFixed(3)}       ` +
     `${dzMain.toFixed(3)}   ${(powerT(N_ANALYSED, dzMain) * 100).toFixed(0).padStart(3)}%            ` +
     `${dzInter.toFixed(3)}   ${(powerT(N_ANALYSED, dzInter) * 100).toFixed(0).padStart(3)}%${flag}`);
 }
 console.log('');
-console.log('  Target from the synopsis: 92% for the main effect, 81% for the interaction at n=130.');
+console.log(`  Target from the synopsis: ${(SYNOPSIS.TARGET_POWER_MAIN * 100).toFixed(0)}% for the main effect, ${(SYNOPSIS.TARGET_POWER_INTERACTION * 100).toFixed(0)}% for the interaction at n=${N_ANALYSED}.`);
 console.log('  The interaction is the binding constraint AND the contrast most exposed to this error.');
 
 console.log('\n' + '='.repeat(96));

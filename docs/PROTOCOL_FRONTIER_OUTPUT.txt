@@ -1,0 +1,89 @@
+================================================================================================================
+PROTOCOL FRONTIER — what each way of shortening a sitting costs
+================================================================================================================
+  2000 simulated participants per variant, identical participant stream across variants.
+  Power assumes n=130, true d_z=0.3, between-participant SD of the difference score=0.1.
+  Every participant must accumulate 20 condition-runs (10 conditions x 2 illumination levels).
+  "contact" is median sitting length x sittings: the participant's total time in the lab.
+
+  variant                       cond   sitting     p95  visits   contact  blinks      SE  pwr main  pwr int
+  ---------------------------------------------------------------------------------------------------------
+  as shipped                      10     93.4m    116m       2      187m      38   0.059       89%      45%   10 conditions, full passages, CVS-Q twice
+  CVS-Q once per participant      10     87.1m    107m       2      174m      38   0.059       89%      45%   demote to a screening covariate
+  CVS-Q end of sitting only       10     90.2m    112m       2      180m      39   0.059       89%      45%   drop the within-sitting baseline
+  5 cond/sitting                   5     55.8m     70m       4      223m      38   0.059       89%      45%   balanced incomplete block, 4 visits
+  5 cond + CVS-Q once              5     49.3m     62m       4      197m      38   0.059       89%      45%
+  4 cond/sitting                   4     41.5m     53m       5      207m      39   0.059       89%      45%   5 visits
+  2 cond/sitting                   2     26.0m     35m      10      260m      38   0.059       89%      45%   10 visits
+  5 cond, 60% passage              5     43.5m     55m       4      174m      23   0.076       87%      34%   ~350 words per condition
+  4 cond, 60% passage              4     36.7m     47m       5      184m      23   0.076       87%      34%
+  4 cond, 40% passage              4     34.3m     44m       5      172m      15   0.093       84%      26%   ~234 words per condition
+  2 cond, 40% passage              2     22.4m     31m      10      224m      15   0.093       84%      26%   closest approach to 20 min
+
+================================================================================================================
+THE FIXED-OVERHEAD WALL — why 20 minutes is not a matter of trimming
+================================================================================================================
+  Minutes a sitting costs BEFORE the first condition runs:
+
+    overhead variant                first visit  repeat visit
+    as shipped                         22.0 min      16.0 min
+    CVS-Q end only                     18.5 min      12.8 min
+    CVS-Q once per participant         15.6 min      10.1 min
+
+  Marginal cost of one further condition: 7.14 min.
+  So a sitting costs   T(k) = overhead + 7.14 x k.
+    with "as shipped" overhead (16.0 min on a repeat visit), a 20-minute sitting affords 0 conditions.
+    with "CVS-Q end only" overhead (12.8 min on a repeat visit), a 20-minute sitting affords 1 condition.
+    with "CVS-Q once per participant" overhead (10.1 min on a repeat visit), a 20-minute sitting affords 1 condition.
+
+  Read that last block carefully: the overhead alone is the binding constraint, not the
+  conditions. Reaching 20 minutes requires cutting what happens AROUND the conditions
+  first, and only then how many of them there are.
+
+================================================================================================================
+ATTRITION — the reason a shorter sitting can cost you MORE participants, not fewer
+================================================================================================================
+  A shorter sitting is bought with more visits, and every visit after the first is an
+  opportunity to not come back. If the per-return dropout probability is q, then a design
+  requiring v visits retains (1-q)^(v-1) of those who started.
+
+  q is NOT measured here — it is a parameter, swept across three values. Substitute a
+  real figure from your own pilot or from the literature before quoting any of this.
+
+     visits   sitting  contact   retained @q=5%  retained @q=10%  retained @q=15%
+    -----------------------------------------------------------------------------
+          2       93m     187m              95%              90%              85%
+          4       56m     223m              86%              73%              61%
+          5       41m     207m              81%              66%              52%
+         10       26m     260m              63%              39%              23%
+
+    To ANALYSE n=130 you must RECRUIT n / retention:
+     visits    recruit @q=5%   recruit @q=10%   recruit @q=15%
+          2              137              145              153
+          4              152              179              212
+          5              160              199              250
+         10              207              336              562
+
+================================================================================================================
+WHAT THE TABLE ACTUALLY SAYS
+================================================================================================================
+  1. Cutting CONDITIONS PER SITTING costs no statistical power at all — every variant above
+     holds the same power, because total condition-runs are conserved at 20 per
+     participant however they are packaged. What it costs is VISITS, and therefore total
+     contact time (which goes UP, because the fixed overhead is paid once per visit) and
+     retention (which goes DOWN, because every return is a chance to not return).
+
+  2. Cutting READING EXPOSURE is the only lever that reduces total contact time, and it is
+     the only one that costs power. It costs it unevenly: the polarity main effect barely
+     moves, while the polarity x colour interaction — the contrast the study is actually
+     about — falls fastest, because it contrasts single conditions instead of averaging.
+
+  3. The interaction is ALREADY below the synopsis target at full exposure. That is a
+     pre-existing problem this table did not create, and it is the reason exposure is the
+     most expensive thing in the protocol to cut.
+
+  4. A 20-minute sitting is not reachable by trimming: the fixed overhead alone exceeds it
+     on a first visit and nearly exhausts it on a repeat. It becomes reachable only by
+     moving the CVS-Q out of the sitting AND running 1-2 conditions per visit AND
+     truncating the passages — which together turn 2 visits of ~93 min into 10 visits of
+     ~22 min, with MORE total contact time and much worse retention.
