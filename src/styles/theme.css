@@ -65,6 +65,41 @@ body {
   isolation: isolate;
 }
 
+/*
+ * A full-height screen INSIDE the scaled root.
+ *
+ * `min-h-screen` is `min-height: 100vh`, and `vh` measures the raw viewport — but #root's own
+ * height is `calc(100% / var(--vl-scale))`, so inside a scaled root the two are different boxes.
+ * Anything sized in `vh` is therefore measuring something it is not laid out in. Percentages
+ * resolve against the root, which is the box that actually clips.
+ *
+ * `.screen` is the correct full-height container for a stage, and `.screen-col` adds the flex
+ * column that lets a long list flex to the space left over rather than being given a guessed
+ * fraction of the viewport. The CVS-Q used `maxHeight: 64vh` for its item list; header, list,
+ * padding and the submit button then summed to 877 px inside an 834 px canvas, putting Continue
+ * in the region #root clips and body's `touch-action: none` makes unreachable. Sixteen items could
+ * be answered and none of them submitted.
+ */
+.screen {
+  height: 100%;
+  min-height: 100%;
+}
+
+.screen-col {
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * The flexing child of a `.screen-col`. `min-height: 0` is the load-bearing line: a flex item's
+ * default `min-height: auto` refuses to shrink below its content, so without it the list pushes
+ * the button out of the container instead of scrolling.
+ */
+.screen-grow {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 /* Inputs remain selectable/typable despite the global no-select. */
 input,
 textarea {

@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './styles/theme.css';
+import { installViewportScale } from './lib/viewportScale';
 
 /**
  * Surface asynchronous failures, which the React error boundary cannot see.
@@ -50,6 +51,17 @@ window.addEventListener('error', (e) => {
     reportAsyncFailure(`${e.message} — the app may have updated while running. Do not reload mid-condition; tell the researcher.`);
   }
 });
+
+/*
+ * Fit the design canvas to this device BEFORE the first paint.
+ *
+ * theme.css scales #root by --vl-scale and nothing ever set it, so every device rendered at the
+ * design size. #root is overflow:hidden and body is touch-action:none, both deliberately, so on a
+ * shorter viewport the clipped part of a screen was not merely off-view — it was unreachable by
+ * any gesture. That is how a tablet 20% shorter than the design canvas produced setup screens whose
+ * Continue button could not be pressed at all.
+ */
+installViewportScale();
 
 // Note: StrictMode is intentionally omitted — its dev double-invocation of effects double-requests
 // the camera and re-runs FaceMesh init (the original VisuLab was a production build with no

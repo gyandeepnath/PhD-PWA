@@ -22,6 +22,7 @@ import { EyeMetricsAggregator, disabledEyeMetrics } from './aggregator';
 import { put } from '@/storage/db';
 import { now } from '@/lib/timing';
 import type { CameraStatus } from '@/storage/types';
+import { loadFaceMesh, faceMeshAssetPath } from './faceMeshLoader';
 
 /** Median of a numeric array (robust frontal-fraction estimate, ignores transient blinks/noise). */
 function medianOf(xs: number[]): number {
@@ -212,27 +213,21 @@ export function useTracking(): TrackingApi {
       lumaCanvas.height = 24;
       lumaCanvasRef.current = lumaCanvas;
 
-      // Dynamic import keeps MediaPipe out of the critical path and lets the app build/run without it.
-      const mod = (await import('@mediapipe/face_mesh')) as unknown as {
-        FaceMesh: new (cfg: { locateFile: (f: string) => string }) => {
-          setOptions: (o: Record<string, unknown>) => void;
-          onResults: (cb: (r: { multiFaceLandmarks?: Point[][] }) => void) => void;
-          send: (i: { image: HTMLVideoElement }) => Promise<void>;
-        };
-      };
       /**
-       * Resolved against the app's own base URL, not the domain root.
+       * Dynamic import keeps MediaPipe out of the critical path and lets the app build/run without
+       * it. The constructor is resolved through faceMeshLoader rather than read off the module
+       * namespace directly, because the package publishes onto a global under Rollup and onto the
+       * module exports under esbuild — see that file for why reading `mod.FaceMesh` here shipped a
+       * build that could not track a single blink.
        *
-       * `/mediapipe/${f}` is root-absolute, so it only works when the app is served from `/`.
-       * vite.config.ts sets `base: './'` and DEPLOYMENT.md recommends GitHub Pages, whose project
-       * sites are always `https://user.github.io/repo/` — where every wasm and model fetch would
-       * 404. getUserMedia still succeeds and the preview still shows a face, so the operator ticks
-       * every checklist box; the FaceMesh init then throws into start()'s catch, status becomes
-       * 'failed', and every condition writes disabledEyeMetrics. No primary outcome for any
-       * participant on that deployment, with nothing on screen to say so.
+       * Asset paths are base-relative for the same class of reason: `/mediapipe/${f}` is
+       * root-absolute, so it only resolves when the app is served from `/`. This app is served
+       * from a GitHub Pages project site at `https://user.github.io/repo/`, where every wasm and
+       * model fetch would 404 — while getUserMedia still succeeds and the preview still shows a
+       * face, so the operator ticks every checklist box and the session records nothing.
        */
-      const base = new URL(import.meta.env.BASE_URL ?? './', document.baseURI);
-      const fm = new mod.FaceMesh({ locateFile: (f) => new URL(`mediapipe/${f}`, base).toString() });
+      const FaceMeshCtor = await loadFaceMesh();
+      const fm = new FaceMeshCtor({ locateFile: faceMeshAssetPath });
       fm.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
       // One ingest per result → EAR is sampled at the real FaceMesh throughput.
       fm.onResults((r) => ingestResult(r.multiFaceLandmarks?.[0] ?? null));

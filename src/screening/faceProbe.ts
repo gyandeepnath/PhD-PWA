@@ -15,7 +15,8 @@
  * Reports absence honestly: `status` is 'loading' until the model answers, and 'unavailable' when
  * it cannot be loaded at all — never a green tick on an unanswered question.
  */
-import { faceEar, type Point } from '@/tracking/blink';
+import { faceEar } from '@/tracking/blink';
+import { loadFaceMesh, faceMeshAssetPath } from '@/tracking/faceMeshLoader';
 
 export type FaceProbeStatus = 'loading' | 'searching' | 'detected' | 'unavailable';
 
@@ -56,18 +57,13 @@ export function startFaceProbe(
 
   void (async () => {
     try {
-      const mod = (await import('@mediapipe/face_mesh')) as unknown as {
-        FaceMesh: new (cfg: { locateFile: (f: string) => string }) => {
-          setOptions: (o: Record<string, unknown>) => void;
-          onResults: (cb: (r: { multiFaceLandmarks?: Point[][] }) => void) => void;
-          send: (i: { image: HTMLVideoElement }) => Promise<void>;
-        };
-      };
+      // Same loader and the same base-relative asset resolution as the tracker, so the probe
+      // exercises exactly the code path the session will use. Sharing it is the point: when the
+      // two had their own copies of this import, one packaging quirk broke both identically and
+      // the probe reported the failure it was built to catch only after the build reached a device.
+      const FaceMeshCtor = await loadFaceMesh();
       if (stopped) return;
-      // Same base-relative resolution as the tracker: a root-absolute path 404s on a subdirectory
-      // deployment, which is exactly the failure this probe exists to catch.
-      const base = new URL(import.meta.env.BASE_URL ?? './', document.baseURI);
-      const fm = new mod.FaceMesh({ locateFile: (f) => new URL(`mediapipe/${f}`, base).toString() });
+      const fm = new FaceMeshCtor({ locateFile: faceMeshAssetPath });
       fm.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
       fm.onResults((r) => {

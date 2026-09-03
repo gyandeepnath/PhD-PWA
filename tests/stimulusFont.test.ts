@@ -57,9 +57,22 @@ describe('the stimulus typeface is served from this origin', () => {
     // is rewritten to a relative asset URL at build time, which dist/index.html confirms.
     const html = read('index.html');
     expect(html).not.toMatch(/href="\/(?!\/)/);
-    const tracking = read('src/tracking/useTracking.ts');
-    expect(tracking).not.toMatch(/locateFile:.*`\/mediapipe\//);
-    expect(tracking).toMatch(/BASE_URL/);
+    /*
+     * Base-relative model paths now live in one place. Both the tracker and the setup-screen probe
+     * had their own copy of this import, and that duplication is how a single packaging quirk
+     * became two identical latent bugs; the loader owns the path resolution as well as the
+     * constructor lookup. The assertion follows the logic rather than the file it used to live in.
+     */
+    const loader = read('src/tracking/faceMeshLoader.ts');
+    expect(loader).toMatch(/BASE_URL/);
+    expect(loader).not.toMatch(/`\/mediapipe\//);
+
+    // And neither caller may go back to building the path itself.
+    for (const f of ['src/tracking/useTracking.ts', 'src/screening/faceProbe.ts']) {
+      const src = read(f);
+      expect(src, `${f} must not resolve model assets itself`).not.toMatch(/locateFile:.*`\/mediapipe\//);
+      expect(src, `${f} must go through faceMeshAssetPath`).toMatch(/faceMeshAssetPath/);
+    }
   });
 
   it('blocks rather than swaps, so the face cannot change mid-passage', () => {

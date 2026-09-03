@@ -18,6 +18,14 @@ import { startNewExperiment, driveUntil, click } from './helpers';
 const LANDSCAPE = [
   { name: 'iPad 11in', width: 1194, height: 834 },
   { name: 'iPad 10.2in', width: 1080, height: 810 },
+  /*
+   * The Android tablets the study will actually run on are SHORTER than any iPad, and height is
+   * the binding dimension for these screens. A Xiaomi Pad 6 in Chrome is about 1152x720 CSS px,
+   * and roughly 650 while the address bar is showing — some 180px under the design canvas. Testing
+   * only iPads is why the first real device found Continue buttons that no gesture could reach.
+   */
+  { name: 'Xiaomi Pad 6, address bar showing', width: 1152, height: 650 },
+  { name: 'Xiaomi Pad 6, address bar hidden', width: 1152, height: 720 },
 ];
 
 for (const vp of LANDSCAPE) {
@@ -58,5 +66,31 @@ for (const vp of LANDSCAPE) {
     // Without this, the block could only ever end on the 40 s cap: termination_mode could never be
     // voluntary_early, and every search score came from whatever fraction was above the fold.
     await expect(page.getByRole('button', { name: /Done searching/ })).toBeInViewport();
+  });
+
+  /*
+   * The questionnaire is the screen that actually broke in the field, and it broke only on a
+   * viewport shorter than any iPad. Measured with the root scaler disabled at 1152x650: the
+   * clipped root overflowed by 106 px with Continue inside that overflow, so the operator could
+   * fill in all sixteen items and had no way to submit them. Every other setup screen fitted,
+   * which is why adding a shorter viewport to the tests above was not by itself enough to catch it.
+   */
+  test(`the CVS-Q fits the clipped root and can be submitted at ${vp.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: vp.width, height: vp.height });
+    await startNewExperiment(page);
+    await driveUntil(page, 'CVSQ_BASELINE');
+
+    const root = await page.evaluate(() => {
+      const el = document.getElementById('root')!;
+      return { scrollH: el.scrollHeight, clientH: el.clientHeight, scrollW: el.scrollWidth, clientW: el.clientWidth };
+    });
+    // #root is overflow:hidden and body is touch-action:none. Anything past these bounds cannot be
+    // reached by any gesture — it is not merely below the fold.
+    expect(root.scrollH, 'the questionnaire overflows the clipped root vertically').toBeLessThanOrEqual(root.clientH + 1);
+    expect(root.scrollW, 'the questionnaire overflows the clipped root horizontally').toBeLessThanOrEqual(root.clientW + 1);
+
+    const btn = page.getByRole('button', { name: /Continue/ });
+    await btn.scrollIntoViewIfNeeded();
+    await expect(btn).toBeInViewport();
   });
 }

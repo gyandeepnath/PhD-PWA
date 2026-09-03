@@ -127,6 +127,21 @@ jobs:
         # the html reporter is appended here to produce the upload artefact.
         run: npm run test:e2e -- --reporter=list,html --trace=on-first-retry
 
+      # ---------------------------------------------------------------------
+      # The suite above runs the DEV SERVER, which cannot catch a packaging
+      # fault. `@mediapipe/face_mesh` publishes its constructor onto the module
+      # exports under esbuild (the dev server) and onto a global under Rollup
+      # (every build that ships), so the dev suite was green by construction
+      # while the shipped bundle could not construct the tracker at all. A
+      # tablet found it; nothing in CI could have. These specs run against
+      # `dist/`, over the same static server the field package uses.
+      # ---------------------------------------------------------------------
+      - name: Build for the production-bundle suite
+        run: npm run build
+
+      - name: Production-bundle suite
+        run: npm run test:e2e:prod -- --reporter=list
+
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4

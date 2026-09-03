@@ -94,8 +94,8 @@ export function Cvsq({ stage, onComplete }: Props) {
   };
 
   return (
-    <div className="min-h-screen w-full bg-cream p-[4%] font-sans text-[#1a1a2e] animate-fade-in">
-      <div style={{ width: '100%', maxWidth: 760, margin: '0 auto' }}>
+    <div className="screen screen-col w-full bg-cream p-[4%] font-sans text-[#1a1a2e] animate-fade-in">
+      <div className="screen-col" style={{ width: '100%', maxWidth: 760, margin: '0 auto', flex: '1 1 auto', minHeight: 0 }}>
       <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">
         Computer Vision Syndrome Questionnaire · {stage === 'baseline' ? 'baseline' : 'session end'}
       </p>
@@ -107,7 +107,10 @@ export function Cvsq({ stage, onComplete }: Props) {
         {freqOptions.map((f) => `${f.label} — ${f.hint}`).join(' · ')}
       </p>
 
-      <div className="scrollable" style={{ maxHeight: '64vh', marginTop: 16, paddingRight: 8 }}>
+      {/* Flexes into whatever the header and the button leave, rather than claiming a guessed
+          fraction of the viewport. The old `maxHeight: 64vh` overflowed the canvas on every device
+          the study will use, and `vh` is the wrong unit inside the scaled root regardless. */}
+      <div className="scrollable screen-grow" style={{ marginTop: 16, paddingRight: 8 }}>
         {CVSQ_ITEMS.map((item, i) => (
           <div key={item} style={{ padding: '12px 0', borderBottom: '1px solid #eceae4' }}>
             <div className="font-lab text-sm" style={{ marginBottom: 8 }}>{i + 1}. {item}</div>
@@ -132,7 +135,9 @@ export function Cvsq({ stage, onComplete }: Props) {
 
       <button onClick={submit} disabled={!ready}
         className="mt-4 rounded-xl px-8 py-3 font-lab text-sm text-white transition active:scale-95"
-        style={{ background: ready ? '#1a1a2e' : '#cfcbc3', cursor: ready ? 'pointer' : 'not-allowed' }}>
+        style={{ background: ready ? '#1a1a2e' : '#cfcbc3', cursor: ready ? 'pointer' : 'not-allowed',
+          // Never allowed to be squeezed out by the list above it.
+          flex: '0 0 auto', alignSelf: 'flex-start' }}>
         Continue →
       </button>
       </div>

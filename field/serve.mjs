@@ -21,7 +21,13 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(HERE, 'app');
+/*
+ * The built app. In the shipped package it sits alongside this file as ./app; in the repository it
+ * is ./dist one level up. Supporting both is what lets the production end-to-end suite exercise
+ * THIS server rather than a stand-in, so a fault here is caught before it reaches a tablet.
+ */
+const CANDIDATES = [path.join(HERE, 'app'), path.join(HERE, '..', 'dist')];
+const ROOT = CANDIDATES.find((p) => fs.existsSync(path.join(p, 'index.html'))) ?? CANDIDATES[0];
 const argv = process.argv.slice(2);
 const useHttps = argv.includes('--https');
 const portArg = argv.indexOf('--port');
