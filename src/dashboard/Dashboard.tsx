@@ -9,6 +9,7 @@ import { get, put } from '@/storage/db';
 import { gatherSession, listSessions, type SessionBundle } from '@/storage/gather';
 import { buildConditionSummaries, baselineFatigueMean, type ConditionSummary } from './aggregate';
 import { buildExportFiles, downloadExport, downloadSessionMedia } from '@/storage/export';
+import { buildAnalysisDataset } from '@/storage/analysisExport';
 import { BarPanel, LinePanel, type Datum } from './charts';
 import type { SessionRecord } from '@/storage/types';
 
@@ -32,6 +33,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   const [bundle, setBundle] = useState<SessionBundle | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
   const [exporting, setExporting] = useState(false);
+  const [analysisSummary, setAnalysisSummary] = useState<string | null>(null);
 
   useEffect(() => {
     listSessions().then((s) => {
@@ -69,6 +71,31 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
    * and the operator should have to choose to put them on the machine rather than receive them as
    * a side effect of exporting data.
    */
+  /**
+   * The pooled analysis dataset: EVERY session on this device, not just the one open.
+   *
+   * Distinct from the bundle download above, and deliberately so. That one is a faithful record of
+   * one sitting and is what gets archived per participant. This one asserts that the sittings
+   * belong together — that a participant's two visits are the two halves of one crossover — and it
+   * refuses to make that assertion silently: the join is checked first and its verdict travels on
+   * every row and in two accompanying files.
+   */
+  const onExportAnalysis = async () => {
+    setExporting(true);
+    try {
+      const sessions = await listSessions();
+      const bundles = (await Promise.all(sessions.map((x) => gatherSession(x.session_id))))
+        .filter((b): b is SessionBundle => b != null);
+      const dataset = buildAnalysisDataset(bundles);
+      setAnalysisSummary(
+        `${dataset.rowCount} rows · ${dataset.integrity.analysable_participants}/`
+        + `${dataset.integrity.total_participants} participants analysable`
+        + (dataset.integrity.clean ? '' : ` · ${dataset.integrity.issues.filter((i) => i.severity === 'blocking').length} blocking issue(s) — see analysis_join_issues.csv`),
+      );
+      await downloadExport(dataset.files);
+    } finally { setExporting(false); }
+  };
+
   const onExportMedia = async () => {
     if (!bundle) return;
     setExporting(true);
@@ -185,6 +212,24 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
             style={{ background: '#1a1a2e', cursor: exporting ? 'wait' : 'pointer' }}>
             {exporting ? 'Exporting…' : 'Download data bundle ↓'}
           </button>
+
+          {/* The analysis dataset pools every session on the device, so it is offered separately
+              from the single-session bundle above and says plainly what it covers. */}
+          <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid #e5e2dc' }}>
+            <p className="font-lab text-sm text-[#5a5a7a]">
+              The analysis dataset pools <strong>every session on this device</strong> into one long
+              file, one row per participant × condition, with the join checked and its verdict on
+              every row.
+            </p>
+            <button onClick={onExportAnalysis} disabled={exporting}
+              className="mt-3 rounded-xl px-8 py-3 font-lab text-sm transition active:scale-95"
+              style={{ background: '#fff', color: '#1a1a2e', border: '1px solid #1a1a2e', cursor: exporting ? 'wait' : 'pointer' }}>
+              {exporting ? 'Building…' : 'Download analysis dataset ↓'}
+            </button>
+            {analysisSummary && (
+              <p className="font-lab text-xs" style={{ marginTop: 10, color: '#5a5a7a' }}>{analysisSummary}</p>
+            )}
+          </div>
           {mediaCount > 0 && (
             <>
               <p className="font-lab text-sm text-[#5a5a7a]" style={{ marginTop: 18 }}>
