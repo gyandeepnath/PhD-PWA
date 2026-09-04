@@ -37,7 +37,7 @@ import { DisplayPerceptionRating } from '@/scales/DisplayPerceptionRating';
 import { ReadingTask } from '@/tasks/ReadingTask';
 import { ComprehensionTask } from '@/tasks/ComprehensionTask';
 import { VisualSearchTask } from '@/tasks/VisualSearchTask';
-import { ReactionTimeTask, resetRtTargetMemory } from '@/tasks/ReactionTimeTask';
+import { ReactionTimeTask, resetRtTargetMemory, setRtTargetMemory, goTargetColor } from '@/tasks/ReactionTimeTask';
 import { IshiharaTest } from '@/screening/IshiharaTest';
 import { resolveCvdStatus } from '@/screening/ishihara';
 import { Cvsq } from '@/scales/Cvsq';
@@ -251,6 +251,27 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       // Where the loop should pick up once setup is satisfied. reachedLoop distinguishes a genuine
       // condition pointer from the default 0 given to a session that never got that far.
       const loopTarget = resume.reachedLoop ? idx : 0;
+
+      /*
+       * Re-establish the go-rule memory the RT task uses to flag a CHANGED target colour.
+       *
+       * `lastTargetColor` lives at module scope in ReactionTimeTask, because that component is
+       * remounted per condition and nothing in component state survives to say what the rule was
+       * last time. resetRtTargetMemory() was wired only into beginSession, which the resume path
+       * never calls — so resuming left the value in one of two wrong states. After a page reload it
+       * is null, and the banner is suppressed at exactly the transition it exists for. After an
+       * in-tab return to the manager it still holds the PREVIOUS PARTICIPANT's last block, so it
+       * fires spuriously or, worse, suppresses a genuine change because the two happened to match.
+       *
+       * Seeding from the plan is better than merely clearing it: the condition before the resume
+       * point is known, so the banner can be correct on resume rather than just absent.
+       */
+      if (loopTarget > 0 && sittingPlan[loopTarget - 1]) {
+        const prevCond = CONDITIONS[sittingPlan[loopTarget - 1].conditionIndex];
+        setRtTargetMemory(goTargetColor(prevCond.background));
+      } else {
+        resetRtTargetMemory();
+      }
 
       if (idx >= sittingPlan.length && resume.reachedLoop) {
         // Every condition ran; only the closing instruments remain.

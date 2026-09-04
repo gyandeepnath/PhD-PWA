@@ -38,7 +38,8 @@ import { N_CONDITIONS } from '@/experiment/conditions';
 import { PASSAGES } from '@/experiment/passages';
 import { ANALYSIS_CODEBOOK } from './analysisCodebook';
 
-const SITTINGS_PER_PARTICIPANT = 2;
+/** The two levels of the whole-plot illumination factor. Total condition-runs is N x this. */
+const ILLUMINATION_LEVELS = 2;
 
 /** Columns of the long analysis file, in the order they are written. */
 export const ANALYSIS_LONG_COLUMNS = [
@@ -72,15 +73,13 @@ export const ANALYSIS_LONG_COLUMNS = [
   'ambient_lux_measured', 'lux_all_in_range', 'screen_luminance_cd_m2', 'stimulus_scale',
   // --- quality, for sensitivity analyses ---------------------------------------------------
   'camera_active', 'effective_fps', 'fps_adequate_for_ratio', 'face_presence_ratio',
-  'gaze_calibrated', 'qc_overall', 'analysable', 'exclusion_reason',
+  'gaze_calibrated', 'qc_overall', 'e2e_timing', 'session_status', 'analysable', 'exclusion_reason',
 ] as const;
 
 interface RowContext {
   bundle: SessionBundle;
   analysable: boolean;
   exclusion: string;
-  /** 0-based index of this sitting for the participant, by start time. */
-  sittingIndex: number;
 }
 
 const numOrNull = (v: unknown): number | null =>
@@ -127,9 +126,20 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
       (compById.get(item.condition_id) ?? compById.set(item.condition_id, []).get(item.condition_id)!).push(item);
     }
 
-    // The CVS-Q baseline is a participant-level trait covariate. The end-of-session score is an
-    // OUTCOME and does not belong repeated on every condition row, where a model would treat one
-    // measurement as ten.
+    /*
+     * THIS SITTING's baseline CVS-Q. It is NOT a participant-level trait, and an earlier version of
+     * this comment said it was.
+     *
+     * CvsqRecord is keyed by session_id and CVSQ_BASELINE sits in the per-sitting setup order, so a
+     * participant accumulates one baseline per sitting — two under the standard protocol, four under
+     * the split — and they differ. Because sitting maps one-to-one onto illumination_block, any
+     * within-participant drift here is perfectly aligned with the whole-plot contrast, and sitting
+     * 2's baseline is measured AFTER sitting 1's ninety-minute exposure. Conditioning on it without
+     * saying why absorbs part of the illumination effect the study exists to estimate.
+     *
+     * The end-of-session score is an OUTCOME and is deliberately not repeated on every condition
+     * row, where a model would read one measurement as ten.
+     */
     const cvsqBaseline = b.cvsq.find((c) => c.stage === 'baseline');
 
     const ordered = [...summaries].sort((a, c) => a.session_position - c.session_position);
@@ -173,8 +183,28 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         session_position: sum.session_position,
         // Position across the WHOLE protocol: the second sitting continues the count rather than
         // restarting it, because cumulative fatigue does not reset between visits.
-        global_position: sum.session_position + ctx.sittingIndex * N_CONDITIONS,
-        position_c: sum.session_position - (N_CONDITIONS + 1) / 2,
+        /*
+         * Derived from the RECORDED illumination_block, not from this session's position in a
+         * time-sorted list.
+         *
+         * session_position is already block-global (0..9 across both halves of a split sitting), so
+         * multiplying a separate sitting counter on top double-counted: a 4-sitting split protocol
+         * produced 0-4, 15-19, 20-24, 35-39 instead of 0-19. The positional index was also wrong
+         * whenever start-time order disagreed with block order, putting illumination_block=0 beside
+         * global_position=10-19 in the same row, and it silently returned 0 — a confident "first
+         * sitting" — for any session whose participant could not be resolved.
+         */
+        global_position: Number.isFinite(s.illumination_block)
+          ? sum.session_position + s.illumination_block * N_CONDITIONS
+          : null,
+        /*
+         * session_position is 0-BASED (0..9; see ConditionRecord in types.ts), so the mid-point is
+         * (N-1)/2 = 4.5, not (N+1)/2 = 5.5. Centring on 5.5 left the column with a mean of -1.0
+         * instead of 0, so it stayed correlated with the intercept — which is precisely the
+         * correlation the codebook claims centring removes. Every "effect at the average condition"
+         * was being reported one full condition further down the fatigue gradient than stated.
+         */
+        position_c: sum.session_position - (N_CONDITIONS - 1) / 2,
         illumination_block: s.illumination_block,
         illumination_order_first: s.illumination_order_first,
         adaptation_ms_before: c?.adaptation_ms_before ?? null,
@@ -267,8 +297,20 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         correction_type: p?.correction_type ?? null,
         cvd_status: p?.cvd_status ?? null,
         cvsq_baseline_total: round(cvsqBaseline?.total_score),
-        caffeine_today: p?.caffeine_today ?? null,
-        hours_since_sleep: p?.hours_since_sleep ?? null,
+        /*
+         * From the SESSION, not the participant record.
+         *
+         * types.ts documents the participant copy as the FIRST sitting's values, sticky, and says
+         * analyses needing these as covariates must read the session's. Reading the participant
+         * copy made the column participant-constant: measured across four sittings whose true
+         * values were false/true/false/true, every row exported `true`. A within-participant
+         * covariate with zero within-participant variance drops silently out of any within-subject
+         * term, and sitting 2's actual state — the reason it is collected per sitting — never
+         * reaches a model. No fallback to the participant copy, which would reintroduce exactly
+         * that.
+         */
+        caffeine_today: s.caffeine_today ?? null,
+        hours_since_sleep: s.hours_since_sleep ?? null,
 
         ambient_lux_measured: round(s.ambient_lux),
         lux_all_in_range: s.lux_all_in_range,
@@ -281,6 +323,19 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         face_presence_ratio: round(sum.face_presence_ratio),
         gaze_calibrated: e?.gaze_calibrated ?? null,
         qc_overall: sum.qc.overall,
+        /*
+         * A test-harness session carries collapsed timing constants — a 150 ms reading floor
+         * instead of 20 s — so its rows are not measurements of anything. The per-session codebook
+         * already says such a row "must never be pooled with collected data", and 01_session_info
+         * carries both of these; the pooled file, the one people actually model from, carried
+         * neither. Exported rather than filtered, because this file's rule is that nothing is
+         * dropped: the analyst filters, and can see what they filtered.
+         *
+         * `status` can be undefined on a record written before the field existed, so an unfinished
+         * sitting is inferred from the absence of an end time rather than left blank.
+         */
+        e2e_timing: s.e2e_timing ?? null,
+        session_status: s.status ?? (s.session_end_time ? 'complete' : 'in_progress'),
         analysable: ctx.analysable,
         exclusion_reason: ctx.exclusion,
       });
@@ -304,27 +359,38 @@ export interface AnalysisDataset {
  */
 export function buildAnalysisDataset(
   bundles: SessionBundle[],
-  expect: JoinExpectation = {
-    conditionsPerParticipant: N_CONDITIONS * SITTINGS_PER_PARTICIPANT,
-    sittingsPerParticipant: SITTINGS_PER_PARTICIPANT,
-  },
+  expect?: JoinExpectation,
 ): AnalysisDataset {
-  const integrity = checkJoin(bundles, expect);
-  const verdict = new Map(integrity.participants.map((p) => [p.participant_id, p]));
+  /*
+   * How many sittings a complete participant has depends on the protocol they were run under.
+   *
+   * Hard-coding two marked EVERY participant unanalysable the moment the split protocol was used:
+   * a split runs one illumination block as two sittings of five, so a complete participant has
+   * four. The expectation is therefore read from the sessions themselves — conditions_per_session
+   * is recorded on each — rather than assumed. Total condition-runs is the invariant that does not
+   * change: ten conditions under each of two illumination levels, however they are packaged.
+   */
+  const resolved: JoinExpectation = expect ?? (() => {
+    const perSitting = bundles
+      .map((b) => b.session.conditions_per_session)
+      .filter((n): n is number => Number.isFinite(n) && n > 0);
+    const cps = perSitting.length > 0 ? Math.min(...perSitting) : N_CONDITIONS;
+    const total = N_CONDITIONS * ILLUMINATION_LEVELS;
+    return {
+      conditionsPerParticipant: total,
+      sittingsPerParticipant: Math.max(1, Math.round(total / cps)),
+    };
+  })();
 
-  // Sitting index by start time, so `global_position` reflects the order actually run rather than
-  // the order the records happened to be stored in.
-  const orderByParticipant = new Map<string, string[]>();
-  for (const p of integrity.participants) orderByParticipant.set(p.participant_id, p.session_ids);
+  const integrity = checkJoin(bundles, resolved);
+  const verdict = new Map(integrity.participants.map((p) => [p.participant_id, p]));
 
   const contexts: RowContext[] = bundles.map((b) => {
     const v = verdict.get(b.session.participant_id);
-    const ids = orderByParticipant.get(b.session.participant_id) ?? [];
     return {
       bundle: b,
       analysable: v?.analysable ?? false,
       exclusion: v?.excluded_by.join(';') ?? 'participant_not_resolved',
-      sittingIndex: Math.max(0, ids.indexOf(b.session.session_id)),
     };
   });
 

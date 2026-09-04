@@ -110,6 +110,8 @@ SESSION_INIT (stateMachine.ts SETUP_ORDER[0]) is the very first screen and setup
 
 ## [critical] min-h-screen (100vh) inside the scaled root under-fills #root, exposing a bright cream band that is visible ONLY in negative-polarity conditions
 
+**STATUS: VERIFIED BY MEASUREMENT AND FIXED.** Measured at 1152x650 (scale 0.76): the fatigue and display-perception panels rendered 650 CSS px inside an 855 px root, a 205px band; comprehension 114px. On a negative-polarity condition that band is a bright strip present in one level of the primary IV and not the other. The five condition-coloured screens now use `.screen` (height:100%, root-relative). e2e/stimulusFill.spec.ts pins it and was checked against the reverted markup.
+
 `src/tasks/TaskIntro.tsx`:29
 
 **Evidence claimed:** theme.css:54-55 gives #root `height: calc(100% / var(--vl-scale))`, i.e. viewportPx/scale. `min-h-screen` is Tailwind 3.4.19's `min-height: 100vh` (verified in node_modules/tailwindcss/stubs/config.full.js:677), and vh measures the raw viewport, not the transformed root. So for scale < 1 the child is SHORTER than the box it sits in and its background stops early. #root has `background: #f8f7f5` (theme.css:56), body the same, so the uncovered strip paints cream.
@@ -157,6 +159,8 @@ Magnitude at scale 0.76 on 1152x650: root height 855 root-px, child 720 root-px 
 
 ## [high] caffeine_today and hours_since_sleep are read from the participant record (sitting 1's values) while the codebook calls them session-level
 
+**STATUS: CONFIRMED AND FIXED.** Read from the session, not the participant record, whose copy is deliberately the sticky first-sitting value. Measured: four sittings with true values false/true/false/true all exported `true`.
+
 `src/storage/analysisExport.ts`:233
 
 **Evidence claimed:** analysisExport.ts:233-234: `caffeine_today: p?.caffeine_today ?? null,` / `hours_since_sleep: p?.hours_since_sleep ?? null,` where `p = b.participant`. types.ts:78-83 documents those participant fields as: 'The FIRST sitting's values, kept for continuity. Per-sitting values are on the session record: this row is shared across a participant's sittings and cannot hold two of anything that varies between them. Analyses that need caffeine or sleep as a covariate must read the session's.' SessionRecord carries `caffeine_today?` / `hours_since_sleep?` (types.ts:161-162) with the note that holding them on the participant 'meant sitting 2 overwrote sitting 1's values'. The per-session exporter does it correctly (export.ts:572-573 `caffeine_today_session: session.caffeine_today ?? ''`) and its codebook entry (export.ts:308) says outright: "the participant record's copy is the first sitting's and must not be used as a per-session covariate." The analysis codebook (analysisCodebook.ts:172-175) nevertheless claims 'Session-level, repeated across the rows of one sitting.'
@@ -168,6 +172,8 @@ Magnitude at scale 0.76 on 1152x650: root height 855 root-px, child 720 root-px 
 **Proposed fix:** Read the session record: `caffeine_today: s.caffeine_today ?? null, hours_since_sleep: s.hours_since_sleep ?? null` (falling back to the participant copy only for legacy sessions, and then flagging it in a separate column). Keep the codebook text as-is once the source is the session.
 
 ## [high] position_c is centred on 5.5 while session_position is 0-based, so the 'centring' it documents does not happen
+
+**STATUS: CONFIRMED BY AGENT (ran the real exporter) AND FIXED.** session_position is 0-based, so the centre is 4.5. Measured mean was -1.0, not 0 — the column stayed correlated with the intercept, which is the one thing centring is for.
 
 `src/storage/analysisExport.ts`:172
 
@@ -181,6 +187,8 @@ Magnitude at scale 0.76 on 1152x650: root height 855 root-px, child 720 root-px 
 
 ## [high] global_position is derived from a positional indexOf with Math.max(0, -1), not from the recorded illumination_block, and is wrong for split sittings, 3 sittings, and unresolved sessions
 
+**STATUS: CONFIRMED AND FIXED, worse than claimed.** Now derived from the recorded illumination_block. The split protocol produced 0-4, 15-19, 20-24, 35-39 instead of 0-19 (session_position is already block-global, so the sitting counter double-counted); start-time order disagreeing with block order put illumination_block=0 beside global_position=10-19 in the same row; and an unresolved participant silently got a confident 0-9. Also fixed alongside: a hard-coded expectation of two sittings marked EVERY split-protocol participant unanalysable.
+
 `src/storage/analysisExport.ts`:290
 
 **Evidence claimed:** analysisExport.ts:290 `sittingIndex: Math.max(0, ids.indexOf(b.session.session_id)),` feeding analysisExport.ts:171 `global_position: sum.session_position + ctx.sittingIndex * N_CONDITIONS,`. `ids` comes from `orderByParticipant.get(...) ?? []`, so a session that checkJoin never filed (empty participant_id — joinIntegrity.ts:74-81 `continue`s before the Map insert) yields indexOf = -1, which Math.max turns into 0, i.e. 'this is the first sitting'. Verified: a bundle with participant_id '' exports 10 rows with global_position 0-9 and an empty participant_id. Verified with three sittings: global_position runs to 29 while the codebook says 1-20. The session record already carries the correct answer: `illumination_block` (types.ts:115, '0 = this participant's first level, 1 = their second'), and session_position is already the block-global position (Experiment.tsx:608), so with the supported split-session mode (conditions_per_session = 5, export.ts:295) a participant has four sittings and the formula produces 0-4, 15-19, 20-24, 35-39 instead of 0-19.
@@ -192,6 +200,8 @@ Magnitude at scale 0.76 on 1152x650: root height 855 root-px, child 720 root-px 
 **Proposed fix:** Derive it from the record rather than from list membership: `global_position: sum.session_position + (s.illumination_block ?? 0) * N_CONDITIONS`. If a positional index really is wanted, do not swallow -1: emit null (and a join issue) when `ids.indexOf(...) < 0`, so 'sitting not resolved' is never rendered as 'first sitting'.
 
 ## [high] E2E-harness sessions and unfinished sittings are pooled with no column to filter them on
+
+**STATUS: CONFIRMED AND FIXED.** e2e_timing and session_status are now exported with codebook entries. Soft-deleted sessions were REFUTED — listSessions filters them before the exporter sees them.
 
 `src/storage/analysisExport.ts`:44
 
@@ -387,6 +397,8 @@ export.ts:302 describes stimulus_scale only as 'a value below 1 means the readin
 **Proposed fix:** Pick one correction and share it. Cleanest: have scripts/lib/timingModel.ts import `probit`, `normalPdf` and `clampRate` from src/lib/stats.ts and reuse the exact `dPrimeStandardError` body from signalDetection.ts rather than re-deriving it, deleting timingModel's duplicate `probit`/`phi`. Fix the comment on signalDetection.ts:87 to say '1/(2N) bound (Macmillan & Kaplan), applied only at the extremes' — or switch both to log-linear deliberately and say so.
 
 ## [medium] cvsq_baseline_total is measured once per SITTING but the codebook declares it a participant-level trait repeated across the participant's rows
+
+**STATUS: CONFIRMED AND FIXED (documentation).** It is genuinely per-sitting; the code comment and codebook both called it a participant trait. Both corrected, with a warning that sitting maps onto illumination_block so conditioning on it absorbs part of the whole-plot effect.
 
 `src/storage/analysisExport.ts`:232
 

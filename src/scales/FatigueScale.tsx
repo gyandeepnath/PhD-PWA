@@ -56,7 +56,7 @@ export function FatigueScale({ prompt, accent = '#4f8ef7', background = '#F8F7F5
   const composite = mean(ITEMS.map((it) => values[it.key]));
 
   return (
-    <div className="min-h-screen w-full p-[5%] font-sans animate-fade-in" style={{ background, color: text }}>
+    <div className="screen w-full p-[5%] font-sans animate-fade-in" style={{ background, color: text }}>
       <div style={{ width: '100%', maxWidth: 720, margin: '0 auto' }}>
       <h2 className="font-serif text-3xl font-light">{prompt}</h2>
       <p className="mt-1 font-lab text-xs" style={{ color: muted }}>Drag each slider. 0 = none, 10 = severe.</p>

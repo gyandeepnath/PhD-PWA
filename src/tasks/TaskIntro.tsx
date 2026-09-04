@@ -26,7 +26,7 @@ export function TaskIntro({
   const onLightTheme = background.toUpperCase() === '#F8F7F5';
   return (
     <div
-      className="min-h-screen w-full animate-fade-in"
+      className="screen w-full animate-fade-in"
       style={{ background, color: text, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8%' }}
     >
       <div style={{ maxWidth: 620, textAlign: 'center' }}>

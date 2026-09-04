@@ -97,10 +97,24 @@ export function goTargetColor(background: string): string {
  */
 let lastTargetColor: string | null = null;
 
-/** Reset between participants. A stale value would suppress the banner on a new participant's
- *  first block, or raise it spuriously. */
+/**
+ * Reset between participants. A stale value would suppress the banner on a new participant's first
+ * block, or raise it spuriously — and because this is module scope, a value genuinely survives from
+ * one participant to the next in the same tab, with no page reload between them.
+ */
 export function resetRtTargetMemory(): void {
   lastTargetColor = null;
+}
+
+/**
+ * Seed the memory from a known predecessor, for the RESUME path.
+ *
+ * A resume re-enters the sitting part-way through, so the previous block did happen and its rule is
+ * recoverable from the plan. Clearing the memory would make the banner merely absent at a genuine
+ * transition; seeding it makes the banner correct.
+ */
+export function setRtTargetMemory(color: string): void {
+  lastTargetColor = color;
 }
 
 function buildTrials(n: number, goRate: number, background: string): Trial[] {

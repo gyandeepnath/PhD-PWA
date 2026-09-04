@@ -92,7 +92,7 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
   );
 
   return (
-    <div className="min-h-screen w-full p-[6%] font-sans animate-fade-in" style={{ background, color: text }}>
+    <div className="screen w-full p-[6%] font-sans animate-fade-in" style={{ background, color: text }}>
       <div style={{ width: '100%', maxWidth: 760, margin: '0 auto' }}>
       <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.55, marginBottom: 14 }}>
         Task 2 of 4 · Comprehension {index + 1} of {questions.length} — choose the best answer, then submit

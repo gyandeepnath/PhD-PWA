@@ -52,7 +52,7 @@ export function NasaTlx({
   const score = scoreTlx(values);
 
   return (
-    <div className="min-h-screen w-full p-[5%] font-sans animate-fade-in" style={{ background, color: text }}>
+    <div className="screen w-full p-[5%] font-sans animate-fade-in" style={{ background, color: text }}>
       <div style={{ width: '100%', maxWidth: 720, margin: '0 auto' }}>
         <h2 className="font-serif text-3xl font-light">Workload over the whole session</h2>
         <p className="mt-1 font-lab text-xs" style={{ color: muted }}>
