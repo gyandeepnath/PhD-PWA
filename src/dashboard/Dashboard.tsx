@@ -54,14 +54,36 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
     if (!bundle) return;
     setExporting(true);
     try {
-      await downloadExport(buildExportFiles(bundle));
-      /**
-       * Record that this session has left the device. The recycle bin refuses to auto-purge a
-       * session that was never exported, because such a session exists only here — and the bin's
-       * timer used to destroy one regardless, unattended, on a Session Manager mount.
+      const files = buildExportFiles(bundle);
+      await downloadExport(files);
+
+      /*
+       * Two different facts, recorded separately.
+       *
+       * exported_at says an export was ATTEMPTED. It cannot say more: downloadExport drives
+       * `a.click()`, which returns void whether the file was written, blocked, cancelled or refused
+       * for want of disk. Chrome also prompts before allowing multiple downloads from one origin,
+       * and this writes ~18 files, so a refused prompt is an ordinary outcome.
+       *
+       * export_confirmed_at says the OPERATOR looked and the files are there. Only that releases a
+       * session to the unattended thirty-day purge, because that purge destroys the only copy of
+       * consented research data and must never rest on an assertion nothing verified.
        */
+      const now = Date.now();
       const fresh = await get('sessions', bundle.session.session_id);
-      if (fresh) await put('sessions', { ...fresh, exported_at: Date.now() });
+      if (fresh) await put('sessions', { ...fresh, exported_at: now });
+
+      const confirmed = window.confirm(
+        `${files.length} files were sent to your downloads.\n\n`
+        + 'Check the receiving computer NOW and confirm they all arrived.\n\n'
+        + 'OK  — I have checked; the files are there.\n'
+        + 'Cancel — not yet, or some are missing.\n\n'
+        + 'Until you confirm, this session is protected from automatic deletion.',
+      );
+      if (confirmed) {
+        const again = await get('sessions', bundle.session.session_id);
+        if (again) await put('sessions', { ...again, export_confirmed_at: Date.now() });
+      }
     } finally { setExporting(false); }
   };
 

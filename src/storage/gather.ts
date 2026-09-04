@@ -306,10 +306,21 @@ export async function purgeExpired(now = Date.now()): Promise<PurgeOutcome> {
       outcome.retained.push({ session_id: s.session_id, reason: 'the sitting is still marked in progress' });
       continue;
     }
-    if (s.exported_at == null) {
+    /*
+     * CONFIRMED, not merely attempted.
+     *
+     * exported_at was the gate, and it is stamped unconditionally after downloadExport returns —
+     * but that function drives `a.click()`, which cannot report a blocked download, a cancelled
+     * save dialog or a full disk. Chrome also prompts before allowing multiple downloads and an
+     * export writes about eighteen files, so a refused prompt leaves exported_at set and every file
+     * absent. Thirty days later this loop would destroy the only copy, unattended.
+     */
+    if (s.export_confirmed_at == null) {
       outcome.retained.push({
         session_id: s.session_id,
-        reason: 'it was never exported, so this device holds the only copy',
+        reason: s.exported_at == null
+          ? 'it was never exported, so this device holds the only copy'
+          : 'an export was attempted but never confirmed as arrived, so this device may hold the only copy',
       });
       continue;
     }

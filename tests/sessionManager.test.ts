@@ -77,6 +77,8 @@ describe('session manager admin', () => {
       session_start_time: Date.now() - BIN_RETENTION_MS - 10_000,
       deleted_at: Date.now() - BIN_RETENTION_MS - 1000,
       exported_at: Date.now() - BIN_RETENTION_MS,
+      // Confirmation, not the attempt, is what releases a session to the timer. See below.
+      export_confirmed_at: Date.now() - BIN_RETENTION_MS,
     }));
     await put('sessions', makeSession('NEW', { deleted_at: Date.now() - 1000 }));
     const r = await purgeExpired();
@@ -149,5 +151,52 @@ describe('resume persistence', () => {
     saveResume('S1', 2);
     clearResume('OTHER');
     expect(loadResume()).toMatchObject({ sessionId: 'S1' });
+  });
+});
+
+describe('an unconfirmed export does not release a session to the timer', () => {
+  /*
+   * exported_at was the gate, and it is stamped unconditionally after downloadExport returns.
+   * That function drives `a.click()`, which returns void whether the file was written, blocked,
+   * cancelled, or refused for want of disk — and Chrome prompts before allowing multiple downloads
+   * from one origin, while an export writes about eighteen files. So a refused prompt leaves
+   * exported_at set and every file absent, and thirty days later the unattended purge destroyed the
+   * only copy of a participant's consented data.
+   */
+  it('retains a session whose export was attempted but never confirmed', async () => {
+    await put('sessions', makeSession('ATTEMPTED', {
+      session_start_time: Date.now() - BIN_RETENTION_MS - 10_000,
+      deleted_at: Date.now() - BIN_RETENTION_MS - 1000,
+      exported_at: Date.now() - BIN_RETENTION_MS,
+      // no export_confirmed_at: the operator never said the files arrived
+    }));
+    const r = await purgeExpired();
+    expect(r.purged).toBe(0);
+    expect(r.retained).toHaveLength(1);
+    expect(r.retained[0].reason).toMatch(/attempted but never confirmed/i);
+    expect((await listDeleted()).map((s) => s.session_id)).toEqual(['ATTEMPTED']);
+  });
+
+  it('purges once the operator has confirmed the files arrived', async () => {
+    await put('sessions', makeSession('CONFIRMED', {
+      session_start_time: Date.now() - BIN_RETENTION_MS - 10_000,
+      deleted_at: Date.now() - BIN_RETENTION_MS - 1000,
+      exported_at: Date.now() - BIN_RETENTION_MS,
+      export_confirmed_at: Date.now() - BIN_RETENTION_MS,
+    }));
+    const r = await purgeExpired();
+    expect(r.purged).toBe(1);
+    expect(await listDeleted()).toHaveLength(0);
+  });
+
+  it('still distinguishes never-exported from attempted-but-unconfirmed', async () => {
+    // The two need different reasons, because they need different actions from the operator.
+    await put('sessions', makeSession('NEVER', {
+      session_start_time: Date.now() - BIN_RETENTION_MS - 10_000,
+      deleted_at: Date.now() - BIN_RETENTION_MS - 1000,
+    }));
+    const r = await purgeExpired();
+    expect(r.retained[0].reason).toMatch(/never exported/i);
+    expect(r.retained[0].reason).not.toMatch(/never confirmed/i);
   });
 });

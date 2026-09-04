@@ -147,10 +147,24 @@ export interface SessionRecord {
   /** Pre-flight checklist fully completed. */
   preflight_complete: boolean;
   /**
-   * When this session was last exported. Null means this device holds the only copy of it, which
-   * is why the recycle bin refuses to auto-purge such a session however long it has been there.
+   * When an export was last ATTEMPTED. Not evidence that any file reached the disk.
+   *
+   * downloadExport triggers browser downloads with `a.click()`, which returns void and reports
+   * nothing: a blocked download, a cancelled save dialog or a full disk are all indistinguishable
+   * from success. Chrome additionally prompts before allowing multiple downloads from one origin,
+   * and an export writes about eighteen files, so a refused prompt is an ordinary outcome — not an
+   * edge case.
    */
   exported_at?: number | null;
+  /**
+   * When the OPERATOR confirmed the exported files are actually on the receiving computer.
+   *
+   * This, and not exported_at, is what may release a session to the unattended thirty-day purge.
+   * The browser genuinely cannot tell whether a download landed, so the app must not assert that it
+   * did — and gating the destruction of the only copy of consented research data on an assertion
+   * nothing can verify is the one place that guess is unacceptable.
+   */
+  export_confirmed_at?: number | null;
   /**
    * True when this session ran with the E2E harness's collapsed timing constants. Such a session is
    * a test artefact, not data: every protocol duration was replaced with a token value.
