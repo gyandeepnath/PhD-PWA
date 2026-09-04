@@ -35,7 +35,7 @@ import { toCsv, round } from './export';
 import { checkJoin, type JoinIntegrity, type JoinExpectation } from './joinIntegrity';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { N_CONDITIONS } from '@/experiment/conditions';
-import { QUESTIONS_PER_PASSAGE, PASSAGES } from '@/experiment/passages';
+import { PASSAGES } from '@/experiment/passages';
 import { ANALYSIS_CODEBOOK } from './analysisCodebook';
 
 const SITTINGS_PER_PARTICIPANT = 2;
@@ -122,6 +122,10 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
     const eyeById = new Map(b.eyeMetrics.map((r) => [r.condition_id, r]));
     const rtById = new Map(b.rtSummaries.map((r) => [r.condition_id, r]));
     const searchById = new Map(b.visualSearch.map((r) => [r.condition_id, r]));
+    const compById = new Map<string, typeof b.comprehension>();
+    for (const item of b.comprehension) {
+      (compById.get(item.condition_id) ?? compById.set(item.condition_id, []).get(item.condition_id)!).push(item);
+    }
 
     // The CVS-Q baseline is a participant-level trait covariate. The end-of-session score is an
     // OUTCOME and does not belong repeated on every condition row, where a model would treat one
@@ -220,8 +224,28 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         fatigue_delta: round(sum.fatigue_delta),
         comfort_score: sum.comfort_score,
         clarity_score: sum.clarity_score,
-        comprehension_correct: sum.comprehension_correct,
-        comprehension_items: QUESTIONS_PER_PASSAGE,
+        /*
+         * A COUNT, not a proportion.
+         *
+         * buildConditionSummaries returns comprehension_correct as a PROPORTION (0, 1/3, 2/3, 1),
+         * which is right for its own display purposes and wrong here: the codebook nominates this
+         * column as the numerator for a binomial model against comprehension_items. Exporting the
+         * proportion under that description would have an analyst compute
+         * cbind(0.667, 3 - 0.667) — arithmetic on two different scales, silently.
+         *
+         * Counted from the records rather than multiplied back out of the proportion, so no float
+         * rounding sits between the answer sheet and the number modelled. The denominator is the
+         * items actually ADMINISTERED for this condition, which is not necessarily the nominal
+         * three if a condition was interrupted.
+         */
+        comprehension_correct: (() => {
+          const items = compById.get(sum.condition_id) ?? [];
+          return items.length > 0 ? items.filter((i) => i.is_correct).length : null;
+        })(),
+        comprehension_items: (() => {
+          const items = compById.get(sum.condition_id) ?? [];
+          return items.length > 0 ? items.length : null;
+        })(),
         search_time_ms: sum.search_time_ms,
         search_accuracy: round(sum.search_accuracy),
         // Whether the block ended by the participant finishing or by the 40 s cap. A time-capped

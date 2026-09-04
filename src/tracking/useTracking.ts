@@ -82,10 +82,20 @@ export interface LiveTrackingStats {
   ear: number | null;
   /** EAR relative to the participant's calibrated baseline, so 1.0 is their own open eye. */
   earRatio: number | null;
-  /** Blinks counted since the current condition began; null when no baseline has been fitted. */
+  /**
+   * Blinks counted in the reading exposure. LIVE while reading; after it, the count the exposure
+   * just finished with, so the operator can see on the following screens that it worked.
+   *
+   * Null means genuinely not counted — no calibrated baseline, or no exposure has run yet. It never
+   * means zero. The aggregator only exists between beginCondition() and endCondition(), i.e. only
+   * during READING_TASK, which is why a live-only reading would have shown "—" on every screen the
+   * monitor is actually visible on.
+   */
   blinks: number | null;
   /** Of those, how many failed to close fully — the primary outcome as it accumulates. */
   incomplete: number | null;
+  /** True when `blinks` is the running count of a live exposure rather than a finished one. */
+  blinksLive: boolean;
   /** Achieved FaceMesh throughput, frames per second. */
   fps: number | null;
   /** Face bounding-box size as a fraction of the frame; a proxy for viewing distance. */
@@ -165,6 +175,17 @@ export function useTracking(): TrackingApi {
    * tracker for the main thread, which is the one thing that must never be starved.
    */
   const liveSubs = useRef(new Set<(s: LiveTrackingStats) => void>());
+  /*
+   * The blink counts the most recent reading exposure ENDED with.
+   *
+   * The aggregator is created in beginCondition() and consumed in endCondition(), both of which
+   * happen inside READING_TASK — and the monitor is deliberately hidden during reading, because a
+   * changing number in peripheral vision competes with the stimulus the blink data comes from. So a
+   * readout that only ever reported the live aggregator would show "—" on every screen it is
+   * actually visible on. Retaining the last finished count is what makes the monitor answer the
+   * question it exists to answer: did the exposure that just ran record blinks?
+   */
+  const lastConditionCounts = useRef<{ blinks: number | null; incomplete: number | null }>({ blinks: null, incomplete: null });
   const lastLiveEmit = useRef(0);
   const frameTimes = useRef<number[]>([]);
 
@@ -227,18 +248,31 @@ export function useTracking(): TrackingApi {
         facePresent: true,
         ear: Number.isFinite(ear) ? ear : null,
         earRatio: baselineEarRef.current && Number.isFinite(ear) ? ear / baselineEarRef.current : null,
-        blinks: live?.blinks ?? null,
-        incomplete: live?.incomplete ?? null,
+        blinks: live?.blinks ?? lastConditionCounts.current.blinks,
+        incomplete: live?.incomplete ?? lastConditionCounts.current.incomplete,
+        blinksLive: live != null,
         faceSize: (() => { const f = faceSizeFromLandmarks(lm); return Number.isFinite(f) ? f : null; })(),
         onScreen: gazeNow.isCenter,
       });
-    } else if (aggRef.current) {
-      const live = aggRef.current.liveCounts(baselineEarRef.current);
+    } else {
+      /*
+       * No face. This MUST emit whether or not an aggregator exists.
+       *
+       * It used to be gated on `aggRef.current`, which exists only during reading — so on every
+       * screen the monitor is visible, losing the face emitted nothing at all and the readout froze
+       * on its last value: a green dot and "face", indefinitely. An operator aid that silently
+       * reports the opposite of the truth is worse than none.
+       */
+      const live = aggRef.current?.liveCounts(baselineEarRef.current);
       emitLive(t, {
         facePresent: false, ear: null, earRatio: null,
-        blinks: live.blinks, incomplete: live.incomplete,
+        blinks: live?.blinks ?? lastConditionCounts.current.blinks,
+        incomplete: live?.incomplete ?? lastConditionCounts.current.incomplete,
+        blinksLive: live != null,
         faceSize: null, onScreen: false,
       });
+    }
+    if (!(lm && lm.length > 0) && aggRef.current) {
       aggRef.current.ingest({
         t_ms: t,
         ear: 0,
@@ -417,6 +451,14 @@ export function useTracking(): TrackingApi {
         await put('eye_metrics', disabledEyeMetrics(conditionId, sessionId));
         return;
       }
+      /*
+       * Retain what this exposure finished with, so the monitor can report it on the screens that
+       * follow. Read from the finalized record rather than recomputed, so the number the operator
+       * sees is the number that was written to the database.
+       */
+      const finished = aggRef.current.liveCounts(baselineEarRef.current);
+      lastConditionCounts.current = { blinks: finished.blinks, incomplete: finished.incomplete };
+
       const record = aggRef.current.finalize({
         conditionId,
         sessionId,

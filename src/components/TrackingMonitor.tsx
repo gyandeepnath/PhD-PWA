@@ -75,7 +75,10 @@ export function TrackingMonitor({
       <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, flex: '0 0 auto' }} />
       <span style={{ whiteSpace: 'nowrap' }}>
         {face ? 'face' : 'NO FACE'}
-        {'  blinks '}
+        {/* "blinks" while an exposure is running, "last" on the screens between exposures. The
+            aggregator only exists during reading, so without the distinction the operator could not
+            tell a live count from a stale one. */}
+        {s?.blinksLive ? '  blinks ' : '  last '}
         <b>{num(s?.blinks)}</b>
         {' ('}
         {num(s?.incomplete)}

@@ -63,6 +63,26 @@ let applied = 1;
 let floorW = Infinity;
 let floorH = Infinity;
 let floorPortrait: boolean | null = null;
+/** Largest viewport seen in this orientation, used to recognise a transient occlusion. */
+let peakW = 0;
+let peakH = 0;
+
+/**
+ * A measurement below this fraction of the largest seen in the same orientation is treated as a
+ * TRANSIENT OCCLUSION rather than a real viewport change, and is not folded into the floor.
+ *
+ * The soft keyboard is the case that forced this. On the participant-profile form it takes roughly
+ * half the screen: measured on a Xiaomi Pad 6, 1152x650 becomes 1152x300 while the keyboard is up.
+ * Under a plain running minimum that is indistinguishable from a genuinely smaller device, so the
+ * floor dropped to 300, the scale locked at MIN_SCALE, and — because the minimum never rises — every
+ * one of the ten reading exposures afterwards rendered at HALF SIZE for the rest of the sitting.
+ * The stimulus whose visual angle the study controls, halved, silently, by someone typing an age.
+ *
+ * 0.7 separates the two cases cleanly: an address bar costs about 10% of the height, a keyboard
+ * about 55%. Nothing in between is expected, and a real device change arrives with an
+ * orientationchange, which resets the reference.
+ */
+const OCCLUSION_FRACTION = 0.7;
 
 /**
  * The scale that fits `w x h`, capped at 1 and floored at MIN_SCALE.
@@ -120,6 +140,8 @@ export function resetViewportFloor(): void {
   floorW = Infinity;
   floorH = Infinity;
   floorPortrait = null;
+  peakW = 0;
+  peakH = 0;
 }
 
 /**
@@ -132,14 +154,50 @@ export function foldViewportFloor(w: number, h: number): { w: number; h: number 
   if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
     return { w: floorW, h: floorH };
   }
+  /*
+   * Occlusion is checked BEFORE the orientation test, and that order is load-bearing.
+   *
+   * The orientation test is `h > w`, and a narrow occlusion can flip it: 1152x720 landscape with a
+   * side panel covering it reads as 400x720, which is "portrait", which resets the floor entirely.
+   * A soft keyboard does the same thing in the other axis on a nearly-square viewport. Classifying
+   * a covered viewport as a rotation discards the real orientation's history on the strength of a
+   * transient.
+   */
+  /*
+   * A rotation swaps the dimensions; an occlusion shrinks one and leaves the other. Both are large
+   * changes, so size alone cannot tell them apart — 720x1152 after 1152x650 is a rotation, while
+   * 400x720 after 1152x720 is a panel covering the side. Checking for the swap first is what keeps
+   * the occlusion guard from swallowing a genuine rotation.
+   *
+   * `orientationchange` also calls resetViewportFloor() and is the authoritative signal; this is
+   * the fallback for platforms that resize without firing it.
+   */
+  const swapped = peakW > 0 && peakH > 0
+    && Math.abs(w - peakH) / peakH < 0.15
+    && Math.abs(h - peakW) / peakW < 0.15;
+
+  if (!swapped && peakW > 0 && peakH > 0
+      && (h < peakH * OCCLUSION_FRACTION || w < peakW * OCCLUSION_FRACTION)) {
+    return {
+      w: Number.isFinite(floorW) ? floorW : w,
+      h: Number.isFinite(floorH) ? floorH : h,
+    };
+  }
+
   const portrait = h > w;
   if (floorPortrait !== portrait) {
-    // A new orientation: start the minimum over rather than inheriting the other shape's.
+    // A new orientation: start over rather than inheriting the other shape's history.
     floorPortrait = portrait;
     floorW = w;
     floorH = h;
+    peakW = w;
+    peakH = h;
     return { w, h };
   }
+
+  peakW = Math.max(peakW, w);
+  peakH = Math.max(peakH, h);
+
   floorW = Math.min(floorW, w);
   floorH = Math.min(floorH, h);
   return { w: floorW, h: floorH };

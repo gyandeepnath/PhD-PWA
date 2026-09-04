@@ -148,3 +148,51 @@ describe('foldViewportFloor — stability across an address-bar cycle', () => {
     expect(foldViewportFloor(NaN, 700)).toEqual(good);
   });
 });
+
+describe('a transient occlusion must not shrink the stimulus for the rest of the sitting', () => {
+  beforeEach(() => resetViewportFloor());
+
+  it('ignores the soft keyboard, which otherwise halves every reading exposure', () => {
+    /*
+     * The failure this prevents, measured before the fix: the participant-profile form opens the
+     * soft keyboard, 1152x650 becomes 1152x300, the running minimum takes 300 — and because a
+     * minimum never rises, the scale locked at MIN_SCALE and all ten reading exposures afterwards
+     * rendered at HALF SIZE. Visual angle is a controlled variable in this study; halving it
+     * silently because someone typed an age is a corrupted stimulus, not a cosmetic defect.
+     */
+    const before = foldViewportFloor(1152, 650);
+    const scaleBefore = computeScale(before.w, before.h);
+
+    foldViewportFloor(1152, 300);            // keyboard up
+    const during = foldViewportFloor(1152, 300);
+    expect(computeScale(during.w, during.h)).toBe(scaleBefore);
+
+    foldViewportFloor(1152, 650);            // keyboard dismissed
+    const after = foldViewportFloor(1152, 720);
+    expect(computeScale(after.w, after.h),
+      'the scale did not recover after the keyboard closed').toBe(scaleBefore);
+    expect(computeScale(after.w, after.h)).toBeGreaterThan(MIN_SCALE);
+  });
+
+  it('still lowers the floor for a viewport that genuinely shrank', () => {
+    // The occlusion guard must not become a blanket refusal to shrink: a real reduction still has
+    // to be honoured, or content returns to the region no gesture can reach.
+    const a = foldViewportFloor(1152, 720);
+    const b = foldViewportFloor(1152, 560);
+    expect(computeScale(b.w, b.h)).toBeLessThan(computeScale(a.w, a.h));
+  });
+
+  it('treats a narrow occlusion the same way as a short one', () => {
+    const base = foldViewportFloor(1152, 720);
+    const occluded = foldViewportFloor(400, 720);
+    expect(occluded).toEqual(base);
+  });
+
+  it('re-establishes its reference on an orientation change', () => {
+    foldViewportFloor(1152, 650);
+    foldViewportFloor(1152, 300);        // keyboard, ignored
+    resetViewportFloor();
+    const portrait = foldViewportFloor(720, 1152);
+    expect(portrait).toEqual({ w: 720, h: 1152 });
+  });
+});
