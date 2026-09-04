@@ -95,7 +95,19 @@ export function computeSdt(input: SdtInput): SdtResult {
   const rawH = nSignal > 0 ? hits / nSignal : 0;
   const rawF = nNoise > 0 ? falseAlarms / nNoise : 0;
 
-  // Loglinear-style clamp using each pool's N to avoid infinite z-scores at 0/1.
+  /*
+   * The 1/(2N) rule, NOT the log-linear correction — an earlier comment here called it
+   * "loglinear-style", and they are different, separately named procedures.
+   *
+   * This clamps a rate into [1/(2N), 1 - 1/(2N)], so it touches ONLY the extremes: a hit rate of
+   * 0.95 on 20 signal trials passes through unchanged. The log-linear correction adds 0.5 to every
+   * cell — (hits + 0.5) / (N + 1) — and so shifts every rate, extreme or not, which on the same
+   * input gives 0.929 instead of 0.95.
+   *
+   * The choice is defensible either way; conflating them in a comment is not, and it left the
+   * protocol timing model predicting a d-prime standard error for an estimator the app does not
+   * use. scripts/lib/timingModel.ts now applies this same rule.
+   */
   const H = clampRate(rawH, Math.max(1, nSignal));
   const F = clampRate(rawF, Math.max(1, nNoise));
 

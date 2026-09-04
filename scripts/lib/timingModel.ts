@@ -348,9 +348,21 @@ export function dPrimeSe(nTrials: number, goRate: number, hit = 0.95, fa = 0.1):
   const nGo = Math.round(nTrials * goRate);
   const nNo = nTrials - nGo;
   if (nGo < 1 || nNo < 1) return Infinity;
-  // Log-linear correction, the standard guard against a rate of exactly 0 or 1 in a short block.
-  const h = (hit * nGo + 0.5) / (nGo + 1);
-  const f = (fa * nNo + 0.5) / (nNo + 1);
+  /*
+   * The SAME correction the app applies — the 1/(2N) rule from src/lib/stats.ts — not the
+   * log-linear one this used before.
+   *
+   * A planning tool that predicts the precision of an estimator must model the estimator actually
+   * in use. Log-linear shifts every rate; the 1/(2N) rule shifts only the extremes, so on the
+   * stated operating point (hit .95, false-alarm .10) the two disagree: .929/.131 against
+   * .95/.10, and hence different standard errors for the same block size.
+   */
+  const clamp = (r: number, n: number) => {
+    const lo = 1 / (2 * Math.max(1, n));
+    return Math.min(1 - lo, Math.max(lo, r));
+  };
+  const h = clamp(hit, nGo);
+  const f = clamp(fa, nNo);
   const vH = (h * (1 - h)) / (nGo * phi(probit(h)) ** 2);
   const vF = (f * (1 - f)) / (nNo * phi(probit(f)) ** 2);
   return Math.sqrt(vH + vF);

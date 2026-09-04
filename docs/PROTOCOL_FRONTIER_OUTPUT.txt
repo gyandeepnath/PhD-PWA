@@ -14,24 +14,24 @@ PROTOCOL FRONTIER — what each way of shortening a sitting costs
 
   variant                       cond   sitting     p95  visits   contact  blinks      SE  pwr main  pwr int   d' SE
   -----------------------------------------------------------------------------------------------------------------
-  as shipped                      10     93.4m    116m       2      187m      38   0.059       89%      45%   0.623   10 conditions, full passages, CVS-Q twice
-  CVS-Q once per participant      10     87.1m    107m       2      174m      38   0.059       89%      45%   0.623   demote to a screening covariate
-  CVS-Q end of sitting only       10     90.2m    112m       2      180m      39   0.059       89%      45%   0.623   drop the within-sitting baseline
-  5 cond/sitting                   5     55.8m     70m       4      223m      38   0.059       89%      45%   0.623   balanced incomplete block, 4 visits
-  5 cond + CVS-Q once              5     49.3m     62m       4      197m      38   0.059       89%      45%   0.623
-  4 cond/sitting                   4     41.5m     53m       5      207m      39   0.059       89%      45%   0.623   5 visits
-  2 cond/sitting                   2     26.0m     35m      10      260m      38   0.059       89%      45%   0.623   10 visits
-  5 cond, 60% passage              5     43.5m     55m       4      174m      23   0.076       87%      34%   0.623   ~350 words per condition
-  4 cond, 60% passage              4     36.7m     47m       5      184m      23   0.076       87%      34%   0.623
-  4 cond, 40% passage              4     34.3m     44m       5      172m      15   0.093       84%      26%   0.623   ~234 words per condition
-  2 cond, 40% passage              2     22.4m     31m      10      224m      15   0.093       84%      26%   0.623   closest approach to 20 min
-  adaptation switch 120->90s      10     90.7m    113m       2      181m      38   0.059       89%      45%   0.623   5 switches x 30s saved
-  adaptation switch 120->60s      10     88.2m    111m       2      176m      38   0.059       89%      45%   0.623   at the Fairchild criterion
-  RT block 32 -> 16 trials        10     87.9m    111m       2      176m      38   0.059       89%      45%   0.831   halves the RT cost
-  90s switch + CVS-Q once         10     84.5m    104m       2      169m      38   0.059       89%      45%   0.623   NO d-prime cost — the free package
-  60s switch + CVS-Q once         10     82.0m    101m       2      164m      38   0.059       89%      45%   0.623   NO d-prime cost, at the Fairchild criterion
-  all three CONFIG cuts           10     79.0m     98m       2      158m      38   0.059       89%      45%   0.831   90s switch + 16 RT + CVS-Q once
-  CONFIG cuts + 5 cond/sitting     5     45.5m     58m       4      182m      38   0.059       89%      45%   0.831   best sitting length with full reading
+  as shipped                      10     93.1m    116m       2      186m      38   0.059       89%      45%   0.683   10 conditions, full passages, CVS-Q twice
+  CVS-Q once per participant      10     87.1m    107m       2      174m      38   0.059       89%      45%   0.683   demote to a screening covariate
+  CVS-Q end of sitting only       10     90.2m    112m       2      180m      39   0.059       89%      45%   0.683   drop the within-sitting baseline
+  5 cond/sitting                   5     55.8m     70m       4      223m      38   0.059       89%      45%   0.683   balanced incomplete block, 4 visits
+  5 cond + CVS-Q once              5     49.3m     62m       4      197m      38   0.059       89%      45%   0.683
+  4 cond/sitting                   4     41.5m     53m       5      207m      39   0.059       89%      45%   0.683   5 visits
+  2 cond/sitting                   2     26.0m     35m      10      260m      38   0.059       89%      45%   0.683   10 visits
+  5 cond, 60% passage              5     43.5m     55m       4      174m      23   0.076       87%      34%   0.683   ~350 words per condition
+  4 cond, 60% passage              4     36.7m     47m       5      183m      23   0.076       87%      34%   0.683
+  4 cond, 40% passage              4     34.3m     44m       5      172m      15   0.093       84%      26%   0.683   ~234 words per condition
+  2 cond, 40% passage              2     22.4m     31m      10      224m      15   0.093       84%      26%   0.683   closest approach to 20 min
+  adaptation switch 120->90s      10     90.7m    113m       2      181m      38   0.059       89%      45%   0.683   5 switches x 30s saved
+  adaptation switch 120->60s      10     88.2m    111m       2      176m      38   0.059       89%      45%   0.683   at the Fairchild criterion
+  RT block 32 -> 16 trials        10     87.9m    111m       2      176m      38   0.059       89%      45%   0.966   halves the RT cost
+  90s switch + CVS-Q once         10     84.5m    104m       2      169m      38   0.059       89%      45%   0.683   NO d-prime cost — the free package
+  60s switch + CVS-Q once         10     82.0m    101m       2      164m      38   0.059       89%      45%   0.683   NO d-prime cost, at the Fairchild criterion
+  all three CONFIG cuts           10     79.0m     98m       2      158m      38   0.059       89%      45%   0.966   90s switch + 16 RT + CVS-Q once
+  CONFIG cuts + 5 cond/sitting     5     45.5m     58m       4      182m      38   0.059       89%      45%   0.966   best sitting length with full reading
 
 ================================================================================================================
 THE FIXED-OVERHEAD WALL — why 20 minutes is not a matter of trimming
@@ -43,8 +43,8 @@ THE FIXED-OVERHEAD WALL — why 20 minutes is not a matter of trimming
     CVS-Q end only                     18.5 min      12.8 min
     CVS-Q once per participant         15.6 min      10.1 min
 
-  Marginal cost of one further condition: 7.14 min.
-  So a sitting costs   T(k) = overhead + 7.14 x k.
+  Marginal cost of one further condition: 7.11 min.
+  So a sitting costs   T(k) = overhead + 7.11 x k.
     with "as shipped" overhead (16.0 min on a repeat visit), a 20-minute sitting affords 0 conditions.
     with "CVS-Q end only" overhead (12.8 min on a repeat visit), a 20-minute sitting affords 1 condition.
     with "CVS-Q once per participant" overhead (10.1 min on a repeat visit), a 20-minute sitting affords 1 condition.
@@ -65,7 +65,7 @@ ATTRITION — the reason a shorter sitting can cost you MORE participants, not f
 
      visits   sitting  contact   retained @q=5%  retained @q=10%  retained @q=15%
     -----------------------------------------------------------------------------
-          2       93m     187m              95%              90%              85%
+          2       93m     186m              95%              90%              85%
           4       56m     223m              86%              73%              61%
           5       41m     207m              81%              66%              52%
          10       26m     260m              63%              39%              23%

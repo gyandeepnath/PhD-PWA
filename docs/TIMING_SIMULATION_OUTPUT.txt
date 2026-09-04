@@ -11,14 +11,14 @@ Visual-search limit        40s
 ------------------------------------------------------------------------------------------------
 WHERE THE TIME GOES (mean minutes per sitting, descending)
 ------------------------------------------------------------------------------------------------
-  reading                              29.6 min   30.1%  ###########################################################
+  reading                              29.5 min   30.0%  ###########################################################
   adaptation                           15.0 min   15.2%  ##############################
   rt_block                             10.9 min   11.1%  ######################
-  comprehension (3 items)               7.0 min    7.2%  ##############
+  comprehension (3 items)               7.1 min    7.2%  ##############
   visual_search                         4.8 min    4.8%  ##########
-  cvsq_baseline (16 items)              3.5 min    3.5%  #######
+  cvsq_baseline (16 items)              3.5 min    3.6%  #######
   breaks                                3.1 min    3.1%  ######
-  cvsq_end (16 items)                   2.9 min    3.0%  ######
+  cvsq_end (16 items)                   3.0 min    3.0%  ######
   consent                               2.8 min    2.9%  ######
   fatigue_vas (5 sliders)               2.7 min    2.7%  #####
   calibration (9-pt + EAR + pitch)      2.5 min    2.5%  #####
@@ -39,16 +39,16 @@ WHERE THE TIME GOES (mean minutes per sitting, descending)
 ------------------------------------------------------------------------------------------------
 SESSION LENGTH DISTRIBUTION
 ------------------------------------------------------------------------------------------------
-  p 5    80.0 min
+  p 5    79.9 min
   p25    89.9 min
   p50    97.7 min   <- median, the feasibility gate applies here
-  p75   105.7 min
-  p90   114.0 min
-  p95   118.7 min
-  p99   130.5 min
+  p75   105.9 min
+  p90   114.4 min
+  p95   119.0 min
+  p99   130.7 min
 
   FEASIBILITY GATE (median <= 120 min): median 97.7 min -> PASS
-  Participants exceeding 120 min: 87 / 2000 (4.3%)
+  Participants exceeding 120 min: 92 / 2000 (4.6%)
 
 ================================================================================================
 IS THIS TOTAL AN OVER-ESTIMATE? — the same minutes split by where the number comes from
@@ -56,18 +56,18 @@ IS THIS TOTAL AN OVER-ESTIMATE? — the same minutes split by where the number c
   Only the third tier is a guess. The first is what the code enforces; the second is
   the corpus word count divided by a reading rate.
 
-  ENFORCED by CONFIG (cannot be argued down)         26.3 min   27%
+  ENFORCED by CONFIG (cannot be argued down)         26.2 min   27%
       adaptation                                   15.0 min
       rt_block                                     10.9 min
       rt_practice (once)                            0.3 min
-  CORPUS arithmetic (word count / reading rate)      29.6 min   30%
-      reading                                      29.6 min
-  ESTIMATED by me (the only tier with guess error)   42.5 min   43%
-      comprehension (3 items)                       7.0 min
+  CORPUS arithmetic (word count / reading rate)      29.5 min   30%
+      reading                                      29.5 min
+  ESTIMATED by me (the only tier with guess error)   42.6 min   43%
+      comprehension (3 items)                       7.1 min
       visual_search                                 4.8 min
       cvsq_baseline (16 items)                      3.5 min
       breaks                                        3.1 min
-      cvsq_end (16 items)                           2.9 min
+      cvsq_end (16 items)                           3.0 min
       consent                                       2.8 min
       fatigue_vas (5 sliders)                       2.7 min
       calibration (9-pt + EAR + pitch)              2.5 min
@@ -91,10 +91,10 @@ IS THIS TOTAL AN OVER-ESTIMATE? — the same minutes split by where the number c
     estimates  30% too high ->   85.6 min
     estimates  50% too high ->   77.1 min
     estimates  70% too high ->   68.6 min
-    estimates 100% too high ->   55.9 min  <- estimates set to ZERO: the arithmetic floor
+    estimates 100% too high ->   55.8 min  <- estimates set to ZERO: the arithmetic floor
 
-  Hardest possible floor: enforced 26.3 min + all 5851 corpus words
-  read at a brisk 300 wpm (19.5 min) + zero deliberation = 45.8 min.
+  Hardest possible floor: enforced 26.2 min + all 5851 corpus words
+  read at a brisk 300 wpm (19.5 min) + zero deliberation = 45.7 min.
   That floor is a property of the design, not of how fast the participant is.
 
 ================================================================================================
@@ -108,23 +108,23 @@ THE FOUR CELLS — illumination x sitting order (they are orthogonal by design)
   session-scoped.
 
   -- assuming dim slows reading by 0% ----------------------------------------------------------
-     dim    1st visit   mean   98.4 min   median   97.8 min   p95  118.6 min
-     dim    2nd visit   mean   90.3 min   median   89.3 min   p95  108.5 min
-     bright 1st visit   mean   98.5 min   median   98.1 min   p95  118.7 min
-     bright 2nd visit   mean   90.5 min   median   89.6 min   p95  108.6 min
-     total contact per participant: dim-first 188.9 min, bright-first 188.8 min
+     dim    1st visit   mean   98.3 min   median   97.8 min   p95  118.7 min
+     dim    2nd visit   mean   90.5 min   median   89.9 min   p95  109.0 min
+     bright 1st visit   mean   98.2 min   median   97.3 min   p95  118.6 min
+     bright 2nd visit   mean   90.7 min   median   89.9 min   p95  108.9 min
+     total contact per participant: dim-first 189.0 min, bright-first 188.7 min
   -- assuming dim slows reading by 5% ----------------------------------------------------------
-     dim    1st visit   mean   99.8 min   median   98.6 min   p95  121.7 min
-     dim    2nd visit   mean   92.0 min   median   90.9 min   p95  111.5 min
-     bright 1st visit   mean   98.2 min   median   97.6 min   p95  119.4 min
-     bright 2nd visit   mean   90.5 min   median   89.4 min   p95  109.5 min
-     total contact per participant: dim-first 190.3 min, bright-first 190.3 min
+     dim    1st visit   mean  100.0 min   median   98.9 min   p95  122.0 min
+     dim    2nd visit   mean   91.9 min   median   91.1 min   p95  110.6 min
+     bright 1st visit   mean   98.2 min   median   97.7 min   p95  119.4 min
+     bright 2nd visit   mean   90.4 min   median   89.4 min   p95  109.5 min
+     total contact per participant: dim-first 190.4 min, bright-first 190.1 min
   -- assuming dim slows reading by 10% ----------------------------------------------------------
-     dim    1st visit   mean  101.2 min   median  100.6 min   p95  123.4 min
-     dim    2nd visit   mean   93.4 min   median   92.6 min   p95  112.4 min
-     bright 1st visit   mean   98.3 min   median   97.7 min   p95  118.1 min
-     bright 2nd visit   mean   90.6 min   median   89.8 min   p95  109.0 min
-     total contact per participant: dim-first 191.8 min, bright-first 191.7 min
+     dim    1st visit   mean  101.1 min   median  100.5 min   p95  122.4 min
+     dim    2nd visit   mean   93.6 min   median   92.4 min   p95  112.6 min
+     bright 1st visit   mean   98.4 min   median   97.8 min   p95  118.2 min
+     bright 2nd visit   mean   90.5 min   median   89.3 min   p95  109.2 min
+     total contact per participant: dim-first 191.5 min, bright-first 192.0 min
 
 ------------------------------------------------------------------------------------------------
 POLARITY SWITCHES — the hidden cost of the Williams order
@@ -137,7 +137,7 @@ POLARITY SWITCHES — the hidden cost of the Williams order
 MEASUREMENT PRECISION OF THE PRIMARY OUTCOME
 ------------------------------------------------------------------------------------------------
   blinks captured per condition (mean): 39
-  reading exposure per condition      : 178s
+  reading exposure per condition      : 177s
   incomplete-blink ratio at p=0.16: SE = 0.059  (95% CI width +/-0.116)
   -> a condition-level ratio of 0.16 is measured to about +/-12 percentage points
   For SE <= 0.05 you need ~54 blinks -> ~249s of reading at 13 blinks/min
@@ -152,7 +152,7 @@ Assumes a between-participant SD of the true difference score of 0.1, n = 130.
   ----------------------------------------------------------------------------------------
     73s        16    0.092       0.259    84%            0.119    27%  <- the corpus before it was rebuilt
    120s        26    0.072       0.273    88%            0.143    37%
-   178s        39    0.059       0.281    89%            0.162    45%  <- as shipped
+   177s        38    0.059       0.281    89%            0.161    45%  <- as shipped
    240s        52    0.051       0.286    90%            0.175    51%
    300s        65    0.045       0.288    91%            0.185    55%
 
@@ -162,8 +162,8 @@ Assumes a between-participant SD of the true difference score of 0.1, n = 130.
 ================================================================================================
 SESSION LENGTH IF READING EXPOSURE IS RAISED
 ================================================================================================
-    73s/condition -> median  80 min, p95 101 min  gate PASS
+    73s/condition -> median  80 min, p95 102 min  gate PASS
    120s/condition -> median  88 min, p95 109 min  gate PASS
-   178s/condition -> median  98 min, p95 119 min  gate PASS  <- as shipped
+   177s/condition -> median  98 min, p95 119 min  gate PASS  <- as shipped
    240s/condition -> median 108 min, p95 129 min  gate PASS  (tail exceeds 120)
    300s/condition -> median 118 min, p95 139 min  gate PASS  (tail exceeds 120)

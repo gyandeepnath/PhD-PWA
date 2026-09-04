@@ -111,11 +111,16 @@ Two quantities are conserved, and they are why shortening is not free:
 2. **Blinks per condition.** The primary outcome is a binomial proportion, so its SE is set by the
    blink *count*. Cutting reading exposure cuts blinks one for one.
 
+> **Note on d′ standard error.** These figures were regenerated after the design helper was
+> corrected to use the same rate correction the app applies — the 1/(2N) rule — rather than the
+> log-linear one. A planning tool must model the estimator actually in use. The earlier figures
+> (0.623 / 0.831) described a correction the app does not perform.
+
 ## The result
 
 | variant | cond | sitting | visits | contact | SE | power main | power interaction |
 |---|---|---|---|---|---|---|---|
-| as shipped | 10 | 93m | 2 | 187m | 0.059 | 89% | 45% |
+| as shipped | 10 | 93m | 2 | 186m | 0.059 | 89% | 45% |
 | CVS-Q once per participant | 10 | 87m | 2 | 174m | 0.059 | 89% | 45% |
 | 5 cond/sitting | 5 | 56m | 4 | 223m | 0.059 | 89% | 45% |
 | 4 cond/sitting | 4 | 41m | 5 | 207m | 0.059 | 89% | 45% |
@@ -199,8 +204,8 @@ defensible by analogy but not by direct citation, and nothing retrieved requires
 ## The go/no-go block is not free to halve
 
 RT-power methodology favours more participants with fewer trials each, which argues for a shorter
-block. But the frontier now reports what it costs: d′ standard error rises from **0.623 to 0.831**
-(+33%) at 32 → 16 trials, because the false-alarm rate comes from the minority no-go trials and is
+block. But the frontier now reports what it costs: d′ standard error rises from **0.683 to 0.966**
+(+41%) at 32 → 16 trials, because the false-alarm rate comes from the minority no-go trials and is
 always the noisier half.
 
 ## Session length past 30 minutes has documented consequences
@@ -215,11 +220,11 @@ is already underpowered.
 
 | variant | sitting | visits | contact | power int | d′ SE |
 |---|---|---|---|---|---|
-| as shipped | 93.4m | 2 | 187m | 45% | 0.623 |
-| **90s switch + CVS-Q once per participant** | **84.5m** | 2 | **169m** | 45% | 0.623 |
-| **60s switch + CVS-Q once per participant** | **82.0m** | 2 | **164m** | 45% | 0.623 |
-| all three cuts (incl. 16 RT trials) | 79.0m | 2 | 158m | 45% | **0.831** |
-| CONFIG cuts + 5 conditions/sitting | 45.5m | 4 | 182m | 45% | 0.831 |
+| as shipped | 93.1m | 2 | 186m | 45% | 0.683 |
+| **90s switch + CVS-Q once per participant** | **84.5m** | 2 | **169m** | 45% | 0.683 |
+| **60s switch + CVS-Q once per participant** | **82.0m** | 2 | **164m** | 45% | 0.683 |
+| all three cuts (incl. 16 RT trials) | 79.0m | 2 | 158m | 45% | **0.966** |
+| CONFIG cuts + 5 conditions/sitting | 45.5m | 4 | 182m | 45% | 0.966 |
 
 Moving the CVS-Q to a once-per-participant covariate and trimming the polarity-switch adaptation
 takes **9–11 minutes off every sitting and 18–23 minutes off total contact, at zero cost to any

@@ -255,6 +255,8 @@ Magnitude at scale 0.76 on 1152x650: root height 855 root-px, child 720 root-px 
 
 ## [high] classifyBlinks() runs at full frame rate before the LIVE_HZ throttle and with zero subscribers, spending ~1.5 s of main thread and ~233 MB of garbage per reading condition inside the primary-outcome window
 
+**STATUS: VERIFIED BY HAND AND FIXED.** Confirmed and worse than claimed: the aggregator exists only during READING_TASK, which is exactly when the monitor is hidden and the subscriber set is empty — so the cost landed at maximum with zero benefit, during the measurement that matters. Measured: 14.6M sample scans and 5,400 array allocations per 3-minute condition, 7.5x the work of doing it at LIVE_HZ. emitLive now takes a thunk invoked only after the rate and subscriber checks.
+
 `src/tracking/useTracking.ts`:225
 
 **Evidence claimed:** Call order in `ingestResult`: line 225 `const live = agg?.liveCounts(baselineEarRef.current);` executes, then line 226 `emitLive(t, {...})` is entered, and only at line 186 does the throttle run: `if (t - lastLiveEmit.current < 1000 / LIVE_HZ) return;`. The subscriber check is later still (line 188 `if (liveSubs.current.size === 0) return;`). So the expensive work is unconditional per FaceMesh result — 30-60x more often than LIVE_HZ=4, and it is paid even when nothing is subscribed.
@@ -273,6 +275,8 @@ CONFIG.CAMERA_FPS = 60 and CONFIG.PROCESS_EVERY_N_FRAMES = 1 (config.ts:193,197)
 **Proposed fix:** Hoist the throttle. Compute the throttle decision first and return before any work: at the top of `ingestResult`'s emit path, check `if (liveSubs.current.size === 0 || t - lastLiveEmit.current < 1000 / LIVE_HZ) skip live work`. Keep only the frameTimes push/trim outside that gate (it is O(1) and feeds fps). Restructure `emitLive` to take a thunk, or split it into `shouldEmitLive(t)` + `emitLive(t, stats)`, so `liveCounts()` and the payload object are never constructed on a throttled frame. Separately, make `liveCounts` incremental rather than O(n): keep the blink state machine's cursor and event count on the aggregator and advance it over only the samples appended since the last call — that removes the quadratic term entirely and also removes the 233 MB of churn.
 
 ## [high] Comments assert a main-thread safeguard that the code does not implement
+
+**STATUS: VERIFIED AND FIXED.** The throttle guarded the React render, not the computation, while the comment claimed main-thread protection. Both the code and the comment are corrected.
 
 `src/tracking/useTracking.ts`:17
 
@@ -393,6 +397,8 @@ export.ts:302 describes stimulus_scale only as 'a value below 1 means the readin
 **Proposed fix:** Either (a) rename the parameter and the constant to `scale` / `RT_DELAY_SCALE_MS` and correct the docstring to 'exponential scale, before truncation', or (b) keep the name honest by solving numerically for the scale that yields the requested truncated mean (a dozen bisection steps on m(s) = min + s - r·e^(-r/s)/(1-e^(-r/s))). Then tighten the test tolerance from 60 ms to ~2 ms so it actually constrains the mean.
 
 ## [medium] d-prime uses the 1/(2N) clamp in the app but a log-linear correction in the design helper, and the app's comment calls its 1/(2N) clamp 'loglinear'
+
+**STATUS: VERIFIED BY HAND AND FIXED.** Two separately named corrections: the app clamps to [1/(2N), 1-1/(2N)] (Macmillan & Kaplan), touching only extremes; the design helper used (x+0.5)/(N+1) (Hautus log-linear), shifting every rate. On the stated operating point they give .95/.10 against .929/.131. The comment calling the clamp 'loglinear-style' was wrong and is corrected; the design helper now models the estimator the app actually uses. Published d' SE figures moved from 0.623/0.831 to 0.683/0.966 and docs/TIMING_MODEL.md is regenerated.
 
 `src/lib/signalDetection.ts`:87
 
