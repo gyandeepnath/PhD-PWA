@@ -42,28 +42,73 @@ export function TrackingMonitor({
   fpsFloor: number;
 }) {
   const [s, setS] = useState<LiveTrackingStats | null>(null);
+  const [at, setAt] = useState(0);
+  const [now, setNow] = useState(() => 0);
 
   useEffect(() => {
     if (!visible) return;
-    return subscribe(setS);
+    return subscribe((next) => { setS(next); setAt(Date.now()); });
   }, [subscribe, visible]);
+
+  /*
+   * Watch for a readout that has stopped updating.
+   *
+   * If the capture freezes without the track firing `ended` — a suspended camera, a stalled pump —
+   * ingestResult simply stops being called and this component keeps painting its last value:
+   * a green dot, "face", a plausible fps, indefinitely. That is the same fault the no-face branch
+   * was rewritten to fix, left open for the no-frames case, and it is the one the operator is least
+   * able to notice.
+   */
+  useEffect(() => {
+    if (!visible) return;
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [visible]);
+
+  const stale = at > 0 && now - at > 1500;
 
   if (!visible) return null;
 
   const face = s?.facePresent ?? false;
-  const fps = s?.fps ?? null;
+  /*
+   * The EXPOSURE's frame rate is what belongs beside the ratio's sampling floor.
+   *
+   * The live figure is measured over the last two seconds of whatever screen is showing, and the
+   * monitor is hidden during reading — so it structurally cannot describe the window the floor
+   * applies to. Colouring it against that floor told the operator the exposure had cleared a gate
+   * the number knew nothing about.
+   */
+  const exposureFps = s?.exposureFps ?? null;
+  const fps = exposureFps;
   const fpsLow = fps != null && fps < fpsFloor;
   const num = (v: number | null | undefined, digits = 0) =>
     v == null || !Number.isFinite(v) ? '—' : v.toFixed(digits);
 
-  // Amber for "measuring but degraded", red for "not measuring", otherwise unobtrusive.
-  const dot = !face ? '#d14343' : fpsLow ? '#c98a22' : '#22c97a';
+  /*
+   * Red means NOT MEASURING, and a null blink count is exactly that.
+   *
+   * The dot ignored `blinks` entirely, so the single worst outcome in the study — no EAR baseline
+   * fitted, therefore no incomplete-blink ratio for any condition of a ninety-minute sitting —
+   * rendered as the healthy state on the instrument built to catch it. That state is reachable with
+   * the camera active: baselineEar leaves the ref null on short or non-finite sample sets, and the
+   * calibration screen offers a deliberate "continue anyway".
+   */
+  const notCounting = s != null && s.blinks == null;
+  const dot = (!face || notCounting) ? '#d14343' : fpsLow ? '#c98a22' : '#22c97a';
 
   return (
     <div
       aria-hidden
       style={{
-        position: 'fixed', right: 10, top: 10, zIndex: 35,
+        /*
+         * Bottom-LEFT, because the top-right strip is already claimed three times over. Measured at
+         * the design canvas: this chip spanned x 869-1184, y 10-36, while ExperimentProgress's text
+         * sits at x 865-1182, y 8-22 with a higher z-index — a 313x12 px overlap that composited to
+         * 1.14:1 and erased the progress readout. The wake-lock warning covers the same strip, and
+         * the reaction task's trial counter sits entirely inside this chip and was hidden by it.
+         * The Pause control holds top-left; bottom-left is free.
+         */
+        position: 'fixed', left: 10, bottom: 10, zIndex: 35,
         pointerEvents: 'none',
         display: 'flex', alignItems: 'center', gap: 10,
         background: 'rgba(20,20,30,0.72)', color: '#fff',
@@ -72,9 +117,12 @@ export function TrackingMonitor({
         boxShadow: '0 2px 10px rgba(0,0,0,.2)',
       }}
     >
-      <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, flex: '0 0 auto' }} />
-      <span style={{ whiteSpace: 'nowrap' }}>
-        {face ? 'face' : 'NO FACE'}
+      <span style={{
+        width: 8, height: 8, borderRadius: '50%',
+        background: stale ? '#d14343' : dot, flex: '0 0 auto',
+      }} />
+      <span style={{ whiteSpace: 'nowrap', opacity: stale ? 0.55 : 1 }}>
+        {stale ? 'NO FRAMES' : face ? 'face' : 'NO FACE'}
         {/* "blinks" while an exposure is running, "last" on the screens between exposures. The
             aggregator only exists during reading, so without the distinction the operator could not
             tell a live count from a stale one. */}
@@ -84,8 +132,10 @@ export function TrackingMonitor({
         {num(s?.incomplete)}
         {' inc)'}
         {'  '}
+        {/* Labelled "exp" so it cannot be read as a live rate: it describes the reading exposure
+            that just finished, which is the only window the ratio's floor applies to. */}
         <span style={{ opacity: fpsLow ? 1 : 0.75, color: fpsLow ? '#ffd27a' : undefined }}>
-          {num(fps)} fps
+          {num(fps)} fps exp
         </span>
         {'  open '}
         {num(s?.earRatio, 2)}

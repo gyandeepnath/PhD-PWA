@@ -1205,6 +1205,24 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           && isInLoop(machine.stage)
           && machine.stage !== 'READING_TASK'
           && machine.stage !== 'ADAPTATION'
+          /*
+           * Also hidden through the two SPEEDED tasks, for two reasons stronger than distraction.
+           *
+           * The chip's background is a fixed dark translucent panel while the page behind it is the
+           * condition background, which alternates polarity — so it is a high-contrast blob on a
+           * light condition and nearly invisible on a dark one. Whatever perturbation it causes is
+           * therefore CORRELATED WITH THE INDEPENDENT VARIABLE rather than spread randomly.
+           *
+           * And in visual search it puts legible words — "face", "blinks", "inc", "fps", "open" —
+           * about twelve pixels above a text field the participant is scanning for a target word,
+           * in a task that records false detections.
+           *
+           * Nothing is lost: comprehension, display perception and post-fatigue are self-paced,
+           * immediately follow the exposure, and are exactly where "did the exposure that just ran
+           * record blinks?" is asked.
+           */
+          && machine.stage !== 'VISUAL_SEARCH'
+          && machine.stage !== 'REACTION_TIME'
         }
         fpsFloor={FPS_RATIO_THRESHOLD}
       />

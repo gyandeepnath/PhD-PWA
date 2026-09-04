@@ -474,6 +474,8 @@ export.ts:302 describes stimulus_scale only as 'a value below 1 means the readin
 
 ## [medium] The displayed fps never describes the reading exposure it is being compared against, because frameTimes is only pushed on code paths that are live in the complementary stages
 
+**STATUS: CONFIRMED AND FIXED.** The live fps is a 2-second trailing window on the CURRENT screen, and the monitor is hidden during reading — so it structurally could not describe the exposure, yet was coloured against a floor meaning 'the rate needed during reading'. The screens do not even carry the same per-frame cost. The monitor now shows the finished exposure's effective_fps, taken from the record that was written so it cannot disagree with the export, labelled 'fps exp'.
+
 `src/tracking/useTracking.ts`:179
 
 **Evidence claimed:** `frameTimes.current.push(t)` happens only inside `emitLive` (useTracking.ts:179), and `emitLive` is reached from two places: the face-present branch (line 226, always) and the face-absent branch (line 237, gated on `aggRef.current`).
@@ -488,6 +490,8 @@ The monitor compares this number against `fpsFloor={FPS_RATIO_THRESHOLD}` (Exper
 
 ## [medium] The status dot is green whenever a face is present, regardless of whether blinks are being counted at all
 
+**STATUS: CONFIRMED BY AGENT AND FIXED — the worst of this cluster.** `blinks` was not an input to the dot at all, and it is null whenever no EAR baseline was fitted (reachable with the camera active: baselineEar leaves the ref null on short sample sets, and calibration offers a deliberate 'continue anyway'). So the single worst outcome in the study — no incomplete-blink ratio for any condition of a 90-minute sitting — rendered green on the instrument built to catch it. Null blinks are now red, which is what red already meant.
+
 `src/components/TrackingMonitor.tsx`:60
 
 **Evidence claimed:** TrackingMonitor.tsx:60 `const dot = !face ? '#d14343' : fpsLow ? '#c98a22' : '#22c97a';` — the colour is a function of `facePresent` and `fps` only. `s.blinks === null` (no baseline fitted, or, per the first finding, no aggregator) has no effect on it. Line 59's comment claims the palette means "Amber for 'measuring but degraded', red for 'not measuring', otherwise unobtrusive" — but there is no state in which the dot reports "not measuring the primary outcome".
@@ -499,6 +503,8 @@ The monitor compares this number against `fpsFloor={FPS_RATIO_THRESHOLD}` (Exper
 **Proposed fix:** Make the null case its own colour state: `const dot = !face ? '#d14343' : s?.blinks == null ? '#d14343' : fpsLow ? '#c98a22' : '#22c97a'` (red, since a null blink count means the primary outcome is not being collected at all), and replace the `face` label with an explicit `NO BASELINE` string when `s.blinks == null && s.facePresent`, so the reason is legible rather than inferred from an em-dash.
 
 ## [medium] The monitor is pinned to the same corner as ExperimentProgress, which renders over it at a higher z-index with 1.1:1 contrast — both readouts are illegible where they overlap
+
+**STATUS: CONFIRMED BY MEASUREMENT AND FIXED.** The agent rebuilt both components in Chromium: the chip spanned x 869-1184 y 10-36 against ExperimentProgress's text at x 865-1182 y 8-22 — a 313x12px overlap composited to 1.14:1, with the progress text on top. The auditor's 'both unreadable' was half right: the monitor survives, the PROGRESS readout is erased. The same strip also holds the wake-lock warning and the RT trial counter, which the chip hid entirely. Moved to bottom-left, which nothing else claims.
 
 `src/components/TrackingMonitor.tsx`:66
 
@@ -514,6 +520,8 @@ Contrast of #5a5a7a over that panel composited on a white condition background (
 **Proposed fix:** Move the monitor out of the collision: `top: 10` → `bottom: 10` (bottom-right is unoccupied — the only fixed bottom element is none; the pause/exit control is top-left at Experiment.tsx:1142 `top: 10, left: 12`), or raise the monitor above the progress bar and shift the progress label to `left: 12`. Either way, add an assertion or a visual-regression check that no two `position: fixed` overlays share an anchor corner.
 
 ## [medium] The monitor renders during VISUAL_SEARCH and REACTION_TIME, injecting an asynchronous peripheral colour transient into two speeded tasks whose latency is a dependent variable
+
+**STATUS: PARTLY CONFIRMED AND FIXED — the mechanism the auditor named was overstated, two it did not name are not.** The agent judged a 4Hz digit change in a corner chip too weak a distractor to move RT, and I agree. But: the chip's dark translucent panel sits over a background that alternates polarity, so it is a high-contrast blob on light conditions and nearly invisible on dark ones — any perturbation is CORRELATED WITH THE IV. And in visual search it puts the legible words 'face', 'blinks', 'inc', 'fps', 'open' about twelve pixels above a text field the participant scans for a target word, in a task that records false detections. Hidden through both speeded tasks.
 
 `src/experiment/Experiment.tsx`:1182
 
@@ -719,6 +727,8 @@ Separately, foldViewportFloor() infers orientation from the measurement itself (
 **Proposed fix:** Delete the branch and make applyUpdate assert (`if (!applyFn) throw new Error('applyUpdate called with no registration')`), or keep it and make it honest by exposing whether the watch actually installed — set a module flag in the catch at :71 and show it next to BuildStamp so "no service worker in this environment" is visible rather than inferred.
 
 ## [low] Stale live stats are repainted on remount after the reading task, and per-frame work is duplicated in the payload builder
+
+**STATUS: PARTLY CONFIRMED AND FIXED — the described mechanism was wrong, the underlying fault real.** There is no remount; the component returns null internally, so state survives. The stale window is one frame (~17-33ms), imperceptible. But nothing aged the snapshot: if the capture freezes without the track firing `ended`, ingestResult stops being called and the readout holds a green dot and a plausible fps indefinitely — the same fault the no-face branch was rewritten to fix, left open for the no-frames case. A staleness watchdog now shows NO FRAMES after 1.5s.
 
 `src/components/TrackingMonitor.tsx`:46
 

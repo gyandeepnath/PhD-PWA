@@ -103,8 +103,15 @@ export interface LiveTrackingStats {
   incomplete: number | null;
   /** True when `blinks` is the running count of a live exposure rather than a finished one. */
   blinksLive: boolean;
-  /** Achieved FaceMesh throughput, frames per second. */
+  /** Achieved FaceMesh throughput over the last ~2s of the CURRENT screen. Live, not the exposure. */
   fps: number | null;
+  /**
+   * Effective frame rate of the last reading exposure, from the record that was written.
+   *
+   * This is the number that belongs beside the ratio's sampling floor; `fps` above describes
+   * whatever screen is on now. Null until an exposure has completed.
+   */
+  exposureFps: number | null;
   /** Face bounding-box size as a fraction of the frame; a proxy for viewing distance. */
   faceSize: number | null;
   /** Whether gaze is currently in the central zone. */
@@ -193,6 +200,18 @@ export function useTracking(): TrackingApi {
    * question it exists to answer: did the exposure that just ran record blinks?
    */
   const lastConditionCounts = useRef<{ blinks: number | null; incomplete: number | null }>({ blinks: null, incomplete: null });
+  /**
+   * The effective frame rate the last reading exposure actually achieved.
+   *
+   * The live fps is measured over a 2-second trailing window, and the monitor is hidden during
+   * reading — so every fps an operator could ever see described the CURRENT non-reading screen
+   * while being coloured against FPS_RATIO_THRESHOLD, a floor that means "the rate needed for the
+   * incomplete-blink ratio to be measurable during reading". The two screens do not even carry the
+   * same per-frame cost: reading additionally runs head-pose estimation and aggregator ingest.
+   * A green 34 fps on the comprehension screen therefore said nothing about the exposure it
+   * appeared to vouch for.
+   */
+  const lastConditionFps = useRef<number | null>(null);
   const lastLiveEmit = useRef(0);
   const frameTimes = useRef<number[]>([]);
 
@@ -278,6 +297,7 @@ export function useTracking(): TrackingApi {
           blinks: live?.blinks ?? lastConditionCounts.current.blinks,
           incomplete: live?.incomplete ?? lastConditionCounts.current.incomplete,
           blinksLive: live != null,
+          exposureFps: lastConditionFps.current,
           // Computed once here rather than twice: the aggregator's own ingest above needs it too,
           // but that call is on a path that runs regardless and is not worth threading through.
           faceSize: Number.isFinite(size) ? size : null,
@@ -300,6 +320,7 @@ export function useTracking(): TrackingApi {
           blinks: live?.blinks ?? lastConditionCounts.current.blinks,
           incomplete: live?.incomplete ?? lastConditionCounts.current.incomplete,
           blinksLive: live != null,
+          exposureFps: lastConditionFps.current,
           faceSize: null, onScreen: false,
         };
       });
@@ -507,6 +528,10 @@ export function useTracking(): TrackingApi {
         headPitchCalibrated: pitchBaselineFracRef.current != null,
       });
       aggRef.current = null;
+
+      // The rate the exposure ACTUALLY achieved, taken from the record that was written, not
+      // recomputed — so the monitor and the export cannot disagree about it.
+      lastConditionFps.current = typeof record.effective_fps === 'number' ? record.effective_fps : null;
       await put('eye_metrics', record);
     },
     [status],
