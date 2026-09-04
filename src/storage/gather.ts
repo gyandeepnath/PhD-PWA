@@ -10,7 +10,7 @@ import type {
   ComprehensionRecord, VisualSearchRecord, DisplayPerceptionRecord, EyeMetricsRecord,
   ReactionTrialRecord, RtSummaryRecord, CalibrationRecord, PerformanceLogRecord,
 } from './types';
-import type { MediaRecord } from './media';
+import { requiredGrant, type MediaRecord, type MediaConsent } from './media';
 
 export interface SessionBundle {
   session: SessionRecord;
@@ -179,6 +179,54 @@ export async function restoreSession(sessionId: string): Promise<void> {
 export async function renameSession(sessionId: string, label: string): Promise<void> {
   const s = await get('sessions', sessionId);
   if (s) await put('sessions', { ...normalise(s), display_label: label.trim() || null });
+}
+
+/**
+ * Withdraw one media grant and destroy the recordings it covered.
+ *
+ * WHY THIS HAS TO EXIST. Three documents promise it. `src/storage/media.ts` says media "is deletable
+ * independently of the research data, so a later withdrawal of media consent does not force
+ * discarding the numeric dataset"; `docs/PROTOCOL.md` repeats it; and the synopsis submitted to the
+ * ethics committee states that "retained media are held apart from the research dataset and
+ * deletable independently of it". The separate-store half was true. The independent-deletion half
+ * described an operation that existed nowhere.
+ *
+ * The only button that removed a video was Purge, which destroys the entire sitting — ten condition
+ * rows, hundreds of reaction trials, both questionnaires, the participant record. So a participant
+ * who wanted their reading clips destroyed while remaining enrolled could not be accommodated
+ * without discarding consented research data, which is precisely the outcome the promise ruled out.
+ *
+ * Returns how many recordings were destroyed, so the operator can be shown a number rather than
+ * being asked to trust that something happened.
+ */
+export async function revokeMediaGrant(
+  sessionId: string,
+  grant: keyof MediaConsent,
+): Promise<number> {
+  const session = await get('sessions', sessionId) as SessionRecord | undefined;
+  if (!session) return 0;
+
+  /*
+   * Consent is withdrawn BEFORE the blobs go, not after.
+   *
+   * If the deletion loop fails part-way — a quota error, the tab closing — the surviving
+   * recordings are already covered by a withdrawn grant, so the export path refuses them. The other
+   * order would leave a live grant over recordings that were meant to be destroyed.
+   */
+  const media = (await getAllByIndex('media_captures', 'by_session', sessionId)) as MediaRecord[];
+  await put('sessions', {
+    ...session,
+    media_consent: { ...session.media_consent, [grant]: false },
+    media_consent_revoked_at: Date.now(),
+  });
+
+  let removed = 0;
+  for (const m of media) {
+    if (requiredGrant(m.checkpoint) !== grant) continue;
+    await remove('media_captures', m.media_id);
+    removed++;
+  }
+  return removed;
 }
 
 /** Permanently delete a session and ALL of its child records across every store. */

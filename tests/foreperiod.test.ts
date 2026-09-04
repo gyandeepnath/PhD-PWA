@@ -55,6 +55,31 @@ describe('the foreperiod is non-aging', () => {
     expect(spread(nh)).toBeLessThan(spread(uh) / 3);
   });
 
+  it('delivers the mean it is asked for, across several targets', () => {
+    /*
+     * The parameter is called `mean`, and it used to be used as the untruncated exponential scale —
+     * so truncation pulled the realised mean below it, by more the larger the request. Measured on
+     * the shipped bounds: asking for 650 gave 618, asking for 900 gave 732. A parameter that does
+     * not deliver what its name promises is a quiet lie in a timing-critical path, and it also made
+     * the protocol timing model overstate every RT block by 300 ms a trial.
+     */
+    for (const target of [400, 650, 900]) {
+      const xs = sample(120000, MIN, MAX, target, 4242);
+      const realised = xs.reduce((a, b) => a + b, 0) / xs.length;
+      expect(Math.abs(realised - target), `asked for ${target}, got ${realised.toFixed(1)}`)
+        .toBeLessThan(target * 0.02);
+    }
+  });
+
+  it('never returns a non-finite delay, which would wait forever', () => {
+    // The value goes straight to rafDelay(), where NaN does not throw — it hangs. The RT block has
+    // no Pause control while trials run, so that strands a participant on a blank screen.
+    for (const [min, max, mean] of [[NaN, 1600, 650], [300, NaN, 650], [300, 1600, NaN], [NaN, NaN, NaN]]) {
+      expect(Number.isFinite(nonAgingDelay(min, max, mean)),
+        `nonAgingDelay(${min}, ${max}, ${mean}) was not finite`).toBe(true);
+    }
+  });
+
   it('preserves the mean foreperiod, so block duration is unchanged', () => {
     const xs = sample(200000, MIN, MAX, MEAN);
     const meanTotal = 400 + xs.reduce((a, b) => a + b, 0) / xs.length;

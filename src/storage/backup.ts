@@ -497,6 +497,16 @@ export async function importSessionBackup(
     await put('sessions', {
       ...(session as unknown as Record<string, unknown>),
       deleted_at: null,
+      /*
+       * withdrawn_at is carried through UNCHANGED, unlike deleted_at.
+       *
+       * Clearing deleted_at is right: a backup taken from a binned session must not restore into
+       * the bin. Applying the same treatment to a withdrawal would be the opposite of right — it
+       * would resurrect data a participant asked to have removed, through the very procedure the
+       * operator manual tells them to run when a tablet is replaced. The two tombstones mean
+       * different things and are handled differently.
+       */
+      withdrawn_at: (session as unknown as { withdrawn_at?: number | null }).withdrawn_at ?? null,
       status: (session as unknown as { session_end_time?: number | null }).session_end_time != null
         ? 'complete'
         : (session as unknown as { status?: string }).status === 'complete' ? 'complete' : 'in_progress',

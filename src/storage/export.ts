@@ -12,6 +12,7 @@ import { PASSAGES } from '@/experiment/passages';
 import { CONDITIONS } from '@/experiment/conditions';
 import { auditBundle } from './integrity';
 import { serialiseSessionBackup } from './backup';
+import { requiredGrant } from './media';
 
 export interface ExportFile {
   filename: string;
@@ -244,22 +245,22 @@ export const CODEBOOK: Record<string, string>[] = [
   // Completion pass. Every exported column is documented; scripts/buildCodebook.ts enforces
   // the correspondence in both directions so a new column cannot ship undescribed.
   // ---------------------------------------------------------------------------------------
-  { file: '01_session_info.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
-  { file: '02_conditions.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
-  { file: '03_fatigue_scores.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
-  { file: '04_comprehension.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
-  { file: '05_visual_search.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
-  { file: '06_display_perception.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
-  { file: '07_eye_metrics.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
-  { file: '08_reaction_trials.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
-  { file: '09_rt_summary.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
-  { file: '10_wide_summary.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
-  { file: '11_participant.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
-  { file: '12_quality_flags.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
-  { file: '13_cvsq.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
-  { file: '14_nasa_tlx.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
-  { file: '15_media_inventory.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
-  { file: '16_integrity_report.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. Never contains identifying information; the link to the enrolment record is held separately.' },
+  { file: '01_session_info.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '02_conditions.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '03_fatigue_scores.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '04_comprehension.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '05_visual_search.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '06_display_perception.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '07_eye_metrics.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '08_reaction_trials.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '09_rt_summary.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '10_wide_summary.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '11_participant.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '12_quality_flags.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '13_cvsq.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '14_nasa_tlx.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '15_media_inventory.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '16_integrity_report.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
   { file: '02_conditions.csv', column: 'condition_id', type: 'string', unit: '-', role: 'id', description: 'Unique key for one condition-run (one display condition within one session). The grain of the repeated-measures design; join child tables on this.' },
   { file: '03_fatigue_scores.csv', column: 'condition_id', type: 'string', unit: '-', role: 'id', description: 'Unique key for one condition-run (one display condition within one session). The grain of the repeated-measures design; join child tables on this.' },
   { file: '04_comprehension.csv', column: 'condition_id', type: 'string', unit: '-', role: 'id', description: 'Unique key for one condition-run (one display condition within one session). The grain of the repeated-measures design; join child tables on this.' },
@@ -393,8 +394,8 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '09_rt_summary.csv', column: 'false_alarms', type: 'integer', unit: 'count', role: 'dv', description: 'Responses on no-go trials.' },
   { file: '09_rt_summary.csv', column: 'misses', type: 'integer', unit: 'count', role: 'dv', description: 'Go trials with no response.' },
   { file: '09_rt_summary.csv', column: 'correct_rejections', type: 'integer', unit: 'count', role: 'dv', description: 'No-go trials correctly withheld.' },
-  { file: '09_rt_summary.csv', column: 'hit_rate', type: 'number', unit: '0-1', role: 'dv', description: 'hits divided by signal trials.' },
-  { file: '09_rt_summary.csv', column: 'false_alarm_rate', type: 'number', unit: '0-1', role: 'dv', description: 'false alarms divided by noise trials.' },
+  { file: '09_rt_summary.csv', column: 'hit_rate', type: 'number', unit: '0-1', role: 'dv', description: 'Hits divided by signal trials. EMPTY when the block held no signal trials — not 0, which would assert the participant never responded to one.' },
+  { file: '09_rt_summary.csv', column: 'false_alarm_rate', type: 'number', unit: '0-1', role: 'dv', description: 'False alarms divided by noise trials. EMPTY when the block held no noise trials — not 0, which would assert the participant never false-alarmed.' },
   { file: '09_rt_summary.csv', column: 'error_rate', type: 'number', unit: '0-1', role: 'dv', description: 'Misses plus false alarms over all trials.' },
   { file: '09_rt_summary.csv', column: 'median_rt_hits_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Median latency over valid hits. More robust than the mean to the long right tail of reaction-time distributions.' },
   { file: '09_rt_summary.csv', column: 'rt_sd_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Standard deviation of hit latencies. Variability rises with fatigue before mean latency does.' },
@@ -840,11 +841,23 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
  */
 export async function downloadSessionMedia(
   bundle: SessionBundle,
-): Promise<{ written: number; missing: string[] }> {
+): Promise<{ written: number; missing: string[]; refused: string[] }> {
   const { session } = bundle;
   const missing: string[] = [];
+  const refused: string[] = [];
   let written = 0;
   for (const m of bundle.media ?? []) {
+    /*
+     * CURRENT consent, not the snapshot taken when the file was captured.
+     *
+     * This loop tested nothing at all, and the inventory beside it reported the historical
+     * snapshot — so once a grant could be withdrawn, a withdrawn recording would still have been
+     * written to the researcher's machine, and 15_media_inventory.csv would have said the grant was
+     * live while 01_session_info.csv in the same bundle said it was not. The correct pattern was
+     * already twelve lines above the equivalent check in integrity.ts, applied to ocular data.
+     */
+    const grant = requiredGrant(m.checkpoint);
+    if (bundle.session?.media_consent?.[grant] !== true) { refused.push(m.media_id); continue; }
     const blob = (m as unknown as { blob?: Blob }).blob;
     if (!(blob instanceof Blob)) { missing.push(m.media_id); continue; }
     const url = URL.createObjectURL(blob);
@@ -858,7 +871,7 @@ export async function downloadSessionMedia(
     written++;
     await new Promise((r) => setTimeout(r, 130));
   }
-  return { written, missing };
+  return { written, missing, refused };
 }
 
 /** Browser-only: stream the files to the device (staggered to avoid the download-blocker). */

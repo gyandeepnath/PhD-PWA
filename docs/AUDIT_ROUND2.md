@@ -70,6 +70,8 @@ TrackingMonitor.tsx:44 `const [s, setS] = useState<LiveTrackingStats | null>(nul
 
 ## [critical] No code path exists to revoke media consent or delete retained photos/video, yet media.ts, PROTOCOL.md and the ethics section of the synopsis all state that one does
 
+**STATUS: CONFIRMED BY AGENT AND FIXED (code); DOCS STILL NEED CORRECTING.** The separate-store half of the promise was true; independent deletion existed nowhere, and the only button that removed a video was Purge, which destroys the whole sitting. `revokeMediaGrant(sessionId, grant)` now withdraws one grant and deletes only the recordings it covered — consent first, blobs second, so a part-way failure leaves survivors already covered by a withdrawn grant. **Outstanding: the synopsis submitted to the IEC (SYNOPSIS_AdtU.md §3.10) states retained media are 'deletable independently of it'. That is now true of the code, but the sentence was false when submitted — flag it to the supervisor. A SessionManager control still needs wiring.**
+
 `src/storage/media.ts`:27
 
 **Evidence claimed:** media.ts:27-28 header: " - Media is deletable independently of the research data, so a later withdrawal of media consent does not force discarding the numeric dataset."  docs/PROTOCOL.md:184-185: "Media lives in its own `media_captures` store and is deletable independently of the research data, so withdrawing media consent later does not force discarding the numeric dataset."  synopsis/SYNOPSIS_AdtU.md:437 (the IEC-facing ethics paragraph): "retained media are held apart from the research dataset and deletable independently of it."  Verified against the code: `grep -rn "media_consent" src` shows exactly two writes — `media_consent: noMediaConsent()` at Experiment.tsx:457 (session creation) and `media_consent: media` at Experiment.tsx:657 (the one-time CONSENT screen). Every other reference is a read. `grep -rn "media_captures" src` shows exactly one deletion: gather.ts:195, `for (const r of bundle.media ?? []) await remove('media_captures', r.media_id);` — which sits inside `purgeSession()`, whose next 20 lines also remove conditions, fatigue, cvsq, tlx, comprehension, perception, visualSearch, eyeMetrics, rtSummaries, calibration, reactionTrials, the participant row and the session itself. SessionManager.tsx exposes only Rename / Delete (soft) / Restore / Purge — no media control at all.
@@ -284,6 +286,8 @@ What is actually throttled is only the subscriber fan-out at line 190. The cost 
 
 ## [high] Media export and the integrity audit read only the historical consent_snapshot, never current consent — a session whose media grants are all false still exports the inventory and the blobs
 
+**STATUS: CONFIRMED AND FIXED.** Latent, not live — media_consent could not previously be written after the consent screen, so snapshot and current were always identical. It becomes live the moment revocation exists, which it now does. downloadSessionMedia refuses any blob whose grant is not currently in force and reports the refusals; the integrity audit gained a `media_grant_withdrawn` error beside the existing snapshot check.
+
 `src/storage/export.ts`:747
 
 **Evidence claimed:** export.ts:745-748 (15_media_inventory.csv): `consent_setup_photos: m.consent_snapshot.setup_photos, consent_annotation_video: m.consent_snapshot.annotation_video` — the row is built from the snapshot on the media record, and `(bundle.media ?? []).map(...)` emits every row unconditionally. export.ts:845-849 `downloadSessionMedia` iterates `bundle.media ?? []` and writes every blob with no consent test whatsoever. integrity.ts:348-355 `media_requires_consent` also tests only `m.consent_snapshot?.[grant]`, while the parallel check twelve lines above it (integrity.ts:337) correctly tests CURRENT consent: `bundle.session?.media_consent?.camera_metrics === true`.  Empirically (npx tsx, fixture bundle with media, session.media_consent forced to {camera_metrics:false, setup_photos:false, annotation_video:false}): 15_media_inventory.csv still emitted 2 rows, both reading `consent_setup_photos=true, consent_annotation_video=true, blob_present=true`, and auditBundle raised no finding.
@@ -319,6 +323,8 @@ What is actually throttled is only the subscriber fan-out at line 190. The cost 
 **Proposed fix:** Add `app_version`, `git_hash`, `condition_def_hash`, `schema_version` (from `s.provenance`) as per-row columns of analysis_long.csv, documented in ANALYSIS_CODEBOOK; and emit an `analysis_manifest.json` mirroring export.ts's manifest — provenance, non_finite_cells, join verdict, and per-file byte counts and FNV-1a checksums. Extend scripts/verifyExport.ts to cover the analysis path.
 
 ## [high] Withdrawal is not durable: restoreSessionBackup force-clears deleted_at, and buildAnalysisDataset has no withdrawal filter or column
+
+**STATUS: CONFIRMED AND FIXED.** deleted_at was doing double duty as 'operator tidied up' and 'participant withdrew', and importSessionBackup deliberately clears it — correct for the bin, catastrophic for a withdrawal, since the manual instructs a restore when a tablet is replaced. `withdrawn_at` is now a separate tombstone, preserved verbatim across import, blocking in checkJoin regardless of caller, and surfaced as a `withdrawn` column.
 
 `src/storage/backup.ts`:499
 
@@ -516,6 +522,8 @@ The panel is also a fixed `rgba(20,20,30,0.72)` patch drawn over the condition b
 
 ## [medium] The operator manual's withdrawal procedure instructs export and never mentions deletion, contradicting what the consent screen promises the participant
 
+**STATUS: CONFIRMED AND FIXED.** The consent screen tells the participant their data 'can be deleted'; the manual said stop-and-export and never mentioned deletion. The procedure now requires the operator to ASK, and names the media files and backup_*.json that Purge cannot reach.
+
 `docs/OPERATOR_MANUAL.md`:210
 
 **Evidence claimed:** setupStages.tsx:643-645 (the text the participant agrees to): "You may stop at any time without penalty; tell the researcher to withdraw and your data for this session can be deleted." docs/OPERATOR_MANUAL.md:210, the only withdrawal procedure in the manual: "| Participant withdraws | Their right, at any time | Stop immediately. Do not ask why. Session Manager → the session under **In progress** → **Export**. The export records the sitting as incomplete and lists only the conditions that ran. |" There is no step directing the operator to bin or purge, no step asking the participant whether they want deletion, and §7 (lines 221-226) then instructs the operator to take the closing photograph and download the media files.
@@ -527,6 +535,8 @@ The panel is also a fixed `rgba(20,20,30,0.72)` patch drawn over the condition b
 **Proposed fix:** Rewrite OPERATOR_MANUAL.md:210 to a two-branch procedure: stop; ask whether they wish their data deleted; if yes, Session Manager → Record withdrawal → Purge (and delete any already-downloaded media and backup files, naming them); if no (they consent to the partial record being kept), export with the withdrawal recorded on the session. Add the same branch to the §8 checklist.
 
 ## [medium] The manual tells operators a changed consent decision 'has to be taken again from the consent screen', but no route back to CONSENT exists
+
+**STATUS: PARTLY CONFIRMED AND FIXED (documentation).** True within a sitting — consent_given is never reset and no route back to CONSENT exists — but a NEW sitting does present it afresh. The manual now says so, and warns against starting a second session for the same visit as a workaround, which would corrupt the counterbalancing.
 
 `docs/OPERATOR_MANUAL.md`:84
 
@@ -551,6 +561,8 @@ The panel is also a fixed `rgba(20,20,30,0.72)` patch drawn over the condition b
 **Proposed fix:** Either restrict display_label to the same charset as participant_id with an inline warning ('do not enter names'), or keep it free text but exclude it from every export path: strip it in `buildExportFiles`'s jsonBundle and in `buildSessionBackup`, and treat it as device-local operator metadata only. The former is preferable, since a restore should not silently lose the operator's labels.
 
 ## [medium] The exported codebook asserts sixteen times that participant_id 'Never contains identifying information', but nothing validates it and it becomes part of every media filename
+
+**STATUS: CONFIRMED AND FIXED.** The claim was repeated 16 times and validated nowhere; the app only checks a character class, so PriyaSharma passes, and the value propagates into the filename of every face photograph. All 16 now state it as a protocol requirement on the operator rather than a guarantee the software makes, and the input label says CODE, not a name.
 
 `src/storage/export.ts`:247
 

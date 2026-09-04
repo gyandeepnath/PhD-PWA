@@ -203,6 +203,8 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
     description: 'TRUE marks a test-harness session run with collapsed timing constants — a 150 ms reading floor instead of 20 s. Such a row is a test artefact and must never be pooled with collected data. Exported rather than filtered so the exclusion is yours and is visible; filter on it before any analysis.' },
   { column: 'session_status', role: 'qc', unit: 'in_progress|complete', missing: 'never empty',
     description: 'Whether the sitting ran to completion. An in-progress sitting contributes partial rows; inferred from the presence of an end time when the field itself predates the record.' },
+  { column: 'withdrawn', role: 'qc', unit: 'boolean', missing: 'never empty',
+    description: 'TRUE means the PARTICIPANT withdrew this sitting. Not a quality flag and not a judgement — a standing instruction. These rows must never be modelled, under any sensitivity analysis. They appear in the file only so the exclusion is auditable rather than silent, and the join check marks the participant unanalysable independently.' },
   { column: 'analysable', role: 'qc', unit: 'boolean', missing: 'never empty',
     description: 'The JOIN verdict for this participant, not a judgement about this row. False means the participant does not contribute a complete crossover — see analysis_join_report.csv. Filter on this for a complete-case analysis.' },
   { column: 'exclusion_reason', role: 'qc', unit: '-', missing: 'analysable rows',

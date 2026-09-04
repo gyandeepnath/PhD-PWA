@@ -99,7 +99,7 @@ export function SessionInit({
         <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">VisuLab · Research Console</p>
         <h1 className="mt-2 font-serif text-5xl font-light">New Session</h1>
         <div className="mt-8 space-y-4">
-          <Field label="Participant ID (letters, digits, - or _, ≤20)">
+          <Field label="Participant ID — a CODE, not a name (letters, digits, - or _, ≤20)">
             <input data-testid="pid" className="vl-input" value={pid} onChange={(e) => setPid(e.target.value)} placeholder="P001" />
           </Field>
           {assigned && spec && (

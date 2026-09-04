@@ -14,6 +14,7 @@ import { CONFIG } from '../../src/experiment/config';
 import { CONDITIONS } from '../../src/experiment/conditions';
 import { PASSAGES, QUESTIONS_PER_PASSAGE } from '../../src/experiment/passages';
 import { blockPlan } from '../../src/experiment/counterbalance';
+import { nonAgingDelay } from '../../src/lib/foreperiod';
 
 // ---------------------------------------------------------------- rng
 let seed = 20260817;
@@ -53,9 +54,37 @@ export function samplePerson(): Person {
 
 // ---------------------------------------------------------------- per-step models (seconds)
 /** Mean seconds the RT block takes, from the real trial-structure constants. */
+/**
+ * Mean of the foreperiod delay, sampled from the app's own generator.
+ *
+ * Cached: it is a fixed property of the CONFIG constants, and the simulation calls rtBlockSeconds
+ * once per condition per simulated participant.
+ */
+let cachedDelayMean: number | null = null;
+function measuredDelayMean(): number {
+  if (cachedDelayMean != null) return cachedDelayMean;
+  const N = 20000;
+  let sum = 0;
+  for (let i = 0; i < N; i++) {
+    sum += nonAgingDelay(CONFIG.RT_DELAY_MIN_MS, CONFIG.RT_DELAY_MAX_MS, CONFIG.RT_DELAY_MEAN_MS, rnd);
+  }
+  cachedDelayMean = sum / N;
+  return cachedDelayMean;
+}
+
 export function rtBlockSeconds(nTrials: number, meanRtMs = 360): number {
   const fix = (CONFIG.RT_FIXATION_MIN_MS + CONFIG.RT_FIXATION_MAX_MS) / 2;
-  const del = (CONFIG.RT_DELAY_MIN_MS + CONFIG.RT_DELAY_MAX_MS) / 2;
+  /*
+   * The delay's realised mean, MEASURED from the same function the app draws with.
+   *
+   * This read (min + max) / 2, which was right while the delay was uniform and wrong the moment it
+   * became a truncated exponential: 950 ms assumed against a realised 650, overstating every RT
+   * block by 300 ms a trial — 1.6 minutes a sitting. The header of simulateParticipant.ts promises
+   * that every app-controlled duration is read from the real CONFIG so the model "cannot drift from
+   * what the instrument does". Averaging the bounds of a non-uniform distribution is exactly that
+   * drift, so the mean is sampled rather than assumed and the promise holds by construction.
+   */
+  const del = measuredDelayMean();
   const iti = (CONFIG.RT_ITI_MIN_MS + CONFIG.RT_ITI_MAX_MS) / 2;
   const nGo = Math.round(nTrials * CONFIG.RT_GO_RATE);
   const nNo = nTrials - nGo;

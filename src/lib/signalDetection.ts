@@ -15,8 +15,10 @@ export interface SdtInput {
 }
 
 export interface SdtResult {
-  hit_rate: number;
-  false_alarm_rate: number;
+  /** Hits / signal trials. Null when the block held no signal trials — never 0, which is a claim. */
+  hit_rate: number | null;
+  /** False alarms / noise trials. Null when the block held no noise trials. */
+  false_alarm_rate: number | null;
   /**
    * Sensitivity. NULL when neither response pool contains a trial, because there is nothing to
    * estimate from. This previously returned 0 - a substantive claim of zero sensitivity - for a
@@ -74,8 +76,17 @@ export function computeSdt(input: SdtInput): SdtResult {
   // Sensitivity is the separation between a signal and a noise distribution; with one of them
   // missing there is no separation to measure, however many trials the other pool holds.
   if (nSignal === 0 || nNoise === 0) {
+    /*
+     * Every field here reports absence, the rates included.
+     *
+     * They used to return 0, which is a measurement: a hit rate of zero says the participant never
+     * responded to a signal, which is a real and damning finding. "There were no signal trials" is
+     * a different statement entirely, and exporting the first when the second is true fabricates
+     * data — the one thing this file's own comments are otherwise careful never to do.
+     */
     return {
-      hit_rate: 0, false_alarm_rate: 0,
+      hit_rate: nSignal === 0 ? null : hits / nSignal,
+      false_alarm_rate: nNoise === 0 ? null : falseAlarms / nNoise,
       d_prime: null, criterion: null, d_prime_se: null,
       d_prime_unstable: true, estimable: false,
     };

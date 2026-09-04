@@ -169,3 +169,35 @@ describe('the stimulus scale is never substituted when it was not measured', () 
     });
   });
 });
+
+describe('an unmeasured detection rate is reported as absent, not as zero', () => {
+  /*
+   * computeSdt returned hit_rate: 0 and false_alarm_rate: 0 whenever a pool was empty, while every
+   * other field in the same return reported null. A hit rate of zero is a real and damning
+   * measurement — the participant never responded to a signal — and it is not the same statement as
+   * "this block contained no signal trials". The two reach an analyst identically.
+   */
+  it('returns null rates when a pool is empty, and nulls for everything derived from it', async () => {
+    const { computeSdt } = await import('@/lib/signalDetection');
+
+    const noSignal = computeSdt({ hits: 0, misses: 0, falseAlarms: 2, correctRejections: 10 });
+    expect(noSignal.hit_rate, 'no signal trials, so the hit rate is unmeasured').toBeNull();
+    expect(noSignal.false_alarm_rate, 'noise trials existed, so this IS measured').toBeCloseTo(2 / 12);
+    expect(noSignal.d_prime).toBeNull();
+    expect(noSignal.estimable).toBe(false);
+
+    const noNoise = computeSdt({ hits: 8, misses: 2, falseAlarms: 0, correctRejections: 0 });
+    expect(noNoise.false_alarm_rate, 'no noise trials, so the false-alarm rate is unmeasured').toBeNull();
+    expect(noNoise.hit_rate, 'signal trials existed, so this IS measured').toBeCloseTo(0.8);
+    expect(noNoise.d_prime).toBeNull();
+  });
+
+  it('still reports a genuine zero when the pool existed and nothing was hit', async () => {
+    // The distinction only matters if a real zero survives. Ten signal trials, no hits, is a
+    // measurement and must not be turned into absence.
+    const { computeSdt } = await import('@/lib/signalDetection');
+    const r = computeSdt({ hits: 0, misses: 10, falseAlarms: 1, correctRejections: 11 });
+    expect(r.hit_rate).toBe(0);
+    expect(r.estimable).toBe(true);
+  });
+});

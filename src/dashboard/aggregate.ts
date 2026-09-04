@@ -256,8 +256,11 @@ export function conditionEngagement(args: {
   }
 
   // RT block disengagement — reuse existing rates.
+  // An unmeasured false-alarm rate is not evidence of engagement OR of disengagement, so it must
+  // not satisfy the comparison. `null > x` is false in JS, which happens to be right here, but
+  // relying on that coercion would be an accident; the guard says so explicitly.
   const rt_disengaged = !!rt && (
-    rt.false_alarm_rate > ENGAGEMENT.RT_FALSE_ALARM_MAX ||
+    (rt.false_alarm_rate != null && rt.false_alarm_rate > ENGAGEMENT.RT_FALSE_ALARM_MAX) ||
     rt.error_rate > ENGAGEMENT.RT_ERROR_MAX ||
     (rt.lapse_rate != null && rt.lapse_rate > ENGAGEMENT.RT_LAPSE_MAX)
   );

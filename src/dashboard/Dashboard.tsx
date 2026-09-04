@@ -104,7 +104,17 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       const lost = r.missing.length
         ? `\n\n${r.missing.length} inventory row(s) no longer have their file on this device (this is expected after a restore from a backup, which carries the inventory but not the binary):\n  ${r.missing.join('\n  ')}`
         : '';
-      window.alert(`${r.written} media file(s) written.${lost}`);
+      /*
+       * A refusal is not a failure and must not read as one. It means the participant withdrew that
+       * grant, and the export honouring it is the system working — but the operator has to be told,
+       * or they will look for files that are deliberately absent.
+       */
+      const held = r.refused.length
+        ? `\n\n${r.refused.length} file(s) were NOT written because the grant covering them has been withdrawn. `
+          + `They should have been destroyed at the point of withdrawal; if they are still on this device, `
+          + `use the session's media revocation to remove them.\n  ${r.refused.join('\n  ')}`
+        : '';
+      window.alert(`${r.written} media file(s) written.${lost}${held}`);
     } finally { setExporting(false); }
   };
 

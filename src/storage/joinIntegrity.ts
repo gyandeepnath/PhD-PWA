@@ -79,6 +79,22 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
       });
       continue;
     }
+    /*
+     * A withdrawn session must never reach an analysis, whatever the caller passed in.
+     *
+     * listSessions() filters the recycle bin before the exporter sees anything, so today no binned
+     * session arrives here — but that is the CALLER's guarantee, and buildAnalysisDataset has no
+     * guard of its own. A second caller, or a restored backup, would inherit the hazard silently.
+     * The check belongs where the assertion is made.
+     */
+    if (b.session.withdrawn_at != null) {
+      issues.push({
+        severity: 'blocking', code: 'participant_withdrawn',
+        participant_id: pid, session_id: b.session.session_id,
+        detail: 'This session is marked withdrawn by the participant. Its rows must not enter any '
+          + 'analysis. If it reached this exporter, a restore or a caller bypassed the recycle bin.',
+      });
+    }
     if (!b.participant) {
       issues.push({
         severity: 'warning', code: 'participant_record_missing',
@@ -98,6 +114,13 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
       issues.push({ severity, code, participant_id: pid, session_id: sid, detail });
       if (severity === 'blocking') excluded.push(code);
     };
+
+    if (ordered.some((b) => b.session.withdrawn_at != null)) {
+      add('blocking', 'participant_withdrawn',
+        'At least one sitting is marked withdrawn by the participant. The participant is excluded '
+        + 'from the analysis dataset; their rows remain present and flagged so the exclusion is '
+        + 'auditable rather than silent.');
+    }
 
     const levels = ordered.map((b) => b.session.ambient_illumination_level ?? null);
     const runs = ordered.reduce((n, b) => n + b.conditions.length, 0);

@@ -167,7 +167,11 @@ describe('the reaction-time accuracy scale separates anticipations from detectio
     const inflated = computeSdt({ hits: 19, misses: 1, falseAlarms: 3, correctRejections: 9 });
     // The inflated version — anticipations folded in as hits and false alarms — reports a higher
     // hit rate off a larger signal pool.
-    expect(inflated.hit_rate).toBeGreaterThan(clean.hit_rate);
+    // Both pools are non-empty here, so both rates are measured; assert that explicitly rather
+    // than letting a null slip through the comparison.
+    expect(clean.hit_rate).not.toBeNull();
+    expect(inflated.hit_rate).not.toBeNull();
+    expect(inflated.hit_rate!).toBeGreaterThan(clean.hit_rate!);
     expect(clean.d_prime).not.toBeNull();
   });
 

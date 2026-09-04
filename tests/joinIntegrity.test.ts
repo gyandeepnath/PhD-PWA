@@ -199,3 +199,39 @@ describe('the analysis codebook cannot drift from the dataset', () => {
     expect(primary).toContain('incomplete_blink_ratio');
   });
 });
+
+describe('a withdrawal is honoured by the exporter itself, not just by its caller', () => {
+  /*
+   * listSessions() filters the recycle bin before the exporter sees anything, so no binned session
+   * reaches it today. But that is the CALLER's guarantee. importSessionBackup deliberately clears
+   * deleted_at — correct for the bin, catastrophic for a withdrawal — so restoring a backup after a
+   * tablet is replaced, which the operator manual instructs, returned a withdrawn session
+   * indistinguishable from a consented one. withdrawn_at is a separate tombstone, preserved across
+   * import, and blocking here regardless of how the bundle arrived.
+   */
+  it('blocks a withdrawn sitting and says why', () => {
+    const [a, b] = complete('P10');
+    (a.session as unknown as Record<string, unknown>).withdrawn_at = Date.now();
+    const r = checkJoin([a, b], EXPECT);
+    expect(r.clean).toBe(false);
+    expect(r.participants[0].analysable).toBe(false);
+    expect(r.participants[0].excluded_by).toContain('participant_withdrawn');
+    expect(r.issues.some((i) => i.code === 'participant_withdrawn' && i.severity === 'blocking')).toBe(true);
+  });
+
+  it('does not treat an ordinary recycle-bin tombstone as a withdrawal', () => {
+    // The two meanings were conflated in one field; only one of them survives a restore, and only
+    // one of them is a participant's instruction.
+    const [a, b] = complete('P11');
+    (a.session as unknown as Record<string, unknown>).deleted_at = Date.now();
+    const r = checkJoin([a, b], EXPECT);
+    expect(r.issues.some((i) => i.code === 'participant_withdrawn')).toBe(false);
+  });
+
+  it('leaves consented participants unaffected', () => {
+    const [a, b] = complete('P12');
+    (a.session as unknown as Record<string, unknown>).withdrawn_at = Date.now();
+    const r = checkJoin([a, b, ...complete('P13', 2)], EXPECT);
+    expect(r.participants.find((p) => p.participant_id === 'P13')!.analysable).toBe(true);
+  });
+});

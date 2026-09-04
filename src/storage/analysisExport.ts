@@ -73,7 +73,8 @@ export const ANALYSIS_LONG_COLUMNS = [
   'ambient_lux_measured', 'lux_all_in_range', 'screen_luminance_cd_m2', 'stimulus_scale',
   // --- quality, for sensitivity analyses ---------------------------------------------------
   'camera_active', 'effective_fps', 'fps_adequate_for_ratio', 'face_presence_ratio',
-  'gaze_calibrated', 'qc_overall', 'e2e_timing', 'session_status', 'analysable', 'exclusion_reason',
+  'gaze_calibrated', 'qc_overall', 'e2e_timing', 'session_status', 'withdrawn',
+  'analysable', 'exclusion_reason',
 ] as const;
 
 interface RowContext {
@@ -336,6 +337,9 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
          */
         e2e_timing: s.e2e_timing ?? null,
         session_status: s.status ?? (s.session_end_time ? 'complete' : 'in_progress'),
+        // A withdrawal is not a data-quality flag, it is a standing instruction. Present so the
+        // exclusion is auditable; the row must never be modelled.
+        withdrawn: s.withdrawn_at != null,
         analysable: ctx.analysable,
         exclusion_reason: ctx.exclusion,
       });

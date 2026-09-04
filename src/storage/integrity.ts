@@ -345,13 +345,26 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
     }
   }
 
-  // ---- media must never exist without the grant that authorises it
+  /*
+   * Media must never exist without the grant that authorises it — checked BOTH ways.
+   *
+   * The snapshot check answers "was this lawfully captured?". The current-consent check answers
+   * "is it lawfully still held?", and only the first existed. The asymmetry sat twelve lines from
+   * the ocular check above, which reads current consent and always did. Once a grant can be
+   * withdrawn, the second question is the one an auditor actually asks.
+   */
   for (const m of bundle.media ?? []) {
     const grant = m.checkpoint === 'reading_segment' ? 'annotation_video' : 'setup_photos';
     if (!m.consent_snapshot?.[grant]) {
       add('error', 'media_requires_consent',
         `media ${m.media_id} (${m.checkpoint}) was retained without the ${grant} grant in its ` +
         `consent snapshot.`, [m.media_id]);
+    } else if (bundle.session?.media_consent?.[grant] !== true) {
+      add('error', 'media_grant_withdrawn',
+        `media ${m.media_id} (${m.checkpoint}) is still held although the ${grant} grant is no ` +
+        `longer in force. It was lawfully captured and must now be destroyed: use the session's ` +
+        `media revocation, not Purge, which would also discard the consented research data.`,
+        [m.media_id]);
     }
   }
 

@@ -102,6 +102,19 @@ export interface SessionRecord {
   status: 'in_progress' | 'complete';
   /** Soft-delete tombstone (ms). Non-null = in the recycle bin; auto-purged after 30 days. */
   deleted_at: number | null;
+  /**
+   * When the PARTICIPANT withdrew, if they did. Distinct from deleted_at, deliberately.
+   *
+   * deleted_at was doing double duty as "the operator tidied up" and "the participant withdrew",
+   * and only the first meaning survives the documented recovery procedure: importSessionBackup
+   * clears deleted_at on purpose, so restoring a backup after a tablet is replaced returns a
+   * withdrawn session indistinguishable from a consented one, straight into the next pooled
+   * analysis dataset. That behaviour is correct for the bin and wrong for a withdrawal, which is
+   * why the two are now separate fields.
+   *
+   * Preserved verbatim across import, and blocking in the join check.
+   */
+  withdrawn_at?: number | null;
   /** Optional researcher-editable display label (rename). Falls back to participant_id. */
   display_label: string | null;
   /** Illuminance at the eye at session start, lux (the 'start' checkpoint reading). */
@@ -175,6 +188,15 @@ export interface SessionRecord {
    * strictly stronger ask than deriving numbers from them, so it needs its own grant.
    */
   media_consent: MediaConsent;
+  /**
+   * When a media grant was withdrawn after the fact, if it ever was.
+   *
+   * Distinct from consent_time, which records when consent was GIVEN. Retained so an export can
+   * show that a withdrawal happened rather than merely showing a grant that is now false — the
+   * difference between "they never agreed" and "they agreed and then changed their mind" matters
+   * to anyone auditing what was held and for how long.
+   */
+  media_consent_revoked_at?: number | null;
   provenance: Provenance;
   device_type: string;
   browser: string;
@@ -419,8 +441,15 @@ export interface RtSummaryRecord {
   false_alarms: number;
   misses: number;
   correct_rejections: number;
-  hit_rate: number;
-  false_alarm_rate: number;
+  /**
+   * Hits / signal trials. NULL when there were no signal trials to divide by.
+   *
+   * Not 0: a hit rate of zero is a real and damning measurement — the participant never responded
+   * to a signal — and is not the same statement as "this block contained no signal trials".
+   */
+  hit_rate: number | null;
+  /** False alarms / noise trials. Null when there were no noise trials; see hit_rate. */
+  false_alarm_rate: number | null;
   mean_rt_hits_ms: number | null;
   median_rt_hits_ms: number | null;
   rt_sd_ms: number | null;

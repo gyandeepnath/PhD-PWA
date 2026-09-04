@@ -43,8 +43,10 @@ export interface RtResult {
     false_alarms: number;
     misses: number;
     correct_rejections: number;
-    hit_rate: number;
-    false_alarm_rate: number;
+    /** Null when the block held no signal trials — never 0, which would be a measurement. */
+    hit_rate: number | null;
+    /** Null when the block held no noise trials. */
+    false_alarm_rate: number | null;
     mean_rt_hits_ms: number | null;
     median_rt_hits_ms: number | null;
     rt_sd_ms: number | null;

@@ -81,8 +81,13 @@ later ones as if they follow from the first.
 
    The app enforces the refusal itself: instead of the camera-setup screen it shows *Camera
    measurement declined* and moves on. There is no button to enable the camera anyway, by design.
-   If a participant changes their mind, that is a change of consent and has to be taken again from
-   the consent screen.
+   If a participant changes their mind DURING a sitting, that decision cannot be amended: the
+   consent screen runs once per session and there is no route back to it. Their original choice
+   stands for this sitting, and the next sitting presents the consent screen afresh with every grant
+   defaulting to no. Do not start a second session for the same visit to work around this — it would
+   record one visit as two sittings and corrupt the counterbalancing. Destroying media already
+   captured IS available at any time, and does not require ending the session: see the withdrawal
+   row in §7.
 3. **Setup photographs.** A separate grant, defaulting to no. Two photographs, at the start and end
    of the session, showing seating distance and room lighting, so that setup compliance is evidenced
    rather than asserted.
@@ -207,7 +212,7 @@ never re-checked is a session where you do not know what the illuminance was.
 | After a resume, the app asks for the camera and runs calibration again | Expected | The blink thresholds are fractions of *this participant's* own open-eye baseline, and a reload clears it. Re-running calibration is required for the resumed conditions to carry any ocular data at all. Take it at the normal pace. |
 | Battery low | Not charged | Plug in. Do not let it die mid-condition. |
 | Participant wants a break outside the scheduled one | Fatigue, discomfort | Allow it. Take it **between** conditions, never inside the reading task. Note it. |
-| Participant withdraws | Their right, at any time | Stop immediately. Do not ask why. Session Manager → the session under **In progress** → **Export**. The export records the sitting as incomplete and lists only the conditions that ran. |
+| Participant withdraws | Their right, at any time | Stop immediately. Do not ask why. **Then ask one question: "Would you like the data from this session deleted?"** The consent form they signed says it can be, so this must be offered, not waited for. **If yes:** Session Manager → the session → **Delete** → open the **Recycle bin** → **Purge**. Then delete any media files and any `backup_*.json` for that session already copied off the tablet — Purge cannot reach those. **If no:** Session Manager → **Export**, and record the withdrawal so the sitting is excluded from analysis rather than merely incomplete. |
 | Participant reports significant symptoms | | Stop if they wish. Advise a full optometric examination. Record it. |
 
 ---

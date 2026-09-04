@@ -34,16 +34,61 @@
  * `rand` is injected so the draw is testable and so a seeded stream can be used where
  * reproducibility matters.
  */
+/**
+ * Solve for the exponential rate whose TRUNCATED mean on [0, range] equals `target`.
+ *
+ * For a truncated exponential the realised mean is not the untruncated scale: cutting the tail at
+ * `range` pulls it down, and by more the closer the scale gets to the range. Using the requested
+ * mean directly as the scale therefore under-delivers — measured on the shipped parameters, asking
+ * for 650 ms produced 618, and asking for 900 produced 732. A parameter called `mean` that does not
+ * produce that mean is a quiet lie in a timing-critical path, so it is solved for instead.
+ *
+ * E[X] = 1/L - range / (e^(L*range) - 1), which decreases monotonically in L from range/2 towards 0.
+ * Bisection is ample: this runs once per draw on values in the hundreds of milliseconds.
+ */
+function rateForTruncatedMean(target: number, range: number): number {
+  // The mean of a truncated exponential cannot exceed the uniform case, range/2.
+  if (!(target > 0) || target >= range / 2) return 0;
+  const meanAt = (L: number) => 1 / L - range / (Math.expm1(L * range));
+  let lo = 1e-9;
+  let hi = 50 / range;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (meanAt(mid) > target) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/**
+ * Draw from a truncated exponential on `[min, max]` whose realised mean is `mean`.
+ *
+ * `rand` is injected so the draw is testable and so a seeded stream can be used where
+ * reproducibility matters.
+ */
 export function nonAgingDelay(min: number, max: number, mean: number, rand: () => number = Math.random): number {
+  /*
+   * Never return a non-finite value.
+   *
+   * The result is handed straight to rafDelay(), and NaN there does not throw — it waits forever.
+   * The RT block has no Pause control while trials are running, so a corrupted constant would
+   * strand a participant on a blank screen with no way out and no error. Falling back to the first
+   * finite bound available fails loudly in the data (an implausible foreperiod) rather than
+   * silently in the room.
+   */
+  const finite = [min, max, 0].find((v) => Number.isFinite(v)) as number;
+  if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(mean)) return finite;
   if (!(max > min)) return min;
-  // The exponential's own mean, before truncation shifts it. Clamped away from the degenerate ends.
-  const scale = Math.max(1, mean - min);
   const range = max - min;
-  // Inverse-transform sampling on the exponential, conditioned on landing inside the range.
-  const u = Math.min(0.999999, Math.max(1e-9, rand()));
-  const cap = 1 - Math.exp(-range / scale);
-  const x = -scale * Math.log(1 - u * cap);
-  return Math.min(max, min + x);
+  const rate = rateForTruncatedMean(mean - min, range);
+  // A target at or above the uniform mean is unreachable by an exponential; fall back to uniform,
+  // which is the closest achievable shape rather than a silently wrong rate.
+  if (rate <= 0) return min + Math.min(1, Math.max(0, rand())) * range;
+
+  const u = Math.min(1 - 1e-12, Math.max(1e-12, rand()));
+  const cap = -Math.expm1(-rate * range);
+  const x = -Math.log1p(-u * cap) / rate;
+  const out = min + x;
+  return Number.isFinite(out) ? Math.min(max, out) : min;
 }
 
 /**
