@@ -5,6 +5,7 @@
  */
 import { useCallback, useEffect, useState, useRef } from 'react';
 import {
+  revokeMediaGrant,
   listSessions, listDeleted, softDeleteSession, restoreSession, purgeSession, purgeExpired,
   renameSession, sessionLabel, BIN_RETENTION_MS,
 } from '@/storage/gather';
@@ -120,6 +121,37 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
       await refresh();
     }
   };
+  /**
+   * Destroy the recordings covered by one media grant, and record the withdrawal.
+   *
+   * This is the operation three documents promise and none implemented — including the synopsis
+   * §3.10 submitted to the ethics committee, which states retained media are "deletable
+   * independently of" the research dataset. Until this control existed, the only way to remove a
+   * photograph or a video clip was Purge, which also destroys the ten condition rows, the reaction
+   * trials, both questionnaires and the participant record. A participant who wanted their
+   * recordings gone while remaining enrolled could not be accommodated.
+   *
+   * Irreversible and confirmed as such: the bin does not cover it, because the point of the
+   * operation is that the bytes are gone.
+   */
+  const revokeMedia = async (s: SessionRecord, grant: 'setup_photos' | 'annotation_video') => {
+    const what = grant === 'annotation_video' ? 'reading video clips' : 'setup photographs';
+    const label = sessionLabel(s);
+    if (!window.confirm(
+      `Delete the ${what} for ${label}, and record that the participant withdrew that permission?\n\n`
+      + 'The measurements from this session are KEPT — only the recordings are destroyed.\n\n'
+      + 'This cannot be undone. The recycle bin does not cover it.',
+    )) return;
+    const removed = await revokeMediaGrant(s.session_id, grant);
+    await refresh();
+    window.alert(
+      removed === 0
+        ? `No ${what} were stored for ${label}. The permission is now recorded as withdrawn.`
+        : `${removed} file(s) destroyed. The permission is recorded as withdrawn, so no further `
+          + `${what} can be captured or exported for this session.`,
+    );
+  };
+
   const del = async (s: SessionRecord) => {
     // Confirmed, like purge is. Delete sits next to Resume and Export on a row of small buttons, on
     // a touch screen, operated by someone standing next to a participant. The bin makes it
@@ -209,6 +241,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
                   sitting could not be got off the tablet at all. The export declares its own
                   incompleteness, so allowing it here cannot silently contaminate the analysis. */}
               <Btn onClick={() => onOpen(s.session_id)} color="#1a1a2e" outline>Export</Btn>
+              <MediaControls s={s} onRevoke={revokeMedia} />
               <Btn onClick={() => del(s)} color="#e64c4c" outline>Delete</Btn>
             </Row>
           ))}
@@ -220,6 +253,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
             <Row key={s.session_id} s={s}>
               <Btn onClick={() => onOpen(s.session_id)} color="#1a1a2e">Open</Btn>
               <Btn onClick={() => rename(s)} color="#5a5a7a" outline>Rename</Btn>
+              <MediaControls s={s} onRevoke={revokeMedia} />
               <Btn onClick={() => del(s)} color="#e64c4c" outline>Delete</Btn>
             </Row>
           ))}
@@ -263,6 +297,30 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     </div>
   );
 }
+/**
+ * Media-withdrawal controls for one session.
+ *
+ * Rendered only for grants that are currently in force. A control offered against an already
+ * withdrawn grant would invite an operator to "delete" recordings that are already gone and imply
+ * the withdrawal had not taken — and a grant that was never given has nothing to withdraw.
+ */
+function MediaControls({ s, onRevoke }: {
+  s: SessionRecord;
+  onRevoke: (s: SessionRecord, grant: 'setup_photos' | 'annotation_video') => void;
+}) {
+  const c = s.media_consent;
+  return (
+    <>
+      {c?.setup_photos === true && (
+        <Btn onClick={() => onRevoke(s, 'setup_photos')} color="#b8860b" outline>Delete photos</Btn>
+      )}
+      {c?.annotation_video === true && (
+        <Btn onClick={() => onRevoke(s, 'annotation_video')} color="#b8860b" outline>Delete video</Btn>
+      )}
+    </>
+  );
+}
+
 function Row({ s, children, note }: { s: SessionRecord; children: React.ReactNode; note?: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 12, padding: '12px 14px' }}>
