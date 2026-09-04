@@ -21,6 +21,13 @@ import { faceEar, baselineEar, EAR_TIERS, type Point } from './blink';
  * FaceMesh result would compete for the main thread with the tracker itself, and the tracker is the
  * one thing in this app that must never be starved — a dropped frame is a lost EAR sample and the
  * primary outcome is a count of events in that series.
+ *
+ * THE THROTTLE ONLY HELPS IF THE WORK IS BEHIND IT. An earlier version of this comment claimed the
+ * protection above while the caller built the whole stats payload — `liveCounts()` included, which
+ * runs classifyBlinks over the entire EAR series — before emitLive was even entered. The throttle
+ * guarded the React render and nothing else, so the expensive part ran at full frame rate anyway.
+ * emitLive now takes a thunk and invokes it only after both the rate check and the
+ * zero-subscriber check pass.
  */
 const LIVE_HZ = 4;
 import { estimateHeadPose, isOffAxis, noseVerticalFraction } from './headPose';
@@ -194,9 +201,27 @@ export function useTracking(): TrackingApi {
     return () => { liveSubs.current.delete(fn); };
   }, []);
 
-  const emitLive = useCallback((t: number, stats: Omit<LiveTrackingStats, 'fps'>) => {
+  /**
+   * Emit the live readout, at most LIVE_HZ times a second and only when someone is listening.
+   *
+   * `build` is a THUNK, and that is the whole point. It used to take an already-constructed stats
+   * object, so the caller evaluated everything — including `liveCounts()`, which runs
+   * classifyBlinks over the entire EAR series — on every single frame, before the throttle and
+   * before the zero-subscriber check.
+   *
+   * The cost was quadratic and landed in the worst possible place. The aggregator exists only
+   * between beginCondition and endCondition, i.e. only during READING_TASK, which is exactly when
+   * the monitor is hidden and the subscriber set is empty. Measured over a 3-minute condition at
+   * 30 fps: 14.6 million sample scans and 5,400 array allocations, on the main thread, for a
+   * readout nobody was watching — 7.5x the work of doing it at LIVE_HZ. Every millisecond spent
+   * there is a millisecond the FaceMesh pump is not running, and a dropped frame is a lost EAR
+   * sample from the series the primary outcome is counted in.
+   *
+   * Frame timing is still recorded every frame, because that is O(1) and is the fps estimate.
+   */
+  const emitLive = useCallback((t: number, build: () => Omit<LiveTrackingStats, 'fps'>) => {
     // Achieved throughput over a short window, which is what the FPS gate on the primary outcome
-    // actually depends on.
+    // actually depends on. Cheap, so it runs unconditionally.
     frameTimes.current.push(t);
     while (frameTimes.current.length > 0 && t - frameTimes.current[0] > 2000) frameTimes.current.shift();
     const span = frameTimes.current.length > 1
@@ -205,9 +230,9 @@ export function useTracking(): TrackingApi {
     const fps = span > 0.5 ? (frameTimes.current.length - 1) / span : null;
 
     if (t - lastLiveEmit.current < 1000 / LIVE_HZ) return;
-    lastLiveEmit.current = t;
     if (liveSubs.current.size === 0) return;
-    const payload: LiveTrackingStats = { ...stats, fps };
+    lastLiveEmit.current = t;
+    const payload: LiveTrackingStats = { ...build(), fps };
     for (const fn of liveSubs.current) fn(payload);
   }, []);
 
@@ -243,16 +268,21 @@ export function useTracking(): TrackingApi {
           luma,
         });
       }
-      const live = agg?.liveCounts(baselineEarRef.current);
-      emitLive(t, {
-        facePresent: true,
-        ear: Number.isFinite(ear) ? ear : null,
-        earRatio: baselineEarRef.current && Number.isFinite(ear) ? ear / baselineEarRef.current : null,
-        blinks: live?.blinks ?? lastConditionCounts.current.blinks,
-        incomplete: live?.incomplete ?? lastConditionCounts.current.incomplete,
-        blinksLive: live != null,
-        faceSize: (() => { const f = faceSizeFromLandmarks(lm); return Number.isFinite(f) ? f : null; })(),
-        onScreen: gazeNow.isCenter,
+      emitLive(t, () => {
+        const live = agg?.liveCounts(baselineEarRef.current);
+        const size = faceSizeFromLandmarks(lm);
+        return {
+          facePresent: true,
+          ear: Number.isFinite(ear) ? ear : null,
+          earRatio: baselineEarRef.current && Number.isFinite(ear) ? ear / baselineEarRef.current : null,
+          blinks: live?.blinks ?? lastConditionCounts.current.blinks,
+          incomplete: live?.incomplete ?? lastConditionCounts.current.incomplete,
+          blinksLive: live != null,
+          // Computed once here rather than twice: the aggregator's own ingest above needs it too,
+          // but that call is on a path that runs regardless and is not worth threading through.
+          faceSize: Number.isFinite(size) ? size : null,
+          onScreen: gazeNow.isCenter,
+        };
       });
     } else {
       /*
@@ -263,13 +293,15 @@ export function useTracking(): TrackingApi {
        * on its last value: a green dot and "face", indefinitely. An operator aid that silently
        * reports the opposite of the truth is worse than none.
        */
-      const live = aggRef.current?.liveCounts(baselineEarRef.current);
-      emitLive(t, {
-        facePresent: false, ear: null, earRatio: null,
-        blinks: live?.blinks ?? lastConditionCounts.current.blinks,
-        incomplete: live?.incomplete ?? lastConditionCounts.current.incomplete,
-        blinksLive: live != null,
-        faceSize: null, onScreen: false,
+      emitLive(t, () => {
+        const live = aggRef.current?.liveCounts(baselineEarRef.current);
+        return {
+          facePresent: false, ear: null, earRatio: null,
+          blinks: live?.blinks ?? lastConditionCounts.current.blinks,
+          incomplete: live?.incomplete ?? lastConditionCounts.current.incomplete,
+          blinksLive: live != null,
+          faceSize: null, onScreen: false,
+        };
       });
     }
     if (!(lm && lm.length > 0) && aggRef.current) {
