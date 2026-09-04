@@ -4,6 +4,7 @@ import {
   williamsSquare,
   conditionOrderFor,
   passageForCondition,
+  PASSAGE_ROTATION_PERIOD,
   sessionPlan,
   blockPlan,
 } from '@/experiment/counterbalance';
@@ -182,5 +183,84 @@ describe('blockPlan — the second session is not a replay of the first', () => 
         s.conditionIndex === blockPlan(e, 1)[i]?.conditionIndex && s.passageIndex === blockPlan(e, 1)[i]?.passageIndex);
       expect(pairRepeat).toBe(false);
     }
+  });
+});
+
+describe('passage is decoupled from SERIAL POSITION, not only from condition', () => {
+  /*
+   * The existing test above checks passage x condition, which always held. Nothing checked
+   * passage x position, and that is where the design was broken.
+   *
+   * The passage offset used to be `(enrolment - 1) mod N_CONDITIONS` — the same quantity as the
+   * Williams row. Both rotations advanced together, and because the row is recoverable from
+   * (condition, position) in a Latin square, passage became a deterministic function of them.
+   * Enumerated over 200 participants x 2 blocks: every one of the 100 (condition, position) cells
+   * held exactly ONE passage, and each position could only ever draw from five of the ten, split
+   * by parity.
+   *
+   * It mattered because session_position is the exported covariate for time-on-task. A position
+   * effect estimated on a fixed half of the corpus carries a permanent corpus property — search
+   * target counts, reading difficulty — that recruitment cannot average away.
+   */
+  const enumerate = (nParticipants: number) => {
+    const byPosition = new Map<number, Set<number>>();
+    const byCell = new Map<string, Set<number>>();
+    const positionPassageCount = new Map<string, number>();
+    for (let e = 1; e <= nParticipants; e++) {
+      for (const block of [0, 1]) {
+        for (const step of blockPlan(e, block)) {
+          const pos = step.position;
+          (byPosition.get(pos) ?? byPosition.set(pos, new Set()).get(pos)!).add(step.passageIndex);
+          const cell = `${step.conditionIndex}|${pos}`;
+          (byCell.get(cell) ?? byCell.set(cell, new Set()).get(cell)!).add(step.passageIndex);
+          const key = `${pos}|${step.passageIndex}`;
+          positionPassageCount.set(key, (positionPassageCount.get(key) ?? 0) + 1);
+        }
+      }
+    }
+    return { byPosition, byCell, positionPassageCount };
+  };
+
+  it('every passage can appear at every serial position', () => {
+    const { byPosition } = enumerate(200);
+    for (const [pos, seen] of byPosition) {
+      expect(seen.size, `position ${pos} can only ever show ${seen.size} of ${N_PASSAGES} passages`)
+        .toBe(N_PASSAGES);
+    }
+  });
+
+  it('passage is NOT a deterministic function of (condition, position)', () => {
+    // The single sharpest statement of the bug: when every cell holds one passage, passage carries
+    // no information beyond condition and position, and is perfectly aliased with their interaction.
+    const { byCell } = enumerate(200);
+    const singletons = [...byCell.entries()].filter(([, s]) => s.size === 1).map(([k]) => k);
+    expect(singletons, `these (condition|position) cells are locked to one passage: ${singletons.slice(0, 8).join(', ')}`)
+      .toEqual([]);
+  });
+
+  it('is uniform across positions at the planned enrolment', () => {
+    // Complete coverage is not enough; it must also be balanced, or position still carries a
+    // corpus-difficulty gradient.
+    const { positionPassageCount } = enumerate(130);
+    const counts = [...positionPassageCount.values()];
+    expect(counts.length).toBe(10 * N_PASSAGES);
+    expect(Math.max(...counts) - Math.min(...counts),
+      'position x passage counts are not uniform at n=130').toBe(0);
+  });
+
+  it('still gives each participant all N passages exactly once per sitting', () => {
+    // The property the original test guarded must survive the fix.
+    for (let e = 1; e <= 60; e++) {
+      for (const block of [0, 1]) {
+        const passages = blockPlan(e, block).map((s) => s.passageIndex).sort((a, b) => a - b);
+        expect(passages).toEqual(Array.from({ length: N_PASSAGES }, (_, i) => i));
+      }
+    }
+  });
+
+  it('uses a rotation period coprime to the condition count', () => {
+    // If these ever share a factor the aliasing returns silently.
+    const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+    expect(gcd(PASSAGE_ROTATION_PERIOD, N)).toBe(1);
   });
 });

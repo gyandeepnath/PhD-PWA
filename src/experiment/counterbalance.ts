@@ -66,13 +66,40 @@ export function conditionOrderFor(enrolmentNumber: number): number[] {
 }
 
 /**
+ * The period of the passage rotation. Coprime to N_CONDITIONS, and that is the entire point.
+ *
+ * The offset used to be `(enrolment - 1) mod N_CONDITIONS` — the SAME quantity as the Williams row.
+ * Both rotations therefore advanced together, and because the row is recoverable from
+ * (condition, position) in a Latin square, passage became a deterministic function of them:
+ * enumerated over 200 participants x 2 blocks, every one of the 100 (condition, position) cells
+ * contained exactly ONE passage, and each serial position could only ever draw from five of the ten
+ * passages, split by parity. No sample size fixes that — it is structural.
+ *
+ * It mattered because `session_position` is exported as the covariate that absorbs time-on-task.
+ * Estimating a position effect on a fixed half of the corpus means that coefficient carries a
+ * permanent corpus property (search-target counts, reading difficulty) that recruitment cannot
+ * average away.
+ *
+ * Rotating on a period coprime to the condition count breaks the link: within a
+ * (condition, position) cell the Williams row is fixed, but `(enrolment - 1) mod 13` still cycles
+ * through every value as enrolment advances in steps of ten. Verified by enumeration in
+ * tests/counterbalance.test.ts: all ten passages reachable at every position, ten distinct passages
+ * per (condition, position) cell, and exact uniformity at multiples of the joint period.
+ *
+ * 13 rather than 11 or 9 because it is the smallest choice giving a perfectly uniform
+ * position x passage count at the planned enrolment, not merely a complete one.
+ */
+export const PASSAGE_ROTATION_PERIOD = 13;
+
+/**
  * Passage index assigned to a given condition for a given participant.
- * Rotating offset decouples passage content from display condition.
+ *
+ * Decoupled from display condition AND from serial position; see PASSAGE_ROTATION_PERIOD.
  */
 export function passageForCondition(conditionIndex: number, enrolmentNumber: number): number {
   const n = Number.isFinite(enrolmentNumber) ? Math.floor(enrolmentNumber) : 1;
   const c = Number.isFinite(conditionIndex) ? Math.floor(conditionIndex) : 0;
-  const offset = (((n - 1) % N_CONDITIONS) + N_CONDITIONS) % N_CONDITIONS;
+  const offset = (((n - 1) % PASSAGE_ROTATION_PERIOD) + PASSAGE_ROTATION_PERIOD) % PASSAGE_ROTATION_PERIOD;
   return (((c + offset) % N_CONDITIONS) + N_CONDITIONS) % N_CONDITIONS;
 }
 

@@ -167,7 +167,10 @@ A participant whose EAR is 0.34 in up-gaze and 0.29 in reading posture is calibr
 Call the existing `calibrate()` on a still, straight-ahead, reading-posture fixation to set the EAR baseline (keep the gaze routine for gaze only); export a per-condition measured open-eye EAR (median of frames above partialT) alongside the calibration baseline so drift is visible and correctable; and re-take the baseline at the mid-session break.
 
 
-### [high] Passage index is a deterministic function of (condition, serial position): half the corpus can never appear at half the serial positions, for any participant, ever
+### [FIXED] [high] Passage index is a deterministic function of (condition, serial position): half the corpus can never appear at half the serial positions, for any participant, ever
+
+**Fixed.** Confirmed by enumeration exactly as reported: five passages structurally unreachable at every position, and all 100 (condition, position) cells locked to a single passage. The cause was that the passage offset used `(enrolment - 1) mod N_CONDITIONS` — the same quantity as the Williams row — so both rotations advanced together, and the row is recoverable from (condition, position) in a Latin square. No multiplier fixes this; the shared modulus is the problem. The offset now rotates on `PASSAGE_ROTATION_PERIOD = 13`, coprime to the 10 conditions. All ten passages now reach every position, every (condition, position) cell holds ten distinct passages, and the position x passage counts are exactly uniform at n=130 (26 each) and n=260 (52 each). Four regression tests in tests/counterbalance.test.ts were checked against the reverted code and observed to fail.
+
 
 `src/experiment/counterbalance.ts` line 72 · dimension: ?
 
