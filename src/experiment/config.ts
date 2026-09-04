@@ -142,8 +142,34 @@ const BASE_CONFIG = {
    * Conditions per sitting within ONE illumination block: 10 = the whole block in one sitting,
    * 5 = split into two shorter sittings. The pilot feasibility gate (§3.6) decides which: if the
    * median session runs over 120 min, or withdrawals exceed 1 in 10, or face-presence drops below
-   * 0.90 in more than 10% of runs, each illumination level is split into two sittings of five,
-   * preserving the counterbalancing scheme and the global serial-position record.
+   * 0.90 in more than 10% of runs, each illumination level is split into two sittings of five.
+   *
+   * THE SPLIT PRESERVES SERIAL-POSITION BALANCE BUT NOT CARRYOVER BALANCE. An earlier version of
+   * this comment claimed it preserved "the counterbalancing scheme", and that was false in a
+   * specific and consequential way.
+   *
+   * A split sitting runs positions 0-4, then positions 5-9 days later, so the 4->5 adjacency never
+   * occurs in time. In the Williams square that boundary pair always has condition indices
+   * differing by 5 — and c and c+5 are the SAME COLOUR IN OPPOSITE POLARITY by construction
+   * (0..4 = P1..P5, 5..9 = N1..N5). Enumerated over 130 participants x 2 blocks: a single sitting
+   * observes all 90 ordered pairs 26 times each; a 5/5 split observes 80 of them 26 times and the
+   * other ten exactly ZERO times — P1->N1, N1->P1, P2->N2, ... P5->N5, N5->P5. Not degraded,
+   * eliminated, for every participant in the cohort.
+   *
+   * Those ten are precisely the transitions the Williams square is justified by: the polarity
+   * switch at MATCHED HUE, the only adjacency that isolates the light-adaptation transient from a
+   * hue change. Under the split protocol the first-order carryover term cannot be estimated for
+   * them at all.
+   *
+   * The gap is now explicit in the data rather than silent: `predecessor_condition_label` is empty
+   * at a sitting boundary, so the structural missingness is visible to the analyst instead of
+   * being inferred from `conditions_per_session`.
+   *
+   * A FIX EXISTS AND IS NOT APPLIED. Rotating the split point by enrolment (4/6, 5/5, 6/4 as
+   * (enrolment-1) mod 3) restores all 90 pairs at counts 16-26. It is not applied because it makes
+   * sitting length vary per participant, which changes the resume path and the operator's
+   * expectations — a protocol decision, not an implementation detail. Take it before the split
+   * protocol is ever switched on.
    */
   CONDITIONS_PER_SESSION_DEFAULT: 10,
 

@@ -85,6 +85,8 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
     description: 'Grey-field adaptation that preceded this condition. Doubled on a polarity switch, so it is collinear with polarity_switched — include one or the other, not both.' },
   { column: 'polarity_switched', role: 'covariate', unit: 'boolean', missing: 'first condition of the sitting',
     description: 'Whether polarity changed from the previous condition. Empty on position 1 because there is no previous condition, which is not the same as false.' },
+  { column: 'predecessor_condition_label', role: 'covariate', unit: '-', missing: 'no condition preceded this one in time',
+    description: 'The condition run immediately before this one. THE CARRYOVER TERM: first-order carryover is modelled by regressing on this. Empty means nothing preceded it — position 1 of a sitting, and therefore also every sitting boundary. Under the split protocol that boundary always falls between two conditions of the SAME COLOUR in OPPOSITE polarity, so those ten transitions are never observed adjacently and their carryover cannot be estimated. Check for structural zeros in the predecessor x condition table before fitting a carryover term.' },
   { column: 'passage_id', role: 'covariate', unit: 'index', missing: 'not recorded',
     description: 'Which reading passage. Decoupled from condition, so passage can carry its own random intercept and is not confounded with the display factors.' },
   { column: 'passage_repeat_number', role: 'qc', unit: 'count', missing: 'condition record absent',

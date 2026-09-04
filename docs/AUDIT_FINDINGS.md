@@ -46,7 +46,13 @@ Commits `6c83892` and `bddc493`. Each was verified by hand against the code firs
 Not yet acted on, and not yet verified. Ordered by the severity the auditor assigned.
 
 
-### [critical] Split sittings delete first-order carryover balance for exactly the ten same-colour polarity-switch adjacencies, while the code and synopsis both claim the split preserves the counterbalancing scheme
+### [PARTLY FIXED — one decision outstanding] [critical] Split sittings delete first-order carryover balance for exactly the ten same-colour polarity-switch adjacencies, while the code and synopsis both claim the split preserves the counterbalancing scheme
+
+**Confirmed by enumeration.** Over 130 participants x 2 blocks a single sitting observes all 90 ordered condition pairs exactly 26 times each; a 5/5 split observes 80 of them 26 times and the other ten exactly ZERO times — P1->N1, N1->P1, ... P5->N5, N5->P5. All ten are same-colour polarity switches, the adjacency the Williams square is justified by.
+
+**Done:** the false claim in config.ts is corrected and now states exactly what the split does and does not preserve. `predecessor_condition_label` is exported on the analysis dataset (empty at a sitting boundary), so the structural missingness is visible rather than inferred from `conditions_per_session`; its codebook entry tells the analyst to check for structural zeros before fitting a carryover term.
+
+**Outstanding decision:** rotating the split point by enrolment — 4/6, 5/5, 6/4 as (enrolment-1) mod 3 — restores all 90 pairs at counts 16-26. Not applied: it makes sitting length vary per participant, which changes the resume path and the operator's expectations. That is a protocol decision. It must be taken BEFORE the split protocol is ever switched on; the default remains 10 conditions per sitting, under which carryover balance is intact.
 
 `src/experiment/config.ts` line 84 · dimension: ?
 

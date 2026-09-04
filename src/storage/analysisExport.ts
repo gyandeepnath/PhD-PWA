@@ -50,6 +50,7 @@ export const ANALYSIS_LONG_COLUMNS = [
   // --- position and order, which carry fatigue and practice -------------------------------
   'session_position', 'global_position', 'position_c',
   'illumination_block', 'illumination_order_first', 'adaptation_ms_before', 'polarity_switched',
+  'predecessor_condition_label',
   'passage_id', 'passage_repeat_number',
   // --- primary outcome, as counts and as a proportion -------------------------------------
   'n_incomplete', 'n_blinks_total', 'incomplete_blink_ratio',
@@ -176,6 +177,18 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         // Adaptation was doubled on a polarity switch, so this is a covariate for any ocular
         // outcome. Derived once here rather than re-derived differently in each analysis.
         polarity_switched: prev ? prev.polarity !== sum.polarity : null,
+        /*
+         * The condition that immediately preceded this one IN TIME, or empty when nothing did.
+         *
+         * Empty marks a real discontinuity, and under the split protocol that discontinuity is
+         * structural rather than incidental: a 5/5 split runs positions 0-4, then 5-9 days later,
+         * so the 4->5 adjacency never occurs. In the Williams square that boundary pair always
+         * differs by 5 in condition index, and c and c+5 are the same colour in opposite polarity
+         * — so the split eliminates all ten same-colour polarity switches from the carryover
+         * matrix, in every participant. This column is what makes that visible in the data instead
+         * of leaving it to be inferred from conditions_per_session.
+         */
+        predecessor_condition_label: prev ? prev.condition_label : null,
         passage_id: sum.passage_id,
         passage_repeat_number: c?.passage_repeat_number ?? null,
 
