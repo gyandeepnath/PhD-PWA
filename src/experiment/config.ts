@@ -177,8 +177,14 @@ const BASE_CONFIG = {
 
   /**
    * Length of one retained reading-video segment for the manual blink-annotation sub-study.
-   * The synopsis specifies two 3-minute segments per participant in the validation subsample, one
-   * per illumination level — so one segment per session at 3 minutes.
+   *
+   * The synopsis specifies two 3-minute segments per participant in the validation subsample. That
+   * used to be one per ILLUMINATION LEVEL, which meant one segment per session; with a single level
+   * and a single sitting, sampling that way would have HALVED the annotated volume to about 60
+   * minutes and 600-750 blink events, and the kappa >= 0.60 acceptability criterion is set against
+   * the larger figure. The two segments are therefore now one per POLARITY, taken within the one
+   * sitting: the total is preserved, and the classifier is validated across the factor that most
+   * changes what the camera sees. Synopsis section 3.5.
    */
   ANNOTATION_SEGMENT_MS: 180000,
 
