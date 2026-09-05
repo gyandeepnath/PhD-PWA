@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { assessStorageHealth, type StorageHealth } from '@/storage/storageHealth';
 import { CONFIG } from '@/experiment/config';
-import { ILLUMINATION, luxInRange, type IlluminationLevel } from '@/experiment/illumination';
+import { ILLUMINATION, luxInRange, type IlluminationLevel, N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 import type { MediaConsent } from '@/storage/media';
 import { WavyBackground } from '@/components/WavyBackground';
 import { now } from '@/lib/timing';
@@ -105,19 +105,22 @@ export function SessionInit({
           {assigned && spec && (
             <div style={{ border: '1px solid #d8d4cc', borderRadius: 10, padding: '14px 16px', background: '#fbf9f5' }}>
               <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">
-                Assigned illumination — block {assigned.block + 1} of 2
+                {N_ILLUMINATION_BLOCKS > 1
+                  ? `Assigned illumination — block ${assigned.block + 1} of ${N_ILLUMINATION_BLOCKS}`
+                  : 'Room illumination — single level for the whole study'}
               </p>
               <p className="mt-1 font-serif text-2xl">{spec.label}</p>
               <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: 4 }}>{spec.description}</p>
               <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: 6 }}>
                 Set the room to <strong>{spec.target} lux</strong> (accept {spec.min}–{spec.max}) before measuring.
-                Order for this participant: {ILLUMINATION[assigned.orderFirst].label} first — assigned by
-                counterbalancing, not chosen.
+                {N_ILLUMINATION_BLOCKS > 1
+                  ? ` Order for this participant: ${ILLUMINATION[assigned.orderFirst].label} first — assigned by counterbalancing, not chosen.`
+                  : ' The same level is used for every participant and every sitting.'}
               </p>
             </div>
           )}
           <Field label={`Measured illuminance at the eye (lux) — ${spec ? `target ${spec.target}, accept ${spec.min}–${spec.max}` : 'measure with a lux meter'}`}>
-            <input data-testid="lux" className="vl-input" inputMode="numeric" value={lux} onChange={(e) => setLux(e.target.value)} placeholder={spec ? String(spec.target) : '150'} />
+            <input data-testid="lux" className="vl-input" inputMode="numeric" value={lux} onChange={(e) => setLux(e.target.value)} placeholder={spec ? String(spec.target) : String(ILLUMINATION.moderate.target)} />
           </Field>
           {luxEntered && spec && !inRange && (
             <Field label={`⚠ ${luxNum} lux is outside ${spec.min}–${spec.max}. Adjust the room, or record why you are proceeding (≥3 chars).`}>
@@ -635,10 +638,27 @@ export function Consent({
       <div style={{ position: 'relative', zIndex: 1, width: '100%', margin: '0 auto', maxWidth: 640 }}>
         <h1 className="font-serif text-4xl font-light">Informed consent</h1>
         <div className="scrollable mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]" style={{ maxHeight: '38vh', paddingRight: 8 }}>
-          <p>You are invited to take part in a study on visual ergonomics — how display polarity,
-            text colour and room lighting affect reading, attention and eye comfort. Each session
-            takes roughly 75–120 minutes and involves reading passages, short attention tasks and
-            brief questionnaires. You will be asked to attend twice, 48–72 hours apart.</p>
+          {/*
+            * PARTICIPANT-FACING CONSENT TEXT. Two statements here became FALSE when the dim
+            * illumination level was withdrawn, and both were material:
+            *
+            *   - it named room lighting as something the study varies. It no longer does; the room
+            *     is held constant at 300 lux.
+            *   - it told the participant to attend TWICE, 48-72 hours apart. There is one visit.
+            *
+            * Misstating a participant's time commitment is a defect in the consent process, not a
+            * wording nit, so it is corrected here rather than left for the amendment. The split
+            * option is a live operator control, so the second visit is described as a possibility
+            * rather than dropped outright.
+            *
+            * THIS REVISED WORDING STILL REQUIRES IEC APPROVAL. Changing it in code does not amend
+            * the approved consent document — see docs/ILLUMINATION_AMENDMENT.md, section 6.
+          */}
+          <p>You are invited to take part in a study on visual ergonomics — how display polarity
+            and text colour affect reading, attention and eye comfort. The session takes roughly
+            75–120 minutes and involves reading passages, short attention tasks and brief
+            questionnaires. It is normally a single visit; if it suits you better it can be split
+            across two shorter visits, which the researcher will arrange with you.</p>
           <p style={{ marginTop: 12 }}><strong>Data:</strong> responses are stored on this device
             under a participant code, not your name. You may stop at any time without penalty; tell
             the researcher to withdraw and your data for this session can be deleted.</p>

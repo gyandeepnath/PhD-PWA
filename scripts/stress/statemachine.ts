@@ -9,7 +9,7 @@
  */
 import { initialState, nextState, progressPercent, shouldBreakAfter, TOTAL_TRACKED_STEPS } from '../../src/experiment/stateMachine';
 import { conditionOrderFor, blockPlan, passageForCondition } from '../../src/experiment/counterbalance';
-import { illuminationOrderFor, illuminationForBlock, N_ILLUMINATION_BLOCKS } from '../../src/experiment/illumination';
+import { illuminationOrderFor, illuminationForBlock, crossoverOrderFor, N_ILLUMINATION_BLOCKS } from '../../src/experiment/illumination';
 import { N_CONDITIONS } from '../../src/experiment/conditions';
 import { N_PASSAGES } from '../../src/experiment/passages';
 import { put, get, getAll, nextEnrolmentNumber, peekNextEnrolmentNumber, _resetForTests } from '../../src/storage/db';
@@ -117,12 +117,39 @@ for (let e = 1; e <= COHORT; e++) {
     check(`enrol ${e} block ${b} level matches its order`, illuminationForBlock(e, b) === order[b]);
   }
 }
-check(`illumination order splits evenly over ${COHORT}`, Math.abs(dimFirst - COHORT / 2) <= 1, `dim-first = ${dimFirst}`);
+/*
+ * The counterbalancing checks belong to the TWO-LEVEL protocol, which is dormant.
+ *
+ * Asserted through crossoverOrderFor directly rather than illuminationOrderFor, which now
+ * short-circuits. Left as-is they did two bad things at once: the even-split check FAILED outright
+ * (dim-first = 0 against an expected 65), and because `npm run stress` chains its harnesses with
+ * `&&`, that failure aborted the suite so metamorphic, recovery and components never ran at all.
+ * Meanwhile the orthogonality check passed VACUOUSLY — `s.size !== 1` is false for a single-element
+ * set — so its label claimed a property it had stopped testing.
+ */
+let dimFirstCB = 0;
+const rowOrdersCB = new Map<number, Set<string>>();
+for (let e = 1; e <= COHORT; e++) {
+  const order = crossoverOrderFor(e);
+  if (order[0] === 'dim') dimFirstCB++;
+  const row = (e - 1) % N_CONDITIONS;
+  if (!rowOrdersCB.has(row)) rowOrdersCB.set(row, new Set());
+  rowOrdersCB.get(row)!.add(order[0]);
+}
+check(`[dormant] illumination order splits evenly over ${COHORT}`,
+  Math.abs(dimFirstCB - COHORT / 2) <= 1, `dim-first = ${dimFirstCB}`);
 let orthogonal = true;
-for (const s of rowOrders.values()) if (s.size !== N_ILLUMINATION_BLOCKS) orthogonal = false;
-check('every Williams row meets both illumination orders', orthogonal);
+for (const s of rowOrdersCB.values()) if (s.size !== 2) orthogonal = false;
+check('[dormant] every Williams row meets both illumination orders', orthogonal);
 
-// a participant must never read the same passage under the same condition twice
+// And the live protocol: one level, so there is exactly one order and it is not counterbalanced.
+check('live protocol assigns a single illumination level',
+  N_ILLUMINATION_BLOCKS === 1 && dimFirst === 0, `blocks=${N_ILLUMINATION_BLOCKS} dimFirst=${dimFirst}`);
+
+// [dormant] Across two blocks a participant must never re-read the same passage under the same
+// condition. Under the single-block protocol each passage is read exactly ONCE, so this property is
+// vacuously satisfied by the live design; it is kept against blockPlan's second block so that the
+// guarantee still holds if the second illumination level is restored.
 for (let e = 1; e <= 40; e++) {
   const a = blockPlan(e, 0);
   const b = blockPlan(e, 1);

@@ -37,9 +37,9 @@ import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { N_CONDITIONS } from '@/experiment/conditions';
 import { PASSAGES } from '@/experiment/passages';
 import { ANALYSIS_CODEBOOK } from './analysisCodebook';
-import { N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
+import { N_ILLUMINATION_BLOCKS, specFor } from '@/experiment/illumination';
 
-/** The two levels of the whole-plot illumination factor. Total condition-runs is N x this. */
+/** Illumination blocks a participant completes — ONE under the current protocol. Runs = N x this. */
 // Derived, never a literal: this used to be a hard-coded 2, which would have silently survived the
 // switch to a single-level protocol and told every analyst the dataset held a crossover it does not.
 const ILLUMINATION_LEVELS = N_ILLUMINATION_BLOCKS;
@@ -176,8 +176,17 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         row_id: `${s.participant_id}|${s.session_id}|${sum.condition_id}`,
 
         illumination: s.ambient_illumination_level,
-        illumination_lux_target: s.ambient_illumination_level === 'dim' ? 10
-          : s.ambient_illumination_level === 'moderate' ? 150 : null,
+        /*
+         * Read from the level's own spec, never a literal.
+         *
+         * These were hard-coded 10 and 150. When the protocol retargeted 'moderate' to 300 lux the
+         * literal stayed, so every row of the study exported a nominal target of 150 beside a
+         * measured 300 — and the codebook entry for this column tells the analyst to compare the
+         * two to check the manipulation held. It would have read as a total failure of the
+         * manipulation on every session. The rule this line broke is stated 130 lines above it:
+         * derived, never a literal.
+         */
+        illumination_lux_target: specFor(s.ambient_illumination_level)?.target ?? null,
         polarity: sum.polarity,
         text_colour: sum.color_name,
         condition_label: sum.condition_label,
@@ -386,6 +395,7 @@ export function buildAnalysisDataset(
     return {
       conditionsPerParticipant: total,
       sittingsPerParticipant: Math.max(1, Math.round(total / cps)),
+      illuminationLevels: N_ILLUMINATION_BLOCKS,
     };
   })();
 

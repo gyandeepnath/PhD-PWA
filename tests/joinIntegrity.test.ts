@@ -11,7 +11,19 @@ import { checkJoin } from '@/storage/joinIntegrity';
 import type { SessionBundle } from '@/storage/gather';
 import { ANALYSIS_CODEBOOK } from '@/storage/analysisCodebook';
 
-const EXPECT = { conditionsPerParticipant: 20, sittingsPerParticipant: 2 };
+/*
+ * The TWO-LEVEL expectation, retained alongside the dormant crossover machinery. The study now runs
+ * a single illumination level and one sitting; these cases keep the crossover checks proven so that
+ * restoring the second level restores something known to work. Current-protocol coverage — one
+ * sitting of ten, and the split — is in the describe at the foot of this file, and was ABSENT: the
+ * split case shipped marking every participant unanalysable and no test noticed.
+ */
+const EXPECT = { conditionsPerParticipant: 20, sittingsPerParticipant: 2, illuminationLevels: 2 };
+
+/** What checkJoin is actually handed under the protocol this build runs. */
+const NOW = { conditionsPerParticipant: 10, sittingsPerParticipant: 1, illuminationLevels: 1 };
+/** ...and when the ten conditions are split across two sittings for scheduling. */
+const SPLIT = { conditionsPerParticipant: 10, sittingsPerParticipant: 2, illuminationLevels: 1 };
 
 /** A minimal bundle: only the fields the join check reads. */
 function bundle(opts: {
@@ -233,5 +245,42 @@ describe('a withdrawal is honoured by the exporter itself, not just by its calle
     (a.session as unknown as Record<string, unknown>).withdrawn_at = Date.now();
     const r = checkJoin([a, b, ...complete('P13', 2)], EXPECT);
     expect(r.participants.find((p) => p.participant_id === 'P13')!.analysable).toBe(true);
+  });
+});
+
+describe('the protocol this build actually runs', () => {
+  const ten = (i: number) => Array.from({ length: 10 }, (_, k) => `c${k}`).slice(i, i + 10);
+
+  it('accepts one sitting of ten conditions with no issues', () => {
+    const r = checkJoin([bundle({
+      pid: 'P1', sid: 's1', start: 1, illumination: 'moderate', conditions: ten(0),
+    })], NOW);
+    expect(r.participants[0].excluded_by).toEqual([]);
+    expect(r.analysable_participants).toBe(1);
+  });
+
+  it('accepts a SPLIT sitting where both halves are the same level, which is by design', () => {
+    /*
+     * The regression this exists for. Under one illumination level both halves of a split are
+     * 'moderate' necessarily, which tripped illumination_not_crossed and marked every split
+     * participant unanalysable with a reason that had become false. The split is a live operator
+     * control with its own end-to-end spec, so this was reachable, not theoretical.
+     */
+    const r = checkJoin([
+      bundle({ pid: 'P2', sid: 'a', start: 1, illumination: 'moderate', conditions: ['c0', 'c1', 'c2', 'c3', 'c4'] }),
+      bundle({ pid: 'P2', sid: 'b', start: 2, illumination: 'moderate', conditions: ['c5', 'c6', 'c7', 'c8', 'c9'] }),
+    ], SPLIT);
+    expect(r.participants[0].excluded_by).not.toContain('illumination_not_crossed');
+    expect(r.participants[0].excluded_by).toEqual([]);
+  });
+
+  it('reports a missing half of a split WITHOUT invoking a crossover that does not exist', () => {
+    const r = checkJoin([
+      bundle({ pid: 'P3', sid: 'a', start: 1, illumination: 'moderate', conditions: ['c0', 'c1', 'c2', 'c3', 'c4'] }),
+    ], SPLIT);
+    expect(r.participants[0].excluded_by).toContain('incomplete_split_sitting');
+    expect(r.participants[0].excluded_by).not.toContain('incomplete_crossover');
+    const f = r.issues.find((x) => x.code === 'incomplete_split_sitting')!;
+    expect(f.detail).toMatch(/Illumination is not involved/i);
   });
 });

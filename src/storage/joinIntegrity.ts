@@ -17,6 +17,7 @@
  * which are not, and why.
  */
 import type { SessionBundle } from './gather';
+import { N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 import type { IlluminationLevel } from '@/experiment/illumination';
 
 /** One problem found while checking whether the sessions can be pooled. */
@@ -63,6 +64,15 @@ export interface JoinIntegrity {
 export interface JoinExpectation {
   conditionsPerParticipant: number;
   sittingsPerParticipant: number;
+  /**
+   * Illumination levels the data was collected under. Defaults to this build's count.
+   *
+   * Passed in rather than read from the module constant so that a pooled file containing EARLIER
+   * two-level data is still checked as a crossover, and so the crossover checks stay reachable
+   * under test while the protocol runs a single level. A dormant check whose tests were deleted
+   * with its caller is not recoverable, only present.
+   */
+  illuminationLevels?: number;
 }
 
 export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): JoinIntegrity {
@@ -123,14 +133,33 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
     }
 
     const levels = ordered.map((b) => b.session.ambient_illumination_level ?? null);
+    // How many illumination levels this data was collected under; see JoinExpectation.
+    const nLevels = expect.illuminationLevels ?? N_ILLUMINATION_BLOCKS;
     const runs = ordered.reduce((n, b) => n + b.conditions.length, 0);
 
     // --- sitting count -------------------------------------------------------------------
     if (ordered.length < expect.sittingsPerParticipant) {
-      add('blocking', 'incomplete_crossover',
-        `Only ${ordered.length} of ${expect.sittingsPerParticipant} sittings present. The illumination factor is `
-        + 'between-sittings, so a participant with one sitting contributes no within-participant '
-        + 'illumination contrast and cannot enter the crossover analysis as a complete case.');
+      /*
+       * Two different shortfalls, and they must not share a message.
+       *
+       * Under the two-level protocol a missing sitting meant a missing illumination level, and the
+       * text said so. Under the single-level protocol the only reason for more than one sitting is
+       * that the ten conditions were SPLIT for scheduling, so a missing sitting is a missing half
+       * of one block — nothing to do with illumination. The crossover wording was being emitted
+       * verbatim for the split case, where every clause of it is false.
+       */
+      if (nLevels > 1) {
+        add('blocking', 'incomplete_crossover',
+          `Only ${ordered.length} of ${expect.sittingsPerParticipant} sittings present. The illumination factor is `
+          + 'between-sittings, so a participant with one sitting contributes no within-participant '
+          + 'illumination contrast and cannot enter the crossover analysis as a complete case.');
+      } else {
+        add('blocking', 'incomplete_split_sitting',
+          `Only ${ordered.length} of ${expect.sittingsPerParticipant} sittings present. The ten conditions were `
+          + 'split across sittings for scheduling and at least one half is missing, so this '
+          + 'participant has an incomplete condition set. Illumination is not involved: it is a '
+          + 'single level throughout.');
+      }
     } else if (ordered.length > expect.sittingsPerParticipant) {
       add('blocking', 'too_many_sittings',
         `${ordered.length} sittings found where ${expect.sittingsPerParticipant} were expected. This is either a `
@@ -144,7 +173,14 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
       add('blocking', 'illumination_level_missing',
         'At least one sitting has no assigned illumination level, so it cannot be placed on the '
         + 'whole-plot factor.');
-    } else if (ordered.length === expect.sittingsPerParticipant && new Set(known).size !== known.length) {
+    } else if (nLevels > 1
+               && ordered.length === expect.sittingsPerParticipant
+               && new Set(known).size !== known.length) {
+      /*
+       * Only meaningful while illumination has more than one level. Under the single-level protocol
+       * a split participant has two sittings that are BOTH 'moderate' by design, which tripped this
+       * check and marked every one of them unanalysable — with a reason that had become false.
+       */
       add('blocking', 'illumination_not_crossed',
         `Both sittings ran under ${known[0]}. Illumination is the session-level independent variable; `
         + 'with only one of its levels this participant carries no illumination contrast at all, and '
