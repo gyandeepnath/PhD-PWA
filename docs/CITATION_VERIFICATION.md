@@ -155,15 +155,190 @@ verified; **the multi-session structure is the part being used as precedent, and
 part still unverified.** Do not cite it for that until the full text is in hand. It is the single
 highest-priority item to obtain.
 
+### 8. Buchner & Baumgartner (2007) — the citation the single-level protocol rests on
+**Status: CONFIRMED.** PMID 17510822 · DOI [10.1080/00140130701306413](https://doi.org/10.1080/00140130701306413)
+
+> Buchner, A., & Baumgartner, N. (2007). Text–background polarity affects performance irrespective
+> of ambient illumination and colour contrast. *Ergonomics, 50*(7), 1036–1063.
+
+Verified against PubMed: journal, volume, issue, pages and both authors match. Verbatim from the
+abstract:
+
+- *"In a series of experiments, proofreading performance was consistently better with positive
+  polarity (dark text on light background) than with negative polarity displays."*
+- *"This positive polarity advantage was **independent of ambient lighting (darkness vs. typical
+  office illumination)** and of chromaticity (black and white vs. blue and yellow)."*
+- *"A final experiment showed that colour contrast (red text on green background) could not
+  compensate for a lack of luminance contrast."*
+- *"Physiological measures of effort and strain … and self-reported mood, fatigue, arousal,
+  eyestrain, headache, muscle strain and back pain did not vary as a function of any of the
+  independent variables."*
+
+**What this licenses.** The claim that the polarity effect *on performance measures* does not depend
+on ambient illumination, and therefore that estimating it at a single ambient level does not
+sacrifice a documented interaction. It is the primary published justification for withdrawing the
+second illumination level.
+
+**Two cautions that must travel with it.** First, its outcome is proofreading performance, not blink
+behaviour or tear film — it licenses nothing about the ocular outcomes. Second, its own null on
+self-reported eyestrain and fatigue is a caution for this study's subjective measures, not support
+for them.
+
+### 9. Piepenbrock, Mayr & Buchner and the display-luminance account
+**Status: CONFIRMED (four records).**
+
+> Buchner, A., Mayr, S., & Brandt, M. (2009). The advantage of positive text–background polarity is
+> due to high display luminance. *Ergonomics, 52*(7), 882–886.
+> PMID 19562598 · DOI [10.1080/00140130802641635](https://doi.org/10.1080/00140130802641635)
+
+> Piepenbrock, C., Mayr, S., Mund, I., & Buchner, A. (2013). Positive display polarity is
+> advantageous for both younger and older adults. *Ergonomics, 56*(7), 1116–1124.
+> PMID 23654206 · DOI [10.1080/00140139.2013.790485](https://doi.org/10.1080/00140139.2013.790485)
+
+> Piepenbrock, C., Mayr, S., & Buchner, A. (2014). Smaller pupil size and better proofreading
+> performance with positive than with negative polarity displays. *Ergonomics, 57*(11), 1670–1677.
+> PMID 25135324 · DOI [10.1080/00140139.2014.948496](https://doi.org/10.1080/00140139.2014.948496)
+
+> Piepenbrock, C., Mayr, S., & Buchner, A. (2014). Positive display polarity is particularly
+> advantageous for small character sizes: implications for display design. *Human Factors, 56*(5),
+> 942–951. PMID 25141597 · DOI [10.1177/0018720813515509](https://doi.org/10.1177/0018720813515509)
+
+**A finding this project must not ignore.** Buchner et al. (2009) state verbatim: *"No positive
+polarity advantage was observed when overall display luminance of positive and negative polarity
+displays was equivalent … This suggests that the positive polarity advantage is in fact due to the
+typically higher luminance of positive polarity displays."*
+
+This build holds display *white* luminance constant across polarities, which means mean screen
+luminance is far higher in the positive conditions — by construction. That is the standard
+operationalisation of polarity and it is what makes the manipulation ecologically real, but under
+Buchner et al. (2009) the effect this study measures is a **luminance** effect as much as a polarity
+effect. It must be described that way in the write-up rather than as a pure polarity effect.
+
+### 10. Sethi & Ziat (2023) — the interaction this design gives up
+**Status: CONFIRMED.** PMID 36533999 · DOI [10.1080/00140139.2022.2160879](https://doi.org/10.1080/00140139.2022.2160879)
+
+> Sethi, T., & Ziat, M. (2023). Dark mode vogue: Do light-on-dark displays have measurable benefits
+> to users? *Ergonomics, 66*(12), 1814–1828.
+
+Abstract confirms: younger and older adults, positive and negative polarity, **bright and dim
+environments**, writing and search tasks. Verbatim: *"Eye-tracking results showed higher cognitive
+load using negative polarity, reflected in increased search time and pupil diameter for older adults
+in a bright environment and **younger adults in a dim environment**."*
+
+**Why this is recorded as a cost, not as support.** This study's sample is young adults. Sethi & Ziat
+located the negative-polarity cognitive-load effect for that age group specifically in the DIM
+environment — the condition being withdrawn. A single-level protocol at 300 lux cannot address it,
+and the limitation belongs in the write-up.
+
+### 11. Fan, Xie, Dong & Wang (2024) — the closest structural analogue, now resolved
+**Status: CONFIRMED.** PMID 38894307 · DOI [10.3390/s24113516](https://doi.org/10.3390/s24113516)
+
+> Fan, Q., Xie, J., Dong, Z., & Wang, Y. (2024). The effect of ambient illumination and text color on
+> visual fatigue under negative polarity. *Sensors, 24*(11), 3516.
+
+Previously listed as UNRESOLVED. Abstract confirms text colour and ambient illumination crossed
+under negative polarity, with pupil accommodation and blink rate measured by eye tracker. Verbatim:
+*"text color significantly affects visual fatigue, with red text causing the highest level of visual
+fatigue and yellow text causing the lowest"*; *"Improvements in ambient lighting reduce visual
+fatigue, but the degree of improvement varies depending on the text color."*
+
+That last clause is an **ambient × text-colour interaction**, and this design can no longer estimate
+it. Recorded here so the loss is explicit rather than discovered by a reviewer.
+
+### 12. Li, Huang, Li, Ma, Zhang & Li (2022)
+**Status: CONFIRMED.** PMID 34856871 · DOI [10.1080/00140139.2021.2013546](https://doi.org/10.1080/00140139.2021.2013546)
+
+> Li, Y., Huang, Y., Li, X., Ma, J., Zhang, J., & Li, J. (2022). The influence of brightness
+> combinations and background colour on legibility and subjective preference under negative
+> polarity. *Ergonomics, 65*(8), 1046–1056.
+
+Abstract confirms: *"higher brightness contrasts led to better legibility; different background
+colours with identical brightness and saturation did not cause significant differences."* Supports
+carrying luminance contrast as a covariate on the colour factor, which this build already does
+(`wcag_contrast_ratio`).
+
+### 13. Luzsa & Mayr (2025), Mayr & Buchner (2010), Dobres et al. (2016)
+**Status: CONFIRMED (three records).** Supporting polarity literature; none is load-bearing here.
+
+> Luzsa, R., & Mayr, S. (2025). The polarity effect in virtual and video see-through mixed
+> reality — better proofreading performance and faster optotype identification with positive display
+> polarity. *Ergonomics, 69*(2), 221–235.
+> PMID 39918051 · DOI [10.1080/00140139.2025.2457470](https://doi.org/10.1080/00140139.2025.2457470)
+
+> Mayr, S., & Buchner, A. (2010). After-effects of TFT-LCD display polarity and display colour on the
+> detection of low-contrast objects. *Ergonomics, 53*(7), 914–925.
+> PMID 20582772 · DOI [10.1080/00140139.2010.484508](https://doi.org/10.1080/00140139.2010.484508)
+
+> Dobres, J., Chahine, N., Reimer, B., Gould, D., Mehler, B., & Coughlin, J. F. (2016). Utilising
+> psychophysical techniques to investigate the effects of age, typeface design, size and display
+> polarity on glance legibility. *Ergonomics, 59*(10), 1377–1391.
+> PMID 26727912 · DOI [10.1080/00140139.2015.1137637](https://doi.org/10.1080/00140139.2015.1137637)
+
+### 14. The Lin et al. (2025) correspondence — LOCATED
+**Status: CONFIRMED to exist; CONTENTS NOT READ.**
+
+> Erdinest, N., & Bura, N. (2026). Letter to the Editor concerning: "Effects of ambient illuminance
+> and mobile phone screen brightness on tear film stability, visual fatigue, and blink patterns
+> during reading." *Contact Lens and Anterior Eye, 49*(2), 102618.
+> PMID 41520503 · DOI [10.1016/j.clae.2026.102618](https://doi.org/10.1016/j.clae.2026.102618)
+
+> Reply to Letter to the Editor concerning the same. *Contact Lens and Anterior Eye, 49*(2), 102622.
+> PMID 41775136 · DOI [10.1016/j.clae.2026.102622](https://doi.org/10.1016/j.clae.2026.102622)
+
+Item 6 above flagged these as *"reported … neither has been independently confirmed"* and required
+that they be located before Lin et al. is used. **They are now located and are real.** PubMed carries
+no abstract for either — both are Letters — so their CONTENT is still unread. Lin et al. (2025) is
+cited in this project's illumination rationale, so the correspondence must be obtained and read from
+an unrestricted network before that citation is relied on in the thesis.
+
+### 15. Atuanya et al. (2025) and Azam et al. (2023) — a counter-consideration for 300 lux
+**Status: CONFIRMED (two records).**
+
+> Atuanya, G. N., Okhaifoh, G. I., Bale, B. I., & Ayikoru, C. P. (2025). Effect of illumination on
+> near positive fusional vergence in young adults. *Clinical Optometry, 17*, 297–306.
+> PMID 40969672 · DOI [10.2147/OPTO.S534389](https://doi.org/10.2147/OPTO.S534389)
+
+> Azam, R., Karmakar, S., Mondal, A., & Bhardwaj, G. K. (2023). The effect of illumination on
+> positive fusional vergence. *The British and Irish Orthoptic Journal, 19*(1), 78–84.
+> PMID 37780187 · DOI [10.22599/bioj.296](https://doi.org/10.22599/bioj.296)
+
+Both measured positive fusional vergence at 50, 100 and 150 lux in young adults and both found it
+**significantly lower at higher illumination**. Atuanya et al. conclude verbatim that *"lower-to-
+moderate lighting optimises binocular coordination during near tasks."*
+
+**Recorded as a counter-consideration, not suppressed.** Neither study measured beyond 150 lux, so
+300 lux is outside their range and the extrapolation is not theirs. Positive fusional vergence is
+also not an outcome of this study. But both point the opposite way to the decision to raise ambient
+illumination, and the write-up should say so rather than cite only the supportive literature.
+
+### 16. Lighting standards — EXTERNALLY DISCOVERED, AWAITING VERIFICATION
+**Status: NOT VERIFIED. Do not cite as given.**
+
+The 300 lux target was chosen partly on the basis that guidance for screen work places ambient
+illuminance at roughly 300–500 lux — below the 500–750 lux specified for paper tasks — because a
+display is self-luminous and the screen-to-surround luminance ratio must be controlled. The figures
+were found in secondary sources (lighting-industry technical pages and standards-preview material),
+**not in the standards themselves**. This environment's egress proxy blocks the publisher and
+standards domains, and `www.ncbi.nlm.nih.gov` is also blocked, so none of the following could be
+checked at source:
+
+- **EN 12464-1** — 500 lux maintained illuminance for office reading and writing tasks.
+- **ISO 9241** (Parts 6/7/303) — ambient illuminance for work with visual display terminals, and the
+  treatment of veiling reflections.
+- **IS 3646** — the 300–500 lux figure for Indian offices and classrooms, asserted in
+  `src/experiment/illumination.ts` and never verified.
+
+**These must be checked against the standard texts before any of them appears in the thesis.** Until
+then the 300 lux target is defended on the measured photometry in `illumination.ts` — the level at
+which room illumination dominates the screen's contribution to face illuminance — and not on a
+standards citation.
+
 ---
 
 ## UNRESOLVED — do not cite until checked
 
-- The Letter to the Editor and authors' Reply reported against Lin et al. (2025) — not located.
 - Talens-Estarelles et al. (2022a) and (2022c) — not yet individually resolved. (2022b is confirmed
   above, but its session structure is not.)
-- Fan et al. (2024), *Sensors* — reported as the closest structural analogue (5 text colours,
-  negative polarity, illumination as a day-level factor).
 - Miller (2023/2024), *Behavior Research Methods* — supplied as vol. 56 (2024 volume) dated 2023;
   the pairing needs resolving. Not indexed in PubMed.
 - Huang & Shih (2021), MacDonald et al. (2020), Villa & Labayrade (2014), Kim et al. (2025) — the
@@ -177,9 +352,9 @@ highest-priority item to obtain.
   limitation must be stated wherever they are used.
 - Delgado et al. (2018), Salmerón et al. (2024), Clinton (2019), Oborne & Holton (1988) — reading
   comprehension.
-- Craig & Klein (2019), Lin, C. J. et al. (2008), Buchner & Baumgartner (2007), Luzsa & Mayr (2025),
-  Sethi & Ziat (2023), Muhamad et al. (2023), Huang et al. (2025), Molloy et al. (2012),
-  Jost et al. (2022), Walsh et al. (2022).
+- Craig & Klein (2019), Lin, C. J. et al. (2008), Muhamad et al. (2023), Huang et al. (2025),
+  Molloy et al. (2012), Jost et al. (2022), Walsh et al. (2022).
+  (Buchner & Baumgartner 2007, Luzsa & Mayr 2025 and Sethi & Ziat 2023 are now CONFIRMED above.)
 
 ## EXCLUDED
 

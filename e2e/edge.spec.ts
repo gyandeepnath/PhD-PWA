@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { stageNow, startNewExperiment, driveUntil, dbCounts, click } from './helpers';
+import { stageNow, startNewExperiment, driveUntil, dbCounts, click, validLux } from './helpers';
 
 /** Edge / "unnatural scenario" E2E checks: invalid input gating, double-submit, reload + resume. */
 
@@ -12,8 +12,8 @@ test('SESSION_INIT gates on invalid input', async ({ page }) => {
   await page.getByTestId('pid').fill('P9');
   await page.getByTestId('lux').fill('999999');
   await expect(page.getByRole('button', { name: /Begin setup/ })).toBeDisabled();
-  // Valid → enabled.
-  await page.getByTestId('lux').fill('10');
+  // Valid → enabled. Taken from the assigned level's spec, never a literal: see validLux.
+  await page.getByTestId('lux').fill(await validLux(page));
   await expect(page.getByRole('button', { name: /Begin setup/ })).toBeEnabled();
 });
 
@@ -22,7 +22,7 @@ test('rapid double-click on Begin setup creates only one session', async ({ page
   page.on('pageerror', (e) => errors.push(e.message));
   await startNewExperiment(page);
   await page.getByTestId('pid').fill('DBL01');
-  await page.getByTestId('lux').fill('10');
+  await page.getByTestId('lux').fill(await validLux(page));
   const btn = page.getByRole('button', { name: /Begin setup/ });
   await expect(btn).toBeEnabled();
   // Fire several clicks before the async session-create completes.

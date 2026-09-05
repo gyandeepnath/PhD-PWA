@@ -210,17 +210,40 @@ describe('test-harness and unfinished sittings are identifiable', () => {
 });
 
 describe('the sitting expectation follows the protocol that was run', () => {
-  it('does not mark every split-protocol participant unanalysable', () => {
-    // A fixed expectation of two sittings condemned all four-sitting participants wholesale.
+  it('does not mark a split-protocol participant unanalysable', () => {
+    // A fixed sitting count condemned every split participant wholesale. The expectation is read
+    // from conditions_per_session instead: under the single-level protocol a split runs the ten
+    // conditions as two sittings of five, and that participant is complete.
     const split = [
-      sitting('P05', { sid: 'a', start: 1, illumination: 'dim', block: 0, conditionsPerSession: 5, offset: 0 }),
-      sitting('P05', { sid: 'b', start: 2, illumination: 'dim', block: 0, conditionsPerSession: 5, offset: 5 }),
-      sitting('P05', { sid: 'c', start: 3, illumination: 'moderate', block: 1, conditionsPerSession: 5, offset: 0 }),
-      sitting('P05', { sid: 'd', start: 4, illumination: 'moderate', block: 1, conditionsPerSession: 5, offset: 5 }),
+      sitting('P05', { sid: 'a', start: 1, illumination: 'moderate', block: 0, conditionsPerSession: 5, offset: 0 }),
+      sitting('P05', { sid: 'b', start: 2, illumination: 'moderate', block: 0, conditionsPerSession: 5, offset: 5 }),
     ];
     const { ds } = long(split);
     expect(ds.integrity.participants[0].excluded_by).not.toContain('too_many_sittings');
-    expect(ds.integrity.participants[0].condition_runs).toBe(20);
+    expect(ds.integrity.participants[0].condition_runs).toBe(N_CONDITIONS);
+  });
+
+  it('accepts the whole ten conditions in ONE sitting, which is now the standard protocol', () => {
+    const { ds } = long([
+      sitting('P06', { sid: 'only', start: 1, illumination: 'moderate', block: 0 }),
+    ]);
+    expect(ds.integrity.participants[0].excluded_by).toEqual([]);
+    expect(ds.integrity.participants[0].condition_runs).toBe(N_CONDITIONS);
+  });
+
+  it('FLAGS a participant carrying the withdrawn two-level crossover, rather than pooling them', () => {
+    /*
+     * Any sitting collected before the dim level was withdrawn has twenty condition-runs across two
+     * illumination blocks. That participant did not run this protocol, and pooling them into a
+     * single-level dataset would average two illumination cells into one and call the result a
+     * constant-illumination measurement. It must surface, and it does.
+     */
+    const legacy = [
+      sitting('P07', { sid: 'x', start: 1, illumination: 'dim', block: 0 }),
+      sitting('P07', { sid: 'y', start: 2, illumination: 'moderate', block: 1 }),
+    ];
+    const { ds } = long(legacy);
+    expect(ds.integrity.participants[0].excluded_by.length).toBeGreaterThan(0);
   });
 });
 

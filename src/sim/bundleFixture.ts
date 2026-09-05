@@ -20,7 +20,7 @@ import type { SessionBundle } from '@/storage/gather';
 import { CONDITIONS } from '@/experiment/conditions';
 import { PASSAGES } from '@/experiment/passages';
 import { blockPlan } from '@/experiment/counterbalance';
-import { illuminationForBlock, illuminationOrderFor, summariseLux } from '@/experiment/illumination';
+import { illuminationForBlock, illuminationOrderFor, summariseLux, specFor } from '@/experiment/illumination';
 import { DB_VERSION } from '@/storage/schemaEnums';
 
 export const FIXTURE = {
@@ -153,7 +153,13 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
   const level = illuminationForBlock(enrolment, block);
   const plan = blockPlan(enrolment, block);
   const wanted = opts.luxCheckpoints ?? ['start', 'middle', 'end'];
-  const defaults: Record<'start' | 'middle' | 'end', number> = { start: 152, middle: 148, end: 151 };
+  // Derived from the level's own target rather than hard-coded, so a retarget of the protocol's
+  // illuminance does not silently leave the fixture reading out-of-range values that the export
+  // then flags as a protocol deviation in every test that touches it.
+  const centre = specFor(level)?.target ?? 150;
+  const defaults: Record<'start' | 'middle' | 'end', number> = {
+    start: centre + 2, middle: centre - 2, end: centre + 1,
+  };
   const luxReadings = wanted.map((cp, k) => ({
     checkpoint: cp,
     lux: opts.luxValues?.[cp] ?? defaults[cp],

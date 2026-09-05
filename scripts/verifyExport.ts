@@ -14,7 +14,7 @@ import { buildExportFiles } from '../src/storage/export';
 import { buildFixtureBundle, FIXTURE, readingMs, fatigueMean, ibrFor, rtFor } from '../src/sim/bundleFixture';
 import { CONDITIONS } from '../src/experiment/conditions';
 import { PASSAGES } from '../src/experiment/passages';
-import { summariseLux } from '../src/experiment/illumination';
+import { summariseLux, specFor } from '../src/experiment/illumination';
 
 const QUIET = process.argv.includes('--quiet');
 const SHOW = process.argv.includes('--show') ? process.argv[process.argv.indexOf('--show') + 1] : null;
@@ -134,9 +134,13 @@ eq('screen_white_luminance_cd_m2', sr.screen_white_luminance_cd_m2, S.screen_whi
 eq('schema_version', sr.schema_version, S.provenance.schema_version);
 eq('condition_def_hash', sr.condition_def_hash, S.provenance.condition_def_hash);
 const lx = summariseLux(S.ambient_illumination_level, S.lux_readings);
-eq('lux_start', sr.lux_start, 152);
-eq('lux_middle', sr.lux_middle, 148);
-eq('lux_end', sr.lux_end, 151);
+// Derived from the level's own target, not hard-coded: the fixture centres its readings on the
+// spec, so a retarget of the protocol's illuminance must not fail a verifier that is checking
+// plumbing rather than the number itself.
+const luxCentre = specFor('moderate')!.target;
+eq('lux_start', sr.lux_start, luxCentre + 2);
+eq('lux_middle', sr.lux_middle, luxCentre - 2);
+eq('lux_end', sr.lux_end, luxCentre + 1);
 eq('lux_mean matches summariseLux (rounded for presentation)', sr.lux_mean, Math.round(lx.mean! * 100) / 100);
 eq('lux_max_deviation matches summariseLux', sr.lux_max_deviation, lx.max_deviation);
 eq('lux_logged_all_in_range', sr.lux_logged_all_in_range, S.lux_all_in_range);

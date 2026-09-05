@@ -1,5 +1,13 @@
 # What the timing numbers are, and where each one comes from
 
+> **PROTOCOL AMENDMENT — ambient illumination.** The dim (~10 lux) level has been withdrawn. The
+> study now runs at a SINGLE ambient level of 300 lux (band 250-350), one sitting per participant,
+> ten condition-runs. Everything else — the Williams order, the five text colours, both polarities,
+> CVS-Q, NASA-TLX, reaction time, visual search, comprehension, fatigue and blink measurement — is
+> unchanged. Passages of this document that describe two sittings or a crossover describe the
+> superseded design. See `ILLUMINATION_AMENDMENT.md` for the reasoning, the verified citations and
+> what the change costs.
+
 This document exists to answer one question: *is the per-session estimate inflated?*
 
 The short answer is that it is partly an estimate and mostly not. The minutes divide into three

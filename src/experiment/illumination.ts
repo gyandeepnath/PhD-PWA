@@ -59,15 +59,70 @@ export const ILLUMINATION: Record<IlluminationLevel, IlluminationSpec> = {
   },
   moderate: {
     level: 'moderate',
-    target: 150,
-    min: 130,
-    max: 170,
-    label: 'Moderate (≈150 lux)',
-    description: 'General indoor domestic lighting. Below office/classroom levels (IS 3646).',
+    target: 300,
+    min: 250,
+    max: 350,
+    label: 'Standard indoor (≈300 lux)',
+    description: 'Typical indoor task lighting for screen work. Steady artificial light, daylight excluded.',
   },
 };
 
-export const ILLUMINATION_LEVELS: IlluminationLevel[] = ['dim', 'moderate'];
+/**
+ * THE LEVELS THIS BUILD ACTUALLY RUNS.
+ *
+ * The study now runs at a SINGLE ambient level. The `dim` spec above is deliberately kept in the
+ * table rather than deleted, for two reasons: any session already recorded under it still resolves
+ * through `specFor()` instead of becoming unreadable, and restoring the crossover is a one-line
+ * change to this array rather than a re-derivation of the design.
+ *
+ * WHY THE DIM LEVEL WAS WITHDRAWN — the measurement, not the science.
+ *
+ * The ocular outcomes are derived from the tablet's front camera, and in a dark room the SCREEN is
+ * the dominant thing lighting the participant's face. Computed from this build's own locked
+ * condition table (backgrounds #FFFFFF and #000000, panel at the protocol's 50-60 cm): a
+ * positive-polarity condition casts about 14.6 lux on the face and a negative-polarity one about
+ * 0.49 lux — a factor of thirty from the stimulus alone. Against a 10 lux room that leaves the face
+ * at 24.6 vs 10.5 lux, a ratio of 2.35; against a 300 lux room it is 314.6 vs 300.5, a ratio of
+ * 1.05. (Robust to the assumptions: 2.25-2.43 across ink coverage 5-12% and panel contrast
+ * 800-2000:1.)
+ *
+ * So at 10 lux, how well the camera can see the face is confounded with POLARITY — the primary
+ * independent variable. That is not a noise problem, it is a validity problem, and it points the
+ * wrong way: undersampling biases the measured minimum EAR upward and therefore INFLATES the
+ * incomplete-blink ratio (see src/tracking/blink.ts). Simulated against this build's own classifier
+ * thresholds, a positive-polarity block at 30 fps against a negative-polarity block at 15 fps
+ * produces a spurious polarity difference of +0.028 in the primary outcome with no real effect
+ * present at all — in the same direction the hypothesis predicts.
+ *
+ * WHY ONE LEVEL IS DEFENSIBLE — the literature.
+ *
+ * Buchner & Baumgartner (2007), Ergonomics 50(7):1036-63, doi:10.1080/00140130701306413, is titled
+ * "Text-background polarity affects performance irrespective of ambient illumination and colour
+ * contrast" and reports the positive-polarity advantage as "independent of ambient lighting
+ * (darkness vs. typical office illumination)". The performance side of this design therefore loses
+ * nothing by being measured at one level.
+ *
+ * What DOES appear to depend on ambient level is the ocular-surface and blink side — Lin et al.
+ * (2025), doi:10.1016/j.clae.2025.102515, found the largest tear-film effects in a dark room with a
+ * bright screen, and Fan et al. (2024), doi:10.3390/s24113516, report an ambient x text-colour
+ * interaction on visual fatigue under negative polarity. Those are precisely the outcomes this
+ * instrument cannot measure trustworthily in a dark room. The level being withdrawn is the level at
+ * which the camera would have produced its least reliable data on exactly the outcomes that needed
+ * it.
+ *
+ * WHAT IS GIVEN UP, stated plainly so it reaches the write-up: the polarity x illumination
+ * interaction is no longer estimable, and Sethi & Ziat (2023), doi:10.1080/00140139.2022.2160879,
+ * found higher cognitive load under negative polarity for YOUNGER adults specifically in a DIM
+ * environment — i.e. in the condition being removed. This design cannot speak to that.
+ *
+ * WHY 300 LUX. ISO 9241-referenced guidance for screen work puts the ambient range at 300-500 lux,
+ * below the 500-750 lux for paper tasks, because a display is self-luminous and the screen-to-
+ * surround luminance ratio has to be controlled. 300 is the bottom of that range: bright enough
+ * that the room dominates the face illumination (collapsing the polarity confound to 1.05) and low
+ * enough that the display is not washed out. The accepted band is 250-350 lux; a sitting outside it
+ * is flagged as a protocol deviation exactly as before.
+ */
+export const ILLUMINATION_LEVELS: IlluminationLevel[] = ['moderate'];
 
 /** Number of illumination blocks each participant completes (the whole-plot factor levels). */
 export const N_ILLUMINATION_BLOCKS = ILLUMINATION_LEVELS.length;
@@ -97,6 +152,22 @@ export const N_ILLUMINATION_BLOCKS = ILLUMINATION_LEVELS.length;
  * balance into the thesis. Recruiting 140 rather than 130 for analysis would close it exactly.
  */
 export function illuminationOrderFor(enrolmentNumber: number): IlluminationLevel[] {
+  // Single-level protocol: there is no order to counterbalance. The crossover rule is not deleted,
+  // only unreached — restoring the crossover is a change to ILLUMINATION_LEVELS and nothing else.
+  if (ILLUMINATION_LEVELS.length < 2) return [...ILLUMINATION_LEVELS];
+  return crossoverOrderFor(enrolmentNumber);
+}
+
+/**
+ * The two-level counterbalancing rule, kept as its own function so that it stays under test while
+ * it is dormant.
+ *
+ * A switched-off mechanism whose tests were deleted along with its caller is not recoverable — it
+ * is merely present. `tests/counterbalance.test.ts` exercises this directly, so the balance
+ * properties documented above are still proven, and flipping ILLUMINATION_LEVELS back restores a
+ * rule that is known to work rather than one that has been unverified for however long.
+ */
+export function crossoverOrderFor(enrolmentNumber: number): IlluminationLevel[] {
   const n = Number.isFinite(enrolmentNumber) ? Math.floor(enrolmentNumber) : 1;
   const i = Math.max(0, n - 1);
   const dimFirst = ((i % 2) + Math.floor(i / WILLIAMS_CYCLE)) % 2 === 0;

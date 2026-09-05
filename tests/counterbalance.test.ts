@@ -10,7 +10,10 @@ import {
 } from '@/experiment/counterbalance';
 import { N_CONDITIONS } from '@/experiment/conditions';
 import { N_PASSAGES } from '@/experiment/passages';
-import { illuminationOrderFor, illuminationForBlock, N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
+import {
+  illuminationOrderFor, illuminationForBlock, crossoverOrderFor,
+  N_ILLUMINATION_BLOCKS, ILLUMINATION_LEVELS, specFor,
+} from '@/experiment/illumination';
 
 const N = N_CONDITIONS;
 
@@ -105,19 +108,56 @@ describe('sessionPlan', () => {
   });
 });
 
-describe('illumination as the session-level (whole-plot) factor', () => {
+describe('illumination: the protocol this build actually runs', () => {
+  /*
+   * The study runs at a SINGLE ambient level. The camera is the reason: computed from this build's
+   * own condition table, a positive-polarity screen casts ~14.6 lux on the participant's face and a
+   * negative-polarity one ~0.49 lux, so against a 10 lux room the face illumination differs by 2.35x
+   * BETWEEN THE TWO LEVELS OF THE PRIMARY INDEPENDENT VARIABLE. At 300 lux that ratio is 1.05.
+   * See the note on ILLUMINATION_LEVELS in src/experiment/illumination.ts.
+   */
+  it('runs one level, so every participant does one sitting', () => {
+    expect(N_ILLUMINATION_BLOCKS).toBe(1);
+    for (let e = 1; e <= 40; e++) {
+      expect(illuminationOrderFor(e)).toEqual(['moderate']);
+      expect(illuminationForBlock(e, 0)).toBe('moderate');
+    }
+  });
+
+  it('targets the level at which the polarity confound collapses', () => {
+    // 300 lux is the bottom of the ISO 9241-referenced 300-500 lux range for screen work, and the
+    // level at which the room dominates the face illumination rather than the stimulus.
+    const spec = specFor('moderate')!;
+    expect(spec.target).toBe(300);
+    expect(spec.min).toBe(250);
+    expect(spec.max).toBe(350);
+  });
+
+  it('still resolves a withdrawn level, so archived sittings stay readable', () => {
+    // 'dim' is disabled, not deleted. A session recorded under it must not become unreadable.
+    expect(specFor('dim')).not.toBeNull();
+    expect(ILLUMINATION_LEVELS).not.toContain('dim');
+  });
+});
+
+describe('the crossover rule is dormant, not lost', () => {
+  /*
+   * These test crossoverOrderFor DIRECTLY rather than through illuminationOrderFor, which now
+   * short-circuits. A switched-off mechanism whose tests were deleted with its caller is not
+   * recoverable, only present — so the balance properties stay proven while the rule is unreached,
+   * and restoring ILLUMINATION_LEVELS restores something known to work.
+   */
   it('gives every participant both levels, exactly once each', () => {
     for (let e = 1; e <= 40; e++) {
-      const order = illuminationOrderFor(e);
-      expect(order).toHaveLength(N_ILLUMINATION_BLOCKS);
-      expect(new Set(order).size).toBe(N_ILLUMINATION_BLOCKS);
+      const order = crossoverOrderFor(e);
+      expect(order).toHaveLength(2);
+      expect(new Set(order).size).toBe(2);
     }
   });
 
   it('counterbalances which level comes first, 50/50 across a block of participants', () => {
-    const firsts = Array.from({ length: N }, (_, i) => illuminationOrderFor(i + 1)[0]);
-    const dimFirst = firsts.filter((f) => f === 'dim').length;
-    expect(dimFirst).toBe(N / 2);
+    const firsts = Array.from({ length: N }, (_, i) => crossoverOrderFor(i + 1)[0]);
+    expect(firsts.filter((f) => f === 'dim').length).toBe(N / 2);
   });
 
   it('is orthogonal to the Williams row — every row appears with both orders across 2N', () => {
@@ -125,18 +165,9 @@ describe('illumination as the session-level (whole-plot) factor', () => {
     for (let e = 1; e <= 2 * N; e++) {
       const row = (e - 1) % N;
       if (!seen.has(row)) seen.set(row, new Set());
-      seen.get(row)!.add(illuminationOrderFor(e)[0]);
+      seen.get(row)!.add(crossoverOrderFor(e)[0]);
     }
-    for (const orders of seen.values()) expect(orders.size).toBe(N_ILLUMINATION_BLOCKS);
-  });
-
-  it('resolves a level per block consistently with the order', () => {
-    for (let e = 1; e <= 20; e++) {
-      const order = illuminationOrderFor(e);
-      for (let b = 0; b < N_ILLUMINATION_BLOCKS; b++) {
-        expect(illuminationForBlock(e, b)).toBe(order[b]);
-      }
-    }
+    for (const orders of seen.values()) expect(orders.size).toBe(2);
   });
 });
 

@@ -1,5 +1,13 @@
 # VisuLab — Experimental Protocol & Workflow Logic Review
 
+> **PROTOCOL AMENDMENT — ambient illumination.** The dim (~10 lux) level has been withdrawn. The
+> study now runs at a SINGLE ambient level of 300 lux (band 250-350), one sitting per participant,
+> ten condition-runs. Everything else — the Williams order, the five text colours, both polarities,
+> CVS-Q, NASA-TLX, reaction time, visual search, comprehension, fatigue and blink measurement — is
+> unchanged. Passages of this document that describe two sittings or a crossover describe the
+> superseded design. See `ILLUMINATION_AMENDMENT.md` for the reasoning, the verified citations and
+> what the change costs.
+
 This document describes the data-collection protocol **as implemented**, the scientific rationale
 for each stage, the workflow-logic cross-check (and the issues it fixed), how a researcher runs a
 session, and the known limitations a PhD write-up should disclose.

@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test';
+import { specFor } from '../src/experiment/illumination';
 
 /** Shared E2E interaction helpers + a stage-keyed driver, reused by full-run and edge specs. */
 
@@ -12,6 +13,22 @@ export async function waitStageChange(page: Page, from: string) {
     from,
     { timeout: 30_000 },
   );
+}
+
+
+/**
+ * A lux reading that is inside the accepted band for whichever level this session was assigned.
+ *
+ * Every setup screen gates its Continue control on the illuminance being in range, so a literal
+ * here is a trap: when the protocol retargeted its single level to 300 lux, the hard-coded '10'
+ * and '150' put every run out of range and thirty-one tests failed on a disabled button with
+ * nothing naming the illuminance as the cause. Read the assignment off the screen, then take the
+ * value from that level's own spec.
+ */
+export async function validLux(page: Page): Promise<string> {
+  const assignedDim = (await page.getByText(/Dim \(/).count()) > 0;
+  const spec = specFor(assignedDim ? 'dim' : 'moderate');
+  return String(spec?.target ?? 300);
 }
 
 export async function setInput(page: Page, testid: string, value: string) {
@@ -64,14 +81,17 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
   switch (stage) {
     case 'SESSION_INIT':
       await setInput(page, 'pid', opts.participantId ?? 'E2E01');
-      // The illumination level is ASSIGNED by counterbalancing once the id is entered, and the lux
-      // reading must land inside that level's accepted range. Read the assignment off the screen
-      // and supply a matching value, rather than hard-coding one that only fits one level.
+      /*
+       * The lux reading must land inside the assigned level's accepted band or the setup screen
+       * keeps its Continue control disabled and every downstream test times out on it.
+       *
+       * The value is read from the level's own SPEC rather than typed in. It used to be a literal
+       * '10' or '150', and when the protocol retargeted its single level to 300 lux that literal
+       * silently put every end-to-end run out of range — thirty-one tests failing on a disabled
+       * button, with nothing pointing at the illuminance as the cause.
+       */
       await page.waitForTimeout(150);
-      {
-        const assignedDim = (await page.getByText(/Dim \(/).count()) > 0;
-        await setInput(page, 'lux', assignedDim ? '10' : '150');
-      }
+      await setInput(page, 'lux', await validLux(page));
       if (opts.split) await click(page, /^split$/);
       await click(page, /Begin setup/);
       await waitStageChange(page, stage);

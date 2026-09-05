@@ -42,7 +42,7 @@ export interface AnalysisColumn {
 export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
   // ---------------------------------------------------------------- keys
   { column: 'participant_id', role: 'key', unit: '-', missing: 'never empty',
-    description: 'The grouping level for every random intercept. One person, both sittings.' },
+    description: 'The grouping level for every random intercept. One person, all of their condition-runs.' },
   { column: 'enrolment_number', role: 'key', unit: 'index', missing: 'no participant record',
     description: 'Drives the Williams row and the illumination order. Two participants sharing one is a design fault, flagged in analysis_join_issues.csv.' },
   { column: 'session_id', role: 'key', unit: '-', missing: 'never empty',
@@ -54,7 +54,7 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
 
   // ---------------------------------------------------------------- design factors
   { column: 'illumination', role: 'factor', unit: 'dim|moderate', missing: 'unassigned session',
-    description: 'The SESSION-LEVEL (whole-plot) independent variable, 10 lux vs 150 lux. It varies between sittings, never within one, which is what makes this a split-plot design.' },
+    description: 'CONSTANT in this dataset: every sitting runs at 300 lux (band 250-350). Ambient illumination was a two-level session factor in an earlier version of the protocol; it was withdrawn because the ocular measures are camera-derived and, in a dim room, face illumination is confounded with polarity. The column is retained so pooled data remains separable and carries no variance here — do not enter it in a model.' },
   { column: 'illumination_lux_target', role: 'factor', unit: 'lux', missing: 'unassigned session',
     description: 'The nominal target for the level. The MEASURED value is ambient_lux_measured; use that to check the manipulation actually held.' },
   { column: 'polarity', role: 'factor', unit: 'positive|negative', missing: 'never empty',
@@ -78,7 +78,7 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
   { column: 'global_position', role: 'covariate', unit: '0-19', missing: 'illumination block not recorded',
     description: 'Order across BOTH illumination blocks, 0-19. Derived from the recorded illumination_block, so it is correct under the split protocol and cannot disagree with that column. Use this for cumulative fatigue; use session_position for within-sitting fatigue. They answer different questions.' },
   { column: 'illumination_block', role: 'covariate', unit: '0|1', missing: 'never empty',
-    description: "Whether this is the participant's first or second illumination level. Tests for a period effect in the crossover." },
+    description: 'CONSTANT in this dataset, since there is a single illumination level. Retained for separability against earlier two-level data.' },
   { column: 'illumination_order_first', role: 'covariate', unit: 'dim|moderate', missing: 'unassigned',
     description: 'Which level the participant received first — the counterbalancing assignment. A sequence effect is tested by the illumination x block interaction.' },
   { column: 'adaptation_ms_before', role: 'covariate', unit: 'ms', missing: 'condition record absent',

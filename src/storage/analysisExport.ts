@@ -37,9 +37,12 @@ import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { N_CONDITIONS } from '@/experiment/conditions';
 import { PASSAGES } from '@/experiment/passages';
 import { ANALYSIS_CODEBOOK } from './analysisCodebook';
+import { N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 
 /** The two levels of the whole-plot illumination factor. Total condition-runs is N x this. */
-const ILLUMINATION_LEVELS = 2;
+// Derived, never a literal: this used to be a hard-coded 2, which would have silently survived the
+// switch to a single-level protocol and told every analyst the dataset held a crossover it does not.
+const ILLUMINATION_LEVELS = N_ILLUMINATION_BLOCKS;
 
 /** Columns of the long analysis file, in the order they are written. */
 export const ANALYSIS_LONG_COLUMNS = [
