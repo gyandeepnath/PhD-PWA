@@ -16,7 +16,7 @@
  */
 import { useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';
-import { nonAgingDelay, planRuns } from '@/lib/foreperiod';
+import { nonAgingDelay, planRuns, balancedDistractors } from '@/lib/foreperiod';
 import { relativeLuminance } from '@/lib/contrast';
 import { rafDelay, randInt, now } from '@/lib/timing';
 import { median, stdSample } from '@/lib/stats';
@@ -121,11 +121,24 @@ export function setRtTargetMemory(color: string): void {
 
 function buildTrials(n: number, goRate: number, background: string): Trial[] {
   const TARGET = goTargetColor(background);
-  const { RT_DISTRACTOR_COLORS: DIST } = CONFIG;
-  const pick = () => DIST[Math.floor(Math.random() * DIST.length)];
   const nGo = Math.round(n * goRate);
-  const { order } = planRuns(nGo, n - nGo, CONFIG.RT_MAX_RUN);
-  return order.map((isGo) => (isGo ? { signal: true, color: TARGET } : { signal: false, color: pick() }));
+  const nNoGo = n - nGo;
+  const { order, capRespected } = planRuns(nGo, nNoGo, CONFIG.RT_MAX_RUN);
+  if (!capRespected) {
+    /*
+     * Unreachable for every parameter set this app ships — tests/foreperiod.test.ts proves the
+     * production, practice and end-to-end counts are all arrangeable within RT_MAX_RUN — so this is
+     * a guard against a future change to RT_TRIALS_PER_CONDITION, RT_GO_RATE or RT_MAX_RUN that
+     * quietly makes the cap unsatisfiable. planRuns returns the flag exactly so the caller need not
+     * hope; discarding it meant a sequence that had broken its own predictability constraint would
+     * have run, and been recorded, as though it had not.
+     */
+    console.error('[visulab] go/no-go run cap could not be honoured: trial predictability is not as configured.');
+  }
+  // Balanced by construction rather than sampled with replacement; see balancedDistractors.
+  const distractors = balancedDistractors(nNoGo, CONFIG.RT_DISTRACTOR_COLORS);
+  let d = 0;
+  return order.map((isGo) => (isGo ? { signal: true, color: TARGET } : { signal: false, color: distractors[d++] }));
 }
 
 const avg = (xs: number[]): number | null => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);

@@ -176,7 +176,15 @@ export function planRuns(
   return { order, capRespected };
 }
 
-/** Longest run of identical values, for testing and for the trial-order quality flag. */
+/**
+ * Longest run of identical values.
+ *
+ * Used by the tests that hold planRuns to its cap. It previously described itself as being "for the
+ * trial-order quality flag" as well — there is no such flag, in the record, the export or the
+ * codebook. The claim is removed rather than a flag invented: the cap is enforced at construction
+ * and proved feasible for every parameter set the app ships, so a per-block quality column would
+ * carry the same value in every row.
+ */
 export function longestRun(order: boolean[]): number {
   let best = 0;
   let run = 0;
@@ -187,4 +195,48 @@ export function longestRun(order: boolean[]): number {
     if (run > best) best = run;
   }
   return best;
+}
+
+/**
+ * `count` no-go distractor colours, balanced across the palette.
+ *
+ * The four distractors are luminance-matched to each other, and they were being drawn i.i.d. with
+ * replacement — `DIST[Math.floor(Math.random() * DIST.length)]` per trial. Over twelve no-go trials
+ * that leaves the composition to chance: 6/3/2/1 is an ordinary draw, and so is a colour that never
+ * appears at all. Which would be tolerable if the composition were recorded and could be modelled.
+ * It is not: `08_reaction_trials.csv` carries `trial_category` (go / no-go) and no distractor
+ * colour, so the variation is invisible to the analysis and cannot be adjusted for afterwards.
+ *
+ * That matters here more than it would in most tasks, because colour is one of the study's
+ * manipulated dimensions. An unbalanced distractor set makes the chromatic content of the no-go
+ * trials differ between conditions for no reason connected to the design, and false alarms are a
+ * dependent measure.
+ *
+ * So the balance is guaranteed by construction instead: whole copies of the palette first, then the
+ * remainder drawn as DISTINCT colours, so no colour is ever more than one ahead of another. With
+ * the shipped 12 no-go trials and 4 distractors that is exactly three of each, every block.
+ */
+export function balancedDistractors(
+  count: number,
+  palette: readonly string[],
+  rand: () => number = Math.random,
+): string[] {
+  if (count <= 0 || palette.length === 0) return [];
+
+  const shuffle = (xs: string[]): string[] => {
+    for (let i = xs.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [xs[i], xs[j]] = [xs[j], xs[i]];
+    }
+    return xs;
+  };
+
+  const k = palette.length;
+  const whole = Math.floor(count / k);
+  const pool: string[] = [];
+  for (const c of palette) for (let i = 0; i < whole; i++) pool.push(c);
+  // The remainder as distinct colours. Drawing it with replacement instead would let one colour run
+  // two ahead of another, which is the imbalance this function exists to remove.
+  pool.push(...shuffle([...palette]).slice(0, count % k));
+  return shuffle(pool);
 }

@@ -149,6 +149,8 @@ Magnitude at scale 0.76 on 1152x650: root height 855 root-px, child 720 root-px 
 
 ## [high] scripts/lib/timingModel.ts still models the foreperiod as a uniform midrange (950 ms) after it became a truncated exponential (mean 617.5 ms), overstating every RT block by 16%
 
+**STATUS: CONFIRMED, ALREADY FIXED IN AN EARLIER ROUND.** `rtBlockSeconds` no longer averages the bounds: `const del = measuredDelayMean();` samples the app's own `nonAgingDelay`, so the model cannot drift from the instrument by construction — which is what the header of `simulateParticipant.ts` had been promising while the code did the opposite. `scripts/lib/timingModel.ts`:75-87.
+
 `scripts/lib/timingModel.ts`:58
 
 **Evidence claimed:** `const del = (CONFIG.RT_DELAY_MIN_MS + CONFIG.RT_DELAY_MAX_MS) / 2;` = (300+1600)/2 = 950. The shipped draw is `nonAgingDelay(300, 1600, 650)`, whose analytic truncated-exponential mean is 300 + (350 - 1300·e^-3.714/(1-e^-3.714)) = 617.52 ms; 2,000,000 draws gave 617.81. Measured: `rtBlockSeconds(32)` returns 75.20 s; the same formula with the true 617.5 ms mean gives 64.56 s. `CONFIG.RT_DELAY_MEAN_MS` is never read anywhere in scripts/.
@@ -310,6 +312,8 @@ What is actually throttled is only the subscriber fan-out at line 190. The cost 
 
 ## [high] analysis_long.csv carries no e2e_timing flag, so E2E-harness sessions with collapsed timing constants pool silently into the modelling dataset
 
+**STATUS: CONFIRMED, ALREADY FIXED IN AN EARLIER ROUND.** `e2e_timing` is a declared column of `ANALYSIS_LONG_COLUMNS` and is written per row from the session record; harness sittings are present and filterable rather than dropped, which is the right treatment — a row silently missing is harder to notice than a row that says what it is. `src/storage/analysisExport.ts`:76 and :338, covered by `tests/analysisExport.test.ts`.
+
 `src/storage/analysisExport.ts`:44
 
 **Evidence claimed:** `grep -n "e2e" src/storage/analysisExport.ts src/storage/analysisCodebook.ts src/storage/joinIntegrity.ts` returns zero hits. ANALYSIS_LONG_COLUMNS (analysisExport.ts:44-76) contains no such column, `buildLongRows` never reads `s.e2e_timing`, and `checkJoin` does not test it. Meanwhile types.ts:141-145 documents the field: "True when this session ran with the E2E harness's collapsed timing constants. Such a session is a test artefact, not data: every protocol duration was replaced with a token value." Experiment.tsx:451-452 stamps it at creation "so a session run on a bookmarked ?e2e URL can never be mistaken for real data". The overrides (config.ts:238 and neighbours) replace READING_PAGE_MIN_MS 20000→150, RT_TRIALS_PER_CONDITION 32→4, VS_TIME_LIMIT_MS 40000→5000, ANNOTATION_SEGMENT_MS 180000→400. Dashboard.tsx:86 feeds `listSessions()` — which filters only `deleted_at` — straight into `buildAnalysisDataset`. Empirically: a fixture bundle with `e2e_timing: true` produced 10 rows in analysis_long.csv, and `/e2e/.test(header)` was false.
@@ -389,6 +393,8 @@ export.ts:302 describes stimulus_scale only as 'a value below 1 means the readin
 **Proposed fix:** Either letterbox the root to the design aspect ratio (fixed 1194x834 box, centred, so scaling is a true similarity transform and the layout is identical everywhere), or export the derived stimulus geometry directly: root width/height in root-px and the computed reading-column width in px, so line length is an available covariate rather than a reconstruction.
 
 ## [medium] nonAgingDelay does not produce the mean it is given: the `mean` argument is used as the untruncated exponential scale, so the realised mean is 617.5 ms, not 650 ms
+
+**STATUS: CONFIRMED, ALREADY FIXED IN AN EARLIER ROUND.** Truncating an exponential raises its mean above the scale, so passing the target mean AS the scale cannot produce it. `rateForTruncatedMean()` now solves for the rate whose TRUNCATED mean is the requested one, by bisection, and `nonAgingDelay` draws with that rate. `src/lib/foreperiod.ts`:40-82.
 
 `src/lib/foreperiod.ts`:37
 
@@ -656,6 +662,8 @@ Separately, foldViewportFloor() infers orientation from the measurement itself (
 
 ## [low] planRuns' capRespected flag is discarded by its only caller, and longestRun's comment claims a 'trial-order quality flag' that does not exist
 
+**STATUS: CONFIRMED AND FIXED.** Both halves were true. `ReactionTimeTask.buildTrials` destructured only `order`, so a sequence that had broken its own run cap would have run, and been recorded, as though it had not. It is now checked and reported. There is no data column, deliberately: a proof was added that all three parameter sets the app ships — the scored block (20 go / 12 no-go), practice (4/2) and the end-to-end harness (3/1) — are arrangeable within RT_MAX_RUN, so a per-block flag would hold the same value in every row of the study. The guard exists for a future change to RT_TRIALS_PER_CONDITION, RT_GO_RATE or RT_MAX_RUN that quietly makes the cap unsatisfiable. `longestRun`'s claim to serve a 'trial-order quality flag' is removed rather than a flag invented to match it.
+
 `src/tasks/ReactionTimeTask.tsx`:111
 
 **Evidence claimed:** `const { order } = planRuns(nGo, n - nGo, CONFIG.RT_MAX_RUN);` — the second field is destructured away. foreperiod.ts:69-71 states 'the cap is relaxed rather than looping forever, and the caller is told, because silently returning a sequence that violates its own constraint is worse than a longer run.' foreperiod.ts:134: 'Longest run of identical values, for testing and for the trial-order quality flag.' grep for `longestRun` and `capRespected` outside tests: zero hits in src/ and scripts/ — no such quality flag exists, and nothing stores the realised longest run.
@@ -668,6 +676,8 @@ Separately, foldViewportFloor() infers orientation from the measurement itself (
 
 ## [low] nonAgingDelay lacks the non-finite guard randInt was given, so a NaN delay would hang the RT block forever on a screen with no Pause control
 
+**STATUS: CONFIRMED, ALREADY FIXED IN AN EARLIER ROUND.** `src/lib/foreperiod.ts`:78-79 returns the first finite value among `[min, max, 0]` when any argument is non-finite, and :91 re-checks the drawn value before returning it. A NaN would have been passed to setTimeout, which treats it as 0 or never fires — on the reaction-time screen, which is the one screen with no Pause control.
+
 `src/lib/foreperiod.ts`:43
 
 **Evidence claimed:** `const u = Math.min(0.999999, Math.max(1e-9, rand()));` — `Math.max(1e-9, NaN)` is NaN, so u is NaN and the function returns NaN (verified: `nonAgingDelay(300,1600,650,()=>NaN)` -> NaN). A NaN `mean` propagates the same way through `Math.max(1, NaN)` -> NaN. Contrast src/lib/timing.ts:30-36, where randInt explicitly guards this: 'Non-finite bounds used to yield NaN, which then became a NaN timeout.' rafDelay (timing.ts:17-19) tests `performance.now() - start >= ms`, which is false for every NaN, so the rAF loop never resolves.
@@ -679,6 +689,8 @@ Separately, foldViewportFloor() infers orientation from the measurement itself (
 **Proposed fix:** Mirror randInt's guard: `const r = rand(); const u = Number.isFinite(r) ? Math.min(0.999999, Math.max(1e-9, r)) : 0.5;` and add `if (!Number.isFinite(mean)) return min;` alongside the existing `if (!(max > min)) return min;`.
 
 ## [low] No-go distractor colours are sampled i.i.d. with replacement, so the four luminance-matched distractors are unbalanced within every block
+
+**STATUS: CONFIRMED AND FIXED, and it deserved more than [low].** `const pick = () => DIST[Math.floor(Math.random() * DIST.length)]`, once per no-go trial. Over twelve no-go trials 6/3/2/1 is an ordinary draw, and so is a distractor that never appears at all. That would be tolerable if the composition were recorded — but `08_reaction_trials.csv` carries `trial_category` (go / no-go) and no distractor colour, so the variation is invisible to the analysis and cannot be adjusted for after the fact. Colour is one of the study's manipulated dimensions and false alarms are a dependent measure, so an unbalanced distractor set makes the chromatic content of the no-go trials differ between conditions for reasons unconnected to the design. `balancedDistractors()` now guarantees the balance at construction: whole copies of the palette, then the remainder as DISTINCT colours, so no colour is ever more than one ahead of another — exactly three of each in the shipped block, every block, with the order still shuffled so balance does not become a learnable cycle.
 
 `src/tasks/ReactionTimeTask.tsx`:109
 

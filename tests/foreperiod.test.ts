@@ -5,7 +5,7 @@
  * Both were real, and both were measurable rather than matters of taste.
  */
 import { describe, it, expect } from 'vitest';
-import { nonAgingDelay, hazardProfile, planRuns, longestRun } from '@/lib/foreperiod';
+import { nonAgingDelay, hazardProfile, planRuns, longestRun, balancedDistractors } from '@/lib/foreperiod';
 import { CONFIG } from '@/experiment/config';
 
 /** A deterministic uniform stream, so these tests never flake on an unlucky draw. */
@@ -142,5 +142,87 @@ describe('trial order carries no long runs', () => {
       seen.add(planRuns(nGo, nNoGo, CONFIG.RT_MAX_RUN, r).order.map((b) => (b ? '1' : '0')).join(''));
     }
     expect(seen.size).toBeGreaterThan(190);
+  });
+
+  it('is achievable for EVERY parameter set the app ships, not only the scored block', () => {
+    /*
+     * ReactionTimeTask discards nothing now: it logs when capRespected comes back false. That guard
+     * is only worth having if it is normally silent, and it can only be normally silent if the
+     * practice block and the end-to-end harness are arrangeable too. The scored block is checked
+     * above; these are the other two counts the same code runs with.
+     */
+    const r = lcg(4242);
+    const sets: [string, number, number][] = [
+      ['scored', nGo, nNoGo],
+      ['practice', Math.round(CONFIG.RT_PRACTICE_TRIALS * CONFIG.RT_GO_RATE),
+        CONFIG.RT_PRACTICE_TRIALS - Math.round(CONFIG.RT_PRACTICE_TRIALS * CONFIG.RT_GO_RATE)],
+      ['e2e', 3, 1],
+    ];
+    for (const [name, g, ng] of sets) {
+      for (let i = 0; i < 500; i++) {
+        const plan = planRuns(g, ng, CONFIG.RT_MAX_RUN, r);
+        expect(plan.capRespected, `${name} (${g} go / ${ng} no-go) could not honour the cap`).toBe(true);
+        expect(longestRun(plan.order)).toBeLessThanOrEqual(CONFIG.RT_MAX_RUN);
+      }
+    }
+  });
+});
+
+describe('no-go distractors are balanced within a block, not sampled with replacement', () => {
+  const N = CONFIG.RT_TRIALS_PER_CONDITION;
+  const nNoGo = N - Math.round(N * CONFIG.RT_GO_RATE);
+  const PALETTE = CONFIG.RT_DISTRACTOR_COLORS;
+
+  const counts = (xs: string[]) => {
+    const m = new Map<string, number>();
+    for (const x of xs) m.set(x, (m.get(x) ?? 0) + 1);
+    return m;
+  };
+
+  it('gives the shipped block exactly equal numbers of each distractor', () => {
+    // 12 no-go trials over 4 luminance-matched distractors is three of each, every time. Sampled
+    // i.i.d. it was three of each only by luck: 6/3/2/1 is an ordinary draw, and so is a colour
+    // that never appears. The composition is not recorded anywhere in the export, so it cannot be
+    // adjusted for afterwards — it has to be right at construction or not at all.
+    const r = lcg(17);
+    for (let i = 0; i < 500; i++) {
+      const c = counts(balancedDistractors(nNoGo, PALETTE, r));
+      expect(c.size).toBe(PALETTE.length);
+      for (const v of c.values()) expect(v).toBe(nNoGo / PALETTE.length);
+    }
+  });
+
+  it('never lets one colour run more than one ahead of another, at any count', () => {
+    const r = lcg(23);
+    for (let n = 1; n <= 20; n++) {
+      for (let i = 0; i < 50; i++) {
+        const out = balancedDistractors(n, PALETTE, r);
+        expect(out).toHaveLength(n);
+        const c = [...PALETTE].map((p) => out.filter((x) => x === p).length);
+        expect(Math.max(...c) - Math.min(...c),
+          `count ${n} produced ${c.join('/')}`).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('draws only from the palette', () => {
+    const r = lcg(29);
+    for (const x of balancedDistractors(nNoGo, PALETTE, r)) {
+      expect(PALETTE).toContain(x);
+    }
+  });
+
+  it('still varies the ORDER, so balance does not become a fixed cycle', () => {
+    // Balanced but deterministic would be worse than unbalanced: the participant could learn it.
+    const r = lcg(31);
+    const seen = new Set<string>();
+    for (let i = 0; i < 200; i++) seen.add(balancedDistractors(nNoGo, PALETTE, r).join(''));
+    expect(seen.size).toBeGreaterThan(150);
+  });
+
+  it('reports absence rather than inventing colours', () => {
+    expect(balancedDistractors(0, PALETTE)).toEqual([]);
+    expect(balancedDistractors(-1, PALETTE)).toEqual([]);
+    expect(balancedDistractors(5, [])).toEqual([]);
   });
 });
