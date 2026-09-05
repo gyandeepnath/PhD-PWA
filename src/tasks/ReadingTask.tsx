@@ -11,6 +11,7 @@ import { CONFIG } from '@/experiment/config';
 import { now } from '@/lib/timing';
 import { TaskIntro } from './TaskIntro';
 import type { Passage } from '@/experiment/passages';
+import { STIMULUS_COLUMN_PX } from '@/lib/viewportScale';
 
 export interface ReadingResult {
   /** Wall-clock reading time MINUS any time the app spent hidden. The exposure. */
@@ -141,9 +142,24 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
   const countdownPct = Math.min(100, ((minSecs - secsLeft) / minSecs) * 100);
 
   return (
+    /*
+     * The column is a FIXED width in root pixels, centred, rather than a percentage of the root.
+     *
+     * The root box takes the device's aspect ratio, not the design canvas's, so a percentage column
+     * gave 12% more characters per line on a Xiaomi Pad 6 than on the design canvas and 114% more on
+     * a large display — at the same --vl-scale and the same glyph size, so stimulus_scale reported
+     * no difference. Line length drives reading rate and regression frequency, both of which are
+     * dependent variables here. See STIMULUS_COLUMN_PX.
+     *
+     * The condition background fills the whole screen, so the space either side of the column is the
+     * stimulus field itself and nothing about this is visible to a participant.
+     */
     <div
-      className="min-h-screen w-full animate-fade-in"
-      style={{ background, color: text, padding: `56px ${CONFIG.READING_MARGIN_PERCENT}% 3%`, display: 'flex', flexDirection: 'column', height: '100%' }}
+      className="screen w-full animate-fade-in"
+      style={{ background, color: text, display: 'flex', justifyContent: 'center' }}
+    >
+    <div
+      style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', padding: '56px 0 3%', display: 'flex', flexDirection: 'column', height: '100%' }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <span style={{ fontFamily: STIMULUS_FONT_STACK, fontSize: 13, textTransform: 'uppercase', opacity: 0.5 }}>{passage.title}</span>
@@ -184,6 +200,7 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 }

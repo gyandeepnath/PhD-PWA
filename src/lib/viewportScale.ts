@@ -16,8 +16,11 @@
  * VISUAL ANGLE. Scaling the root scales the stimulus text with it, which changes visual angle, so
  * this cannot be a silent cosmetic fix. Two things keep it honest:
  *
- *   - The scale never exceeds 1. A larger screen renders at the design size rather than being
- *     magnified, so the stimulus is identical on every device at or above the design canvas.
+ *   - The scale never exceeds 1, so a larger screen renders at the design size rather than being
+ *     magnified: the GLYPHS are identical on every device at or above the design canvas. This used
+ *     to say the stimulus was identical, which was false — the root box takes the device's aspect
+ *     ratio, so a percentage-sized layout reflows. See STIMULUS_COLUMN_PX at the foot of this file
+ *     for the measurements and for what the stimulus screens now do instead.
  *   - `currentScale()` is recorded with the session, so a study run on a smaller tablet carries the
  *     factor its stimuli were actually presented at, instead of an unstated difference.
  *
@@ -259,3 +262,46 @@ export function installViewportScale(): () => void {
     window.visualViewport?.removeEventListener('resize', schedule);
   };
 }
+
+/**
+ * The width of a text column that is identical on every device, in root pixels.
+ *
+ * WHY THIS IS NEEDED. The root transform is NOT a similarity transform of the design canvas, and
+ * that was not obvious. `#root` is sized `calc(100% / var(--vl-scale))` in both axes while the scale
+ * is `min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT)` — one axis binds and the other over-fills, so the
+ * root box takes the DEVICE's aspect ratio, never the canvas's 1194/834. A layout that sizes itself
+ * as a percentage of the root therefore gets a different number of characters per line on every
+ * differently-shaped screen, at the same `--vl-scale`, at the same glyph size.
+ *
+ * Measured, with the reading passage's 10% side margins:
+ *
+ *   1194x834 (design)   scale 1.00   root 1194 wide   column  955 px   baseline
+ *   1152x720 (Xiaomi)   scale 0.86   root 1340 wide   column 1072 px   +12.2% characters per line
+ *   1152x650 (bar up)   scale 0.76   root 1516 wide   column 1213 px   +27.0%
+ *   2560x1600           scale 1.00   root 2560 wide   column 2048 px   +114%
+ *
+ * The last row is the one that matters most, because the header of this file used to claim the
+ * opposite: "A larger screen renders at the design size rather than being magnified, so the stimulus
+ * is identical on every device at or above the design canvas." The glyphs are identical there. The
+ * line is more than twice as long. Line length is a first-order determinant of reading rate and
+ * regression frequency, and reading rate and ocular behaviour are dependent variables here — so this
+ * was an uncontrolled difference in the stimulus, invisible in `stimulus_scale`, which reads 1.00 on
+ * both of those devices.
+ *
+ * Fixing the column in root pixels restores the property the design assumes: every device presents
+ * the same layout, differing only by the uniform magnification `--vl-scale` records. The space left
+ * over is filled by the condition's own background, so nothing about it is visible to a participant.
+ */
+export const STIMULUS_COLUMN_PX = Math.round(DESIGN_WIDTH * 0.8);
+
+/**
+ * The box a stimulus is positioned within, in root pixels — the design canvas itself.
+ *
+ * Used by the reaction-time task, where the target's position is a percentage and its diameter is a
+ * constant. Resolving those percentages against the device-shaped root box made the target's
+ * eccentricity, and so its size-to-eccentricity ratio, vary by device: 0.148 on the design canvas,
+ * 0.136 at 1152x720, 0.123 at 1152x650, 0.071 at 2560x1600. Simple reaction time and detection
+ * sensitivity are both monotone in eccentricity, so that entered the data as device-driven variance
+ * in a dependent variable with no column identifying it.
+ */
+export const STIMULUS_BOX = { width: DESIGN_WIDTH, height: DESIGN_HEIGHT } as const;

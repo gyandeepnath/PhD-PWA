@@ -353,6 +353,9 @@ What is actually throttled is only the subscriber fan-out at line 190. The cost 
 
 ## [high] stimulus_scale is stamped once at session creation and never re-recorded when the scale later changes
 
+**STATUS: CONFIRMED — NOT YET FIXED.** Verified: the only write is `Experiment.tsx:488` inside `beginSession`, and every later `put('sessions', ...)` spreads the stale record forward. Two paths still move the scale afterwards, both requiring the un-installed Chrome route (the installed PWA is `display: fullscreen`, `orientation: landscape` and locks orientation): the address bar revealing after load, and a rotation. This matters MORE now that the geometry findings above are fixed, because `stimulus_scale` has become the complete description of the difference between devices rather than a partial one — so a stale value is the whole error rather than part of it. The right grain is the CONDITION record, since that is where a stimulus was actually presented; deferred to its own change rather than bundled into the geometry fix.
+
+
 `src/experiment/Experiment.tsx`:467
 
 **Evidence claimed:** `stimulus_scale: currentScale()` and `layout_viewport: layoutViewport()` are written once inside beginSession(), which runs at SETUP_ORDER[0] = SESSION_INIT (stateMachine.ts:17-31). Every other stage — CONSENT (setupStages.tsx:620 has an input), PARTICIPANT_PROFILE (six inputs, setupStages.tsx:225-239), PREFLIGHT, and the whole condition loop — comes after. `applied` in viewportScale.ts continues to change after that point (a taller keyboard, or resetViewportFloor() on an orientationchange, which can move the scale UP as well as down: portrait 800x1280 -> 0.66, landscape 1280x800 -> 0.94). grep confirms nothing ever rewrites the field: the only other mutation of the record, the PREFLIGHT handler at Experiment.tsx:727, spreads the stale `session` object (`{ ...session, preflight_complete: true, stimulus_font_ok: fontOk }`) and so carries the original value forward. The comment at Experiment.tsx:463-466 asserts that recording it here 'keeps that an analysable covariate rather than an unstated difference' — true only if the scale cannot change afterwards, which it can.
@@ -365,6 +368,9 @@ What is actually throttled is only the subscriber fan-out at line 190. The cost 
 
 ## [high] isBelowMinimum() has no production caller — the comment claims the operator is warned, and nothing warns them
 
+**STATUS: CONFIRMED — comment-truth defect, low practical severity.** Recounted: one definition, four test assertions, no production caller anywhere in `src/`, and no `layout_below_minimum` field in the record or any export. The comment claiming the operator is warned is false. The practical trigger is now nearly empty, though: the occlusion guard removed the keyboard path, and the remaining trigger needs a viewport below 597x417 CSS pixels, which no tablet in scope reaches. Left open rather than quietly deleted, because a preflight check plus a QC column is the correct closure and belongs with the `stimulus_scale` change above.
+
+
 `src/lib/viewportScale.ts`:148
 
 **Evidence claimed:** The doc comment reads: 'True when the viewport is so small that even MIN_SCALE cannot fit the design canvas, so content is being clipped despite scaling. The operator needs to know rather than discover it as a missing button.' `grep -rn isBelowMinimum src/ tests/` returns exactly three files' worth of hits: the definition (viewportScale.ts:153) and six assertions in tests/viewportScale.test.ts. No component, no screen, no banner imports it. Meanwhile computeScale() clamps at MIN_SCALE 0.5 (line 81), so below-minimum viewports genuinely do clip into the region #root's `overflow:hidden` plus body's `touch-action:none` makes unreachable — the exact failure mode the file's header describes. tests/viewportScale.test.ts:52 even gates its 'always fits' assertion on `if (s > MIN_SCALE)`, so the suite is silent about the clamped case.
@@ -376,6 +382,9 @@ What is actually throttled is only the subscriber fan-out at line 190. The cost 
 **Proposed fix:** Call isBelowMinimum() from apply() and surface it — an operator-visible banner (like the reportAsyncFailure panel in main.tsx) plus a persisted `layout_below_minimum` boolean on the session record, exported as a QC column so affected sittings can be excluded.
 
 ## [high] The root transform is not a similarity transform of the design canvas: reading line length changes with device aspect ratio and is not captured by stimulus_scale
+
+**STATUS: CONFIRMED AND FIXED, and the finding understated it.** Independently recomputed: `#root` is `calc(100% / var(--vl-scale))` in both axes while the scale is `min(w/1194, h/834)`, so one axis binds and the other over-fills and the root box takes the DEVICE's aspect ratio. The reading column, a percentage of that box, ran 955 px on the design canvas, 1072 at 1152x720 (**+12.2% characters per line**), 1213 at 1152x650 (+27.0%) and 2048 at 2560x1600 (**+114%**) — and on that last device `stimulus_scale` reads 1.00, exactly as it does on the design canvas, because the glyphs really are identical there. The audit's ratios are right; its absolute character counts are about 40% low. What it missed is that the WORST case is a display LARGER than the canvas, where `viewportScale.ts` claimed "the stimulus is identical on every device at or above the design canvas" — false as written, and now corrected in place. The reading and visual-search passages are laid out in a fixed centred column of `STIMULUS_COLUMN_PX` root pixels (955, the value the design canvas always produced, so the reference device is unchanged), with the condition background filling the space either side so nothing is visible to a participant. Line length is now identical on every device and `stimulus_scale` is a complete description of the difference between them, which is what the codebook has been asserting all along.
+
 
 `src/styles/theme.css`:54
 
@@ -611,6 +620,9 @@ The panel is also a fixed `rgba(20,20,30,0.72)` patch drawn over the condition b
 
 ## [medium] RT dot visual angle is device-dependent and its size-to-eccentricity ratio changes with the scale, recorded only via the session-level stimulus_scale
 
+**STATUS: CONFIRMED AND FIXED.** Same root cause as the finding above, though the mechanism the audit gave is not quite right: the dot diameter and the eccentricity are both multiplied by the same scale. The ratio moves because the diameter is a CONSTANT in root pixels while the root box in root pixels is `viewport / scale`, which varies by device. Recomputed: the dot-to-maximum-eccentricity ratio was 0.148 on the design canvas, 0.136 at 1152x720, 0.123 at 1152x650 and 0.071 at 2560x1600 — a 48% spread, recorded nowhere, in a stimulus dimension that simple reaction time and detection sensitivity are both monotone in. The target is now positioned inside a centred box the size of the design canvas, so the ratio is identical on every device.
+
+
 `src/tasks/ReactionTimeTask.tsx`:450
 
 **Evidence claimed:** config.ts:80 sets RT_DOT_PX: 52, a fixed design-canvas pixel size, used at ReactionTimeTask.tsx:409 (the exemplar shown in the instructions, with the comment 'Show the actual target, at the size it will appear') and at line 450 (the stimulus). The dot renders at 52 root-px, i.e. 52 x --vl-scale CSS px on the panel — 39.5 px at scale 0.76, 26 px at the stuck 0.5.
@@ -625,6 +637,9 @@ Position, by contrast, is a PERCENTAGE: `left: ${clusterPos.current.x}%, top: ${
 
 ## [medium] resetViewportFloor is wired only to legacy `orientationchange`, and the fold's own h>w orientation test can be flipped by the keyboard
 
+**STATUS: PARTLY CONFIRMED — the damaging half is ALREADY FIXED.** The keyboard-flip half no longer reproduces: the occlusion guard runs BEFORE the orientation test, so 800x1280 → 800x600 → 800x1280 holds the floor at 800x1280 throughout, and the landscape case (1152x650 → 1152x300 → 1152x650 → 1152x720) holds at 0.76. What remains is narrow: a shrink that flips `h > w` while staying ABOVE 0.7 of peak height still resets the floor, which needs a near-square viewport and a sub-30% shrink — split-screen, not a keyboard, and portrait is blocked during a session anyway. The genuine residual gap is that nothing recovers a lowered floor on `visibilitychange`, so a tablet that slept with the address bar showing keeps the smaller scale. No stimulus consequence in the landscape-locked deployment.
+
+
 `src/lib/viewportScale.ts`:188
 
 **Evidence claimed:** installViewportScale() registers resetViewportFloor() on `orientationchange` alone (lines 188-194). It is not registered on `screen.orientation.change` (the non-deprecated event), not on `focusout` / keyboard dismissal, not on `visibilitychange` (a session resumed after the tablet slept re-measures but can never recover a floor lowered before it slept), and not on any app-level 'a new sitting is starting' boundary — so a floor poisoned during sitting 1 persists across a page that is never reloaded.
@@ -638,6 +653,9 @@ Separately, foldViewportFloor() infers orientation from the measurement itself (
 **Proposed fix:** Detect orientation from `screen.orientation.type` or `matchMedia('(orientation: portrait)')` rather than from the (keyboard-affected) visual viewport, listen on `screen.orientation.change` in addition to `orientationchange`, and reset the floor on document `focusout` and on `visibilitychange` -> visible.
 
 ## [medium] theme.css documents `.screen` as the correct full-height container while 19 screens still use min-h-screen
+
+**STATUS: PARTLY CONFIRMED — the count is wrong and there is no current data consequence.** Recounted: `.screen` is used by six components and `min-h-screen` remains at ten render sites, not 19 or the 15 the evidence listed. Of those ten, two are the condition-coloured stimulus screens and both carried an explicit `height: '100%'` correction — and both have since been converted to `.screen` by the geometry fix above. The other eight are cream-on-cream or `fixed inset-0`, where the class is inert. The audit's parenthetical about a viewport where `100vh` EXCEEDS the root height is impossible: root height is `viewportH / s` and `s <= 1` always, so only under-fill can occur. What survives is the real point — the convention has no lint rule or grep guard, and `e2e/stimulusFill.spec.ts` enumerates four named stages, so it would not catch a NEW condition-coloured screen.
+
 
 `src/styles/theme.css`:71
 
@@ -782,6 +800,9 @@ Verified NOT defective, for the record: the frameTimes trim (useTracking.ts:180)
 **Proposed fix:** Record why a consented capture did not occur — e.g. a `media_capture_skips` count or a session-level `setup_photos_unavailable_reason: 'camera_not_started' | 'no_frame' | null` — and export it beside consent_setup_photos. Separately, decide deliberately whether a photo-only grant should be honoured by acquiring a still without starting FaceMesh; if it should not, say so on the consent screen so the participant is not offered a grant that cannot be used.
 
 ## [low] --vl-vw / --vl-vh are published but never consumed, and are skipped entirely when the scale does not change
+
+**STATUS: CONFIRMED — two writes, zero reads.** Neither variable is read in `theme.css`, any component, `index.html`, or any test. Both are also set after `if (next === applied) return`, and `applied` initialises to 1, so on any device whose scale is 1 they are never set at all — a screen written against `var(--vl-vh)` would silently get an empty value on the reference device. No data consequence; a latent trap in the path of exactly the geometry work above. Left in place for now because the correct closure is to delete them together with the check on whether anything should consume them.
+
 
 `src/lib/viewportScale.ts`:161
 

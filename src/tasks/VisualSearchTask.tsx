@@ -10,6 +10,7 @@ import { CONFIG } from '@/experiment/config';
 import { now } from '@/lib/timing';
 import { TaskIntro } from './TaskIntro';
 import type { Passage } from '@/experiment/passages';
+import { STIMULUS_COLUMN_PX } from '@/lib/viewportScale';
 
 export interface SearchResult {
   searchTimeMs: number;
@@ -152,7 +153,11 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
       beyond the bottom edge with no way to reach it, so the block can only ever end on the 40 s
       cap and termination_mode can never be voluntary_early.
     */
-    <div className="min-h-screen w-full animate-fade-in" style={{ background, color: text, padding: '4% 8%', display: 'flex', flexDirection: 'column', height: '100%' }}>
+    /* Fixed-width centred column, for the reason given in ReadingTask: a percentage column reflows
+       with the device's aspect ratio, and this passage is the same stimulus material read under the
+       same conditions. See STIMULUS_COLUMN_PX. */
+    <div className="screen w-full animate-fade-in" style={{ background, color: text, display: 'flex', justifyContent: 'center' }}>
+    <div style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', padding: '4% 0', display: 'flex', flexDirection: 'column', height: '100%' }}>
       <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 15 }}>
         <strong>Find and tap every occurrence of:</strong>{' '}
         <span style={{ padding: '2px 10px', borderRadius: 4, border: `1.5px solid ${text}80`, fontWeight: 700 }}>
@@ -194,6 +199,7 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
       >
         Done searching →
       </button>
+    </div>
     </div>
   );
 }

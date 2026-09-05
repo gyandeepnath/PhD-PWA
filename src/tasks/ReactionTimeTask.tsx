@@ -17,6 +17,7 @@
 import { useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';
 import { nonAgingDelay, planRuns, balancedDistractors } from '@/lib/foreperiod';
+import { STIMULUS_BOX } from '@/lib/viewportScale';
 import { relativeLuminance } from '@/lib/contrast';
 import { rafDelay, randInt, now } from '@/lib/timing';
 import { median, stdSample } from '@/lib/stats';
@@ -476,7 +477,30 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
       )}
 
       {showStim && (
-        <div style={{ position: 'fixed', left: `${clusterPos.current.x}%`, top: `${clusterPos.current.y}%`, transform: 'translate(-50%, -50%)', width: dot, height: dot, borderRadius: '50%', background: t!.color }} />
+        /*
+         * The target is positioned inside a box the size of the DESIGN CANVAS, centred, not inside
+         * the root box.
+         *
+         * Its position is a percentage and its diameter is a constant, so resolving the percentage
+         * against the root — which takes the DEVICE's aspect ratio, not the canvas's — made the
+         * target's eccentricity, and so its size-to-eccentricity ratio, vary by device: 0.148 on the
+         * design canvas, 0.136 at 1152x720, 0.123 at 1152x650, 0.071 on a large display where
+         * stimulus_scale still reads 1.00. Simple reaction time and detection sensitivity are both
+         * monotone in eccentricity, so that entered the data as device-driven variance in a
+         * dependent variable, with nothing in any exported column identifying it.
+         *
+         * The box is invisible: the condition background covers the whole screen behind it.
+         */
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+            width: STIMULUS_BOX.width, height: STIMULUS_BOX.height,
+            maxWidth: '100%', maxHeight: '100%', pointerEvents: 'none',
+          }}
+        >
+          <div style={{ position: 'absolute', left: `${clusterPos.current.x}%`, top: `${clusterPos.current.y}%`, transform: 'translate(-50%, -50%)', width: dot, height: dot, borderRadius: '50%', background: t!.color }} />
+        </div>
       )}
 
       {/* Practice only, and drawn in the condition ink rather than a fixed green/red: those
