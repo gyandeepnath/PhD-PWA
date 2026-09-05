@@ -368,6 +368,34 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
     }
   }
 
+  /*
+   * A permission that was granted but could not be exercised.
+   *
+   * Setup photographs are captured from the camera stream, and the camera path is skipped outright
+   * when camera_metrics is declined — that refusal is enforced, not merely recorded, which is
+   * correct. The consequence is that a participant who declines blink measurement but agrees to be
+   * photographed has ticked a box the app can never act on: captureMedia finds no media source and
+   * returns silently.
+   *
+   * The export then reads consent_setup_photos=true beside media_items_retained=0 and an empty
+   * media inventory — the identical signature to a camera that failed, a toBlob that returned null,
+   * or an operator who skipped the closing photograph. Setup-proof coverage is therefore missing
+   * NON-RANDOMLY, precisely for the participants who have no ocular data to corroborate the setup
+   * by other means, and nothing in the dataset says so.
+   *
+   * Failing closed is the right direction. Failing closed SILENTLY is the defect, and it is fixed
+   * here rather than by capturing the photograph anyway: no new column is needed, because the state
+   * is already fully determined by two consent flags that both ship.
+   */
+  const consent = bundle.session?.media_consent;
+  if (consent?.setup_photos === true && consent?.camera_metrics !== true) {
+    add('warning', 'grant_not_exercisable',
+      'setup_photos was granted but camera_metrics was declined. Setup photographs are captured '
+      + 'from the camera stream, so the camera path is skipped and NO photograph was ever possible '
+      + 'for this session. The absence is a consequence of the consent combination, not a capture '
+      + 'failure — do not read it as one.');
+  }
+
   const errors = f.filter((x) => x.severity === 'error').length;
   const warnings = f.filter((x) => x.severity === 'warning').length;
   return { findings: f, errors, warnings, joins_sound: errors === 0 };

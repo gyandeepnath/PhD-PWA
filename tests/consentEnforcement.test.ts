@@ -132,3 +132,47 @@ describe('the CVS-Q change score cannot be computed from duplicates', () => {
     expect(f!.severity).toBe('error');
   });
 });
+
+describe('a permission that cannot be exercised is reported, not left as an absence', () => {
+  /*
+   * Setup photographs come from the camera stream, and declining camera_metrics skips the camera
+   * path outright — enforced, which is correct. So a participant who declines blink measurement but
+   * agrees to be photographed has granted something the app can never act on.
+   *
+   * The export then shows consent_setup_photos=true, media_items_retained=0 and an empty inventory:
+   * the identical signature to a camera failure or a skipped photograph. That makes setup-proof
+   * coverage missing non-randomly, exactly for the participants with no ocular data to corroborate
+   * the setup any other way.
+   */
+  const withConsent = (over: Record<string, unknown>) => {
+    const b = buildFixtureBundle();
+    (b.session as unknown as Record<string, unknown>).media_consent = {
+      camera_metrics: true, setup_photos: true, annotation_video: true, granted_at: 1, ...over,
+    };
+    return b;
+  };
+
+  it('flags setup_photos granted while camera_metrics is declined', async () => {
+    const { auditBundle } = await import('@/storage/integrity');
+    const r = auditBundle(withConsent({ camera_metrics: false, annotation_video: false }));
+    const hit = r.findings.filter((x) => x.check === 'grant_not_exercisable');
+    expect(hit, 'an unexercisable grant was recorded with nothing saying so').toHaveLength(1);
+    expect(hit[0].severity).toBe('warning');
+    // A warning, not an error: no rule was broken and no data is wrong. It is unreadable without
+    // the note, which is a different failure and carries a different severity.
+    expect(hit[0].detail).toMatch(/not a capture failure/i);
+  });
+
+  it('does not fire when the camera was permitted', async () => {
+    const { auditBundle } = await import('@/storage/integrity');
+    const r = auditBundle(withConsent({}));
+    expect(r.findings.filter((x) => x.check === 'grant_not_exercisable')).toHaveLength(0);
+  });
+
+  it('does not fire when photographs were never asked for', async () => {
+    // Declining both is coherent and needs no note: nothing was promised.
+    const { auditBundle } = await import('@/storage/integrity');
+    const r = auditBundle(withConsent({ camera_metrics: false, setup_photos: false, annotation_video: false }));
+    expect(r.findings.filter((x) => x.check === 'grant_not_exercisable')).toHaveLength(0);
+  });
+});
