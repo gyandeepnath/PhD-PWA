@@ -80,6 +80,8 @@ def main() -> None:
     ).reset_index()
     if {"baseline", "session_end"} <= set(cvsq_wide.columns):
         cvsq_wide["change"] = cvsq_wide["session_end"] - cvsq_wide["baseline"]
+        # Previously skipped in silence when the illumination check failed. The baseline-to-close
+        # CHANGE is estimable with one level; only the between-level contrast is not.
         if cvsq_wide["ambient_illumination_level"].nunique() > 1:
             m_cvsq = smf.mixedlm(
                 "change ~ C(ambient_illumination_level)",
@@ -88,8 +90,34 @@ def main() -> None:
             ).fit()
             print("\n=== CVS-Q change by illumination (EXPLORATORY: frames differ) ===")
             print(m_cvsq.summary())
+        else:
+            # This branch did not exist: with one illumination level the whole block vanished
+            # without printing a word, and the key secondary outcome simply never appeared in the
+            # output. The change score itself is perfectly estimable; only the contrast is gone.
+            ch = cvsq_wide["change"].dropna()
+            print("\n=== CVS-Q baseline-to-close change (EXPLORATORY: frames differ) ===")
+            print("One illumination level: no between-level contrast is estimable.")
+            print(f"n = {len(ch)}, mean change = {ch.mean():.2f}, sd = {ch.std():.2f}")
     # Only include session_index when sittings actually vary (else it is constant → unidentified).
     si = " + session_index" if cond["session_index"].nunique() > 1 else ""
+
+    # Ambient illumination is a SINGLE level under the current protocol, and patsy contributes ZERO
+    # columns for a one-level categorical with an intercept — no error, no warning, the term simply
+    # vanishes along with every interaction it appears in. That silent drop is worse than R's hard
+    # error, because the model still fits and still prints. Detected from the data, so this file
+    # analyses earlier two-level data unchanged.
+    n_illum = cond["ambient_illumination_level"].nunique(dropna=True)
+    il = " + C(ambient_illumination_level)" if n_illum > 1 else ""
+    ilx = " * C(ambient_illumination_level)" if n_illum > 1 else ""
+    if n_illum <= 1:
+        print("\n[PROTOCOL NOTE] One ambient illumination level: illumination terms are omitted and"
+              "\nno illumination effect is estimable. This is the protocol, not a fault in the data.")
+
+    # passage_repeat_number is constant at 1 when each passage is read once, and statsmodels does
+    # NOT drop an aliased column - the fit goes singular instead of telling you.
+    rep_t = (" + passage_repeat_number"
+             if cond.get("passage_repeat_number") is not None
+             and cond["passage_repeat_number"].nunique(dropna=True) > 1 else "")
 
     # --- Reaction time -----------------------------------------------------------------
     rt = rt_summary.merge(cond, on=["participant_id", "condition_id"]).dropna(
@@ -121,7 +149,7 @@ def main() -> None:
         # Item-level rows, three per condition, sharing a passage and a reading episode. GEE with
         # groups=condition_id gives a working-correlation account of that clustering; a plain
         # participant-level mixed model would treat the three items as independent.
-        "is_correct ~ log_contrast + C(polarity) * C(ambient_illumination_level) + C(question_kind)"
+        f"is_correct ~ log_contrast + C(polarity){ilx} + C(question_kind)"
         " + session_position" + si,
         groups="participant_id",
         data=comp,
@@ -163,8 +191,8 @@ def main() -> None:
             if len(prim):
                 prim["p_incomplete"] = prim["blink_count_incomplete"] / prim["n_blinks"]
                 m = smf.gee(
-                    "p_incomplete ~ C(polarity) * C(color_name) * C(ambient_illumination_level)"
-                    " + session_position + passage_repeat_number",
+                    f"p_incomplete ~ C(polarity) * C(color_name){ilx}"
+                    f" + session_position{rep_t}",
                     groups="participant_id", data=prim,
                     family=sm.families.Binomial(), weights=prim["n_blinks"],
                 ).fit()
@@ -176,7 +204,7 @@ def main() -> None:
                 sub = eye_active.dropna(subset=[dv, "ambient_illumination_level"])
                 if len(sub):
                     m = smf.mixedlm(
-                        f"{dv} ~ session_position + C(polarity) + C(ambient_illumination_level)",
+                        f"{dv} ~ session_position + C(polarity){il}",
                         sub, groups=sub["participant_id"],
                     ).fit()
                     print(f"\n=== {dv} mixed model ===")
