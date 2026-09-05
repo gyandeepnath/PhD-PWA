@@ -39,6 +39,27 @@ const STORE_SPECS: StoreSpec[] = [
 
 let _dbPromise: Promise<IDBPDatabase> | null = null;
 
+/**
+ * Set once another tab has upgraded the database past the version THIS build knows about.
+ *
+ * From that moment this tab can never open the database again: openDB asks for DB_VERSION, the
+ * constant compiled into this build, and IndexedDB rejects an open at a version BELOW the one on
+ * disk. Recording the fact lets every later call fail immediately with a sentence an operator can
+ * act on, instead of a bare VersionError raised from whichever write happened to come next.
+ */
+let _supersededByNewerBuild = false;
+
+/**
+ * What the operator is told when this tab has been superseded. Written for a research assistant.
+ * "Your data is safe" is the first thing they need to know and is true: nothing was deleted, this
+ * tab simply holds a connection to a schema that no longer exists.
+ */
+export const SUPERSEDED_MESSAGE =
+  'This window is running an older version of VisuLab and can no longer save data, because another '
+  + 'window or tab has updated the app. Nothing has been lost — the sessions already saved are safe. '
+  + 'Close every VisuLab window and open the app again. If a sitting was in progress, resume it from '
+  + 'the Session Manager after reopening.';
+
 function indexedDBAvailable(): boolean {
   try {
     return typeof indexedDB !== 'undefined' && indexedDB !== null;
@@ -48,6 +69,8 @@ function indexedDBAvailable(): boolean {
 }
 
 function getDB(): Promise<IDBPDatabase> {
+  // Fail fast and legibly rather than attempting an open that cannot succeed; see the flag above.
+  if (_supersededByNewerBuild) return Promise.reject(new Error(SUPERSEDED_MESSAGE));
   if (_dbPromise) return _dbPromise;
   _dbPromise = openDB(DB_NAME, DB_VERSION, {
     /**
@@ -65,8 +88,26 @@ function getDB(): Promise<IDBPDatabase> {
     blocked() {
       console.error('[visulab] The database is open in another tab, which is blocking an upgrade. Close the other tab.');
     },
-    blocking(_cur, _next, ev) {
-      // This connection is the one in the way. Release it; the next call here reopens.
+    blocking(_cur, next, ev) {
+      /*
+       * This connection is the one in the way, so it has to be released or the other tab's upgrade
+       * hangs for ever. What it must NOT do is claim the release is recoverable.
+       *
+       * The comment here used to say "the next call here reopens". It does not. `next` is a version
+       * higher than the DB_VERSION this build was compiled with — that is the only reason blocking
+       * fires — and IndexedDB refuses an open below the version on disk. So the reopen this tab
+       * would attempt rejects with VersionError, and it will reject for as long as the tab is open.
+       * The fix turned a silent hang into a permanent failure, which is better, but calling it a
+       * reopen made it look like neither.
+       *
+       * The honest position is that this tab is finished with the database. Say so once, here, so
+       * that every later call carries a sentence an operator can act on rather than a VersionError
+       * surfacing from an arbitrary write mid-condition.
+       */
+      if (next != null && next > DB_VERSION) {
+        _supersededByNewerBuild = true;
+        console.error(`[visulab] ${SUPERSEDED_MESSAGE}`);
+      }
       _dbPromise = null;
       (ev.target as IDBDatabase | null)?.close();
     },
@@ -325,4 +366,5 @@ export async function clearSessionStageRows(
 export function _resetForTests(): void {
   memStores.clear();
   _dbPromise = null;
+  _supersededByNewerBuild = false;
 }

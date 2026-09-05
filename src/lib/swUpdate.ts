@@ -82,10 +82,23 @@ export async function installUpdateWatch(): Promise<void> {
  */
 export async function applyUpdate(): Promise<void> {
   if (!applyFn) {
-    // No registration to update through — reload anyway so a hard-refreshed page at least picks up
-    // whatever the network has.
-    location.reload();
-    return;
+    /*
+     * Unreachable in the shipped app, and deliberately a thrown error rather than a fallback,
+     * because what used to be here was not one.
+     *
+     * registerSW() returns its update function synchronously and unconditionally — even in a
+     * browser with no service worker at all — so applyFn is assigned the moment installUpdateWatch's
+     * dynamic import resolves. updateWaiting turns true only from onNeedRefresh, which cannot fire
+     * before that, and UpdateBanner is the sole caller and renders only while updateWaiting is
+     * true. There is no ordering in which applyFn is null here.
+     *
+     * The previous branch called location.reload() with a comment saying that would "pick up
+     * whatever the network has". On a page a service worker controls, a reload is served BY that
+     * worker out of the same precache, so it would have re-served the stale build — the claim was
+     * false as well as dead. Throwing at least reaches the operator through the banner instead of
+     * looking like an update that worked.
+     */
+    throw new Error('No service-worker registration to update through.');
   }
   await applyFn(true);
 }

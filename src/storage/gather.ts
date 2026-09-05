@@ -158,6 +158,19 @@ export async function listSessions(): Promise<SessionRecord[]> {
     .sort((a, b) => b.session_start_time - a.session_start_time);
 }
 
+/**
+ * The sittings that are open right now: started, not finished, not in the recycle bin.
+ *
+ * Exists to gate the service-worker update. Applying an update reloads the page, and the question
+ * "is a participant part-way through a sitting?" cannot be answered from the React state of the
+ * screen asking it — a SECOND TAB on the same tablet can be mid-condition and is invisible from
+ * here. IndexedDB is shared by every tab on the origin, so asking the database is what makes the
+ * gate hold across all of them.
+ */
+export async function sittingsInProgress(): Promise<SessionRecord[]> {
+  return (await listSessions()).filter((s) => s.status === 'in_progress');
+}
+
 /** Soft-deleted sessions still inside the retention window (the recycle bin). */
 export async function listDeleted(): Promise<SessionRecord[]> {
   const sessions = (await getAll('sessions')).map(normalise);

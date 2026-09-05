@@ -217,6 +217,8 @@ Magnitude at scale 0.76 on 1152x650: root height 855 root-px, child 720 root-px 
 
 ## [high] Pause exits mid-session to SessionManager, where UpdateBanner renders — applyUpdate() is reachable during a sitting, contradicting the comments in four files
 
+**STATUS: CONFIRMED AND FIXED.** Pause exits to the session manager, which is exactly where the banner lives, so a sitting paused at condition seven put the operator in front of "Apply it now, between sessions" — the banner's own reassurance was the trap. The screen was the wrong thing to gate on. `sittingsInProgress()` reads IndexedDB instead, and the button renders only when it comes back empty; an unanswered query blocks, since offering the update while the question is open would be deciding it by assuming the convenient answer. The notice itself stays visible and names the sitting that is holding it back, because hiding it silently would restore the failure this module exists for — from the tablet, a deployed fix and a stale cache look identical.
+
 `src/experiment/Experiment.tsx`:1257
 
 **Evidence claimed:** Experiment.tsx:1166 `const canPause = isInLoop(machine.stage) && (machine.stage !== 'REACTION_TIME' || rtBlockFinished) && !!session;` and :1255-1257 `saveResume(session.session_id, target); tracking.stop(); onExit();`. App.tsx:52 wires `onExit={toManager}`, and App.tsx:33-43 renders `<UpdateBanner />` unconditionally on the `manager` view. So the manager is NOT a between-sessions screen: it is the screen Pause lands on, and Pause is deliberately available throughout the condition loop (including BREAK, which is exactly when an operator steps away and taps around). The banner text itself then lies to the operator: "Apply it now, between sessions. Never during a sitting" (UpdateBanner.tsx:39) — while a sitting is in progress. Four comments assert a safeguard that does not exist: swUpdate.ts:23-25 ("ONLY on the landing and session-manager screens — between sessions, never inside one — which preserves the original safety property"), UpdateBanner.tsx:8-11 ("Render this on the landing and session-manager screens and nowhere else... exactly the operation that must never happen during a sitting"), App.tsx:27-28 ("Between-sessions screens only"), main.tsx:71 ("UpdateBanner offers the waiting build on the between-sessions screens only"). There is no test covering this: `find` for *swUpdate*/*UpdateBanner* returns only the two source files.
@@ -228,6 +230,8 @@ Magnitude at scale 0.76 on 1152x650: root height 855 root-px, child 720 root-px 
 **Proposed fix:** Do not render UpdateBanner on the manager view whenever any session has status 'in_progress'. SessionManager already computes `inProgress` (SessionManager.tsx:65); lift that (or a `listResumable().length > 0` check) into App and gate the banner: `{inProgress.length === 0 && <UpdateBanner />}`. Failing that, make applyUpdate() itself refuse: query `getAll('sessions')` for any `status === 'in_progress' && !deleted_at` and, if found, replace the button with a line naming the participant(s) blocking the update. Then correct the four comments to describe what the code actually does.
 
 ## [high] Applying an update reloads EVERY open client, not just the one that consented: vite-plugin-pwa arms a hidden `controlling` -> window.location.reload() listener in every window the moment a new build starts waiting
+
+**STATUS: CONFIRMED AND FIXED by the same gate.** Verified in `node_modules/vite-plugin-pwa/dist/client/build/register.js`: in prompt mode `showSkipWaitingPrompt` attaches a `controlling` listener that reloads, and it is called from both `waiting` and `externalwaiting`, so every open tab arms one; `skipWaiting()` then hands the new worker every client the old one controlled. Pressing Update in one window reloads them all. React state cannot see another window, but IndexedDB is shared by every tab on the origin — so gating on the database blocks the button in the window holding it as well as in the one that is mid-condition.
 
 `src/lib/swUpdate.ts`:64
 
@@ -452,6 +456,8 @@ export.ts:302 describes stimulus_scale only as 'a value below 1 means the readin
 
 ## [medium] db.ts blocking() closes the connection and comments that "the next call here reopens", but after a newer build raises DB_VERSION the reopen fails with VersionError on every retry for the rest of the session
 
+**STATUS: CONFIRMED AND FIXED.** Reproduced: with the guard removed, the call after a version bump rejects with "An attempt was made to open a database using a version lower than the existing version" — the reopen the comment promised cannot happen, because openDB asks for the DB_VERSION compiled into this build. The connection still has to be released or the other tab hangs for ever, so the fix is not to keep it: `blocking` now records that this tab has been superseded, and every later call fails immediately with a sentence written for a research assistant — what happened, that nothing was lost, and what to do — instead of a VersionError surfacing from whichever write came next, mid-condition.
+
 `src/storage/db.ts`:68
 
 **Evidence claimed:** db.ts:68-72: `blocking(_cur, _next, ev) { // This connection is the one in the way. Release it; the next call here reopens.  _dbPromise = null; (ev.target as IDBDatabase | null)?.close(); }`. getDB() (db.ts:52) always reopens with the constant `DB_VERSION` compiled into THIS bundle (schemaEnums.ts: `export const DB_VERSION = 9`). `blocking` fires when another client opens a HIGHER version — i.e. a client running a newer build. After that client's upgrade commits, the stored database is at version 10; this old-build client's `openDB(DB_NAME, 9)` rejects with VersionError. db.ts:99 `_dbPromise.catch(() => { _dbPromise = null; })` correctly avoids caching the rejection, so every subsequent call re-attempts and re-fails identically. The comment promises recovery that the version constant makes impossible. The surrounding block comment (db.ts:57-66) explicitly names the triggering case: "a service-worker update that bumps DB_VERSION".
@@ -463,6 +469,8 @@ export.ts:302 describes stimulus_scale only as 'a value below 1 means the readin
 **Proposed fix:** Make the failure legible and bounded rather than silent-and-permanent: in getDB, catch VersionError specifically and rethrow with a message the operator can act on ("this tab is running an older build than the database on this device — reload this window"), and consider opening with no explicit version (`openDB(DB_NAME)`) for read paths so an old build can at least still read a newer database. At minimum, correct the comment: the next call reopens only while no newer build has upgraded the store.
 
 ## [medium] UpdateBanner's `applying` latch and swUpdate's `updateWaiting` are never cleared, and applyUpdate resolves as soon as the message is posted — a failed apply leaves the button stuck on "Updating…" forever
+
+**STATUS: CONFIRMED IN PART, FIXED.** The latch is a real fault and is now released on failure, with the reason shown in the banner: a button reading "Updating…" for ever reports an update in progress while the tablet is in fact still on the stale build. `updateWaiting` staying true is NOT a fault and was left alone — after a failed apply a new build genuinely is still waiting, so clearing the flag would be the lie.
 
 `src/components/UpdateBanner.tsx`:43
 
@@ -719,6 +727,8 @@ Separately, foldViewportFloor() infers orientation from the measurement itself (
 **Proposed fix:** `illumination_lux_target: s.ambient_illumination_level ? ILLUMINATION[s.ambient_illumination_level].target : null` (import ILLUMINATION from '@/experiment/illumination').
 
 ## [low] The applyFn === null fallback in applyUpdate() is unreachable dead code whose comment describes a safeguard that can never run
+
+**STATUS: CONFIRMED, AND WORSE THAN REPORTED.** Unreachable as described — `registerSW` returns its update function synchronously and unconditionally, even where the browser has no service worker, so `applyFn` is assigned before `onNeedRefresh` can fire, and the banner is the only caller. But the comment was also false on its own terms: it said a reload would "pick up whatever the network has", and a reload on a service-worker-controlled page is served BY that worker from the same precache, so it would have re-served the stale build. Replaced with a throw the banner surfaces.
 
 `src/lib/swUpdate.ts`:84
 
