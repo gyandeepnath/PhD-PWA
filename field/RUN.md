@@ -52,7 +52,7 @@ the go/no-go block from 32 trials to 4. A session runs in about two minutes and 
 measure will be meaningless. It exists so the automated tests can run quickly. Plain URL only.
 
 **Use a real tablet in the real room.** Reading speed on a 10-inch tablet held at reading distance
-is not reading speed on a laptop, and the 10 lux condition genuinely slows people down.
+is not reading speed on a laptop. (An earlier draft of this note also cited the 10 lux condition as a source of slowing; that level has been withdrawn from the protocol and the claim no longer applies.)
 
 **Landscape.** The app blocks portrait with an overlay; that is deliberate, not a bug.
 

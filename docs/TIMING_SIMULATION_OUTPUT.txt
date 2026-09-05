@@ -1,3 +1,7 @@
+
+> visulab@2.1.0 simulate:timing
+> tsx scripts/simulateParticipant.ts
+
 ================================================================================================
 PROTOCOL TIMING SIMULATION — 2000 simulated participants, university students aged 20-24
 ================================================================================================

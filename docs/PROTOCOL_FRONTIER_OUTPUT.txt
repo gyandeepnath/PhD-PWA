@@ -3,7 +3,7 @@ PROTOCOL FRONTIER — what each way of shortening a sitting costs
 ================================================================================================================
   2000 simulated participants per variant, identical participant stream across variants.
   Power assumes n=130, true d_z=0.3, between-participant SD of the difference score=0.1.
-  Every participant must accumulate 20 condition-runs (10 conditions x 2 illumination levels).
+  Every participant must accumulate 10 condition-runs (10 conditions x 1 illumination level).
   "contact" is median sitting length x sittings: the participant's total time in the lab.
 
   The power columns are the PRIMARY outcome only — the incomplete-blink ratio. They are
@@ -14,24 +14,24 @@ PROTOCOL FRONTIER — what each way of shortening a sitting costs
 
   variant                       cond   sitting     p95  visits   contact  blinks      SE  pwr main  pwr int   d' SE
   -----------------------------------------------------------------------------------------------------------------
-  as shipped                      10     93.1m    116m       2      186m      38   0.059       89%      45%   0.683   10 conditions, full passages, CVS-Q twice
-  CVS-Q once per participant      10     87.1m    107m       2      174m      38   0.059       89%      45%   0.683   demote to a screening covariate
-  CVS-Q end of sitting only       10     90.2m    112m       2      180m      39   0.059       89%      45%   0.683   drop the within-sitting baseline
-  5 cond/sitting                   5     55.8m     70m       4      223m      38   0.059       89%      45%   0.683   balanced incomplete block, 4 visits
-  5 cond + CVS-Q once              5     49.3m     62m       4      197m      38   0.059       89%      45%   0.683
-  4 cond/sitting                   4     41.5m     53m       5      207m      39   0.059       89%      45%   0.683   5 visits
-  2 cond/sitting                   2     26.0m     35m      10      260m      38   0.059       89%      45%   0.683   10 visits
-  5 cond, 60% passage              5     43.5m     55m       4      174m      23   0.076       87%      34%   0.683   ~350 words per condition
-  4 cond, 60% passage              4     36.7m     47m       5      183m      23   0.076       87%      34%   0.683
-  4 cond, 40% passage              4     34.3m     44m       5      172m      15   0.093       84%      26%   0.683   ~234 words per condition
-  2 cond, 40% passage              2     22.4m     31m      10      224m      15   0.093       84%      26%   0.683   closest approach to 20 min
-  adaptation switch 120->90s      10     90.7m    113m       2      181m      38   0.059       89%      45%   0.683   5 switches x 30s saved
-  adaptation switch 120->60s      10     88.2m    111m       2      176m      38   0.059       89%      45%   0.683   at the Fairchild criterion
-  RT block 32 -> 16 trials        10     87.9m    111m       2      176m      38   0.059       89%      45%   0.966   halves the RT cost
-  90s switch + CVS-Q once         10     84.5m    104m       2      169m      38   0.059       89%      45%   0.683   NO d-prime cost — the free package
-  60s switch + CVS-Q once         10     82.0m    101m       2      164m      38   0.059       89%      45%   0.683   NO d-prime cost, at the Fairchild criterion
-  all three CONFIG cuts           10     79.0m     98m       2      158m      38   0.059       89%      45%   0.966   90s switch + 16 RT + CVS-Q once
-  CONFIG cuts + 5 cond/sitting     5     45.5m     58m       4      182m      38   0.059       89%      45%   0.966   best sitting length with full reading
+  as shipped                      10     93.1m    116m       1       93m      38   0.059       89%      45%   0.683   10 conditions, full passages, CVS-Q twice
+  CVS-Q once per participant      10     87.1m    107m       1       87m      38   0.059       89%      45%   0.683   demote to a screening covariate
+  CVS-Q end of sitting only       10     90.2m    112m       1       90m      39   0.059       89%      45%   0.683   drop the within-sitting baseline
+  5 cond/sitting                   5     55.8m     70m       2      112m      38   0.059       89%      45%   0.683   balanced incomplete block
+  5 cond + CVS-Q once              5     49.3m     62m       2       99m      38   0.059       89%      45%   0.683
+  4 cond/sitting                   4     41.5m     53m       3      124m      39   0.059       89%      45%   0.683   CVS-Q dropped
+  2 cond/sitting                   2     26.0m     35m       5      130m      38   0.059       89%      45%   0.683   CVS-Q dropped
+  5 cond, 60% passage              5     43.5m     55m       2       87m      23   0.076       87%      34%   0.683   ~350 words per condition
+  4 cond, 60% passage              4     36.7m     47m       3      110m      23   0.076       87%      34%   0.683
+  4 cond, 40% passage              4     34.3m     44m       3      103m      15   0.093       84%      26%   0.683   ~234 words per condition
+  2 cond, 40% passage              2     22.4m     31m       5      112m      15   0.093       84%      26%   0.683   closest approach to 20 min
+  adaptation switch 120->90s      10     90.7m    113m       1       91m      38   0.059       89%      45%   0.683   5 switches x 30s saved
+  adaptation switch 120->60s      10     88.2m    111m       1       88m      38   0.059       89%      45%   0.683   at the Fairchild criterion
+  RT block 32 -> 16 trials        10     87.9m    111m       1       88m      38   0.059       89%      45%   0.966   halves the RT cost
+  90s switch + CVS-Q once         10     84.5m    104m       1       84m      38   0.059       89%      45%   0.683   NO d-prime cost — the free package
+  60s switch + CVS-Q once         10     82.0m    101m       1       82m      38   0.059       89%      45%   0.683   NO d-prime cost, at the Fairchild criterion
+  all three CONFIG cuts           10     79.0m     98m       1       79m      38   0.059       89%      45%   0.966   90s switch + 16 RT + CVS-Q once
+  CONFIG cuts + 5 cond/sitting     5     45.5m     58m       2       91m      38   0.059       89%      45%   0.966   best sitting length with full reading
 
 ================================================================================================================
 THE FIXED-OVERHEAD WALL — why 20 minutes is not a matter of trimming
@@ -65,23 +65,23 @@ ATTRITION — the reason a shorter sitting can cost you MORE participants, not f
 
      visits   sitting  contact   retained @q=5%  retained @q=10%  retained @q=15%
     -----------------------------------------------------------------------------
-          2       93m     186m              95%              90%              85%
-          4       56m     223m              86%              73%              61%
-          5       41m     207m              81%              66%              52%
-         10       26m     260m              63%              39%              23%
+          1       93m      93m             100%             100%             100%
+          2       56m     112m              95%              90%              85%
+          3       41m     124m              90%              81%              72%
+          5       26m     130m              81%              66%              52%
 
     To ANALYSE n=130 you must RECRUIT n / retention:
      visits    recruit @q=5%   recruit @q=10%   recruit @q=15%
+          1              130              130              130
           2              137              145              153
-          4              152              179              212
+          3              145              161              180
           5              160              199              250
-         10              207              336              562
 
 ================================================================================================================
 WHAT THE TABLE ACTUALLY SAYS
 ================================================================================================================
   1. Cutting CONDITIONS PER SITTING costs no statistical power at all — every variant above
-     holds the same power, because total condition-runs are conserved at 20 per
+     holds the same power, because total condition-runs are conserved at 10 per
      participant however they are packaged. What it costs is VISITS, and therefore total
      contact time (which goes UP, because the fixed overhead is paid once per visit) and
      retention (which goes DOWN, because every return is a chance to not return).

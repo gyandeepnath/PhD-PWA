@@ -4,7 +4,7 @@ One row per checkpoint. Note the clock time as you pass each one; the durations 
 subtraction, so you only ever write down a single number and never have to stop and start a timer
 mid-task.
 
-Session: ____________  Participant: ______  Illumination: ☐ 10 lux  ☐ 150 lux  ☐ 1st visit ☐ 2nd
+Session: ____________  Participant: ______  Room: 300 lux (250–350) ☐ verified   Sitting: ☐ single  ☐ split half 1  ☐ split half 2
 
 ## Setup — predicted 17.4 min total
 

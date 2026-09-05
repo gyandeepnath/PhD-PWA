@@ -29,8 +29,19 @@ export const FIXTURE = {
   sid: 'sess-verify-0001',
   /** Odd and non-trivial, so the counterbalancing arithmetic is genuinely exercised. */
   enrolment: 7,
-  /** The SECOND illumination block, so blockPlan must advance the Williams row. */
-  block: 1,
+  /**
+   * The block a participant of this protocol can actually be in.
+   *
+   * This was 1 — the SECOND illumination block — chosen so blockPlan had to advance the Williams
+   * row. Under the single-level protocol Experiment.tsx clamps the block to 0, so no participant
+   * can ever be in block 1, and the golden fixture was certifying a record shape the app cannot
+   * produce: session_index 2, global_position 10-19, passage_repeat_number 2. Every one of the
+   * export verifier's checks passed against a participant who could not exist.
+   *
+   * The Williams row is still exercised: enrolment 7 is odd and non-trivial, and blockPlan(7, 0)
+   * is not the identity order.
+   */
+  block: 0,
   t0: 1_700_000_000_000,
 } as const;
 
@@ -228,7 +239,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       screen_resolution: '1600x2560', stimulus_scale: 1, layout_viewport: '1194x834',
       conditions_per_session: plan.length,
       condition_offset: 0,
-      session_index: 2,
+      session_index: 1,
     },
     participant: {
       participant_id: pid,

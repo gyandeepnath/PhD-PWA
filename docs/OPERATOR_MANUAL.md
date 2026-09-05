@@ -1,5 +1,11 @@
 # Operator manual
 
+> **PROTOCOL AMENDMENT — READ THIS FIRST.** Ambient illumination is no longer varied. Every sitting
+> runs at **300 lux** (accept 250–350), and each participant attends **ONCE** for all ten
+> conditions. Instructions below that name 10 or 150 lux, or a second session 48–72 hours later,
+> describe the superseded protocol — **the app will reject a 150 lux reading** and force you to
+> record a protocol deviation. Everything else is unchanged. See `ILLUMINATION_AMENDMENT.md`.
+
 For the research assistant running a session. It assumes you are a trained optometry student, not a
 developer. Read it once end to end before your first participant, then use section 9 at the bench.
 
@@ -30,15 +36,15 @@ tablet's own camera during the reading task. Two consequences for you:
 **Room**
 
 - Exclude daylight. Curtains or blinds closed; no window contribution that changes through the day.
-- Set the room to the level for *this* sitting:
-  - **Dim: 10 lux** (acceptable 5 to 15)
-  - **Moderate: 150 lux** (acceptable 130 to 170)
+- Set the room to **300 lux** (acceptable 250 to 350). This is the same for every participant and
+  every sitting — there is no longer a level to look up or assign.
 - Measure with the lux meter at **two points**: the participant's eye position, facing the display,
   and the display plane. If either is outside the accepted range, adjust the lighting before the
   participant arrives, not during the session. The app has one lux field and it is the **eye-position**
   reading; record the display-plane reading on the session sheet.
-- Keep the lamp type and colour temperature identical between the two sittings. Only the
-  illuminance is meant to differ.
+- Keep the lamp type and colour temperature identical across every session in the study.
+  Illuminance is held constant, so ANY variation in the room's light is unwanted, not just a change
+  in brightness.
 
 **Tablet**
 
@@ -133,7 +139,7 @@ confirmatory analysis can drop them. Enter what is true rather than what will le
   Record *not done* honestly if you did not do it; it is not a pass.
 - The **app's own six-plate screen** is a screening aid and a covariate. It is not the Ishihara
   test — it has no published sensitivity or specificity — and it never excludes anyone on its own.
-  Its digits, plate order and colours differ between the two sittings by design, so a participant
+  Its digits, plate order and colours are re-randomised on every administration by design, so a participant
   cannot pass the second one from memory; for the same reason the two scores are not directly
   comparable with each other.
 
@@ -240,7 +246,9 @@ never re-checked is a session where you do not know what the illuminance was.
    - `07_eye_metrics.csv` — confirm `camera_active` is true and `face_presence_ratio` is high.
 5. **Copy the export off the tablet the same day.** Not at the end of the week. Everything lives in
    the tablet's browser storage until you do, and a wiped or failed device destroys it.
-6. Book session 2 for **48 to 72 hours** later, at a similar time of day.
+6. There is no second session to book. If the sitting had to be **split** for scheduling, book the
+   remaining half as soon as the participant can manage — the ten conditions belong to one
+   protocol, and a long gap between halves adds a period effect the design does not model.
 
 **If a tablet is lost or wiped:** the `backup_*.json` from the last export restores the session on
 any device — Session Manager → *Restore session from backup file*. The plain `session_*.json` is
@@ -248,14 +256,21 @@ any device — Session Manager → *Restore session from backup file*. The plain
 
 ---
 
-## 8. Session 2
+## 8. Split sittings
 
-Same participant, same everything, except:
+There is no second session in the standard protocol. A participant attends once and completes all
+ten conditions.
 
-- The **other** illumination level. The app knows which and assigns it; do not override.
-- The condition order is different by design. Do not try to repeat session 1's order.
-- Re-measure and re-set the room to the new level before they arrive.
-- Re-run calibration. Do not reuse session 1's.
+The app does offer a **split**, for a participant who cannot sit the full ~100 minutes in one go. It
+divides the same ten conditions across two shorter visits. If you use it:
+
+- Choose *split* on the setup screen **before** starting. It cannot be applied afterwards.
+- The room is set to **300 lux** for both halves, exactly as for a single sitting. Nothing about the
+  lighting changes between them.
+- The condition order continues where the first half stopped. Do not restart it, and do not try to
+  repeat the first half's order.
+- Re-run calibration for the second half. Do not reuse the first half's.
+- Keep the gap short. The design treats the two halves as one sitting.
 
 ---
 
@@ -264,7 +279,7 @@ Same participant, same everything, except:
 Print this.
 
 **Before**
-- [ ] Daylight excluded; lamp type unchanged from the other sitting
+- [ ] Daylight excluded; lamp type and colour temperature unchanged from every other session
 - [ ] Lux measured at eye position (entered in the app) and display plane (on the sheet), both in range
 - [ ] Screen cleaned; brightness fixed; auto-brightness OFF; blue-light filter OFF
 - [ ] Screen timeout off; Do Not Disturb on; aeroplane mode on
@@ -300,8 +315,8 @@ Print this.
 - [ ] Integrity report reads `all_checks_passed`
 - [ ] `camera_active` true; face presence high
 - [ ] Export copied off the tablet **today**
-- [ ] Session 2 booked for 48 to 72 hours later
+- [ ] If the sitting was split, the second half is booked as soon as the participant can manage
 
-Participant code: ............  Session: 1 / 2  Illumination: dim / moderate
+Participant code: ............  Sitting: single / split (half 1 / half 2)  Room: 300 lux (250–350)
 
 Operator: ............  Date: ............  Deviations: ...............................

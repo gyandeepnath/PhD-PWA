@@ -21,6 +21,7 @@
  */
 import { CONFIG } from '../src/experiment/config';
 import { N_CONDITIONS } from '../src/experiment/conditions';
+import { N_ILLUMINATION_BLOCKS } from '../src/experiment/illumination';
 import {
   type SittingSpec, samplePerson, simulateSitting, reseed, clamp,
   seOfRatio, powerT, attenuatedDz, CONTRAST, SYNOPSIS, dPrimeSe,
@@ -28,8 +29,15 @@ import {
 
 const N = Number(process.argv[process.argv.indexOf('--n') + 1]) || 2000;
 
-/** Every participant must accumulate one run of each condition under each illumination level. */
-const RUNS_PER_PARTICIPANT = N_CONDITIONS * 2;
+/**
+ * Every participant accumulates one run of each condition under each illumination level.
+ *
+ * Derived rather than a literal `* 2`: with the dim level withdrawn there is ONE block, so a
+ * participant contributes ten condition-runs, not twenty. Left as a literal this script printed
+ * "20 condition-runs (10 conditions x 2 illumination levels)" and derived every visit count,
+ * contact time and attrition figure in the frontier table from it.
+ */
+const RUNS_PER_PARTICIPANT = N_CONDITIONS * N_ILLUMINATION_BLOCKS;
 
 /** Assumptions come from the shared SYNOPSIS block so this script cannot disagree with the other. */
 const { SIGMA_TRUE, N_ANALYSED: N_PARTICIPANTS, TRUE_DZ_MAIN, TRUE_DZ_INTERACTION } = SYNOPSIS;
@@ -85,10 +93,10 @@ const VARIANTS: Variant[] = [
   { label: 'as shipped', perSitting: 10, note: '10 conditions, full passages, CVS-Q twice', spec: {} },
   { label: 'CVS-Q once per participant', perSitting: 10, note: 'demote to a screening covariate', spec: { cvsq: 'none' } },
   { label: 'CVS-Q end of sitting only', perSitting: 10, note: 'drop the within-sitting baseline', spec: { cvsq: 'end-only' } },
-  { label: '5 cond/sitting', perSitting: 5, note: 'balanced incomplete block, 4 visits', spec: {} },
+  { label: '5 cond/sitting', perSitting: 5, note: 'balanced incomplete block', spec: {} },
   { label: '5 cond + CVS-Q once', perSitting: 5, note: '', spec: { cvsq: 'none' } },
-  { label: '4 cond/sitting', perSitting: 4, note: '5 visits', spec: { cvsq: 'none' } },
-  { label: '2 cond/sitting', perSitting: 2, note: '10 visits', spec: { cvsq: 'none' } },
+  { label: '4 cond/sitting', perSitting: 4, note: 'CVS-Q dropped', spec: { cvsq: 'none' } },
+  { label: '2 cond/sitting', perSitting: 2, note: 'CVS-Q dropped', spec: { cvsq: 'none' } },
   { label: '5 cond, 60% passage', perSitting: 5, note: '~350 words per condition', spec: { cvsq: 'none', readingFraction: 0.6 } },
   { label: '4 cond, 60% passage', perSitting: 4, note: '', spec: { cvsq: 'none', readingFraction: 0.6 } },
   { label: '4 cond, 40% passage', perSitting: 4, note: '~234 words per condition', spec: { cvsq: 'none', readingFraction: 0.4 } },
@@ -116,7 +124,7 @@ console.log('PROTOCOL FRONTIER — what each way of shortening a sitting costs')
 console.log('='.repeat(112));
 console.log(`  ${N} simulated participants per variant, identical participant stream across variants.`);
 console.log(`  Power assumes n=${N_PARTICIPANTS}, true d_z=${TRUE_DZ_MAIN}, between-participant SD of the difference score=${SIGMA_TRUE}.`);
-console.log(`  Every participant must accumulate ${RUNS_PER_PARTICIPANT} condition-runs (${N_CONDITIONS} conditions x 2 illumination levels).`);
+console.log(`  Every participant must accumulate ${RUNS_PER_PARTICIPANT} condition-runs (${N_CONDITIONS} conditions x ${N_ILLUMINATION_BLOCKS} illumination level${N_ILLUMINATION_BLOCKS === 1 ? "" : "s"}).`);
 console.log('  "contact" is median sitting length x sittings: the participant\'s total time in the lab.\n');
 
 console.log("  The power columns are the PRIMARY outcome only — the incomplete-blink ratio. They are");
