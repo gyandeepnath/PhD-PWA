@@ -145,7 +145,7 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
     description: 'Mean reaction time on correct go trials.' },
   { column: 'rt_median_hits_ms', role: 'secondary', unit: 'ms', missing: 'no valid hits',
     description: 'Median reaction time on correct go trials. More robust to lapses than the mean; report both.' },
-  { column: 'd_prime', role: 'secondary', unit: 'z', missing: 'block not completed',
+  { column: 'd_prime', role: 'secondary', unit: 'z', missing: 'block not completed, OR one trial pool was empty so sensitivity was not estimable — d_prime_estimable in 09_rt_summary.csv separates the two',
     description: "Sensitivity on the go/no-go block. Check d_prime_se in 09_rt_summary.csv: with 20 go and 12 no-go trials a single block's d-prime is imprecise, and this column carries no indication of that on its own." },
   { column: 'criterion', role: 'secondary', unit: 'z', missing: 'block not completed',
     description: 'Response bias. A polarity effect on criterion without one on d_prime is a bias shift, not a sensitivity change — a distinction worth making explicitly.' },

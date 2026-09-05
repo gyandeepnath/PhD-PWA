@@ -222,6 +222,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '09_rt_summary.csv', column: 'rt_cv', type: 'number', unit: 'ratio', role: 'dv', description: 'RT coefficient of variation. One of the two most fatigue-sensitive indices.' },
   { file: '09_rt_summary.csv', column: 'lapse_rate', type: 'number', unit: '0-1', role: 'dv', description: 'Proportion of valid hits slower than 600 ms. The other fatigue-sensitive index.' },
   { file: '09_rt_summary.csv', column: 'd_prime', type: 'number', unit: 'z units', role: 'dv', description: 'Signal-detection sensitivity. Unstable at low trial counts — model hierarchically; check d_prime_unstable.' },
+  { file: '09_rt_summary.csv', column: 'd_prime_estimable', type: 'boolean', unit: '-', role: 'qc', description: "FALSE when one of the two trial pools was empty, so sensitivity could not be estimated at all — distinct from an estimate that is merely imprecise, which is what d_prime_unstable reports. It is recorded on every block and was being dropped from this file, leaving an empty d_prime cell to mean either 'unestimable' or 'not written'. The case is real: every no-go trial scored as an anticipation (RT under 150 ms) empties the noise pool, and a rhythmically-tapping, disengaged participant is the phenotype this task exists to detect." },
   { file: '09_rt_summary.csv', column: 'd_prime_unstable', type: 'boolean', unit: '-', role: 'qc', description: "Set when the standard error of d-prime exceeds 0.3, i.e. the per-condition estimate is too imprecise to compare directly. With 20 signal and 12 noise trials the smallest achievable SE is about 0.46, so this is TRUE for every possible block: per-condition d-prime must be modelled hierarchically, not read row by row. It does NOT mean a rate hit a bound and was corrected — an earlier version of this line said so, and it does not describe the code." },
 
   // ---- 10_wide_summary.csv
@@ -649,7 +650,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 09 — rt summary
   csv('09_rt_summary.csv',
-    ['participant_id', 'condition_id', 'total_trials', 'signal_trials', 'hits', 'false_alarms', 'misses', 'correct_rejections', 'hit_rate', 'false_alarm_rate', 'error_rate', 'mean_rt_hits_ms', 'median_rt_hits_ms', 'rt_sd_ms', 'rt_cv', 'anticipations', 'lapse_count', 'lapse_rate', 'inverse_efficiency_ms', 'first_half_mean_rt_ms', 'second_half_mean_rt_ms', 'd_prime', 'd_prime_se', 'd_prime_unstable', 'criterion'],
+    ['participant_id', 'condition_id', 'total_trials', 'signal_trials', 'hits', 'false_alarms', 'misses', 'correct_rejections', 'hit_rate', 'false_alarm_rate', 'error_rate', 'mean_rt_hits_ms', 'median_rt_hits_ms', 'rt_sd_ms', 'rt_cv', 'anticipations', 'lapse_count', 'lapse_rate', 'inverse_efficiency_ms', 'first_half_mean_rt_ms', 'second_half_mean_rt_ms', 'd_prime', 'd_prime_se', 'd_prime_unstable', 'd_prime_estimable', 'criterion'],
     bundle.rtSummaries.map((r) => ({ participant_id: pid, ...r })));
 
   // 10 — wide one-row-per-condition summary (joined)

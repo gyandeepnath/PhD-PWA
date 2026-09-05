@@ -30,6 +30,29 @@ import { buildFixtureBundle } from '@/sim/bundleFixture';
 /** A value that correctly signals "no measurement": null, or non-finite for filtered channels. */
 const absent = (v: unknown) => v === null || v === undefined || (typeof v === 'number' && !Number.isFinite(v));
 
+
+/** Minimal RFC4180 reader, so an assertion reads the shipped bytes and not a naive split. */
+function parseCsv(content: string): Record<string, string>[] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let quoted = false;
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i];
+    if (quoted) {
+      if (ch === '"') {
+        if (content[i + 1] === '"') { field += '"'; i++; } else quoted = false;
+      } else field += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') { row.push(field); field = ''; }
+    else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else if (ch !== '\r') field += ch;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  const [head, ...body] = rows.filter((r) => r.length > 1);
+  return body.map((r) => Object.fromEntries(head.map((h, i) => [h, r[i] ?? ''])));
+}
+
 describe('the primary outcome never invents a value', () => {
   it('reports absence, not zero, when no blink was detected', () => {
     expect(absent(summariseBlinks([], 60000).incomplete_blink_ratio)).toBe(true);
@@ -199,5 +222,44 @@ describe('an unmeasured detection rate is reported as absent, not as zero', () =
     const r = computeSdt({ hits: 0, misses: 10, falseAlarms: 1, correctRejections: 11 });
     expect(r.hit_rate).toBe(0);
     expect(r.estimable).toBe(true);
+  });
+
+  it('carries the estimability flag into the exported file, not just the record', async () => {
+    /*
+     * The rates being null is only half the repair. An empty d_prime cell still has to be readable,
+     * and on its own it says nothing about WHY it is empty — a block that was never written and a
+     * block whose noise pool was emptied by anticipations produce the same blank.
+     *
+     * d_prime_estimable was computed and stored on every summary and then dropped from
+     * 09_rt_summary.csv, so the answer existed on the tablet and not in the export. d_prime_unstable
+     * cannot stand in for it: with 20 signal and 12 noise trials that flag is true for every block
+     * the study can produce, so it separates nothing.
+     */
+    const { buildExportFiles } = await import('@/storage/export');
+    const { buildFixtureBundle } = await import('@/sim/bundleFixture');
+
+    const b = buildFixtureBundle();
+    const first = b.rtSummaries[0] as unknown as Record<string, unknown>;
+    // Every no-go trial scored as an anticipation: the noise pool is empty, the block is real.
+    Object.assign(first, {
+      false_alarms: 0, correct_rejections: 0,
+      false_alarm_rate: null, d_prime: null, d_prime_se: null,
+      d_prime_estimable: false,
+    });
+
+    const rt = buildExportFiles(b).find((f) => f.filename === '09_rt_summary.csv')!;
+    // Parsed properly rather than split on commas: the fixture's participant_id is deliberately a
+    // torture string containing a comma and a quote, and a naive split shifts every column by one —
+    // which silently made this assertion read d_prime_unstable instead.
+    const rows = parseCsv(rt.content);
+    expect(Object.keys(rows[0]), 'the estimability flag never reached the file')
+      .toContain('d_prime_estimable');
+    expect(rows.some((r) => r.d_prime_estimable === 'false'),
+      'the unestimable block exported as estimable').toBe(true);
+
+    // And the flag is not a constant: the other blocks are estimable, so it distinguishes them.
+    expect(new Set(rows.map((r) => r.d_prime_estimable))).toEqual(new Set(['true', 'false']));
+    // The row it marks is the one with the empty d_prime.
+    expect(rows.find((r) => r.d_prime_estimable === 'false')!.d_prime).toBe('');
   });
 });
