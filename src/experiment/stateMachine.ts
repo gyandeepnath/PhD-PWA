@@ -26,7 +26,8 @@ export const SETUP_ORDER: Stage[] = [
   'CALIBRATION',
   'CVSQ_BASELINE',
   'BASELINE_FATIGUE',
-  // Participant-facing overview of what the 8 condition-blocks involve, shown once before the loop.
+  // Participant-facing overview of what the condition-blocks involve, shown once before the loop.
+  // Deliberately not a literal count: it was written as "8" and was stale at 10.
   'INSTRUCTIONS',
 ];
 
