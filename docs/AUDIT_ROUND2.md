@@ -438,6 +438,8 @@ export.ts:302 describes stimulus_scale only as 'a value below 1 means the readin
 
 ## [medium] purgeExpired's `purged` count is computed and thrown away while the comment above it claims the bin reports what it destroyed
 
+**STATUS: CONFIRMED AND FIXED.** The count was computed and discarded, so a session the 30-day timer permanently destroyed vanished with no notice at all — the one bin event that cannot be undone was the one event that was silent. Both halves are now reported: what was destroyed and what was declined.
+
 `src/start/SessionManager.tsx`:44
 
 **Evidence claimed:** gather.ts:245 `const outcome: PurgeOutcome = { purged: 0, retained: [] };` and :269 `outcome.purged++`. `grep -rn "\.purged" src/` returns exactly one hit — gather.ts:269, the increment. Nothing reads it. SessionManager.tsx:44-56: `const purge = await purgeExpired(); if (purge.retained.length) { setBinNotice(...) } else { setBinNotice(null); }` — only `retained` is ever surfaced. Directly above it, SessionManager.tsx:40-43 states: "The bin reports what it declined to destroy as well as what it destroyed. It used to discard the count entirely, so a session it purged — or refused to purge — left no trace anywhere." The first half of that sentence is false and the second half still describes the current code.
@@ -565,6 +567,8 @@ The panel is also a fixed `rgba(20,20,30,0.72)` patch drawn over the condition b
 **Proposed fix:** Add an operator-accessible 'Amend consent' action (e.g. from the progress header or Session Manager on an in-progress session) that re-renders the Consent component pre-populated with the current grants, writes the amended `media_consent` back to the session with an amendment timestamp, and — via the revocation path from finding #1 — deletes media whose grant was withdrawn. Export the amendment so the change is visible in the data. Until it exists, correct the manual to state that consent decisions are fixed for the sitting.
 
 ## [medium] display_label is unvalidated free text prompted as 'Rename session' and is written verbatim into session_*.json and backup_*.json in every export
+
+**STATUS: CONFIRMED AND FIXED — by the second option, not the first.** The proposed fix preferred a charset restriction, and that would have been theatre: the participant_id finding immediately below this one was closed precisely because `PriyaSharma` passes any character class, so a charset check on a human-readable label cannot read content. What software can guarantee is the boundary. `sessionForExport()` sets the label to null in both the analysis JSON and the backup, and nothing downstream wanted it — no CSV column carries it and the codebook never mentions it. Entry is bounded too (control characters neutralised, whitespace collapsed, 40-character cap) and the prompt now says what the field is for and tells the operator not to enter a name. The stated cost — a restore losing the operator's labels — is accepted: a nickname is for finding a row in a list, and a restore onto a replacement tablet is when an old tablet's nicknames mean least. A useful side effect is that renaming a sitting no longer changes the bytes of its export, so it no longer changes the manifest checksum that is supposed to describe content.
 
 `src/start/SessionManager.tsx`:116
 

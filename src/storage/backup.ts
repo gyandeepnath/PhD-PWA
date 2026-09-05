@@ -24,7 +24,7 @@
  *     missing rather than appearing to still hold it.
  */
 import { get, getAll, put, ensureEnrolmentAtLeast, MAX_PLAUSIBLE_ENROLMENT } from './db';
-import { purgeSession } from './gather';
+import { purgeSession, sessionForExport } from './gather';
 import { fnv1a } from './export';
 import type { SessionBundle } from './gather';
 import type { StoreName, StoreMap } from './types';
@@ -127,7 +127,10 @@ const RESTORE_PLAN: { key: keyof BackupData; store: StoreName; keyPath: string }
 
 export function buildSessionBackup(bundle: SessionBundle): SessionBackup {
   const data: BackupData = {
-    session: bundle.session,
+    // Device-local operator label stripped: a backup is the designated OFF-device copy, so it
+    // is the last place a freely-typed string about a participant should travel. A restore
+    // brings the sitting back under its participant_id. See sessionForExport().
+    session: sessionForExport(bundle.session),
     participant: bundle.participant ?? null,
     conditions: bundle.conditions,
     fatigue: bundle.fatigue,

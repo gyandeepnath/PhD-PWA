@@ -3,7 +3,7 @@
  * per-file checksums. Pure (`buildExportFiles`) so it is fully unit-testable; `downloadExport`
  * is the thin browser wrapper that streams the files to the device.
  */
-import { normaliseBundle, type SessionBundle } from './gather';
+import { normaliseBundle, sessionForExport, type SessionBundle } from './gather';
 import type { SessionRecord } from './types';
 import type { MediaRecord } from './media';
 import { summariseLux, LUX_CHECKPOINTS } from '@/experiment/illumination';
@@ -781,7 +781,10 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
     // manifest checksum could not be used to confirm two exports hold the same dataset. The
     // timestamp lives in the manifest, which is provenance rather than data.
     provenance: session.provenance,
-    session, participant,
+    // The operator's free-text label is device-local and does not leave with the data; see
+    // sessionForExport() in gather.ts for why a charset check would not have been a substitute.
+    session: sessionForExport(session),
+    participant,
     conditions: bundle.conditions, fatigue: bundle.fatigue, cvsq: bundle.cvsq, nasa_tlx: bundle.tlx,
     comprehension: bundle.comprehension, visual_search: bundle.visualSearch,
     display_perception: bundle.perception, eye_metrics: bundle.eyeMetrics,

@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   revokeMediaGrant,
   listSessions, listDeleted, softDeleteSession, restoreSession, purgeSession, purgeExpired,
-  renameSession, sessionLabel, BIN_RETENTION_MS,
+  renameSession, sessionLabel, BIN_RETENTION_MS, MAX_DISPLAY_LABEL,
 } from '@/storage/gather';
 import { listResumable, type ResumePointer } from '@/storage/sessionPersistence';
 import { parseSessionBackup, importSessionBackup } from '@/storage/backup';
@@ -43,15 +43,29 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
      * the count entirely, so a session it purged — or refused to purge — left no trace anywhere.
      */
     const purge = await purgeExpired();
+    /*
+     * BOTH halves are reported, which the comment above has always claimed and the code did not do.
+     *
+     * `purged` was computed and discarded, so a session the timer permanently destroyed vanished
+     * with no notice anywhere — the operator opens the manager, and a participant's sitting is
+     * simply gone. Retention is a warning; destruction is a fact the operator has to be told, not
+     * least because it is the one thing here that cannot be undone.
+     */
+    const parts: string[] = [];
+    if (purge.purged > 0) {
+      parts.push(
+        `${purge.purged} session(s) past the 30-day window were PERMANENTLY DELETED just now. `
+        + 'This cannot be undone. They had been confirmed as exported.',
+      );
+    }
     if (purge.retained.length) {
-      setBinNotice(
+      parts.push(
         `${purge.retained.length} session(s) are past the 30-day window but were NOT auto-deleted:\n`
         + purge.retained.map((r) => `  ${r.session_id} — ${r.reason}`).join('\n')
         + '\n\nPurge them from the bin deliberately once you are sure they are safe to lose.',
       );
-    } else {
-      setBinNotice(null);
     }
+    setBinNotice(parts.length ? parts.join('\n\n') : null);
     setActive(await listSessions());
     setBin(await listDeleted());
     const list = await listResumable();
@@ -114,8 +128,23 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
     }
   };
 
+  /**
+   * Label a sitting so it can be found in this list.
+   *
+   * The old prompt said only "Rename session", which invites a participant's name — and the whole
+   * session record used to be written into the exported JSON and the backup, so that name left the
+   * device with a bundle the protocol treats as de-identified. The export now strips the label
+   * (gather.ts, sessionForExport), and the wording here says what the field is for so the operator
+   * is not misled into treating it as a notes field in the first place.
+   */
   const rename = async (s: SessionRecord) => {
-    const label = window.prompt('Rename session', sessionLabel(s));
+    const label = window.prompt(
+      `A short reminder to find this sitting by, on this tablet only (max ${MAX_DISPLAY_LABEL} characters).\n\n`
+      + 'Do NOT enter the participant\'s name or any identifying detail. The label is not exported '
+      + 'and is not part of the data; the participant code is what identifies the sitting.\n\n'
+      + 'Leave empty to go back to the participant code.',
+      sessionLabel(s),
+    );
     if (label != null) {
       await renameSession(s.session_id, label);
       await refresh();

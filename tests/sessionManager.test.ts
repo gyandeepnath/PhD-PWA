@@ -3,7 +3,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { put, getAll, _resetForTests } from '@/storage/db';
 import {
   listSessions, listDeleted, softDeleteSession, restoreSession, purgeSession, purgeExpired,
-  renameSession, sessionLabel, BIN_RETENTION_MS,
+  renameSession, sessionLabel, BIN_RETENTION_MS, MAX_DISPLAY_LABEL,
 } from '@/storage/gather';
 import { saveResume, loadResume, clearResume } from '@/storage/sessionPersistence';
 import type { Provenance, SessionRecord } from '@/storage/types';
@@ -53,6 +53,25 @@ describe('session manager admin', () => {
     await renameSession('A', 'Pilot 1');
     expect((await listSessions())[0].display_label).toBe('Pilot 1');
     expect(sessionLabel((await listSessions())[0])).toBe('Pilot 1');
+  });
+
+  it('bounds what a rename can store, rather than taking the prompt verbatim', async () => {
+    // The label is device-local and is stripped from every export (see tests/displayLabel.test.ts),
+    // but it is still written to the database, so what lands there has to be bounded: a paste can
+    // carry newlines, and an unbounded field invites use as a notes field.
+    await put('sessions', makeSession('A', { participant_id: 'P001' }));
+    await renameSession('A', `  bench\t2  ${'x'.repeat(MAX_DISPLAY_LABEL)}`);
+    const stored = (await listSessions())[0].display_label!;
+    expect(stored.length).toBe(MAX_DISPLAY_LABEL);
+    expect(stored).not.toMatch(/[\t\n]/);
+  });
+
+  it('clears the label rather than storing an empty string', async () => {
+    await put('sessions', makeSession('A', { participant_id: 'P001' }));
+    await renameSession('A', 'Pilot 1');
+    await renameSession('A', '   ');
+    expect((await listSessions())[0].display_label).toBeNull();
+    expect(sessionLabel((await listSessions())[0])).toBe('P001');
   });
 
   it('purge cascades to all child records', async () => {

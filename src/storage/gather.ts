@@ -176,9 +176,69 @@ export async function restoreSession(sessionId: string): Promise<void> {
   if (s) await put('sessions', { ...normalise(s), deleted_at: null });
 }
 
+/**
+ * Longest session label kept.
+ *
+ * A label exists to pick one row out of a list of twenty on a tablet. Past roughly this length it
+ * stops being a label and becomes a notes field, and a free-text notes field attached to a
+ * participant is exactly where identifying detail accumulates.
+ */
+export const MAX_DISPLAY_LABEL = 40;
+
+/**
+ * Clean an operator-typed session label.
+ *
+ * What this deliberately does NOT do is check the content, and that is worth stating plainly
+ * because the neighbouring participant_id finding was closed for precisely this confusion: no
+ * character class separates "Pilot 1" from "PriyaSharma". A charset restriction here would look
+ * like a privacy control while guaranteeing nothing.
+ *
+ * The actual guard is `sessionForExport()` below — the label never leaves the device. This
+ * function only bounds what is stored: control characters (which a paste can carry) neutralised,
+ * runs of whitespace collapsed, length capped.
+ */
+export function sanitiseDisplayLabel(raw: string): string | null {
+  const cleaned = raw
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_DISPLAY_LABEL)
+    .trim();
+  return cleaned || null;
+}
+
 export async function renameSession(sessionId: string, label: string): Promise<void> {
   const s = await get('sessions', sessionId);
-  if (s) await put('sessions', { ...normalise(s), display_label: label.trim() || null });
+  if (s) await put('sessions', { ...normalise(s), display_label: sanitiseDisplayLabel(label) });
+}
+
+/**
+ * The session record as it is permitted to leave the device.
+ *
+ * `display_label` is operator convenience — a name to find a sitting by in the Session Manager
+ * list — and it is the one field in the whole record that a person types freely. The prompt says
+ * "Rename session", which invites "Priya S - Tue am", and the export spread the entire session
+ * object into `session_*.json` and `backup_*.json`. So that string travelled inside a bundle the
+ * protocol treats as de-identified, in the two files least likely to be opened and read, alongside
+ * the backup that is the designated OFF-device copy.
+ *
+ * Restricting the label's charset would not have closed this: `PriyaSharma` passes any charset a
+ * human-readable label could have. What software can genuinely guarantee is that the field does not
+ * cross the boundary — and nothing downstream wants it. No CSV column carries it, the codebook
+ * never mentions it, and no analysis reads it.
+ *
+ * The cost is that restoring a backup onto a replacement tablet brings back the sitting under its
+ * participant_id rather than the operator's nickname. That is the correct trade: the nickname is a
+ * convenience for finding a row in a list, and a restore is the moment an old tablet's nicknames
+ * mean least.
+ *
+ * Set to null rather than deleted, so an exported record has the same SHAPE whether or not the
+ * session was ever renamed. A useful consequence: renaming a session no longer alters the bytes of
+ * its export, so it no longer alters the manifest checksum that is supposed to describe content.
+ */
+export function sessionForExport(s: SessionRecord): SessionRecord {
+  return s.display_label == null ? s : { ...s, display_label: null };
 }
 
 /**
