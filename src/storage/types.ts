@@ -269,8 +269,9 @@ export interface ConditionRecord {
   adaptation_ms_before: number;
   /**
    * How many times this participant has now read this passage, counting this run: 1 in the first
-   * sitting, 2 in the second. There are ten passages and twenty condition-runs, so every passage is
-   * re-read. Illumination is confounded with session order within a participant, so without this
+   * sitting. CONSTANT at 1 under the single-level protocol: ten passages cover ten condition-runs,
+   * so each is read exactly once and there is no practice effect to model. It was 1 in the first
+   * sitting and 2 in the second under the two-block design, where without this
    * column the practice effect is indistinguishable from the illumination main effect.
    */
   passage_repeat_number: number;

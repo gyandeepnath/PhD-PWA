@@ -1,5 +1,9 @@
 # VisuLab — Master Blueprint
 
+> **PROTOCOL AMENDMENT.** Ambient illumination is no longer a factor: every sitting runs at 300 lux
+> and each participant attends once for all ten conditions. Passages describing two levels or two
+> sittings describe the superseded design. See `docs/ILLUMINATION_AMENDMENT.md`.
+
 **A within-subjects visual-ergonomics experiment delivered as an offline tablet PWA.**
 Authoritative, self-contained specification of the build: scientific rationale, experimental
 design, every task and parameter, the physiological/behavioural metrics and their formulae, the
@@ -67,13 +71,14 @@ conditions. The analysis is a **linear mixed model with a random intercept per p
   contrast metadata is **derived** and recorded as covariates rather than altering colours.
   Green was added after a colour-set simulation (see §2.2) to balance sub-AA conditions across
   polarity at two each.
-- **Ambient illumination** is a third factor with **two levels** — dim ≈10 lux (accept 5–15) and
-  moderate ≈150 lux (accept 130–170) — manipulated at **session level**, not within a session,
-  because room light cannot be changed without forcing re-adaptation. Each participant completes
-  both levels, so all three factors are within-participant: **20 condition-runs per person**.
-- **Split-plot structure:** illumination is the whole-plot factor; polarity × colour are the
-  sub-plot factors. The statistical consequence is two nested random intercepts — participant, and
-  session within participant (see `src/analysis/analysis_template.R`).
+- **Ambient illumination** is **held constant at 300 lux** (accept 250–350) for every participant
+  and every sitting. It was a third factor with two levels (dim ≈10 lux, moderate ≈150 lux) in an
+  earlier version of the protocol; it was withdrawn because the ocular measures are camera-derived
+  and, in a dim room, how well the camera sees the face is confounded with display polarity — the
+  primary independent variable. See `docs/ILLUMINATION_AMENDMENT.md`.
+- **Design:** polarity × colour, both within participant, in a **single sitting**:
+  **10 condition-runs per person**. One random intercept, participant. The split-plot structure and
+  its nested session-within-participant term belonged to the two-level design and no longer apply.
 - **Counterbalancing:** balanced **Williams Latin square** (first-order carryover controlled),
   indexed by a **sequential enrolment number** (not a hash of an arbitrary ID — hashing breaks
   balance). Each condition appears in each serial position equally over each block of 10

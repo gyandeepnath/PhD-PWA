@@ -134,9 +134,15 @@ export function sessionPlan(enrolmentNumber: number): PlannedStep[] {
  * Passage assignment advances with the block too, which decorrelates passage from CONDITION across
  * the two sittings.
  *
- * It does NOT prevent a re-read, and an earlier version of this note wrongly claimed it did. There
- * are ten passages and twenty condition-runs per participant, so every passage is necessarily read
- * once per block — the rotation only changes which condition it is paired with. That matters:
+ * Under the SINGLE-level protocol there is nothing to prevent: ten passages cover ten
+ * condition-runs, so each is read exactly once and the rotation only decides which condition it is
+ * paired with. The paragraph below describes the two-block case, where every passage WAS re-read
+ * and the practice effect mattered; it is kept because the rotation still has to be correct if the
+ * second illumination level is restored.
+ *
+ * Under two blocks: the rotation does NOT prevent a re-read, and an earlier version of this note
+ * wrongly claimed it did. Twenty condition-runs over ten passages means every passage is read
+ * once per block. That matters:
  * illumination is perfectly confounded with session order within a participant, so the practice
  * effect from re-reading (faster reading, better comprehension, known target locations in the
  * search text) loads entirely onto the illumination main effect, which is the whole-plot factor.

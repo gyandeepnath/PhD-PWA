@@ -4,8 +4,10 @@ A tablet PWA that runs the data collection for a PhD in Optometry (Assam down to
 *Ergonomics of Visual Perception — Effects of Display Polarity, Text Colour and Ambient Illumination
 on Visual Fatigue, Ocular Behaviour and Task Performance.*
 
-Each participant reads under **ten display conditions** (2 polarities × 5 text colours) in each of
-**two sittings** that differ in ambient illumination, giving twenty condition-runs per participant.
+Each participant reads under **ten display conditions** (2 polarities × 5 text colours) in a
+**single sitting** at a constant 300 lux, giving ten condition-runs per participant. Ambient
+illumination was a second factor in an earlier version of the protocol — see
+`docs/ILLUMINATION_AMENDMENT.md` for why it was withdrawn.
 Per condition the app runs reading, comprehension, visual-search and go/no-go reaction-time tasks
 while the front camera estimates blink, gaze and head-pose metrics, and collects validated fatigue
 questionnaires. Everything is stored in IndexedDB and exported as CSV + JSON for analysis in R or

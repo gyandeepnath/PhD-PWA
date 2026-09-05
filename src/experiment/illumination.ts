@@ -1,10 +1,15 @@
 /**
- * Ambient illumination — the session-level (whole-plot) factor of the split-plot design.
+ * Ambient illumination.
+ *
+ * SUPERSEDED BELOW — read the note on ILLUMINATION_LEVELS before this paragraph. The study now runs
+ * a SINGLE level at 300 lux; the two-level description that follows is the design as originally
+ * approved, kept because the spec table and the crossover rule are retained for archived data.
  *
  * Synopsis §3.4. Exactly TWO levels, not a free researcher choice and not a graded series:
  *
  *   dim       ≈10 lux  (accept 5-15)    night-time and low-light domestic use
- *   moderate ≈150 lux  (accept 130-170) general indoor domestic lighting
+ *   moderate ≈150 lux  (accept 130-170) general indoor domestic lighting  [RETARGETED to 300 lux,
+ *                                                                            band 250-350; see below]
  *
  * Why these numbers:
  *  - They sit either side of the range at which negative-polarity penalties have been reported

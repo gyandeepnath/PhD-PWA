@@ -27,7 +27,7 @@ const BASE_CONFIG = {
    * were right.
    *
    * It used to hold for a second while outlining the correct option green and the chosen one red.
-   * That is performance feedback, delivered 30 times a sitting and 60 across the study, and the
+   * That is performance feedback, delivered 30 times, once per condition, across the whole protocol, and the
    * protocol forbids it in five separate places — the synopsis rests the whole no-differential-
    * effort argument on its absence, and the operator manual forbids the OPERATOR from saying
    * exactly what the screen was showing. It also biased effort in a way correlated with earlier
@@ -113,7 +113,9 @@ const BASE_CONFIG = {
    * The ordering is exactly reversed between polarities and the mean separation is ~23% larger in
    * positive polarity — so no-go discriminability was a function of the study's primary factor. On
    * a black field the yellow distractor sat 2.39:1 from the white target, which is a hue judgement
-   * on a small peripheral dot at 10 lux. That inflates false alarms in negative polarity, lowers
+   * on a small peripheral dot. (An earlier version rested this on the 10 lux condition; that level
+   * has been withdrawn, and the rank-reversal arithmetic above holds at any illuminance.) That
+   * inflates false alarms in negative polarity, lowers
    * d-prime there, and — because false_alarm_rate and error_rate drive the disengagement flag —
    * ALSO gets negative-polarity conditions preferentially dropped by the quality filter. A
    * manufactured polarity effect plus differential attrition on the same factor.
@@ -142,7 +144,7 @@ const BASE_CONFIG = {
    * Conditions per sitting within ONE illumination block: 10 = the whole block in one sitting,
    * 5 = split into two shorter sittings. The pilot feasibility gate (§3.6) decides which: if the
    * median session runs over 120 min, or withdrawals exceed 1 in 10, or face-presence drops below
-   * 0.90 in more than 10% of runs, each illumination level is split into two sittings of five.
+   * 0.90 in more than 10% of runs, the ten conditions are split into two sittings of five.
    *
    * THE SPLIT PRESERVES SERIAL-POSITION BALANCE BUT NOT CARRYOVER BALANCE. An earlier version of
    * this comment claimed it preserved "the counterbalancing scheme", and that was false in a

@@ -2,8 +2,8 @@
  * One analysis dataset from every session on the device.
  *
  * The per-session export is a faithful record of one sitting, and it is the right shape for
- * checking a sitting. It is the wrong shape for analysis: 130 participants over two sittings each
- * is 260 folders, and concatenating those by hand is where analysis errors are actually introduced
+ * checking a sitting. It is the wrong shape for analysis: 130 participants, one sitting each, is
+ * 130 folders, and concatenating those by hand is where analysis errors are actually introduced
  * — a mis-sorted join, a participant counted twice, a sitting silently missing.
  *
  * This produces the modelling unit directly. One row per participant x condition-run, with the
@@ -110,7 +110,7 @@ function centreTwoLevel(value: string | null | undefined, negative: string, posi
  * export uses, rather than being recomputed here. Two files that derive the same quantity by two
  * routes will eventually disagree, and the disagreement will be found during analysis, when nobody
  * remembers which route was right. The only things computed locally are the ones that do not exist
- * at session scope at all: position across both sittings, and the contrast coding.
+ * at session scope at all: position across the protocol, and the contrast coding.
  */
 function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
   const rows: Record<string, unknown>[] = [];
@@ -194,7 +194,7 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         illumination_c: centreTwoLevel(s.ambient_illumination_level, 'dim', 'moderate'),
 
         session_position: sum.session_position,
-        // Position across the WHOLE protocol: the second sitting continues the count rather than
+        // Position across the WHOLE protocol: a split sitting continues the count rather than
         // restarting it, because cumulative fatigue does not reset between visits.
         /*
          * Derived from the RECORDED illumination_block, not from this session's position in a

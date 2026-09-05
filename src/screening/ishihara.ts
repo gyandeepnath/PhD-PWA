@@ -186,7 +186,8 @@ export function luminancePolarityBalance(plates: Plate[]): { figureLighter: numb
 
 /**
  * The default set, used where no per-administration seed is available (tests, the fixture).
- * A real session passes its own seed so that the two sittings differ.
+ * A real session passes its own seed, so no two administrations show the same plates in the same
+ * order.
  */
 export const PLATES: Plate[] = buildScreeningPlates(0);
 

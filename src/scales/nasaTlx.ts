@@ -3,7 +3,7 @@
  *
  * Synopsis Table 3.5 lists NASA-TLX as a dependent variable, administered ONCE PER SESSION at
  * close, as a session-level index of cumulative workload. It is deliberately not administered
- * after every condition: twenty administrations per participant would add substantial burden to
+ * after every condition: ten administrations per participant would add substantial burden to
  * an already long protocol, and the pilot feasibility gate caps median session length at 120 min.
  *
  * The cost of that choice is stated in §4.3: workload inference is limited to the ILLUMINATION

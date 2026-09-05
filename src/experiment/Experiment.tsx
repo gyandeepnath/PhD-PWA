@@ -596,8 +596,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       session_id: prior?.session_id ?? session.session_id,
     });
 
-    // Caffeine and sleep are STATE, not trait: they are asked at every sitting because they differ
-    // between them. Recorded on the session so both sittings' values survive.
+    // Caffeine and sleep are STATE, not trait: they are asked at every sitting rather than taken
+    // from the participant record, which holds a sticky first-sitting copy. Recorded on the session
+    // so a split sitting keeps each half's own value.
     const fresh = { ...session, caffeine_today: d.caffeineToday, hours_since_sleep: d.hoursSinceSleep };
     await put('sessions', fresh);
     setSession(fresh);
