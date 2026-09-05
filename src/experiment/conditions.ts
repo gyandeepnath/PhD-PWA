@@ -11,9 +11,10 @@
  * the correlation between polarity and log contrast (a confounding index, zero ideal), and
  * the contrast of the weakest condition. Without green the sub-AA conditions are unbalanced
  * (1 positive vs 2 negative); with green they are 2 per polarity, so polarity is not
- * systematically confounded with accessibility compliance. r(polarity, log contrast) = +0.11
- * across the ten conditions, close enough to zero that polarity and contrast can enter the
- * same model without collinearity. The two rejected alternatives were a luminance-matched
+ * systematically confounded with accessibility compliance. Coding positive = 1,
+ * r(polarity, log contrast) = -0.113 across the ten conditions — close enough to zero that
+ * polarity and contrast can enter the same model without collinearity. (This line previously read
+ * "+0.11" and did not state the coding, so the sign could not be checked against it.) The two rejected alternatives were a luminance-matched
  * chromatic set (worst: all four sub-AA conditions in one polarity, r = +0.43) and the
  * web-default hues (yields an unusable 1.07:1 condition).
  *
