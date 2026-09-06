@@ -7,7 +7,7 @@
  * quietly producing a tidy file.
  */
 import { describe, it, expect } from 'vitest';
-import { checkJoin } from '@/storage/joinIntegrity';
+import { checkJoin, groupByProvenance, unresolvedParticipantKey } from '@/storage/joinIntegrity';
 import type { SessionBundle } from '@/storage/gather';
 import { ANALYSIS_CODEBOOK } from '@/storage/analysisCodebook';
 
@@ -25,6 +25,12 @@ const NOW = { conditionsPerParticipant: 10, sittingsPerParticipant: 1, illuminat
 /** ...and when the ten conditions are split across two sittings for scheduling. */
 const SPLIT = { conditionsPerParticipant: 10, sittingsPerParticipant: 2, illuminationLevels: 1 };
 
+/** The build stamp a real SessionRecord always carries; `provenance` is not optional on the type. */
+const BUILD_A = {
+  app_version: '2.1.0', git_hash: 'aaaa111', build_time: '2026-01-01T00:00:00Z',
+  condition_def_hash: 'cond-hash-A', schema_version: 7,
+};
+
 /** A minimal bundle: only the fields the join check reads. */
 function bundle(opts: {
   pid: string;
@@ -34,7 +40,13 @@ function bundle(opts: {
   conditions: string[];
   enrolment?: number;
   withParticipant?: boolean;
+  /** Positions this sitting recorded. Defaults to a contiguous run from `offset`. */
+  positions?: number[];
+  offset?: number;
+  /** The build that collected it; null to model a record carrying no stamp at all. */
+  provenance?: Record<string, unknown> | null;
 }): SessionBundle {
+  const positions = opts.positions ?? opts.conditions.map((_, i) => (opts.offset ?? 0) + i);
   return {
     session: {
       session_id: opts.sid,
@@ -42,12 +54,14 @@ function bundle(opts: {
       enrolment_number: opts.enrolment ?? 1,
       session_start_time: opts.start,
       ambient_illumination_level: opts.illumination,
+      condition_offset: opts.offset ?? 0,
+      provenance: opts.provenance === undefined ? BUILD_A : opts.provenance ?? undefined,
     },
     participant: opts.withParticipant === false
       ? undefined
       : { participant_id: opts.pid, enrolment_number: opts.enrolment ?? 1 },
     conditions: opts.conditions.map((label, i) => ({
-      condition_id: `${opts.sid}-c${i}`, condition_label: label,
+      condition_id: `${opts.sid}-c${i}`, condition_label: label, session_position: positions[i],
     })),
   } as unknown as SessionBundle;
 }
@@ -282,5 +296,158 @@ describe('the protocol this build actually runs', () => {
     expect(r.participants[0].excluded_by).not.toContain('incomplete_crossover');
     const f = r.issues.find((x) => x.code === 'incomplete_split_sitting')!;
     expect(f.detail).toMatch(/Illumination is not involved/i);
+  });
+});
+
+describe('a session with no participant id is placed, not dropped', () => {
+  /*
+   * It used to raise its issue and then `continue` past the participant map, so it appeared in no
+   * row of analysis_join_report.csv while its rows were still written — and two such sessions
+   * shared one empty grouping key. The exporter's own rule is that nothing is silently dropped and
+   * nothing is silently merged; this was both, committed by the module that states the rule.
+   */
+  const orphan = (sid: string, start: number) =>
+    bundle({ pid: '', sid, start, illumination: 'moderate', conditions: tenA });
+
+  it('still raises the blocking issue', () => {
+    const r = checkJoin([orphan('s1', 1)], NOW);
+    const issue = r.issues.find((i) => i.code === 'session_without_participant')!;
+    expect(issue.severity).toBe('blocking');
+    expect(issue.session_id).toBe('s1');
+  });
+
+  it('now also gets a participant row, flagged, so the join report states its existence', () => {
+    const r = checkJoin([orphan('s1', 1)], NOW);
+    expect(r.total_participants).toBe(1);
+    expect(r.analysable_participants).toBe(0);
+    expect(r.participants[0].participant_id).toBe(unresolvedParticipantKey('s1'));
+    expect(r.participants[0].excluded_by).toContain('session_without_participant');
+    expect(r.participants[0].session_ids).toEqual(['s1']);
+  });
+
+  it('keeps two unattributable sessions apart instead of merging them into one person', () => {
+    const r = checkJoin([orphan('s1', 1), orphan('s2', 2)], NOW);
+    expect(r.total_participants).toBe(2);
+    expect(r.participants.map((p) => p.participant_id).sort())
+      .toEqual(['unresolved:s1', 'unresolved:s2']);
+    // Each contributes its own ten runs; merged they would have looked like one 20-run crossover.
+    expect(r.participants.every((p) => p.condition_runs === 10)).toBe(true);
+  });
+
+  it('names the sitting it stands for, without passing itself off as a participant id', () => {
+    const r = checkJoin([orphan('sess-0001', 1)], NOW);
+    const key = r.participants[0].participant_id;
+    expect(key).toContain('sess-0001');
+    expect(key).not.toBe('sess-0001');
+  });
+});
+
+describe('a hole in a sitting changes what two exported columns mean', () => {
+  /*
+   * analysis_long.csv writes polarity_switched and predecessor_condition_label by looking for the
+   * row at session_position - 1. Where a condition is missing, the row after the hole finds no
+   * predecessor and both come out empty — and the codebook gives empty one meaning: 'first
+   * condition of the sitting'. condition_coverage counts the missing rows; only this says where
+   * they were, which is what decides whether an empty cell is a sitting boundary or a lie.
+   */
+  it('reports a hole in the middle of a sitting, naming the missing positions', () => {
+    const r = checkJoin([bundle({
+      pid: 'P1', sid: 's1', start: 1, illumination: 'moderate',
+      conditions: ['c0', 'c1', 'c2', 'c4', 'c5'], positions: [0, 1, 2, 4, 5],
+    })], NOW);
+    const gap = r.issues.find((i) => i.code === 'condition_position_gap')!;
+    expect(gap).toBeTruthy();
+    expect(gap.severity).toBe('warning');
+    expect(gap.session_id).toBe('s1');
+    expect(gap.detail).toContain('3');
+    expect(gap.detail).toContain('polarity_switched');
+  });
+
+  it('reports a sitting whose own OPENING condition is missing', () => {
+    // The row that then leads the sitting exports empty and is not the sitting's first condition
+    // either, so measuring from the earliest row present would have missed this entirely.
+    const r = checkJoin([bundle({
+      pid: 'P1', sid: 's1', start: 1, illumination: 'moderate',
+      conditions: ['c1', 'c2'], positions: [1, 2], offset: 0,
+    })], NOW);
+    expect(r.issues.map((i) => i.code)).toContain('condition_position_gap');
+  });
+
+  it('stays silent on a contiguous sitting that starts partway through the protocol', () => {
+    // The second half of a split runs positions 5-9. That row IS its sitting's first condition,
+    // which is exactly what the codebook's empty cell means.
+    const r = checkJoin([
+      bundle({ pid: 'P2', sid: 'a', start: 1, illumination: 'moderate', conditions: ['c0', 'c1', 'c2', 'c3', 'c4'], offset: 0 }),
+      bundle({ pid: 'P2', sid: 'b', start: 2, illumination: 'moderate', conditions: ['c5', 'c6', 'c7', 'c8', 'c9'], offset: 5 }),
+    ], SPLIT);
+    expect(r.issues.map((i) => i.code)).not.toContain('condition_position_gap');
+    expect(r.participants[0].excluded_by).toEqual([]);
+  });
+
+  it('does not make the participant unanalysable by itself — it explains, it does not judge', () => {
+    const r = checkJoin([bundle({
+      pid: 'P1', sid: 's1', start: 1, illumination: 'moderate',
+      conditions: tenA.filter((_, i) => i !== 3), positions: [0, 1, 2, 4, 5, 6, 7, 8, 9],
+    })], NOW);
+    expect(r.participants[0].excluded_by).not.toContain('condition_position_gap');
+    expect(r.participants[0].excluded_by).toContain('condition_coverage');
+  });
+});
+
+describe('which build measured these rows', () => {
+  const BUILD_B = {
+    app_version: '3.0.0', git_hash: 'bbbb222', build_time: '2027-06-01T00:00:00Z',
+    condition_def_hash: 'cond-hash-B', schema_version: 9,
+  };
+
+  it('groups sittings by their build stamp and lists the sessions under each', () => {
+    const groups = groupByProvenance([
+      ...complete('P01', 1),
+      bundle({ pid: 'P02', sid: 'x', start: 3, illumination: 'moderate', conditions: tenA, enrolment: 2, provenance: BUILD_B }),
+    ]);
+    expect(groups).toHaveLength(2);
+    expect(groups.find((g) => g.git_hash === 'aaaa111')!.session_ids).toEqual(['P01-s1', 'P01-s2']);
+    expect(groups.find((g) => g.git_hash === 'bbbb222')!.session_ids).toEqual(['x']);
+  });
+
+  it('warns when the dataset pools rows collected by two different builds', () => {
+    const r = checkJoin([
+      ...complete('P01', 1),
+      bundle({ pid: 'P02', sid: 'x', start: 3, illumination: 'dim', conditions: tenA, enrolment: 2, provenance: BUILD_B }),
+      bundle({ pid: 'P02', sid: 'y', start: 4, illumination: 'moderate', conditions: tenA, enrolment: 2, provenance: BUILD_B }),
+    ], EXPECT);
+    const issue = r.issues.find((i) => i.code === 'mixed_build_provenance')!;
+    expect(issue).toBeTruthy();
+    expect(issue.detail).toContain('cond-hash-A');
+    expect(issue.detail).toContain('cond-hash-B');
+  });
+
+  it('BLOCKS a participant whose own sittings span a rebuild', () => {
+    // Their within-subject contrast would be taken across two instruments, which is not a
+    // within-subject contrast of the display conditions at all — and no column would show it.
+    const r = checkJoin([
+      bundle({ pid: 'P1', sid: 'a', start: 1, illumination: 'dim', conditions: tenA }),
+      bundle({ pid: 'P1', sid: 'b', start: 2, illumination: 'moderate', conditions: tenA, provenance: BUILD_B }),
+    ], EXPECT);
+    expect(r.participants[0].excluded_by).toContain('mixed_build_within_participant');
+    expect(r.clean).toBe(false);
+  });
+
+  it('reports a sitting carrying no build stamp at all rather than assuming the current one', () => {
+    const r = checkJoin([bundle({
+      pid: 'P1', sid: 's1', start: 1, illumination: 'moderate', conditions: tenA, provenance: null,
+    })], NOW);
+    const issue = r.issues.find((i) => i.code === 'build_provenance_missing')!;
+    expect(issue).toBeTruthy();
+    expect(issue.session_id).toBe('s1');
+    expect(groupByProvenance([bundle({
+      pid: 'P1', sid: 's1', start: 1, illumination: 'moderate', conditions: tenA, provenance: null,
+    })])[0]).toMatchObject({ app_version: null, git_hash: null, condition_def_hash: null, schema_version: null });
+  });
+
+  it('says nothing when every sitting came from the same build', () => {
+    const r = checkJoin(complete('P01'), EXPECT);
+    expect(r.issues.map((i) => i.code)).not.toContain('mixed_build_provenance');
+    expect(r.issues.map((i) => i.code)).not.toContain('build_provenance_missing');
   });
 });

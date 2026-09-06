@@ -85,8 +85,8 @@ export interface JoinExpectation {
  * grouping key, and a mixed model reading participant_id as the random-intercept level would have
  * treated two different people as one person — the exact silent merge this module exists to
  * prevent, committed by the module itself. Keyed on the session id so every unattributable session
- * is its own grouping level, and prefixed so it can never collide with a real participant id and is
- * obvious on sight in the exported file.
+ * is its own grouping level and can be traced back to the sitting it stands for, and prefixed so
+ * that the join report names it for what it is rather than passing it off as somebody's id.
  */
 export function unresolvedParticipantKey(sessionId: string): string {
   return `unresolved:${sessionId}`;
@@ -303,13 +303,18 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
       const holes: number[] = [];
       for (let p = first; p < last; p++) if (!seen.has(p)) holes.push(p);
       if (holes.length > 0) {
+        // The rows left ambiguous are the ones immediately after a hole; a hole's own successor can
+        // itself be missing, and only positions actually present can carry an ambiguous cell.
+        const affected = holes.map((h) => h + 1).filter((p) => seen.has(p));
+        const many = holes.length > 1;
         add('warning', 'condition_position_gap',
-          `Sitting positions ${holes.join(', ')} have no condition row, between ${first} and ${last}. `
-          + `The row at position ${holes.map((h) => h + 1).filter((p) => seen.has(p)).join(', ')} therefore `
-          + 'exports polarity_switched and predecessor_condition_label EMPTY, which the codebook '
-          + 'defines as "first condition of the sitting". It is not: something preceded it and was '
-          + 'not recorded. Do not read those empty cells as a sitting boundary, and do not carry '
-          + 'those rows into a carryover or after-effect term.',
+          `Position${many ? 's' : ''} ${holes.join(', ')} of this sitting ${many ? 'have' : 'has'} no `
+          + `condition row, in a sitting otherwise running ${first} to ${last}. `
+          + `The row${affected.length > 1 ? 's' : ''} at position ${affected.join(', ')} therefore `
+          + `export${affected.length > 1 ? '' : 's'} polarity_switched and predecessor_condition_label `
+          + 'EMPTY, which the codebook defines as "first condition of the sitting". It is not: '
+          + 'something preceded it and was not recorded. Do not read those empty cells as a sitting '
+          + 'boundary, and do not carry those rows into a carryover or after-effect term.',
           b.session.session_id);
       }
     }

@@ -327,6 +327,38 @@ What is actually throttled is only the subscriber fan-out at line 190. The cost 
 
 ## [high] The pooled analysis dataset — the file the thesis is modelled from — carries no build or protocol provenance and no manifest, while its docstring claims provenance can never be unstated
 
+**STATUS: CONFIRMED AND FIXED.** Verified by running the exporter: four files out, and a grep of
+the emitted bytes for the fixture's own `git_hash`, `condition_def_hash` and `app_version` matched
+nothing at all. The docstring was not merely unsupported, it asserted the opposite of what the code
+did, in the one file the confirmatory analysis reads.
+
+`analysis_manifest.json` is now emitted alongside the four CSVs, mirroring `export_manifest.json`:
+`exported_at`, per-file byte counts and FNV-1a checksums, the join verdict with its blocking and
+warning codes, `non_finite_cells`, and a `builds` array giving every distinct build stamp with the
+`session_ids` it collected — so a row is attributable to the instrument that measured it through
+its `session_id`. Grouping is done once, in `joinIntegrity.groupByProvenance()`, and read by both
+the manifest and the join check, so the two cannot disagree about how many builds are in the file.
+An unstamped sitting groups as all-nulls; it is never given the reading build's stamp.
+
+Because the manifest alone is passive, `checkJoin` now says it out loud too: `mixed_build_provenance`
+(warning) when the dataset pools across a rebuild, `build_provenance_missing` (warning) for a
+sitting carrying no stamp, and `mixed_build_within_participant` (**blocking**) when one
+participant's own sittings span two builds — that participant's within-subject contrast is taken
+across two instruments, and no column in the long file would have shown it.
+
+`escapeCsv()`'s non-finite counter was module-private and reset only inside `buildExportFiles()`,
+so the pooled export could blank a NaN with nothing anywhere recording it; `beginNonFiniteCount()` /
+`nonFiniteCellCount()` are exported from export.ts and the pooled build now brackets its own CSV
+writes.
+
+**NOT DONE — needs a file outside this change's scope.** The audit also proposes `app_version`,
+`git_hash`, `condition_def_hash` and `schema_version` as per-row columns of analysis_long.csv.
+Adding a column to `ANALYSIS_LONG_COLUMNS` requires a matching entry in
+`src/storage/analysisCodebook.ts` — `tests/joinIntegrity.test.ts` and `tests/analysisTemplates.test.ts`
+both gate the column list against the codebook in *both* directions — and that file was outside the
+scope of this pass. The manifest's `builds[].session_ids` gives the same attribution one join away.
+Extending `scripts/verifyExport.ts` to cover the analysis path is likewise still open.
+
 `src/storage/analysisExport.ts`:279
 
 **Evidence claimed:** analysisExport.ts:277-280: "The join is checked first and its verdict is carried onto every row, so a dataset can never be produced whose provenance is unstated." `grep -n "provenance|app_version|git_hash|condition_def_hash|schema_version" src/storage/analysisExport.ts src/storage/analysisCodebook.ts` returns exactly one hit — that comment. The four emitted files are analysis_codebook.csv, analysis_long.csv, analysis_join_report.csv and analysis_join_issues.csv (verified by running buildAnalysisDataset): no export_manifest.json, no per-file FNV-1a checksums, no exported_at, no app_version/git_hash/condition_def_hash/schema_version on any row or in any file. The per-session bundle has all of this (export.ts:812-836). scripts/verifyExport.ts checks only the per-session bundle (its manifest assertion is at line 252) and never touches the analysis path.
@@ -445,6 +477,38 @@ export.ts:302 describes stimulus_scale only as 'a value below 1 means the readin
 **Proposed fix:** Either state the truth in the codebook ('measured at the start of EACH sitting; session-level, not a participant constant') and consider renaming to cvsq_sitting_baseline_total, or add a genuinely participant-level column (the earliest sitting's value) alongside it. Do not leave the description asserting invariance the data does not have.
 
 ## [medium] polarity_switched is null for any gap in session_position, and the codebook defines null as 'first condition of the sitting'
+
+**STATUS: CONFIRMED, PARTLY FIXED — and the proposed fix is wrong.** Reproduced by running the
+exporter over a sitting recording positions 0,1,2,4,5: the row at position 4 exports
+`polarity_switched` and `predecessor_condition_label` empty, byte-for-byte the same cells the row at
+position 0 exports. Two different absences sharing one encoding.
+
+The audit's proposed fix — "compute prev as the row with the greatest session_position less than
+this one" — would make it worse, and has been rejected. The audit's own failure scenario is a
+condition *interrupted* at position 3: the participant saw whatever ran there, so position 2's
+polarity is not what position 4 switched from. Reaching back across the hole would put a confident
+true/false on a comparison nobody made — a fabricated value, which is the rule this codebase breaks
+least willingly. `prev` therefore still matches `session_position - 1` exactly, and there is a test
+that fails if it is loosened.
+
+The second half of the audit's proposal is right and is done: `checkJoin` now raises
+`condition_position_gap` (warning) for any sitting whose recorded positions have a hole in them,
+naming the sitting, the missing positions, and the rows whose empty cells must not be read as a
+sitting boundary. It is measured from the sitting's recorded `condition_offset`, not from the
+earliest row present, so a sitting whose own *opening* condition is missing is caught too. It does
+not itself exclude the participant — `condition_coverage` already does that — because it explains a
+cell's meaning rather than judging the data. It deliberately stays silent on a split sitting
+starting at position 5, where the empty cell means exactly what the codebook says it does.
+
+**RESIDUE — needs `src/storage/analysisCodebook.ts`, outside this pass's scope.** The
+`polarity_switched` entry still reads `missing: 'first condition of the sitting'`, and the
+`predecessor_condition_label` entry still reads `missing: 'no condition preceded this one in time'`.
+Both are false for a post-gap row, and a codebook sentence an analyst reads years later is the worst
+place for a false statement. Suggested replacements — `polarity_switched`: *"first condition of the
+sitting, OR the condition before this one was not recorded — check analysis_join_issues.csv for
+`condition_position_gap` on this session before treating it as a sitting boundary"*; and the same
+qualifier appended to `predecessor_condition_label`. Distinguishing the two in the data itself would
+need a `prev_condition_gap` column, which needs a codebook entry, which needs that file.
 
 `src/storage/analysisExport.ts`:149
 
@@ -733,6 +797,19 @@ Verified: `theme.css`:53 applies `transform: scale(var(--vl-scale))`; `viewportS
 
 ## [low] camera_active, fps_adequate_for_ratio and qc_overall can never be empty, contradicting the 'no eye record' missing-value meanings in the codebook
 
+**STATUS: CONFIRMED FOR TWO OF THE THREE COLUMNS, FIXED. The third claim is wrong.** Run against a
+sitting with no eye_metrics rows, `camera_active` came out `false` and `qc_overall` came out `warn`
+on every row — the codebook's `missing: 'no eye record'` described a cell the writer could not
+produce. Both now read `e ? ... : null`, so empty means exactly what the codebook already says, and
+`false` still means the record exists and says tracking did not run. The two states stay
+distinguishable, which is the point: "the participant declined the camera" is a measurement about a
+condition that ran, and it is not the same as having no record of that condition at all.
+
+**`fps_adequate_for_ratio` was NOT confirmed.** It has read `e?.fps_adequate_for_ratio ?? null`
+since the file was created (`git log -S` shows one commit, b185d6e, the file's own introduction), so
+it was already empty with no eye record — verified by running the exporter, which emits an empty
+cell. Nothing was changed there.
+
 `src/storage/analysisExport.ts`:241
 
 **Evidence claimed:** analysisExport.ts:241 `camera_active: sum.camera_active,` where aggregate.ts:351 defines `const cameraActive = eye?.camera_active ?? false;`, and analysisExport.ts:246 `qc_overall: sum.qc.overall` where all four flags are forced to 'warn' when cameraActive is false (aggregate.ts:356-361), so a condition with no eye record whatsoever exports camera_active=false and qc_overall='warn'. The codebook declares camera_active missing = 'no eye record' (analysisCodebook.ts:188) and qc_overall missing = 'no eye record' (analysisCodebook.ts:198) — states the writer cannot produce.
@@ -744,6 +821,22 @@ Verified: `theme.css`:53 applies `transform: scale(var(--vl-scale))`; `viewportS
 **Proposed fix:** Carry the distinction: `camera_active: e ? sum.camera_active : null` and `qc_overall: e ? sum.qc.overall : null` (the eye record `e` is already in scope at analysisExport.ts:134), or change the codebook's `missing` text to say the column is never empty and that false covers both 'declined' and 'no record'.
 
 ## [low] Rows from a session with no participant id are exported with an empty grouping key and appear in no join-report row
+
+**STATUS: CONFIRMED AND FIXED, as proposed.** Reproduced exactly: two bundles with
+`participant_id: ''` produced twenty rows sharing one empty grouping key, `row_id` values leading
+with `|`, an `analysis_join_report.csv` containing nothing but its header, and a dashboard reading
+"0/0 participants analysable" for a dataset holding twenty rows. Both halves of this module's own
+stated rule — nothing silently dropped, nothing silently merged — were broken by the module that
+states it.
+
+`checkJoin` no longer `continue`s past the participant map. Such a session is keyed on
+`unresolvedParticipantKey(session_id)` (`unresolved:<session_id>`), so it reaches the participant
+loop, gets a `ParticipantJoin` row with `analysable: false` and `excluded_by:
+['session_without_participant']`, and appears in the join report; two of them can no longer merge
+into one random-intercept level. `buildAnalysisDataset` writes that same key as `participant_id` and
+as the `row_id` prefix, so the long file, the join report and the issues file all name the same
+thing, and `exclusion_reason` now carries the real code instead of the exporter's generic
+`participant_not_resolved` fallback. The dashboard now reports 0/2 rather than 0/0.
 
 `src/storage/analysisExport.ts`:283
 

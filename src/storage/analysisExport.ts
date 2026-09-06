@@ -411,8 +411,16 @@ export interface AnalysisDataset {
 /**
  * Build the pooled dataset from every gathered session.
  *
- * The join is checked first and its verdict is carried onto every row, so a dataset can never be
- * produced whose provenance is unstated.
+ * The join is checked first and its verdict is carried onto every row, so no row can be modelled
+ * without the exporter's conclusion about whether it may be.
+ *
+ * THIS SENTENCE USED TO SAY that a dataset "can never be produced whose provenance is unstated",
+ * and nothing here stated any provenance at all. Four CSVs went out with no build, no commit, no
+ * hash of the condition table and no checksum — while the per-session export beside it carried all
+ * of that in export_manifest.json. Two years of collection can span several builds, and a re-export
+ * could not be shown to be byte-identical to the file the reported numbers came from. The claim was
+ * not merely unsupported, it was the opposite of what the code did, and the file it was written in
+ * is the only one the confirmatory analysis reads. `analysis_manifest.json` now makes it true.
  */
 export function buildAnalysisDataset(
   bundles: SessionBundle[],
@@ -444,14 +452,22 @@ export function buildAnalysisDataset(
   const verdict = new Map(integrity.participants.map((p) => [p.participant_id, p]));
 
   const contexts: RowContext[] = bundles.map((b) => {
-    const v = verdict.get(b.session.participant_id);
+    // The same stand-in key checkJoin used, so a session with no participant id resolves to its own
+    // join verdict instead of falling through to the generic fallback and writing an empty group.
+    const key = b.session.participant_id || unresolvedParticipantKey(b.session.session_id);
+    const v = verdict.get(key);
     return {
       bundle: b,
+      participantKey: key,
       analysable: v?.analysable ?? false,
       exclusion: v?.excluded_by.join(';') ?? 'participant_not_resolved',
     };
   });
 
+  // Bracket the CSV writes: escapeCsv() blanks any non-finite number it meets, and the count of how
+  // many it blanked is the only trace that leaves. Reset here so the manifest reports THIS
+  // dataset's cells rather than a total carried over from an earlier per-session export.
+  beginNonFiniteCount();
   const rows = buildLongRows(contexts);
 
   const files: ExportFile[] = [
@@ -495,6 +511,56 @@ export function buildAnalysisDataset(
       ),
     },
   ];
+
+  /*
+   * WHAT PRODUCED THIS DATASET, AND PROOF IT IS THE ONE THAT WAS ANALYSED.
+   *
+   * Mirrors export_manifest.json in the per-session bundle, which had all of this while the pooled
+   * file — the one the thesis is actually modelled from — had none of it.
+   *
+   * Three things it has to answer, none of which any of the four CSVs can:
+   *
+   *  - WHICH INSTRUMENT. `builds` lists every distinct build stamp with the session_ids it
+   *    collected, so a row is attributable to a build through its session_id. More than one entry
+   *    means the file pools across a change to the instrument; checkJoin raises
+   *    `mixed_build_provenance` so it is visible in the issues file too rather than only here.
+   *  - WHETHER THIS IS THE SAME FILE. Per-file byte counts and FNV-1a checksums, so the dataset the
+   *    reported numbers came from can be shown to be byte-identical to a later re-export. The
+   *    manifest cannot checksum itself, so it is built last and lists only the four data files.
+   *  - WHETHER ANYTHING WAS SILENTLY BLANKED. `non_finite_cells` must be 0; anything else means a
+   *    NaN or Infinity reached the CSV boundary and was written as empty, and the columns that
+   *    produced it have to be found before the file is modelled.
+   *
+   * exported_at lives here and NOT in any data file, for the reason given in export.ts: a
+   * timestamp inside the data would make identical data produce different bytes, and the checksums
+   * would then certify nothing.
+   */
+  const manifest = {
+    exported_at: new Date().toISOString(),
+    builds: groupByProvenance(bundles),
+    dataset: {
+      sessions: bundles.length,
+      rows: rows.length,
+      participants_total: integrity.total_participants,
+      participants_analysable: integrity.analysable_participants,
+      join_clean: integrity.clean,
+      blocking_issue_codes: [...new Set(
+        integrity.issues.filter((i) => i.severity === 'blocking').map((i) => i.code),
+      )],
+      warning_issue_codes: [...new Set(
+        integrity.issues.filter((i) => i.severity === 'warning').map((i) => i.code),
+      )],
+    },
+    non_finite_cells: nonFiniteCellCount(),
+    files: files.map((f) => ({
+      filename: f.filename, bytes: f.content.length, checksum_fnv1a: fnv1a(f.content),
+    })),
+  };
+  files.push({
+    filename: 'analysis_manifest.json',
+    mime: 'application/json',
+    content: JSON.stringify(manifest, null, 2),
+  });
 
   return { files, integrity, rowCount: rows.length };
 }
