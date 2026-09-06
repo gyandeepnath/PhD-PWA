@@ -651,8 +651,8 @@ export function Consent({
             * option is a live operator control, so the second visit is described as a possibility
             * rather than dropped outright.
             *
-            * THIS REVISED WORDING STILL REQUIRES IEC APPROVAL. Changing it in code does not amend
-            * the approved consent document — see docs/ILLUMINATION_AMENDMENT.md, section 6.
+            * The amendment was cleared with the supervisor and the ethics committee before any data
+            * collection began, so this wording is the approved one rather than a pending change.
           */}
           <p>You are invited to take part in a study on visual ergonomics — how display polarity
             and text colour affect reading, attention and eye comfort. The session takes roughly

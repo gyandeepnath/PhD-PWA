@@ -312,8 +312,10 @@ export function conditionEngagement(args: {
 
   // Frame rate too low for the PRIMARY OUTCOME. Reported, not penalised and not dropped: a low
   // frame rate is a property of the device and the light, not of the participant's engagement, and
-  // dropping these conditions would bias the sample toward whichever ambient illumination sustains
-  // a high frame rate — and ambient illumination is an independent variable in this design.
+  // dropping these conditions would bias the sample toward whichever participants, devices and
+  // seating positions sustain a high frame rate. Ambient illumination is held constant by protocol
+  // now rather than manipulated, so it is no longer the axis at risk — but face illuminance still
+  // varies with display polarity, which IS an independent variable, so the bias is not neutral.
   // Undersampling biases the sampled minimum EAR upward, so the ratio is inflated, directionally.
   const low_fps_for_ratio = !!eye && eye.camera_active && !eye.fps_adequate_for_ratio;
   if (low_fps_for_ratio) {

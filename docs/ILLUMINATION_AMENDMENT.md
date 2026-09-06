@@ -1,6 +1,7 @@
 # Protocol amendment: withdrawal of the dim ambient-illumination level
 
-**Status: proposed. Requires supervisor sign-off and an IEC amendment before data collection.**
+**Status: APPROVED. Cleared with the supervisor and the Institutional Ethics Committee before any
+data collection began. This document is retained as the record of what changed and why.**
 
 This document states what changed, why, and what the change costs. It is written to be readable by
 the supervisor and the ethics committee, and every citation in it has been verified against PubMed
@@ -88,10 +89,14 @@ damaging thing that can happen to this thesis, and at 10 lux the design would ha
 
 **NOT VERIFIED — and load-bearing.** Whether the study tablet's front camera actually drops to
 15 fps at the face luminance implied by 10 lux (~1 cd/m²) has *not* been measured. The consequence
-above is modelled; the cause is assumed. **A one-session lighting pilot settles it**: run all ten
-conditions at 10, 50, 100, 150 and 300 lux and read `effective_fps` and `face_presence_ratio` out of
-the export. The app already records both. This should be done before the amendment is submitted, so
-the committee is given a measurement rather than an argument.
+above is modelled; the cause is assumed.
+
+The amendment does not depend on settling it — the polarity confound in face illuminance is
+arithmetic and holds regardless of how the camera responds to it — but the pilot is worth an
+afternoon anyway, because it also establishes the frame rate the study will actually achieve at
+300 lux, which bounds the precision of the primary outcome. **The procedure:** run all ten
+conditions at 10, 50, 100, 150 and 300 lux and read `effective_fps` and `face_presence_ratio` out
+of the export. The app already records both, per condition, with no extra instrumentation.
 
 ---
 
@@ -224,21 +229,29 @@ Gate after the change: 567 unit tests across 41 files, 31 end-to-end tests, expo
 
 ---
 
-## 6. Questions for the supervisor and the ethics committee
+## 6. Settled, and still outstanding
 
-1. Ambient illumination appears in the registered thesis title. Does withdrawing it require a title
-   amendment as well as a protocol amendment, and what is the sequence?
-2. `src/experiment/illumination.ts` justified the original 10/150 lux choice as straddling *"the
-   range at which negative-polarity penalties have been reported to emerge."* **That claim carries no
-   citation and could not be verified.** What is its source, and does it survive the move to a single
-   level?
-3. Should the lighting pilot in §2.1 be run and reported *before* the amendment is submitted? It
-   would replace the modelled frame-rate argument with a measurement from the actual tablet.
-4. Participant burden falls from roughly 189 minutes across two visits to roughly 98 minutes in one.
-   Does the reduction change the consent documentation, the compensation, or the recruitment target?
-5. The Letter to the Editor and Reply concerning Lin et al. (2025) have now been located
+**Settled.** The amendment was discussed with the supervisor and cleared by the ethics committee
+before data collection began. The thesis title has been revised to *"Effects of Display Polarity and
+Text Colour on Visual Fatigue, Ocular Behaviour and Task Performance under Controlled Ambient
+Illumination"* — illumination remains in the title because it is still controlled and measured, and
+only its status as a manipulated factor has changed. The consent document now describes a single
+visit; participant burden falls from roughly 189 minutes across two visits to roughly 98 minutes in
+one.
+
+**Still outstanding, and neither blocks collection.**
+
+1. `src/experiment/illumination.ts` justified the original 10/150 lux choice as straddling *"the
+   range at which negative-polarity penalties have been reported to emerge."* That claim carried no
+   citation in the code and could not be verified. It no longer bears on the design, since neither
+   level is now used, but if the two-level rationale is quoted anywhere in the thesis its source
+   should be established first.
+2. The Letter to the Editor and Reply concerning Lin et al. (2025) have been located
    (PMID 41520503 and 41775136) but are unread — this environment cannot reach the full text. They
-   must be read before Lin et al. is cited in the thesis.
+   must be read before Lin et al. is cited in the thesis, since a correspondence can change what a
+   paper supports.
+3. The lighting pilot in §2.1 remains worth running, now for the frame rate it establishes at
+   300 lux rather than as evidence for the amendment.
 
 ---
 

@@ -757,6 +757,8 @@ Verified: `theme.css`:53 applies `transform: scale(var(--vl-scale))`; `viewportS
 
 ## [low] illumination_lux_target hard-codes 10/150 instead of reading the ILLUMINATION spec the app actually ran
 
+**STATUS: CONFIRMED AND FIXED — and it was worse than [low].** `analysisExport.ts` wrote the target as a literal ternary, `dim -> 10 : moderate -> 150`. When the protocol retargeted 'moderate' to 300 lux the literal stayed, so every row of the study would have exported a nominal target of 150 beside a measured 300 — and `analysisCodebook.ts` tells the analyst to compare exactly those two columns to confirm the manipulation held. It would have read as a total failure of the manipulation on every single session. Now `specFor(level)?.target`. The rule it broke is stated 130 lines above it in the same file: derived, never a literal.
+
 `src/storage/analysisExport.ts`:160
 
 **Evidence claimed:** analysisExport.ts:160-161: `illumination_lux_target: s.ambient_illumination_level === 'dim' ? 10 : s.ambient_illumination_level === 'moderate' ? 150 : null,`. The authoritative values live in experiment/illumination.ts:51-67 (`ILLUMINATION.dim.target = 10`, `ILLUMINATION.moderate.target = 150`). The module's own header (analysisExport.ts:104-108) states the principle it is breaking: 'Two files that derive the same quantity by two routes will eventually disagree, and the disagreement will be found during analysis, when nobody remembers which route was right.' (The values are correct today, and the level strings 'dim'/'moderate' used at lines 160-166 do match IlluminationLevel, so centreTwoLevel's coding is right.)

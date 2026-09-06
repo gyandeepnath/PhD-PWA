@@ -4,9 +4,10 @@
 > study now runs at a SINGLE ambient level of 300 lux (band 250-350), one sitting per participant,
 > ten condition-runs. Everything else — the Williams order, the five text colours, both polarities,
 > CVS-Q, NASA-TLX, reaction time, visual search, comprehension, fatigue and blink measurement — is
-> unchanged. Passages of this document that describe two sittings or a crossover describe the
-> superseded design. See `ILLUMINATION_AMENDMENT.md` for the reasoning, the verified citations and
-> what the change costs.
+> unchanged. The design sections, the model formulae and the timing tables below have been rewritten
+> for the amended protocol; any remaining reference to two sittings is either explicitly historical
+> or describes the split-sitting accommodation, which is a scheduling option and not a factor. See
+> `ILLUMINATION_AMENDMENT.md` for the reasoning, the verified citations and what the change costs.
 
 This document exists to answer one question: *is the per-session estimate inflated?*
 
@@ -46,32 +47,32 @@ So the challenge is well aimed at the right tier and still does not reach the ta
 behavioural estimate in the model is **half** what I claimed, a sitting is 77 minutes. If they are
 all **zero**, it is 56.
 
-## Illumination × sitting order
+## Sitting structure and setup burden
 
-These two factors are orthogonal by design: illumination order is counterbalanced against sitting
-order, so the dim sitting is the first visit for half the sample and the second for the other half.
-They act on different things — illumination on reading rate, sitting order on setup burden.
+Illumination is no longer a factor, so the two-cell analysis this section used to carry — a dim and
+a bright sitting per participant, crossed with visit order — no longer has a second cell. A
+participant attends **once** and the whole protocol is one sitting. Total contact is therefore the
+single first-visit figure, **98.4 minutes**, not the 188.9 minutes this section reported when it
+summed two visits.
+
+What survives from that analysis is the part about setup burden, which still governs what a split
+sitting costs.
 
 Which setup stages repeat is decided by the predicates in `firstUnsatisfiedSetupStage()`, and those
 read from two different scopes. `consent_given`, `cvsq.stage === 'baseline'` and the baseline
 fatigue row are **session** fields, so they repeat every sitting. `participantRow` and
 `cvd_screen_total` are **participant** fields, so `PARTICIPANT_PROFILE` and `COLOR_VISION` run once
-in a participant's life. The second-sitting saving is therefore a property of the code, not an
-assumption.
+in a participant's life. The saving on a second sitting is therefore a property of the code, not an
+assumption — measured at **8.2 minutes**.
 
-The size of the dim-reading effect is *itself one of the things this study exists to estimate*, so
-baking a value into the feasibility model would beg the question. It is exposed as a knob and
-reported across three assumptions:
+That number is what makes a split sitting cost more in total than a single one: dividing the ten
+conditions into two visits of five pays the session-scoped setup twice. Simulated across the
+protocol frontier, a single sitting is 93 minutes of contact and a 5/5 split is 112. The split is a
+scheduling accommodation for a participant who cannot sit the full session, not an optimisation.
 
-| dim reading penalty | dim 1st | dim 2nd | bright 1st | bright 2nd | total contact |
-|---|---|---|---|---|---|
-| 0% | 98.4 | 90.3 | 98.5 | 90.5 | 188.9 |
-| 5% | 99.8 | 92.0 | 98.2 | 90.5 | 190.3 |
-| 10% | 101.2 | 93.4 | 98.3 | 90.6 | 191.8 |
-
-Means in minutes, n = 2000 simulated participants per cell. A participant runs exactly one first
-visit and one second visit, one dim and one bright, so total contact is the sum of the two cells
-they actually occupy.
+The dim-reading-penalty knob that this section used to sweep is retained in
+`scripts/lib/timingModel.ts` but is no longer exercised by the shipped protocol, since there is no
+dim sitting. It stays because the model must still run against archived two-level data.
 
 ## Consequence for the 20-minute target
 
@@ -126,15 +127,27 @@ Two quantities are conserved, and they are why shortening is not free:
 
 ## The result
 
-| variant | cond | sitting | visits | contact | SE | power main | power interaction |
-|---|---|---|---|---|---|---|---|
-| as shipped | 10 | 93m | 2 | 186m | 0.059 | 89% | 45% |
-| CVS-Q once per participant | 10 | 87m | 2 | 174m | 0.059 | 89% | 45% |
-| 5 cond/sitting | 5 | 56m | 4 | 223m | 0.059 | 89% | 45% |
-| 4 cond/sitting | 4 | 41m | 5 | 207m | 0.059 | 89% | 45% |
-| 2 cond/sitting | 2 | 26m | 10 | 260m | 0.059 | 89% | 45% |
-| 4 cond, 60% passage | 4 | 37m | 5 | 183m | 0.076 | 87% | 34% |
-| 2 cond, 40% passage | 2 | 22m | 10 | 224m | 0.093 | 84% | 27% |
+Regenerated after the illumination factor was withdrawn. Every figure below moved, because
+`RUNS_PER_PARTICIPANT` was a literal `N_CONDITIONS * 2` and every visit count and contact time
+derived from it — the shipped variant used to read 2 visits and 186 minutes for a design that runs
+1 and 93. Source: `docs/PROTOCOL_FRONTIER_OUTPUT.txt`, regenerated by `scripts/protocolFrontier.ts`.
+
+| variant | cond | sitting | visits | contact | blinks | SE | power main | power interaction |
+|---|---|---|---|---|---|---|---|---|
+| **as shipped** | 10 | 93m | **1** | **93m** | 38 | 0.059 | 89% | 45% |
+| CVS-Q once per participant | 10 | 87m | 1 | 87m | 38 | 0.059 | 89% | 45% |
+| CVS-Q end of sitting only | 10 | 90m | 1 | 90m | 39 | 0.059 | 89% | 45% |
+| 5 cond/sitting | 5 | 56m | 2 | 112m | 38 | 0.059 | 89% | 45% |
+| 5 cond + CVS-Q once | 5 | 49m | 2 | 99m | 38 | 0.059 | 89% | 45% |
+| 4 cond/sitting | 4 | 41m | 3 | 124m | 39 | 0.059 | 89% | 45% |
+| 2 cond/sitting | 2 | 26m | 5 | 130m | 38 | 0.059 | 89% | 45% |
+| 4 cond, 60% passage | 4 | 37m | 3 | 110m | 23 | 0.076 | 87% | 34% |
+| 4 cond, 40% passage | 4 | 34m | 3 | 103m | 15 | 0.093 | 84% | 26% |
+| 2 cond, 40% passage | 2 | 22m | 5 | 112m | 15 | 0.093 | 84% | 26% |
+
+**The shipped design is now the cheapest variant in the table.** Splitting the sitting no longer
+saves contact time — it costs it, because the session-scoped setup is paid once per visit. That was
+true before as well, but was obscured while every variant carried a second illumination block.
 
 **Cutting conditions per sitting costs no statistical power at all.** Every condition-count variant
 holds identical power, because the condition-runs are conserved however they are packaged. What it

@@ -4,9 +4,10 @@
 > study now runs at a SINGLE ambient level of 300 lux (band 250-350), one sitting per participant,
 > ten condition-runs. Everything else — the Williams order, the five text colours, both polarities,
 > CVS-Q, NASA-TLX, reaction time, visual search, comprehension, fatigue and blink measurement — is
-> unchanged. Passages of this document that describe two sittings or a crossover describe the
-> superseded design. See `ILLUMINATION_AMENDMENT.md` for the reasoning, the verified citations and
-> what the change costs.
+> unchanged. The design sections, the model formulae and the timing tables below have been rewritten
+> for the amended protocol; any remaining reference to two sittings is either explicitly historical
+> or describes the split-sitting accommodation, which is a scheduling option and not a factor. See
+> `ILLUMINATION_AMENDMENT.md` for the reasoning, the verified citations and what the change costs.
 
 What model answers which question, why that model and not a simpler one, and what would falsify
 each hypothesis. Written against the columns in `analysis_long.csv`; every column named here exists
@@ -22,29 +23,35 @@ has not been resolved to a real record.
 
 ## 1. What kind of design this is, and why it dictates the model
 
-Three factors, and they do not sit at the same level:
+Two factors, both at the same level:
 
 | Factor | Levels | Varies |
 |---|---|---|
-| Ambient illumination | 10 lux, 150 lux | **Between sittings** — the whole-plot factor |
 | Display polarity | positive, negative | Within sitting |
-| Text colour | 5 | Within sitting |
+| Text colour | 5 (achromatic, blue, red, yellow, green) | Within sitting |
+| *Ambient illumination* | *300 lux, constant* | *Controlled — not a factor* |
 
-Polarity × colour gives the 10 conditions run inside each sitting; illumination changes only between
-the two sittings. That is a **split-plot repeated-measures design**, and it has one consequence that
-governs everything below: *the illumination effect is estimated on fewer effective units than the
-polarity and colour effects are.* Each participant contributes 20 condition-runs but only **two**
-illumination observations. Any analysis that pools all 20 rows and treats illumination like the
-other factors will understate its standard error, because it counts ten correlated rows as ten
-independent ones.
+Polarity × colour gives the 10 conditions, all run inside one sitting. Every participant contributes
+10 condition-runs and is their own control for both factors, so this is a straightforward
+within-subjects repeated-measures design with a single random-effect stratum: participant.
+
+**This replaces a split-plot design and the change simplifies the analysis rather than complicating
+it.** Illumination used to be a session-level (whole-plot) factor estimated on two observations per
+participant while polarity and colour had twenty, which meant the illumination effect had to be
+tested against a different error stratum or its standard error would be understated. That
+asymmetry is gone. Both surviving factors vary within participant at the same grain, and the model
+below has one random intercept instead of two nested ones.
 
 A mixed model with a participant random intercept handles this correctly without any special
 casing, which is the main reason to use one rather than a repeated-measures ANOVA on cell means.
 
-**Before any of this, check `analysis_join_report.csv`.** Rows from a participant whose two sittings
-ran under the same illumination, or who has only one sitting, carry no illumination contrast at all.
-They are present in the file and marked `analysable = FALSE`. The confirmatory analysis is
-complete-case; a sensitivity analysis including them is reasonable and should be reported as such.
+**Before any of this, check `analysis_join_report.csv`.** A participant with an incomplete condition
+set — a sitting abandoned part-way, or one half of a split sitting missing — is present in the file
+and marked `analysable = FALSE`. The confirmatory analysis is complete-case; a sensitivity analysis
+including them is reasonable and should be reported as such. Anyone carrying the withdrawn two-level
+crossover (twenty condition-runs across two illumination levels) is also flagged, because pooling
+them would average two illumination cells into one and call the result a constant-illumination
+measurement.
 
 ---
 
@@ -64,7 +71,7 @@ precision on sparse rows and lets a handful of low-blink conditions dominate the
 library(lme4)
 m_primary <- glmer(
   cbind(n_incomplete, n_blinks_total - n_incomplete) ~
-    polarity_c * illumination_c + text_colour +
+    polarity_c * text_colour +
     position_c + (1 | participant_id) + (1 | passage_id),
   family = binomial, data = subset(d, analysable & camera_active)
 )
@@ -72,9 +79,15 @@ m_primary <- glmer(
 
 Notes on each term:
 
-- **`polarity_c * illumination_c`** — sum-to-zero coded (±0.5). With an interaction present, a
-  dummy-coded main effect is the simple effect at the other factor's reference level rather than an
-  average effect. This is not a stylistic preference; it changes what the coefficient means.
+- **`polarity_c`** — sum-to-zero coded (±0.5). With an interaction present, a dummy-coded main
+  effect is the simple effect at the other factor's reference level rather than an average effect.
+  This is not a stylistic preference; it changes what the coefficient means.
+- **`illumination_c` is NOT in this model, and must not be added.** It is a constant +0.5 in a
+  single-level dataset, aliased with the intercept, so `polarity_c * illumination_c` is
+  rank-deficient. The column still ships so that a pooled file containing earlier two-level data
+  stays separable; in this dataset it carries no variance. The same applies to
+  `illumination_order_first`, which R will reject outright as a one-level factor, and to
+  `passage_repeat_number`, which is constant at 1 now that each passage is read once.
 - **`text_colour`** as a factor, or **`wcag_contrast_ratio`** as a continuous predictor. These
   answer different questions — "does colour matter?" versus "does contrast matter?" — and the
   ten-cell design cannot separate hue from contrast on its own. Fitting both and comparing is
@@ -157,9 +170,10 @@ only after **60 min**.
 
 These are not optional and they come first.
 
-1. **Did the illumination manipulation hold?** Plot `ambient_lux_measured` by `illumination`. If the
-   two levels overlap, the whole-plot factor is not what the labels say. `lux_all_in_range` flags
-   sittings that drifted outside the accepted band.
+1. **Did the illumination CONTROL hold?** Plot `ambient_lux_measured` across sittings: it should be
+   a tight cluster at 300 lux, not a spread. This is a constancy check rather than a separation
+   check — there are no levels to separate — and a sitting outside 250–350 is a protocol deviation.
+   `lux_all_in_range` flags those, and `lux_complete` says whether all three checkpoints were taken.
 2. **Was the primary outcome measurable?** `fps_adequate_for_ratio`. Below the frame-rate floor the
    sampled minimum EAR is biased **upward**, so `incomplete_blink_ratio` is inflated — a directional
    bias, not symmetric noise. **Do not drop these rows silently:** frame rate covaries with ambient

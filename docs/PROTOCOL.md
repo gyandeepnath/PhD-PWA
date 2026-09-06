@@ -4,9 +4,10 @@
 > study now runs at a SINGLE ambient level of 300 lux (band 250-350), one sitting per participant,
 > ten condition-runs. Everything else — the Williams order, the five text colours, both polarities,
 > CVS-Q, NASA-TLX, reaction time, visual search, comprehension, fatigue and blink measurement — is
-> unchanged. Passages of this document that describe two sittings or a crossover describe the
-> superseded design. See `ILLUMINATION_AMENDMENT.md` for the reasoning, the verified citations and
-> what the change costs.
+> unchanged. The design sections, the model formulae and the timing tables below have been rewritten
+> for the amended protocol; any remaining reference to two sittings is either explicitly historical
+> or describes the split-sitting accommodation, which is a scheduling option and not a factor. See
+> `ILLUMINATION_AMENDMENT.md` for the reasoning, the verified citations and what the change costs.
 
 This document describes the data-collection protocol **as implemented**, the scientific rationale
 for each stage, the workflow-logic cross-check (and the issues it fixed), how a researcher runs a
@@ -16,19 +17,22 @@ session, and the known limitations a PhD write-up should disclose.
 
 ## 1. Design
 
-- **Within-subjects crossover (split-plot), 10 conditions × 2 illumination levels = 20 condition-runs**
-  = 2 polarity (light/dark background) × 5 text colour (achromatic, blue, red, yellow, green),
-  each block run under one ambient illumination level (dim ≈10 lux / moderate ≈150 lux). Polarity
-  and colour vary WITHIN a session; illumination is the session-level (whole-plot) factor, with
-  its order counterbalanced between participants. Legacy note: the build previously ran 4 text
-  colours and a single researcher-chosen illumination level
-  (achromatic / blue / red / yellow). Hex values are locked; contrast differs across conditions and
-  is recorded as a covariate (see §5).
+- **Within-subjects factorial, 10 conditions = 10 condition-runs per participant**
+  = 2 polarity (light/dark background) × 5 text colour (achromatic, blue, red, yellow, green), all
+  in ONE sitting. Ambient illumination is held constant at 300 lux (accept 250–350) and is a
+  controlled variable with a manipulation check, not a factor.
+  Legacy note: two earlier versions of this build ran a two-level illumination factor across two
+  sittings (20 condition-runs), and before that 4 text colours with a researcher-chosen illumination
+  level. The two-level machinery is retained but switched off, so data collected under it still
+  reads; see `ILLUMINATION_AMENDMENT.md`. Hex values are locked; contrast differs across conditions
+  and is recorded as a covariate (see §5).
 - **Condition order**: balanced Williams Latin square, assigned by a **sequential enrolment index**
   (controls first-order carryover; every condition appears in every serial position equally over
   each block of 10 participants).
 - **Passage assignment**: rotated independently of condition (each condition meets each passage
-  equally over a block of 10 (illumination-order balance completes at 20)) so passage difficulty is **orthogonal to display condition**.
+  equally over a block of 10) so passage difficulty is **orthogonal to display condition**. With ten
+  passages covering ten condition-runs, each passage is read exactly ONCE per participant — the
+  practice effect that the two-sitting design had to carry as a covariate is absent by construction.
 
 ## 2. Session flow (as implemented)
 
