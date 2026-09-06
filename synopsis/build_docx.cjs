@@ -86,10 +86,35 @@ function buildTable(rows) {
     if (i < n) lens[i] = Math.max(lens[i], Math.min(c.replace(/\*\*|\[|\]\([^)]*\)/g, '').length, 90));
   }));
   const total = lens.reduce((a, b) => a + b, 0) || n;
-  let widths = lens.map((l) => Math.max(700, Math.round((l / total) * CONTENT_W)));
-  // normalise to exactly CONTENT_W
+  /*
+   * Column widths must sum to exactly CONTENT_W, and none may go negative.
+   *
+   * The old code clamped every column up to a 700-twip minimum and then dumped the whole
+   * correction on the LAST column. With enough narrow columns the clamped widths already exceed
+   * CONTENT_W, so the correction is negative and the last column goes below zero — docx then
+   * throws `Invalid value '-220' specified`, and the whole build dies with no indication that a
+   * table was the cause. A seven-column comparison table was enough to trigger it.
+   *
+   * Excess is now taken from the columns that actually have room above the minimum, in proportion
+   * to how much room each has, and the rounding remainder goes on the widest column rather than
+   * the last one.
+   */
+  const MIN_W = 700;
+  let widths = lens.map((l) => Math.max(MIN_W, Math.round((l / total) * CONTENT_W)));
+  const excess = widths.reduce((a, b) => a + b, 0) - CONTENT_W;
+  if (excess > 0) {
+    const slack = widths.map((w) => w - MIN_W);
+    const totalSlack = slack.reduce((a, b) => a + b, 0);
+    if (totalSlack > 0) {
+      const take = Math.min(excess, totalSlack);
+      widths = widths.map((w, i) => w - Math.round((slack[i] / totalSlack) * take));
+    }
+  }
   const diff = CONTENT_W - widths.reduce((a, b) => a + b, 0);
-  widths[widths.length - 1] += diff;
+  if (diff !== 0) {
+    const widest = widths.indexOf(Math.max(...widths));
+    widths[widest] = Math.max(MIN_W, widths[widest] + diff);
+  }
 
   const cell = (txt, isHeader, i) => new TableCell({
     width: { size: widths[i], type: WidthType.DXA },
