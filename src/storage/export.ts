@@ -62,6 +62,20 @@ export function mediaFilename(session: SessionRecord, m: MediaRecord): string {
  */
 let nonFiniteCells = 0;
 
+/**
+ * Start counting non-finite cells afresh, and read the running total.
+ *
+ * escapeCsv() blanks a NaN or an Infinity rather than writing the literal, because R would coerce
+ * either into something that looks like data. That silence is only tolerable because a count of how
+ * often it happened travels in the manifest. The counter was module-private and reset only inside
+ * buildExportFiles(), so the POOLED analysis export — which builds its CSVs through the same
+ * escapeCsv() — could blank a non-finite cell with nothing anywhere to say it had. The pair is
+ * exported so any builder emitting a manifest can bracket its own CSV writes and report the same
+ * number for its own files rather than inheriting a total left over from some earlier export.
+ */
+export function beginNonFiniteCount(): void { nonFiniteCells = 0; }
+export function nonFiniteCellCount(): number { return nonFiniteCells; }
+
 /** CSV-escape a single value: wrap in quotes and double internal quotes when needed. */
 export function escapeCsv(value: unknown): string {
   if (value == null) return '';
@@ -477,7 +491,7 @@ export const CODEBOOK: Record<string, string>[] = [
 ];
 
 export function buildExportFiles(input: SessionBundle): ExportFile[] {
-  nonFiniteCells = 0;
+  beginNonFiniteCount();
   // Normalise ordering at the boundary so the export is reproducible regardless of how the bundle
   // was assembled - straight from IndexedDB, from a test fixture, or from an import. Without this
   // the same data can produce different bytes and the manifest checksums certify nothing.
@@ -810,7 +824,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
      * guards this should always be 0; any other value means something produced a NaN or Infinity
      * and the affected columns must be investigated before the data is analysed.
      */
-    non_finite_cells: nonFiniteCells,
+    non_finite_cells: nonFiniteCellCount(),
     /**
      * Referential integrity of the joins this export performed. joins_sound=false means at least
      * one condition's measurements cannot be trusted to belong to it - see 16_integrity_report.csv

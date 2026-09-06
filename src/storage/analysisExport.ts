@@ -31,8 +31,11 @@
  */
 import type { SessionBundle } from './gather';
 import type { ExportFile } from './export';
-import { toCsv, round } from './export';
-import { checkJoin, type JoinIntegrity, type JoinExpectation } from './joinIntegrity';
+import { toCsv, round, fnv1a, beginNonFiniteCount, nonFiniteCellCount } from './export';
+import {
+  checkJoin, groupByProvenance, unresolvedParticipantKey,
+  type JoinIntegrity, type JoinExpectation,
+} from './joinIntegrity';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { N_CONDITIONS } from '@/experiment/conditions';
 import { PASSAGES } from '@/experiment/passages';
@@ -82,6 +85,15 @@ export const ANALYSIS_LONG_COLUMNS = [
 
 interface RowContext {
   bundle: SessionBundle;
+  /**
+   * The grouping level these rows are written under.
+   *
+   * Not read off the session, because a session with no participant id would then write an EMPTY
+   * grouping key — and two such sessions would share it, silently merging two people into one
+   * random-intercept level. checkJoin assigns the stand-in key; it is used here so the long file,
+   * the join report and the issues file all name the same thing.
+   */
+  participantKey: string;
   analysable: boolean;
   exclusion: string;
 }
@@ -168,12 +180,12 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
       const prev = ordered.find((x) => x.session_position === sum.session_position - 1);
 
       rows.push({
-        participant_id: s.participant_id,
+        participant_id: ctx.participantKey,
         enrolment_number: p?.enrolment_number ?? s.enrolment_number,
         session_id: s.session_id,
         session_index: s.session_index,
         // Stable and order-independent, so a re-merge cannot silently duplicate a row.
-        row_id: `${s.participant_id}|${s.session_id}|${sum.condition_id}`,
+        row_id: `${ctx.participantKey}|${s.session_id}|${sum.condition_id}`,
 
         illumination: s.ambient_illumination_level,
         /*
@@ -221,8 +233,19 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         illumination_block: s.illumination_block,
         illumination_order_first: s.illumination_order_first,
         adaptation_ms_before: c?.adaptation_ms_before ?? null,
-        // Adaptation was doubled on a polarity switch, so this is a covariate for any ocular
-        // outcome. Derived once here rather than re-derived differently in each analysis.
+        /*
+         * Adaptation was doubled on a polarity switch, so this is a covariate for any ocular
+         * outcome. Derived once here rather than re-derived differently in each analysis.
+         *
+         * `prev` is the row at session_position - 1 EXACTLY, never the nearest earlier one. Where a
+         * condition is missing from the data the participant still saw whatever ran in its place,
+         * so the polarity of the row two places back is not the polarity this row was switched
+         * from; comparing across the hole would put a confident true/false on a comparison nobody
+         * made. Empty is the honest answer, and it is the same empty the codebook reads as 'first
+         * condition of the sitting' — so checkJoin raises `condition_position_gap` naming every
+         * sitting with a hole in it and every row whose empty cell must not be read that way. Two
+         * different absences cannot share one encoding silently; here they share it loudly.
+         */
         polarity_switched: prev ? prev.polarity !== sum.polarity : null,
         /*
          * The condition that immediately preceded this one IN TIME, or empty when nothing did.
@@ -330,12 +353,30 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         screen_luminance_cd_m2: round(s.screen_white_luminance_cd_m2),
         stimulus_scale: round(s.stimulus_scale),
 
-        camera_active: sum.camera_active,
+        /*
+         * NO EYE RECORD IS NOT THE SAME AS "THE CAMERA DID NOT RUN".
+         *
+         * These two read through the condition summary, which substitutes for a missing eye record:
+         * camera_active defaults to false and every quality flag is forced to 'warn', so qc_overall
+         * came out 'warn' whatever had happened. That is right for the dashboard, which needs
+         * something to colour, and wrong here. A condition abandoned before endCondition() writes
+         * its eye row has no ocular record at all, and the file was asserting two facts about it:
+         * that tracking ran and did not see a face (indistinguishable from a participant who
+         * declined the camera) and that its data quality had been assessed and was merely
+         * questionable. An analyst filtering `qc_overall != 'bad'` kept a row with no ocular
+         * measurement in it.
+         *
+         * The codebook already gives both columns the missing-value meaning 'no eye record' — a
+         * state the writer could not produce, so the codebook described a cell that could not
+         * exist. Gated on the eye record itself, empty now means exactly what it says, and false
+         * still means the record exists and says tracking did not run.
+         */
+        camera_active: e ? sum.camera_active : null,
         effective_fps: round(sum.effective_fps),
         fps_adequate_for_ratio: e?.fps_adequate_for_ratio ?? null,
         face_presence_ratio: round(sum.face_presence_ratio),
         gaze_calibrated: e?.gaze_calibrated ?? null,
-        qc_overall: sum.qc.overall,
+        qc_overall: e ? sum.qc.overall : null,
         /*
          * A test-harness session carries collapsed timing constants — a 150 ms reading floor
          * instead of 20 s — so its rows are not measurements of anything. The per-session codebook
