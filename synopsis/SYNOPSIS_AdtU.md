@@ -88,7 +88,7 @@ A clinician, designer or standards body therefore has no evidence base from whic
 
 The study addresses a determinant of visual health that is common, freely modifiable and poorly evidenced, using a design that can answer a question the existing literature cannot.
 
-Because WCAG contrast on a white field falls as the text's relative luminance rises, while contrast on a black field rises with it, the rank order of the chromatic conditions is exactly inverted between the two polarities (Table 3.4). Blue and red are high in contrast on white but fall below the accessibility minimum on black, while yellow and green behave oppositely. The achromatic pair is the exception and the anchor: black-on-white and white-on-black both give 21.00:1, so that single pair varies polarity with luminance contrast held constant. The polarity-by-colour interaction therefore allows contrast-mediated effects to be modelled and distinguished from residual, hue-specific effects. The design does not experimentally isolate hue from luminance contrast, since the two cannot be orthogonalised within a fixed colour set; the separation is statistical rather than experimental and is interpreted accordingly. The ordering Fan and colleagues (2024) reported under negative polarity, red worst and yellow best, is precisely what luminance contrast alone would predict for those hues on a black background, and a single-polarity design cannot exclude that explanation.
+Because WCAG contrast on a white field falls as the text's relative luminance rises, while contrast on a black field rises with it, the rank order of the chromatic conditions is exactly inverted between the two polarities (Table 3.3). Blue and red are high in contrast on white but fall below the accessibility minimum on black, while yellow and green behave oppositely. The achromatic pair is the exception and the anchor: black-on-white and white-on-black both give 21.00:1, so that single pair varies polarity with luminance contrast held constant. The polarity-by-colour interaction therefore allows contrast-mediated effects to be modelled and distinguished from residual, hue-specific effects. The design does not experimentally isolate hue from luminance contrast, since the two cannot be orthogonalised within a fixed colour set; the separation is statistical rather than experimental and is interpreted accordingly. The ordering Fan and colleagues (2024) reported under negative polarity, red worst and yellow best, is precisely what luminance contrast alone would predict for those hues on a black background, and a single-polarity design cannot exclude that explanation.
 
 Holding ambient light constant isolates the polarity effect where it matters behaviourally, since devices are used extensively at night and in dim domestic settings, where negative polarity is predicted to cost most (Dobres *et al.*, 2017). Validating an automated measure of blink completeness would remove the annotation bottleneck that has kept this literature small. The findings bear on interface design, on accessibility standards whose contrast criterion does not account for polarity (World Wide Web Consortium, 2023), on public health guidance, and on the advice optometrists give patients, an area in which practitioners are documented to lack quality evidence (Sheppard & Wolffsohn, 2018).
 
@@ -120,7 +120,7 @@ The following hypotheses are linked to the objectives.
 
 **H₁ᵦ (Objective 1, interactions).** The effect of text colour depends on polarity. The further prediction that the cost of negative polarity is greater under dim than under moderate illumination (Dobres *et al.*, 2017) is not tested here, illumination being held constant; it is retained in §4.3 as a question this design deliberately forgoes.
 
-**H₁ᵪ (Objective 2, contrast mediation).** Colour-related variance is largely accounted for by luminance contrast. Because the computed contrast ordering reverses between the two polarities (Table 3.4), a contrast-mediated effect predicts a corresponding reversal of the colour ordering across polarity, whereas a residual hue-specific effect predicts a consistent ordering, with red the a priori candidate exception (Fan *et al.*, 2024).
+**H₁ᵪ (Objective 2, contrast mediation).** Colour-related variance is largely accounted for by luminance contrast. Because the computed contrast ordering reverses between the two polarities (Table 3.3), a contrast-mediated effect predicts a corresponding reversal of the colour ordering across polarity, whereas a residual hue-specific effect predicts a consistent ordering, with red the a priori candidate exception (Fan *et al.*, 2024).
 
 **H₁ᵨ (Objective 3, moderation).** Habitual display-mode preference, habitual screen exposure, typical ambient-lighting environment and digital literacy moderate the magnitude of these effects.
 
@@ -280,6 +280,21 @@ The target is 130 participants for analysis, with 145 enrolled to allow for with
 
 Screening comprises visual acuity, non-cycloplegic refraction, cover test, near point of convergence and Ishihara colour-vision screening on the study display (Klinke *et al.*, 2024); it is an aid rather than a diagnosis and its outcomes are covariates. A profiling questionnaire supplies the moderators for Objective 3 and the sleepiness covariates.
 
+**Table 3.2 — The proposed design against the published studies from which its measures are drawn.**
+
+| Study | Year | N | Conditions per participant | Total condition-runs | Ocular measure | Display parameter manipulated |
+|---|---|---|---|---|---|---|
+| Hirota *et al.* | 2013 | 11 | 1 | 11 | Blink composition, tear break-up | None |
+| Jackson *et al.* | 2016 | 12 | 2 | 24 | PERCLOS | None |
+| Jiménez *et al.* | 2020 | 20 | 14 | 280 | Accommodation, pupil | Text–background colour |
+| Portello *et al.* | 2013 | 21 | 2 | 42 | Blink rate, completeness | None |
+| Cardona *et al.* | 2011 | 25 | 3 | 75 | Blink rate, amplitude | Task dynamism |
+| Lin, M., *et al.* | 2025 | 30 | 4 | 120 | Blink patterns, tear film | Ambient light × screen brightness |
+| Argilés *et al.* | 2015 | 50 | 6 | 300 | Blink rate, completeness | Reading medium |
+| **Proposed study** | — | **130** | **10** | **1,300** | **Incomplete-blink ratio, blink rate, IBI, PERCLOS** | **Polarity × colour, illumination controlled** |
+
+Precision on the primary outcome follows the number of condition-runs rather than the number of participants, and no located study combines a sample of this size with per-condition ocular measurement under a manipulated display parameter.
+
 **Figure 3.2 — Participant flow.**
 
 <!--FLOW-->
@@ -295,7 +310,7 @@ Analysed (target n = 130; 1,300 condition-runs)
 
 All conditions are presented on one tablet at a fixed white luminance, characterised photometrically before collection. Hex values are locked and contrast is computed from them, entering the analysis as a covariate.
 
-**Table 3.2 — The ten display conditions with computed contrast.**
+**Table 3.3 — The ten display conditions with computed contrast.**
 
 | Sl. No. | Code | Text colour | Text hex | Background | WCAG ratio | Level | Below AA |
 |---|---|---|---|---|---|---|---|
@@ -310,6 +325,16 @@ All conditions are presented on one tablet at a fixed white luminance, character
 | 9 | N4 | Yellow | #C9A400 | #000000 | 8.79 : 1 | AAA | No |
 | 10 | N5 | Green | #00A651 | #000000 | 6.57 : 1 | AA | No |
 
+**Figure 3.3 — Why the colour ordering must reverse between polarities, and what that tests.**
+
+<!--FLOW-->
+On a white field, contrast = 1.05 / (L + 0.05) — FALLS as the text lightens
+On a black field, contrast = (L + 0.05) / 0.05 — RISES as the text lightens
+Both depend on the same relative luminance L, so the two rank orders are exact reverses
+If colour acts THROUGH contrast: the colour ordering crosses over between polarities
+If a residual hue effect exists: the ordering is preserved and the lines stay parallel
+<!--/FLOW-->
+
 Two properties govern the analysis. The contrast ordering is exactly inverted between polarities — arithmetic, not design — so a contrast-mediated colour effect must cross over between them and a residual hue effect must not. The achromatic pair is contrast-matched at 21.00:1 in both, giving the one comparison in which a polarity effect cannot be attributed to contrast. Two conditions fall below the accessibility minimum in each polarity, so polarity is unconfounded with compliance.
 
 ## 3.4 Ambient illumination as a controlled constant
@@ -321,6 +346,16 @@ The level was fixed on photometric grounds rather than by reference to a lightin
 ## 3.5 Instrumentation and measures
 
 A purpose-built, offline-capable tablet application presents the ten conditions with locked colour values and a neutral grey adaptation field between them, timestamping task onsets to the frame. Ocular measures come from the front camera by facial-landmark tracking; no video leaves the device unless separately consented.
+
+**Figure 3.4 — How a blink is classified, and what makes one incomplete.**
+
+<!--FLOW-->
+Eye aspect ratio is tracked continuously and normalised to the participant's own open-eye baseline
+A blink begins when the ratio falls below 0.75 of that baseline
+Reaches below 0.60 → COMPLETE blink | Bottoms out between 0.60 and 0.75 → INCOMPLETE blink
+Incomplete-blink ratio = incomplete blinks ÷ all blinks — the primary outcome
+Because classification depends on catching the frame at minimum aperture, the achieved frame rate is recorded per condition and gates the measure
+<!--/FLOW-->
 
 **Precision.** The incomplete-blink ratio is a binomial proportion, so precision follows the blinks captured. Passages of four pages and 570 to 600 words give an exposure of 178 seconds, about 39 blinks, and a condition-level standard error near 0.06; the count is exported with every ratio, and runs below 20 blinks are flagged.
 

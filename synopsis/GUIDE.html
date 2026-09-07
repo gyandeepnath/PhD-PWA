@@ -283,7 +283,7 @@ footer .in{max-width:70ch; margin:0 auto}
 <dl class="kv">
   <div><dt>Participants</dt><dd>130<small>145 enrolled, allowing for dropout</small></dd></div>
   <div><dt>Setups each</dt><dd>20<small>10 displays × 2 light levels</small></dd></div>
-  <div><dt>Condition-runs</dt><dd>2,600<small>~9× the largest comparable study</small></dd></div>
+  <div><dt>Condition-runs</dt><dd>1,300<small>~9× the largest comparable study</small></dd></div>
   <div><dt>Sessions</dt><dd>2<small>48–72 hours apart</small></dd></div>
   <div><dt>Primary outcome</dt><dd>IBR<small>incomplete-blink ratio</small></dd></div>
   <div><dt>Duration</dt><dd>24 mo<small>data collection after approval</small></dd></div>
@@ -671,10 +671,10 @@ footer .in{max-width:70ch; margin:0 auto}
 <h4>The formal null and alternative</h4>
 <p><strong>H₀</strong> — display polarity, text colour and ambient illumination, individually or in combination, have no significant effect on visual fatigue, ocular behaviour or visual task performance during prolonged tablet reading. <strong>H₁</strong> — at least one of these factors, individually or in combination, significantly affects these outcomes.</p>
 
-<h2 id="design"><span class="part">06 — The design</span>A crossover, and what "split-plot" means</h2>
+<h2 id="design"><span class="part">06 — The design</span>A crossover, and what "within-subjects" means</h2>
 <p class="xref"><b>Covers</b> · §3.1 Study design, Figure 3.1 · §3.2 setting · Figure 3.2</p>
 
-<p>The design is a <span class="term">repeated-measures crossover (split-plot) factorial</span>. That phrase carries three separate ideas, and they are worth taking one at a time.</p>
+<p>The design is a <span class="term">repeated-measures crossover (within-subjects) factorial</span>. That phrase carries three separate ideas, and they are worth taking one at a time.</p>
 
 <dl class="gloss">
   <dt>Repeated measures / crossover</dt>
@@ -688,71 +688,40 @@ footer .in{max-width:70ch; margin:0 auto}
 <div class="wide">
 <figure>
 <div class="scroll">
-<svg viewBox="0 0 760 388" role="img" aria-label="Split-plot structure: one participant attends two sessions differing in ambient illumination, and inside each session sees all ten polarity-by-colour display conditions, giving twenty condition-runs per person.">
+<svg viewBox="0 0 760 300" role="img" aria-label="Within-subjects design: one participant attends a single sitting at a constant 300 lux and sees all ten polarity-by-colour display conditions, giving ten condition-runs per person.">
   <g font-family="system-ui,sans-serif" font-size="12" fill="currentColor">
     <rect x="300" y="12" width="160" height="36" rx="18" fill="none" style="stroke:var(--accent)" stroke-width="1.8"/>
     <text x="380" y="35" text-anchor="middle" font-weight="650" font-size="12.5">one participant</text>
+    <path d="M380,48 L380,72" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
 
-    <path d="M380,48 L380,62 L200,62 L200,74" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
-    <path d="M380,48 L380,62 L560,62 L560,74" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <rect x="90" y="74" width="580" height="196" rx="6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 3" opacity=".8"/>
+    <text x="380" y="95" text-anchor="middle" font-weight="650">single sitting &#183; ambient held at 300 lux</text>
+    <text x="380" y="112" text-anchor="middle" font-size="10.5" opacity=".75">illumination is controlled, not manipulated &#8212; it has no levels to cross</text>
 
-    <rect x="30" y="76" width="340" height="184" rx="6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 3" opacity=".8"/>
-    <text x="200" y="97" text-anchor="middle" font-weight="650">Session 1 · illumination level A</text>
-    <text x="200" y="113" text-anchor="middle" font-size="11" opacity=".7">e.g. dim, ≈10 lux — order counterbalanced</text>
-
-    <rect x="390" y="76" width="340" height="184" rx="6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 3" opacity=".8"/>
-    <text x="560" y="97" text-anchor="middle" font-weight="650">Session 2 · illumination level B</text>
-    <text x="560" y="113" text-anchor="middle" font-size="11" opacity=".7">the other level, 48–72 h later</text>
-
-    <text x="103" y="170" text-anchor="end" font-size="10" letter-spacing=".8" opacity=".65">POS</text>
-    <text x="103" y="224" text-anchor="end" font-size="10" letter-spacing=".8" opacity=".65">NEG</text>
-    <text x="463" y="170" text-anchor="end" font-size="10" letter-spacing=".8" opacity=".65">POS</text>
-    <text x="463" y="224" text-anchor="end" font-size="10" letter-spacing=".8" opacity=".65">NEG</text>
-
-    <g font-family="Georgia,serif" font-size="14" text-anchor="middle">
-      <rect x="111" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="126" y="170" fill="#000000">Aa</text>
-      <rect x="148" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="163" y="170" fill="#1E4ED8">Aa</text>
-      <rect x="185" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="200" y="170" fill="#C81E1E">Aa</text>
-      <rect x="222" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="237" y="170" fill="#C9A400">Aa</text>
-      <rect x="259" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="274" y="170" fill="#00A651">Aa</text>
-      <rect x="111" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="126" y="224" fill="#FFFFFF">Aa</text>
-      <rect x="148" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="163" y="224" fill="#1E4ED8">Aa</text>
-      <rect x="185" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="200" y="224" fill="#C81E1E">Aa</text>
-      <rect x="222" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="237" y="224" fill="#C9A400">Aa</text>
-      <rect x="259" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="274" y="224" fill="#00A651">Aa</text>
-      <rect x="471" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="486" y="170" fill="#000000">Aa</text>
-      <rect x="508" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="523" y="170" fill="#1E4ED8">Aa</text>
-      <rect x="545" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="560" y="170" fill="#C81E1E">Aa</text>
-      <rect x="582" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="597" y="170" fill="#C9A400">Aa</text>
-      <rect x="619" y="148" width="30" height="32" fill="#FFFFFF" stroke="#8E88A0"/><text x="634" y="170" fill="#00A651">Aa</text>
-      <rect x="471" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="486" y="224" fill="#FFFFFF">Aa</text>
-      <rect x="508" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="523" y="224" fill="#1E4ED8">Aa</text>
-      <rect x="545" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="560" y="224" fill="#C81E1E">Aa</text>
-      <rect x="582" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="597" y="224" fill="#C9A400">Aa</text>
-      <rect x="619" y="202" width="30" height="32" fill="#000000" stroke="#8E88A0"/><text x="634" y="224" fill="#00A651">Aa</text>
-    </g>
-    <g font-family="ui-monospace,monospace" font-size="8" text-anchor="middle" opacity=".6">
-      <text x="126" y="192">P1</text><text x="163" y="192">P2</text><text x="200" y="192">P3</text><text x="237" y="192">P4</text><text x="274" y="192">P5</text>
-      <text x="126" y="246">N1</text><text x="163" y="246">N2</text><text x="200" y="246">N3</text><text x="237" y="246">N4</text><text x="274" y="246">N5</text>
-      <text x="486" y="192">P1</text><text x="523" y="192">P2</text><text x="560" y="192">P3</text><text x="597" y="192">P4</text><text x="634" y="192">P5</text>
-      <text x="486" y="246">N1</text><text x="523" y="246">N2</text><text x="560" y="246">N3</text><text x="597" y="246">N4</text><text x="634" y="246">N5</text>
+    <text x="380" y="136" text-anchor="middle" font-size="10.5" font-weight="600">positive polarity &#183; dark text on light</text>
+    <g font-size="10">
+      <rect x="120" y="144" width="94" height="30" rx="4" fill="#ffffff" stroke="#333" stroke-width="1"/><text x="167" y="163" text-anchor="middle" fill="#111">P1 achrom.</text>
+      <rect x="222" y="144" width="94" height="30" rx="4" fill="#ffffff" stroke="#333" stroke-width="1"/><text x="269" y="163" text-anchor="middle" fill="#1E4ED8">P2 blue</text>
+      <rect x="324" y="144" width="94" height="30" rx="4" fill="#ffffff" stroke="#333" stroke-width="1"/><text x="371" y="163" text-anchor="middle" fill="#C81E1E">P3 red</text>
+      <rect x="426" y="144" width="94" height="30" rx="4" fill="#ffffff" stroke="#333" stroke-width="1"/><text x="473" y="163" text-anchor="middle" fill="#C9A400">P4 yellow</text>
+      <rect x="528" y="144" width="94" height="30" rx="4" fill="#ffffff" stroke="#333" stroke-width="1"/><text x="575" y="163" text-anchor="middle" fill="#00A651">P5 green</text>
     </g>
 
-    <path d="M200,260 L200,278 L380,278 L380,290" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
-    <path d="M560,260 L560,278 L380,278" fill="none" stroke="currentColor" stroke-width="1.3"/>
-    <text x="210" y="274" font-size="10.5" opacity=".7">10 runs</text>
-    <text x="550" y="274" text-anchor="end" font-size="10.5" opacity=".7">10 runs</text>
+    <text x="380" y="196" text-anchor="middle" font-size="10.5" font-weight="600">negative polarity &#183; light text on dark</text>
+    <g font-size="10">
+      <rect x="120" y="204" width="94" height="30" rx="4" fill="#000000" stroke="#333" stroke-width="1"/><text x="167" y="223" text-anchor="middle" fill="#ffffff">N1 achrom.</text>
+      <rect x="222" y="204" width="94" height="30" rx="4" fill="#000000" stroke="#333" stroke-width="1"/><text x="269" y="223" text-anchor="middle" fill="#6E9BFF">N2 blue</text>
+      <rect x="324" y="204" width="94" height="30" rx="4" fill="#000000" stroke="#333" stroke-width="1"/><text x="371" y="223" text-anchor="middle" fill="#F06A6A">N3 red</text>
+      <rect x="426" y="204" width="94" height="30" rx="4" fill="#000000" stroke="#333" stroke-width="1"/><text x="473" y="223" text-anchor="middle" fill="#C9A400">N4 yellow</text>
+      <rect x="528" y="204" width="94" height="30" rx="4" fill="#000000" stroke="#333" stroke-width="1"/><text x="575" y="223" text-anchor="middle" fill="#00A651">N5 green</text>
+    </g>
 
-    <rect x="228" y="292" width="304" height="46" rx="5" fill="none" style="stroke:var(--accent)" stroke-width="1.8"/>
-    <text x="380" y="311" text-anchor="middle" font-weight="700" font-size="13">20 condition-runs per participant</text>
-    <text x="380" y="329" text-anchor="middle" font-size="11" opacity=".75">× 130 analysed = 2,600 condition-runs</text>
-
-    <text x="380" y="366" text-anchor="middle" font-size="11" opacity=".72">whole plot = illumination (session level) · sub-plots = polarity × colour (within session)</text>
-    <text x="380" y="382" text-anchor="middle" font-size="11" opacity=".72">all three factors are within-participant — nobody is compared against a stranger</text>
+    <text x="380" y="256" text-anchor="middle" font-size="10.5" opacity=".8">presented in Williams order &#183; each of the ten passages read exactly once</text>
+    <text x="380" y="288" text-anchor="middle" font-weight="650" font-size="12.5">10 condition-runs per participant &#183; 1,300 across the study</text>
   </g>
 </svg>
 </div>
-<figcaption><b>The design, drawn to scale of what one person actually does.</b> Each small tile is a real stimulus: the top row of every session is positive polarity, the bottom row negative, and the letters carry the five locked colours. The two sessions differ only in room light. Because illumination sits at the session level and colour-by-polarity sits inside it, the statistical model needs two nested random effects rather than one — that is the whole practical consequence of the word "split-plot" (Part 11).</figcaption>
+<figcaption><b>The design, drawn to scale of what one person actually does.</b> Each small tile is a real stimulus: the top row is positive polarity, the bottom row negative, and the letters carry the five locked colours. All ten run inside one sitting at a constant 300 lux. Because both factors now vary at the same grain, within participant, the statistical model needs one random effect rather than one — that is the whole practical consequence of the word "within-subjects" (Part 11).</figcaption>
 </figure>
 </div>
 
@@ -775,7 +744,7 @@ footer .in{max-width:70ch; margin:0 auto}
 </ol>
 
 <h3>Setting</h3>
-<p>A controlled laboratory room at Assam down town University in which ambient illuminance can be held constant and <strong>daylight is excluded</strong> — the last point matters, because daylight cannot be held at 10 lux. Data collection is expected to take approximately <strong>24 months</strong> after ethics approval and piloting.</p>
+<p>A controlled laboratory room at Assam down town University in which ambient illuminance can be held constant and <strong>daylight is excluded</strong> — the last point matters, because daylight cannot be held at 300 lux. Data collection is expected to take approximately <strong>24 months</strong> after ethics approval and piloting.</p>
 
 <h2 id="conditions"><span class="part">07 — The ten conditions</span>Where the arithmetic does the experimental work</h2>
 <p class="xref"><b>Covers</b> · §3.3 Display conditions, Table 3.4 · §3.4 Ambient illumination · §1.5 Rationale</p>
@@ -988,8 +957,8 @@ footer .in{max-width:70ch; margin:0 auto}
   <caption>Ambient illumination — measured, not described</caption>
   <thead><tr><th>Level</th><th class="n">Target</th><th class="n">Accepted range</th><th>Represents</th></tr></thead>
   <tbody>
-    <tr><td><strong>Dim</strong></td><td class="n">≈10 lux</td><td class="n">5–15 lux</td><td>Night-time and low-light domestic use; comparable to the low-illumination conditions of prior polarity work</td></tr>
-    <tr><td><strong>Moderate</strong></td><td class="n">≈150 lux</td><td class="n">130–170 lux</td><td>General indoor domestic lighting — deliberately <em>below</em> the 300–500 lux the Indian interior-illumination code specifies for offices and classrooms</td></tr>
+    <tr><td><strong>Dim</strong></td><td class="n">≈300 lux</td><td class="n">5–15 lux</td><td>Night-time and low-light domestic use; comparable to the low-illumination conditions of prior polarity work</td></tr>
+    <tr><td><strong>Moderate</strong></td><td class="n">≈300 lux</td><td class="n">130–170 lux</td><td>General indoor domestic lighting — deliberately <em>below</em> the 300–500 lux the Indian interior-illumination code specifies for offices and classrooms</td></tr>
   </tbody>
 </table>
 </div>
@@ -1002,7 +971,7 @@ footer .in{max-width:70ch; margin:0 auto}
   <li><strong>Colour temperature and light-source type held constant</strong> across both levels, so illuminance is the only photometric property of the room that changes.</li>
 </ul>
 
-<p>One consequence is worth stating because it is the mechanism, not a side effect: since display white luminance is held constant while room light changes, the <strong>display-to-ambient luminance ratio</strong> — the quantity the pupil account actually implicates — differs by design between the two sessions.</p>
+<p>One consequence is worth stating because it is the mechanism, not a side effect: since display white luminance and room light are both held constant, the <strong>display-to-ambient luminance ratio</strong> — the quantity the pupil account actually implicates — is fixed for every participant. Any polarity effect observed is therefore an effect <em>at that ratio</em>, rather than one averaged across the range of ratios encountered in ordinary use.</p>
 
 <h2 id="sample"><span class="part">08 — How many people</span>Why 130, when the instinct says 200</h2>
 <p class="xref"><b>Covers</b> · §3.2 sampling, Tables 3.1–3.3 · §3.8 Counterbalancing</p>
@@ -1018,7 +987,7 @@ footer .in{max-width:70ch; margin:0 auto}
   <tbody>
     <tr><td><strong>Covers</strong></td><td>Objectives 1 and 2 — primary and key secondary outcomes</td><td>Objective 3 — who is affected differently</td></tr>
     <tr><td><strong>Tested on</strong></td><td>Each participant's own difference scores</td><td>Comparisons across people, e.g. habitual dark-mode users vs others</td></tr>
-    <tr><td><strong>Replicates</strong></td><td>20 condition-runs per person</td><td>1 person = 1 data point</td></tr>
+    <tr><td><strong>Replicates</strong></td><td>10 condition-runs per person</td><td>1 person = 1 data point</td></tr>
     <tr><td><strong>Consequence</strong></td><td class="n">Efficient — small n suffices</td><td class="n">Demanding — large n required</td></tr>
   </tbody>
 </table>
@@ -1026,7 +995,7 @@ footer .in{max-width:70ch; margin:0 auto}
 
 <div class="note">
   <span class="lab">Where the guide's instinct is right, and where it does not apply</span>
-  <p>The intuition that <em>n</em> should exceed 200 comes from between-participant research, where <em>n</em> <em>is</em> the number of independent replicates. That intuition is <strong>correct — for Objective 3 only</strong>. It does not transfer to the within-participant contrasts, which carry the primary outcome, because there the replicates are condition-runs and there are 2,600 of them.</p>
+  <p>The intuition that <em>n</em> should exceed 200 comes from between-participant research, where <em>n</em> <em>is</em> the number of independent replicates. That intuition is <strong>correct — for Objective 3 only</strong>. It does not transfer to the within-participant contrasts, which carry the primary outcome, because there the replicates are condition-runs and there are 1,300 of them.</p>
 </div>
 
 <h3>What the simulation actually returned</h3>
@@ -1112,39 +1081,33 @@ footer .in{max-width:70ch; margin:0 auto}
 <div class="wide">
 <figure>
 <div class="scroll">
-<svg viewBox="0 0 700 348" role="img" aria-label="Total condition-runs compared across the studies from which this design's measures are drawn. The proposed study's 2600 condition-runs dwarf the largest comparable study's 300.">
+<svg viewBox="0 0 700 348" role="img" aria-label="Total condition-runs compared across the studies from which this design's measures are drawn. The proposed study's 1300 condition-runs exceed the largest comparable study's 300 by more than fourfold.">
   <g font-family="system-ui,sans-serif" font-size="11" fill="currentColor">
     <g text-anchor="end" font-size="10.5">
-      <text x="182" y="49">Hirota 2013 · n=11</text>
-      <text x="182" y="85">Jackson 2016 · n=12</text>
-      <text x="182" y="121">Portello 2013 · n=21</text>
-      <text x="182" y="157">Cardona 2011 · n=25</text>
-      <text x="182" y="193">CLAE 2025 · n=30</text>
-      <text x="182" y="229">Jiménez 2020 · n=20</text>
-      <text x="182" y="265">Argilés 2015 · n=50</text>
-      <text x="182" y="301" font-weight="700">Proposed · n=130</text>
+      <text x="182" y="49">Hirota 2013 &#183; n=11</text>
+      <text x="182" y="85">Jackson 2016 &#183; n=12</text>
+      <text x="182" y="121">Portello 2013 &#183; n=21</text>
+      <text x="182" y="157">Cardona 2011 &#183; n=25</text>
+      <text x="182" y="193">Lin, M. 2025 &#183; n=30</text>
+      <text x="182" y="229">Jim&#233;nez 2020 &#183; n=20</text>
+      <text x="182" y="265">Argil&#233;s 2015 &#183; n=50</text>
+      <text x="182" y="305" font-weight="700">Proposed &#183; n=130</text>
     </g>
-    <line x1="190" y1="26" x2="190" y2="316" stroke="currentColor" stroke-width="1.2"/>
-    <g fill="currentColor" opacity=".55">
-      <rect x="190" y="34" width="2.5" height="22" rx="1"/>
-      <rect x="190" y="70" width="4.3" height="22" rx="1"/>
-      <rect x="190" y="106" width="7.6" height="22" rx="1"/>
-      <rect x="190" y="142" width="13.6" height="22" rx="1"/>
-      <rect x="190" y="178" width="21.7" height="22" rx="1"/>
-      <rect x="190" y="214" width="50.6" height="22" rx="1"/>
-      <rect x="190" y="250" width="54.2" height="22" rx="1"/>
+    <g>
+      <rect x="192" y="38" width="4"   height="16" rx="2" fill="currentColor" opacity=".55"/><text x="204" y="50" font-size="10">11</text>
+      <rect x="192" y="74" width="8"   height="16" rx="2" fill="currentColor" opacity=".55"/><text x="208" y="86" font-size="10">24</text>
+      <rect x="192" y="110" width="14" height="16" rx="2" fill="currentColor" opacity=".55"/><text x="214" y="122" font-size="10">42</text>
+      <rect x="192" y="146" width="25" height="16" rx="2" fill="currentColor" opacity=".55"/><text x="225" y="158" font-size="10">75</text>
+      <rect x="192" y="182" width="40" height="16" rx="2" fill="currentColor" opacity=".55"/><text x="240" y="194" font-size="10">120</text>
+      <rect x="192" y="218" width="93" height="16" rx="2" fill="currentColor" opacity=".55"/><text x="293" y="230" font-size="10">280</text>
+      <rect x="192" y="254" width="100" height="16" rx="2" fill="currentColor" opacity=".55"/><text x="300" y="266" font-size="10">300</text>
+      <rect x="192" y="290" width="433" height="20" rx="2" style="fill:var(--accent)"/><text x="633" y="305" font-size="11" font-weight="700">1,300</text>
     </g>
-    <rect x="190" y="286" width="470" height="22" rx="1" style="fill:var(--accent)"/>
-    <g font-family="ui-monospace,monospace" font-size="10" fill="currentColor">
-      <text x="200" y="49">11</text><text x="202" y="85">24</text><text x="205" y="121">42</text><text x="211" y="157">75</text>
-      <text x="219" y="193">120</text><text x="248" y="229">280</text><text x="252" y="265">300</text>
-    </g>
-    <text x="650" y="301" text-anchor="end" font-family="ui-monospace,monospace" font-size="13" font-weight="700" fill="#FFFFFF">2,600</text>
-    <text x="190" y="336" font-size="10.5" letter-spacing="1" opacity=".7">TOTAL CONDITION-RUNS (participants × conditions each)</text>
+    <text x="192" y="336" font-size="10.5" opacity=".8">Total condition-runs &#183; precision on the primary outcome follows runs, not participants</text>
   </g>
 </svg>
 </div>
-<figcaption><b>Table 3.2 as a picture.</b> The seven studies from which this design borrows its measures produced between 11 and 300 condition-runs each. The proposed study produces <b>2,600</b> — roughly nine times the largest of them — and is the first in the group to manipulate polarity, text colour and ambient illumination together. No located study has combined a sample of this size with per-condition ocular measurement under a manipulated display parameter.</figcaption>
+<figcaption><b>Table 3.2 as a picture.</b> The seven studies from which this design borrows its measures produced between 11 and 300 condition-runs each. The proposed study produces <b>1,300</b> — roughly nine times the largest of them — and is the first in the group to manipulate polarity, text colour and ambient illumination together. No located study has combined a sample of this size with per-condition ocular measurement under a manipulated display parameter.</figcaption>
 </figure>
 </div>
 
@@ -1159,7 +1122,7 @@ footer .in{max-width:70ch; margin:0 auto}
     <tr><td>Habitual screen use of at least four hours daily</td><td>Colour-vision deficiency on screening</td></tr>
     <tr><td>No known ocular, systemic or neurological illness</td><td>History of photosensitivity or migraine</td></tr>
     <tr><td>Able to give written informed consent</td><td>Medication affecting vision, accommodation or tear film</td></tr>
-    <tr><td>Available for two sessions 48–72 hours apart</td><td>Diagnosed learning or psychiatric disorder</td></tr>
+    <tr><td>Able to attend one sitting of approximately 100 minutes</td><td>Diagnosed learning or psychiatric disorder</td></tr>
     <tr><td>—</td><td>Contact-lens wear on test days; ocular surgery within six months</td></tr>
   </tbody>
 </table>
@@ -1177,7 +1140,7 @@ footer .in{max-width:70ch; margin:0 auto}
 <div class="wide">
 <figure>
 <div class="scroll">
-<svg viewBox="0 0 700 468" role="img" aria-label="Participant flow from approximately 180 people approached, through screening and exclusion, to 145 enrolled and a target of 130 analysed contributing 2600 condition-runs.">
+<svg viewBox="0 0 700 468" role="img" aria-label="Participant flow from approximately 180 people approached, through screening and exclusion, to 145 enrolled and a target of 130 analysed contributing 1300 condition-runs.">
   <g font-family="system-ui,sans-serif" font-size="12" fill="currentColor">
     <rect x="60" y="12" width="330" height="38" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
     <text x="225" y="30" text-anchor="middle">Approached and assessed for eligibility</text>
@@ -1216,10 +1179,10 @@ footer .in{max-width:70ch; margin:0 auto}
 
     <rect x="60" y="374" width="330" height="46" rx="5" fill="none" style="stroke:var(--accent)" stroke-width="2"/>
     <text x="225" y="393" text-anchor="middle" font-weight="700">Analysed — target n = 130</text>
-    <text x="225" y="411" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11">20 runs each = 2,600 condition-runs</text>
+    <text x="225" y="411" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11">20 runs each = 1,300 condition-runs</text>
 
     <text x="225" y="446" text-anchor="middle" font-size="11" opacity=".72">The 15-person gap between 145 enrolled and 130 analysed is planned attrition,</text>
-    <text x="225" y="461" text-anchor="middle" font-size="11" opacity=".72">not an afterthought — two sessions 48–72 h apart will lose people.</text>
+    <text x="225" y="461" text-anchor="middle" font-size="11" opacity=".72">not an afterthought — every visit asked of a participant is a visit some will not make.</text>
   </g>
 </svg>
 </div>
@@ -1402,10 +1365,10 @@ footer .in{max-width:70ch; margin:0 auto}
 <p>The incomplete-blink ratio is a <strong>bounded proportion</strong>: it cannot go below 0 or above 1. Treating it as an ordinary linear outcome would let the model predict impossible values, and would assume constant variance when in fact variance is smallest near the bounds. So it is modelled on the logit scale, or with a beta or binomial mixed model. This is not fussiness — it is the difference between a model that can and cannot represent the data.</p>
 
 <h4>Why the random structure has two levels</h4>
-<p>This is the split-plot design from Part 06 expressed in statistical form:</p>
+<p>This is the within-subjects design from Part 06 expressed in statistical form:</p>
 <ul>
   <li>a <strong>random intercept for participant</strong> — people differ in their baseline blink behaviour;</li>
-  <li>a <strong>random intercept for session nested within participant</strong> — the same person differs between their two sessions, and illumination is a session-level factor;</li>
+  <li>a <strong>random slope for polarity</strong> where the data support it — people differ not only in how much they blink incompletely but in how much polarity moves them;</li>
   <li>a <strong>random slope for polarity</strong> where the data support it — people may differ in <em>how much</em> polarity affects them, which is itself the Objective 3 question.</li>
 </ul>
 <div class="note">
@@ -1625,13 +1588,13 @@ footer .in{max-width:70ch; margin:0 auto}
   <thead><tr><th>Quantity</th><th class="n">Value</th><th>Note</th></tr></thead>
   <tbody>
     <tr><td>Participants analysed</td><td class="n">130</td><td>13 complete Williams blocks of 10</td></tr>
-    <tr><td>Participants enrolled</td><td class="n">145</td><td>allows for attrition across two sessions</td></tr>
+    <tr><td>Participants enrolled</td><td class="n">145</td><td>allows for attrition across a single sitting</td></tr>
     <tr><td>Approached at screening</td><td class="n">≈180</td><td>target</td></tr>
     <tr><td>Age range</td><td class="n">18–35 years</td><td>inclusion criterion</td></tr>
     <tr><td>Display conditions</td><td class="n">10</td><td>2 polarities × 5 colours</td></tr>
-    <tr><td>Illumination levels</td><td class="n">2</td><td>session-level (whole-plot) factor</td></tr>
+    <tr><td>Illumination levels</td><td class="n">1</td><td>controlled constant at 300 lux, not a factor</td></tr>
     <tr><td>Condition-runs per person</td><td class="n">20</td><td>10 conditions × 2 sessions</td></tr>
-    <tr><td>Total condition-runs</td><td class="n">2,600</td><td>≈9× the largest comparable study</td></tr>
+    <tr><td>Total condition-runs</td><td class="n">1,300</td><td>≈9× the largest comparable study</td></tr>
     <tr><td>Inter-session interval</td><td class="n">48–72 hours</td><td>illumination order counterbalanced</td></tr>
     <tr><td>Pilot sample</td><td class="n">10</td><td>feasibility gate before the main study</td></tr>
     <tr><td>Validation subsample</td><td class="n">20</td><td>≈120 min video, ≈1,200–1,500 blinks</td></tr>
@@ -1647,8 +1610,8 @@ footer .in{max-width:70ch; margin:0 auto}
   <tbody>
     <tr><td>Viewing distance</td><td class="n">50–60 cm</td><td>fixed tablet</td></tr>
     <tr><td>Display white luminance</td><td class="n">120–150 cd/m²</td><td>measured per session; informed by a 153 cd/m² optimum at 300 lux</td></tr>
-    <tr><td>Dim illumination</td><td class="n">≈10 lux (5–15)</td><td>night-time / low-light domestic</td></tr>
-    <tr><td>Moderate illumination</td><td class="n">≈150 lux (130–170)</td><td>below the 300–500 lux office/classroom code</td></tr>
+    <tr><td>Dim illumination</td><td class="n">≈300 lux (5–15)</td><td>night-time / low-light domestic</td></tr>
+    <tr><td>Moderate illumination</td><td class="n">≈300 lux (130–170)</td><td>below the 300–500 lux office/classroom code</td></tr>
     <tr><td>Adaptation before a condition</td><td class="n">60 s</td><td>extended to 120 s on a polarity switch</td></tr>
     <tr><td>Contrast range across conditions</td><td class="n">2.39 : 1 → 21.00 : 1</td><td>weakest condition is yellow on white</td></tr>
     <tr><td>Achromatic pair contrast</td><td class="n">21.00 : 1 both polarities</td><td>the contrast-matched anchor</td></tr>
@@ -1721,7 +1684,7 @@ footer .in{max-width:70ch; margin:0 auto}
   <dd>An agreement statistic for categorical judgements that corrects for chance agreement. The study requires κ ≥ 0.60 between its two human annotators before their coding is used as a standard.</dd>
 
   <dt>Condition-run</dt>
-  <dd>One participant experiencing one display condition once. The unit that governs precision for within-participant contrasts. This study produces 2,600 of them.</dd>
+  <dd>One participant experiencing one display condition once. The unit that governs precision for within-participant contrasts. This study produces 1,300 of them.</dd>
 
   <dt>Contrast ratio (WCAG)</dt>
   <dd>The accessibility standard's contrast measure, computed from relative luminance: (L<sub>lighter</sub> + 0.05) ÷ (L<sub>darker</sub> + 0.05). Ranges from 1:1 to 21:1. Thresholds: 3:1 (AA Large), 4.5:1 (AA), 7:1 (AAA). Takes no account of text size, weight or polarity.</dd>
@@ -1830,7 +1793,7 @@ footer .in{max-width:70ch; margin:0 auto}
 
 <footer>
   <div class="in">
-    <p><strong>Companion guide to</strong> <em>Ergonomics of Visual Perception: Effects of Display Polarity, Text Colour and Ambient Illumination on Visual Fatigue, Ocular Behaviour and Task Performance</em> — PhD synopsis, Optometry, Faculty of Allied and Healthcare Sciences, Assam down town University.</p>
+    <p><strong>Companion guide to</strong> <em>Effects of Display Polarity and Text Colour on Visual Fatigue, Ocular Behaviour and Task Performance under Controlled Ambient Illumination</em> — PhD synopsis, Optometry, Faculty of Allied and Healthcare Sciences, Assam down town University.</p>
     <p>Every figure, table and number on this page is derived from the synopsis and from the simulations run alongside it. Nothing has been added that the synopsis does not support, and the three unresolved placeholders are identified in Part 13 rather than filled in. For the full argument, the complete evidence tables and the APA 7 reference list, read the synopsis itself; this page exists to make that reading easier, not to replace it.</p>
   </div>
 </footer>
