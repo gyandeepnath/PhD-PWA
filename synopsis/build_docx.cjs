@@ -6,7 +6,7 @@ const fs = require('fs');
 const {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
   Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType,
-  ExternalHyperlink, LevelFormat, convertInchesToTwip,
+  ExternalHyperlink, LevelFormat, convertInchesToTwip, PageBreak,
 } = require('docx');
 
 const IN = process.argv[2];
@@ -74,6 +74,83 @@ function splitRow(line) {
   if (s.startsWith('|')) s = s.slice(1);
   if (s.endsWith('|')) s = s.slice(0, -1);
   return s.split('|').map((c) => c.trim());
+}
+
+
+/**
+ * Render a FLOW block as a vertical flow diagram.
+ *
+ * Each step becomes a bordered, shaded, centred box; a downward arrow sits between consecutive
+ * boxes. Built from table cells rather than a drawing, so it survives a round trip through Word
+ * and can be edited there. A step written as "A | B" is rendered as two boxes side by side on one
+ * rank, which is how the parallel stages of the participant flow are expressed.
+ */
+function buildFlow(steps) {
+  const out = [];
+  const arrow = () => new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 0, after: 0 },
+    children: [new TextRun({ text: '\u2193', font: FONT, size: 26, color: '5A6B7C' })],
+  });
+  const box = (text, widthTwips) => new Table({
+    columnWidths: [widthTwips],
+    width: { size: widthTwips, type: WidthType.DXA },
+    alignment: AlignmentType.CENTER,
+    borders: {
+      top:    { style: BorderStyle.SINGLE, size: 6, color: '5A6B7C' },
+      bottom: { style: BorderStyle.SINGLE, size: 6, color: '5A6B7C' },
+      left:   { style: BorderStyle.SINGLE, size: 6, color: '5A6B7C' },
+      right:  { style: BorderStyle.SINGLE, size: 6, color: '5A6B7C' },
+      insideHorizontal: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+      insideVertical:   { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+    },
+    rows: [new TableRow({ children: [new TableCell({
+      width: { size: widthTwips, type: WidthType.DXA },
+      shading: { type: ShadingType.CLEAR, fill: 'EEF3FA', color: 'auto' },
+      margins: { top: 80, bottom: 80, left: 140, right: 140 },
+      children: [new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 0, line: 240 },
+        children: inline(text, { size: SIZE_SMALL }),
+      })],
+    })] })],
+  });
+
+  steps.forEach((step, n) => {
+    if (n > 0) out.push(arrow());
+    const parts = step.split('|').map((x) => x.trim()).filter(Boolean);
+    if (parts.length > 1) {
+      // Parallel stages share a rank: one table, one cell per stage.
+      const w = Math.floor((CONTENT_W - 400) / parts.length);
+      out.push(new Table({
+        columnWidths: parts.map(() => w),
+        width: { size: w * parts.length, type: WidthType.DXA },
+        alignment: AlignmentType.CENTER,
+        borders: {
+          top:    { style: BorderStyle.SINGLE, size: 6, color: '5A6B7C' },
+          bottom: { style: BorderStyle.SINGLE, size: 6, color: '5A6B7C' },
+          left:   { style: BorderStyle.SINGLE, size: 6, color: '5A6B7C' },
+          right:  { style: BorderStyle.SINGLE, size: 6, color: '5A6B7C' },
+          insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: '9FB3C8' },
+          insideVertical:   { style: BorderStyle.SINGLE, size: 4, color: '9FB3C8' },
+        },
+        rows: [new TableRow({ children: parts.map((pt) => new TableCell({
+          width: { size: w, type: WidthType.DXA },
+          shading: { type: ShadingType.CLEAR, fill: 'EEF3FA', color: 'auto' },
+          margins: { top: 80, bottom: 80, left: 120, right: 120 },
+          children: [new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 0, after: 0, line: 240 },
+            children: inline(pt, { size: SIZE_SMALL }),
+          })],
+        })) })],
+      }));
+    } else {
+      out.push(box(step, Math.min(CONTENT_W - 800, 7200)));
+    }
+  });
+  out.push(new Paragraph({ spacing: { after: 160 }, children: [new TextRun({ text: '', font: FONT, size: SIZE })] }));
+  return out;
 }
 
 function buildTable(rows) {
@@ -173,6 +250,30 @@ while (i < lines.length) {
 
   // blank
   if (!line.trim()) { i++; continue; }
+
+  /*
+   * Structural markers the source uses. Neither was handled, so both printed as literal text:
+   * "PAGEBREAK" appeared as a word in the middle of the document, and each FLOW block rendered as
+   * a run of bare lines rather than the diagram it describes.
+   */
+  if (line.trim() === '<!--PAGEBREAK-->') {
+    children.push(new Paragraph({ children: [new PageBreak()] }));
+    i++; continue;
+  }
+
+  // A flow block: consecutive lines between <!--FLOW--> and <!--/FLOW-->, each one a step.
+  if (line.trim() === '<!--FLOW-->') {
+    i++;
+    const steps = [];
+    while (i < lines.length && lines[i].trim() !== '<!--/FLOW-->') {
+      const t = lines[i].trim();
+      if (t) steps.push(t);
+      i++;
+    }
+    i++; // consume the closing marker
+    children.push(...buildFlow(steps));
+    continue;
+  }
 
   // horizontal rule
   if (/^---+$/.test(line.trim())) {
