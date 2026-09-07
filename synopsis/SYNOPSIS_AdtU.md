@@ -159,6 +159,7 @@ Evidence for the positive polarity advantage is consistent across paradigms, tas
 | 5 | Dobres *et al.* | 2017 | NR | Lexical decision; polarity × illumination × size | Thresholds worst for negative polarity under near-dark light | No fatigue or ocular-surface outcomes |
 | 6 | Sethi & Ziat | 2023 | NR | Eye tracking with subjective and affective measures; polarity × environment × age × task | Higher cognitive load under negative polarity, conditional on age and lighting | Search and writing tasks; no ocular-surface measures |
 | 7 | Lin, C., *et al.* | 2024 | 36; 21 | Visual-ergonomic optimisation; luminance × polarity at 300 lux | Positive polarity preferable; optimum display luminance 153 cd/m² | Desktop head-up display; office lighting only; achromatic |
+| 8 | Sengsoon & Intaruk | 2025 | 30 | Randomised crossover; light vs dark mode on a tablet, immediate effects | No difference in subjective visual fatigue between modes; critical flicker frequency and dry-eye symptoms did differ, and both modes worsened all three measures | Female participants only; short exposure; no text-colour factor; no blink measurement |
 
 Two features of this corpus define the entry point for the present work. The paradigms are short and threshold-limited, and they do not measure blinking, validated symptoms, comprehension or fatigue accumulated over an hour; the stimuli are also almost entirely achromatic. An advantage in legibility does not license an inference about visual fatigue, although popular argument about dark mode routinely makes that inference in both directions. Sethi and Ziat (2023)'s finding that the cognitive cost of negative polarity depended jointly on age and lighting indicates that polarity effects are conditional rather than universal.
 
@@ -238,7 +239,7 @@ Six gaps follow from the foregoing, and together they define the study.
 2. The interaction between polarity and text colour on visual fatigue appears unestimated, the only located text-colour fatigue study having held polarity constant (Fan *et al.*, 2024); nor has hue been separated from luminance contrast in the studies located (Buchner & Baumgartner, 2007; Jiménez *et al.*, 2020; Xie *et al.*, 2021).
 3. No located study reports contrast metrics alongside measured display photometry, and the prevailing standard is polarity-blind (Advanced Perceptual Contrast Algorithm, n.d.; World Wide Web Consortium, 2023). Joint effects of polarity, colour and illumination remain uncharacterised, the two-way findings being in partial conflict (Dobres *et al.*, 2017; Fan *et al.*, 2024); the present study addresses the polarity × colour interaction at a fixed illuminance and leaves the three-way case to designs whose ocular instrumentation is independent of room light.
 4. Few studies co-register a validated symptom instrument with objective markers in the same condition, leaving the subjective–objective discrepancy unresolved (Sheppard & Wolffsohn, 2018); where both were measured they pointed in opposite directions (Xie *et al.*, 2021).
-5. The incomplete-blink ratio does not appear to have been tested as an outcome of a display manipulation despite its specificity (Lin, M., *et al.*, 2025; Argilés *et al.*, 2015; Hirota *et al.*, 2013; Portello *et al.*, 2013), and no automated implementation was found, in the literature located, to have been validated against manual annotation, so the measure does not scale.
+5. The incomplete-blink ratio does not appear to have been tested as an outcome of a display manipulation despite its specificity (Lin, M., *et al.*, 2025; Argilés *et al.*, 2015; Hirota *et al.*, 2013; Portello *et al.*, 2013). The most recent direct test of the polarity question on a tablet is instructive here: Sengsoon and Intaruk (2025) randomised thirty users between light and dark mode and found **no** difference in subjective visual fatigue, while critical flicker frequency and dry-eye symptoms did differ — a dissociation between what participants report and what can be measured on them. Their design carried no text-colour factor, no blink measurement and a short exposure, so the null on the subjective scale is as likely to reflect the sensitivity of the outcome as the absence of an effect, and no automated implementation was found, in the literature located, to have been validated against manual annotation, so the measure does not scale.
 6. Individual differences in habitual display preference, exposure and lighting environment are seldom modelled as moderators, and tablet-specific, ecologically valid protocols are scarce.
 
 ---
@@ -249,7 +250,11 @@ Six gaps follow from the foregoing, and together they define the study.
 
 A repeated-measures factorial design in which both factors vary within participant. Display polarity (positive, negative) is crossed with text colour (achromatic, blue, red, yellow, green), giving ten display conditions, each presented once in a single sitting. Ambient illumination is held constant at 300 lux and is a controlled variable with a manipulation check, not a factor (§3.4). Each participant contributes ten condition-runs and serves as their own control. Ten reading passages cover the ten runs, so each is read exactly once and no practice effect requires adjustment.
 
-**Figure 3.1 — Study flow.**
+**Figure 3.1 — The design: what one participant does.**
+
+<!--FIG:fig_design-->
+
+**Figure 3.2 — Study flow.**
 
 <!--FLOW-->
 Phase I — Ethics approval; instrument development; photometric characterisation of the display
@@ -295,7 +300,7 @@ Screening comprises visual acuity, non-cycloplegic refraction, cover test, near 
 
 Precision on the primary outcome follows the number of condition-runs rather than the number of participants, and no located study combines a sample of this size with per-condition ocular measurement under a manipulated display parameter.
 
-**Figure 3.2 — Participant flow.**
+**Figure 3.3 — Participant flow.**
 
 <!--FLOW-->
 Approached and assessed for eligibility (target ≈ 180)
@@ -325,15 +330,9 @@ All conditions are presented on one tablet at a fixed white luminance, character
 | 9 | N4 | Yellow | #C9A400 | #000000 | 8.79 : 1 | AAA | No |
 | 10 | N5 | Green | #00A651 | #000000 | 6.57 : 1 | AA | No |
 
-**Figure 3.3 — Why the colour ordering must reverse between polarities, and what that tests.**
+**Figure 3.4 — Why the colour ordering must reverse between polarities, and what that tests.**
 
-<!--FLOW-->
-On a white field, contrast = 1.05 / (L + 0.05) — FALLS as the text lightens
-On a black field, contrast = (L + 0.05) / 0.05 — RISES as the text lightens
-Both depend on the same relative luminance L, so the two rank orders are exact reverses
-If colour acts THROUGH contrast: the colour ordering crosses over between polarities
-If a residual hue effect exists: the ordering is preserved and the lines stay parallel
-<!--/FLOW-->
+<!--FIG:fig_contrast_curve-->
 
 Two properties govern the analysis. The contrast ordering is exactly inverted between polarities — arithmetic, not design — so a contrast-mediated colour effect must cross over between them and a residual hue effect must not. The achromatic pair is contrast-matched at 21.00:1 in both, giving the one comparison in which a polarity effect cannot be attributed to contrast. Two conditions fall below the accessibility minimum in each polarity, so polarity is unconfounded with compliance.
 
@@ -347,15 +346,9 @@ The level was fixed on photometric grounds rather than by reference to a lightin
 
 A purpose-built, offline-capable tablet application presents the ten conditions with locked colour values and a neutral grey adaptation field between them, timestamping task onsets to the frame. Ocular measures come from the front camera by facial-landmark tracking; no video leaves the device unless separately consented.
 
-**Figure 3.4 — How a blink is classified, and what makes one incomplete.**
+**Figure 3.5 — How a blink is classified, and what makes one incomplete.**
 
-<!--FLOW-->
-Eye aspect ratio is tracked continuously and normalised to the participant's own open-eye baseline
-A blink begins when the ratio falls below 0.75 of that baseline
-Reaches below 0.60 → COMPLETE blink | Bottoms out between 0.60 and 0.75 → INCOMPLETE blink
-Incomplete-blink ratio = incomplete blinks ÷ all blinks — the primary outcome
-Because classification depends on catching the frame at minimum aperture, the achieved frame rate is recorded per condition and gates the measure
-<!--/FLOW-->
+<!--FIG:fig_blink_trace-->
 
 **Precision.** The incomplete-blink ratio is a binomial proportion, so precision follows the blinks captured. Passages of four pages and 570 to 600 words give an exposure of 178 seconds, about 39 blinks, and a condition-level standard error near 0.06; the count is exported with every ratio, and runs below 20 blinks are flagged.
 
@@ -496,6 +489,8 @@ Pucker, A. D., Kerr, A. M., Sanderson, J., & Lievens, C. (2024). Digital eye str
 Redondo, B., Jiménez, R., Vera, J., & Rosenfield, M. (2025). The impact of break schedules on digital eye strain symptoms and ocular accommodation during prolonged near work. *Experimental Eye Research*, *258*, 110463. https://doi.org/10.1016/j.exer.2025.110463
 
 Seguí, M. del M., Cabrero-García, J., Crespo, A., Verdú, J., & Ronda, E. (2015). A reliable and valid questionnaire was developed to measure computer vision syndrome at the workplace. *Journal of Clinical Epidemiology*, *68*(6), 662–673. https://doi.org/10.1016/j.jclinepi.2015.01.015
+
+Sengsoon, P., & Intaruk, R. (2025). Immediate effects of light mode and dark mode features on visual fatigue in tablet users. *International Journal of Environmental Research and Public Health*, *22*(4), 609. https://doi.org/10.3390/ijerph22040609
 
 Sethi, T., & Ziat, M. (2023). Dark mode vogue: Do light-on-dark displays have measurable benefits to users? *Ergonomics*, *66*(12), 1814–1828. https://doi.org/10.1080/00140139.2022.2160879
 

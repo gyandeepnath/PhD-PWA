@@ -3,10 +3,11 @@
  * Usage: node build_docx.cjs <input.md> <output.docx>
  */
 const fs = require('fs');
+const path = require('path');
 const {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
   Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType,
-  ExternalHyperlink, LevelFormat, convertInchesToTwip, PageBreak,
+  ExternalHyperlink, LevelFormat, convertInchesToTwip, PageBreak, ImageRun,
 } = require('docx');
 
 const IN = process.argv[2];
@@ -256,6 +257,34 @@ while (i < lines.length) {
    * "PAGEBREAK" appeared as a word in the middle of the document, and each FLOW block rendered as
    * a run of bare lines rather than the diagram it describes.
    */
+  /*
+   * <!--FIG:name--> embeds figures/name.png, rasterised from the SVG of the same name by
+   * svg2png.mjs. Word does not render SVG dependably across versions, and two of these figures are
+   * CURVES, which a flow diagram built from table cells cannot express at all.
+   */
+  {
+    const fig = /^<!--FIG:([A-Za-z0-9_.-]+)-->$/.exec(line.trim());
+    if (fig) {
+      const png = path.join(path.dirname(IN), 'figures', `${fig[1]}.png`);
+      if (fs.existsSync(png)) {
+        const buf = fs.readFileSync(png);
+        // Intrinsic size from the PNG header, scaled to the text column so nothing overflows.
+        const pw = buf.readUInt32BE(16), ph = buf.readUInt32BE(20);
+        const maxPt = 420;                       // points across the A4 text column
+        const wPt = Math.min(maxPt, pw / 3);     // rasterised at 3x
+        const hPt = Math.round((ph / pw) * wPt);
+        children.push(new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 120, after: 140 },
+          children: [new ImageRun({ type: 'png', data: buf, transformation: { width: Math.round(wPt), height: hPt } })],
+        }));
+      } else {
+        console.warn(`  ! figure not found: ${png}`);
+      }
+      i++; continue;
+    }
+  }
+
   if (line.trim() === '<!--PAGEBREAK-->') {
     children.push(new Paragraph({ children: [new PageBreak()] }));
     i++; continue;

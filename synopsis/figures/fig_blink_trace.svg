@@ -1,0 +1,39 @@
+<svg viewBox="0 0 720 326" role="img" aria-label="An eye-aspect-ratio trace over time showing three blinks. Two dip below 0.60 of baseline and count as complete; the middle one bottoms out at 0.68, inside the 0.60 to 0.75 band, and counts as incomplete.">
+  <g font-family="system-ui,sans-serif" font-size="11" fill="currentColor">
+    <rect x="50" y="136" width="640" height="43" style="fill:var(--accent)" opacity=".16"/>
+    <line x1="50" y1="64" x2="690" y2="64" stroke="currentColor" stroke-width="1.1" stroke-dasharray="5 4" opacity=".6"/>
+    <line x1="50" y1="136" x2="690" y2="136" stroke="currentColor" stroke-width="1.4" stroke-dasharray="6 4"/>
+    <line x1="50" y1="179" x2="690" y2="179" stroke="currentColor" stroke-width="1.4" stroke-dasharray="6 4"/>
+    <g text-anchor="end" font-family="ui-monospace,monospace" font-size="10">
+      <text x="44" y="67" opacity=".7">1.00 ×</text>
+      <text x="44" y="139">0.75 ×</text>
+      <text x="44" y="182">0.60 ×</text>
+    </g>
+    <text x="50" y="30" font-size="9.5" letter-spacing="1" opacity=".7">EAR ÷ OPEN-EYE BASELINE &nbsp; (1.00 = fully open)</text>
+
+    <text x="680" y="152" font-size="9.5" style="fill:var(--accent)" font-weight="650" text-anchor="end">INCOMPLETE</text>
+    <text x="680" y="165" font-size="9.5" style="fill:var(--accent)" font-weight="650" text-anchor="end">BAND</text>
+
+    <polyline points="50,64 140,64 152,79 162,150 170,230 178,150 190,79 200,64 330,64 342,81 352,156 362,81 374,64 500,64 512,79 522,144 530,221 538,144 550,79 562,64 690,64"
+      fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/>
+
+    <circle cx="170" cy="230" r="4.5" fill="currentColor"/>
+    <text x="170" y="252" text-anchor="middle" font-size="11" font-weight="650">complete</text>
+    <text x="170" y="266" text-anchor="middle" font-size="10" opacity=".7">min 0.42 — lids meet</text>
+
+    <circle cx="352" cy="156" r="5.5" style="fill:var(--accent)"/>
+    <text x="328" y="122" text-anchor="end" font-size="11.5" font-weight="700" style="fill:var(--accent)">INCOMPLETE</text>
+    <text x="328" y="107" text-anchor="end" font-size="10" opacity=".75">min 0.68 — lids never meet</text>
+    <polyline points="333,118 344,140 346,150" fill="none" style="stroke:var(--accent)" stroke-width="1.2"/>
+
+    <circle cx="530" cy="221" r="4.5" fill="currentColor"/>
+    <text x="530" y="252" text-anchor="middle" font-size="11" font-weight="650">complete</text>
+    <text x="530" y="266" text-anchor="middle" font-size="10" opacity=".7">min 0.45 — lids meet</text>
+
+    <text x="60" y="56" font-size="10" opacity=".7">open-eye baseline, set per participant at calibration</text>
+    <text x="50" y="292" font-size="10.5" letter-spacing="1" opacity=".7">TIME →</text>
+
+    <text x="200" y="292" font-size="11.5">Blink registered when EAR falls below <tspan font-family="ui-monospace,monospace" font-weight="650">0.75 ×</tspan> baseline.</text>
+    <text x="200" y="310" font-size="11.5">Incomplete-blink ratio = <tspan font-weight="650">incomplete blinks ÷ all detected blinks</tspan>, per condition.</text>
+  </g>
+</svg>
