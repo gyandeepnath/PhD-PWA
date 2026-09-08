@@ -1,0 +1,75 @@
+<svg viewBox="0 0 780 548" role="img" aria-label="Two causal routes from display settings to measured outcomes: an optical route through pupil size to retinal image quality, and an ocular-surface route through blink completeness to tear-film breakup.">
+  <g font-family="system-ui,sans-serif" font-size="12.5" fill="currentColor">
+
+    <rect x="20" y="14" width="740" height="50" rx="5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <text x="390" y="29" text-anchor="middle" font-size="10.5" letter-spacing="1.6" opacity=".62">WHAT THE STUDY MANIPULATES</text>
+    <text x="390" y="44" text-anchor="middle" font-weight="600">display polarity · text colour</text>
+    <text x="390" y="57" text-anchor="middle" font-size="9.5" opacity=".7">ambient illuminance held constant at 300 lux — controlled, not manipulated</text>
+
+    <text x="182" y="72" text-anchor="end" font-size="10.5" letter-spacing="1.4" style="fill:var(--accent)">OPTICAL ROUTE</text>
+    <text x="598" y="72" text-anchor="start" font-size="10.5" letter-spacing="1.4" style="fill:var(--accent)">OCULAR-SURFACE ROUTE</text>
+
+    <line x1="198" y1="66" x2="198" y2="84" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)" opacity=".55"/>
+    <line x1="582" y1="66" x2="582" y2="84" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)" opacity=".55"/>
+
+    <rect x="20" y="86" width="355" height="46" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="198" y="104" text-anchor="middle">More total light reaches the eye</text>
+    <text x="198" y="121" text-anchor="middle" font-size="11" opacity=".65">a white screen emits more than a black one</text>
+    <rect x="405" y="86" width="355" height="46" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="582" y="104" text-anchor="middle">Sustained visual and cognitive demand</text>
+    <text x="582" y="121" text-anchor="middle" font-size="11" opacity=".65">low contrast and hard text cost more effort</text>
+
+    <line x1="198" y1="132" x2="198" y2="164" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <text x="210" y="152" font-size="10.5" opacity=".7">constricts</text>
+    <line x1="582" y1="132" x2="582" y2="164" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <text x="594" y="152" font-size="10.5" opacity=".7">suppresses</text>
+
+    <rect x="20" y="166" width="355" height="46" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="198" y="184" text-anchor="middle">Pupil diameter falls</text>
+    <text x="198" y="201" text-anchor="middle" font-size="11" opacity=".65">ambient light drives this too &#8212; held constant here</text>
+    <rect x="405" y="166" width="355" height="46" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="582" y="184" text-anchor="middle">Blink rate falls · incomplete blinks rise</text>
+    <text x="582" y="201" text-anchor="middle" font-size="11" opacity=".65">total rate can hold steady while quality shifts</text>
+
+    <line x1="198" y1="212" x2="198" y2="244" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <text x="210" y="232" font-size="10.5" opacity=".7">less aberration</text>
+    <line x1="582" y1="212" x2="582" y2="244" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <text x="594" y="232" font-size="10.5" opacity=".7">leaves surface unwetted</text>
+
+    <rect x="20" y="246" width="355" height="46" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="198" y="264" text-anchor="middle">Wider depth of focus, cleaner optics</text>
+    <text x="198" y="281" text-anchor="middle" font-size="11" opacity=".65">light passes through the centre of the lens</text>
+    <rect x="405" y="246" width="355" height="46" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="582" y="264" text-anchor="middle">Larger exposed evaporative area</text>
+    <text x="582" y="281" text-anchor="middle" font-size="11" opacity=".65">no fresh oily layer drawn over the film</text>
+
+    <line x1="198" y1="292" x2="198" y2="324" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <line x1="582" y1="292" x2="582" y2="324" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+
+    <rect x="20" y="326" width="355" height="40" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="198" y="351" text-anchor="middle" font-weight="600">Sharper retinal image</text>
+    <rect x="405" y="326" width="355" height="40" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
+    <text x="582" y="351" text-anchor="middle" font-weight="600">Tear film thins and breaks up</text>
+
+    <line x1="198" y1="366" x2="198" y2="398" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <line x1="582" y1="366" x2="582" y2="398" style="stroke:var(--accent)" stroke-width="1.8" marker-end="url(#arA)"/>
+
+    <rect x="20" y="400" width="355" height="76" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55" stroke-dasharray="4 3"/>
+    <text x="198" y="418" text-anchor="middle" font-size="10.5" letter-spacing="1.2" opacity=".62">SECONDARY OUTCOMES</text>
+    <text x="198" y="437" text-anchor="middle" font-size="11.5">reading rate · comprehension</text>
+    <text x="198" y="453" text-anchor="middle" font-size="11.5">visual search · reaction time</text>
+    <text x="198" y="469" text-anchor="middle" font-size="11.5">perceived clarity and comfort</text>
+
+    <rect x="405" y="400" width="355" height="76" rx="5" fill="none" style="stroke:var(--accent)" stroke-width="2"/>
+    <text x="582" y="418" text-anchor="middle" font-size="10.5" letter-spacing="1.2" style="fill:var(--accent)">PRIMARY OUTCOME</text>
+    <text x="582" y="439" text-anchor="middle" font-size="13.5" font-weight="700">Incomplete-blink ratio</text>
+    <text x="582" y="457" text-anchor="middle" font-size="11" opacity=".7">key secondary: change in CVS-Q score</text>
+    <text x="582" y="471" text-anchor="middle" font-size="11" opacity=".7">also blink rate, inter-blink interval, VAS</text>
+
+    <rect x="20" y="496" width="740" height="38" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" opacity=".6"/>
+    <text x="390" y="512" text-anchor="middle" font-size="10.5" letter-spacing="1.4" opacity=".62">CROSS-CUTTING — MEASURED AND MODELLED, NOT ELIMINATED</text>
+    <text x="390" y="527" text-anchor="middle" font-size="11.5">time on task · sleepiness (PERCLOS) · disengagement · participant characteristics</text>
+    <line x1="120" y1="496" x2="120" y2="478" stroke="currentColor" stroke-width="1.1" stroke-dasharray="3 3" marker-end="url(#ar)" opacity=".5"/>
+    <line x1="660" y1="496" x2="660" y2="478" stroke="currentColor" stroke-width="1.1" stroke-dasharray="3 3" marker-end="url(#ar)" opacity=".5"/>
+  </g>
+</svg>

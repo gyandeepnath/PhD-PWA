@@ -244,7 +244,7 @@ footer .in{max-width:70ch; margin:0 auto}
     <li><a href="#orient"><span class="n">00</span>Orientation</a></li>
     <li><a href="#problem"><span class="n">01</span>The problem</a></li>
     <li><a href="#mechanism"><span class="n">02</span>How eyes tire</a></li>
-    <li><a href="#factors"><span class="n">03</span>The three factors</a></li>
+    <li><a href="#factors"><span class="n">03</span>The two factors</a></li>
     <li><a href="#gap"><span class="n">04</span>The gap</a></li>
     <li><a href="#asks"><span class="n">05</span>Aim &amp; hypotheses</a></li>
     <li><a href="#design"><span class="n">06</span>The design</a></li>
@@ -276,15 +276,16 @@ footer .in{max-width:70ch; margin:0 auto}
 <h2 id="orient"><span class="part">00 — Orientation</span>The whole study in one page</h2>
 <p class="xref"><b>Covers</b> · title, aim, §1.6</p>
 
-<p>People read on screens for hours a day, and roughly seven in ten of them report tired, dry or aching eyes as a result. Almost every treatment sold for this — blue-light lenses above all — fails in trials. But the <em>stimulus itself</em> is free to change: whether text is dark-on-light or light-on-dark, what colour the letters are, and how bright the room is. Nobody has properly tested those three things together.</p>
+<p>People read on screens for hours a day, and roughly seven in ten of them report tired, dry or aching eyes as a result. Almost every treatment sold for this — blue-light lenses above all — fails in trials. But the <em>stimulus itself</em> is free to change: whether text is dark-on-light or light-on-dark, and what colour the letters are. Nobody has properly tested those two things together over an hour of reading. The third thing everyone argues about — how bright the room is — is not tested here either, but it is not ignored: it is pinned to a single measured level, for a reason Part 07 sets out in full.</p>
 
-<p>This study puts <strong>130 young adults</strong> in a light-controlled room, gives each of them a tablet, and has them read under <strong>twenty different display setups</strong> — ten colour-and-polarity combinations, each seen twice, once in dim light and once in ordinary indoor light. While they read, the tablet's own camera counts their blinks and, crucially, works out how many of those blinks failed to close all the way. That single number, the <strong>incomplete-blink ratio</strong>, is the study's primary outcome, because incompletely closing the eyelid is the specific step that lets the tear film break down.</p>
+<p>This study puts <strong>130 young adults</strong> in a light-controlled room, gives each of them a tablet, and has them read under <strong>ten different display setups</strong> — five text colours in each of two polarities — in <strong>one sitting</strong>, with room illuminance held at a metered 300 lux throughout. While they read, the tablet's own camera counts their blinks and, crucially, works out how many of those blinks failed to close all the way. That single number, the <strong>incomplete-blink ratio</strong>, is the study's primary outcome, because incompletely closing the eyelid is the specific step that lets the tear film break down.</p>
 
 <dl class="kv">
   <div><dt>Participants</dt><dd>130<small>145 enrolled, allowing for dropout</small></dd></div>
-  <div><dt>Setups each</dt><dd>20<small>10 displays × 2 light levels</small></dd></div>
+  <div><dt>Setups each</dt><dd>10<small>2 polarities × 5 text colours</small></dd></div>
   <div><dt>Condition-runs</dt><dd>1,300<small>~9× the largest comparable study</small></dd></div>
-  <div><dt>Sessions</dt><dd>2<small>48–72 hours apart</small></dd></div>
+  <div><dt>Sittings</dt><dd>1<small>≈100 minutes, all ten conditions</small></dd></div>
+  <div><dt>Room light</dt><dd>300 lux<small>controlled constant, accepted 250–350</small></dd></div>
   <div><dt>Primary outcome</dt><dd>IBR<small>incomplete-blink ratio</small></dd></div>
   <div><dt>Duration</dt><dd>24 mo<small>data collection after approval</small></dd></div>
 </dl>
@@ -322,7 +323,7 @@ footer .in{max-width:70ch; margin:0 auto}
 <p>So: a condition affecting most screen users, no working treatment, and an explicit recommendation to optimise ergonomics — while the most basic ergonomic variables of all remain untested for prolonged reading. That is the gap this study occupies.</p>
 
 <h3>What a clinician cannot currently answer</h3>
-<p>The synopsis states the practical consequence plainly: a clinician, designer or standards body has no evidence base from which to advise how a tablet should be configured for long reading, or how that configuration should change with the light in the room. Everyone has an opinion about dark mode. Nobody has the data.</p>
+<p>The synopsis states the practical consequence plainly: a clinician, designer or standards body has no evidence base from which to advise how a tablet should be configured for long reading, or how that configuration should change with the light in the room. Everyone has an opinion about dark mode. Nobody has the data. This study takes the first of those two questions — the configuration itself — and answers it at one controlled level of room light. The second it leaves open, deliberately and for a reason set out in Part 07.</p>
 
 <h2 id="mechanism"><span class="part">02 — How eyes tire</span>Two separate routes, and why separating them matters</h2>
 <p class="xref"><b>Covers</b> · §1.2 Biophysiological basis · §1.9 Conceptual framework, Table 1.1</p>
@@ -355,15 +356,16 @@ footer .in{max-width:70ch; margin:0 auto}
 <svg viewBox="0 0 780 548" role="img" aria-label="Two causal routes from display settings to measured outcomes: an optical route through pupil size to retinal image quality, and an ocular-surface route through blink completeness to tear-film breakup.">
   <g font-family="system-ui,sans-serif" font-size="12.5" fill="currentColor">
 
-    <rect x="20" y="14" width="740" height="38" rx="5" fill="none" stroke="currentColor" stroke-width="1.6"/>
-    <text x="390" y="31" text-anchor="middle" font-size="10.5" letter-spacing="1.6" opacity=".62">WHAT THE STUDY MANIPULATES</text>
-    <text x="390" y="46" text-anchor="middle" font-weight="600">display polarity · text colour · ambient illuminance</text>
+    <rect x="20" y="14" width="740" height="50" rx="5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <text x="390" y="29" text-anchor="middle" font-size="10.5" letter-spacing="1.6" opacity=".62">WHAT THE STUDY MANIPULATES</text>
+    <text x="390" y="44" text-anchor="middle" font-weight="600">display polarity · text colour</text>
+    <text x="390" y="57" text-anchor="middle" font-size="9.5" opacity=".7">ambient illuminance held constant at 300 lux — controlled, not manipulated</text>
 
-    <text x="198" y="72" text-anchor="middle" font-size="10.5" letter-spacing="1.4" style="fill:var(--accent)">OPTICAL ROUTE</text>
-    <text x="582" y="72" text-anchor="middle" font-size="10.5" letter-spacing="1.4" style="fill:var(--accent)">OCULAR-SURFACE ROUTE</text>
+    <text x="182" y="72" text-anchor="end" font-size="10.5" letter-spacing="1.4" style="fill:var(--accent)">OPTICAL ROUTE</text>
+    <text x="598" y="72" text-anchor="start" font-size="10.5" letter-spacing="1.4" style="fill:var(--accent)">OCULAR-SURFACE ROUTE</text>
 
-    <line x1="198" y1="52" x2="198" y2="84" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)" opacity=".55"/>
-    <line x1="582" y1="52" x2="582" y2="84" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)" opacity=".55"/>
+    <line x1="198" y1="66" x2="198" y2="84" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)" opacity=".55"/>
+    <line x1="582" y1="66" x2="582" y2="84" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)" opacity=".55"/>
 
     <rect x="20" y="86" width="355" height="46" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
     <text x="198" y="104" text-anchor="middle">More total light reaches the eye</text>
@@ -379,7 +381,7 @@ footer .in{max-width:70ch; margin:0 auto}
 
     <rect x="20" y="166" width="355" height="46" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
     <text x="198" y="184" text-anchor="middle">Pupil diameter falls</text>
-    <text x="198" y="201" text-anchor="middle" font-size="11" opacity=".65">ambient light drives this too, independently</text>
+    <text x="198" y="201" text-anchor="middle" font-size="11" opacity=".65">ambient light drives this too &#8212; held constant here</text>
     <rect x="405" y="166" width="355" height="46" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/>
     <text x="582" y="184" text-anchor="middle">Blink rate falls · incomplete blinks rise</text>
     <text x="582" y="201" text-anchor="middle" font-size="11" opacity=".65">total rate can hold steady while quality shifts</text>
@@ -440,7 +442,7 @@ footer .in{max-width:70ch; margin:0 auto}
 </ol>
 <p>The proportion of blinks that fail to close, referenced to each participant's own baseline, survives all three objections. It is also the measure with a documented symptom correlation: in one 15-minute reading study, incomplete blinks ranged from 0.9% to 56.5% of all blinks (mean 16.1%), and symptoms correlated with that percentage at <span class="num">p = 0.002</span>.</p>
 
-<h2 id="factors"><span class="part">03 — The three factors</span>Polarity, colour and room light</h2>
+<h2 id="factors"><span class="part">03 — The two factors</span>Polarity, colour, and the room light that is held still</h2>
 <p class="xref"><b>Covers</b> · §1.1 definitions · §1.3 · §2.2 Table 2.1 · §2.3 Table 2.2 · §2.4 Table 2.3</p>
 
 <h3>Four words you need before anything else</h3>
@@ -466,7 +468,7 @@ footer .in{max-width:70ch; margin:0 auto}
 <div class="wide">
 <figure>
 <div class="scroll">
-<svg viewBox="0 0 760 268" role="img" aria-label="The pupil-mediated explanation of the positive polarity advantage: a mostly-white positive-polarity screen emits more light, constricting the pupil, which improves optical quality and sharpens the retinal image; a mostly-black negative-polarity screen does the opposite.">
+<svg viewBox="0 0 760 292" role="img" aria-label="The pupil-mediated explanation of the positive polarity advantage: a mostly-white positive-polarity screen emits more light, constricting the pupil, which improves optical quality and sharpens the retinal image; a mostly-black negative-polarity screen does the opposite.">
   <g font-family="system-ui,sans-serif" font-size="12" fill="currentColor">
     <text x="14" y="16" font-size="10.5" letter-spacing="1.4" style="fill:var(--accent)">POSITIVE POLARITY</text>
     <rect x="14" y="26" width="150" height="96" rx="5" fill="#FFFFFF" stroke="#8E88A0" stroke-width="1.2"/>
@@ -527,7 +529,7 @@ footer .in{max-width:70ch; margin:0 auto}
   </g>
 </svg>
 </div>
-<figcaption><b>The polarity advantage is an argument about photons, not preference.</b> Nothing in this chain mentions colour or taste. It says the advantage exists because a mostly-white screen puts out more light, and more light entering the eye improves the optics. That prediction is testable — and it also predicts that the advantage should shrink when the room is already bright, which is exactly why ambient illumination is the study's third factor.</figcaption>
+<figcaption><b>The polarity advantage is an argument about photons, not preference.</b> Nothing in this chain mentions colour or taste. It says the advantage exists because a mostly-white screen puts out more light, and more light entering the eye improves the optics. That prediction is testable — and it also predicts that the advantage should shrink when the room is already bright, which is exactly why ambient illuminance is held constant here at a single measured level rather than left to vary (Part 07).</figcaption>
 </figure>
 </div>
 
@@ -540,7 +542,7 @@ footer .in{max-width:70ch; margin:0 auto}
 <div class="plain">
   <span class="lab">The inference everyone makes and nobody has earned</span>
   <p>An advantage in <em>legibility</em> does not license a conclusion about <em>visual fatigue</em>. Popular argument about dark mode makes that leap constantly, in both directions. Bridging brief legibility work to hour-scale fatigue is one of this study's specific contributions.</p>
-  <p>And the advantage is not universal: one study found the cognitive cost of negative polarity depended jointly on the reader's age and on the room lighting. Polarity effects are conditional, which is an argument for crossing polarity with other factors rather than testing it alone.</p>
+  <p>And the advantage is not universal: one study found the cognitive cost of negative polarity depended jointly on the reader's age and on the room lighting — it was younger adults in a <em>dim</em> room who paid for dark mode. Polarity effects are conditional, which is an argument for crossing polarity with other factors rather than testing it alone. Here that crossing is with text colour. The lighting half of the same argument is what this design gives up, and because the sample here is young adults, that finding in particular is one the study cannot speak to. Part 07 explains why, Part 13 counts the cost.</p>
 </div>
 
 <h3>Factor two: text colour, where the evidence thins out</h3>
@@ -552,8 +554,8 @@ footer .in{max-width:70ch; margin:0 auto}
 
 <p>One study adds a complication that this design must confront directly: its objective and subjective measures pointed in <em>opposite directions</em>. Dark mode improved the blink measures, yet light mode was preferred and rated less fatiguing. The present study treats that subjective–objective discrepancy as an object of study rather than an inconvenience, which is why it co-registers a validated questionnaire with the camera metrics in the same condition.</p>
 
-<h3>Factor three: ambient light, the moderator</h3>
-<p>Room light matters because it drives pupil size <em>independently of the screen</em>, and it adds veiling luminance to the display surface. If the polarity advantage really works through the pupil, then the amount of light already in the room should change how much the advantage is worth. Six studies (Table 2.3) bear on this, and they are not unanimous:</p>
+<h3>The third variable: ambient light — a moderator in the literature, a constant here</h3>
+<p>Room light matters because it drives pupil size <em>independently of the screen</em>, and it adds veiling luminance to the display surface. If the polarity advantage really works through the pupil, then the amount of light already in the room should change how much the advantage is worth. That makes it the obvious candidate for a third factor — and it is the one variable this design deliberately does not vary. Six studies (Table 2.3) bear on it, and they are not unanimous:</p>
 
 <div class="scroll">
 <table>
@@ -562,13 +564,15 @@ footer .in{max-width:70ch; margin:0 auto}
   <tbody>
     <tr><td>Polarity advantage was <em>independent</em> of ambient lighting</td><td>Proofreading, darkness vs office light</td><td>No interaction at the task level</td></tr>
     <tr><td>Negative polarity was <em>worst</em> under near-dark light; raising illumination or switching polarity restored legibility</td><td>Threshold legibility</td><td>A clear interaction at threshold</td></tr>
-    <tr><td>Higher illumination reduced fatigue, by an amount that depended on text colour</td><td>Reading, negative polarity only</td><td>Three-way structure implied but untested</td></tr>
+    <tr><td>Higher illumination reduced fatigue, by an amount that depended on text colour</td><td>Reading, negative polarity only</td><td>A three-way structure is implied; this design cannot test it</td></tr>
     <tr><td>Dark room with a bright screen most destabilised the tear film; incomplete blinking rose over time in every condition</td><td>30-min smartphone reading, n = 30</td><td>Closest existing work; polarity not manipulated</td></tr>
   </tbody>
 </table>
 </div>
 
-<p>The disagreement between the first two rows suggests a <strong>threshold-like rather than smoothly scaling</strong> relationship — which is a methodological instruction: illumination must be <em>measured</em> with a meter, not merely described as "dim" or "bright". The study does exactly that (Part 07).</p>
+<p>The disagreement between the first two rows suggests a <strong>threshold-like rather than smoothly scaling</strong> relationship, and it carries a methodological instruction that holds whether or not room light is manipulated: illumination must be <em>measured</em> with a meter, not merely described in words. The study does exactly that — at the eye position and the display plane, three times a sitting (Part 07).</p>
+
+<p>The second thing to read out of the table is <em>where</em> the disagreement falls, because that is what settled the design. The finding that came out <em>independent</em> of room light is a performance one, from proofreading. The findings that <em>depend</em> on room light are ocular and tear-film ones — and they were obtained with clinical tear-film measures and a laboratory eye tracker. This study's ocular measures come from a tablet's front camera, which is exactly the instrument that stops working properly in a dark room. So the variable most likely to interact with polarity is also the one this instrument is least able to survive. Illumination is therefore held at a single controlled level rather than manipulated; the arithmetic behind that decision is in Part 07, and what it forfeits is stated in Part 13.</p>
 
 <h2 id="gap"><span class="part">04 — The gap</span>What nobody has done</h2>
 <p class="xref"><b>Covers</b> · §1.4 · §2.5 Table 2.4 · §2.7 · §2.8 Research gaps</p>
@@ -579,7 +583,7 @@ footer .in{max-width:70ch; margin:0 auto}
 <ul>
   <li>Polarity is established for <strong>brief achromatic legibility</strong> tasks, untested for prolonged reading with fatigue accumulation and ocular-surface outcomes.</li>
   <li>The <strong>polarity × colour interaction</strong> on fatigue has not been estimated: the only text-colour fatigue study held polarity constant.</li>
-  <li><strong>Three-way effects</strong> of polarity, colour and illumination are uncharacterised, and the available two-way findings partly conflict.</li>
+  <li><strong>Three-way effects</strong> of polarity, colour and illumination are uncharacterised, and the available two-way findings partly conflict. This is the one gap on the list that the present study does <em>not</em> close: it fixes illumination instead of crossing it, for the measurement reason given in Part 07, and the gap is handed on as future work.</li>
 </ul>
 
 <h3>Missing separation</h3>
@@ -624,7 +628,7 @@ footer .in{max-width:70ch; margin:0 auto}
 <h3>The aim, unpacked</h3>
 <p>The formal aim is one long sentence. It contains two halves:</p>
 <div class="plain">
-  <p><strong>Substantive half.</strong> To determine the effects and interactions of display polarity, text colour and ambient illumination on visual fatigue, ocular behaviour and visual task performance during prolonged tablet-based reading.</p>
+  <p><strong>Substantive half.</strong> To determine the effects and interaction of display polarity and text colour on visual fatigue, ocular behaviour and visual task performance during prolonged tablet-based reading, <em>under controlled ambient illumination</em> — the last four words being load-bearing, and Part 07 explaining why.</p>
   <p><strong>Methodological half.</strong> And, as a secondary objective, to evaluate the validity and feasibility of camera-based blink assessment as an objective measure of ocular response.</p>
 </div>
 
@@ -636,9 +640,9 @@ footer .in{max-width:70ch; margin:0 auto}
   <tbody>
     <tr>
       <td><strong>1</strong><br><span class="pill">primary</span></td>
-      <td>Individual and interactive effects of the three factors on fatigue, ocular behaviour, workload and performance</td>
+      <td>Individual and interactive effects of polarity and text colour on fatigue, ocular behaviour, workload and performance, with ambient illumination held at one controlled level</td>
       <td class="n">H₁ₐ main effects<br>H₁ᵦ interactions</td>
-      <td><strong>H₁ₐ:</strong> positive polarity, higher contrast and higher ambient light each give a lower incomplete-blink ratio, lower fatigue and better performance.<br><strong>H₁ᵦ:</strong> the effect of colour depends on polarity, and negative polarity costs more in dim than moderate light.</td>
+      <td><strong>H₁ₐ:</strong> positive polarity and higher luminance contrast are each associated with a lower incomplete-blink ratio, lower subjective fatigue and better performance.<br><strong>H₁ᵦ:</strong> the effect of text colour depends on polarity. The further prediction that negative polarity costs more in dim than in moderate light is <em>not tested here</em>, illumination being constant; it is retained as a declared limitation (Part 13).</td>
     </tr>
     <tr>
       <td><strong>2</strong><br><span class="pill">primary</span></td>
@@ -669,7 +673,7 @@ footer .in{max-width:70ch; margin:0 auto}
 </div>
 
 <h4>The formal null and alternative</h4>
-<p><strong>H₀</strong> — display polarity, text colour and ambient illumination, individually or in combination, have no significant effect on visual fatigue, ocular behaviour or visual task performance during prolonged tablet reading. <strong>H₁</strong> — at least one of these factors, individually or in combination, significantly affects these outcomes.</p>
+<p><strong>H₀</strong> — display polarity and text colour, individually or in combination, have no significant effect on visual fatigue, ocular behaviour or visual task performance during prolonged tablet reading at a controlled ambient illuminance of 300 lux. <strong>H₁</strong> — at least one of these factors, individually or in combination, significantly affects these outcomes. Ambient illumination appears in both statements as a stated condition of the test, not as a term in it.</p>
 
 <h2 id="design"><span class="part">06 — The design</span>A crossover, and what "within-subjects" means</h2>
 <p class="xref"><b>Covers</b> · §3.1 Study design, Figure 3.1 · §3.2 setting · Figure 3.2</p>
@@ -680,9 +684,9 @@ footer .in{max-width:70ch; margin:0 auto}
   <dt>Repeated measures / crossover</dt>
   <dd>Every participant experiences <em>every</em> condition. Nobody is assigned to one group and compared with strangers in another group. Each person is their own control, which removes between-person variation from the comparison and makes the design dramatically more efficient than a between-groups study of the same size.</dd>
   <dt>Factorial</dt>
-  <dd>The factors are fully crossed rather than varied one at a time. Every text colour appears in both polarities, and every one of those ten combinations appears at both light levels. This is what makes interactions estimable — you cannot detect "colour behaves differently depending on polarity" unless you have observed every colour in both polarities.</dd>
-  <dt>Split-plot</dt>
-  <dd>Not all factors sit at the same level. Polarity and colour switch <em>within</em> a sitting — you can change them in software in a second. Ambient illumination cannot: you cannot re-light a room mid-session without forcing the eye to re-adapt. So illumination is manipulated <em>between sessions</em>. It is still within-participant (everyone gets both levels), but it operates at the session level. The larger unit is the <strong>whole plot</strong>; the conditions nested inside it are the <strong>sub-plots</strong>.</dd>
+  <dd>The factors are fully crossed rather than varied one at a time. Every text colour appears in both polarities, so all ten combinations are seen by every participant. This is what makes the interaction estimable — you cannot detect "colour behaves differently depending on polarity" unless you have observed every colour in both polarities.</dd>
+  <dt>Split-plot — and why this is <em>not</em> one</dt>
+  <dd>A split-plot design is one whose factors do not all sit at the same level: a slow-changing factor defines a large unit, the <strong>whole plot</strong>, and the fast-changing ones are nested inside it as <strong>sub-plots</strong>. An earlier version of this protocol was exactly that. Polarity and colour switch <em>within</em> a sitting — software changes them in a second — whereas room light cannot be changed mid-sitting without forcing the eye to re-adapt, so illumination had to be manipulated between two sittings, at the whole-plot level. Withdrawing the second illumination level removed the whole plot. Both surviving factors now vary at the same grain, within participant, and what is left is a plain within-subjects factorial with one random intercept instead of two nested ones (Part 11).</dd>
 </dl>
 
 <div class="wide">
@@ -721,24 +725,27 @@ footer .in{max-width:70ch; margin:0 auto}
   </g>
 </svg>
 </div>
-<figcaption><b>The design, drawn to scale of what one person actually does.</b> Each small tile is a real stimulus: the top row is positive polarity, the bottom row negative, and the letters carry the five locked colours. All ten run inside one sitting at a constant 300 lux. Because both factors now vary at the same grain, within participant, the statistical model needs one random effect rather than one — that is the whole practical consequence of the word "within-subjects" (Part 11).</figcaption>
+<figcaption><b>The design, drawn to scale of what one person actually does.</b> Each small tile is a real stimulus: the top row is positive polarity, the bottom row negative, and the letters carry the five locked colours. All ten run inside one sitting at a constant 300 lux. Because both factors now vary at the same grain, within participant, the statistical model needs one random intercept rather than two nested ones — that is the whole practical consequence of the word "within-subjects" (Part 11).</figcaption>
 </figure>
 </div>
 
-<h3>Why illumination is not switched within a session</h3>
-<p>Two reasons, both practical. A fully crossed within-session design would mean twenty conditions in one sitting, which is unmanageable. And room light cannot be changed without forcing the eye to re-adapt, which would contaminate the condition that follows the switch. Sessions are separated by <strong>48 to 72 hours</strong>, and the order of the two light levels is counterbalanced between participants so that any session-order effect cancels out across the sample.</p>
+<h3>Why illumination is a controlled constant and not a third factor</h3>
+<p>Crossing two illumination levels with the ten display conditions means twenty condition-runs per participant, and because room light cannot be changed mid-sitting without forcing the eye to re-adapt, those twenty runs have to be split across two visits a few days apart. An earlier version of this protocol was built exactly that way. It was withdrawn before any data were collected — and not because two visits are inconvenient.</p>
+
+<p>The reason is the instrument. The ocular outcomes are derived from the tablet's own front camera, and in a dim room the <em>screen</em> is the brightest thing lighting the participant's face. Computed from this study's locked condition table, a positive-polarity screen casts roughly <strong>thirty times</strong> the illuminance of a negative-polarity one at the reading distance used here. Against a 10 lux room, that leaves the face about <strong>2.3 times</strong> more brightly lit in positive polarity than in negative; against a 300 lux room, about <strong>1.05 times</strong>. At the dim level, how well the camera could see the eye would therefore have varied with the primary independent variable. Part 07 works the arithmetic through, including why the resulting bias points in the worst possible direction.</p>
 
 <div class="plain">
-  <span class="lab">The cost of that choice, stated in the limitations</span>
-  <p>Because illumination is manipulated between sessions rather than within, its effect is more exposed to between-session variance — time of day, sleep, circadian phase. The design mitigates this by counterbalancing order and recording covariates, but it cannot eliminate it. The synopsis says so in §4.3 rather than leaving it for an examiner to find.</p>
+  <span class="lab">The cost of that choice, stated rather than buried</span>
+  <p>Holding illumination constant is the most consequential delimitation in this design, and three things go with it. The <strong>polarity × room-light interaction can no longer be estimated</strong> — and that interaction is the exact form the popular claim about dark mode actually takes. The <strong>night-time reading scenario</strong>, which the withdrawn level represented at roughly 10 lux, is outside the scope of the study altogether. And the one study to locate a cognitive cost of negative polarity in <em>younger</em> adults located it specifically under dim conditions, so a protocol run only at 300 lux cannot speak to that finding for its own age group. All three are stated in §4.3 and again in Part 13.</p>
+  <p>One thing is gained in exchange, and it costs nothing. Ten condition-runs instead of twenty means the ten reading passages are read <strong>exactly once each</strong>. Under the twenty-run version every passage was read twice and repeat number had to be carried as a covariate; the practice effect now disappears rather than being adjusted for.</p>
 </div>
 
 <h3>The six phases of the whole project</h3>
 <ol class="timeline">
   <li><span class="dot">I</span><span class="t">Preparation</span><span class="d">Ethics approval; instrument development and pilot; photometric characterisation of the tablet.</span></li>
   <li><span class="dot">II</span><span class="t">Recruitment, screening and baseline profiling</span><span class="d">Eligibility checks, vision screening, and the questionnaire that supplies the Objective 3 moderators.</span></li>
-  <li class="hot"><span class="dot">III</span><span class="t">Session 1</span><span class="d">Ten display conditions under illumination level A, presented in Williams order.</span></li>
-  <li class="hot"><span class="dot">IV</span><span class="t">Session 2, after 48–72 hours</span><span class="d">The same ten conditions under illumination level B.</span></li>
+  <li class="hot"><span class="dot">III</span><span class="t">The sitting</span><span class="d">One visit of roughly 100 minutes: ten display conditions at a metered 300 lux, presented in Williams order.</span></li>
+  <li class="hot"><span class="dot">IV</span><span class="t">Quality-control review</span><span class="d">Each sitting is checked against the data-quality gates <em>before the participant is released</em>, so a recoverable problem is caught while it can still be fixed.</span></li>
   <li><span class="dot">V</span><span class="t">Data processing</span><span class="d">Automated ocular metrics, quality-control gating, and the manual-annotation validation sub-study.</span></li>
   <li><span class="dot">VI</span><span class="t">Analysis and write-up</span><span class="d">Mixed-effects analysis, design recommendations, thesis.</span></li>
 </ol>
@@ -946,32 +953,61 @@ footer .in{max-width:70ch; margin:0 auto}
 <h3>Holding everything else still</h3>
 <ul>
   <li>A <strong>single fixed tablet</strong>, viewing distance 50–60 cm.</li>
-  <li>Brightness fixed; automatic brightness and any blue-light filter <strong>disabled</strong>; screen cleaned before each session.</li>
-  <li>White-point luminance measured photometrically each session, target <span class="num">120–150 cd/m²</span> — informed by an optimum of 153 cd/m² determined under 300 lux, scaled down for the lower domestic illuminance used here.</li>
+  <li>Brightness fixed; automatic brightness and any blue-light filter <strong>disabled</strong>; screen cleaned before each sitting.</li>
+  <li>White-point luminance measured photometrically each sitting, target <span class="num">120–150 cd/m²</span> — informed by a reported optimum of 153 cd/m² determined under 300 lux, which is the ambient level this protocol now works at.</li>
   <li>Typography, line height and margins <strong>identical across all conditions</strong>, so polarity and colour are the only stimulus properties that vary.</li>
 </ul>
 
-<h3>The two light levels, and why those numbers</h3>
+<h3>The one light level, and why it is a constant rather than a factor</h3>
+<p>Ambient illumination is not among the things this study varies. It is among the things it holds still, and it is held still with the same care that goes into the stimulus itself.</p>
+
 <div class="scroll">
 <table>
   <caption>Ambient illumination — measured, not described</caption>
-  <thead><tr><th>Level</th><th class="n">Target</th><th class="n">Accepted range</th><th>Represents</th></tr></thead>
+  <thead><tr><th>Specification</th><th>Value</th></tr></thead>
   <tbody>
-    <tr><td><strong>Dim</strong></td><td class="n">≈300 lux</td><td class="n">5–15 lux</td><td>Night-time and low-light domestic use; comparable to the low-illumination conditions of prior polarity work</td></tr>
-    <tr><td><strong>Moderate</strong></td><td class="n">≈300 lux</td><td class="n">130–170 lux</td><td>General indoor domestic lighting — deliberately <em>below</em> the 300–500 lux the Indian interior-illumination code specifies for offices and classrooms</td></tr>
+    <tr><td><strong>Target illuminance</strong></td><td class="n">300 lux</td></tr>
+    <tr><td><strong>Accepted band</strong></td><td class="n">250–350 lux</td></tr>
+    <tr><td><strong>Measured where</strong></td><td>At the participant's eye position <em>and</em> at the display plane, with a calibrated lux meter</td></tr>
+    <tr><td><strong>Measured when</strong></td><td>Start, middle and end of every sitting</td></tr>
+    <tr><td><strong>If a reading falls outside the band</strong></td><td>Recorded as a <strong>protocol deviation</strong> — flagged in the data, not quietly corrected afterwards</td></tr>
+    <tr><td><strong>Also held constant</strong></td><td>Colour temperature and light-source type; daylight excluded from the room entirely</td></tr>
   </tbody>
 </table>
 </div>
 
-<ul>
-  <li><strong>Verified at two points</strong> — the participant's eye position and the display plane — with a calibrated lux meter, and logged at the start, middle and end of every session.</li>
-  <li><strong>Two levels rather than a graded series</strong>, so that illumination could be crossed with all ten display conditions inside a feasible protocol.</li>
-  <li><strong>Roughly one log unit apart</strong>, so a pupillary difference is physiologically plausible rather than hypothetical.</li>
-  <li><strong>Chosen to straddle</strong> the range at which negative-polarity penalties have been reported to appear.</li>
-  <li><strong>Colour temperature and light-source type held constant</strong> across both levels, so illuminance is the only photometric property of the room that changes.</li>
-</ul>
+<div class="note">
+  <span class="lab">Where 300 lux comes from, and what it is not defended on</span>
+  <p>Published guidance for work with self-luminous displays puts ambient illuminance around this range — lower than the level specified for paper tasks, because a screen makes its own light and it is the screen-to-surround ratio that has to be controlled. Those figures were traced only to secondary sources and could <strong>not</strong> be verified against the standards themselves, so they are <em>not</em> cited in support of the number. Until they are checked at source, 300 lux is defended on the photometry below and on nothing else.</p>
+</div>
 
-<p>One consequence is worth stating because it is the mechanism, not a side effect: since display white luminance and room light are both held constant, the <strong>display-to-ambient luminance ratio</strong> — the quantity the pupil account actually implicates — is fixed for every participant. Any polarity effect observed is therefore an effect <em>at that ratio</em>, rather than one averaged across the range of ratios encountered in ordinary use.</p>
+<h4>Why the room is controlled rather than manipulated</h4>
+<p>This is the part that matters, because it is a measurement argument rather than a convenience one. The ocular outcomes — blink rate, incomplete-blink ratio, PERCLOS — all come from the tablet's front camera. In a dark room the screen is the dominant source of light falling on the reader's face, and the two levels of the primary independent variable emit very different amounts of it. Computed from the locked condition table above, at the protocol's viewing distance and display luminance:</p>
+
+<div class="scroll">
+<table>
+  <caption>Light falling on the reader's face, by polarity</caption>
+  <thead><tr><th>Source</th><th class="n">Positive polarity<br><small>mean of P1–P5</small></th><th class="n">Negative polarity<br><small>mean of N1–N5</small></th><th class="n">Ratio</th></tr></thead>
+  <tbody>
+    <tr><td>The screen alone</td><td class="n">14.6 lux</td><td class="n">0.49 lux</td><td class="n"><strong>≈30×</strong></td></tr>
+    <tr><td>Screen + a 10 lux room <span class="pill warn">the withdrawn level</span></td><td class="n">24.6 lux</td><td class="n">10.5 lux</td><td class="n"><strong>2.35×</strong></td></tr>
+    <tr><td>Screen + a 300 lux room <span class="pill">the level used</span></td><td class="n">314.6 lux</td><td class="n">300.5 lux</td><td class="n"><strong>1.05×</strong></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>The 2.35× figure is not delicate: it stays between 2.25× and 2.43× across every assumption that was varied, including ink coverage from 5% to 12% and panel contrast ratio from 800:1 to 2000:1. So in a dim room, <strong>how well the camera can see the participant's face is confounded with display polarity</strong> — which is the primary independent variable. That is a validity problem, not a noise problem.</p>
+
+<div class="plain">
+  <span class="lab">And the bias would point the worst possible way</span>
+  <p>Blink completeness is classified from the <em>minimum</em> eye-aspect ratio reached during a blink (Part 10). Sampling can only miss the deepest frame, never overshoot it, so undersampling is a <strong>one-directional</strong> error: complete blinks get miscalled as incomplete, never the reverse. Lower face illuminance means longer camera exposure, which means a lower achieved frame rate, which means more missed minima — and therefore a measured incomplete-blink ratio that is <em>inflated</em> in exactly the polarity the hypothesis says should be worse.</p>
+  <p>A measurement artefact that imitates the predicted result is indistinguishable from the result. It is the single most damaging thing that could happen to this thesis, and at 10 lux the design would have manufactured one.</p>
+  <p><strong>Stated honestly:</strong> whether this particular tablet's camera really does drop its frame rate at the face luminance implied by a 10 lux room has <em>not</em> been measured — the consequence is modelled, the cause is assumed. The argument does not depend on it, because the confound in face illuminance is arithmetic either way, but the pilot that would settle it is worth running, not least because it establishes the frame rate the study actually achieves at 300 lux.</p>
+</div>
+
+<p>What this costs is not hidden. The polarity × room-light interaction cannot be estimated; the night-time reading scenario is out of scope; and a study that found negative polarity cognitively costly for younger adults specifically under dim light cannot be addressed by a protocol that never goes dim. Part 13 lists all three again alongside the other limitations, because a delimitation this consequential should be findable in more than one place.</p>
+
+<p>One further consequence is worth stating because it is the mechanism, not a side effect: since display white luminance and room light are both held constant, the <strong>display-to-ambient luminance ratio</strong> — the quantity the pupil account actually implicates — is fixed for every participant. Any polarity effect observed is therefore an effect <em>at that ratio</em>, rather than one averaged across the range of ratios encountered in ordinary use.</p>
 
 <h2 id="sample"><span class="part">08 — How many people</span>Why 130, when the instinct says 200</h2>
 <p class="xref"><b>Covers</b> · §3.2 sampling, Tables 3.1–3.3 · §3.8 Counterbalancing</p>
@@ -1107,7 +1143,7 @@ footer .in{max-width:70ch; margin:0 auto}
   </g>
 </svg>
 </div>
-<figcaption><b>Table 3.2 as a picture.</b> The seven studies from which this design borrows its measures produced between 11 and 300 condition-runs each. The proposed study produces <b>1,300</b> — roughly nine times the largest of them — and is the first in the group to manipulate polarity, text colour and ambient illumination together. No located study has combined a sample of this size with per-condition ocular measurement under a manipulated display parameter.</figcaption>
+<figcaption><b>Table 3.2 as a picture.</b> The seven studies from which this design borrows its measures produced between 11 and 300 condition-runs each. The proposed study produces <b>1,300</b> — roughly nine times the largest of them — and is the only one in the group to cross polarity with text colour while holding ambient illumination at a metered constant. No located study has combined a sample of this size with per-condition ocular measurement under a manipulated display parameter.</figcaption>
 </figure>
 </div>
 
@@ -1140,7 +1176,7 @@ footer .in{max-width:70ch; margin:0 auto}
 <div class="wide">
 <figure>
 <div class="scroll">
-<svg viewBox="0 0 700 468" role="img" aria-label="Participant flow from approximately 180 people approached, through screening and exclusion, to 145 enrolled and a target of 130 analysed contributing 1300 condition-runs.">
+<svg viewBox="0 0 700 414" role="img" aria-label="Participant flow from approximately 180 people approached, through screening and exclusion, to 145 enrolled, each attending one sitting of ten display conditions at a constant 300 lux, and a target of 130 analysed contributing 1300 condition-runs.">
   <g font-family="system-ui,sans-serif" font-size="12" fill="currentColor">
     <rect x="60" y="12" width="330" height="38" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
     <text x="225" y="30" text-anchor="middle">Approached and assessed for eligibility</text>
@@ -1162,31 +1198,29 @@ footer .in{max-width:70ch; margin:0 auto}
 
     <rect x="60" y="198" width="330" height="38" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
     <text x="225" y="216" text-anchor="middle">Allocated to a Williams row</text>
-    <text x="225" y="231" text-anchor="middle" font-size="11" opacity=".75">and to dim-first or moderate-first order</text>
+    <text x="225" y="231" text-anchor="middle" font-size="11" opacity=".75">by enrolment number · complete in blocks of ten</text>
     <line x1="225" y1="236" x2="225" y2="258" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
 
-    <rect x="60" y="260" width="330" height="34" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
-    <text x="225" y="282" text-anchor="middle">Session 1 — 10 conditions, illumination A</text>
-    <line x1="225" y1="294" x2="225" y2="314" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
-    <rect x="60" y="316" width="330" height="34" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
-    <text x="225" y="338" text-anchor="middle">Session 2, 48–72 h later — illumination B</text>
-    <line x1="390" y1="305" x2="440" y2="305" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ar)"/>
-    <rect x="446" y="278" width="234" height="54" rx="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="4 3" opacity=".6"/>
-    <text x="563" y="298" text-anchor="middle" font-size="11.5" opacity=".8">Withdrawal, non-attendance or</text>
-    <text x="563" y="314" text-anchor="middle" font-size="11.5" opacity=".8">data-quality exclusion —</text>
-    <text x="563" y="326" text-anchor="middle" font-size="10.5" opacity=".7">recorded and reported, not silently dropped</text>
-    <line x1="225" y1="350" x2="225" y2="372" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
+    <rect x="60" y="260" width="330" height="38" rx="5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <text x="225" y="278" text-anchor="middle">Single sitting — 10 conditions</text>
+    <text x="225" y="293" text-anchor="middle" font-size="11" opacity=".75">ambient held at 300 lux, metered three times</text>
+    <line x1="390" y1="279" x2="440" y2="279" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+    <rect x="446" y="252" width="234" height="54" rx="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="4 3" opacity=".6"/>
+    <text x="563" y="272" text-anchor="middle" font-size="11.5" opacity=".8">Withdrawal, non-completion or</text>
+    <text x="563" y="288" text-anchor="middle" font-size="11.5" opacity=".8">data-quality exclusion —</text>
+    <text x="563" y="300" text-anchor="middle" font-size="10.5" opacity=".7">recorded and reported, not silently dropped</text>
+    <line x1="225" y1="298" x2="225" y2="318" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)"/>
 
-    <rect x="60" y="374" width="330" height="46" rx="5" fill="none" style="stroke:var(--accent)" stroke-width="2"/>
-    <text x="225" y="393" text-anchor="middle" font-weight="700">Analysed — target n = 130</text>
-    <text x="225" y="411" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11">20 runs each = 1,300 condition-runs</text>
+    <rect x="60" y="320" width="330" height="46" rx="5" fill="none" style="stroke:var(--accent)" stroke-width="2"/>
+    <text x="225" y="339" text-anchor="middle" font-weight="700">Analysed — target n = 130</text>
+    <text x="225" y="357" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11">10 runs each = 1,300 condition-runs</text>
 
-    <text x="225" y="446" text-anchor="middle" font-size="11" opacity=".72">The 15-person gap between 145 enrolled and 130 analysed is planned attrition,</text>
-    <text x="225" y="461" text-anchor="middle" font-size="11" opacity=".72">not an afterthought — every visit asked of a participant is a visit some will not make.</text>
+    <text x="225" y="392" text-anchor="middle" font-size="11" opacity=".72">The 15-person gap between 145 enrolled and 130 analysed is planned attrition,</text>
+    <text x="225" y="407" text-anchor="middle" font-size="11" opacity=".72">not an afterthought — withdrawal and exclusion are budgeted for in advance.</text>
   </g>
 </svg>
 </div>
-<figcaption><b>Figure 3.2, drawn as a CONSORT-style flow.</b> Dashed boxes on the right are the exits. Both are recorded and reported rather than quietly removed, which is what allows a reader to judge whether the analysed sample is representative of the enrolled one.</figcaption>
+<figcaption><b>Figure 3.3, drawn as a CONSORT-style flow.</b> Dashed boxes on the right are the exits. Both are recorded and reported rather than quietly removed, which is what allows a reader to judge whether the analysed sample is representative of the enrolled one.</figcaption>
 </figure>
 </div>
 
@@ -1203,10 +1237,12 @@ footer .in{max-width:70ch; margin:0 auto}
   <p><strong>2.</strong> Every condition precedes and follows every other condition equally often — so carryover cancels.</p>
 </div>
 
-<p>Participants are assigned to rows by sequential enrolment index, and complete balance is achieved in <strong>blocks of ten</strong>. This is the real reason the sample size is a multiple of ten: 130 is 13 complete blocks. Illumination order is counterbalanced orthogonally on top of that, so dim-first and moderate-first are equally represented within each block.</p>
+<p>Participants are assigned to rows by sequential enrolment index, and complete balance is achieved in <strong>blocks of ten</strong>. This is the real reason the sample size is a multiple of ten: 130 is 13 complete blocks. Nothing is counterbalanced on top of that, because there is nothing left to counterbalance — with illumination fixed, the Williams row is the participant's entire allocation. Where a sitting has to be split for scheduling, the row continues from where it stopped rather than restarting, so the block stays balanced.</p>
 
 <h2 id="session"><span class="part">09 — Inside a session</span>What a participant actually does</h2>
 <p class="xref"><b>Covers</b> · §3.6 Procedure, Figure 3.3 · §3.5 instrumentation</p>
+
+<p>There is one session, and it holds everything. Simulation over 2,000 synthetic participants puts its median length at <strong>98 minutes</strong>, with a 95th percentile of 119 — and because there is only one visit, that is also the entire contact time asked of a participant.</p>
 
 <h3>The session frame</h3>
 <ol class="timeline">
@@ -1242,9 +1278,9 @@ footer .in{max-width:70ch; margin:0 auto}
 
 <div class="plain">
   <span class="lab">The pilot and the feasibility gate — §3.6</span>
-  <p>Ten participants precede the main study. Three pre-specified criteria decide whether the two-session structure survives:</p>
-  <p>· median session duration ≤ <strong>120 minutes</strong><br>· no more than <strong>one withdrawal in ten</strong><br>· face-presence ratio ≥ <strong>0.90</strong> in at least 90% of condition-runs</p>
-  <p>If any criterion fails, each illumination level is split into <strong>two shorter sittings of five conditions</strong>, preserving the counterbalancing scheme and the global serial-position record. The fallback is specified in advance rather than improvised, which is what makes it a gate rather than a hope.</p>
+  <p>Ten participants precede the main study. Three pre-specified criteria decide whether all ten conditions can be delivered in a single sitting:</p>
+  <p>· median sitting duration ≤ <strong>120 minutes</strong><br>· no more than <strong>one withdrawal in ten</strong><br>· face-presence ratio ≥ <strong>0.90</strong> in at least 90% of condition-runs</p>
+  <p>If any criterion fails, the ten conditions are split across <strong>two shorter sittings of five</strong>, with the Williams row continuing rather than restarting — so the counterbalancing scheme and the global serial-position record both survive the split. The fallback is specified in advance rather than improvised, which is what makes it a gate rather than a hope.</p>
 </div>
 
 <h2 id="measure"><span class="part">10 — Measuring the eye</span>How a tablet camera counts an incomplete blink</h2>
@@ -1315,7 +1351,7 @@ footer .in{max-width:70ch; margin:0 auto}
   <thead><tr><th>Element</th><th>Specification</th></tr></thead>
   <tbody>
     <tr><td>Subsample</td><td class="n">20 participants, pre-specified</td></tr>
-    <tr><td>Video contributed</td><td>Two 3-minute reading segments each, one per illumination level — ≈120 minutes total</td></tr>
+    <tr><td>Video contributed</td><td>Two 3-minute reading segments each — ≈120 minutes total</td></tr>
     <tr><td>Expected events</td><td class="n">≈1,200–1,500 blinks at typical reading rates</td></tr>
     <tr><td>Annotators</td><td>Two, trained on a <em>separate</em> pilot set, masked both to condition <em>and</em> to algorithm output; a third adjudicates disagreements</td></tr>
     <tr><td>Inter-rater reliability</td><td>Cohen's κ for complete/incomplete classification; ICC for event counts</td></tr>
@@ -1357,23 +1393,23 @@ footer .in{max-width:70ch; margin:0 auto}
 <h3>The confirmatory model, piece by piece</h3>
 <div class="plain">
   <span class="lab">Fixed effects — what is being estimated</span>
-  <p>Polarity · text colour · ambient illumination · all two-way interactions · the three-way interaction · serial position · illumination order.</p>
-  <p>Serial position and illumination order are in the model because Part 08's counterbalancing removes their <em>bias</em> but not their <em>variance</em> — modelling them recovers precision.</p>
+  <p>Polarity · text colour · their interaction · serial position.</p>
+  <p>Serial position is in the model because Part 08's counterbalancing removes its <em>bias</em> but not its <em>variance</em> — modelling it recovers precision. Ambient illumination is not in the model at all: it is a constant, so it has no variance to explain. It is checked instead, against the metered readings, as a manipulation check.</p>
 </div>
 
 <h4>Why the outcome is modelled on the logit scale</h4>
 <p>The incomplete-blink ratio is a <strong>bounded proportion</strong>: it cannot go below 0 or above 1. Treating it as an ordinary linear outcome would let the model predict impossible values, and would assume constant variance when in fact variance is smallest near the bounds. So it is modelled on the logit scale, or with a beta or binomial mixed model. This is not fussiness — it is the difference between a model that can and cannot represent the data.</p>
 
-<h4>Why the random structure has two levels</h4>
+<h4>Why the random structure has one level, not two</h4>
 <p>This is the within-subjects design from Part 06 expressed in statistical form:</p>
 <ul>
   <li>a <strong>random intercept for participant</strong> — people differ in their baseline blink behaviour;</li>
-  <li>a <strong>random slope for polarity</strong> where the data support it — people differ not only in how much they blink incompletely but in how much polarity moves them;</li>
-  <li>a <strong>random slope for polarity</strong> where the data support it — people may differ in <em>how much</em> polarity affects them, which is itself the Objective 3 question.</li>
+  <li>a <strong>random slope for polarity</strong> where the data support it — people may differ in <em>how much</em> polarity moves them, which is itself the Objective 3 question.</li>
 </ul>
+<p>The earlier two-sitting version of this protocol needed a second, nested random intercept for the sitting, because two sittings from the same person share whatever that day happened to be like. With all ten conditions inside one sitting, participant and sitting are the same unit and the nesting collapses. That is one fewer variance component to estimate from the same data.</p>
 <div class="note">
   <span class="lab">The convergence contingency, pre-specified</span>
-  <p>Maximal random structures often fail to converge. Rather than improvising, the reduction order is fixed in advance — <strong>random slopes first, then the session intercept</strong> — and whatever reduction was needed is reported. This closes off a route by which a researcher could try structures until one gave a favourable answer.</p>
+  <p>Maximal random structures often fail to converge. Rather than improvising, the reduction order is fixed in advance — <strong>the random slope for polarity comes out first, leaving the participant intercept</strong> — and whatever reduction was needed is reported. This closes off a route by which a researcher could try structures until one gave a favourable answer.</p>
 </div>
 
 <h3>How Objective 2 is actually tested</h3>
@@ -1398,7 +1434,7 @@ footer .in{max-width:70ch; margin:0 auto}
   <li><strong>Signal-detection indices (<em>d′</em>, criterion)</strong> — treated hierarchically, because they are unstable at small per-condition trial counts.</li>
   <li><strong>Sensitivity analyses</strong> — models re-fitted (a) excluding conditions flagged for disengagement or poor data quality, and (b) with PERCLOS as a covariate, which is how visual fatigue is separated from plain sleepiness.</li>
 </ul>
-<p>Residual diagnostics, multiplicity control within outcome families, and effect sizes with 95% confidence intervals are reported throughout. The three-way interaction is treated as <strong>exploratory</strong>, because Part 08 showed it has the least power.</p>
+<p>Residual diagnostics, multiplicity control within outcome families, and effect sizes with 95% confidence intervals are reported throughout. Confirmatory inference stops at the primary outcome; the polarity × colour interaction is the analysis Part 08 sized the sample around, and it is the last term in the model with enough power to be treated as more than descriptive.</p>
 
 <h2 id="results"><span class="part">12 — What results mean</span>The one figure the study is built to produce</h2>
 <p class="xref"><b>Covers</b> · §4.1 Expected outcomes · §4.2 Significance</p>
@@ -1481,15 +1517,19 @@ footer .in{max-width:70ch; margin:0 auto}
 
 <h3>The full set of expected outputs</h3>
 <ul>
-  <li>Quantified effects, with confidence intervals, of all three factors on fatigue, ocular behaviour, workload and performance.</li>
+  <li>Quantified effects, with confidence intervals, of both factors on fatigue, ocular behaviour, workload and performance, at a controlled ambient illuminance.</li>
   <li>Among the <strong>first estimates of the polarity × colour interaction</strong> on fatigue outcomes.</li>
   <li>Whether the positive polarity advantage <strong>extends from brief legibility tasks to hour-scale reading</strong> and to ocular-surface outcomes.</li>
   <li>The extent to which colour effects are <strong>contrast-mediated rather than hue-specific</strong> — the figure above.</li>
-  <li>Whether negative polarity is <strong>specifically costly under dim domestic lighting</strong>, which is where dark mode is most used and most advocated.</li>
   <li>The configurations that <strong>minimise and maximise</strong> fatigue.</li>
   <li>Whether a <strong>polarity-blind contrast criterion</strong> adequately predicts measured readability.</li>
   <li>An account of <strong>subjective–objective correspondence</strong>, and a validated instrument with reported agreement against manual annotation.</li>
 </ul>
+
+<div class="note">
+  <span class="lab">One thing conspicuously absent from that list</span>
+  <p>Whether negative polarity is <strong>specifically costly under dim domestic lighting</strong> — which is where dark mode is most used and most advocated — is <em>not</em> among this study's outputs. It was on the list while the protocol carried two illumination levels, and it came off when the dim level was withdrawn (Part 07). It is the clearest single piece of future work this design leaves behind, and answering it properly needs an instrument that keeps working in a dark room, which a tablet's front camera does not.</p>
+</div>
 
 <h3>Who the findings are for</h3>
 <div class="scroll">
@@ -1555,18 +1595,18 @@ footer .in{max-width:70ch; margin:0 auto}
     </tr>
     <tr>
       <td><strong>Generic fatigue and boredom accumulate</strong></td>
-      <td>A two-hour session is tiring regardless of display</td>
+      <td>A sitting of roughly a hundred minutes is tiring regardless of what is on the display</td>
       <td>Counterbalanced, measured and modelled rather than eliminated</td>
     </tr>
     <tr>
-      <td><strong>NASA-TLX once per session</strong></td>
+      <td><strong>NASA-TLX once per sitting</strong></td>
       <td>Administering it after every condition would be excessive burden</td>
-      <td>Workload inference is limited to the illumination contrast, and this is stated</td>
+      <td>It describes the sitting as a whole and cannot be attributed to polarity or colour, since both vary inside it; reported as a descriptive session-level index rather than as a contrast, and stated as such</td>
     </tr>
     <tr>
-      <td><strong>Illumination is between-session</strong></td>
-      <td>Room light cannot be switched mid-session without re-adaptation</td>
-      <td>Order counterbalanced, covariates recorded — but exposure to between-session variance in time of day, sleep and circadian phase remains</td>
+      <td><strong>Ambient illumination is held constant, not crossed</strong></td>
+      <td>The ocular measures come from the tablet's front camera, and in a dim room the display dominates the light falling on the face — differing by polarity, which is the primary independent variable (Part 07)</td>
+      <td>None available, and none claimed. The polarity × room-light interaction is not estimable; the night-time reading scenario is out of scope; and the finding that younger adults pay a cognitive cost for negative polarity <em>under dim light</em> cannot be addressed. A narrower question answered with a trustworthy instrument was judged preferable to a broader one answered with a compromised one — but the narrowing is real</td>
     </tr>
     <tr>
       <td><strong>PERCLOS is insensitive in moderate drowsiness</strong></td>
@@ -1578,7 +1618,7 @@ footer .in{max-width:70ch; margin:0 auto}
 </div>
 
 <h4>Delimitations — the boundaries drawn on purpose</h4>
-<p>Findings will be specific to the device, display technology, luminance range and population studied. The sample is delimited to adults aged 18–35 with normal or corrected vision and no colour-vision deficiency. <strong>Presbyopic, paediatric and colour-vision-deficient populations — for whom polarity effects may well differ — lie outside this study and are identified as future work.</strong></p>
+<p>Findings will be specific to the device, display technology, luminance range and population studied. They also apply at a <strong>display-to-ambient ratio fixed at 300 lux</strong>, rather than across the range of ratios met in ordinary use. The sample is delimited to adults aged 18–35 with normal or corrected vision and no colour-vision deficiency. <strong>Presbyopic, paediatric and colour-vision-deficient populations — for whom polarity effects may well differ — lie outside this study and are identified as future work.</strong></p>
 
 <h2 id="cheat"><span class="part">14 — Cheat sheet</span>Every number in one place</h2>
 
@@ -1593,9 +1633,9 @@ footer .in{max-width:70ch; margin:0 auto}
     <tr><td>Age range</td><td class="n">18–35 years</td><td>inclusion criterion</td></tr>
     <tr><td>Display conditions</td><td class="n">10</td><td>2 polarities × 5 colours</td></tr>
     <tr><td>Illumination levels</td><td class="n">1</td><td>controlled constant at 300 lux, not a factor</td></tr>
-    <tr><td>Condition-runs per person</td><td class="n">20</td><td>10 conditions × 2 sessions</td></tr>
+    <tr><td>Sittings per participant</td><td class="n">1</td><td>median ≈98 min, 95th percentile 119 min</td></tr>
+    <tr><td>Condition-runs per person</td><td class="n">10</td><td>each of the 10 passages read exactly once</td></tr>
     <tr><td>Total condition-runs</td><td class="n">1,300</td><td>≈9× the largest comparable study</td></tr>
-    <tr><td>Inter-session interval</td><td class="n">48–72 hours</td><td>illumination order counterbalanced</td></tr>
     <tr><td>Pilot sample</td><td class="n">10</td><td>feasibility gate before the main study</td></tr>
     <tr><td>Validation subsample</td><td class="n">20</td><td>≈120 min video, ≈1,200–1,500 blinks</td></tr>
     <tr><td>Data collection period</td><td class="n">≈24 months</td><td>after approval and piloting</td></tr>
@@ -1609,9 +1649,9 @@ footer .in{max-width:70ch; margin:0 auto}
   <thead><tr><th>Quantity</th><th class="n">Value</th><th>Note</th></tr></thead>
   <tbody>
     <tr><td>Viewing distance</td><td class="n">50–60 cm</td><td>fixed tablet</td></tr>
-    <tr><td>Display white luminance</td><td class="n">120–150 cd/m²</td><td>measured per session; informed by a 153 cd/m² optimum at 300 lux</td></tr>
-    <tr><td>Dim illumination</td><td class="n">≈300 lux (5–15)</td><td>night-time / low-light domestic</td></tr>
-    <tr><td>Moderate illumination</td><td class="n">≈300 lux (130–170)</td><td>below the 300–500 lux office/classroom code</td></tr>
+    <tr><td>Display white luminance</td><td class="n">120–150 cd/m²</td><td>measured per sitting; informed by a 153 cd/m² optimum reported at 300 lux</td></tr>
+    <tr><td>Ambient illuminance</td><td class="n">300 lux (250–350)</td><td>controlled constant; metered at the eye and the display plane, three times per sitting</td></tr>
+    <tr><td>Face illuminance ratio, positive : negative</td><td class="n">1.05× at 300 lux</td><td>2.35× at 10 lux — the confound that removed the dim level</td></tr>
     <tr><td>Adaptation before a condition</td><td class="n">60 s</td><td>extended to 120 s on a polarity switch</td></tr>
     <tr><td>Contrast range across conditions</td><td class="n">2.39 : 1 → 21.00 : 1</td><td>weakest condition is yellow on white</td></tr>
     <tr><td>Achromatic pair contrast</td><td class="n">21.00 : 1 both polarities</td><td>the contrast-matched anchor</td></tr>
@@ -1732,7 +1772,7 @@ footer .in{max-width:70ch; margin:0 auto}
   <dd>(L<sub>max</sub> − L<sub>min</sub>) ÷ (L<sub>max</sub> + L<sub>min</sub>). Reported for completeness but analytically useless in negative polarity, where a pure black background drives it to 1.000 for every colour.</dd>
 
   <dt>Mixed-effects model</dt>
-  <dd>A regression containing both fixed effects (the factors of interest) and random effects (participant- and session-level variation). Required here because observations are nested inside people and sessions rather than independent.</dd>
+  <dd>A regression containing both fixed effects (the factors of interest) and random effects (person-to-person variation). Required here because a participant's ten condition-runs are nested inside that participant rather than independent of one another.</dd>
 
   <dt>Moderation</dt>
   <dd>When the size of an effect depends on a characteristic of the person. Objective 3. Tested between participants, which is why it is the power-hungry analysis.</dd>
@@ -1771,7 +1811,7 @@ footer .in{max-width:70ch; margin:0 auto}
   <dd>Systematic differences caused by <em>where</em> in the sequence a condition fell rather than by the condition itself. Handled by the Williams square and modelled as a covariate.</dd>
 
   <dt>Split-plot</dt>
-  <dd>A design in which factors operate at different levels — here illumination at session level (whole plot) and polarity × colour within session (sub-plot). Its statistical signature is two nested random intercepts.</dd>
+  <dd>A design in which factors operate at different levels: a slow-changing factor defines the large unit (the whole plot) and faster-changing ones sit inside it (the sub-plots). Its statistical signature is two nested random intercepts. The earlier two-sitting version of this protocol was split-plot, with illumination at the sitting level; with illumination held constant the present design is not one, and needs a single participant intercept (Parts 06 and 11).</dd>
 
   <dt>sRGB linearisation</dt>
   <dd>Undoing the non-linear encoding of standard display colour values before computing luminance. Without this step contrast calculations are simply wrong.</dd>

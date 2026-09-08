@@ -1,0 +1,60 @@
+<svg viewBox="0 0 760 292" role="img" aria-label="The pupil-mediated explanation of the positive polarity advantage: a mostly-white positive-polarity screen emits more light, constricting the pupil, which improves optical quality and sharpens the retinal image; a mostly-black negative-polarity screen does the opposite.">
+  <g font-family="system-ui,sans-serif" font-size="12" fill="currentColor">
+    <text x="14" y="16" font-size="10.5" letter-spacing="1.4" style="fill:var(--accent)">POSITIVE POLARITY</text>
+    <rect x="14" y="26" width="150" height="96" rx="5" fill="#FFFFFF" stroke="#8E88A0" stroke-width="1.2"/>
+    <g fill="#000000" font-family="Georgia,serif" font-size="10.5">
+      <text x="26" y="46">The quick brown fox</text><text x="26" y="62">jumps over the lazy</text>
+      <text x="26" y="78">dog and the pupil</text><text x="26" y="94">narrows accordingly.</text>
+    </g>
+    <text x="89" y="138" text-anchor="middle" font-size="11" opacity=".7">mostly white — emits a lot</text>
+
+    <text x="14" y="176" font-size="10.5" letter-spacing="1.4" opacity=".62">NEGATIVE POLARITY</text>
+    <rect x="14" y="186" width="150" height="96" rx="5" fill="#000000" stroke="#8E88A0" stroke-width="1.2"/>
+    <g fill="#FFFFFF" font-family="Georgia,serif" font-size="10.5">
+      <text x="26" y="206">The quick brown fox</text><text x="26" y="222">jumps over the lazy</text>
+      <text x="26" y="238">dog and the pupil</text><text x="26" y="254">stays wide open.</text>
+    </g>
+
+    <g stroke="currentColor" fill="none">
+      <line x1="176" y1="74" x2="212" y2="74" stroke-width="1.3" marker-end="url(#ar)"/>
+      <line x1="176" y1="234" x2="212" y2="234" stroke-width="1.3" marker-end="url(#ar)"/>
+    </g>
+
+    <circle cx="256" cy="74" r="30" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <circle cx="256" cy="74" r="9" fill="currentColor"/>
+    <text x="256" y="122" text-anchor="middle" font-size="11">pupil constricts</text>
+    <text x="256" y="136" text-anchor="middle" font-size="10.5" opacity=".65">small aperture</text>
+
+    <circle cx="256" cy="234" r="30" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <circle cx="256" cy="234" r="21" fill="currentColor"/>
+    <text x="256" y="272" text-anchor="middle" font-size="11">pupil stays dilated</text>
+
+    <g stroke="currentColor" fill="none">
+      <line x1="300" y1="74" x2="336" y2="74" stroke-width="1.3" marker-end="url(#ar)"/>
+      <line x1="300" y1="234" x2="336" y2="234" stroke-width="1.3" marker-end="url(#ar)"/>
+    </g>
+
+    <rect x="342" y="46" width="186" height="56" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".8"/>
+    <text x="435" y="66" text-anchor="middle" font-size="11.5">light uses the centre of</text>
+    <text x="435" y="81" text-anchor="middle" font-size="11.5">the lens · less aberration</text>
+    <text x="435" y="96" text-anchor="middle" font-size="11.5">· deeper depth of focus</text>
+
+    <rect x="342" y="206" width="186" height="56" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".5" stroke-dasharray="4 3"/>
+    <text x="435" y="226" text-anchor="middle" font-size="11.5">light uses the lens edge</text>
+    <text x="435" y="241" text-anchor="middle" font-size="11.5">· more aberration</text>
+    <text x="435" y="256" text-anchor="middle" font-size="11.5">· shallower depth of focus</text>
+
+    <g stroke="currentColor" fill="none">
+      <line x1="534" y1="74" x2="570" y2="74" stroke-width="1.3" marker-end="url(#ar)"/>
+      <line x1="534" y1="234" x2="570" y2="234" stroke-width="1.3" marker-end="url(#ar)"/>
+    </g>
+
+    <rect x="576" y="50" width="170" height="48" rx="5" fill="none" style="stroke:var(--accent)" stroke-width="1.8"/>
+    <text x="661" y="70" text-anchor="middle" font-size="12.5" font-weight="650">sharper retinal image</text>
+    <text x="661" y="87" text-anchor="middle" font-size="11" opacity=".7">better legibility</text>
+
+    <rect x="576" y="210" width="170" height="48" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".5" stroke-dasharray="4 3"/>
+    <text x="661" y="230" text-anchor="middle" font-size="12.5">softer retinal image</text>
+    <text x="661" y="247" text-anchor="middle" font-size="11" opacity=".7">the polarity penalty</text>
+  </g>
+</svg>
