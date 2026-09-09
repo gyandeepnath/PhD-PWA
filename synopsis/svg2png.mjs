@@ -38,6 +38,9 @@ for (const f of readdirSync(DIR).filter((x) => x.endsWith('.svg'))) {
   await page.setContent(
     `<style>html,body{margin:0;padding:0;background:#fff;color:#1a1a2e}
      :root{--accent:#2f5d8a}
+     /* The synopsis and the slide deck are both set in Times New Roman; the figures follow, so a
+        figure does not arrive in either document in a different typeface from the text around it. */
+     svg text, svg tspan{font-family:'Times New Roman',Times,serif !important}
      svg{display:block;width:${w}px;height:${h}px}
      svg[width="0"]{position:absolute;width:0;height:0}</style>${SHARED_DEFS}${svg}`);
   await page.setViewportSize({ width: w, height: h });
