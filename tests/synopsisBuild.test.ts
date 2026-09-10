@@ -142,6 +142,25 @@ describe('the synopsis document', () => {
     expect(docxWarnings.match(/^\s*!.*$/gm) ?? [], 'the document builder reported a problem').toEqual([]);
   });
 
+  it('sets the reference list flush left with a hanging indent, as APA requires', () => {
+    /*
+     * The body of the synopsis is justified, and the reference list inherited that: long DOIs and
+     * journal titles opened rivers of white space across the line, and with no hanging indent the
+     * author column could not be scanned. APA 7 sets a reference list flush left with a half-inch
+     * hanging indent, and an examiner checking format will look for exactly that.
+     */
+    const xml = part(docxPath, 'word/document.xml');
+    const refs = xml.slice(xml.search(/<w:t[^>]*>REFERENCES<\/w:t>/));
+    expect(refs.length, 'no REFERENCES heading was emitted').toBeGreaterThan(1000);
+
+    const hanging = (refs.match(/<w:ind w:left="720" w:hanging="720"\/>/g) ?? []).length;
+    expect(hanging, 'reference entries carry no hanging indent').toBeGreaterThan(20);
+
+    // Nothing after the REFERENCES heading may still be justified.
+    expect(refs.includes('<w:jc w:val="both"/>'),
+      'a reference entry is still justified, which opens rivers inside DOIs').toBe(false);
+  });
+
   it('declares a fixed table layout, so the computed column widths are honoured', () => {
     const xml = part(docxPath, 'word/document.xml');
     const tables = (xml.match(/<w:tbl>/g) ?? []).length;

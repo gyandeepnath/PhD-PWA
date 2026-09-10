@@ -315,10 +315,22 @@ const HEADINGS = {
   4: HeadingLevel.HEADING_4,
 };
 
+/**
+ * True once the REFERENCES heading has been passed. APA 7 sets a reference list flush left with a
+ * half-inch hanging indent; justifying it, as the body is justified, opens rivers of white space
+ * inside long DOIs and journal titles, and without the hanging indent an examiner cannot scan the
+ * author column. Both were wrong until this existed.
+ */
+let inReferences = false;
+
+const HANGING = 720;   // 0.5 inch, as APA specifies
+
 function bodyPara(text, extra = {}) {
+  const reference = inReferences && !extra.alignment;
   return new Paragraph({
-    spacing: sp({ after: 140, line: 340 }), // ~1.4 line spacing
-    alignment: AlignmentType.JUSTIFIED,
+    spacing: sp(reference ? { after: 100, line: 340 } : { after: 140, line: 340 }),
+    alignment: reference ? AlignmentType.LEFT : AlignmentType.JUSTIFIED,
+    ...(reference ? { indent: { left: HANGING, hanging: HANGING } } : {}),
     children: inline(text),
     ...extra,
   });
@@ -397,6 +409,8 @@ while (i < lines.length) {
   const h = line.match(/^(#{1,4})\s+(.*)$/);
   if (h) {
     const lvl = h[1].length;
+    // The reference list runs from its own heading to the next top-level one.
+    if (lvl === 1) inReferences = /^references$/i.test(h[2].trim());
     children.push(new Paragraph({
       heading: HEADINGS[lvl],
       spacing: { before: lvl === 1 ? 320 : 280, after: 160 },
