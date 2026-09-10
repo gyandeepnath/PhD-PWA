@@ -142,6 +142,25 @@ describe('the synopsis document', () => {
     expect(docxWarnings.match(/^\s*!.*$/gm) ?? [], 'the document builder reported a problem').toEqual([]);
   });
 
+  it('centres the title page instead of setting it as body prose', () => {
+    /*
+     * The title, degree, candidate and university were justified body paragraphs, so the title's
+     * words were stretched to reach the right margin and the page sat in its top third against the
+     * left edge. Everything before the first page break is title-page matter and is centred.
+     */
+    const xml = part(docxPath, 'word/document.xml');
+    const firstBreak = xml.indexOf('<w:br w:type="page"/>');
+    expect(firstBreak, 'the document has no page break, so the title page is unbounded')
+      .toBeGreaterThan(0);
+    const front = xml.slice(0, firstBreak);
+
+    expect(front.includes('<w:jc w:val="both"/>'),
+      'a title-page paragraph is justified, which stretches the title across the measure').toBe(false);
+    expect((front.match(/<w:jc w:val="center"\/>/g) ?? []).length,
+      'the title page is not centred').toBeGreaterThan(5);
+    expect(front.includes('<w:b/>'), 'the title is not set in bold').toBe(true);
+  });
+
   it('sets the reference list flush left with a hanging indent, as APA requires', () => {
     /*
      * The body of the synopsis is justified, and the reference list inherited that: long DOIs and

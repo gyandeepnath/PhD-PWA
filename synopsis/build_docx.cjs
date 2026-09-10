@@ -323,10 +323,32 @@ const HEADINGS = {
  */
 let inReferences = false;
 
+/**
+ * True until the first page break, which is where the title page ends.
+ *
+ * Everything on it — the title, the degree, the candidate, the university — was being set as body
+ * prose: flush left and justified, so the title's words were stretched apart to reach the right
+ * margin and the whole page sat in the top third against the left edge. A submission title page is
+ * centred. The rule is positional rather than a list of strings to match, so it keeps working if
+ * the front matter is reworded.
+ */
+let onTitlePage = true;
+let titleParaSeen = false;
+
 const HANGING = 720;   // 0.5 inch, as APA specifies
 
 function bodyPara(text, extra = {}) {
   const reference = inReferences && !extra.alignment;
+  if (onTitlePage && !extra.alignment) {
+    const isTitle = !titleParaSeen;
+    titleParaSeen = true;
+    return new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: sp(isTitle ? { before: 1400, after: 400, line: 360 } : { before: 60, after: 200, line: 340 }),
+      children: inline(text, isTitle ? { size: 28, bold: true } : {}),
+      ...extra,
+    });
+  }
   return new Paragraph({
     spacing: sp(reference ? { after: 100, line: 340 } : { after: 140, line: 340 }),
     alignment: reference ? AlignmentType.LEFT : AlignmentType.JUSTIFIED,
@@ -377,6 +399,7 @@ while (i < lines.length) {
   }
 
   if (line.trim() === '<!--PAGEBREAK-->') {
+    onTitlePage = false;
     children.push(new Paragraph({ children: [new PageBreak()] }));
     i++; continue;
   }
