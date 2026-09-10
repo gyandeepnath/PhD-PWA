@@ -26,7 +26,9 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const A = (f) => path.join(__dirname, 'figures', f);
-const OUT = path.join(__dirname, 'Synopsis_Presentation_Gyandeep_Nath.pptx');
+// Output path is overridable so a test can build to a temporary file instead of overwriting the
+// committed deck; without that, the only way to check the builder was to clobber the artefact.
+const OUT = process.argv[2] || path.join(__dirname, 'Synopsis_Presentation_Gyandeep_Nath.pptx');
 
 /* ---------------------------------------------------------------- typography and page */
 const F = 'Times New Roman';

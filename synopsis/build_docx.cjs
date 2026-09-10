@@ -8,6 +8,7 @@ const {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
   Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType,
   ExternalHyperlink, LevelFormat, convertInchesToTwip, PageBreak, ImageRun,
+  LineRuleType, TableLayoutType,
 } = require('docx');
 
 const IN = process.argv[2];
@@ -20,6 +21,24 @@ const SIZE_SMALL = 20;  // 10pt for tables
 const PAGE_W = 11906;   // A4 width in DXA
 const MARGIN = 1440;    // 1 inch
 const CONTENT_W = PAGE_W - 2 * MARGIN; // 9026
+
+/**
+ * Paragraph spacing.
+ *
+ * `w:line` without `w:lineRule` is the single most expensive defect this builder has had. The
+ * attribute's default is implementation-defined in practice: LibreOffice reads the omission as
+ * `exact`, which CLIPS any inline content taller than the line — so every embedded figure in the
+ * synopsis rendered as a 4 mm sliver showing only the bottom of the image, while the .docx itself
+ * carried a perfectly correct <wp:extent>. Nothing in the file was wrong, so nothing that inspected
+ * the file could find it; it was visible only by rendering a page.
+ *
+ * Every spacing object in this file goes through here, and `line` without `lineRule` is filled in
+ * as `auto` rather than left to the reader to guess.
+ */
+function sp(o) {
+  if (o.line !== undefined && o.lineRule === undefined) return { ...o, lineRule: LineRuleType.AUTO };
+  return o;
+}
 
 /* ---------------- inline formatting ---------------- */
 // Tokenise **bold**, *italic*, `code`, [text](url)
@@ -95,6 +114,7 @@ function buildFlow(steps) {
   });
   const box = (text, widthTwips) => new Table({
     columnWidths: [widthTwips],
+    layout: TableLayoutType.FIXED,
     width: { size: widthTwips, type: WidthType.DXA },
     alignment: AlignmentType.CENTER,
     borders: {
@@ -111,7 +131,7 @@ function buildFlow(steps) {
       margins: { top: 80, bottom: 80, left: 140, right: 140 },
       children: [new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { before: 0, after: 0, line: 240 },
+        spacing: sp({ before: 0, after: 0, line: 240 }),
         children: inline(text, { size: SIZE_SMALL }),
       })],
     })] })],
@@ -125,6 +145,7 @@ function buildFlow(steps) {
       const w = Math.floor((CONTENT_W - 400) / parts.length);
       out.push(new Table({
         columnWidths: parts.map(() => w),
+        layout: TableLayoutType.FIXED,
         width: { size: w * parts.length, type: WidthType.DXA },
         alignment: AlignmentType.CENTER,
         borders: {
@@ -141,7 +162,7 @@ function buildFlow(steps) {
           margins: { top: 80, bottom: 80, left: 120, right: 120 },
           children: [new Paragraph({
             alignment: AlignmentType.CENTER,
-            spacing: { before: 0, after: 0, line: 240 },
+            spacing: sp({ before: 0, after: 0, line: 240 }),
             children: inline(pt, { size: SIZE_SMALL }),
           })],
         })) })],
@@ -177,11 +198,59 @@ function buildTable(rows) {
    * to how much room each has, and the rounding remainder goes on the widest column rather than
    * the last one.
    */
-  const MIN_W = 700;
-  let widths = lens.map((l) => Math.max(MIN_W, Math.round((l / total) * CONTENT_W)));
+  /*
+   * A column's floor is set by its longest WORD, not by a flat constant.
+   *
+   * The proportional model weights a column by its longest cell, which is right for how much room a
+   * column deserves and wrong for how little it can survive on. Table 1.1's first column holds
+   * "Pathway" against six columns of prose, so it won by proportion a width of about 500 twips,
+   * was clamped up to a flat 700, and still rendered as "Path / way" — broken mid-word, because
+   * 700 twips less 200 twips of cell margin leaves 25pt for a 38pt word. Every narrow column in
+   * every table had the same latent fault; only this one had a word long enough to show it.
+   *
+   * The floor is therefore derived: the longest unbreakable token in the column, measured at the
+   * table font size, plus the cell margins. If the floors cannot all be met at once they are scaled
+   * down together, so a pathological table degrades evenly instead of mangling one column.
+   */
+  const longestWord = new Array(n).fill(0);
+  [header, ...body].forEach((r) => r.forEach((c, i) => {
+    if (i >= n) return;
+    for (const word of String(c).replace(/\*\*|\[|\]\([^)]*\)/g, '').split(/[\s\u00a0]+/)) {
+      longestWord[i] = Math.max(longestWord[i], word.length);
+    }
+  }));
+
+  /*
+   * The table is set at the largest size at which its longest words still fit.
+   *
+   * Table 1.1 has seven columns and a 22-character token ("Accommodative/vergence"). At 10pt its
+   * columns demand 10,864 twips against a 9,026-twip text column, so SOMETHING has to give. Scaling
+   * the floors down proportionally, which is what this did first, gives every column a width its own
+   * longest word does not fit into, and the reader breaks words mid-syllable: "Proxima / l mechani /
+   * sm", "Piepenbr / ock". Setting a wide table a point or two smaller is what a typesetter does
+   * instead, and it is reversible per table rather than a global compromise.
+   */
+  const pad = n >= 6 ? 60 : 100;                    // cell side margin in twips
+  const cellMargins = 2 * pad;
+  const chTwips = (halfPt) => Math.ceil((halfPt / 2) * 20 * 0.52);   // widest common glyph at that size
+  const floorsFor = (halfPt) => longestWord.map((L) => Math.max(700, L * chTwips(halfPt) + cellMargins));
+  const demand = (halfPt) => floorsFor(halfPt).reduce((a, b) => a + b, 0);
+
+  let tblSize = SIZE_SMALL;                          // 10pt
+  while (tblSize > 16 && demand(tblSize) > CONTENT_W) tblSize -= 1;   // floor at 8pt
+  let mins = floorsFor(tblSize);
+  const minSum = mins.reduce((a, b) => a + b, 0);
+  if (minSum > CONTENT_W) {
+    // Even at 8pt the words do not fit; scale the floors and say so rather than silently mangling.
+    console.warn(`  ! table cannot fit its longest words even at 8pt `
+      + `(demand ${minSum} twips vs ${CONTENT_W}); columns will break words`);
+    mins = mins.map((m) => Math.floor((m / minSum) * CONTENT_W));
+  }
+
+  let widths = lens.map((l, i) => Math.max(mins[i], Math.round((l / total) * CONTENT_W)));
   const excess = widths.reduce((a, b) => a + b, 0) - CONTENT_W;
   if (excess > 0) {
-    const slack = widths.map((w) => w - MIN_W);
+    const slack = widths.map((w, i) => w - mins[i]);
     const totalSlack = slack.reduce((a, b) => a + b, 0);
     if (totalSlack > 0) {
       const take = Math.min(excess, totalSlack);
@@ -191,21 +260,31 @@ function buildTable(rows) {
   const diff = CONTENT_W - widths.reduce((a, b) => a + b, 0);
   if (diff !== 0) {
     const widest = widths.indexOf(Math.max(...widths));
-    widths[widest] = Math.max(MIN_W, widths[widest] + diff);
+    widths[widest] = Math.max(mins[widest], widths[widest] + diff);
+  }
+  const sum = widths.reduce((a, b) => a + b, 0);
+  if (sum !== CONTENT_W) {
+    // The floors won: the table is wider than the page. Say so rather than letting Word reflow it
+    // into something nobody chose.
+    console.warn(`  ! table columns sum to ${sum} twips against a ${CONTENT_W} text column `
+      + `(longest words: ${longestWord.join(', ')})`);
   }
 
   const cell = (txt, isHeader, i) => new TableCell({
     width: { size: widths[i], type: WidthType.DXA },
     shading: isHeader ? { type: ShadingType.CLEAR, fill: 'E8EEF7', color: 'auto' } : undefined,
-    margins: { top: 60, bottom: 60, left: 100, right: 100 },
+    margins: { top: 60, bottom: 60, left: pad, right: pad },
     children: [new Paragraph({
-      spacing: { before: 20, after: 20, line: 240 },
-      children: inline(txt, { size: SIZE_SMALL, bold: isHeader }),
+      spacing: sp({ before: 20, after: 20, line: 240 }),
+      children: inline(txt, { size: tblSize, bold: isHeader }),
     })],
   });
 
   return new Table({
     columnWidths: widths,
+    // Without an explicit fixed layout the reader is free to autofit and ignore every width
+    // computed above — which makes the computation above a decoration rather than a decision.
+    layout: TableLayoutType.FIXED,
     width: { size: CONTENT_W, type: WidthType.DXA },
     borders: {
       top: { style: BorderStyle.SINGLE, size: 4, color: '8899AA' },
@@ -238,7 +317,7 @@ const HEADINGS = {
 
 function bodyPara(text, extra = {}) {
   return new Paragraph({
-    spacing: { after: 140, line: 340 }, // ~1.4 line spacing
+    spacing: sp({ after: 140, line: 340 }), // ~1.4 line spacing
     alignment: AlignmentType.JUSTIFIED,
     children: inline(text),
     ...extra,
@@ -345,7 +424,7 @@ while (i < lines.length) {
       buf.push(lines[i].trim().replace(/^>\s?/, '')); i++;
     }
     children.push(new Paragraph({
-      spacing: { before: 120, after: 180, line: 320 },
+      spacing: sp({ before: 120, after: 180, line: 320 }),
       indent: { left: 360, right: 240 },
       alignment: AlignmentType.JUSTIFIED,
       border: { left: { style: BorderStyle.SINGLE, size: 12, color: '4F8EF7', space: 8 } },
@@ -367,7 +446,7 @@ while (i < lines.length) {
     }
     children.push(new Paragraph({
       numbering: { reference: 'bullets', level: 0 },
-      spacing: { after: 90, line: 320 },
+      spacing: sp({ after: 90, line: 320 }),
       alignment: AlignmentType.JUSTIFIED,
       children: inline(text),
     }));
@@ -384,7 +463,7 @@ while (i < lines.length) {
       i++; text += ' ' + lines[i].trim();
     }
     children.push(new Paragraph({
-      spacing: { after: 120, line: 320 },
+      spacing: sp({ after: 120, line: 320 }),
       indent: { left: 600, hanging: 600 },
       alignment: AlignmentType.JUSTIFIED,
       children: [
@@ -427,7 +506,7 @@ const doc = new Document({
   },
   styles: {
     default: {
-      document: { run: { font: FONT, size: SIZE }, paragraph: { spacing: { line: 340 } } },
+      document: { run: { font: FONT, size: SIZE }, paragraph: { spacing: sp({ line: 340 }) } },
       heading1: { run: { font: FONT, size: 32, bold: true, color: '1A1A2E' }, paragraph: { spacing: { before: 320, after: 160 } } },
       heading2: { run: { font: FONT, size: 28, bold: true, color: '1A1A2E' }, paragraph: { spacing: { before: 300, after: 150 } } },
       heading3: { run: { font: FONT, size: 26, bold: true, color: '243B53' }, paragraph: { spacing: { before: 260, after: 130 } } },
