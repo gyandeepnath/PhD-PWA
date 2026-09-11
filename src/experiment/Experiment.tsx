@@ -11,6 +11,7 @@ import {
   illuminationForBlock, illuminationOrderFor, luxInRange, summariseLux,
 } from '@/experiment/illumination';
 import { participantProgress, passageRepeatNumber } from './participantProgress';
+import { trackHiddenTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { PASSAGES } from './passages';
 import { annotationSegmentSteps, blockPlan, isAnnotationSubsample, type PlannedStep } from './counterbalance';
 import { CONFIG, isE2ETimingActive } from './config';
@@ -80,6 +81,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const creatingSession = useRef(false);
   // Conditions run in THIS sitting (8 single, 4 split). Drives the loop length + break insertion.
   const nConditionsRef = useRef<number>(N_CONDITIONS);
+  /** Backgrounding across the whole of the current condition. See the note where it is started. */
+  const conditionHidden = useRef<HiddenTimeTracker | null>(null);
   // Transition lock: ignore re-entrant advance() calls (e.g. accidental double-taps on a tablet)
   // until the machine actually changes — prevents skipping a stage. Reset on every stage change.
   const transitioning = useRef(false);
@@ -678,6 +681,19 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       layout_viewport: layoutViewport(),
     });
     conditionStarted.current[machine.stepIndex] = Date.now();
+    /*
+     * Watch the whole condition, not just the tasks that happen to track it themselves.
+     *
+     * Reading and the adaptation field each measure their own hidden time. Nothing else in a
+     * condition did, and every task in one has a clock: visual search runs against a 40-second
+     * limit, the questionnaires record response times, and the reaction-time block is a sequence of
+     * one-second trials with one-second response windows. A hidden tab has its timers and animation
+     * frames throttled, so an RT block run while the tablet is backgrounded produces misses and
+     * lapses that describe the operating system rather than the participant — and nothing in the
+     * export distinguished that from a genuinely inattentive one.
+     */
+    conditionHidden.current?.stop();
+    conditionHidden.current = trackHiddenTime();
     // Coarse resume pointer: an interruption during this condition resumes by redoing it.
     saveResume(session.session_id, machine.stepIndex);
     // NOTE: tracking.beginCondition() is deliberately NOT called here. See the ReadingTask
@@ -1120,10 +1136,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               const existing = await get('conditions', conditionId);
               if (existing) {
                 const started = conditionStarted.current[machine.stepIndex] ?? existing.started_at;
+                const away = conditionHidden.current?.stop() ?? null;
+                conditionHidden.current = null;
                 await put('conditions', {
                   ...existing,
                   completed_at: Date.now(),
                   condition_duration_sec: (Date.now() - started) / 1000,
+                  condition_hidden_ms: away?.hiddenMs,
+                  condition_hidden_events: away?.events,
                 });
               }
               saveResume(session.session_id, machine.stepIndex + 1);

@@ -326,6 +326,22 @@ export interface ConditionRecord {
   stimulus_scale?: number;
   layout_viewport?: string;
   /**
+   * How long the app was in the background during this condition, and how many separate times.
+   *
+   * Reading and the adaptation field measure their own hidden time; nothing else in a condition did.
+   * Every task in one carries a clock — visual search against a 40-second limit, response times on
+   * the questionnaires, and a reaction-time block of one-second trials with one-second response
+   * windows. A hidden tab has its timers and animation frames throttled, so a backgrounded RT block
+   * yields misses and lapses that describe the operating system rather than the participant, and
+   * nothing in the export told them apart from a genuinely inattentive one.
+   *
+   * Absent on rows written before this was captured, and on a condition abandoned without
+   * completing. Zero is the expected value and means the tablet stayed in front of the participant
+   * throughout.
+   */
+  condition_hidden_ms?: number;
+  condition_hidden_events?: number;
+  /**
    * The grey-field duration the protocol asked for, beside `adaptation_ms_before`, which is what
    * the participant actually saw. They differ when the device sleeps or the app is backgrounded
    * mid-field: the countdown is frame-driven and stops, and on waking the screen advances at once.

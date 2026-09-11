@@ -105,6 +105,35 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
   }
 
   /*
+   * ---- the tablet must have stayed in front of the participant
+   *
+   * Backgrounding does not merely cost time. A hidden tab has its timers and animation frames
+   * throttled, so anything measured against a clock while hidden is measuring the throttling: the
+   * visual-search limit, the response times, and above all the reaction-time block, whose
+   * one-second trials and one-second response windows come back as misses and lapses attributable
+   * to the operating system. Reported per condition, so one interrupted condition does not
+   * discredit a whole sitting.
+   *
+   * The thresholds are deliberately low. A second of absence is a notification; ten is someone
+   * attending to something else while the protocol runs.
+   */
+  for (const c of conditions) {
+    const away = c.condition_hidden_ms;
+    if (away == null || away <= 0) continue;
+    const events = c.condition_hidden_events ?? 1;
+    add(
+      away >= 10_000 ? 'error' : 'warning',
+      'condition_uninterrupted',
+      `condition ${c.condition_label} (position ${c.session_position}) spent `
+      + `${(away / 1000).toFixed(1)}s in the background, across ${events} `
+      + `interruption${events === 1 ? '' : 's'}. Timers and animation frames are throttled while `
+      + `hidden, so the timing measures on this row — search time, response times, and the whole `
+      + `reaction-time block — partly describe the device rather than the participant.`,
+      [c.condition_id],
+    );
+  }
+
+  /*
    * ---- the stimulus must have been the same size in every condition of a sitting
    *
    * Scaling the root scales the stimulus text, so `stimulus_scale` IS the visual angle a condition

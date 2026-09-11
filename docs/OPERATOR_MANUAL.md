@@ -219,6 +219,21 @@ never re-checked is a session where you do not know what the illuminance was.
 
 ---
 
+**Do not let the tablet leave the app during a condition.**
+
+Aeroplane mode and Do Not Disturb are on the pre-flight list for this reason, but the common causes
+are closer to hand: answering a message on the tablet, the operator opening something to check a
+detail, or the screen timing out while a participant reads slowly.
+
+It costs more than the seconds it takes. A backgrounded tab has its timers slowed down by the
+operating system, so every timed measure in that condition — the visual-search limit, the response
+times, and the whole reaction-time block, whose trials are about a second each — records the
+throttling rather than the participant. The app now records how long and how often this happened
+for each condition, and the integrity report flags the condition rather than silently keeping it.
+If it does happen, note it on the session sheet; do not re-run the condition.
+
+---
+
 ## 6. Troubleshooting
 
 | Symptom | Likely cause | Action |

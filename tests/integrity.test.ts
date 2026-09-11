@@ -148,6 +148,38 @@ describe('a session run under the test harness is not data', () => {
   });
 });
 
+describe('the tablet must have stayed in front of the participant', () => {
+  const auditAway = (hiddenMs?: number, events?: number) => {
+    const b = buildFixtureBundle();
+    b.conditions = b.conditions.slice(0, 1);
+    Object.assign(b.conditions[0], { condition_hidden_ms: hiddenMs, condition_hidden_events: events });
+    return auditBundle(b).findings.filter((x) => x.check === 'condition_uninterrupted');
+  };
+
+  it('says nothing about a condition the participant sat through', () => {
+    expect(auditAway(0, 0)).toHaveLength(0);
+  });
+
+  it('says nothing for rows recorded before this was captured', () => {
+    expect(auditAway(undefined, undefined)).toHaveLength(0);
+  });
+
+  it('warns about a brief absence — a notification taking the screen', () => {
+    const found = auditAway(1_500, 1);
+    expect(found).toHaveLength(1);
+    expect(found[0].severity).toBe('warning');
+  });
+
+  it('errors when the tablet was away long enough to void the timing measures', () => {
+    // Ten seconds of a throttled tab spans a large part of a reaction-time block, whose trials are
+    // one second each with one-second response windows.
+    const found = auditAway(45_000, 2);
+    expect(found).toHaveLength(1);
+    expect(found[0].severity).toBe('error');
+    expect(found[0].detail).toMatch(/2 interruptions/);
+  });
+});
+
 describe('the stimulus must have been the same size throughout a sitting', () => {
   /*
    * stimulus_scale multiplies the stimulus text, so it IS the visual angle a condition was

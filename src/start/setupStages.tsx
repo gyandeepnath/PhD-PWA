@@ -14,6 +14,7 @@ import { ILLUMINATION, luxInRange, type IlluminationLevel, N_ILLUMINATION_BLOCKS
 import type { MediaConsent } from '@/storage/media';
 import { WavyBackground } from '@/components/WavyBackground';
 import { now } from '@/lib/timing';
+import { trackHiddenTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { stimulusFontLoaded } from '@/lib/fonts';
 import { isBelowMinimum } from '@/lib/viewportScale';
 import { startFaceProbe, type FaceProbeResult, type FaceProbeStatus } from '@/screening/faceProbe';
@@ -585,27 +586,20 @@ export function AdaptationScreen({ durationMs, nextLabel, onDone }: {
 }) {
   const [progress, setProgress] = useState(0);
   const start = useRef(now());
-  const hiddenMs = useRef(0);
-  const hiddenSince = useRef<number | null>(document.visibilityState === 'hidden' ? now() : null);
+  // Shared implementation — this screen's copy was the correct one and the reading task's was not,
+  // which is the reason there is now only one. See lib/hiddenTime.ts.
+  const hidden = useRef<HiddenTimeTracker>(trackHiddenTime());
 
   useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        if (hiddenSince.current == null) hiddenSince.current = now();
-      } else if (hiddenSince.current != null) {
-        hiddenMs.current += now() - hiddenSince.current;
-        hiddenSince.current = null;
-      }
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
+    const t = hidden.current;
+    return () => { t.stop(); };
   }, []);
 
   useEffect(() => {
     let raf = 0;
     let done = false;
     const tick = () => {
-      const hiddenNow = hiddenMs.current + (hiddenSince.current != null ? now() - hiddenSince.current : 0);
+      const hiddenNow = hidden.current.read().hiddenMs;
       const visible = Math.max(0, now() - start.current - hiddenNow);
       const p = Math.min(1, visible / durationMs);
       setProgress(p);

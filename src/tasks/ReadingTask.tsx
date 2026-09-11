@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { STIMULUS_FONT_STACK } from '@/lib/fonts';
 import { CONFIG } from '@/experiment/config';
 import { now } from '@/lib/timing';
+import { trackHiddenTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { TaskIntro } from './TaskIntro';
 import type { Passage } from '@/experiment/passages';
 import { STIMULUS_COLUMN_PX } from '@/lib/viewportScale';
@@ -55,8 +56,13 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
    * paused a couple of seconds more was never flagged, and a genuinely fast reader was.
    */
   const pageDwells = useRef<number[]>([]);
-  const hiddenMs = useRef(0);
-  const hiddenAt = useRef<number | null>(null);
+  /**
+   * Hidden time for this exposure. Shared implementation, because this file's own copy seeded its
+   * "hidden since" to null rather than to the CURRENT visibility state — so a page that began while
+   * the tablet was already backgrounded had its whole absence dropped, and reading_hidden_ms
+   * understated the interruption it exists to report. See lib/hiddenTime.ts.
+   */
+  const hidden = useRef<HiddenTimeTracker | null>(null);
   const totalPages = passage.pages.length;
   const isLast = page === totalPages - 1;
 
@@ -64,16 +70,9 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
     // The dwell countdown uses performance.now() deltas, so it is unaffected by backgrounding; this
     // only accumulates the hidden time so it can be subtracted from, and reported alongside, the
     // exposure.
-    const onVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        hiddenAt.current = now();
-      } else if (hiddenAt.current != null) {
-        hiddenMs.current += now() - hiddenAt.current;
-        hiddenAt.current = null;
-      }
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
+    const t = trackHiddenTime();
+    hidden.current = t;
+    return () => { t.stop(); };
   }, []);
 
   useEffect(() => {
@@ -122,17 +121,14 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
     if (!unlocked) return;
     pageDwells.current.push(Math.round(now() - pageStart.current));
     if (isLast) {
-      // Any hidden interval still open at submit is closed first, so a participant who returns to
-      // the app and immediately taps Next does not carry that gap into the exposure.
-      if (hiddenAt.current != null) {
-        hiddenMs.current += now() - hiddenAt.current;
-        hiddenAt.current = null;
-      }
+      // read() includes an interval still open, so a participant who returns to the app and
+      // immediately taps Next does not carry that gap into the exposure.
+      const away = hidden.current?.read().hiddenMs ?? 0;
       const wall = now() - taskStart.current;
       onComplete({
-        readingTimeMs: Math.max(0, Math.round(wall - hiddenMs.current)),
+        readingTimeMs: Math.max(0, Math.round(wall - away)),
         wallClockMs: Math.round(wall),
-        hiddenMs: Math.round(hiddenMs.current),
+        hiddenMs: away,
         pageDwellsMs: [...pageDwells.current],
       });
     } else setPage((p) => p + 1);
