@@ -15,7 +15,10 @@
  * windows come back as misses and lapses belonging to the operating system.
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { trackHiddenTime } from '@/lib/hiddenTime';
+
+const readFileSyncSync = (p: string) => readFileSync(p, 'utf8');
 
 /** A page whose visibility and clock a test drives directly. */
 function fakePage(startHidden = false) {
@@ -155,5 +158,30 @@ describe('the two screens that grew their own copies now share this one', () => 
     const src = readFileSync('src/experiment/Experiment.tsx', 'utf8');
     expect(src).toMatch(/conditionHidden\.current = trackHiddenTime\(\)/);
     expect(src).toMatch(/condition_hidden_ms: away\?\.hiddenMs/);
+  });
+});
+
+describe('the reading exposure measures the same window it subtracts from', () => {
+  const src = readFileSyncSync('src/tasks/ReadingTask.tsx');
+
+  it('starts the hidden-time tracker when reading starts, not when the screen mounts', () => {
+    /*
+     * The tracker ran from mount, while the self-paced instruction card was still up, whereas
+     * taskStart is set on "Begin reading". So the hidden window covered intro + reading while the
+     * wall clock covered reading only, and the intro card is exactly where a participant puts the
+     * tablet down. A 96 s absence there plus a normal 178 s read exported reading_time_ms = 82,200
+     * — a reading speed of 439 wpm for someone reading at 202 — in a row that satisfied its own
+     * codebook definition. Long enough an absence and the Math.max(0, ...) clamp exports a zero.
+     */
+    const effect = src.slice(src.indexOf('const t = trackHiddenTime();') - 1400, src.indexOf('const t = trackHiddenTime();') + 200);
+    expect(effect).toMatch(/if \(!started\) return undefined;\s*\n\s*const t = trackHiddenTime\(\);/);
+    expect(src).toMatch(/hidden\.current = t;[\s\S]{0,80}\}, \[started\]\);/);
+  });
+
+  it('still subtracts it from the reading clock, and still reports it', () => {
+    const next = src.slice(src.indexOf('const next = ()'), src.indexOf('} else setPage'));
+    expect(next).toMatch(/readingTimeMs: Math\.max\(0, Math\.round\(wall - away\)\)/);
+    expect(next).toMatch(/hiddenMs: away/);
+    expect(next).toMatch(/wallClockMs: Math\.round\(wall\)/);
   });
 });

@@ -123,9 +123,15 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
     description: 'Proportion of samples with the head turned far enough that EAR is unreliable. High values undermine the primary outcome for that row.' },
 
   // ---------------------------------------------------------------- subjective and performance
-  { column: 'fatigue_mean', role: 'secondary', unit: '0-100', missing: 'not completed',
+  /*
+   * 0-10, NOT 0-100. The instrument's sliders are max={10}. These two entries said 0-100 while the
+   * same quantity is documented 0-10 in both of export.ts's entries for it — and they sit directly
+   * above comfort_score and clarity_score, which genuinely ARE 0-100, inviting an analyst to read
+   * all four on one scale and to report a fatigue effect an order of magnitude too small.
+   */
+  { column: 'fatigue_mean', role: 'secondary', unit: '0-10', missing: 'not completed',
     description: 'Mean of the five visual-fatigue VAS items for this condition.' },
-  { column: 'fatigue_delta', role: 'secondary', unit: '0-100', missing: 'no baseline',
+  { column: 'fatigue_delta', role: 'secondary', unit: '0-10', missing: 'no baseline',
     description: "Change from this participant's own pre-session baseline. Prefer this to fatigue_mean when between-participant scale use is a concern." },
   { column: 'comfort_score', role: 'secondary', unit: '0-100', missing: 'not completed',
     description: 'Display comfort rating for this condition.' },
@@ -139,6 +145,10 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
     description: 'Visual-search duration. CENSORED when search_termination is the time cap: such rows are a lower bound, not a measurement, and pooling them untreated biases the mean downward.' },
   { column: 'search_accuracy', role: 'secondary', unit: '0-1', missing: 'not completed',
     description: 'Targets found over targets present.' },
+  { column: 'search_d_prime', role: 'secondary', unit: "d'", missing: 'not completed',
+    description: "PREFER THIS TO search_accuracy as the search outcome. Sensitivity over words-as-trials: hits are target words tapped, false alarms are non-target words tapped, and the correct-rejection pool is the rest of the passage. search_accuracy ignores false detections entirely, so a participant who taps indiscriminately finds every target in seconds and scores 1.0 on it with no quality flag raised; d-prime does not reward that. Log-linear corrected, so it is finite at ceiling and floor." },
+  { column: 'search_false_detections', role: 'secondary', unit: 'count', missing: 'not completed',
+    description: 'Non-target words tapped, counted once per word. A rise with stable search_accuracy is a criterion shift rather than a sensitivity change, and a large value beside a high search_accuracy and a short search_time_ms is the signature of tapping indiscriminately.' },
   { column: 'search_termination', role: 'qc', unit: '-', missing: 'not completed',
     description: 'Whether the block ended by the participant finishing or by the 40 s cap. Decides whether search_time_ms is a measurement or a bound.' },
   { column: 'rt_mean_hits_ms', role: 'secondary', unit: 'ms', missing: 'no valid hits',

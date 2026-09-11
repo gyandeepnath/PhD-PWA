@@ -67,13 +67,31 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
   const isLast = page === totalPages - 1;
 
   useEffect(() => {
-    // The dwell countdown uses performance.now() deltas, so it is unaffected by backgrounding; this
-    // only accumulates the hidden time so it can be subtracted from, and reported alongside, the
-    // exposure.
+    /*
+     * Started WHEN READING STARTS, not when the component mounts — the two windows have to be the
+     * same one or the subtraction is meaningless.
+     *
+     * This ran on mount, while the self-paced instruction card was still up, whereas taskStart is
+     * set when the participant taps "Begin reading". So `away` covered the intro AND the reading
+     * while `wall` covered only the reading, and the intro card is precisely the moment a
+     * participant puts the tablet down. A 96-second absence on the instruction card followed by a
+     * normal 178-second read exported reading_time_ms = 82,200 against a wall clock of 178,400: a
+     * reading speed of 439 wpm for someone who read at 202.
+     *
+     * The row was then internally consistent and unfalsifiable — the codebook says reading_time_ms
+     * "is this minus reading_hidden_ms", and it was. Worse, the aggregator's skim rule would have
+     * flagged the condition and docked its quality score, so the pre-registered filter would
+     * preferentially drop exactly the conditions this defect corrupted. And if the absence exceeded
+     * the read, the Math.max(0, ...) clamp below exported a reading_time_ms of 0 — a fabricated
+     * zero for an exposure that happened.
+     *
+     * The dwell countdown is unaffected either way: it uses performance.now() deltas.
+     */
+    if (!started) return undefined;
     const t = trackHiddenTime();
     hidden.current = t;
     return () => { t.stop(); };
-  }, []);
+  }, [started]);
 
   useEffect(() => {
     if (!started) return;

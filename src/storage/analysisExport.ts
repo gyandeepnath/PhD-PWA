@@ -68,7 +68,7 @@ export const ANALYSIS_LONG_COLUMNS = [
   // --- subjective and performance ---------------------------------------------------------
   'fatigue_mean', 'fatigue_delta', 'comfort_score', 'clarity_score',
   'comprehension_correct', 'comprehension_items',
-  'search_time_ms', 'search_accuracy', 'search_termination',
+  'search_time_ms', 'search_accuracy', 'search_d_prime', 'search_false_detections', 'search_termination',
   'rt_mean_hits_ms', 'rt_median_hits_ms', 'd_prime', 'criterion', 'rt_lapses',
   // --- stimulus properties, as continuous predictors ---------------------------------------
   'wcag_contrast_ratio', 'michelson_contrast', 'below_wcag_aa',
@@ -314,6 +314,21 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         })(),
         search_time_ms: sum.search_time_ms,
         search_accuracy: round(sum.search_accuracy),
+        /*
+         * d-prime and the false-alarm count, because accuracy alone cannot be modelled honestly.
+         *
+         * This file carried search_accuracy and nothing else from the search task, while the full
+         * export's codebook says of the same measure: "Prefer this [d-prime] to accuracy_rate as the
+         * search outcome. accuracy_rate ignores false detections entirely, so a participant who taps
+         * every word finds all targets in seconds and scores 1.0 with an efficiency three times
+         * their own mean, while no quality flag fires."
+         *
+         * That warning lived in the file this one's own header calls "the wrong shape for analysis",
+         * and the modelling file contained no column that could expose the strategy. A drag-tap
+         * block arrived as search_accuracy 1.0, search_time_ms 9400, qc_overall good.
+         */
+        search_d_prime: round(searchById.get(sum.condition_id)?.search_d_prime ?? null),
+        search_false_detections: searchById.get(sum.condition_id)?.false_detections ?? null,
         // Whether the block ended by the participant finishing or by the 40 s cap. A time-capped
         // block censors search_time_ms, so this decides whether that row is a measurement or a bound.
         search_termination: searchById.get(sum.condition_id)?.termination_mode ?? null,

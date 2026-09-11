@@ -65,3 +65,34 @@ describe('the comprehension screen does not mark answers', () => {
     expect(code).not.toMatch(/#2e7d46|#22c97a|#e64c4c|'green'|'red'/);
   });
 });
+
+/**
+ * The comprehension screen must record each item exactly once.
+ *
+ * `onComplete` is in the effect's dependency array and the parent passes a fresh inline arrow on
+ * every render. On the final item the effect returns WITHOUT clearing submitted/selected, so the
+ * component sits in that state until the parent's async writes finish and the stage advances. A
+ * parent re-render inside that window — an orientation or resize event, a camera-status change —
+ * gave onComplete a new identity, re-ran the effect, and pushed a second copy.
+ *
+ * In 04_comprehension.csv that is four rows for a three-item passage, question_index 0, 1, 2, 2.
+ * comprehension_items reads 4, the proportion correct is scored over 4, and one condition is
+ * silently weighted 4/3 in a binomial model whose denominator the codebook promises is the items
+ * actually administered.
+ */
+describe('each comprehension item is recorded once', () => {
+  const src = read('src/tasks/ComprehensionTask.tsx');
+
+  it('latches per item, so a re-render cannot push a duplicate', () => {
+    expect(src).toMatch(/const recorded = useRef<Set<number>>\(new Set\(\)\)/);
+    expect(src).toMatch(/if \(!recorded\.current\.has\(index\)\)/);
+    expect(src).toMatch(/recorded\.current\.add\(index\)/);
+  });
+
+  it('reports completion once, however many times the effect re-runs', () => {
+    expect(src).toMatch(/const reported = useRef\(false\)/);
+    const last = src.slice(src.indexOf('if (isLast) {'), src.indexOf('// Reset for the next item'));
+    expect(last).toMatch(/if \(reported\.current\) return;/);
+    expect(last.indexOf('reported.current = true')).toBeLessThan(last.indexOf('onComplete('));
+  });
+});

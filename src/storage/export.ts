@@ -358,7 +358,10 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '04_comprehension.csv', column: 'response_time_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Time from the item appearing to submission, timed per item rather than across the set.' },
   { file: '05_visual_search.csv', column: 'search_target', type: 'string', unit: '-', role: 'meta', description: 'Target word the participant was asked to tap in the passage.' },
   { file: '05_visual_search.csv', column: 'targets_in_set', type: 'integer', unit: 'count', role: 'meta', description: 'Authoritative number of target occurrences, computed from the passage text with the same tokenisation the task uses. This is the denominator of accuracy_rate.' },
-  { file: '05_visual_search.csv', column: 'search_time_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Time spent on the search task, bounded by the fixed limit.' },
+  { file: '05_visual_search.csv', column: 'search_time_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Time spent on the search task. The 40-second limit is enforced by a timer, and a browser throttles '
+      + 'timers while the app is in the background, so a block interrupted that way can exceed it — see '
+      + 'condition_hidden_ms on 02_conditions.csv, which flags the condition though it cannot localise the absence '
+      + 'to this task. Absent any interruption the limit holds.' },
   { file: '05_visual_search.csv', column: 'time_to_first_target_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Latency to the first correct tap. Null when nothing was found.' },
   { file: '05_visual_search.csv', column: 'targets_found', type: 'integer', unit: 'count', role: 'dv', description: 'Number of correct target taps. The numerator of accuracy_rate.' },
   { file: '05_visual_search.csv', column: 'targets_missed', type: 'integer', unit: 'count', role: 'dv', description: 'Targets present but never tapped.' },
@@ -368,7 +371,12 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '05_visual_search.csv', column: 'accuracy_rate', type: 'number', unit: '0-1', role: 'dv', description: 'targets_found divided by targets_in_set. Comparable across passages only because target counts are held in a narrow band.' },
   { file: '05_visual_search.csv', column: 'search_efficiency', type: 'number', unit: 'hits/min', role: 'dv', description: 'Correct taps per minute. Combines speed and accuracy into one rate.' },
   { file: '05_visual_search.csv', column: 'mean_inter_target_interval_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Mean interval between successive correct taps. Rising within a block indicates slowing.' },
-  { file: '05_visual_search.csv', column: 'termination_mode', type: 'factor(4)', unit: '-', role: 'qc', description: 'How the task ended: time_limit, voluntary_full (all targets found), voluntary_early, or session_terminated. Rows ending voluntary_early warrant inspection.' },
+  { file: '05_visual_search.csv', column: 'termination_mode', type: 'factor(3)', unit: '-', role: 'qc', description: 'How the task ended: time_limit, voluntary_full (all targets '
+      + 'found), or voluntary_early. Rows ending voluntary_early warrant inspection. This entry previously '
+      + 'documented a fourth level, session_terminated, that nothing can produce — a search abandoned part-way '
+      + 'writes NO row at all, because the visual_search record is written from the completion handler, so an '
+      + 'abandoned block is an ABSENT row rather than a marked one. Check for missing condition_ids, not for a '
+      + 'termination level.' },
   { file: '06_display_perception.csv', column: 'display_comfort_score', type: 'number', unit: '0-100', role: 'dv', description: 'Rated comfort of the display in this condition, captured immediately after reading.' },
   { file: '06_display_perception.csv', column: 'text_clarity_score', type: 'number', unit: '0-100', role: 'dv', description: 'Rated clarity of the text in this condition, captured immediately after reading.' },
   { file: '06_display_perception.csv', column: 'comfort_touched', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the comfort slider was actually moved. False means the value is the untouched default and should not be treated as a response.' },

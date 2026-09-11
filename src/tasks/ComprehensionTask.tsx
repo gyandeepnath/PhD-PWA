@@ -39,6 +39,27 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
   const start = useRef(now());
   /** Results accumulate in a ref: a state update would re-render mid-advance and lose the last item. */
   const results = useRef<ComprehensionResult[]>([]);
+  /**
+   * Which items have been recorded, and whether the task has already reported.
+   *
+   * THE LAST ITEM COULD BE WRITTEN TWICE. `onComplete` is in the effect's dependency array and the
+   * parent passes a fresh inline arrow on every render. On the final item the effect takes the
+   * isLast branch and returns WITHOUT clearing `submitted`/`selected`, so the component stays
+   * mounted in that state until the parent's async writes finish and the stage advances. Any parent
+   * re-render inside that window — an orientation or resize event, a camera-status change — gave
+   * `onComplete` a new identity, re-ran the effect, and pushed a second copy of the last item.
+   *
+   * In the export that is four rows for a three-item passage, with question_index 0, 1, 2, 2. The
+   * duplicate's response time is inflated by the write latency, comprehension_items reads 4, and
+   * the proportion correct is scored over 4 — so one condition is silently weighted 4/3 in a
+   * binomial model whose denominator the codebook promises is the items actually administered. It
+   * looks exactly like a legitimately interrupted condition.
+   *
+   * A per-index latch rather than a single flag, because the same race can catch a middle item
+   * between the push and the state reset.
+   */
+  const recorded = useRef<Set<number>>(new Set());
+  const reported = useRef(false);
 
   const questions = passage.questions;
   const q = questions[index];
@@ -48,15 +69,20 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
     if (!submitted || selected == null) return;
     const responseTimeMs = now() - start.current;
     const t = setTimeout(() => {
-      results.current.push({
-        questionIndex: index,
-        questionKind: q.kind,
-        selectedIndex: selected,
-        correctIndex: q.correctIndex,
-        isCorrect: selected === q.correctIndex,
-        responseTimeMs,
-      });
+      if (!recorded.current.has(index)) {
+        recorded.current.add(index);
+        results.current.push({
+          questionIndex: index,
+          questionKind: q.kind,
+          selectedIndex: selected,
+          correctIndex: q.correctIndex,
+          isCorrect: selected === q.correctIndex,
+          responseTimeMs,
+        });
+      }
       if (isLast) {
+        if (reported.current) return;
+        reported.current = true;
         onComplete(results.current);
         return;
       }
