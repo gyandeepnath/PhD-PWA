@@ -15,6 +15,14 @@
  * report as corruption of the data rather than of the restore.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
+/** Every .ts/.tsx file under a directory, for the store-writer ratchet below. */
+const walkTs = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+  const p = join(dir, e.name);
+  return e.isDirectory() ? walkTs(p) : /\.tsx?$/.test(e.name) ? [p] : [];
+});
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import {
@@ -521,6 +529,39 @@ describe('a restore says what it could not restore, and what it is about to dest
     const parsed = reseal((d) => { d.pupilTraces = [{ x: 1 }]; });
     expect(parsed.ok).toBe(true);
     expect(parsed.warnings.join(' ')).toMatch(/pupilTraces[\s\S]*DROPPED/);
+  });
+
+  it('says outright when a file carries no measurements at all', () => {
+    // Every collection empty and no participant passes every structural check — the only required
+    // field is the session id — so the operator was shown "Session restored" over a one-row file.
+    const parsed = reseal((d) => {
+      for (const k of Object.keys(d)) if (Array.isArray(d[k])) d[k] = [];
+      d.participant = null;
+    });
+    expect(parsed.ok).toBe(true);
+    expect(parsed.warnings.join(' ')).toMatch(/NO measurements at all/);
+  });
+
+  it('stays quiet about that for a file that does carry measurements', () => {
+    expect(parseSessionBackup(serialiseSessionBackup(buildFixtureBundle())).warnings.join(' '))
+      .not.toMatch(/NO measurements/);
+  });
+
+  /**
+   * A ratchet, not a check on today's behaviour.
+   *
+   * system_performance_logs is declared in STORE_SPECS and cleared by purgeSession, and appears in
+   * neither BackupData nor RESTORE_PLAN nor gatherSession. Nothing writes it, so nothing is lost
+   * today — but the moment anything does, a backup drops it in silence and a restore does not
+   * notice, which is the failure mode the missing-collection warning was just added for.
+   */
+  it('a store nothing backs up must also be a store nothing writes', () => {
+    const writers = ['src', 'scripts']
+      .flatMap((dir) => walkTs(dir))
+      .filter((f) => !/storage\/db\.ts$|storage\/gather\.ts$|storage\/types\.ts$/.test(f))
+      .filter((f) => /put\(\s*'system_performance_logs'/.test(readFileSync(f, 'utf8')));
+    expect(writers, 'something now writes system_performance_logs — add it to BackupData, '
+      + 'RESTORE_PLAN and gatherSession in the same change, or a backup will drop it').toEqual([]);
   });
 
   it('gives the operator both row counts and says the delete is permanent', async () => {

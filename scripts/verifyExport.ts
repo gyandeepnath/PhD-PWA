@@ -10,7 +10,7 @@
  *   npx tsx scripts/verifyExport.ts --quiet    assertions only (non-zero exit on failure)
  *   npx tsx scripts/verifyExport.ts --show 10_wide_summary.csv   dump one file in full
  */
-import { buildExportFiles } from '../src/storage/export';
+import { buildExportFiles, fnv1a } from '../src/storage/export';
 import { buildFixtureBundle, FIXTURE, readingMs, fatigueMean, ibrFor, rtFor } from '../src/sim/bundleFixture';
 import { CONDITIONS } from '../src/experiment/conditions';
 import { PASSAGES } from '../src/experiment/passages';
@@ -256,7 +256,42 @@ log('='.repeat(104));
 const man = files.find((f) => /manifest/i.test(f.filename));
 ok('a manifest exists', man != null);
 if (man) {
-  log(man.content.split('\n').slice(0, 4).join('\n'));
+  /*
+   * ACTUALLY CHECK THEM. This section's heading has always said "checksums must match the bytes
+   * actually written", and the check was that a manifest existed, followed by printing its first
+   * four lines. The manifest is the only defence against a file that was truncated in transit off
+   * the tablet — an operator is told to compare it — so an unverified manifest is worse than none:
+   * it invites a comparison against numbers nothing has confirmed.
+   *
+   * `bytes` in particular was a count of UTF-16 code units rather than bytes, so it disagreed with
+   * every file containing an en dash, and nothing here noticed.
+   */
+  const parsed = JSON.parse(man.content) as { files?: { filename: string; bytes: number; checksum_fnv1a: string }[] };
+  const entries = parsed.files ?? [];
+  const listed = new Set(entries.map((e) => e.filename));
+  const shipped = files.filter((f) => f.filename !== man.filename);
+  ok('every exported file is listed in the manifest',
+    shipped.every((f) => listed.has(f.filename)),
+    `missing: ${shipped.filter((f) => !listed.has(f.filename)).map((f) => f.filename).join(', ')}`);
+  ok('the manifest lists nothing that was not exported',
+    entries.every((e) => shipped.some((f) => f.filename === e.filename)));
+
+  const enc = new TextEncoder();
+  const badBytes = entries.filter((e) => {
+    const f = shipped.find((x) => x.filename === e.filename);
+    return f != null && e.bytes !== enc.encode(f.content).length;
+  });
+  ok('every manifest byte count equals the file\'s real UTF-8 size', badBytes.length === 0,
+    badBytes.map((e) => `${e.filename}: manifest ${e.bytes}`).join('; '));
+
+  const badSums = entries.filter((e) => {
+    const f = shipped.find((x) => x.filename === e.filename);
+    return f != null && e.checksum_fnv1a !== fnv1a(f.content);
+  });
+  ok('every manifest checksum matches the file it describes', badSums.length === 0,
+    badSums.map((e) => e.filename).join('; '));
+
+  log(`   ${entries.length} files listed; byte counts and checksums verified against the content.`);
 }
 
 // ================================================================ 9. completeness reporting

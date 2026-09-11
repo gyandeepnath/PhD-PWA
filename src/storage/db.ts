@@ -33,6 +33,16 @@ const STORE_SPECS: StoreSpec[] = [
   { name: 'rt_summaries', keyPath: 'condition_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
   { name: 'eye_metrics', keyPath: 'condition_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
   { name: 'calibration_data', keyPath: 'calibration_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
+  /*
+   * RESERVED AND UNWRITTEN. Nothing in the app writes this store — grep for 'system_performance_logs'
+   * and every hit is this declaration, purgeSession clearing it defensively, and the type map. It is
+   * also in neither BackupData nor RESTORE_PLAN nor gatherSession, so the moment anything DID start
+   * writing it, a backup would drop it in silence and a restore would not notice.
+   *
+   * Kept rather than deleted, because removing it from STORE_SPECS would leave purgeSession reading
+   * a store that no longer exists on a fresh install. tests/backup.test.ts holds the ratchet: if a
+   * writer ever appears, the backup has to cover it in the same change.
+   */
   { name: 'system_performance_logs', keyPath: 'log_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
   { name: 'meta', keyPath: 'key' },
 ];

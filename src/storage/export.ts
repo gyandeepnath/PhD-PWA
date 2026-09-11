@@ -215,7 +215,12 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '02_conditions.csv', column: 'reading_time_ms', type: 'integer', unit: 'ms', role: 'dv', description: 'Self-paced reading duration. This is also the ocular-metrics exposure window.' },
   { file: '02_conditions.csv', column: 'reading_wall_clock_ms', type: 'integer', unit: 'ms', role: 'qc', description: 'Unadjusted first-to-last span of the reading task, before hidden time was subtracted. reading_time_ms is this minus reading_hidden_ms; both are exported so the adjustment is auditable rather than silent.' },
   { file: '02_conditions.csv', column: 'reading_hidden_ms', type: 'integer', unit: 'ms', role: 'qc', description: 'Time the app spent backgrounded or the screen off during the passage. Already subtracted from reading_time_ms. Large values mean the participant was not looking at the stimulus for part of the window the ocular measures cover.' },
-  { file: '02_conditions.csv', column: 'reading_min_page_dwell_ms', type: 'integer', unit: 'ms', role: 'qc', description: 'Shortest single-page dwell in the passage. A page advanced within about a second of its own 20 s unlock was waited out, not read — which the whole-passage skim rule could not detect, because the four unlocks guarantee 80 s against a skim floor of 86-90 s.' },
+  { file: '02_conditions.csv', column: 'reading_min_page_dwell_ms', type: 'integer', unit: 'ms', role: 'qc', description: 'Shortest single-page dwell in the passage. A page advanced within about a second of its own 20 s unlock was '
+      + 'waited out, not read — which the whole-passage skim rule could not detect, because the four unlocks guarantee 80 s '
+      + 'against a skim floor of 86-90 s. WALL CLOCK: unlike reading_time_ms beside it, no hidden time is subtracted from '
+      + 'this, so a page the participant was away for looks longer rather than shorter. The direction is conservative — an '
+      + 'interrupted page cannot masquerade as a waited-out one — but the two columns are on different clocks and a '
+      + 'difference between them is not evidence of anything on its own. Use condition_hidden_ms to tell them apart.' },
   { file: '02_conditions.csv', column: 'reading_speed_wpm', type: 'integer', unit: 'words/min', role: 'dv', description: 'Derived: passage word count / reading_time_ms. Word counts are computed from the passage text, not declared.' },
 
   // ---- 03_fatigue_scores.csv
@@ -415,7 +420,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '08_reaction_trials.csv', column: 'trial_category', type: 'string', unit: '-', role: 'iv', description: 'Trial type as presented: go (achromatic target) or no-go (chromatic distractor).' },
   { file: '08_reaction_trials.csv', column: 'is_signal', type: 'boolean', unit: '-', role: 'iv', description: 'True on go trials. Signal and noise trials must both be present for sensitivity to be estimable.' },
   { file: '08_reaction_trials.csv', column: 'response_time_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Latency from stimulus onset to response. Null when no response was made.' },
-  { file: '08_reaction_trials.csv', column: 'accuracy', type: 'factor(5)', unit: '-', role: 'dv', description: "hit, miss, false_alarm, correct_rejection, or anticipation. An ANTICIPATION is a response faster than the 150 ms cutoff, which cannot reflect stimulus processing; it is its own level rather than a hit or a false alarm, and it is excluded from both signal-detection pools and from error_rate. Scoring anticipations as detections credited participants who had stopped watching, and the credit was largest exactly where disengagement was greatest." },
+  { file: '08_reaction_trials.csv', column: 'accuracy', type: 'factor(5)', unit: '-', role: 'dv', description: "hit, miss, false_alarm, correct_rejection, or anticipation. An ANTICIPATION is a response faster than the 150 ms cutoff, which cannot reflect stimulus processing; it is its own level rather than a hit or a false alarm, and it is excluded from both signal-detection pools and from error_rate. Scoring anticipations as detections credited participants who had stopped watching, and the credit was largest exactly where disengagement was greatest. A latency outside [0, the response window] is a clock fault rather than a measurement, so the trial is recorded with a null response_time_ms, false_start true, and — on a go trial — accuracy 'miss'. The participant may well have responded; what is asserted is that the timing cannot be trusted. Those trials therefore lower hit_rate and raise error_rate, so check false_start before reading a low sensitivity as inattention." },
   { file: '08_reaction_trials.csv', column: 'anticipatory', type: 'boolean', unit: '-', role: 'qc', description: 'Response faster than the anticipation cutoff. Excluded from reaction-time means and counted separately, because it reflects guessing rather than detection.' },
   { file: '08_reaction_trials.csv', column: 'false_start', type: 'boolean', unit: '-', role: 'qc', description: 'Response made before the stimulus appeared.' },
   { file: '09_rt_summary.csv', column: 'total_trials', type: 'integer', unit: 'count', role: 'meta', description: 'Trials recorded in the block.' },
@@ -500,7 +505,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '14_nasa_tlx.csv', column: 'response_time_ms', type: 'number', unit: 'ms', role: 'qc', description: 'Time taken over the workload instrument.' },
   { file: '15_media_inventory.csv', column: 'captured_at', type: 'string', unit: 'ISO 8601', role: 'meta', description: 'When the file was captured.' },
   { file: '15_media_inventory.csv', column: 'mime', type: 'string', unit: '-', role: 'meta', description: 'Media type of the stored file.' },
-  { file: '15_media_inventory.csv', column: 'bytes', type: 'integer', unit: 'bytes', role: 'meta', description: 'Size of the stored file in bytes. Used to reconcile the inventory against the media actually present.' },
+  { file: '15_media_inventory.csv', column: 'bytes', type: 'integer', unit: 'bytes', role: 'meta', description: 'Size of the stored file in bytes, as the browser reports the blob. Used to reconcile the inventory against the media actually present.' },
   { file: '15_media_inventory.csv', column: 'width', type: 'integer', unit: 'px', role: 'meta', description: 'Pixel width, where applicable.' },
   { file: '15_media_inventory.csv', column: 'height', type: 'integer', unit: 'px', role: 'meta', description: 'Pixel height, where applicable.' },
   { file: '15_media_inventory.csv', column: 'duration_ms', type: 'number', unit: 'ms', role: 'meta', description: 'Duration for video segments; blank for photographs.' },
@@ -863,7 +868,22 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       errors: integrity.errors,
       warnings: integrity.warnings,
     },
-    files: files.map((f) => ({ filename: f.filename, bytes: f.content.length, checksum_fnv1a: fnv1a(f.content) })),
+    /*
+     * BYTES, measured as bytes.
+     *
+     * This was `f.content.length`, which is a count of UTF-16 code units, not of bytes. Every
+     * non-ASCII character in the export makes the two differ, and the export is full of
+     * operator-typed free text — lux_deviation_note, repeat_run_note, exclusion_reason — as well as
+     * the en dashes and times signs in the codebook prose itself. An operator checking a copied
+     * file's size on the receiving machine against this manifest, which is the only defence against
+     * a truncated transfer, was comparing it with a number that is wrong whenever any of that
+     * appears.
+     */
+    files: files.map((f) => ({
+      filename: f.filename,
+      bytes: new TextEncoder().encode(f.content).length,
+      checksum_fnv1a: fnv1a(f.content),
+    })),
   };
   files.push({ filename: 'export_manifest.json', content: JSON.stringify(manifest, null, 2), mime: 'application/json' });
 

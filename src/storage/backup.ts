@@ -238,6 +238,19 @@ export function parseSessionBackup(text: string): ParseResult {
    * A collection the file does not carry is named, because it used to be indistinguishable from one
    * that was legitimately empty. See missingCollections().
    */
+  /*
+   * A file with no measurements in it is not "restored", and calling it that is the problem.
+   * Every collection empty and no participant record passes every structural check — the only
+   * required field is the session id — and the operator was shown "Session restored" over a file
+   * containing one row.
+   */
+  const measurements = countBackupRows(b.data as BackupData);
+  if (measurements === 0) {
+    warnings.push(
+      'This file contains NO measurements at all — only the session record. Restoring it will '
+      + 'produce an empty sitting. Check you picked the right file before going further.',
+    );
+  }
   const missing = missingCollections(b.data as BackupData);
   if (missing.length) {
     warnings.push(
