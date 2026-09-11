@@ -11,6 +11,7 @@ import {
   illuminationForBlock, illuminationOrderFor, luxInRange, summariseLux,
 } from '@/experiment/illumination';
 import { participantProgress, passageRepeatNumber } from './participantProgress';
+import { mergeExclusionReasons } from './eligibility';
 import { trackHiddenTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { PASSAGES } from './passages';
 import { annotationSegmentSteps, blockPlan, isAnnotationSubsample, type PlannedStep } from './counterbalance';
@@ -556,16 +557,29 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     if (d.correctionType === 'contacts') {
       reasons.push('contact-lens wear on a test day is an exclusion');
     }
-    if (d.cvdSelfReport) {
-      reasons.push('self-reported colour-vision deficiency');
-    }
+    /*
+     * The self-report is recorded into cvd_status below and asserted as an exclusion by the
+     * COLOUR-VISION stage, which owns every colour-vision reason and holds the sticky status. Two
+     * stages asserting the same reason would each strip and re-add the other's, so ownership is
+     * disjoint — see eligibility.ts.
+     */
     // The FORMAL plate result is what excludes. The app's own six-plate digital screen has no
     // published operating characteristics and is a flag, not a criterion — using it to exclude
     // contradicted its own module header, which names formal plates as the standard.
     if (d.cvdClinical === 'deficient') {
       reasons.push('colour-vision deficiency on formal plates');
     }
-    const eligible = reasons.length === 0;
+    /*
+     * MERGED, not replaced. This stage used to write `eligible: reasons.length === 0` and
+     * `exclusion_reason: reasons.join('; ')` over whatever the record held — and the record is
+     * shared across a participant's sittings, so sitting 2's profile stage erased a sitting-1
+     * exclusion it knows nothing about, most importantly the Ishihara screen result. The
+     * colour-vision stage restores it a few screens later, which means the damage is invisible
+     * unless the sitting is abandoned in between — which is exactly what a participant withdrawing
+     * during setup produces, and leaves eligible=TRUE with no reason, permanently.
+     */
+    const prior = await get('participants', session.participant_id);
+    const verdict = mergeExclusionReasons(prior?.exclusion_reason, 'profile', reasons);
 
     /**
      * The participant record is created once and SHARED across a participant's two sittings, so
@@ -580,8 +594,6 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
      * (a participant may have changed correction between sittings, and should be recorded as such).
      * Everything measured elsewhere is preserved unless this sitting has something better.
      */
-    const prior = await get('participants', session.participant_id);
-
     await put('participants', {
       ...(prior ?? {}),
       participant_id: session.participant_id,
@@ -604,8 +616,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       // First-sitting values, kept for continuity; the per-sitting values go on the session below.
       caffeine_today: prior?.caffeine_today ?? d.caffeineToday,
       hours_since_sleep: prior?.hours_since_sleep ?? d.hoursSinceSleep,
-      eligible,
-      exclusion_reason: eligible ? null : reasons.join('; '),
+      eligible: verdict.eligible,
+      exclusion_reason: verdict.exclusion_reason,
       // null, not 0: a baseline that was never administered is missing, and 0 is a
       // measurement — the lowest possible fatigue rating.
       baseline_fatigue: prior?.baseline_fatigue ?? null,
@@ -782,19 +794,26 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 // basis to exclude — but it is recorded, so the analyst can see the screen did not
                 // produce a result rather than reading an absent one as a pass.
                 const failsColourVision = status === 'screen_failed' || status === 'self_reported_deficient';
-                const priorReasons = (p.exclusion_reason ?? '')
-                  .split(';').map((x) => x.trim()).filter(Boolean)
-                  .filter((x) => !/colour-vision|colour vision/i.test(x));
-                if (failsColourVision) {
-                  priorReasons.push(status === 'screen_failed'
-                    ? 'failed the colour-vision screening'
-                    : 'self-reported colour-vision deficiency');
-                }
+                /*
+                 * Through the same merge the profile stage uses, so neither can erase the other's
+                 * verdict. This stage's hand-rolled version was the correct one — it merged and was
+                 * sticky — but it lived here alone, and the other writer did not follow it. One
+                 * implementation, one ownership table: eligibility.ts.
+                 */
+                const verdict = mergeExclusionReasons(
+                  p.exclusion_reason,
+                  'colour_vision',
+                  failsColourVision
+                    ? [status === 'screen_failed'
+                      ? 'failed the colour-vision screening'
+                      : 'self-reported colour-vision deficiency']
+                    : [],
+                );
                 await put('participants', {
                   ...p,
                   cvd_screen_correct: r.testCorrect, cvd_screen_total: r.testTotal, cvd_status: status,
-                  eligible: p.eligible && !failsColourVision,
-                  exclusion_reason: priorReasons.length ? priorReasons.join('; ') : null,
+                  eligible: verdict.eligible,
+                  exclusion_reason: verdict.exclusion_reason,
                 });
               }
             }
