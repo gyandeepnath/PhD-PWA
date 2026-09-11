@@ -73,7 +73,6 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const [session, setSession] = useState<SessionRecord | null>(null);
   const [enrolment, setEnrolment] = useState(0);
   const [plan, setPlan] = useState<PlannedStep[]>([]);
-  const [baselineFatigue, setBaselineFatigue] = useState<number | null>(null);
   const [resuming, setResuming] = useState<boolean>(!!resume);
   const conditionIds = useRef<string[]>([]);
   const writtenConditions = useRef<Set<number>>(new Set());
@@ -220,7 +219,6 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       setSession(s);
       setEnrolment(s.enrolment_number);
       setPlan(sittingPlan);
-      setBaselineFatigue(baseline ? baseline.fatigue_mean : null);
       const idx = resume.nextStepIndex;
 
       /**
@@ -953,7 +951,6 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 await put('participants', { ...p, baseline_fatigue: r.mean });
               }
             }
-            setBaselineFatigue(r.mean);
             advance();
           }}
         />
@@ -1080,7 +1077,6 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       view = (
         <FatigueScale
           prompt="How are your eyes feeling after this display condition?"
-          baselineMean={baselineFatigue ?? undefined}
           background={cond?.background ?? '#F8F7F5'}
           text={cond?.text ?? '#1a1a2e'}
           accent={cond?.text ?? '#1a1a2e'}

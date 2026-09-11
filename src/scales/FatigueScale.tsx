@@ -29,10 +29,6 @@ type Key = (typeof ITEMS)[number]['key'];
 
 interface Props {
   prompt: string;
-  /** No longer used: the participant is shown neither a score nor a delta. See the note in the
-   *  render body — feeding a comparative judgement back into a repeated self-report outcome is
-   *  the same feedback the operator manual forbids the operator from giving. */
-  baselineMean?: number;
   accent?: string;
   /** Condition colours (post-condition rating runs under the active display); default = neutral cream. */
   background?: string;
@@ -108,6 +104,11 @@ export function FatigueScale({ prompt, accent = '#4f8ef7', background = '#F8F7F5
         reason. The instrument should not do what the operator is instructed not to do. The
         composite and the delta are both computed and exported; they belong in the dashboard, which
         is researcher-facing, not here.
+
+        The `baselineMean` prop is GONE, not merely unused. It survived the removal as a parameter
+        the experiment still passed and this component still accepted and ignored — a wire from the
+        baseline rating to the screen that must not show it, needing only one line to become live
+        again. A comment saying "no longer used" does not stop that; not having the value here does.
       */}
       <div className="mt-6 font-lab text-sm text-[#5a5a7a]">
         {allTouched ? 'Thank you — tap Continue.' : 'Set all sliders to continue.'}
