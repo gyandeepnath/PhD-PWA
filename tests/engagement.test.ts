@@ -160,3 +160,69 @@ describe('visual search cannot be gamed by tapping everything', () => {
     expect(gamed.d_prime!).toBeLessThan(honest.d_prime!);
   });
 });
+
+/**
+ * A condition the app was backgrounded during is not a condition the participant disengaged from.
+ *
+ * reading_hidden_ms was the only interruption this scorer could see, and it covers the passage
+ * only. Every other task in a condition is also timed, and the reaction-time block is the one that
+ * cannot survive being backgrounded at all: one-second trials, one-second response windows, and a
+ * browser that throttles timers in a hidden tab.
+ *
+ * So a block run with the app in the background came back as misses and lapses produced by the
+ * throttled clock, `rt_disengaged` fired, and the reason string read "reaction-time block shows
+ * disengagement" — blaming the participant for what the device did, and costing the condition 0.3
+ * on the score the pre-registered sensitivity analysis drops on.
+ */
+describe('an interrupted condition is not scored as a careless participant', () => {
+  /** A clean 60 s read of a 100-word passage, with the app away for 30 s somewhere in the condition. */
+  const interrupted = (over: Partial<Parameters<typeof conditionEngagement>[0]> = {}) =>
+    conditionEngagement({ reading_time_ms: 60000, word_count: 100, condition_hidden_ms: 30_000, ...over });
+
+  it('flags the interruption even when the passage itself was clean', () => {
+    const e = interrupted();
+    expect(e.condition_interrupted).toBe(true);
+    expect(e.reading_interrupted, 'reading was fine; the absence was elsewhere').toBe(false);
+    expect(e.reasons.join(' ')).toMatch(/hidden for 30s during this condition, outside the passage/);
+  });
+
+  it('WITHHOLDS rt_disengaged, because the rates cannot distinguish the two causes', () => {
+    const e = interrupted({ rt: rt({ false_alarm_rate: 0.5 }) });
+    expect(e.rt_disengaged, 'the participant was blamed for the throttled clock').toBe(false);
+    expect(e.reasons.join(' ')).toMatch(/cannot be read as disengagement/);
+  });
+
+  it('still flags rt_disengaged when nothing interrupted the condition', () => {
+    const e = conditionEngagement({
+      reading_time_ms: 60000, word_count: 100, condition_hidden_ms: 0, rt: rt({ false_alarm_rate: 0.5 }),
+    });
+    expect(e.rt_disengaged).toBe(true);
+  });
+
+  it('charges the interruption once, not twice', () => {
+    // Penalising the absence AND the error rates it caused would take 0.55 off one event.
+    const e = interrupted({ rt: rt({ false_alarm_rate: 0.5 }) });
+    expect(e.quality_score).toBeCloseTo(0.75, 5);
+  });
+
+  it('does not double-charge when the absence was inside the passage', () => {
+    // reading_interrupted already took 0.25 for the same event.
+    const e = conditionEngagement({
+      reading_time_ms: 60000, word_count: 100, reading_hidden_ms: 30_000, condition_hidden_ms: 30_000,
+    });
+    expect(e.reading_interrupted).toBe(true);
+    expect(e.condition_interrupted).toBe(true);
+    expect(e.quality_score).toBeCloseTo(0.75, 5);
+  });
+
+  it('says nothing for a condition recorded before this was captured', () => {
+    const e = conditionEngagement({ reading_time_ms: 60000, word_count: 100 });
+    expect(e.condition_interrupted).toBe(false);
+    expect(e.quality_score).toBe(1);
+  });
+
+  it('tolerates a brief absence, which is a notification rather than an interruption', () => {
+    const e = conditionEngagement({ reading_time_ms: 60000, word_count: 100, condition_hidden_ms: 900 });
+    expect(e.condition_interrupted).toBe(false);
+  });
+});

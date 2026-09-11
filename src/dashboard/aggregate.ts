@@ -34,6 +34,17 @@ export const ENGAGEMENT = {
   PAGE_UNLOCK_GRACE_MS: 1500,
   /** Hidden time during a passage beyond this means the exposure window is not what it claims. */
   READING_HIDDEN_MAX_MS: 5000,
+  /**
+   * Hidden time ANYWHERE in the condition beyond this means its timing measures are not
+   * interpretable.
+   *
+   * Lower than the reading threshold, and deliberately. Reading is self-paced and dwell-gated, so a
+   * few seconds away cost time and nothing else. The reaction-time block is a sequence of
+   * one-second trials with one-second response windows, and a browser throttles timers in a hidden
+   * tab — two seconds of absence there is several trials that resolve as misses because the clock
+   * stopped, not because the participant did.
+   */
+  CONDITION_HIDDEN_MAX_MS: 2000,
   /** RT block is disengaged if any of these existing rates exceed their cutoff. */
   RT_FALSE_ALARM_MAX: 0.3,
   RT_ERROR_MAX: 0.3,
@@ -111,6 +122,8 @@ export interface ConditionSummary {
   reading_skim: boolean;
   /** The app was backgrounded or the screen went off during the reading exposure. */
   reading_interrupted: boolean;
+  /** The app was backgrounded somewhere in the condition — which the reading flag does not cover. */
+  condition_interrupted: boolean;
   comprehension_wrong: boolean;
   rt_disengaged: boolean;
   low_face_presence: boolean;
@@ -168,6 +181,8 @@ export interface EngagementResult {
   careless_rushed_perception: boolean;
   reading_skim: boolean;
   reading_interrupted: boolean;
+  /** The app was hidden somewhere in the condition, which invalidates its timing measures. */
+  condition_interrupted: boolean;
   comprehension_wrong: boolean;
   rt_disengaged: boolean;
   low_face_presence: boolean;
@@ -209,6 +224,8 @@ export function conditionEngagement(args: {
   reading_min_page_dwell_ms?: number | null;
   /** Time the app was hidden during the passage. */
   reading_hidden_ms?: number | null;
+  /** Time the app was hidden anywhere in the condition, which covers the timed tasks reading does not. */
+  condition_hidden_ms?: number | null;
   word_count: number | null;
   fatigue?: FatigueRecord;
   perception?: DisplayPerceptionRecord;
@@ -217,7 +234,7 @@ export function conditionEngagement(args: {
   eye?: EyeMetricsRecord;
 }): EngagementResult {
   const {
-    reading_time_ms, reading_min_page_dwell_ms, reading_hidden_ms,
+    reading_time_ms, reading_min_page_dwell_ms, reading_hidden_ms, condition_hidden_ms,
     word_count, fatigue, perception, comprehension, rt, eye,
   } = args;
   const reasons: string[] = [];
@@ -255,16 +272,47 @@ export function conditionEngagement(args: {
     penalise(0.25, `app was hidden for ${Math.round(reading_hidden_ms! / 1000)}s during reading`);
   }
 
+  /*
+   * The app left the screen somewhere in this condition — not necessarily during reading.
+   *
+   * reading_hidden_ms above covers the passage only, and it was the only interruption this scorer
+   * could see. Every other task in a condition is also timed, and the reaction-time block is the
+   * one that cannot survive being backgrounded at all: one-second trials, one-second response
+   * windows, and a browser that throttles timers in a hidden tab.
+   */
+  const condition_interrupted = condition_hidden_ms != null
+    && condition_hidden_ms > ENGAGEMENT.CONDITION_HIDDEN_MAX_MS;
+  if (condition_interrupted && !reading_interrupted) {
+    penalise(0.25, `app was hidden for ${Math.round(condition_hidden_ms! / 1000)}s during this condition, outside the passage`);
+  }
+
   // RT block disengagement — reuse existing rates.
   // An unmeasured false-alarm rate is not evidence of engagement OR of disengagement, so it must
   // not satisfy the comparison. `null > x` is false in JS, which happens to be right here, but
   // relying on that coercion would be an accident; the guard says so explicitly.
-  const rt_disengaged = !!rt && (
+  const rtRatesHigh = !!rt && (
     (rt.false_alarm_rate != null && rt.false_alarm_rate > ENGAGEMENT.RT_FALSE_ALARM_MAX) ||
     rt.error_rate > ENGAGEMENT.RT_ERROR_MAX ||
     (rt.lapse_rate != null && rt.lapse_rate > ENGAGEMENT.RT_LAPSE_MAX)
   );
+  /*
+   * HIGH ERROR RATES IN AN INTERRUPTED CONDITION ARE NOT EVIDENCE ABOUT THE PARTICIPANT.
+   *
+   * A backgrounded RT block comes back as misses and lapses produced by the throttled clock, so
+   * this flag fired and the reason string read "reaction-time block shows disengagement" — blaming
+   * the participant for what the device did, and costing the condition 0.3 on a score the
+   * pre-registered filter drops on. The two causes cannot be told apart from the rates alone, so
+   * the flag is withheld and the interruption is named instead. The interruption is already
+   * penalised above; penalising both would charge one event twice.
+   */
+  const rt_disengaged = rtRatesHigh && !condition_interrupted;
   if (rt_disengaged) penalise(0.3, 'reaction-time block shows disengagement (high FA/error/lapse rate)');
+  else if (rtRatesHigh) {
+    reasons.push(
+      'reaction-time error rates are high, but the app was hidden during this condition — the '
+      + 'timers are throttled while hidden, so this cannot be read as disengagement',
+    );
+  }
 
   // Rushed questionnaires.
   const careless_rushed_fatigue = !!fatigue && fatigue.response_time_ms != null && fatigue.response_time_ms < ENGAGEMENT.FATIGUE_RUSHED_MS;
@@ -333,7 +381,8 @@ export function conditionEngagement(args: {
     engagement, quality_score, reasons,
     blink_count_total: blinkCount, insufficient_blinks,
     careless_straight_lined, careless_rushed_fatigue, careless_rushed_perception,
-    reading_skim, reading_interrupted, comprehension_wrong, rt_disengaged, low_face_presence,
+    reading_skim, reading_interrupted, condition_interrupted,
+    comprehension_wrong, rt_disengaged, low_face_presence,
   };
 }
 
@@ -369,6 +418,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       reading_time_ms: c.reading_time_ms,
       reading_min_page_dwell_ms: c.reading_min_page_dwell_ms ?? null,
       reading_hidden_ms: c.reading_hidden_ms ?? null,
+      condition_hidden_ms: c.condition_hidden_ms ?? null,
       word_count: PASSAGES[c.passage_id]?.wordCount ?? null,
       fatigue: fat, perception: perc, comprehension: comp, rt, eye,
     });
@@ -419,6 +469,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       careless_rushed_perception: eng.careless_rushed_perception,
       reading_skim: eng.reading_skim,
       reading_interrupted: eng.reading_interrupted,
+      condition_interrupted: eng.condition_interrupted,
       comprehension_wrong: eng.comprehension_wrong,
       rt_disengaged: eng.rt_disengaged,
       low_face_presence: eng.low_face_presence,

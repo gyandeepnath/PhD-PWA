@@ -482,10 +482,20 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '12_quality_flags.csv', column: 'fatigue_response_ms', type: 'number', unit: 'ms', role: 'qc', description: 'Time taken over the fatigue scale. Very short values feed the rushed flag.' },
   { file: '12_quality_flags.csv', column: 'perception_response_ms', type: 'number', unit: 'ms', role: 'qc', description: 'Time taken over the comfort and clarity ratings.' },
   { file: '12_quality_flags.csv', column: 'reading_skim', type: 'boolean', unit: '-', role: 'qc', description: 'True when reading was faster than the plausible ceiling for the passage word count, so the exposure window cannot be treated as sustained reading.' },
-  { file: '12_quality_flags.csv', column: 'rt_disengaged', type: 'boolean', unit: '-', role: 'qc', description: 'True when the reaction-time block shows a high false-alarm, error or lapse rate together, indicating the participant stopped attending.' },
+  { file: '12_quality_flags.csv', column: 'rt_disengaged', type: 'boolean', unit: '-', role: 'qc', description: 'True when the reaction-time block shows a high false-alarm, error or lapse rate together, indicating the participant '
+      + 'stopped attending. WITHHELD when condition_interrupted is true: a backgrounded block comes back as misses and lapses produced by '
+      + 'the throttled clock, and the rates alone cannot distinguish that from disengagement, so the interruption is reported instead of '
+      + 'a verdict about the participant. A false value therefore means either that the rates were fine or that the condition was '
+      + 'interrupted — check condition_interrupted before reading it as evidence of engagement.' },
   { file: '12_quality_flags.csv', column: 'careless_rushed_fatigue', type: 'boolean', unit: '-', role: 'qc', description: 'True when the fatigue scale was submitted too quickly to have been read.' },
   { file: '12_quality_flags.csv', column: 'careless_rushed_perception', type: 'boolean', unit: '-', role: 'qc', description: 'True when the comfort and clarity ratings were submitted too quickly to have been read.' },
   { file: '12_quality_flags.csv', column: 'careless_straight_lined', type: 'boolean', unit: '-', role: 'qc', description: 'True when all five fatigue items received an identical value, the classic straight-lining signature.' },
+  { file: '12_quality_flags.csv', column: 'condition_interrupted', type: 'boolean', unit: '-', role: 'qc', description: 'The app was backgrounded for more than 2 s somewhere in this condition, which reading_interrupted does not cover — it '
+      + 'watches the passage only, and every other task in a condition is also timed. The threshold is lower than the reading one on '
+      + 'purpose: reading is self-paced and dwell-gated, so a few seconds away costs time and nothing else, while the reaction-time '
+      + 'block is one-second trials with one-second response windows and a browser throttles timers in a hidden tab. When this is TRUE, '
+      + 'rt_disengaged is withheld — the high error rates cannot be told apart from the throttling, so attributing them to the '
+      + 'participant would be a guess. See condition_hidden_ms on 02_conditions.csv for the duration.' },
   { file: '12_quality_flags.csv', column: 'reading_interrupted', type: 'boolean', unit: '-', role: 'qc', description: 'The app was backgrounded or the screen went off for more than 5 s during the reading exposure. The ocular measures for this condition therefore cover a window that includes time the participant was not looking at the stimulus.' },
   { file: '12_quality_flags.csv', column: 'comprehension_wrong', type: 'boolean', unit: '-', role: 'qc', description: 'True when the participant scored below chance across the three items for this condition. A single slip does not fire it.' },
   { file: '12_quality_flags.csv', column: 'low_face_presence', type: 'boolean', unit: '-', role: 'qc', description: 'True when a face was detected for too little of the condition for the ocular measures to be trustworthy.' },
@@ -718,13 +728,14 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 12 — engagement / careless-responding quality flags (boredom & disengagement detection)
   csv('12_quality_flags.csv',
-    ['participant_id', 'session_index', 'condition_label', 'session_position', 'engagement_flag', 'quality_score', 'blink_count_total', 'insufficient_blinks', 'reading_time_ms', 'fatigue_response_ms', 'perception_response_ms', 'reading_skim', 'reading_interrupted', 'rt_disengaged', 'careless_rushed_fatigue', 'careless_rushed_perception', 'careless_straight_lined', 'comprehension_wrong', 'low_face_presence', 'reasons'],
+    ['participant_id', 'session_index', 'condition_label', 'session_position', 'engagement_flag', 'quality_score', 'blink_count_total', 'insufficient_blinks', 'reading_time_ms', 'fatigue_response_ms', 'perception_response_ms', 'reading_skim', 'reading_interrupted', 'condition_interrupted', 'rt_disengaged', 'careless_rushed_fatigue', 'careless_rushed_perception', 'careless_straight_lined', 'comprehension_wrong', 'low_face_presence', 'reasons'],
     summaries.map((s) => ({
       participant_id: pid, session_index: session.session_index, condition_label: s.condition_label,
       session_position: s.session_position, engagement_flag: s.engagement, quality_score: s.quality_score,
       blink_count_total: s.blink_count_total, insufficient_blinks: s.insufficient_blinks,
       reading_time_ms: s.reading_time_ms, fatigue_response_ms: s.fatigue_response_ms, perception_response_ms: s.perception_response_ms,
-      reading_skim: s.reading_skim, reading_interrupted: s.reading_interrupted, rt_disengaged: s.rt_disengaged, careless_rushed_fatigue: s.careless_rushed_fatigue,
+      reading_skim: s.reading_skim, reading_interrupted: s.reading_interrupted,
+      condition_interrupted: s.condition_interrupted, rt_disengaged: s.rt_disengaged, careless_rushed_fatigue: s.careless_rushed_fatigue,
       careless_rushed_perception: s.careless_rushed_perception, careless_straight_lined: s.careless_straight_lined,
       comprehension_wrong: s.comprehension_wrong, low_face_presence: s.low_face_presence, reasons: s.engagement_reasons.join('; '),
     })));
