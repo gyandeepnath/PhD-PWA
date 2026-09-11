@@ -275,6 +275,26 @@ export interface ConditionRecord {
    * column the practice effect is indistinguishable from the illumination main effect.
    */
   passage_repeat_number: number;
+  /**
+   * How many times this condition has been STARTED, counting this one.
+   *
+   * A pause exits to the session manager and restarts the condition on resume; a crash resumes at
+   * the same step. Either way the row is rewritten in place with a fresh `started_at`, and until
+   * this existed nothing recorded that it had happened — while `passage_repeat_number`, which is
+   * derived from the illumination block and so is constant at 1, went on asserting a first
+   * exposure. A second attempt is a second reading of the same passage, with the search target
+   * already located and the comprehension questions already seen.
+   *
+   * Optional: rows written before this existed have no value for it, which is not the same as 1.
+   */
+  attempt_number?: number;
+  /**
+   * The grey-field duration the protocol asked for, beside `adaptation_ms_before`, which is what
+   * the participant actually saw. They differ when the device sleeps or the app is backgrounded
+   * mid-field: the countdown is frame-driven and stops, and on waking the screen advances at once.
+   * Optional: rows written before this existed have no value for it.
+   */
+  adaptation_ms_planned?: number;
   /** Total time spent on the reading task (ms), self-paced; null until reading completes. */
   /** Reading exposure, with any time the app spent hidden already subtracted. */
   reading_time_ms: number | null;
@@ -623,6 +643,15 @@ export interface CalibrationRecord {
   targets_detected: number;
   targets_total: number;
   ear_baseline: number | null;
+  /**
+   * How many frames of the calibration routine produced a usable EAR.
+   *
+   * Recorded because `ear_baseline` alone cannot distinguish a baseline fitted from three hundred
+   * frames from one fitted from three — and for a while it could not distinguish either from no
+   * baseline at all, because the sample gate counted NaNs. Optional: sessions recorded before this
+   * existed have no value for it.
+   */
+  ear_samples_usable?: number;
   /** Fitted iris-offset thresholds (if real calibration). */
   gaze_h_threshold: number | null;
   gaze_v_threshold: number | null;

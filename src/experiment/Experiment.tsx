@@ -106,6 +106,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    * of a sitting, or one reached through the resume path, which shows no adaptation screen.
    */
   const adaptationDelivered = useRef(0);
+  /** What the protocol asked for, kept beside what was delivered so the two can be compared. */
+  const adaptationPlanned = useRef(0);
 
   /** The annotation clip in progress, so the reading task can close it at the right moment. */
   const annotationRecording = useRef<{ stop: () => void } | null>(null);
@@ -624,7 +626,20 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
      * when this condition was entered cold: the first of a sitting, or a resume.
      */
     const adaptationBefore = adaptationDelivered.current;
+    const adaptationPlan = adaptationPlanned.current;
     adaptationDelivered.current = 0;
+    adaptationPlanned.current = 0;
+    /*
+     * A redo must leave a trace.
+     *
+     * `writtenConditions` only guards against rewriting within one mount, and a pause or a crash
+     * remounts: the row is then overwritten in place with a fresh `started_at`, and nothing said so.
+     * The participant has already read that passage once, already found the search target and
+     * already seen the comprehension questions, so the reading time, comprehension and search time
+     * on the surviving row are second-exposure values sitting beside nine first-exposure ones.
+     */
+    const prior = await get('conditions', conditionId);
+    const attempt = ((prior as { attempt_number?: number } | undefined)?.attempt_number ?? 0) + 1;
     await put('conditions', {
       condition_id: conditionId, session_id: session.session_id,
       // Global serial position (offset + local index) so split sittings keep a 0..9 covariate.
@@ -634,9 +649,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       wcag_contrast_ratio: cond.wcag_contrast_ratio, wcag_level: cond.wcag_level,
       michelson_contrast: cond.michelson_contrast, below_wcag_aa: cond.below_wcag_aa,
       started_at: Date.now(), completed_at: null, condition_duration_sec: null,
-      adaptation_ms_before: adaptationBefore, reading_time_ms: null,
+      adaptation_ms_before: adaptationBefore, adaptation_ms_planned: adaptationPlan,
+      reading_time_ms: null,
       // Block 0 is the participant's first exposure to every passage, block 1 the second.
       passage_repeat_number: (session.illumination_block ?? 0) + 1,
+      attempt_number: attempt,
     });
     conditionStarted.current[machine.stepIndex] = Date.now();
     // Coarse resume pointer: an interruption during this condition resumes by redoing it.
@@ -1097,9 +1114,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       const switched = prev && nextStep && CONDITIONS[prev.conditionIndex].polarity !== CONDITIONS[nextStep.conditionIndex].polarity;
       const dur = switched ? CONFIG.ADAPTATION_SWITCH_POLARITY_MS : CONFIG.ADAPTATION_SAME_POLARITY_MS;
       const label = nextStep ? `Next: ${CONDITIONS[nextStep.conditionIndex].polarity === 'positive' ? 'Light' : 'Dark'} background` : '';
-      view = <AdaptationScreen durationMs={dur} nextLabel={label} onDone={() => {
-        // Record what was actually delivered, for the next condition's adaptation_ms_before.
-        adaptationDelivered.current = dur;
+      view = <AdaptationScreen durationMs={dur} nextLabel={label} onDone={(delivered) => {
+        // What the participant actually saw, not what was scheduled. The screen subtracts any time
+        // the document was hidden, so a tablet that auto-locks mid-field cannot certify a
+        // polarity-switch control that did not happen.
+        adaptationDelivered.current = delivered.visibleMs;
+        adaptationPlanned.current = dur;
         advance();
       }} />;
       break;

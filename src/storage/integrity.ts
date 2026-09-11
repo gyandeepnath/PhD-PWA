@@ -53,6 +53,38 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
   const conditions = bundle.conditions ?? [];
   const validIds = new Set(conditions.map((c) => c.condition_id));
 
+  /*
+   * ---- the light-adaptation control must actually have been delivered
+   *
+   * `adaptation_ms_before` is what the participant saw; `adaptation_ms_planned` is what the protocol
+   * called for. The countdown is frame-driven, so a device that sleeps or an app that is
+   * backgrounded mid-field stops it, and on waking the screen advances at once — the participant
+   * gets part of the grey field and the next condition begins from the wrong adaptation state. That
+   * matters most across a polarity switch, which is the transition the 120 s field exists for.
+   *
+   * This is reported rather than repaired, and reported per condition, so a sitting with one
+   * shortfall is not discarded wholesale.
+   */
+  for (const c of conditions) {
+    const planned = c.adaptation_ms_planned;
+    const delivered = c.adaptation_ms_before;
+    if (planned == null || delivered == null || planned <= 0) continue;
+    // A cold entry — the first condition of a sitting, or one reached by resume — shows no field at
+    // all and records 0 for both, which is honest rather than a shortfall.
+    if (delivered === 0 && planned === 0) continue;
+    const ratio = delivered / planned;
+    if (ratio < 0.8) {
+      add(
+        ratio < 0.5 ? 'error' : 'warning',
+        'adaptation_delivered',
+        `condition ${c.condition_label} (position ${c.session_position}) saw ${Math.round(delivered / 1000)}s `
+        + `of a ${Math.round(planned / 1000)}s adaptation field. The device probably slept or the app `
+        + `was backgrounded; the light-adaptation control for this condition was not delivered.`,
+        [c.condition_id],
+      );
+    }
+  }
+
   // ---- the join key must be unique, or every join is ambiguous
   const dupIds = duplicates(conditions, (c) => c.condition_id);
   for (const [id, n] of dupIds) {

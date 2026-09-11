@@ -133,6 +133,30 @@ export function faceEar(landmarks: Point[]): number {
  * Returns null when no usable sample survives, so the caller records "not measured" rather than a
  * fabricated default. The previous 0.3 fallback silently asserted a population-typical eye.
  */
+/**
+ * Usable EAR frames required before a baseline is accepted.
+ *
+ * The nine-point routine runs ~800 ms per target, so a working camera contributes several hundred
+ * frames. Thirty is a floor rather than a target: it rejects "three of three hundred frames
+ * solved", which otherwise produces a baseline indistinguishable from a well-founded one.
+ */
+export const MIN_EAR_BASELINE_SAMPLES = 30;
+
+/**
+ * Fit an open-eye baseline, and say how much evidence it rests on.
+ *
+ * The caller used to gate on the RAW sample count. `faceEar` returns NaN for a partial or
+ * degenerate solve — deliberately — and every frame was counted, so three hundred NaNs passed a
+ * `>= 10` check and the baseline came out null while calibration reported success. Every blink
+ * threshold in the study is a fraction of this number, so a null one empties the primary outcome
+ * for the whole sitting.
+ */
+export function fitEarBaseline(samples: number[]): { baseline: number | null; usable: number } {
+  const usable = samples.filter((v) => Number.isFinite(v) && v > 0);
+  if (usable.length < MIN_EAR_BASELINE_SAMPLES) return { baseline: null, usable: usable.length };
+  return { baseline: baselineEar(usable), usable: usable.length };
+}
+
 export function baselineEar(samples: number[]): number | null {
   const usable = samples.filter((v) => Number.isFinite(v) && v > 0);
   if (usable.length === 0) return null;
@@ -444,22 +468,48 @@ export function computeClosureMetrics(
     if (o <= PERCLOS_P70_OPENNESS) p70++;
   }
 
-  // Long closures: maximal runs of consecutive ≥80%-closed samples spanning > LONG_CLOSURE_MS.
+  /*
+   * Long closures: maximal runs of consecutive >=80%-closed samples spanning > LONG_CLOSURE_MS.
+   *
+   * A RUN MAY NOT SPAN A SAMPLING GAP. `classifyBlinks` already abandons an in-progress blink when
+   * the face is lost; this loop had no such guard, so it measured straight across the gap and
+   * charged every unobserved millisecond to the closure. Reproduced against this module: sixty
+   * seconds of ordinary reading, two frames caught deeply closed as the participant turns to speak
+   * to the operator, twenty-five seconds with no face, then reading resumes — and the condition
+   * reports long_closure_count = 1 with long_closure_total_ms = 25,066. The codebook calls this
+   * column "a micro-sleep proxy; treat as a sleepiness covariate", so a fully awake participant who
+   * looked away acquires a twenty-five-second micro-sleep, and the covariate that exists to
+   * separate drowsiness from display-induced fatigue is fed a fabrication.
+   *
+   * The observed part of the run is real and is kept: if the eye was seen closed for 600 ms before
+   * the face was lost, a 600 ms closure happened. Only the unobserved span is excluded. Dropping
+   * the whole run instead would under-report closures that end in a head movement, which is when
+   * they most often end.
+   */
+  const closureGapMs = samplingGapThreshold(present);
   let longCount = 0;
   let longTotal = 0;
   let runStart: number | null = null;
+  let runLast: number | null = null;
+  const endRun = (endedAt: number) => {
+    if (runStart == null) return;
+    const dur = endedAt - runStart;
+    if (dur > LONG_CLOSURE_MS) {
+      longCount++;
+      longTotal += dur;
+    }
+    runStart = null;
+    runLast = null;
+  };
   for (let i = 0; i < present.length; i++) {
+    const gapped = runLast != null && present[i].t_ms - runLast > closureGapMs;
+    // The face was lost mid-run: close the run at the last frame actually seen.
+    if (gapped) endRun(runLast as number);
+
     const closed = openness(present[i].ear) <= PERCLOS_P80_OPENNESS;
     if (closed && runStart == null) runStart = present[i].t_ms;
-    const runEnds = runStart != null && (!closed || i === present.length - 1);
-    if (runEnds) {
-      const dur = present[i].t_ms - (runStart as number);
-      if (dur > LONG_CLOSURE_MS) {
-        longCount++;
-        longTotal += dur;
-      }
-      runStart = null;
-    }
+    if (closed) runLast = present[i].t_ms;
+    if (runStart != null && (!closed || i === present.length - 1)) endRun(present[i].t_ms);
   }
 
   return {

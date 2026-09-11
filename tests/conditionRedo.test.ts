@@ -16,12 +16,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
-import { put, getAllByIndex, clearConditionRows, _resetForTests } from '@/storage/db';
+import { put, get, getAllByIndex, clearConditionRows, _resetForTests } from '@/storage/db';
 import { auditBundle } from '@/storage/integrity';
 import { buildFixtureBundle } from '@/sim/bundleFixture';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
-import type { ComprehensionRecord } from '@/storage/types';
+import type { ComprehensionRecord, ConditionRecord } from '@/storage/types';
 
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
@@ -156,5 +156,115 @@ describe('a duplicated attempt produces a score the codebook says cannot exist',
     // 0.5 is not a multiple of 1/3, so it cannot arise from a single well-formed attempt.
     const valid = [0, 1 / 3, 2 / 3, 1];
     expect(valid.some((v) => Math.abs(v - (summary.comprehension_correct ?? -1)) < 1e-9)).toBe(false);
+  });
+});
+
+describe('a redone condition says so', () => {
+  /*
+   * `writtenConditions` guards against rewriting a condition row within one mount, and a pause or a
+   * crash remounts — both clear it. So the row was overwritten in place with a fresh started_at and
+   * nothing recorded that a second attempt had happened, while passage_repeat_number, derived from
+   * the illumination block and therefore constant at 1, went on asserting a first exposure. Worse,
+   * the codebook told the analyst in terms that under the single-sitting protocol each passage "is
+   * read exactly once and there is NO practice-effect confound to model".
+   *
+   * A second attempt is a second reading: the search target is already located and the comprehension
+   * questions already seen, so reading time, comprehension and search time on the surviving row are
+   * second-exposure values sitting beside nine first-exposure ones.
+   */
+  const row = (attempt: number | undefined): ConditionRecord => ({
+    condition_id: 'c-1', session_id: 's-1', session_position: 3, condition_label: 'N3',
+    polarity: 'negative', background_color: '#000000', text_color: '#C81E1E',
+    color_name: 'red', ink_name: 'red', passage_id: 7,
+    wcag_contrast_ratio: 3.66, wcag_level: 'AA Large', michelson_contrast: 0.57, below_wcag_aa: true,
+    started_at: 1000, completed_at: null, condition_duration_sec: null,
+    adaptation_ms_before: 0, reading_time_ms: null,
+    passage_repeat_number: 1, attempt_number: attempt,
+  } as unknown as ConditionRecord);
+
+  /** The rule ensureCondition applies: read the prior row, add one. */
+  const nextAttempt = (prior: ConditionRecord | undefined) => (prior?.attempt_number ?? 0) + 1;
+
+  it('counts the first entry as attempt 1', async () => {
+    const prior = await get('conditions', 'c-1') as ConditionRecord | undefined;
+    await put('conditions', row(nextAttempt(prior)));
+    const saved = await get('conditions', 'c-1') as ConditionRecord;
+    expect(saved.attempt_number).toBe(1);
+  });
+
+  it('counts a redo after a pause as attempt 2, on the row that survives', async () => {
+    await put('conditions', row(1));
+    // The pause/resume path remounts, clears writtenConditions, and writes the same condition_id.
+    const prior = await get('conditions', 'c-1') as ConditionRecord | undefined;
+    await put('conditions', row(nextAttempt(prior)));
+
+    const saved = await get('conditions', 'c-1') as ConditionRecord;
+    expect(saved.attempt_number, 'the redo left no trace').toBe(2);
+    // passage_repeat_number cannot carry this: it is derived from the illumination block, so it
+    // stays at 1 and on its own asserts a first exposure for a second reading.
+    expect(saved.passage_repeat_number).toBe(1);
+  });
+
+  it('keeps counting across repeated interruptions', async () => {
+    for (let i = 0; i < 4; i++) {
+      const prior = await get('conditions', 'c-1') as ConditionRecord | undefined;
+      await put('conditions', row(nextAttempt(prior)));
+    }
+    const saved = await get('conditions', 'c-1') as ConditionRecord;
+    expect(saved.attempt_number).toBe(4);
+  });
+});
+
+describe('an adaptation field that was not delivered is reported', () => {
+  /*
+   * adaptation_ms_before is what the participant saw; adaptation_ms_planned is what the protocol
+   * asked for. The countdown is frame-driven, so a tablet that auto-locks sixty seconds into a
+   * 120 s polarity-switch field freezes it, and on waking the screen advances at once. Before this,
+   * the export recorded the planned figure and certified a control that did not happen.
+   *
+   * The UI behaviour cannot be unit-tested here — there is no component render harness — so the
+   * guard is placed where it still bites: the shortfall is visible in the data and the integrity
+   * audit names it.
+   */
+  const cond = (over: Partial<ConditionRecord>): ConditionRecord => ({
+    condition_id: 'c-1', session_id: 's-1', session_position: 3, condition_label: 'N3',
+    polarity: 'negative', background_color: '#000000', text_color: '#C81E1E',
+    color_name: 'red', ink_name: 'red', passage_id: 7,
+    wcag_contrast_ratio: 3.66, wcag_level: 'AA Large', michelson_contrast: 0.57, below_wcag_aa: true,
+    started_at: 1000, completed_at: 2000, condition_duration_sec: 1,
+    adaptation_ms_before: 120_000, adaptation_ms_planned: 120_000,
+    reading_time_ms: 1000, passage_repeat_number: 1, attempt_number: 1,
+    ...over,
+  } as unknown as ConditionRecord);
+
+  const auditOf = (c: ConditionRecord) => auditBundle({
+    ...buildFixtureBundle({ conditions: 0 }), conditions: [c],
+  } as never).findings.filter((x) => x.check === 'adaptation_delivered');
+
+  it('says nothing when the field ran in full', () => {
+    expect(auditOf(cond({}))).toHaveLength(0);
+  });
+
+  it('reports an error when barely any of the field was seen', () => {
+    const found = auditOf(cond({ adaptation_ms_before: 20_000, adaptation_ms_planned: 120_000 }));
+    expect(found).toHaveLength(1);
+    expect(found[0].severity).toBe('error');
+    expect(found[0].detail).toContain('N3');
+  });
+
+  it('warns on a partial shortfall rather than failing the sitting', () => {
+    const found = auditOf(cond({ adaptation_ms_before: 78_000, adaptation_ms_planned: 120_000 }));
+    expect(found).toHaveLength(1);
+    expect(found[0].severity).toBe('warning');
+  });
+
+  it('does not complain about a cold entry, which shows no field at all', () => {
+    // The first condition of a sitting, or one reached by resume, records 0 for both — honest,
+    // not a shortfall.
+    expect(auditOf(cond({ adaptation_ms_before: 0, adaptation_ms_planned: 0 }))).toHaveLength(0);
+  });
+
+  it('says nothing for rows written before the planned duration was recorded', () => {
+    expect(auditOf(cond({ adaptation_ms_planned: undefined }))).toHaveLength(0);
   });
 });

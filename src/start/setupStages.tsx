@@ -505,16 +505,55 @@ export function Calibration({ cameraStatus, onDone }: { cameraStatus: CameraStat
 }
 
 // ---- ADAPTATION ----
-export function AdaptationScreen({ durationMs, nextLabel, onDone }: { durationMs: number; nextLabel: string; onDone: () => void }) {
+/**
+ * The grey adaptation field, which reports how much of itself the participant actually saw.
+ *
+ * `onDone` took no argument, so the caller recorded the PLANNED duration under a comment saying it
+ * recorded what was delivered. The countdown is driven by requestAnimationFrame, which stops when
+ * the document is hidden — a tablet auto-locking sixty seconds into a 120 s polarity-switch field
+ * freezes it, and on waking `now() - start` already exceeds `durationMs`, so progress clamps to 1
+ * and the screen advances at once. The participant saw a minute of grey and four minutes of a dark
+ * screen; the export certified a full polarity-switch control that did not happen.
+ *
+ * Time while the document was hidden is not adaptation, so it is measured and subtracted, the same
+ * treatment the reading task already gives `reading_hidden_ms`.
+ */
+export function AdaptationScreen({ durationMs, nextLabel, onDone }: {
+  durationMs: number;
+  nextLabel: string;
+  onDone: (delivered: { visibleMs: number; hiddenMs: number }) => void;
+}) {
   const [progress, setProgress] = useState(0);
   const start = useRef(now());
+  const hiddenMs = useRef(0);
+  const hiddenSince = useRef<number | null>(document.visibilityState === 'hidden' ? now() : null);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        if (hiddenSince.current == null) hiddenSince.current = now();
+      } else if (hiddenSince.current != null) {
+        hiddenMs.current += now() - hiddenSince.current;
+        hiddenSince.current = null;
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
   useEffect(() => {
     let raf = 0;
+    let done = false;
     const tick = () => {
-      const p = Math.min(1, (now() - start.current) / durationMs);
+      const hiddenNow = hiddenMs.current + (hiddenSince.current != null ? now() - hiddenSince.current : 0);
+      const visible = Math.max(0, now() - start.current - hiddenNow);
+      const p = Math.min(1, visible / durationMs);
       setProgress(p);
-      if (p >= 1) onDone();
-      else raf = requestAnimationFrame(tick);
+      if (p >= 1) {
+        if (done) return;
+        done = true;
+        onDone({ visibleMs: Math.round(visible), hiddenMs: Math.round(hiddenNow) });
+      } else raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);

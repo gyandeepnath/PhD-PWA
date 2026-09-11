@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   classifyBlinks, observedDurationMs, samplingGapThreshold, faceEar, eyeAspectRatio,
+  computeClosureMetrics, LONG_CLOSURE_MS, fitEarBaseline, MIN_EAR_BASELINE_SAMPLES,
   LEFT_EYE_EAR, RIGHT_EYE_EAR, type EarSample,
 } from '@/tracking/blink';
 
@@ -216,5 +217,107 @@ describe('gaze is blink-invariant', () => {
     const down = estimateGaze(face(0.035, 0.010), 0.05, 0.05, 0, 0);
     expect(down.v).toBeGreaterThan(centre.v);
     expect(down.zone).not.toBe(centre.zone);
+  });
+});
+
+describe('a face-loss gap does not become a micro-sleep', () => {
+  /*
+   * classifyBlinks abandons an in-progress blink across a sampling gap; computeClosureMetrics had
+   * no such guard and measured straight across, charging every unobserved millisecond to the
+   * closure. long_closure_total_ms is documented as "a micro-sleep proxy; treat as a sleepiness
+   * covariate", so the covariate that exists to separate drowsiness from display-induced fatigue
+   * was being handed a fabrication whenever a participant looked away mid-blink.
+   */
+  const CLOSED = BASE * 0.15;          // 15% open — below the 20% PERCLOS threshold
+  const OPEN = BASE;
+
+  /** A run of `ms` at `ear`, appended at 30 fps, advancing a shared clock. */
+  function append(out: EarSample[], clock: { t: number }, ms: number, ear: number) {
+    for (let e = 0; e < ms; e += 33, clock.t += 33) out.push({ t_ms: clock.t, ear });
+  }
+
+  it('does not invent a closure out of the time the face was absent', () => {
+    const out: EarSample[] = [];
+    const clock = { t: 0 };
+    append(out, clock, 10_000, OPEN);
+    append(out, clock, 66, CLOSED);     // two frames caught closed as the head turns away
+    clock.t += 25_000;                  // face lost for 25 s — no samples at all
+    append(out, clock, 10_000, OPEN);
+
+    const m = computeClosureMetrics(out, BASE, []);
+    expect(m.long_closure_count, 'the gap was counted as a closure').toBe(0);
+    expect(m.long_closure_total_ms).toBe(0);
+  });
+
+  it('still reports a genuine closure that is observed throughout', () => {
+    // The guard must not suppress real closures, which is the whole point of the column.
+    const out: EarSample[] = [];
+    const clock = { t: 0 };
+    append(out, clock, 5_000, OPEN);
+    append(out, clock, 2_000, CLOSED);
+    append(out, clock, 5_000, OPEN);
+
+    const m = computeClosureMetrics(out, BASE, []);
+    expect(m.long_closure_count).toBe(1);
+    expect(m.long_closure_total_ms).toBeGreaterThan(LONG_CLOSURE_MS);
+    expect(m.long_closure_total_ms).toBeLessThan(2_200);
+  });
+
+  it('keeps the part of a closure that was actually seen before the face was lost', () => {
+    // 600 ms of closure was observed. That is a real closure and is reported as 600 ms, not as the
+    // 25.6 s that would result from measuring to the far side of the gap.
+    const out: EarSample[] = [];
+    const clock = { t: 0 };
+    append(out, clock, 5_000, OPEN);
+    append(out, clock, 600, CLOSED);
+    clock.t += 25_000;
+    append(out, clock, 5_000, OPEN);
+
+    const m = computeClosureMetrics(out, BASE, []);
+    expect(m.long_closure_count).toBe(1);
+    expect(m.long_closure_total_ms).toBeGreaterThan(LONG_CLOSURE_MS);
+    expect(m.long_closure_total_ms, 'the unobserved span leaked into the duration').toBeLessThan(1_000);
+  });
+});
+
+describe('an open-eye baseline is only accepted when frames actually solved', () => {
+  /*
+   * The calibration gate counted RAW samples. faceEar returns NaN for a partial or degenerate
+   * landmark solve — deliberately, so a bad frame is absent rather than a fabricated blink — and
+   * every frame of the routine was counted, so three hundred NaNs satisfied a `>= 10` check while
+   * the baseline itself came out null. The routine then returned the GAZE verdict, which was
+   * `true`, and the sitting ran its full hundred minutes with no baseline.
+   *
+   * That matters because every blink threshold is a fraction of this number: partial at 0.75 x
+   * baseline, complete at 0.60 x. With no baseline, classifyBlinks returns nothing and all ten
+   * conditions report incomplete_blink_ratio: null — the study's primary outcome, absent for that
+   * participant, discovered at export.
+   */
+  it('refuses a baseline when every frame failed to solve', () => {
+    const fit = fitEarBaseline(Array.from({ length: 300 }, () => NaN));
+    expect(fit.baseline, 'three hundred NaNs produced a baseline').toBeNull();
+    expect(fit.usable).toBe(0);
+  });
+
+  it('refuses a baseline fitted from a handful of frames', () => {
+    // Three solved frames out of three hundred was previously indistinguishable from three hundred.
+    const samples = Array.from({ length: 300 }, (_, i) => (i < 3 ? BASE : NaN));
+    const fit = fitEarBaseline(samples);
+    expect(fit.baseline).toBeNull();
+    expect(fit.usable).toBe(3);
+  });
+
+  it('accepts a baseline once enough frames have solved, and reports how many', () => {
+    const n = MIN_EAR_BASELINE_SAMPLES + 5;
+    const samples = [...Array.from({ length: n }, () => BASE), ...Array.from({ length: 50 }, () => NaN)];
+    const fit = fitEarBaseline(samples);
+    expect(fit.baseline).toBeCloseTo(BASE, 6);
+    expect(fit.usable, 'NaN frames were counted as evidence').toBe(n);
+  });
+
+  it('ignores non-positive values, which are absence rather than a closed eye', () => {
+    const fit = fitEarBaseline(Array.from({ length: 200 }, () => 0));
+    expect(fit.baseline).toBeNull();
+    expect(fit.usable).toBe(0);
   });
 });

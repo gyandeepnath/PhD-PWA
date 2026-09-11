@@ -12,7 +12,7 @@
  */
 import { useCallback, useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';
-import { faceEar, baselineEar, EAR_TIERS, type Point } from './blink';
+import { faceEar, baselineEar, fitEarBaseline, EAR_TIERS, type Point } from './blink';
 
 /**
  * How often the operator's live readout updates, in hertz.
@@ -134,10 +134,25 @@ interface TrackingApi {
   /** Sample iris offset for a calibration target for ~`ms` while the participant fixates it. */
   sampleGazeTarget: (targetId: string, ms: number) => Promise<void>;
   /** Fit gaze calibration + EAR baseline, persist a CalibrationRecord. Returns whether gaze fit is valid. */
-  endGazeCalibration: (sessionId: string) => Promise<boolean>;
+  endGazeCalibration: (sessionId: string) => Promise<CalibrationOutcome>;
   beginCondition: () => void;
   /** Finalise the current condition and persist an EyeMetricsRecord. */
   endCondition: (conditionId: string, sessionId: string) => Promise<void>;
+}
+
+/**
+ * What a calibration actually established.
+ *
+ * A bare boolean could only carry the gaze verdict, so the one thing the primary outcome depends
+ * on — whether this participant has an open-eye EAR baseline — had no way of reaching the caller.
+ */
+export interface CalibrationOutcome {
+  /** The nine-point gaze mapping met its acceptance criterion. */
+  gazeValid: boolean;
+  /** The participant's open-eye EAR baseline, or null if none could be fitted. */
+  earBaseline: number | null;
+  /** How many frames of the routine yielded a usable EAR. Distinguishes a thin fit from a solid one. */
+  earSamplesUsable: number;
 }
 
 export function useTracking(): TrackingApi {
@@ -470,11 +485,32 @@ export function useTracking(): TrackingApi {
     gazeCollectingTarget.current = null;
   }, []);
 
-  const endGazeCalibration = useCallback(async (sessionId: string): Promise<boolean> => {
+  const endGazeCalibration = useCallback(async (sessionId: string): Promise<CalibrationOutcome> => {
     const earSamples = calibrating.current?.samples ?? [];
     const noseFracs = calibrating.current?.noseFracs ?? [];
     calibrating.current = null;
-    if (earSamples.length >= 10) baselineEarRef.current = baselineEar(earSamples);
+
+    /*
+     * The gate counts USABLE samples, and the verdict reports the EAR baseline separately.
+     *
+     * `faceEar` returns NaN for a partial or degenerate landmark solve — deliberately, so a bad
+     * frame is absent rather than a fabricated blink — and every frame of the routine was pushed
+     * here unconditionally. So `earSamples.length >= 10` was satisfied by three hundred NaNs, and
+     * the baseline came out null while the function returned `cal.valid`: the GAZE verdict.
+     *
+     * That is reachable. `faceEar` needs the lid landmarks (33/160/158/133/153/144 and
+     * 362/385/387/263/373/380) finite on both eyes; `estimateGaze` needs the iris and corners
+     * (468/473/133/33/362/263 plus 159/145/386/374). The sets are disjoint on the lid points, so
+     * spectacle glare across the lid margin gives a perfectly separable gaze fit and no EAR at all.
+     * Nine of nine targets detected, calibration "succeeded", the sitting ran its full hundred
+     * minutes, and every one of the ten conditions returned incomplete_blink_ratio: null — the
+     * study's primary outcome, absent for that participant, discovered at export.
+     *
+     * MIN_EAR_SAMPLES also rejects a baseline fitted from a handful of frames, which was previously
+     * indistinguishable from one fitted from hundreds.
+     */
+    const earFit = fitEarBaseline(earSamples);
+    baselineEarRef.current = earFit.baseline;
     if (noseFracs.length >= 10) pitchBaselineFracRef.current = medianOf(noseFracs);
     const cal = fitGazeCalibration(gazeSamplesRef.current);
     gazeCalRef.current = cal;
@@ -489,9 +525,14 @@ export function useTracking(): TrackingApi {
       gaze_h_threshold: cal.valid ? cal.hThreshold : null,
       gaze_v_threshold: cal.valid ? cal.vThreshold : null,
       pitch_baseline_frac: pitchBaselineFracRef.current,
+      ear_samples_usable: earFit.usable,
       calibrated_at: Date.now(),
     });
-    return cal.valid;
+    return {
+      gazeValid: cal.valid,
+      earBaseline: baselineEarRef.current,
+      earSamplesUsable: earFit.usable,
+    };
   }, []);
 
   const beginCondition = useCallback(() => {
