@@ -25,6 +25,11 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
+import { createRequire } from 'node:module';
+
+// adtu_spec.cjs is CommonJS and is the single record of the university's page specification; it is
+// loaded rather than restated so this test cannot drift from the builder it is checking.
+const requireCjs = createRequire(__filename);
 
 const ROOT = resolve(__dirname, '..');
 const SYNOPSIS_MD = join(ROOT, 'synopsis', 'SYNOPSIS_AdtU.md');
@@ -85,7 +90,7 @@ describe('the synopsis document', () => {
      * round with 1.42 spacing, and nothing compared the two. The binding margin was 0.46 cm short
      * of requirement — the kind of thing a submission is returned for before anyone reads a word.
      */
-    const spec = require(join(ROOT, 'synopsis', 'adtu_spec.cjs'));
+    const spec = requireCjs(join(ROOT, 'synopsis', 'adtu_spec.cjs'));
     const xml = part(docxPath, 'word/document.xml');
 
     const pgMar = /<w:pgMar\b[^>]*\/>/.exec(xml);
