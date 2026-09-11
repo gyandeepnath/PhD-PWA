@@ -20,7 +20,7 @@ import {
   type MachineState,
 } from './stateMachine';
 import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
-import { put, get, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows, clearSessionStageRows } from '@/storage/db';
+import { put, get, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows, clearSessionStageRows, storageIsFull } from '@/storage/db';
 import {
   noMediaConsent, mayCapture, capturePhoto, recordSegment, checksumOfBlob,
 } from '@/storage/media';
@@ -421,8 +421,16 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         consent_snapshot: fresh!.media_consent,
         blob,
       });
-    } catch {
-      // A failed capture must never abort the session: the numeric data is the study.
+    } catch (err) {
+      /*
+       * A failed capture must never abort the session: the numeric data is the study.
+       *
+       * With ONE exception. A three-minute video is the largest single thing this app writes, so a
+       * full device shows up here first — and swallowing it meant the last quiet moment before
+       * every numeric write began failing was spent discarding the warning. The storage-full error
+       * is re-raised so main.tsx's panel says so while there is still a sitting to save.
+       */
+      if (storageIsFull()) throw err;
     }
   }, [session, tracking]);
 

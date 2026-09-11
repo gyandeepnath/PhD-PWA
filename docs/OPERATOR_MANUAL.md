@@ -234,6 +234,23 @@ If it does happen, note it on the session sheet; do not re-run the condition.
 
 ---
 
+**If a red bar appears saying the device has run out of storage**
+
+Stop the sitting. Not at the end of the condition — now. From the moment that message appears
+nothing the participant does is being recorded, and the tablet is the only copy, so the rest of the
+sitting would be work done for nothing.
+
+What is already saved is safe. Export the sessions on the tablet, copy the files off it and open
+them to check they are really there, then delete those sessions from the Session Manager to free
+space. Re-run the pre-flight check before starting anyone else; it reports free space and will block
+you if there is not enough.
+
+Prevent it rather than meet it: export and clear the tablet regularly instead of letting sessions
+accumulate. Video consent is what fills a tablet — a three-minute clip is larger than everything
+else a sitting produces put together.
+
+---
+
 ## 6. Troubleshooting
 
 | Symptom | Likely cause | Action |

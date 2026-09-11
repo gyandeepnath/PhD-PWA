@@ -60,6 +60,48 @@ export const SUPERSEDED_MESSAGE =
   + 'Close every VisuLab window and open the app again. If a sitting was in progress, resume it from '
   + 'the Session Manager after reopening.';
 
+/**
+ * Set once a write has been rejected for want of space.
+ *
+ * A quota rejection is not one bad write. The device is full, and it stays full: every subsequent
+ * write in the sitting fails the same way, for the rest of the hundred minutes, while the
+ * participant keeps working through conditions that are no longer being recorded. The tablet is
+ * the only copy, so what is lost is lost.
+ *
+ * Recording it lets every later call fail immediately with a sentence an operator can act on,
+ * rather than a bare DOMException raised from whichever write happened to come next — the same
+ * treatment, and for the same reason, as the superseded-build flag above.
+ */
+let _storageFull = false;
+
+/**
+ * What the operator is told when the device is out of space. Written for a research assistant, and
+ * deliberately specific about what to do: there is nothing the app can do about a full disk, so the
+ * only useful output is an instruction and the fact that continuing is pointless.
+ */
+export const STORAGE_FULL_MESSAGE =
+  'This device has run out of storage and VisuLab can no longer save anything. STOP THE SITTING NOW '
+  + '— from this point on nothing the participant does is being recorded. Sessions already saved are '
+  + 'safe. Export them, copy the files off the tablet, then delete the exported sessions from the '
+  + 'Session Manager to free space before running anyone else.';
+
+/** True once a write has been rejected for want of space. Exported so the UI can say so. */
+export function storageIsFull(): boolean {
+  return _storageFull;
+}
+
+/**
+ * Is this the browser saying "no room"? Names differ by engine and none of them is pleasant to
+ * show an operator, which is why they are translated rather than surfaced.
+ */
+function isQuotaError(err: unknown): boolean {
+  const name = (err as { name?: string } | null)?.name ?? '';
+  const code = (err as { code?: number } | null)?.code;
+  return name === 'QuotaExceededError'
+    || name === 'NS_ERROR_FILE_NO_DEVICE_SPACE'
+    || code === 22;   // legacy DOMException QUOTA_EXCEEDED_ERR
+}
+
 function indexedDBAvailable(): boolean {
   try {
     return typeof indexedDB !== 'undefined' && indexedDB !== null;
@@ -166,8 +208,26 @@ export async function put<N extends StoreName>(store: N, record: StoreMap[N]): P
     memStore(store).set(keyOf(store, record as unknown as Record<string, unknown>), record);
     return;
   }
+  if (_storageFull) throw new Error(STORAGE_FULL_MESSAGE);
   const db = await getDB();
-  await db.put(store, record);
+  try {
+    await db.put(store, record);
+  } catch (err) {
+    /*
+     * Translate the one failure that means the sitting is over.
+     *
+     * A raw QuotaExceededError surfaced through main.tsx's panel as
+     * "QuotaExceededError: ..." under the heading "Something failed in the background. The session
+     * may not have saved the last step." Both halves of that are wrong here: it is not the last
+     * step, it is every step from now on, and there is something the operator must do about it.
+     */
+    if (isQuotaError(err)) {
+      _storageFull = true;
+      console.error(`[visulab] ${STORAGE_FULL_MESSAGE}`);
+      throw new Error(STORAGE_FULL_MESSAGE);
+    }
+    throw err;
+  }
 }
 
 export async function get<N extends StoreName>(
@@ -367,4 +427,5 @@ export function _resetForTests(): void {
   memStores.clear();
   _dbPromise = null;
   _supersededByNewerBuild = false;
+  _storageFull = false;
 }

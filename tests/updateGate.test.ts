@@ -25,7 +25,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { IDBFactory } from 'fake-indexeddb';
-import { put, get, _resetForTests, SUPERSEDED_MESSAGE } from '@/storage/db';
+import { put, get, _resetForTests, SUPERSEDED_MESSAGE, STORAGE_FULL_MESSAGE, storageIsFull } from '@/storage/db';
 import { sittingsInProgress } from '@/storage/gather';
 import { DB_NAME, DB_VERSION } from '@/storage/schemaEnums';
 import type { SessionRecord } from '@/storage/types';
@@ -79,6 +79,55 @@ describe('the gate is the database, so it holds across tabs', () => {
     await put('sessions', session('other-tab', { status: 'in_progress', session_end_time: null }));
     _resetForTests();                       // as if a different tab opened its own connection
     expect(await sittingsInProgress()).toHaveLength(1);
+  });
+});
+
+describe('a device that has run out of space says so, and says the sitting is over', () => {
+  /*
+   * A quota rejection is not one bad write. The device is full and stays full: every subsequent
+   * write fails the same way for the rest of the hundred minutes, while the participant keeps
+   * working through conditions that are no longer being recorded. The tablet is the only copy.
+   *
+   * It used to surface as a raw QuotaExceededError through main.tsx's panel, under the heading
+   * "the session may not have saved the last step" — which is wrong twice over: it is not the last
+   * step, it is every step from now on, and there IS something the operator must do.
+   */
+  beforeEach(async () => {
+    globalThis.indexedDB = new IDBFactory();
+    _resetForTests();
+  });
+
+  /** A store whose put always reports the device as full, as the browser reports it. */
+  const quotaFails = () => {
+    const err = new Error('no space');
+    (err as { name: string }).name = 'QuotaExceededError';
+    return err;
+  };
+
+  it('translates the browser error, then refuses every later write without retrying', async () => {
+    await put('sessions', session('a'));               // a normal write, to open the connection
+    expect(storageIsFull()).toBe(false);
+
+    const real = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function fail() { throw quotaFails(); };
+    try {
+      await expect(put('sessions', session('b'))).rejects.toThrow(STORAGE_FULL_MESSAGE);
+    } finally {
+      IDBObjectStore.prototype.put = real;
+    }
+
+    // The disk is still full; a working put underneath it changes nothing. The point of the flag is
+    // that the hundred minutes after this do not each produce their own raw DOMException.
+    expect(storageIsFull()).toBe(true);
+    await expect(put('sessions', session('c'))).rejects.toThrow(STORAGE_FULL_MESSAGE);
+  });
+
+  it('tells the operator to stop, and that what is already saved is safe', () => {
+    expect(STORAGE_FULL_MESSAGE).toMatch(/STOP THE SITTING/);
+    expect(STORAGE_FULL_MESSAGE).toMatch(/safe/i);
+    expect(STORAGE_FULL_MESSAGE).toMatch(/export/i);
+    // No jargon: a research assistant reads this, not a developer.
+    expect(STORAGE_FULL_MESSAGE).not.toMatch(/IndexedDB|QuotaExceeded|DOMException/i);
   });
 });
 
