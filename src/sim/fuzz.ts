@@ -206,7 +206,7 @@ function makePartialBundle(rng: Rng, nConds: number): SessionBundle {
   return {
     session: {
       session_id: sid, participant_id: 'PF', enrolment_number: 1, status: 'complete', deleted_at: null,
-      display_label: rng() < 0.5 ? null : torture(), ambient_lux: 350, ambient_illumination_level: null, illumination_block: 0, illumination_order_first: 'dim' as const, lux_readings: [], lux_all_in_range: null, lux_deviation_note: null, screen_white_luminance_cd_m2: null, brightness_percent: null,
+      display_label: rng() < 0.5 ? null : torture(), ambient_lux: 350, ambient_illumination_level: null, illumination_block: 0, protocol_pass: randInt(rng, 0, 3), repeat_run_note: rng() < 0.5 ? null : torture(), illumination_order_first: 'dim' as const, lux_readings: [], lux_all_in_range: null, lux_deviation_note: null, screen_white_luminance_cd_m2: null, brightness_percent: null,
       session_start_time: 1, session_end_time: 2, randomisation_seed: 1,
       condition_order: conditions.map((c) => c.session_position), preflight_complete: true, e2e_timing: false,
       consent_given: true, consent_time: 1, media_consent: { camera_metrics: true, setup_photos: false, annotation_video: false, granted_at: null }, provenance: PROV, device_type: torture(), browser: torture(), screen_resolution: '1x1', stimulus_scale: 1, layout_viewport: '1194x834',

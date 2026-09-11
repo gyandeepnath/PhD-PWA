@@ -495,7 +495,7 @@ In the 10-lux sitting, occasional collapsed solves during the P2 exposure inject
 Apply the same gate as headPose: return NaN from faceEar when the eye spans are below a minimum extent or any landmark is non-finite, so degenerate frames are dropped rather than measured.
 
 
-### [medium] A third sitting for a participant who has already completed both illumination blocks silently replays all ten conditions of block 1 and labels them passage_repeat_number = 2
+### [FIXED] [medium] A third sitting for a participant who has already completed both illumination blocks silently replays all ten conditions of block 1 and labels them passage_repeat_number = 2
 
 `src/experiment/Experiment.tsx` line 298 · dimension: ?
 
@@ -510,6 +510,27 @@ P047 finishes both sittings. A week later the investigator finds the camera cons
 **Suggested fix**
 
 In beginSession, clamp the whole plan, not just the block: if `prior.conditionsCompleted >= N_CONDITIONS * N_ILLUMINATION_BLOCKS`, refuse to create the session. Surface the already-returned `conditionsCompleted` on the New Session screen ('this participant has completed 20 of 20 condition-runs') and require an explicit override that is stamped on the session record, and derive passage_repeat_number from the participant's actual prior exposure count for that passage rather than from illumination_block.
+
+**What was done**
+
+Under the current single-level design the problem is worse than the finding describes: the clamp is
+to 0, so it bites after ONE complete pass, not two, and the replay's rows carry
+passage_repeat_number = 1 — indistinguishable from a first reading rather than merely off by one.
+
+`src/experiment/participantProgress.ts` now holds the arithmetic that was written out twice, and
+keeps the two quantities apart: `passes` counts complete runs through the ten conditions and is
+never clamped; `block` is the illumination assignment and is clamped to the levels the design has.
+`passage_repeat_number` is derived from the pass (falling back to the block for sittings recorded
+before `protocol_pass` existed). The New Session screen renders the participant's existing record —
+conditions completed, sittings, enrolment — and, when they have completed a pass, refuses to start
+until the researcher writes down why, in the same shape as the out-of-range lux acknowledgement.
+Both `protocol_pass` and `repeat_run_note` are stored on the session and exported in
+01_session_info.csv with codebook entries saying what a non-zero pass means for the rows.
+
+Not refused outright, deliberately: a sitting voided by a camera failure is a real reason to run a
+participant again, and the alternative to recording that decision is not preventing it — it is
+losing it. Tests in `tests/protocolReplay.test.ts`; mutation-tested against restoring the clamp,
+dropping the console gate, and re-deriving passage_repeat_number from the block.
 
 
 ### [medium] Single-vs-split sitting length is a free per-sitting operator toggle, so a participant's two illumination blocks can be run at different sitting lengths — confounding fatigue exposure with the whole-plot factor

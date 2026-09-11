@@ -8,6 +8,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { assessStorageHealth, type StorageHealth } from '@/storage/storageHealth';
 import { CONFIG } from '@/experiment/config';
+import { N_CONDITIONS } from '@/experiment/conditions';
+import { repeatRunAcknowledged, REPEAT_NOTE_MIN_CHARS } from '@/experiment/participantProgress';
 import { ILLUMINATION, luxInRange, type IlluminationLevel, N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 import type { MediaConsent } from '@/storage/media';
 import { WavyBackground } from '@/components/WavyBackground';
@@ -48,6 +50,8 @@ export interface SessionInitData {
   conditionsPerSession: number;
   /** Researcher acknowledged running outside the accepted lux range; free-text reason. */
   luxDeviationNote: string | null;
+  /** Researcher acknowledged re-running a participant who had already completed the protocol. */
+  repeatRunNote: string | null;
 }
 export interface IlluminationAssignment {
   level: IlluminationLevel;
@@ -55,6 +59,10 @@ export interface IlluminationAssignment {
   orderFirst: IlluminationLevel;
   enrolment: number;
   conditionsCompleted: number;
+  /** Complete passes through the ten conditions already finished. UNCLAMPED, unlike `block`. */
+  priorPasses: number;
+  /** Sittings already recorded for this participant, deleted ones excluded. */
+  sittings: number;
 }
 
 export function SessionInit({
@@ -68,6 +76,7 @@ export function SessionInit({
   const [pid, setPid] = useState('');
   const [lux, setLux] = useState('');
   const [deviation, setDeviation] = useState('');
+  const [repeatNote, setRepeatNote] = useState('');
   const [assigned, setAssigned] = useState<IlluminationAssignment | null>(null);
   const [lum, setLum] = useState('');
   const [bright, setBright] = useState('');
@@ -87,10 +96,25 @@ export function SessionInit({
   const spec = assigned ? ILLUMINATION[assigned.level] : null;
   const inRange = spec != null && luxInRange(assigned!.level, luxNum);
   const luxEntered = lux !== '' && luxNum >= 0 && luxNum <= 200000;
+  /*
+   * HAS THIS PARTICIPANT ALREADY FINISHED?
+   *
+   * resolveAssignment has always returned conditionsCompleted and this screen has never shown it.
+   * A participant who had completed all ten conditions, re-entered at this console — a mistyped id
+   * that collides with an existing one, a second visit, a researcher who does not remember — got
+   * offset = completed % 10 = 0 and a full fresh plan of ten. The app started the entire protocol
+   * again without a word, and every row of the replay was labelled exactly like a first run.
+   *
+   * So it is stated, and it is refused unless the researcher says why in writing — the same shape
+   * as the lux deviation above, for the same reason: the decision belongs in the data.
+   */
+  const completedProtocol = assigned != null && assigned.priorPasses >= 1;
+  const repeatAcknowledged = repeatRunAcknowledged(assigned?.priorPasses ?? 0, repeatNote);
   // Out-of-range is permitted only with an explicit written reason, so a deviation is recorded
   // as data rather than silently accepted or silently blocked.
   const valid =
-    /^[A-Za-z0-9_-]{1,20}$/.test(pid) && luxEntered && (inRange || deviation.trim().length >= 3);
+    /^[A-Za-z0-9_-]{1,20}$/.test(pid) && luxEntered && (inRange || deviation.trim().length >= 3)
+    && repeatAcknowledged;
 
   return (
     <div className={shell} style={{ position: 'relative' }}>
@@ -102,6 +126,38 @@ export function SessionInit({
           <Field label="Participant ID — a CODE, not a name (letters, digits, - or _, ≤20)">
             <input data-testid="pid" className="vl-input" value={pid} onChange={(e) => setPid(e.target.value)} placeholder="P001" />
           </Field>
+          {assigned && assigned.conditionsCompleted > 0 && (
+            <div
+              data-testid="prior-progress"
+              style={{
+                border: `1px solid ${completedProtocol ? '#e0a33c' : '#d8d4cc'}`,
+                borderRadius: 10, padding: '14px 16px',
+                background: completedProtocol ? '#fdf6e8' : '#fbf9f5',
+              }}
+            >
+              <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">Existing record for this ID</p>
+              <p className="mt-1 font-serif text-xl">
+                {assigned.conditionsCompleted} of {N_CONDITIONS} conditions completed
+                {' · '}{assigned.sittings} sitting{assigned.sittings === 1 ? '' : 's'}
+                {' · '}enrolment {assigned.enrolment}
+              </p>
+              <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: 6 }}>
+                {completedProtocol
+                  ? 'This participant has already been through the whole protocol. Starting now runs '
+                    + 'all ten conditions AGAIN: they will re-read every passage, repeat every search '
+                    + 'and see every comprehension question a second time. If this ID was a typo, '
+                    + 'correct it. If the earlier sitting is to be discarded, delete it in the '
+                    + 'dashboard first.'
+                  : 'This sitting continues where they stopped — the condition order and enrolment '
+                    + 'number are preserved.'}
+              </p>
+            </div>
+          )}
+          {completedProtocol && (
+            <Field label={`⚠ Why is this participant being run again? (≥${REPEAT_NOTE_MIN_CHARS} chars — recorded with the session)`}>
+              <input data-testid="repeat-run-note" className="vl-input" value={repeatNote} onChange={(e) => setRepeatNote(e.target.value)} placeholder="e.g. first sitting voided — camera failed throughout" />
+            </Field>
+          )}
           {assigned && spec && (
             <div style={{ border: '1px solid #d8d4cc', borderRadius: 10, padding: '14px 16px', background: '#fbf9f5' }}>
               <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">
@@ -156,9 +212,11 @@ export function SessionInit({
           onClick={() => {
             if (!valid) {
               setErr(
-                luxEntered && spec && !inRange
-                  ? `Illuminance is outside ${spec.min}–${spec.max} lux. Adjust the room, or record a reason for the deviation.`
-                  : 'Enter a valid Participant ID and a measured lux value.',
+                !repeatAcknowledged
+                  ? 'This participant has already completed all ten conditions. Record why they are being run again, correct the ID, or delete the earlier sitting in the dashboard.'
+                  : luxEntered && spec && !inRange
+                    ? `Illuminance is outside ${spec.min}–${spec.max} lux. Adjust the room, or record a reason for the deviation.`
+                    : 'Enter a valid Participant ID and a measured lux value.',
               );
               return;
             }
@@ -168,6 +226,7 @@ export function SessionInit({
               illuminationLevel: assigned ? assigned.level : null,
               whiteLuminance: lum === '' ? null : Number(lum),
               brightnessPercent: bright === '' ? null : Number(bright),
+              repeatRunNote: completedProtocol ? repeatNote.trim() : null,
               conditionsPerSession: sitting === 'split' ? CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2 : CONFIG.CONDITIONS_PER_SESSION_DEFAULT,
               luxDeviationNote: inRange ? null : deviation.trim(),
             });

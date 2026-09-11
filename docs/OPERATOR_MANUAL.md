@@ -286,6 +286,24 @@ divides the same ten conditions across two shorter visits. If you use it:
 - Re-run calibration for the second half. Do not reuse the first half's.
 - Keep the gap short. The design treats the two halves as one sitting.
 
+**If the setup screen says the ID already has a record**
+
+Entering a participant ID that already exists now shows what is on file — conditions completed,
+sittings, enrolment number — before you can go any further. Read it.
+
+- *Part of the protocol completed* (for example 5 of 10): this is the second half of a split. Carry
+  on; the condition order and enrolment number continue from where they stopped.
+- *All ten completed*: **stop and check the ID.** Starting anyway runs the entire protocol a second
+  time — every passage re-read, every search text already familiar, every comprehension question
+  already seen — and those are not first-exposure measurements. Nine times out of ten it is a
+  mistyped ID that collided with someone else's.
+
+If the repeat is deliberate — the first sitting was voided, say, because the camera failed
+throughout — the app will let you proceed, but only after you type the reason. It is stored on the
+session and exported, so write something a stranger reading the data in a year could act on: "first
+sitting voided, camera failed throughout", not "redo". If instead the earlier sitting should simply
+not exist, delete it in the dashboard first and start clean.
+
 ---
 
 ## 9. Bench checklist

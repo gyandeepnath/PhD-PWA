@@ -214,6 +214,9 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       ambient_lux: luxReadings.find((r) => r.checkpoint === 'start')?.lux ?? 0,
       ambient_illumination_level: level,
       illumination_block: block,
+      // A normal first pass through the protocol: no replay, so no reason to record.
+      protocol_pass: 0,
+      repeat_run_note: null,
       illumination_order_first: illuminationOrderFor(enrolment)[0],
       lux_readings: luxReadings,
       lux_all_in_range: summariseLux(level, luxReadings).all_in_range,

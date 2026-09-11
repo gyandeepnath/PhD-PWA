@@ -9,8 +9,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { CONDITIONS, conditionDefinitionHash, N_CONDITIONS } from './conditions';
 import {
   illuminationForBlock, illuminationOrderFor, luxInRange, summariseLux,
-  N_ILLUMINATION_BLOCKS,
 } from '@/experiment/illumination';
+import { participantProgress, passageRepeatNumber } from './participantProgress';
 import { PASSAGES } from './passages';
 import { blockPlan, isAnnotationSubsample, type PlannedStep } from './counterbalance';
 import { CONFIG, isE2ETimingActive } from './config';
@@ -317,16 +317,16 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const resolveAssignment = useCallback(async (participantId: string) => {
     const prior = await priorParticipantProgress(participantId);
     const enrol = prior.enrolment ?? (await peekNextEnrolmentNumber());
-    const block = Math.min(
-      Math.floor(prior.conditionsCompleted / N_CONDITIONS),
-      N_ILLUMINATION_BLOCKS - 1,
-    );
+    // passes (unclamped) vs block (clamped to the design's levels) — see participantProgress.ts.
+    const { passes, block } = participantProgress(prior.conditionsCompleted);
     return {
       level: illuminationForBlock(enrol, block),
       block,
       orderFirst: illuminationOrderFor(enrol)[0],
       enrolment: enrol,
       conditionsCompleted: prior.conditionsCompleted,
+      priorPasses: passes,
+      sittings: prior.sittings,
     };
   }, []);
 
@@ -432,8 +432,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     // Which illumination block is this participant on, and how far into it? Each block is a full
     // pass through the ten conditions, so completed / 10 gives the block and completed % 10 the
     // offset within it. A block may itself be run as one sitting of ten or two sittings of five.
-    const block = Math.min(Math.floor(prior.conditionsCompleted / N_CONDITIONS), N_ILLUMINATION_BLOCKS - 1);
-    const offset = prior.conditionsCompleted % N_CONDITIONS;
+    // The same arithmetic the console displayed, from the same place, so the two cannot disagree
+    // about what session is being created. See participantProgress.ts.
+    const { passes, block, offset } = participantProgress(prior.conditionsCompleted);
     const level = illuminationForBlock(enrol, block);
     const fullPlan = blockPlan(enrol, block);
     const cps = Math.min(d.conditionsPerSession, N_CONDITIONS - offset);
@@ -460,6 +461,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       ambient_lux: d.ambientLux,
       ambient_illumination_level: level,
       illumination_block: block,
+      protocol_pass: passes,
+      repeat_run_note: d.repeatRunNote,
       illumination_order_first: illuminationOrderFor(enrol)[0],
       lux_readings: [{ checkpoint: 'start', lux: d.ambientLux, at: Date.now() }],
       lux_all_in_range: luxInRange(level, d.ambientLux),
@@ -651,8 +654,15 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       started_at: Date.now(), completed_at: null, condition_duration_sec: null,
       adaptation_ms_before: adaptationBefore, adaptation_ms_planned: adaptationPlan,
       reading_time_ms: null,
-      // Block 0 is the participant's first exposure to every passage, block 1 the second.
-      passage_repeat_number: (session.illumination_block ?? 0) + 1,
+      /*
+       * Counted from the PASS, not the illumination block.
+       *
+       * The block is clamped to the number of levels in the design — 0 under the single-level
+       * design — so a participant re-run after completing all ten conditions read every passage for
+       * the second time on a row that said 1. Legacy sittings carry no protocol_pass, and for those
+       * the block is what the number was derived from, so it remains the fallback.
+       */
+      passage_repeat_number: passageRepeatNumber(session),
       attempt_number: attempt,
     });
     conditionStarted.current[machine.stepIndex] = Date.now();

@@ -126,6 +126,27 @@ export interface SessionRecord {
   ambient_illumination_level: IlluminationLevel | null;
   /** 0-based illumination block: 0 = this participant's first level, 1 = their second. */
   illumination_block: number;
+  /**
+   * How many COMPLETE passes through the protocol this participant had already finished when this
+   * sitting started. 0 for everyone running the study as designed.
+   *
+   * illumination_block cannot carry this. It is clamped to N_ILLUMINATION_BLOCKS - 1, which under
+   * the single-level design is 0 forever — so a participant who had already completed all ten
+   * conditions and was started again produced a second set of ten rows identical in every label to
+   * the first, including passage_repeat_number = 1, asserting a first reading of each passage to an
+   * analysis that had no way to know otherwise.
+   *
+   * Absent on sittings recorded before this was captured; treat absent as 0, which is what those
+   * sittings were.
+   */
+  protocol_pass?: number;
+  /**
+   * Why a participant who had already completed the protocol was run again. Null for a first pass.
+   *
+   * Required by the console before a repeat sitting can start, so the reason is recorded as data at
+   * the moment the decision is made rather than reconstructed later from someone's memory.
+   */
+  repeat_run_note?: string | null;
   /** Which level the participant received first — the counterbalancing assignment, for reporting. */
   illumination_order_first: IlluminationLevel | null;
   /** Illuminance logged at start / middle / end of the session (§3.4). */
