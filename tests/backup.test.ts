@@ -564,6 +564,26 @@ describe('a restore says what it could not restore, and what it is about to dest
       + 'RESTORE_PLAN and gatherSession in the same change, or a backup will drop it').toEqual([]);
   });
 
+  it('warns that a fresh tablet cannot see enrolments issued on another one', async () => {
+    // ensureEnrolmentAtLeast raises the counter to the highest enrolment RESTORED, and the clash
+    // scan only reads this device's sessions. Restoring one session onto a replacement tablet
+    // therefore resumes numbering below any participant recorded elsewhere, and two participants
+    // sharing an enrolment share a Williams condition order. No local check can see that.
+    const b = buildFixtureBundle();
+    const res = await importSessionBackup(parseSessionBackup(serialiseSessionBackup(b)).backup!);
+    expect(res.ok).toBe(true);
+    expect(res.warnings?.join(' ')).toMatch(/only see its own sessions/);
+  });
+
+  it('does not repeat that warning once the tablet already holds other sessions', async () => {
+    // A tablet with its own history is not a fresh one, and the numbering advice does not apply.
+    const b = buildFixtureBundle();
+    await put('sessions', { ...b.session, session_id: 'unrelated-sitting', participant_id: 'P-OTHER' } as never);
+    const res = await importSessionBackup(parseSessionBackup(serialiseSessionBackup(b)).backup!);
+    expect(res.ok).toBe(true);
+    expect(res.warnings?.join(' ') ?? '').not.toMatch(/only see its own sessions/);
+  });
+
   it('gives the operator both row counts and says the delete is permanent', async () => {
     // SessionManager turns this refusal straight into a confirm() one tap from purgeSession, which
     // is a hard delete outside the thirty-day bin. It used to carry nothing to decide with.

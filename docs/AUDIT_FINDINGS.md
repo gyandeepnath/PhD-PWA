@@ -720,3 +720,65 @@ describes decorrelation across two sittings that cannot happen while `N_ILLUMINA
 It is kept because restoring the second level is a live possibility and the rotation would have to
 be right on the day, but it now says at the top that it is a specification rather than a description
 of what this build does.
+
+---
+
+## Round 3 — the task measures, and the ways data leaves the tablet
+
+Two areas that had not been audited: the per-condition task measures from stimulus to exported
+column, and every path by which data leaves or can be lost. Both were verified finding by finding
+against the code before anything was changed; two of the reported findings turned out to be safer
+than reported and are recorded here as such.
+
+**Fixed — measurement**
+
+- `search_d_prime` and `distractor_words` counted whitespace as words. The renderer's tokeniser is a
+  capturing split, so the token array is about twice the passage's length in words: passage 0 has
+  601 words and 1,201 tokens, and `distractor_words` exported 1,189 against a true 589. It does not
+  cancel within a participant, because d′ uses the false-alarm RATE and the inflation scales with
+  the false-alarm count — itself a dependent measure varying with the display condition. Same
+  measure: false alarms counted tap EVENTS while hits counted words, so a double-tapped wrong word
+  contributed two.
+- `reading_time_ms` subtracted a wider window than it measured. The hidden-time tracker started at
+  mount, while the self-paced instruction card was up; `taskStart` is set on "Begin reading". A 96 s
+  absence on the intro plus a normal 178 s read exported 82,200 ms — 439 wpm for someone reading at
+  202 — in a row that satisfied its own codebook definition, and a long enough absence exported a
+  clamped zero.
+- The last comprehension item could be recorded twice, because `onComplete` sits in the effect's
+  dependency array and the parent passes a fresh arrow each render. Four rows for a three-item
+  passage, with the proportion correct scored over four.
+- Per-condition backgrounding is now recorded at all (`condition_hidden_ms`,
+  `condition_hidden_events`), and the two duplicated hidden-time trackers are one module.
+
+**Fixed — the data's exits**
+
+- An overwrite restore destroyed media blobs still on the device: the carry-forward guard read the
+  store AFTER `purgeSession` had emptied it, so it was dead in exactly the mode it exists for. The
+  test that covered it wrote the media row but never the sessions row, so it passed in a device
+  state that cannot occur.
+- A missing collection was indistinguishable from an empty one, and the UI hid zero counts — 320
+  reaction trials dropped by a shape mismatch left the same trace as a session that had none.
+- The overwrite confirmation carried nothing to compare: no row counts, no end times, no export
+  status, for a hard delete outside the recycle bin.
+- The shared participant record was replaced without a word, reverting the eligibility decision and
+  colour-vision result for both of a participant's sittings.
+- `withdrawn_at` was read in three places and set in none, so the manual's own withdrawal procedure
+  had no control — and when one was added, the restore turned out to take the tombstone from the
+  FILE, which predates the withdrawal in exactly the case that matters.
+- The export manifest's `bytes` was a UTF-16 code-unit count, and `verifyExport`'s section for it
+  checked only that a manifest existed.
+- A device that filled mid-sitting failed one write loudly and the next ninety minutes silently.
+
+**Reported as defects, found to be sound**
+
+- The RT distractor palette really is luminance-matched (L = 0.177–0.179; 4.54–4.59:1 on black,
+  4.58–4.62:1 on white), so no-go discriminability does not vary with polarity.
+- The condition-redo path does not double-count: child stores are keyed by `condition_id` or
+  explicitly cleared first, and the condition row is rewritten with an incremented `attempt_number`.
+
+**Not fixed, and why**
+
+- A replacement tablet cannot detect an enrolment number issued on a different device — the scan is
+  necessarily local. The restore now says so rather than implying the check is complete.
+- `system_performance_logs` is declared, purged, and never written, and is in no backup path.
+  Nothing is lost today; a ratchet test requires the backup to cover it if a writer ever appears.

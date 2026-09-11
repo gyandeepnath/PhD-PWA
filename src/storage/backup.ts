@@ -709,8 +709,16 @@ export async function importSessionBackup(
     // distinct enrolments. Raising the counter here closes that path.
     const enrolment = (session as unknown as { enrolment_number?: number }).enrolment_number;
     if (typeof enrolment === 'number' && Number.isFinite(enrolment)) {
-    // Warn if this device already issued the number to somebody else, which the restore cannot
-    // undo and which invalidates the counterbalance for both participants.
+    /*
+     * Warn if THIS DEVICE already issued the number to somebody else — and note what that cannot
+     * see.
+     *
+     * The scan is over getAll('sessions'), which is this tablet's sessions and no others. Restoring
+     * a subset onto a replacement tablet raises the counter to the highest enrolment restored, so a
+     * participant recorded on a DIFFERENT device at a higher number is invisible: the counter
+     * resumes below them and re-issues numbers they already hold. Nothing local can detect that,
+     * which is a reason to say so rather than to imply the check is complete.
+     */
     const pid = (session as unknown as { participant_id?: string }).participant_id;
     const clash = (await getAll('sessions')).filter((s) => {
       const r = s as unknown as { enrolment_number?: number; participant_id?: string; session_id?: string };
@@ -720,6 +728,21 @@ export async function importSessionBackup(
       collision = `Enrolment number ${enrolment} is already held on this device by a different participant. Both participants now share a condition order, which breaks the counterbalance for each of them. Record this and tell the investigator before collecting more data.`;
     }
     await ensureEnrolmentAtLeast(enrolment);
+    /*
+     * The counter now sits at the highest enrolment this tablet has SEEN, which after a partial
+     * restore is not the highest the study has issued.
+     */
+    const restoredCount = (await getAll('sessions')).length;
+    if (restoredCount <= 1) {
+      warnings.push(
+        `The enrolment counter has been raised to ${enrolment} so the next participant on this `
+        + `device does not reuse it. This device can only see its own sessions, so if the study has `
+        + `run past enrolment ${enrolment} on another tablet, the next participant here will be `
+        + `issued a number somebody already holds — and two participants sharing an enrolment share `
+        + `a condition order. Restore every session you have before enrolling anyone new, or set the `
+        + `next number by hand with the investigator.`,
+      );
+    }
     }
 
     // From here on a failure leaves the device holding a PARTIAL copy. IndexedDB gives no
