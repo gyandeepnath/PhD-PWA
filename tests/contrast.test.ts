@@ -56,6 +56,26 @@ describe('WCAG contrast ratio', () => {
     expect(rank('positive')).toEqual([...rank('negative')].reverse());
   });
 
+  /**
+   * The one design claim in conditions.ts that was NOT pinned, and the one it has already been
+   * wrong about: the docstring used to read "+0.11" without stating the polarity coding, so the
+   * sign could not be checked against it. The figure is the argument that polarity and luminance
+   * contrast can enter the same model without collinearity — if a hex value or the colour set ever
+   * changes, this is the number that has to be recomputed, and a prose figure will not notice.
+   */
+  it('keeps polarity very nearly uncorrelated with log contrast (r = -0.113, positive coded 1)', () => {
+    const x = CONDITIONS.map((c) => (c.polarity === 'positive' ? 1 : 0));
+    const y = CONDITIONS.map((c) => Math.log(c.wcag_contrast_ratio));
+    const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
+    const sd = (a: number[], m: number) => Math.sqrt(mean(a.map((v) => (v - m) ** 2)));
+    const mx = mean(x);
+    const my = mean(y);
+    const r = mean(x.map((v, i) => (v - mx) * (y[i] - my))) / (sd(x, mx) * sd(y, my));
+    expect(r).toBeCloseTo(-0.113, 3);
+    // The claim the design rests on is not the exact value but that it is near zero.
+    expect(Math.abs(r)).toBeLessThan(0.2);
+  });
+
   it('exposes the same five colour levels in both polarities (factorial crossing)', () => {
     const lv = (pol: string) => CONDITIONS.filter((c) => c.polarity === pol).map((c) => c.colorName).sort();
     expect(lv('positive')).toEqual(lv('negative'));
