@@ -403,6 +403,25 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         if (!shot) return;   // no frame yet — never store a black placeholder as "proof"
         blob = shot.blob; mime = 'image/jpeg'; width = shot.width; height = shot.height;
       }
+      /*
+       * THE GRANT IS RE-READ AFTER THE RECORDING, NOT ONLY BEFORE IT.
+       *
+       * The check above happens before capture starts, and an annotation segment runs for three
+       * minutes. A participant who says "stop recording me" part-way through is exactly what the
+       * revocation control exists for — and revokeMediaGrant withdraws the grant and deletes the
+       * blobs that exist, which this one does not yet. The recorder then finished and this write
+       * stored a video of their face, stamped with the consent_snapshot from before they withdrew.
+       *
+       * The export refused it afterwards, because that path checks the LIVE grant — so it was never
+       * analysed. It was still on the device: a recording retained after the person in it asked for
+       * it to stop, which is the wrong the grant exists to prevent, not a data-quality matter.
+       *
+       * So the persisted grant is read again here, and the blob is discarded if it has gone. The
+       * snapshot written is that second read, so a stored file's basis is the consent in force when
+       * it was stored rather than when it was begun.
+       */
+      const atWrite = await get('sessions', session.session_id);
+      if (!mayCapture(atWrite?.media_consent, checkpoint)) return;
       await put('media_captures', {
         media_id: uuidv4(),
         session_id: session.session_id,
@@ -417,7 +436,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         height,
         duration_ms: duration,
         checksum_fnv1a: await checksumOfBlob(blob),
-        consent_snapshot: fresh!.media_consent,
+        consent_snapshot: atWrite!.media_consent,
         blob,
       });
     } catch (err) {
