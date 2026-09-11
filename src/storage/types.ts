@@ -255,7 +255,7 @@ export interface SessionRecord {
   layout_viewport: string | null;
 
   // --- Split-session / boredom-mitigation fields ---
-  /** How many of the 8 conditions are run in this sitting (8 = single session, 4 = split). */
+  /** How many of the ten conditions run in this sitting (10 = single sitting, 5 = one half of a split). */
   conditions_per_session: number;
   /** Conditions already completed by this participant in prior sittings (global serial offset). */
   condition_offset: number;

@@ -1,10 +1,15 @@
 /**
  * Pure experiment stage machine.
  *
- * Flow:
- *   SESSION_INIT → PARTICIPANT_PROFILE → CAMERA_SETUP → CALIBRATION → BASELINE_FATIGUE →
- *   [×8: READING_TASK → COMPREHENSION → DISPLAY_PERCEPTION → POST_FATIGUE → VISUAL_SEARCH →
- *        REACTION_TIME → ADAPTATION] → SESSION_COMPLETE → EXPORT_DASHBOARD
+ * Flow, matching SETUP_ORDER and LOOP_ORDER below — five setup stages were missing from this
+ * summary, and a stage list that is not the stage list is worse than none:
+ *
+ *   SESSION_INIT → CONSENT → PARTICIPANT_PROFILE → PREFLIGHT → COLOR_VISION → CAMERA_SETUP →
+ *   CALIBRATION → CVSQ_BASELINE → BASELINE_FATIGUE → INSTRUCTIONS →
+ *   [×10: READING_TASK → COMPREHENSION → DISPLAY_PERCEPTION → POST_FATIGUE → VISUAL_SEARCH →
+ *         REACTION_TIME → ADAPTATION, with a self-paced BREAK_SCREEN every
+ *         CONFIG.BREAK_EVERY_N_CONDITIONS conditions] →
+ *   CVSQ_END → NASA_TLX → SESSION_COMPLETE → EXPORT_DASHBOARD
  *
  * Adaptation is skipped after the final condition (nothing to adapt to). Transitions are pure
  * functions of (stage, stepIndex) so they are unit-testable in isolation from React.
@@ -67,7 +72,7 @@ function sittingSize(n: number): number {
   return Number.isFinite(n) && n >= 1 ? Math.floor(n) : N_CONDITIONS;
 }
 
-/** Tracked steps for a sitting that runs `nConditions` conditions (default = full 8). */
+/** Tracked steps for a sitting that runs `nConditions` conditions (default = a full N_CONDITIONS). */
 export function totalTrackedSteps(nConditionsRaw: number = N_CONDITIONS): number {
   return SETUP_STEPS + sittingSize(nConditionsRaw) * TASKS_PER_CONDITION;
 }

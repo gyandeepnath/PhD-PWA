@@ -1,21 +1,29 @@
 /**
  * Counterbalancing.
  *
- * Condition order: a balanced (Williams) Latin square for even N — the same construction the
- * original build used (first row [0,1,7,2,6,3,5,4] for N=8). Each condition appears in each
- * serial position equally across a block of 8 participants, and each condition precedes/follows
- * every other equally often (controls first-order carryover).
+ * Condition order: a balanced (Williams) Latin square of order N_CONDITIONS, which is 10 — first
+ * row [0,1,9,2,8,3,7,4,6,5]. Each condition appears in each serial position equally across a block
+ * of ten participants, and each condition precedes and follows every other equally often, which is
+ * what controls first-order carryover.
+ *
+ * (The construction is the one the original build used at N=8, where the first row was
+ * [0,1,7,2,6,3,5,4]. This header described that eight-condition design long after the study became
+ * ten, which is worth saying because the numbers in a comment are what the next reader checks their
+ * understanding against.)
  *
  * Participant -> row mapping uses a SEQUENTIAL enrolment index (1-based), not a hash of an
  * arbitrary ID. Hashing arbitrary alphanumeric IDs (as the late builds did) breaks balance
  * because collisions/gaps make rows unevenly used. The enrolment index must be assigned at
  * session creation by counting existing participants.
  *
- * Passage assignment: the original build yoked passage to condition (passage = conditionIndex),
- * so passage difficulty was perfectly confounded with display condition. We instead rotate
- * passages across participants: passage(condition, participant) = (conditionIndex + offset) mod N.
- * Over each block of 8 participants every condition is paired with every passage exactly once,
- * so passage content is orthogonal to condition (a Latin square on condition x participant).
+ * Passage assignment: the original build yoked passage to condition (passage = conditionIndex), so
+ * passage difficulty was perfectly confounded with display condition. Passages are instead rotated
+ * across participants — but NOT on a period of N, which this header used to claim and which was
+ * the scheme's second failure rather than its fix. Rotating on the same period as the Williams row
+ * makes both advance together, and since the row is recoverable from (condition, position), passage
+ * becomes a deterministic function of them: each serial position can then only ever draw from five
+ * of the ten passages. The period is 13, coprime to 10, for reasons set out in full at
+ * PASSAGE_ROTATION_PERIOD below.
  */
 import { CONDITIONS, N_CONDITIONS } from './conditions';
 
