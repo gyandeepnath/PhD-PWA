@@ -3,7 +3,7 @@ import Experiment from '@/experiment/Experiment';
 import { LandingPage } from '@/start/LandingPage';
 import { SessionManager } from '@/start/SessionManager';
 import { LazyDashboard as Dashboard } from '@/dashboard/LazyDashboard';
-import { UpdateBanner, BuildStamp } from '@/components/UpdateBanner';
+import { UpdateBanner, BuildStamp, E2EBanner } from '@/components/UpdateBanner';
 
 /**
  * Top-level shell / router. Landing → session manager → (new or resumed experiment) → back to
@@ -20,6 +20,21 @@ export default function App() {
   const [view, setView] = useState<View>({ mode: 'landing' });
   const toManager = () => setView({ mode: 'manager' });
 
+  // Rendered on EVERY view, not just the between-sessions ones: the whole point is that a tablet
+  // left on a bookmarked ?e2e URL looks exactly like a real one from the first screen to the last.
+  return (
+    <>
+      <E2EBanner />
+      {renderView(view, setView, toManager)}
+    </>
+  );
+}
+
+function renderView(
+  view: View,
+  setView: (v: View) => void,
+  toManager: () => void,
+) {
   switch (view.mode) {
     case 'landing':
       return (

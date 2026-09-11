@@ -680,3 +680,43 @@ to check the CVS-Q, NASA-TLX and Ishihara implementations against their publishe
 
 The workflow is resumable, so the four completed dimensions replay from cache and only the missing
 six cost anything.
+
+---
+
+## Residual items closed after the round-2 triage
+
+**Every camera frame was sent to the tracker more than once.** The pump was
+`requestAnimationFrame`, which fires at the DISPLAY's refresh rate and sent whatever the `<video>`
+element was holding without asking whether it was new. A 30 fps camera on a 60 Hz panel had every
+frame sent twice; MediaPipe answers each send, so each duplicate produced its own EAR sample and its
+own timestamp. `effective_fps` is computed from those timestamps and gates the primary outcome:
+FPS_RATIO_THRESHOLD is 30 because a blink lasts 100-150 ms and classifying it complete or incomplete
+needs the frame at its minimum aperture, so a tablet genuinely delivering 15 fps would have reported
+30, passed the gate, and had `fps_adequate_for_ratio` certify a ratio drawn from blinks sampled once
+or twice each. `src/tracking/framePump.ts` now delivers one frame per presented frame, via
+`requestVideoFrameCallback` where available and rAF plus a `currentTime` comparison where not, with
+a re-entry guard so a slow solver is not queued behind itself. `PROCESS_EVERY_N_FRAMES` now counts
+camera frames, which is what it always meant — under rAF it counted display refreshes, so a value of
+2 on a 60 Hz panel with a 30 fps camera dropped nothing at all.
+
+**The annotation sub-study took one segment per participant, not one per polarity.** Capture was
+gated on `stepIndex === 0`. Two things followed: the annotated volume was half what the kappa >=
+0.60 acceptability criterion is set against, and each participant's classifier validation covered a
+single polarity, allocated by Williams row rather than by design. Polarity is the factor that most
+changes what the camera sees — on a negative screen the face is lit almost entirely by the room, at
+the lid margin the EAR landmarks sit on. `annotationSegmentSteps()` now returns the first index of
+each polarity present in the plan, so a full sitting yields two and a partial sitting yields only
+segments that exist.
+
+**A session run under the test harness had no on-screen mark.** `?e2e` replaces every protocol
+duration with a token value and changes nothing else, so the rows are complete, plausible and
+exportable; `e2e_timing` made such a session identifiable afterwards, but nothing said so at the
+time, on the tablet, to the person about to run a participant. There is now a fixed banner on every
+view (pointer-events: none, so it can never sit between an operator and a control) and an
+`e2e_timing` integrity check of severity ERROR — there is no analysis in which such a row belongs.
+
+**The illumination-block rotation is documented as an unreachable path.** `blockPlan`'s note
+describes decorrelation across two sittings that cannot happen while `N_ILLUMINATION_BLOCKS` is 1.
+It is kept because restoring the second level is a live possibility and the rotation would have to
+be right on the day, but it now says at the top that it is a specification rather than a description
+of what this build does.

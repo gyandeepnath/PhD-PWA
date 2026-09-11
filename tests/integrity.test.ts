@@ -119,6 +119,35 @@ describe('coverage and session-level expectations', () => {
   });
 });
 
+describe('a session run under the test harness is not data', () => {
+  /*
+   * ?e2e collapses every protocol duration to a token value and changes nothing else, so the rows
+   * are complete, plausible and exportable. A tablet left on a bookmarked ?e2e URL produces a
+   * session indistinguishable from a real one except for this flag.
+   */
+  const auditWith = (e2e: boolean) => {
+    const b = buildFixtureBundle();
+    (b.session as { e2e_timing?: boolean }).e2e_timing = e2e;
+    return auditBundle(b).findings.filter((x) => x.check === 'e2e_timing');
+  };
+
+  it('says nothing about a real session', () => {
+    expect(auditWith(false)).toHaveLength(0);
+  });
+
+  it('is an ERROR, not a warning — there is no analysis such a row belongs in', () => {
+    const found = auditWith(true);
+    expect(found).toHaveLength(1);
+    expect(found[0].severity).toBe('error');
+  });
+
+  it('marks the bundle\'s joins unsound so a caller that checks only that flag still stops', () => {
+    const b = buildFixtureBundle();
+    (b.session as { e2e_timing?: boolean }).e2e_timing = true;
+    expect(auditBundle(b).joins_sound).toBe(false);
+  });
+});
+
 describe('the stimulus must have been the same size throughout a sitting', () => {
   /*
    * stimulus_scale multiplies the stimulus text, so it IS the visual angle a condition was

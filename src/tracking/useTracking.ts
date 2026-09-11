@@ -13,6 +13,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';
 import { faceEar, fitEarBaseline, EAR_TIERS, type Point } from './blink';
+import { startFramePump, type FramePump, type PumpVideo } from './framePump';
 
 /**
  * How often the operator's live readout updates, in hertz.
@@ -171,7 +172,8 @@ export function useTracking(): TrackingApi {
   // Tiny offscreen canvas for cheap per-frame luminance sampling (lighting QC).
   const lumaCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const faceMeshRef = useRef<unknown>(null);
-  const rafRef = useRef<number | null>(null);
+  /** The frame pump, when the camera is running. See framePump.ts. */
+  const pumpRef = useRef<FramePump | null>(null);
   const aggRef = useRef<EyeMetricsAggregator | null>(null);
   const calibrating = useRef<{ samples: number[]; noseFracs: number[] } | null>(null);
   const baselineEarRef = useRef<number | null>(null);
@@ -179,7 +181,6 @@ export function useTracking(): TrackingApi {
   const earSamplesUsableRef = useRef(0);
   // Per-participant frontal nose fraction (pitch zero), captured during calibration.
   const pitchBaselineFracRef = useRef<number | null>(null);
-  const frameCounter = useRef(0);
   // Gaze calibration state.
   const gazeCalRef = useRef<GazeCalibration | null>(null);
   const gazeSamplesRef = useRef<Record<string, GazeSample[]>>({});
@@ -437,19 +438,21 @@ export function useTracking(): TrackingApi {
       fm.onResults((r) => ingestResult(r.multiFaceLandmarks?.[0] ?? null));
       faceMeshRef.current = fm;
 
-      // Drive MediaPipe: send each frame (awaited, so the loop self-paces to the achieved rate).
-      const pump = async () => {
-        frameCounter.current++;
-        if (frameCounter.current % CONFIG.PROCESS_EVERY_N_FRAMES === 0 && videoRef.current) {
-          try {
-            await fm.send({ image: videoRef.current });
-          } catch {
-            /* transient frame error — ignore */
-          }
-        }
-        rafRef.current = requestAnimationFrame(pump);
-      };
-      rafRef.current = requestAnimationFrame(pump);
+      /*
+       * Drive MediaPipe once per CAMERA frame.
+       *
+       * This was requestAnimationFrame, which fires at the display's refresh rate and sent whatever
+       * the video element was holding without asking whether it was new. A 30 fps camera on a 60 Hz
+       * panel had every frame sent twice, each duplicate producing its own result, its own EAR
+       * sample and its own timestamp — so the series looked twice as fast as the eye was actually
+       * observed, and effective_fps is computed from those timestamps and gates the primary
+       * outcome. See framePump.ts.
+       */
+      pumpRef.current = startFramePump(
+        video as unknown as PumpVideo,
+        async () => { if (videoRef.current) await fm.send({ image: videoRef.current }); },
+        { everyN: CONFIG.PROCESS_EVERY_N_FRAMES },
+      );
 
       setStatus('active');
       return 'active';
@@ -466,7 +469,8 @@ export function useTracking(): TrackingApi {
   const trackEndedRef = useRef(false);
 
   const stop = useCallback(() => {
-    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    pumpRef.current?.stop();
+    pumpRef.current = null;
     const v = videoRef.current;
     if (v?.srcObject) (v.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
     videoRef.current = null;

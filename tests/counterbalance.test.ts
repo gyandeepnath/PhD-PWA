@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   williamsFirstRow,
   williamsSquare,
@@ -7,8 +9,9 @@ import {
   PASSAGE_ROTATION_PERIOD,
   sessionPlan,
   blockPlan,
+  annotationSegmentSteps,
 } from '@/experiment/counterbalance';
-import { N_CONDITIONS } from '@/experiment/conditions';
+import { CONDITIONS, N_CONDITIONS } from '@/experiment/conditions';
 import { N_PASSAGES } from '@/experiment/passages';
 import {
   illuminationOrderFor, illuminationForBlock, crossoverOrderFor,
@@ -295,5 +298,61 @@ describe('passage is decoupled from SERIAL POSITION, not only from condition', (
     // If these ever share a factor the aliasing returns silently.
     const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
     expect(gcd(PASSAGE_ROTATION_PERIOD, N)).toBe(1);
+  });
+});
+
+/**
+ * The manual-annotation sub-study gets one segment per POLARITY, which is what it was specified as.
+ *
+ * Capture was gated on `stepIndex === 0`, so one segment was retained per participant — whichever
+ * polarity their Williams row happened to start with. Two consequences at once: the annotated
+ * volume was half what the kappa >= 0.60 criterion was set against, and the classifier was
+ * validated on a single polarity per participant, allocated by row rather than by design. Polarity
+ * is the factor that most changes what the camera sees — on a negative screen the face is lit
+ * almost entirely by the room, at the lid margin the EAR landmarks sit on.
+ */
+describe('annotation segments', () => {
+  it('takes one segment of each polarity from a full sitting', () => {
+    for (let enrolment = 1; enrolment <= 20; enrolment++) {
+      const plan = sessionPlan(enrolment);
+      const steps = annotationSegmentSteps(plan);
+      expect(steps, `enrolment ${enrolment}`).toHaveLength(2);
+      const polarities = steps.map((i) => CONDITIONS[plan[i].conditionIndex].polarity);
+      expect(new Set(polarities).size, `enrolment ${enrolment}`).toBe(2);
+    }
+  });
+
+  it('takes the FIRST occurrence of each, so the clip is early in the sitting', () => {
+    const plan = sessionPlan(3);
+    for (const i of annotationSegmentSteps(plan)) {
+      const polarity = CONDITIONS[plan[i].conditionIndex].polarity;
+      const earlier = plan.slice(0, i).some((s) => CONDITIONS[s.conditionIndex].polarity === polarity);
+      expect(earlier, `step ${i} is not the first ${polarity} condition`).toBe(false);
+    }
+  });
+
+  it('always includes the very first condition, as it did before', () => {
+    for (let enrolment = 1; enrolment <= 20; enrolment++) {
+      expect(annotationSegmentSteps(sessionPlan(enrolment))[0]).toBe(0);
+    }
+  });
+
+  it('is what the experiment actually gates capture on', () => {
+    // The pure function being right is half of it. `stepIndex === 0` was the gate, and it is still
+    // the gate for the RT practice block two lines away — so a source check has to name the
+    // annotation capture specifically.
+    const src = readFileSync(resolve(__dirname, '..', 'src/experiment/Experiment.tsx'), 'utf8');
+    const line = src.split('\n').find((l) => l.includes("captureMedia('reading_segment'"));
+    expect(line, "the annotation capture call moved — re-point this test").toBeDefined();
+    expect(line).toMatch(/annotationSteps\.includes\(machine\.stepIndex\)/);
+    expect(line).not.toMatch(/stepIndex === 0/);
+  });
+
+  it('never asks for a segment a partial sitting does not contain', () => {
+    // A split sitting, or a plan trimmed by a resume, may hold only one polarity. Returning an
+    // index for the other would schedule a recording against a condition that is never run.
+    const plan = sessionPlan(1).filter((s) => CONDITIONS[s.conditionIndex].polarity === 'positive');
+    expect(annotationSegmentSteps(plan)).toHaveLength(1);
+    expect(annotationSegmentSteps([])).toEqual([]);
   });
 });

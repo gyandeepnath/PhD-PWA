@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { onUpdateWaiting, applyUpdate } from '@/lib/swUpdate';
 import { sittingsInProgress, sessionLabel } from '@/storage/gather';
 import { APP_VERSION, GIT_HASH } from '@/lib/env';
+import { isE2ETimingActive } from '@/experiment/config';
 
 /** How often the open-sitting question is re-asked while the notice is on screen. */
 export const RECHECK_MS = 6000;
@@ -183,6 +184,44 @@ export function BuildStamp() {
       style={{ position: 'fixed', right: 12, bottom: 10, zIndex: 30, opacity: 0.45, pointerEvents: 'none' }}
     >
       v{APP_VERSION} · {GIT_HASH}
+    </div>
+  );
+}
+
+/**
+ * An unmissable mark that this tab is running with collapsed protocol timings.
+ *
+ * `?e2e` replaces EVERY duration in the protocol — the reading floor, the adaptation field, the
+ * search limit, the reaction-time block — with a token value. config.ts already says what that
+ * means: "a tablet left on a bookmarked ?e2e URL would have produced a full, plausible, exportable
+ * session whose every timing constant was wrong, and it would have pooled with real data." The
+ * session record has carried `e2e_timing` since, which makes such a session identifiable AFTERWARDS.
+ * Nothing said so at the time, on the tablet, to the person about to run a participant through it.
+ *
+ * A bookmark is the obvious way in, and the URL is the only difference: every screen, every colour
+ * and every control is identical, and the durations are exactly the things nobody can eyeball. An
+ * operator would notice a reading page unlocking in a fifth of a second — but only if they were
+ * looking for it.
+ *
+ * `pointer-events: none` deliberately: this must never sit between an operator and a control, and
+ * the end-to-end suite that legitimately uses the flag must not have to dismiss it.
+ */
+export function E2EBanner() {
+  if (!isE2ETimingActive()) return null;
+  return (
+    <div
+      role="status"
+      data-testid="e2e-banner"
+      className="font-lab"
+      style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 60,
+        background: '#b3261e', color: '#fff', textAlign: 'center',
+        padding: '4px 10px', fontSize: 12, letterSpacing: '0.04em',
+        pointerEvents: 'none',
+      }}
+    >
+      TEST MODE (?e2e) — every protocol duration is collapsed. This is not a valid session; do not
+      run a participant.
     </div>
   );
 }

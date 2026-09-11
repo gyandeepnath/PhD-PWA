@@ -17,7 +17,7 @@
  * Over each block of 8 participants every condition is paired with every passage exactly once,
  * so passage content is orthogonal to condition (a Latin square on condition x participant).
  */
-import { N_CONDITIONS } from './conditions';
+import { CONDITIONS, N_CONDITIONS } from './conditions';
 
 /** Largest square this module will build. Far above any real design; guards Array construction. */
 const MAX_SQUARE_N = 1000;
@@ -112,6 +112,38 @@ export interface PlannedStep {
   passageIndex: number;
 }
 
+/**
+ * Which steps of a sitting's plan retain a reading-video segment for manual annotation.
+ *
+ * THE RULE IS ONE PER POLARITY, and the code did not implement it. Capture was gated on
+ * `stepIndex === 0`, so exactly ONE segment was retained per participant — whichever polarity
+ * happened to come first in their Williams row.
+ *
+ * Two things went wrong at once. The annotated volume was halved, and the kappa >= 0.60
+ * acceptability criterion in the synopsis is set against the larger figure: twenty participants
+ * yielding one 3-minute segment each is about 60 minutes and 600-750 blink events, not the ~120
+ * minutes the criterion was powered on. And the validation became single-polarity per participant
+ * — split roughly half and half across the subsample by Williams row, which is arbitrary allocation
+ * rather than design. Polarity is the factor that most changes what the camera sees: on a negative
+ * screen the face is lit almost entirely by the room, and the lid margin that carries the EAR
+ * landmarks is exactly where that matters. A classifier validated on one polarity and applied to
+ * both has had the harder half of its job checked in half the participants, by accident.
+ *
+ * Returns the first index at which each polarity appears, so a sitting containing both yields two
+ * and a partial sitting containing only one yields one — never a segment that does not exist.
+ */
+export function annotationSegmentSteps(plan: PlannedStep[]): number[] {
+  const seen = new Set<string>();
+  const steps: number[] = [];
+  plan.forEach((step, i) => {
+    const polarity = CONDITIONS[step.conditionIndex]?.polarity;
+    if (polarity == null || seen.has(polarity)) return;
+    seen.add(polarity);
+    steps.push(i);
+  });
+  return steps;
+}
+
 /** Full ordered plan (condition + decoupled passage per serial position) for a participant. */
 export function sessionPlan(enrolmentNumber: number): PlannedStep[] {
   return conditionOrderFor(enrolmentNumber).map((conditionIndex, position) => ({
@@ -123,6 +155,13 @@ export function sessionPlan(enrolmentNumber: number): PlannedStep[] {
 
 /**
  * Plan for one ILLUMINATION BLOCK (0 = first session's level, 1 = second's).
+ *
+ * EVERYTHING BELOW DESCRIBES A PATH THAT IS CURRENTLY UNREACHABLE. N_ILLUMINATION_BLOCKS is 1, so
+ * `block` is always 0 and `blockPlan(n, 0)` is `sessionPlan(n)`: no row is advanced, no passage is
+ * re-read, and none of the decorrelation described here happens or needs to. It is kept, and kept
+ * correct, because restoring the second illumination level is a live possibility and the rotation
+ * would have to be right on the day it is. Read it as a specification, not as a description of what
+ * this build does.
  *
  * The block advances the Williams row by one, so a participant does NOT meet the ten conditions
  * in the same serial order in both sessions. Without this, serial position would be perfectly

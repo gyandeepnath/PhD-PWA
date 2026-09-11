@@ -3,7 +3,7 @@
  * lifecycle, and all IndexedDB writes. Renders the component for the current stage and advances on
  * completion. EXPORT_DASHBOARD renders the full researcher dashboard + CSV/JSON export.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { acquireScreenWakeLock } from '@/lib/wakeLock';
 import { v4 as uuidv4 } from 'uuid';
 import { CONDITIONS, conditionDefinitionHash, N_CONDITIONS } from './conditions';
@@ -12,7 +12,7 @@ import {
 } from '@/experiment/illumination';
 import { participantProgress, passageRepeatNumber } from './participantProgress';
 import { PASSAGES } from './passages';
-import { blockPlan, isAnnotationSubsample, type PlannedStep } from './counterbalance';
+import { annotationSegmentSteps, blockPlan, isAnnotationSubsample, type PlannedStep } from './counterbalance';
 import { CONFIG, isE2ETimingActive } from './config';
 import {
   initialState, nextState, progressPercent, firstUnsatisfiedSetupStage, resumeOwesBaselines,
@@ -303,6 +303,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       cancelled = true;
     };
   }, [resume]);
+
+  /** Which steps of this sitting retain an annotation clip: one per polarity. See counterbalance.ts. */
+  const annotationSteps = useMemo(() => annotationSegmentSteps(plan), [plan]);
 
   const step = plan[machine.stepIndex];
   const cond = step ? CONDITIONS[step.conditionIndex] : null;
@@ -974,7 +977,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                * Fire-and-forget: recording must never delay stimulus onset, and mayCapture() gates
                * it on the annotation-video grant.
                */
-              if (machine.stepIndex === 0) void captureMedia('reading_segment', cond?.label ?? null);
+              /*
+               * One segment per POLARITY, which is what the protocol asks for — not one per
+               * sitting, which is what `stepIndex === 0` gave. See annotationSegmentSteps().
+               */
+              if (annotationSteps.includes(machine.stepIndex)) void captureMedia('reading_segment', cond?.label ?? null);
             }}
             onComplete={async (r) => {
               // Close the annotation clip at the SAME instant the automated measurement window

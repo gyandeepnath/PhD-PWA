@@ -86,6 +86,25 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
   }
 
   /*
+   * ---- a session run under the test harness is not data
+   *
+   * `?e2e` replaces every protocol duration with a token value: the reading floor, the adaptation
+   * field, the search limit, the reaction-time block. Nothing else about the session differs, so
+   * the rows are complete, plausible and exportable, and the flag is the only thing separating them
+   * from a real participant's. It is an error rather than a warning because there is no analysis in
+   * which such a row belongs — a reading page that unlocked in a fifth of a second is not a short
+   * reading time, it is not a reading time at all.
+   */
+  if (bundle.session?.e2e_timing === true) {
+    add('error', 'e2e_timing',
+      'this session ran under the end-to-end test harness (?e2e), in which every protocol duration '
+      + 'is collapsed to a token value. Every timing-derived measure in it — reading time, reading '
+      + 'speed, search time, reaction time, adaptation delivered — describes the harness, not a '
+      + 'participant. Do not pool it with collected data.',
+      [bundle.session.session_id]);
+  }
+
+  /*
    * ---- the stimulus must have been the same size in every condition of a sitting
    *
    * Scaling the root scales the stimulus text, so `stimulus_scale` IS the visual angle a condition

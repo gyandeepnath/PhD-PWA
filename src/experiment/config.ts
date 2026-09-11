@@ -218,9 +218,15 @@ const BASE_CONFIG = {
    * per condition as effective_fps.
    */
   CAMERA_FPS: 60,
-  // Process every camera frame: blinks last 100-400 ms, so ~30 fps is the literature minimum for
-  // valid blink detection (sub-Nyquist below ~25 fps). Raise to 2 only if a slow tablet can't keep
-  // up — effective_fps records the true achieved rate and gates the duration-based tiers.
+  /**
+   * Process every camera frame: blinks last 100-400 ms, so ~30 fps is the literature minimum for
+   * valid blink detection (sub-Nyquist below ~25 fps). Raise to 2 only if a slow tablet can't keep
+   * up — effective_fps records the true achieved rate and gates the duration-based tiers.
+   *
+   * CAMERA frames, which is what this always meant. It used to count animation frames: the pump ran
+   * on requestAnimationFrame, so on a 60 Hz panel with a 30 fps camera a value of 2 dropped nothing
+   * at all — it deduplicated by accident, and differently on every device. See tracking/framePump.ts.
+   */
   PROCESS_EVERY_N_FRAMES: 1,
 };
 
