@@ -138,11 +138,50 @@ describe('the update control is wired to the gate', () => {
     expect(banner).toMatch(/openSittings == null \|\| openSittings\.length > 0/);
   });
 
+  /*
+   * THE ANSWER MUST STAY FRESH. The check used to run on mount and when a build started waiting,
+   * on the belief that the shell mounts a fresh banner per view. It does not — App.tsx renders
+   * <UpdateBanner /> at the same position in the landing and manager branches, so React keeps the
+   * same element and its effects across that move. A window that checked before a sitting began
+   * kept an enabled button, and the sitting it would have reloaded is in the OTHER window, where
+   * nobody is watching this banner.
+   */
+  it('keeps asking while the notice is up, rather than trusting one answer', () => {
+    expect(banner).toMatch(/setInterval\(again, RECHECK_MS\)/);
+    // Read from source rather than imported: UpdateBanner pulls in swUpdate, which imports the
+    // virtual pwa-register module that only exists inside a Vite build.
+    const declared = banner.match(/export const RECHECK_MS = (\d+);/);
+    expect(declared, 'RECHECK_MS is not declared as a plain literal').not.toBeNull();
+    const ms = Number(declared![1]);
+    expect(ms).toBeGreaterThan(0);
+    expect(ms).toBeLessThanOrEqual(15000);
+  });
+
+  it('re-asks when the window is shown or focused, not only on the timer', () => {
+    expect(banner).toMatch(/visibilitychange/);
+    expect(banner).toMatch(/addEventListener\('focus'/);
+  });
+
+  it('asks again AT THE CLICK, before anything irreversible happens', () => {
+    // Every poll is an answer from the past. A sitting started one second before the operator's
+    // finger lands is caught here and nowhere else: applying reloads every window on the device,
+    // and there is no confirmation step after this point.
+    const apply = banner.slice(banner.indexOf('const apply = ()'), banner.indexOf('return (', banner.indexOf('const apply = ()')));
+    expect(apply).toMatch(/sittingsInProgress\(\)/);
+    // and it must REFUSE on a positive answer rather than merely report it
+    expect(apply).toMatch(/open\.length > 0/);
+    expect(apply.indexOf('sittingsInProgress()')).toBeLessThan(apply.indexOf('applyUpdate()'));
+  });
+
   it('releases the applying latch when the update fails', () => {
     // Otherwise the button sits disabled reading "Updating…" for ever, which reports an update in
     // progress when the tablet is in fact still on the stale build.
-    expect(banner).toMatch(/applyUpdate\(\)\.catch/);
-    expect(banner).toMatch(/setApplying\(false\)/);
+    // applyUpdate is returned from inside the pre-flight chain, so its rejection lands in that
+    // chain's single catch — which must be the last link, or a failure escapes the latch.
+    const apply = banner.slice(banner.indexOf('const apply = ()'), banner.indexOf('return (', banner.indexOf('const apply = ()')));
+    expect(apply).toMatch(/return applyUpdate\(\);/);
+    expect(apply.lastIndexOf('.catch(')).toBeGreaterThan(apply.indexOf('return applyUpdate();'));
+    expect(apply).toMatch(/setApplying\(false\)/);
   });
 });
 

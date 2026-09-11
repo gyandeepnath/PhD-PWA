@@ -119,6 +119,37 @@ describe('coverage and session-level expectations', () => {
   });
 });
 
+describe('the stimulus must have been the same size throughout a sitting', () => {
+  /*
+   * stimulus_scale multiplies the stimulus text, so it IS the visual angle a condition was
+   * presented at. Within one sitting the tablet does not change shape and it should be one number —
+   * but the running viewport minimum drops when the viewport genuinely shrinks, which on an
+   * un-installed browser means the address bar appearing partway through. Conditions either side of
+   * that are not the same stimulus, and reading rate moves with visual angle.
+   */
+  const atScales = (...scales: (number | undefined)[]) => {
+    const b = buildFixtureBundle();
+    b.conditions = b.conditions.slice(0, scales.length);
+    b.conditions.forEach((c, i) => { (c as { stimulus_scale?: number }).stimulus_scale = scales[i]; });
+    return auditBundle(b).findings.filter((f) => f.check === 'stimulus_scale_stable');
+  };
+
+  it('says nothing when every condition was presented at the same scale', () => {
+    expect(atScales(0.86, 0.86, 0.86)).toHaveLength(0);
+  });
+
+  it('reports a sitting whose scale changed partway through', () => {
+    const found = atScales(1, 1, 0.76);
+    expect(found).toHaveLength(1);
+    expect(found[0].severity).toBe('warning');
+    expect(found[0].detail).toMatch(/24%/);           // (1 - 0.76) / 1
+  });
+
+  it('says nothing for rows recorded before the scale was captured', () => {
+    expect(atScales(undefined, undefined)).toHaveLength(0);
+  });
+});
+
 describe('media can never exist without its grant', () => {
   it('flags a retained file whose consent snapshot does not authorise it', () => {
     const b = buildFixtureBundle();

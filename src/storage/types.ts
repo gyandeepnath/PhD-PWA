@@ -310,6 +310,22 @@ export interface ConditionRecord {
    */
   attempt_number?: number;
   /**
+   * The root scale factor the stimuli of THIS condition were presented at, and the viewport it was
+   * computed from.
+   *
+   * The session record carries a stimulus_scale too, stamped once inside beginSession. It can be
+   * wrong by the time a stimulus is shown: the setup screens may be laid out in portrait or with
+   * the browser's address bar up, and the scale settles at a different value once the tablet is in
+   * its final landscape state. Scaling the root scales the stimulus text, so this factor IS the
+   * visual angle the condition was run at — recorded here, where the stimulus actually happens.
+   *
+   * A value equal to MIN_SCALE means the viewport was too small for the design canvas even at the
+   * smallest scale allowed, so the screens were clipped. Absent on rows written before this was
+   * captured.
+   */
+  stimulus_scale?: number;
+  layout_viewport?: string;
+  /**
    * The grey-field duration the protocol asked for, beside `adaptation_ms_before`, which is what
    * the participant actually saw. They differ when the device sleeps or the app is backgrounded
    * mid-field: the countdown is frame-driven and stops, and on waking the screen advances at once.

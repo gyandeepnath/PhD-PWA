@@ -920,3 +920,61 @@ Verified NOT defective, for the record: the frameTimes trim (useTracking.ts:180)
 **Impact:** No effect on current data. It is a latent trap directly in the path of the correct fix for finding 2, and a comment describing a facility that is not usable as described.
 
 **Proposed fix:** Either set --vl-vw/--vl-vh unconditionally (move them above the `next === applied` early return, since the floor can move without the scale moving) or delete them and the comment.
+
+---
+
+## Round 2 triage, and what was done
+
+Every finding above was re-checked against the code as it stands. Most were already fixed by the
+work that followed the first audit; the ones that were still live have now been dealt with, and two
+that were mis-stated are corrected here rather than silently dropped.
+
+**Fixed in this pass**
+
+- **The update gate answered a question from the past.** `UpdateBanner` checked for open sittings on
+  mount and when a build started waiting, on the belief that the shell mounts a fresh banner per
+  view. It does not — App.tsx renders `<UpdateBanner />` at the same position in the landing and
+  manager branches, so React keeps the element and its effects across that move. A window that
+  checked before a sitting began kept an enabled Update button, and the sitting it would have
+  reloaded is in the OTHER window, where nobody is looking at this banner. Now re-asked on a timer,
+  on visibility and focus, and — the part that actually closes it — again at the moment of the
+  click, before anything irreversible happens.
+- **`stimulus_scale` was stamped once, inside `beginSession`.** The scale is free to settle
+  elsewhere afterwards (portrait setup screens, the address bar dismissed), and it multiplies the
+  stimulus text, so the recorded value could state the wrong visual angle for all ten rows. It is
+  now recorded per condition, read when the condition starts, together with the viewport it was
+  computed from; a new `stimulus_scale_stable` integrity check reports a sitting whose conditions
+  did not share a visual angle. The session-level column is kept and its codebook entry now says
+  what it is.
+- **`isBelowMinimum()` had no caller**, under a comment saying the operator needs to know. It is now
+  checked on the pre-flight screen and reported there — clipped content is not merely off-screen,
+  since #root is `overflow: hidden` and body is `touch-action: none`, so it is unreachable by any
+  gesture and presents as a Continue button that does not exist.
+- **`--vl-vw` / `--vl-vh` were written but never read**, and were written after the early return, so
+  on any device whose initial scale is 1 they were never set at all — the reference tablet included.
+  Removed rather than repaired: the layout problem they were meant to serve is solved by
+  `STIMULUS_COLUMN_PX` and `STIMULUS_BOX`.
+- **`screen.orientation` was not listened for.** `window.orientationchange` is deprecated; listening
+  only for it leaves a portrait viewport floor in force after a rotation on any browser that has
+  dropped it. Both are now handled.
+- **The `.screen` convention had a comment and no guard.** `tests/stimulusGeometry.test.ts` now
+  ratchets `min-h-screen`: the eight existing uses are listed with the reason each is safe (all
+  cream-on-cream or `fixed inset-0`), a new one fails the suite, and a stale allowlist entry fails
+  it too. The failure being prevented is a bright band visible only in negative polarity — present
+  in exactly half the conditions, on the factor the study is about.
+
+**Corrected**
+
+- The `visibilitychange` half of the viewport finding is NOT a defect to fix. Resetting the floor on
+  wake would let the scale RISE, which resizes the text under a participant mid-passage — precisely
+  what the floor exists to prevent. Keeping the smaller scale is the design working. What it cost
+  was an export that misstated the scale, and that is fixed on the condition record instead. The
+  reasoning is recorded in `viewportScale.ts` so the next reader does not "fix" it.
+- The `fps_adequate_for_ratio` third of the null-flags finding was never true: that column already
+  emitted an empty cell for a missing eye-metrics row.
+
+**Left to the investigator**
+
+- Whether `transform: scale()` changes Chrome's antialiasing regime between devices, and whether
+  that interacts with ink colour. It cannot be settled from this repository — it needs photometry
+  on the two physical tablets, or the simpler answer of running the whole study on one model.

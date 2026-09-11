@@ -210,6 +210,14 @@ export function foldViewportFloor(w: number, h: number): { w: number; h: number 
  * True when the viewport is so small that even MIN_SCALE cannot fit the design canvas, so content
  * is being clipped despite scaling. The operator needs to know rather than discover it as a
  * missing button.
+ *
+ * This had no production caller for a while: the sentence above described a warning nobody was
+ * shown, and a sitting whose screens were clipped exported byte-identically to a clean one. It is
+ * now checked on the pre-flight screen, which reports it and lets the session run — the same rule
+ * the typeface check follows.
+ *
+ * In the exported data the signature is `stimulus_scale == MIN_SCALE`: the scale is clamped there,
+ * so a row at exactly 0.5 is a row that did not fit.
  */
 export function isBelowMinimum(w = measure().w, h = measure().h): boolean {
   return Math.min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT) < MIN_SCALE;
@@ -222,9 +230,17 @@ function apply(): void {
   if (next === applied) return;
   applied = next;
   document.documentElement.style.setProperty('--vl-scale', String(next));
-  // Expose the viewport actually sized for, so a layout can react without re-measuring.
-  document.documentElement.style.setProperty('--vl-vw', `${Math.round(w)}px`);
-  document.documentElement.style.setProperty('--vl-vh', `${Math.round(h)}px`);
+  /*
+   * `--vl-vw` and `--vl-vh` used to be published here, described as a facility a layout could react
+   * to without re-measuring. Nothing ever read them — and they were written AFTER the
+   * `if (next === applied) return` above, so on any device whose initial scale is 1 they were never
+   * written at all. A screen authored against `var(--vl-vh)` would therefore have got an empty
+   * value on the reference tablet: the one device where anyone would have tested it.
+   *
+   * They are gone rather than fixed. The layout problem they were meant to serve is solved properly
+   * by STIMULUS_COLUMN_PX and STIMULUS_BOX at the foot of this file, which make the stimulus
+   * geometry device-independent instead of inviting each screen to react to the viewport itself.
+   */
 }
 
 /**
@@ -252,13 +268,36 @@ export function installViewportScale(): () => void {
   };
 
   window.addEventListener('resize', schedule);
+  /*
+   * BOTH orientation signals, because `window.orientationchange` is deprecated and the Screen
+   * Orientation API is what replaces it. Listening only for the old one leaves the floor carrying a
+   * portrait minimum into landscape on any browser that has dropped it, which sizes the whole
+   * sitting for a shape the tablet is no longer in.
+   *
+   * resetViewportFloor is idempotent, so both firing is harmless.
+   */
   window.addEventListener('orientationchange', onOrientation);
+  screen.orientation?.addEventListener?.('change', onOrientation);
   window.visualViewport?.addEventListener('resize', schedule);
+
+  /*
+   * DELIBERATELY NOT visibilitychange. It is tempting — a tablet that slept while the address bar
+   * was showing keeps the smaller scale afterwards, and resetting on wake would let it recover.
+   *
+   * But the floor is the mechanism that stops the stimulus resizing under a reader, and resetting
+   * it lets the scale RISE. A participant who is mid-passage when the operator switches apps and
+   * back would watch the text grow: precisely the failure this design exists to prevent, introduced
+   * by a fix for a smaller one. Keeping the smaller scale is the design working — it sizes for the
+   * worst case seen, so the layout always fits. What that cost was an export whose stimulus_scale
+   * was stamped once at session start and never revisited, and that is fixed where it belongs, on
+   * the condition record.
+   */
 
   return () => {
     if (frame) cancelAnimationFrame(frame);
     window.removeEventListener('resize', schedule);
     window.removeEventListener('orientationchange', onOrientation);
+    screen.orientation?.removeEventListener?.('change', onOrientation);
     window.visualViewport?.removeEventListener('resize', schedule);
   };
 }

@@ -15,6 +15,7 @@ import type { MediaConsent } from '@/storage/media';
 import { WavyBackground } from '@/components/WavyBackground';
 import { now } from '@/lib/timing';
 import { stimulusFontLoaded } from '@/lib/fonts';
+import { isBelowMinimum } from '@/lib/viewportScale';
 import { startFaceProbe, type FaceProbeResult, type FaceProbeStatus } from '@/screening/faceProbe';
 import type { CameraStatus } from '@/storage/types';
 
@@ -841,6 +842,26 @@ export function Preflight({ onDone }: { onDone: (fontOk: boolean | null) => void
   const [fontOk, setFontOk] = useState<boolean | null | undefined>(undefined);
   useEffect(() => { void stimulusFontLoaded().then(setFontOk); }, []);
 
+  /**
+   * Is the screen too small for the design canvas even at the smallest scale the study allows?
+   *
+   * `isBelowMinimum()` existed with a comment saying "the operator needs to know rather than
+   * discover it as a missing button" — and had no caller anywhere in the app, so nobody was told
+   * anything. Content past the edge is not merely off-screen: #root sets overflow:hidden so a
+   * stimulus cannot be scrolled mid-exposure, and body sets touch-action:none, so it is unreachable
+   * by any gesture. The way that presents is a Continue button that does not exist.
+   *
+   * Re-checked on resize, because the pre-flight screen is where an operator would rotate the
+   * tablet or dismiss the address bar in response to being told.
+   */
+  const [clipped, setClipped] = useState(false);
+  useEffect(() => {
+    const check = () => setClipped(isBelowMinimum());
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   const storageBlocks = storage?.verdict === 'blocked';
   const all = checked.every(Boolean) && !!storage && !storageBlocks && fontOk !== undefined;
   const tone = { ok: '#22c97a', warn: '#c98a22', blocked: '#e64c4c', unknown: '#5a5a7a' } as const;
@@ -864,6 +885,19 @@ export function Preflight({ onDone }: { onDone: (fontOk: boolean | null) => void
           <p key={i} className="font-lab text-sm" style={{ marginTop: 6, color: '#3a3a4a' }}>{m}</p>
         ))}
       </div>
+      {clipped && (
+        <div data-testid="layout-warning" style={{ marginTop: 12, maxWidth: 640, padding: '12px 14px', borderRadius: 10, border: '1px solid #c98a22', background: '#c98a2212' }}>
+          <p className="font-lab text-xs uppercase tracking-wide" style={{ color: '#c98a22' }}>Screen too small — content is being clipped</p>
+          <p className="font-lab text-sm" style={{ marginTop: 6, color: '#3a3a4a' }}>
+            This viewport is smaller than the app can scale down to, so parts of some screens are
+            past the edge — and they cannot be scrolled to, because a stimulus screen must not
+            scroll mid-exposure. Buttons may simply be absent. Rotate to landscape, launch from the
+            home-screen icon so the address bar is gone, and close any split-screen or floating
+            window. If you run anyway, these rows carry <code>stimulus_scale=0.5</code>, which is
+            the value that means the layout did not fit.
+          </p>
+        </div>
+      )}
       {fontOk === false && (
         <div data-testid="font-warning" style={{ marginTop: 12, maxWidth: 640, padding: '12px 14px', borderRadius: 10, border: '1px solid #c98a22', background: '#c98a2212' }}>
           <p className="font-lab text-xs uppercase tracking-wide" style={{ color: '#c98a22' }}>Stimulus typeface — not loaded</p>

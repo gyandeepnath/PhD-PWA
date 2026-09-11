@@ -15,6 +15,8 @@
  * The reading passage was a percentage column. The reaction-time target was a percentage position
  * with a constant diameter. Both are now fixed in root pixels, and these tests hold them there.
  */
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
   computeScale, STIMULUS_COLUMN_PX, STIMULUS_BOX, DESIGN_WIDTH, DESIGN_HEIGHT,
@@ -130,5 +132,61 @@ describe('the reaction-time target sits in a device-independent field', () => {
   it('is the design canvas, so the reference device is unchanged', () => {
     expect(STIMULUS_BOX.width).toBe(DESIGN_WIDTH);
     expect(STIMULUS_BOX.height).toBe(DESIGN_HEIGHT);
+  });
+});
+
+/**
+ * `min-h-screen` on a condition-coloured screen is a polarity confound, and it has happened.
+ *
+ * `min-h-screen` is `min-height: 100vh`. `vh` measures the raw viewport, while #root's height is
+ * `calc(100% / var(--vl-scale))` — inside a scaled root those are different boxes, so a screen sized
+ * in vh does not fill the one it is laid out in. What shows through the shortfall is the cream page
+ * behind it. On a positive-polarity condition (dark ink on light) nobody can see it; on a negative
+ * one (light ink on near-black) it is a bright band at the edge of the display, present in exactly
+ * half the conditions of the study, on the factor the study is about. theme.css documents `.screen`
+ * as the replacement and the four stimulus stages were converted — but nothing stopped the next
+ * screen being written from any of the eight files below, which still use it.
+ *
+ * This is a ratchet, not a ban. The existing uses are all cream-on-cream or `fixed inset-0`, where
+ * the shortfall shows cream against cream and nothing is visible. A NEW one has to be justified
+ * here, in front of the reason, rather than copied in.
+ */
+describe('the .screen convention has a guard, not just a comment', () => {
+  /** Each entry: why this file may keep `min-h-screen`. A stimulus screen can never be on this list. */
+  const ALLOWED: Record<string, string> = {
+    'src/components/ErrorBoundary.tsx': 'fixed inset-0 over the whole viewport; no condition colour',
+    'src/screening/IshiharaTest.tsx': 'cream page, before any condition is shown',
+    'src/start/SessionManager.tsx': 'operator console, cream, between sittings',
+    'src/start/BreakScreen.tsx': 'cream break screen; no stimulus is displayed',
+    'src/start/LandingPage.tsx': 'cream landing screen',
+    'src/experiment/Experiment.tsx': 'cream loading/fallback shell, not a stimulus stage',
+    'src/dashboard/Dashboard.tsx': 'operator dashboard, cream',
+    'src/dashboard/LazyDashboard.tsx': 'cream loading fallback for the dashboard',
+  };
+
+  const root = resolve(__dirname, '..');
+  const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = join(dir, e.name);
+    return e.isDirectory() ? walk(p) : p.endsWith('.tsx') ? [p] : [];
+  });
+
+  it('no screen outside the allowlist sizes itself in viewport units', () => {
+    const offenders = walk(join(root, 'src'))
+      .map((p) => [relative(root, p).split('\\').join('/'), readFileSync(p, 'utf8')] as const)
+      // The className, not the word — VisualSearchTask explains in a comment why it does NOT use it.
+      .filter(([, src]) => /className=(?:"|'|\{`)[^"'`]*\bmin-h-screen\b/.test(src))
+      .map(([rel]) => rel)
+      .filter((rel) => !(rel in ALLOWED));
+    expect(offenders, 'a new min-h-screen: if this screen ever shows a condition colour it is a '
+      + 'polarity-confounded band. Use .screen, or add it to ALLOWED with the reason it is safe.')
+      .toEqual([]);
+  });
+
+  it('the allowlist has no stale entries, so it cannot quietly become a blanket exemption', () => {
+    const stale = Object.keys(ALLOWED).filter((rel) => {
+      const p = join(root, rel);
+      return !existsSync(p) || !/className=(?:"|'|\{`)[^"'`]*\bmin-h-screen\b/.test(readFileSync(p, 'utf8'));
+    });
+    expect(stale, 'these files no longer use min-h-screen; drop them from ALLOWED').toEqual([]);
   });
 });

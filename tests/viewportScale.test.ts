@@ -10,6 +10,8 @@
  * The Xiaomi Pad 6 case below is the device that found this.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   computeScale, isBelowMinimum, foldViewportFloor, resetViewportFloor,
   DESIGN_WIDTH, DESIGN_HEIGHT, MIN_SCALE,
@@ -194,5 +196,57 @@ describe('a transient occlusion must not shrink the stimulus for the rest of the
     resetViewportFloor();
     const portrait = foldViewportFloor(720, 1152);
     expect(portrait).toEqual({ w: 720, h: 1152 });
+  });
+});
+
+/*
+ * The three findings that made the scale unaccountable in the exported data, together: the
+ * per-condition record, the operator warning that had no caller, and the CSS variables that looked
+ * like a facility and were never written on the one device anyone would test on.
+ */
+describe('the scale is accountable in the data, not just applied to the screen', () => {
+  const src = readFileSync(resolve(__dirname, '..', 'src/experiment/Experiment.tsx'), 'utf8');
+  const vs = readFileSync(resolve(__dirname, '..', 'src/lib/viewportScale.ts'), 'utf8');
+  const preflight = readFileSync(resolve(__dirname, '..', 'src/start/setupStages.tsx'), 'utf8');
+
+  it('records the scale on every condition, not once at session creation', () => {
+    // The session-level stamp happens inside beginSession, before the participant has touched the
+    // tablet. The scale is still free to settle elsewhere afterwards — portrait setup screens, the
+    // address bar dismissed — and it multiplies the stimulus text, so a stale value states the
+    // wrong visual angle for all ten rows.
+    const start = src.indexOf("await put('conditions', {");
+    expect(start).toBeGreaterThan(-1);
+    const write = src.slice(start, src.indexOf('});', start));
+    expect(write).toMatch(/stimulus_scale: currentScale\(\)/);
+    expect(write).toMatch(/layout_viewport: layoutViewport\(\)/);
+  });
+
+  it('warns the operator when the screen cannot fit the canvas at all', () => {
+    // isBelowMinimum carried a comment saying "the operator needs to know rather than discover it
+    // as a missing button" and had no caller anywhere in the app. Clipped content is not merely
+    // off-screen: #root is overflow:hidden and body is touch-action:none, so it is unreachable.
+    expect(preflight).toMatch(/isBelowMinimum\(\)/);
+    expect(preflight).toContain('data-testid="layout-warning"');
+  });
+
+  it('no longer publishes CSS variables nothing reads', () => {
+    // Written after the `if (next === applied) return`, so on any device whose initial scale is 1
+    // they were never set at all — including the reference tablet.
+    const code = vs.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    expect(code).not.toMatch(/--vl-vw|--vl-vh/);
+    expect(code).toMatch(/--vl-scale/);
+  });
+
+  it('listens for the Screen Orientation API as well as the deprecated event', () => {
+    // Listening only for window.orientationchange leaves a portrait floor in force after a rotation
+    // on any browser that has dropped it — sizing the whole sitting for a shape the tablet is not in.
+    expect(vs).toMatch(/screen\.orientation\?\.addEventListener\?\.\('change', onOrientation\)/);
+  });
+
+  it('does NOT reset the floor on visibilitychange, which would resize text under a reader', () => {
+    // Tempting, and wrong: the floor is what stops the stimulus resizing mid-passage. Resetting it
+    // lets the scale rise. The staleness it was meant to fix belongs on the condition record.
+    const code = vs.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    expect(code).not.toMatch(/visibilitychange/);
   });
 });

@@ -85,6 +85,31 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
     }
   }
 
+  /*
+   * ---- the stimulus must have been the same size in every condition of a sitting
+   *
+   * Scaling the root scales the stimulus text, so `stimulus_scale` IS the visual angle a condition
+   * was presented at. Within one sitting it should be one number: the tablet does not change shape.
+   * It can change, though — the running minimum drops when the viewport genuinely shrinks, which on
+   * an un-installed browser means the address bar appearing, or a window being resized.
+   *
+   * If it did change, the conditions of that sitting were not presented at the same visual angle,
+   * and reading rate and ocular behaviour both move with visual angle. That is a within-participant
+   * difference in the stimulus with nothing in the design to account for it, so it is reported: the
+   * per-condition column says which rows differ, and this says the sitting is not homogeneous.
+   */
+  const scales = [...new Set(conditions.map((c) => c.stimulus_scale).filter((v): v is number => typeof v === 'number'))];
+  if (scales.length > 1) {
+    const lo = Math.min(...scales);
+    const hi = Math.max(...scales);
+    add('warning', 'stimulus_scale_stable',
+      `the stimulus was presented at ${scales.length} different scales within this sitting `
+      + `(${lo} to ${hi}, a ${Math.round(((hi - lo) / hi) * 100)}% difference in linear size). The `
+      + `conditions of this sitting therefore did not share a visual angle; see stimulus_scale on `
+      + `02_conditions.csv for which rows differ.`,
+      conditions.filter((c) => c.stimulus_scale !== hi).map((c) => c.condition_id));
+  }
+
   // ---- the join key must be unique, or every join is ambiguous
   const dupIds = duplicates(conditions, (c) => c.condition_id);
   for (const [id, n] of dupIds) {

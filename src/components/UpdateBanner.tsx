@@ -3,6 +3,9 @@ import { onUpdateWaiting, applyUpdate } from '@/lib/swUpdate';
 import { sittingsInProgress, sessionLabel } from '@/storage/gather';
 import { APP_VERSION, GIT_HASH } from '@/lib/env';
 
+/** How often the open-sitting question is re-asked while the notice is on screen. */
+export const RECHECK_MS = 6000;
+
 /**
  * Offer a waiting build to the operator — but only when no sitting is open.
  *
@@ -25,6 +28,22 @@ import { APP_VERSION, GIT_HASH } from '@/lib/env';
  * button in all of them. The notice stays visible either way: hiding it silently would bring back
  * the failure this whole module exists for — a deployed fix and a stale cache look identical from
  * the tablet, and telling them apart took a full round trip of screenshots.
+ *
+ * AND THE ANSWER HAS TO STAY FRESH, which it did not. The check ran on mount and when a build
+ * started waiting, and the comment claimed "the shell mounts a fresh banner per view". It does not:
+ * App.tsx renders <UpdateBanner /> at the same position in the landing and manager branches, so
+ * React reconciles it as the same element and moving between those screens preserves its state,
+ * effects included. A window that answered "nothing open" BEFORE a sitting began kept an enabled
+ * Update button for as long as it stayed on those screens — and the sitting it would have reloaded
+ * is in a different window, where nobody is looking at this banner at all. The consequence is a
+ * participant's condition cut off at an arbitrary point mid-reading; because resume reuses the
+ * condition_id, the truncated attempt is then overwritten, and the row's incomplete_blink_ratio is
+ * a proportion over a window the protocol never defined.
+ *
+ * So the question is asked on a timer while the banner is up, again whenever the window is shown or
+ * focused, and — the part that actually closes it — AGAIN AT THE MOMENT OF THE CLICK, before
+ * anything irreversible happens. A sitting started one second before the operator's finger lands is
+ * caught by the last of those; nothing else can catch it.
  */
 export function UpdateBanner() {
   const [waiting, setWaiting] = useState(false);
@@ -45,9 +64,30 @@ export function UpdateBanner() {
     return () => { live = false; };
   }, []);
 
-  // Re-checked on mount and whenever a build starts waiting. The shell mounts a fresh banner per
-  // view, so finishing a sitting and returning to the manager asks again.
-  useEffect(() => (waiting ? recheck() : undefined), [waiting, recheck]);
+  /*
+   * While a build is waiting, keep asking. A sitting can be started in another window at any
+   * moment, and this banner would otherwise still be showing the answer from before it began.
+   *
+   * Six seconds is cheap — one indexed read of the session list — and bounds how long a stale
+   * "nothing open" can be displayed. It is not the guarantee; the check inside apply() is.
+   */
+  useEffect(() => {
+    if (!waiting) return undefined;
+    let cancel = recheck();
+    const again = () => { cancel(); cancel = recheck(); };
+    const timer = setInterval(again, RECHECK_MS);
+    // A tablet whose other window has been in the foreground comes back needing a fresh answer
+    // immediately, not up to six seconds later.
+    const onVisible = () => { if (document.visibilityState === 'visible') again(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', again);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', again);
+      cancel();
+    };
+  }, [waiting, recheck]);
 
   if (!waiting) return null;
 
@@ -56,14 +96,30 @@ export function UpdateBanner() {
   const apply = () => {
     setApplying(true);
     setFailure(null);
-    void applyUpdate().catch((err: unknown) => {
-      // Normally unreachable, because a successful apply reloads the page and this component goes
-      // with it. When it is reached, the latch has to be released: leaving the button disabled
-      // showing "Updating…" for ever tells the operator the update is in progress when it has in
-      // fact failed, and the only build that ever reaches the tablet is the stale one.
-      setApplying(false);
-      setFailure(err instanceof Error ? err.message : String(err));
-    });
+    /*
+     * Ask once more, now. Every poll above is an answer from the past, and applying the update
+     * reloads every window on the device — there is no undo and no confirmation step after this.
+     * A sitting begun between the last poll and this click is caught here and nowhere else.
+     */
+    void sittingsInProgress()
+      .then((open) => {
+        if (open.length > 0) {
+          setOpenSittings(open.map(sessionLabel));
+          setApplying(false);
+          return undefined;
+        }
+        return applyUpdate();
+      })
+      .catch((err: unknown) => {
+        // Normally unreachable, because a successful apply reloads the page and this component goes
+        // with it. When it is reached, the latch has to be released: leaving the button disabled
+        // showing "Updating…" for ever tells the operator the update is in progress when it has in
+        // fact failed, and the only build that ever reaches the tablet is the stale one. A failure
+        // of the re-check itself lands here too, and refusing is the right answer to an unreadable
+        // database — the same rule the poll follows.
+        setApplying(false);
+        setFailure(err instanceof Error ? err.message : String(err));
+      });
   };
 
   return (

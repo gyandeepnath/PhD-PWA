@@ -664,6 +664,15 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
        */
       passage_repeat_number: passageRepeatNumber(session),
       attempt_number: attempt,
+      /*
+       * Read NOW, not at session start. The session-level copy is stamped inside beginSession,
+       * before the participant has touched the tablet — and the scale is still free to change after
+       * that, when the setup screens are left in portrait, or the address bar is dismissed, or the
+       * tablet is put on its stand. The scale multiplies the stimulus text, so a stale value states
+       * the wrong visual angle for every condition of the sitting.
+       */
+      stimulus_scale: currentScale(),
+      layout_viewport: layoutViewport(),
     });
     conditionStarted.current[machine.stepIndex] = Date.now();
     // Coarse resume pointer: an interruption during this condition resumes by redoing it.
