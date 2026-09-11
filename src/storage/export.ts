@@ -711,7 +711,16 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
   csv('10_wide_summary.csv',
     ['participant_id', 'session_index', 'condition_id', 'condition_label', 'session_position', 'polarity', 'color_name', 'wcag_contrast_ratio', 'below_wcag_aa', 'passage_id', 'mean_rt_hits_ms', 'd_prime', 'd_prime_se', 'criterion', 'fatigue_mean', 'fatigue_delta', 'comprehension_correct', 'search_accuracy', 'search_efficiency', 'comfort_score', 'clarity_score', 'blink_rate', 'blink_rate_full', 'effective_fps', 'face_presence_ratio', 'qc_overall', 'engagement_flag', 'quality_score'],
     summaries.map((s) => ({
-      participant_id: pid, session_index: session.session_index, condition_label: s.condition_label, session_position: s.session_position,
+      participant_id: pid, session_index: session.session_index,
+      /*
+       * THE JOIN KEY. The header declared condition_id and this row object omitted it, so every
+       * row of 10_wide_summary.csv carried a blank one — the file could not be joined to anything.
+       * The Python analysis template's FIRST operation is that join, and it crashed on a dtype
+       * mismatch (str against an all-NaN float column) before printing a line, complete with an
+       * assert written to catch exactly a bad join.
+       */
+      condition_id: s.condition_id,
+      condition_label: s.condition_label, session_position: s.session_position,
       polarity: s.polarity, color_name: s.color_name, wcag_contrast_ratio: s.wcag_contrast_ratio,
       below_wcag_aa: s.below_wcag_aa, passage_id: s.passage_id, mean_rt_hits_ms: s.mean_rt_hits_ms,
       d_prime: s.d_prime, d_prime_se: s.d_prime_se, criterion: s.criterion,

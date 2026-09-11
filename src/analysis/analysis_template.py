@@ -1,7 +1,26 @@
 """VisuLab — analysis template (Python).
 
-Authoritative inference for the within-subjects design: linear mixed models with a random
-intercept per participant. Run after exporting the CSV bundle.
+A CROSS-CHECK, not the authoritative analysis. `analysis_template.R` is what implements
+docs/ANALYSIS_PLAN.md: a random-effects reduction ladder that reports which structure it settled
+on, and the pre-specified sensitivity refits. This file's header used to claim to be
+"authoritative inference", which it was not — and three pre-registered requirements were simply
+absent from it, so an analyst who ran this file instead of the R one satisfied none of them and had
+no way to tell.
+
+What this file is for: an independent re-derivation in a second toolchain. Where the two must agree
+is in SIGN and in significance, not coefficient for coefficient — statsmodels' GEE is
+population-averaged where lme4's glmer is subject-specific.
+
+TWO LIMITS OF THIS FILE, stated because they are limits of the tool and not choices:
+
+  - A GEE takes ONE clustering level. The pre-registered primary model has
+    `(1 | participant_id) + (1 | passage_id)`; this file can cluster on participant only, so the
+    passage intercept the design deliberately makes available is not fitted here. The R template
+    fits it. A passage effect will therefore load onto the residual here and not there.
+  - `mixedlm` fits a random intercept only. Where the plan's maximal structure carries a random
+    slope, this file is at the plan's first reduction from the start.
+
+Run after exporting the CSV bundle.
 
     pip install pandas numpy statsmodels scipy
 
@@ -68,6 +87,22 @@ def main() -> None:
     )
     cond["log_contrast"] = np.log10(cond["wcag_contrast_ratio"])
     cond["below_aa"] = cond["below_wcag_aa"].astype(int)
+
+    # SUM-TO-ZERO POLARITY, and CENTRED POSITION. Both are pre-registered and neither was used.
+    #
+    # Every model below carried `C(polarity)`, which is patsy's default TREATMENT coding, inside an
+    # interaction with colour. docs/ANALYSIS_PLAN.md is explicit about why that is wrong: "With an
+    # interaction present, a dummy-coded main effect is the simple effect at the other factor's
+    # reference level rather than an average effect. This is not a stylistic preference; it changes
+    # what the coefficient means." The polarity coefficient this file printed for the PRIMARY
+    # outcome was therefore the effect of polarity in achromatic text only — the one condition pair
+    # with contrast held constant — reported as though it were the average effect of polarity.
+    #
+    # analysis_long.csv already exports `polarity_c` and `position_c` for exactly this. They are
+    # re-derived here because this file reads the numbered CSVs, and the codings are kept identical
+    # to that file's: negative = -0.5, positive = +0.5; position centred on (N_CONDITIONS - 1) / 2.
+    cond["polarity_c"] = np.where(cond["polarity"] == "positive", 0.5, -0.5)
+    cond["position_c"] = cond["session_position"] - (cond["session_position"].max() / 2)
     # CVS-Q change, per SITTING. Pivoting on participant_id alone silently averaged the two sittings
     # (pivot_table defaults to aggfunc="mean"), which destroyed the illumination contrast that is
     # the entire reason for administering it twice. 13_cvsq.csv now carries session_index.
@@ -124,7 +159,7 @@ def main() -> None:
         subset=["mean_rt_hits_ms"]
     )
     m_rt = smf.mixedlm(
-        "mean_rt_hits_ms ~ log_contrast + C(polarity) + session_position" + si,
+        "mean_rt_hits_ms ~ log_contrast + polarity_c + position_c" + si,
         rt,
         groups=rt["participant_id"],
     ).fit()
@@ -132,15 +167,27 @@ def main() -> None:
     print(m_rt.summary())
 
     # --- Fatigue -----------------------------------------------------------------------
+    # fatigue_delta, per the plan's outcome table: "Change from the participant's own baseline
+    # removes between-person scale use. Use fatigue_mean only if baselines are missing." This file
+    # fitted fatigue_mean unconditionally, so it carried every participant's scale use into the
+    # residual and into any between-participant term. 10_wide_summary.csv computes the delta
+    # against the session baseline; fall back only when it is genuinely absent.
     fat = fatigue[fatigue["stage"] == "post_condition"].merge(
         cond, on=["participant_id", "condition_id"]
     )
+    if "condition_id" in wide.columns and "fatigue_delta" in wide.columns:
+        fat = fat.merge(wide[["condition_id", "fatigue_delta"]], on="condition_id", how="left")
+    fat_dv = "fatigue_delta" if ("fatigue_delta" in fat.columns and fat["fatigue_delta"].notna().any()) else "fatigue_mean"
+    if fat_dv == "fatigue_mean":
+        print("\n[NOTE] No session baseline available: fitting fatigue_mean, which carries "
+              "between-participant scale use. See the plan's outcome table.")
+    fat = fat.dropna(subset=[fat_dv])
     m_fat = smf.mixedlm(
-        "fatigue_mean ~ log_contrast + C(polarity) + session_position" + si,
+        f"{fat_dv} ~ log_contrast + polarity_c + position_c" + si,
         fat,
         groups=fat["participant_id"],
     ).fit()
-    print("\n=== Fatigue mixed model ===")
+    print(f"\n=== Fatigue mixed model ({fat_dv}) ===")
     print(m_fat.summary())
 
     # --- Comprehension (logistic; GEE as a mixed-logit stand-in) -----------------------
@@ -149,8 +196,8 @@ def main() -> None:
         # Item-level rows, three per condition, sharing a passage and a reading episode. GEE with
         # groups=condition_id gives a working-correlation account of that clustering; a plain
         # participant-level mixed model would treat the three items as independent.
-        f"is_correct ~ log_contrast + C(polarity){ilx} + C(question_kind)"
-        " + session_position" + si,
+        f"is_correct ~ log_contrast + polarity_c{ilx} + C(question_kind)"
+        " + position_c" + si,
         groups="participant_id",
         data=comp,
         family=__import__("statsmodels.api", fromlist=["families"]).families.Binomial(),
@@ -185,26 +232,76 @@ def main() -> None:
         # for coefficient. Where they must agree is in SIGN and in significance.
         counts = ["blink_count_incomplete", "blink_count_full", "blink_count_micro"]
         if all(c in eye_active.columns for c in counts):
+            # fps_adequate_for_ratio is deliberately NOT in the dropna subset: a row missing the
+            # flag must reach the sensitivity block and be counted there, not vanish from the
+            # primary fit for want of a QC column.
             prim = eye_active.dropna(subset=counts + ["polarity", "ambient_illumination_level"]).copy()
             prim["n_blinks"] = prim[counts].sum(axis=1)
             prim = prim[prim["n_blinks"] > 0]
             if len(prim):
                 prim["p_incomplete"] = prim["blink_count_incomplete"] / prim["n_blinks"]
                 m = smf.gee(
-                    f"p_incomplete ~ C(polarity) * C(color_name){ilx}"
-                    f" + session_position{rep_t}",
+                    f"p_incomplete ~ polarity_c * C(color_name){ilx}"
+                    f" + position_c{rep_t}",
                     groups="participant_id", data=prim,
                     family=sm.families.Binomial(), weights=prim["n_blinks"],
                 ).fit()
                 print("\n=== PRIMARY: incomplete-blink ratio, binomial GEE (population-averaged) ===")
                 print(m.summary())
 
+                # --- the pre-registered frame-rate sensitivity, which was ABSENT ----------------
+                #
+                # docs/ANALYSIS_PLAN.md §5.2: "Below the frame-rate floor the sampled minimum EAR is
+                # biased UPWARD, so incomplete_blink_ratio is inflated — a directional bias, not
+                # symmetric noise. Do not drop these rows silently: frame rate covaries with ambient
+                # illumination, which is an independent variable, so dropping them deletes data
+                # non-randomly with respect to a factor. Run the model with and without them and
+                # report both."
+                #
+                # This file did neither. It pooled the flagged rows into the single fit above and
+                # never named fps_adequate_for_ratio, so an analyst running it got one estimate that
+                # silently included rows the export marks as biased on the primary outcome — and no
+                # indication that a comparison was required. The R template has done this all along.
+                #
+                # The weighting above handles PRECISION (a ratio from 8 blinks is down-weighted
+                # against one from 60). It cannot handle BIAS, which is what this is.
+                if "fps_adequate_for_ratio" in prim.columns:
+                    flag = prim["fps_adequate_for_ratio"].astype("boolean")
+                    n_bad = int((flag == False).sum())  # noqa: E712 — pandas nullable boolean
+                    print(f"\nframe-rate adequacy on the primary-outcome rows: "
+                          f"{int((flag == True).sum())} adequate, {n_bad} below the floor")
+                    if n_bad == 0:
+                        print("No rows below the frame-rate floor: the fit above is already the "
+                              "adequate-only fit, and no sensitivity comparison is needed.")
+                    else:
+                        ok = prim[flag == True]  # noqa: E712
+                        if len(ok) and ok["polarity_c"].nunique() > 1:
+                            m_ok = smf.gee(
+                                f"p_incomplete ~ polarity_c * C(color_name){ilx}"
+                                f" + position_c{rep_t}",
+                                groups="participant_id", data=ok,
+                                family=sm.families.Binomial(), weights=ok["n_blinks"],
+                            ).fit()
+                            print("\n=== PRIMARY refit, adequately-sampled conditions ONLY "
+                                  "(pre-registered sensitivity) ===")
+                            print(m_ok.summary())
+                            print("\nBoth fits are reported because the plan requires both. If the "
+                                  "effect exists only in the pooled fit, it is a camera artefact; if "
+                                  "it survives here, the frame rate is not what produced it.")
+                        else:
+                            print("Too few adequately-sampled rows to refit — report the pooled fit "
+                                  "with this count stated, and do not treat it as unqualified.")
+                else:
+                    print("\n[PLAN VIOLATION] fps_adequate_for_ratio is not in this export, so the "
+                          "pre-registered frame-rate sensitivity CANNOT be run. Do not report the "
+                          "primary outcome from this bundle without it.")
+
         for dv in ["blink_rate", "perclos_p80"]:
             if dv in eye_active.columns and eye_active[dv].notna().any():
                 sub = eye_active.dropna(subset=[dv, "ambient_illumination_level"])
                 if len(sub):
                     m = smf.mixedlm(
-                        f"{dv} ~ session_position + C(polarity){il}",
+                        f"{dv} ~ position_c + polarity_c{il}",
                         sub, groups=sub["participant_id"],
                     ).fit()
                     print(f"\n=== {dv} mixed model ===")

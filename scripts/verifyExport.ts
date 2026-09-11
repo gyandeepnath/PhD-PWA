@@ -387,6 +387,48 @@ const sorted = [...numbered].sort();
 eq('emitted order matches lexicographic order', numbered.join(' '), sorted.join(' '));
 log(`   ${numbered.join(' ')}`);
 
+// ================================================================ 14. join keys
+log('\n' + '='.repeat(104));
+log('14. JOIN KEYS — a declared key column must actually carry a value in every row');
+log('='.repeat(104));
+/*
+ * 10_wide_summary.csv declared condition_id in its header and its row objects omitted it, so every
+ * row's join key was blank and the file could not be joined to anything. Twelve sections of this
+ * verifier passed it: they check that documented columns exist and that values are in range, and an
+ * all-empty column exists and is trivially in range.
+ *
+ * The consequence was not subtle. The Python analysis template's FIRST operation is that join, and
+ * it crashed on a dtype mismatch — str against an all-NaN float column — before printing a line,
+ * carrying an assert written to catch exactly a bad join.
+ *
+ * Checked per FILE rather than globally, because a key is legitimately blank where the row is not
+ * about a condition: 03_fatigue_scores.csv carries the session-level baseline rating with no
+ * condition_id, and 01/11 are keyed by participant and sitting. Those files are listed with the
+ * reason. Everywhere else, a declared key is required on every row.
+ */
+const KEY_COLUMNS = ['participant_id', 'condition_id', 'session_id'];
+/** file → columns allowed to be blank on SOME rows, with why. */
+const KEY_MAY_BE_BLANK: Record<string, Record<string, string>> = {
+  '03_fatigue_scores.csv': { condition_id: 'the session-level baseline rating belongs to no condition' },
+  '16_integrity_report.csv': { condition_id: 'a session-level finding refers to no single condition' },
+  '12_quality_flags.csv': { condition_id: 'not exported on this file; rows are keyed by label' },
+};
+for (const f of files.filter((x) => /^\d\d_.*\.csv$/.test(x.filename) && x.filename !== '00_CODEBOOK.csv')) {
+  const t = table(f.content);
+  if (t.rows.length === 0) continue;
+  for (const col of KEY_COLUMNS) {
+    if (!t.headers.includes(col)) continue;
+    const blank = t.rows.filter((r) => r[col] === '' || r[col] == null).length;
+    const excused = KEY_MAY_BE_BLANK[f.filename]?.[col];
+    if (excused) {
+      ok(`${f.filename}: ${col} blank on ${blank}/${t.rows.length} rows (${excused})`, blank < t.rows.length,
+        'every row is blank, which no excuse covers — the column carries nothing at all');
+    } else {
+      ok(`${f.filename}: ${col} present on every row`, blank === 0, `${blank}/${t.rows.length} rows blank`);
+    }
+  }
+}
+
 // ================================================================ report
 log('\n' + '='.repeat(104));
 console.log(`${failures.length === 0 ? 'PASS' : 'FAIL'} — ${checks - failures.length}/${checks} checks passed`);

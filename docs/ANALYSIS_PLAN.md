@@ -188,6 +188,30 @@ These are not optional and they come first.
 
 ---
 
+## 5b. Which template implements this plan
+
+`src/analysis/analysis_template.R` does. It fits the random-effects reduction ladder, reports which
+structure it settled on, and runs the pre-specified sensitivity refits.
+
+`analysis_template.py` is a CROSS-CHECK in a second toolchain, and two of its limits are limits of
+the tool rather than choices:
+
+- statsmodels' GEE takes one clustering level, so the `(1 | passage_id)` intercept this design
+  deliberately makes available is not fitted there. A passage effect loads onto the residual in the
+  Python fit and not in the R one.
+- GEE is population-averaged where `glmer` is subject-specific, so the two sets of coefficients are
+  on different scales. Where they must agree is in SIGN and in significance, never coefficient for
+  coefficient.
+
+Its header used to call itself "authoritative inference", and three requirements of this plan were
+absent from it: the frame-rate sensitivity refit of §5.2, the sum-to-zero polarity coding of §2, and
+the `fatigue_delta` preference of §4. An analyst who ran that file instead of the R one satisfied
+none of them and had nothing in the output to say so. `npm run verify:analysis` now runs the Python
+template against a fixture export on every `npm run verify` and fails if any required section is
+missing — it had never been run against the app's own output at all, and did not work when it was.
+
+---
+
 ## 6. Things this design cannot answer, and should not be asked to
 
 Stating these protects the thesis more than any additional analysis would.
