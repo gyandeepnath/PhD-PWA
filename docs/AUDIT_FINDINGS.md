@@ -156,7 +156,7 @@ Participant 011 wears spectacles; in the 10-lux sitting FaceMesh solves ~60% of 
 Compute a second rate over the face-present EAR timestamps (`this.ear.map(s => s.t_ms)`) and gate `fps_adequate_for_ratio` on that, exporting it as its own column. Separately, dedupe sends against `video.currentTime` (or drive from `requestVideoFrameCallback`) so a camera frame is never processed twice.
 
 
-### [high] The open-eye EAR baseline is a by-product of the 9-point gaze calibration, is taken in a different gaze/head posture than reading, and is never re-measured or re-checkable across a 90-minute sitting
+### [FIXED — one protocol decision left open] [high] The open-eye EAR baseline is a by-product of the 9-point gaze calibration, is taken in a different gaze/head posture than reading, and is never re-measured or re-checkable across a 90-minute sitting
 
 `src/tracking/useTracking.ts` line 261 · dimension: ?
 
@@ -171,6 +171,26 @@ A participant whose EAR is 0.34 in up-gaze and 0.29 in reading posture is calibr
 **Suggested fix**
 
 Call the existing `calibrate()` on a still, straight-ahead, reading-posture fixation to set the EAR baseline (keep the gaze routine for gaze only); export a per-condition measured open-eye EAR (median of frames above partialT) alongside the calibration baseline so drift is visible and correctable; and re-take the baseline at the mid-session break.
+
+**What was done**
+
+The first two. The routine is now a sequence (`src/tracking/calibrationSequence.ts`) whose first step
+is a dedicated six-second centre-fixation window, and `measureEarBaseline` — the former dead
+`calibrate()` — is the only path in the hook that fits a baseline. `beginGazeCalibration` opens no
+EAR window and `endGazeCalibration` fits none; the nine targets contribute iris offset only. Head
+pitch zero moved to the same window, for the same reason. `open_ear_measured` is exported per
+condition in `07_eye_metrics.csv`, computed with the same 90th-percentile estimator as the baseline
+and null below the same 30-usable-frame floor, so within-sitting drift is a column an analyst can
+model rather than a bias absorbed silently into the outcome. The recorded outcome is NOT corrected
+by it. Tests in `tests/earBaseline.test.ts`, including the misclassification the old pooling caused;
+mutation-tested.
+
+**Still open — a protocol decision, not a code one**
+
+Re-taking the baseline mid-sitting. It would track drift directly rather than only making it
+visible, but it changes what a participant is asked to do partway through a 98-minute protocol and
+means the ten conditions are no longer scored against one denominator. `open_ear_measured` gives the
+analysis most of what a re-take would, without that cost. Left for the investigator to decide.
 
 
 ### [FIXED] [high] Passage index is a deterministic function of (condition, serial position): half the corpus can never appear at half the serial positions, for any participant, ever

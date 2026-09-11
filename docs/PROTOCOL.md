@@ -44,7 +44,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
   → PREFLIGHT           researcher: display/room configured (brightness fixed, night-shift OFF, …)
   → COLOR_VISION        digital Ishihara screening (runs AFTER night-shift is off)
   → CAMERA_SETUP        webcam permission (or skip → no eye tracking)
-  → CALIBRATION         9-point gaze calibration + EAR baseline + per-person frontal-pitch baseline
+  → CALIBRATION         centre-fixation open-eye EAR + frontal-pitch baseline (6 s), then 9-point gaze calibration
                           (head frontal during calibration → pitch zero) / positioning check
   → CVSQ_BASELINE       CVS-Q (16 items), validated habitual frame — see the CVS-Q note below
   → BASELINE_FATIGUE    5-item VAS baseline

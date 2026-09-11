@@ -136,9 +136,11 @@ export function faceEar(landmarks: Point[]): number {
 /**
  * Usable EAR frames required before a baseline is accepted.
  *
- * The nine-point routine runs ~800 ms per target, so a working camera contributes several hundred
- * frames. Thirty is a floor rather than a target: it rejects "three of three hundred frames
+ * The dedicated centre-fixation window runs six seconds, so a working camera contributes ~180
+ * frames. Thirty is a floor rather than a target: it rejects "three of a hundred and eighty frames
  * solved", which otherwise produces a baseline indistinguishable from a well-founded one.
+ *
+ * The same floor governs the per-condition open_ear_measured, so the two are comparable.
  */
 export const MIN_EAR_BASELINE_SAMPLES = 30;
 

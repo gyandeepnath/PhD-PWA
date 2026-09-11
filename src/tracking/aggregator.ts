@@ -14,6 +14,7 @@ import {
   observedDurationMs,
   computeClosureMetrics,
   interBlinkInterval,
+  fitEarBaseline,
   type EarSample,
   type BlinkEvent,
 } from './blink';
@@ -227,6 +228,27 @@ export class EyeMetricsAggregator {
       observed_duration_ms: Math.round(observedMs),
       ear_sample_count: this.ear.length,
 
+      /**
+       * THIS condition's own open eye, measured the same way the calibration baseline was.
+       *
+       * The baseline is fitted once, before the first condition, and then every blink threshold for
+       * the next hour and a half is a fraction of it. Open-eye EAR is not constant over that hour:
+       * it falls with ocular fatigue and lid droop, which is the very thing the study is about. As
+       * it falls, a fixed 0.60 x baseline cut relabels blinks that are genuinely incomplete as
+       * complete, and does so MORE at the end of the sitting than at the start — a spurious decline
+       * in the primary outcome that tracks session_position and carries the opposite sign to the
+       * hypothesis.
+       *
+       * Nothing in the export could distinguish that from a real effect: ear_baseline is the same
+       * constant on all ten rows. This column is the same 90th-percentile estimator applied to the
+       * frames of this condition alone, so an analyst can see the drift, model it, or re-derive the
+       * ratio against a per-condition denominator. It is a measurement, not a correction: the
+       * recorded outcome is left exactly as the fixed baseline produced it.
+       *
+       * Null below the same evidence floor as the calibration baseline (MIN_EAR_BASELINE_SAMPLES).
+       */
+      open_ear_measured: fitEarBaseline(this.ear.map((s) => s.ear)).baseline,
+
       blink_rate: blink.blink_rate,
       blink_rate_full: blink.blink_rate_full,
       incomplete_blink_ratio: blink.incomplete_blink_ratio,
@@ -315,6 +337,7 @@ export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeM
     fps_adequate_for_ratio: false,
     observed_duration_ms: null,
     ear_sample_count: 0,
+    open_ear_measured: null,
     blink_rate: null,
     blink_rate_full: null,
     incomplete_blink_ratio: null,

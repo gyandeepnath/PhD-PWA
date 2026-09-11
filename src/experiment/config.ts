@@ -188,6 +188,25 @@ const BASE_CONFIG = {
    */
   ANNOTATION_SEGMENT_MS: 180000,
 
+  /**
+   * Length of the dedicated open-eye EAR baseline window, in the posture the outcome is measured in.
+   *
+   * Every blink threshold in the study is a fraction of this participant's own open-eye EAR, so
+   * WHERE THEY WERE LOOKING while it was measured is part of the measurement. The baseline used to
+   * be pooled across the whole nine-point gaze routine, which spends a third of its frames on the
+   * top row of targets. Up-gaze raises the upper lid and widens the palpebral fissure, and
+   * baselineEar() takes the 90th percentile — the statistic that selects precisely those frames.
+   * The baseline therefore came out above the participant's straight-ahead open eye, and both
+   * thresholds scale with it: 0.60 x an inflated baseline reclassifies genuinely incomplete blinks
+   * as complete, biasing the study's primary outcome downward, against its own hypothesis.
+   *
+   * Six seconds of centre fixation at ~30 fps yields ~180 frames against a floor of 30 usable
+   * (MIN_EAR_BASELINE_SAMPLES), so a camera solving even a sixth of its frames still fits a
+   * baseline. The participant blinks normally throughout; the 90th percentile is what makes that
+   * safe, and a window with no blinks in it would not represent the reading task anyway.
+   */
+  EAR_BASELINE_MS: 6000,
+
   // Camera.
   CAMERA_WIDTH: 1280,
   CAMERA_HEIGHT: 720,
@@ -244,6 +263,7 @@ const E2E_OVERRIDES: Partial<typeof BASE_CONFIG> = {
   ADAPTATION_SAME_POLARITY_MS: 200,
   ADAPTATION_SWITCH_POLARITY_MS: 300,
   ANNOTATION_SEGMENT_MS: 400,
+  EAR_BASELINE_MS: 400,
 };
 
 export const CONFIG = isE2E() ? { ...BASE_CONFIG, ...E2E_OVERRIDES } : BASE_CONFIG;

@@ -363,6 +363,8 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       camera_active: true,
       effective_fps: 29.4,
       fps_adequate_for_tiers: true, fps_adequate_for_ratio: true, observed_duration_ms: 178000, ear_sample_count: 5340,
+      // Slightly below the 0.312 calibration baseline: the open eye drifts down over a sitting.
+      open_ear_measured: 0.298,
       blink_rate: blinkRateFor(i),
       blink_rate_full: Math.round(blinkRateFor(i) * 0.8 * 10) / 10,
       incomplete_blink_ratio: ibrFor(i),

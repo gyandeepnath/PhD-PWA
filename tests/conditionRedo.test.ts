@@ -238,7 +238,7 @@ describe('an adaptation field that was not delivered is reported', () => {
   } as unknown as ConditionRecord);
 
   const auditOf = (c: ConditionRecord) => auditBundle({
-    ...buildFixtureBundle({ conditions: 0 }), conditions: [c],
+    ...buildFixtureBundle(), conditions: [c],
   } as never).findings.filter((x) => x.check === 'adaptation_delivered');
 
   it('says nothing when the field ran in full', () => {

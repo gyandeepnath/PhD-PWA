@@ -157,6 +157,20 @@ anomaly, a colour-vision deficiency:
 posture. Every blink threshold is expressed as a fraction of their baseline, not a population
 default, so a rushed calibration degrades every ocular measure for the whole session. Take the time.
 
+It runs in two parts, and the first one matters more than it looks:
+
+1. **A single dot in the centre, six seconds.** The participant looks straight at it, sits as they
+   will sit to read, and blinks normally. Do not ask them to hold their eyes open — the measure is
+   designed around normal blinking, and a forced stare gives a wider eye than they will ever read
+   with. This window alone sets the open-eye baseline, so posture here is the posture the whole
+   sitting is scored against: seated square to the tablet, head level, eyes on the dot, not above
+   or below it.
+2. **The nine targets.** Head still, eyes only. These fit the gaze mapping and nothing else.
+
+If the screen reports that the gaze mapping fitted but no open-eye baseline could be measured, it is
+almost always glare across the lid margin — spectacles, a window or a lamp behind the tablet. Move
+the light or the tablet and retry before continuing.
+
 ---
 
 ## 5. Running the ten conditions

@@ -547,6 +547,15 @@ export interface EyeMetricsRecord {
   observed_duration_ms: number | null;
   /** EAR samples behind this row. Zero means nothing was measured, whatever the other columns say. */
   ear_sample_count: number;
+  /**
+   * This condition's own open-eye EAR, by the same estimator as the calibration baseline.
+   *
+   * ear_baseline is fitted once, before the sitting, and every threshold in every condition is a
+   * fraction of it — while the open eye itself drifts down over ninety minutes with the ocular
+   * fatigue the study exists to measure. Recorded so that drift is visible in the data rather than
+   * absorbed silently into the primary outcome. Null below MIN_EAR_BASELINE_SAMPLES usable frames.
+   */
+  open_ear_measured: number | null;
 
   // Primary (frame-rate-robust): CVS markers + drowsiness covariates.
   /**

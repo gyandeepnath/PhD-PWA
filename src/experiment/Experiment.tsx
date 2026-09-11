@@ -870,6 +870,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       view = tracking.status === 'active' && session ? (
         <CalibrationRoutine
           sessionId={session.session_id}
+          measureEarBaseline={tracking.measureEarBaseline}
           beginGazeCalibration={tracking.beginGazeCalibration}
           sampleGazeTarget={tracking.sampleGazeTarget}
           endGazeCalibration={tracking.endGazeCalibration}
