@@ -234,6 +234,27 @@ export function parseSessionBackup(text: string): ParseResult {
   if (!(b.data as BackupData).participant) {
     warnings.push('This backup carries no participant record; demographic and screening covariates will be absent.');
   }
+  /*
+   * A collection the file does not carry is named, because it used to be indistinguishable from one
+   * that was legitimately empty. See missingCollections().
+   */
+  const missing = missingCollections(b.data as BackupData);
+  if (missing.length) {
+    warnings.push(
+      `This file carries NO ${missing.join(', ')} section at all — not an empty one, an absent one. `
+      + `It was probably written by a different version of the app. Those measurements will not be `
+      + `restored and nothing else will report them as missing. Keep the file and ask the `
+      + `investigator before relying on the restored session.`,
+    );
+  }
+  const unknown = unknownCollections(b.data as BackupData);
+  if (unknown.length) {
+    warnings.push(
+      `This file carries ${unknown.join(', ')}, which this version of the app does not know how to `
+      + `restore. That data will be DROPPED. The file was probably written by a newer version; `
+      + `keep it and restore it on that version instead.`,
+    );
+  }
   return { ok: true, backup: b as SessionBackup, warnings };
 }
 
@@ -253,6 +274,32 @@ export function parseSessionBackup(text: string): ParseResult {
  * Refuses rather than repairs. A backup is a last copy; quietly dropping the rows that look wrong
  * would hand the operator a file that imported "successfully" and lost data.
  */
+/**
+ * Collections the file does not carry at all, named by the store they would have been written to.
+ *
+ * ABSENT IS NOT EMPTY, and the restore treated them identically: `(data[key] ?? [])` wrote zero rows
+ * and said nothing, and SessionManager then filtered zero counts out of the list it shows. A backup
+ * written by a build whose shape differs from this one — the whole point of a backup is that it
+ * outlives the tablet that wrote it — therefore dropped an entire store in silence, and the only
+ * evidence was one absent line in a twelve-line summary. 320 reaction trials leave exactly as much
+ * trace as a session that legitimately had none.
+ *
+ * An empty array is a real and common answer (no media, no TLX on a half sitting) and must stay
+ * silent. A missing key is the file and the reader disagreeing about what a session contains, and
+ * the operator is the only one who can judge whether that matters.
+ */
+export function missingCollections(data: BackupData): string[] {
+  return RESTORE_PLAN
+    .filter(({ key }) => data[key] === undefined || data[key] === null)
+    .map(({ store }) => store);
+}
+
+/** Top-level data keys this build does not know how to restore. Also silent before now. */
+export function unknownCollections(data: BackupData): string[] {
+  const known = new Set<string>([...RESTORE_PLAN.map((r) => String(r.key)), 'session', 'participant', 'media']);
+  return Object.keys(data).filter((k) => !known.has(k));
+}
+
 function validateStructure(data: BackupData, sessionId: string, participantId: string): string[] {
   const problems: string[] = [];
 
@@ -425,6 +472,41 @@ export interface ImportResult {
  * through, which matters because a partial restore is otherwise indistinguishable from a session
  * that genuinely lost records.
  */
+/** Rows this device holds for a session, across every store a backup covers. For the refusal. */
+async function countDeviceRows(sessionId: string): Promise<number> {
+  let n = 0;
+  for (const { store } of RESTORE_PLAN) {
+    n += ((await getAllByIndex(store, 'by_session', sessionId)) as unknown[]).length;
+  }
+  n += ((await getAllByIndex('media_captures', 'by_session', sessionId)) as unknown[]).length;
+  return n;
+}
+
+/** The same count for a backup file, so the two numbers in the refusal are comparable. */
+function countBackupRows(data: BackupData): number {
+  let n = 0;
+  for (const { key } of RESTORE_PLAN) n += ((data[key] as unknown[]) ?? []).length;
+  n += ((data.media as unknown[]) ?? []).length;
+  return n;
+}
+
+/**
+ * Fields the device's record has a value for and the incoming one does not.
+ *
+ * Only that direction: a field the backup fills and the device does not is a gain, and a field both
+ * fill differently is an ordinary update. What needs naming is a value about to become blank.
+ */
+function fieldsLost(devicePrior: unknown, incoming: unknown): string[] {
+  if (!devicePrior || typeof devicePrior !== 'object') return [];
+  const prev = devicePrior as Record<string, unknown>;
+  const next = (incoming ?? {}) as Record<string, unknown>;
+  return Object.keys(prev).filter((k) => {
+    const had = prev[k];
+    const has = next[k];
+    return had != null && had !== '' && (has == null || has === '');
+  });
+}
+
 export async function importSessionBackup(
   backup: SessionBackup,
   mode: ImportMode = 'refuse-if-present',
@@ -442,11 +524,36 @@ export async function importSessionBackup(
 
   const existing = await get('sessions', sessionId);
   if (existing && mode === 'refuse-if-present') {
+    /*
+     * THE OPERATOR HAS TO BE ABLE TO TELL THE TWO COPIES APART.
+     *
+     * The refusal used to say only that a session with this id was already here, and SessionManager
+     * turns it straight into a window.confirm with "Overwrite the copy on this device with the
+     * backup?" — one tap away from purgeSession, which is a HARD delete outside the thirty-day
+     * recycle bin. Nothing compared the two: not row counts, not when either finished, not whether
+     * the device copy had ever been exported. A backup taken at a mid-session export, which the app
+     * explicitly allows for an in-progress sitting, silently replaced a complete one.
+     *
+     * Nothing here decides for the operator. It gives them the two numbers they were being asked to
+     * choose between.
+     */
+    const onDevice = await countDeviceRows(sessionId);
+    const inFile = countBackupRows(data);
+    const ended = (r: unknown) => {
+      const t = (r as { session_end_time?: number | null } | null)?.session_end_time;
+      return t ? new Date(t).toLocaleString() : 'not finished';
+    };
+    const exported = (existing as unknown as { export_confirmed_at?: number | null }).export_confirmed_at;
     return {
       ok: false,
       written,
       warnings,
-      error: `A session with this id is already on this device. Importing would overwrite it. Choose overwrite only if you are sure the copy on the device is the damaged one.`,
+      error: 'A session with this id is already on this device.\n\n'
+        + `  ON THIS DEVICE: ${onDevice} rows, ended ${ended(existing)}`
+        + `${exported ? ', already exported and confirmed' : ', NOT yet confirmed as exported'}\n`
+        + `  IN THIS FILE:   ${inFile} rows, ended ${ended(session)}\n\n`
+        + 'Overwriting DELETES the copy on this device permanently — it does not go to the recycle '
+        + 'bin and cannot be undone. Choose it only if the copy on the device is the damaged one.',
     };
   }
 
@@ -505,8 +612,35 @@ export async function importSessionBackup(
       }
     }
 
-    // Participant first: several stores are only interpretable with it, and it is shared across a
-    // participant's two sittings, so it may already exist from the other session.
+    /*
+     * The participant record is SHARED, and this overwrites it without being asked.
+     *
+     * refuse-if-present guards the sessions row only. When the session is absent but the participant
+     * is present — the normal state when a participant's two sittings live on different devices, or
+     * when sitting 2 was collected on a replacement tablet before sitting 1 was restored — this put
+     * replaced the device row wholesale, no comparison, no warning.
+     *
+     * That record is written to repeatedly AFTER creation: colour-vision result, screening counts,
+     * eligibility and exclusion reason, baseline fatigue. Restoring a backup taken before those
+     * were recorded silently reverted the eligibility decision and the colour-vision result for
+     * BOTH sittings, and nothing downstream notices — the join checks that the record is there, not
+     * that it is the current one.
+     *
+     * Not refused, because the file's copy is often the right one. Named, so the operator knows
+     * what changed.
+     */
+    if (data.participant) {
+      const devicePrior = await get('participants', (session as unknown as { participant_id: string }).participant_id);
+      const lost = fieldsLost(devicePrior, data.participant);
+      if (lost.length) {
+        warnings.push(
+          `The participant record on this device held values the backup does not: ${lost.join(', ')}. `
+          + `The backup's version has replaced it, so those are now blank — for BOTH of this `
+          + `participant's sittings, because the record is shared. If the device copy was the newer `
+          + `one, re-enter them before exporting.`,
+        );
+      }
+    }
     if (data.participant) {
     await put('participants', data.participant as StoreMap['participants']);
     written.participants = 1;

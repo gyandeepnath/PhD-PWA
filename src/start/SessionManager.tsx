@@ -111,11 +111,21 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
         window.alert(`Restore failed.\n\n${result.error ?? 'Unknown problem.'}`);
         return;
       }
+      /*
+       * ZERO COUNTS ARE SHOWN. They used to be filtered out, so a store that restored nothing was
+       * simply absent from the list — and "reaction_trials: 0" and "no reaction_trials line at all"
+       * look identical to a reader who is not counting entries against a list they have memorised.
+       * 320 trials dropped by a schema mismatch left exactly as much trace as a session that
+       * legitimately had none. The parse warnings now name an absent collection outright; this
+       * makes the count itself legible.
+       */
       const rows = Object.entries(result.written)
-        .filter(([, n]) => n > 0)
         .map(([store, n]) => `  ${store}: ${n}`)
         .join('\n');
-      const warn = parsed.warnings.length ? `\n\nNote:\n${parsed.warnings.map((w) => `  ${w}`).join('\n')}` : '';
+      // Warnings from the FILE and from the WRITE. The write's own — a participant record
+      // overwritten, media carried forward — used to be computed and then dropped on the floor here.
+      const allWarnings = [...parsed.warnings, ...(result.warnings ?? [])];
+      const warn = allWarnings.length ? `\n\nNote:\n${allWarnings.map((w) => `  ${w}`).join('\n')}` : '';
       // A counterbalance collision is not a warning about the file; it is a fact about this
       // device that compromises two participants' condition orders, so it leads.
       const clash = result.collision ? `\n\nCOUNTERBALANCE PROBLEM\n  ${result.collision}` : '';

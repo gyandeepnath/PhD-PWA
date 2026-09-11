@@ -491,3 +491,67 @@ describe('a restored session lands where the operator can see it', () => {
     expect((stored as unknown as { deleted_at: number | null }).deleted_at).toBeNull();
   });
 });
+
+describe('a restore says what it could not restore, and what it is about to destroy', () => {
+  beforeEach(clearDb);
+
+  /** Tamper with a good file and re-seal it, so only the SHAPE differs from what the reader expects. */
+  const reseal = (mutate: (d: Record<string, unknown>) => void) => {
+    const obj = JSON.parse(serialiseSessionBackup(buildFixtureBundle())) as Record<string, unknown>;
+    mutate(obj.data as Record<string, unknown>);
+    return parseSessionBackup(withChecksum(obj));
+  };
+
+  it('names a collection the file does not carry at all', () => {
+    // Absent is not empty. `(data[key] ?? [])` wrote zero rows and said nothing, and the UI then
+    // filtered the zero out — so 320 reaction trials dropped by a schema mismatch left exactly as
+    // much trace as a session that legitimately had none.
+    const parsed = reseal((d) => { delete d.reactionTrials; });
+    expect(parsed.ok).toBe(true);
+    expect(parsed.warnings.join(' ')).toMatch(/NO reaction_trials section at all/);
+  });
+
+  it('stays silent about a collection that is present and legitimately empty', () => {
+    const parsed = reseal((d) => { d.reactionTrials = []; });
+    expect(parsed.ok).toBe(true);
+    expect(parsed.warnings.join(' ')).not.toMatch(/reaction_trials/);
+  });
+
+  it('names a collection this build does not know how to restore', () => {
+    const parsed = reseal((d) => { d.pupilTraces = [{ x: 1 }]; });
+    expect(parsed.ok).toBe(true);
+    expect(parsed.warnings.join(' ')).toMatch(/pupilTraces[\s\S]*DROPPED/);
+  });
+
+  it('gives the operator both row counts and says the delete is permanent', async () => {
+    // SessionManager turns this refusal straight into a confirm() one tap from purgeSession, which
+    // is a hard delete outside the thirty-day bin. It used to carry nothing to decide with.
+    const b = buildFixtureBundle();
+    const parsed = parseSessionBackup(serialiseSessionBackup(b));
+    await importSessionBackup(parsed.backup!);
+
+    const again = await importSessionBackup(parsed.backup!);
+    expect(again.ok).toBe(false);
+    expect(again.error).toMatch(/ON THIS DEVICE: \d+ rows/);
+    expect(again.error).toMatch(/IN THIS FILE:\s+\d+ rows/);
+    expect(again.error).toMatch(/permanently/);
+    expect(again.error).toMatch(/not yet confirmed as exported/i);
+  });
+
+  it('names the participant fields a restore is about to blank', async () => {
+    const b = buildFixtureBundle();
+    const parsed = parseSessionBackup(serialiseSessionBackup(b));
+
+    // The device's record has been filled in since the backup was taken — the eligibility decision
+    // and the colour-vision result are written after the profile stage, and the record is SHARED
+    // across a participant's two sittings.
+    await put('participants', {
+      ...b.participant, exclusion_reason: 'recorded after this backup was taken',
+    } as never);
+
+    const res = await importSessionBackup(parsed.backup!);
+    expect(res.ok).toBe(true);
+    expect(res.warnings?.join(' ')).toMatch(/exclusion_reason/);
+    expect(res.warnings?.join(' ')).toMatch(/BOTH/);
+  });
+});
