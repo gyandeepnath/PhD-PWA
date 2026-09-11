@@ -19,6 +19,7 @@
  * cited in this presentation" and so make the stronger promise of the two.
  */
 import { describe, it, expect } from 'vitest';
+import { CVSQ_CUTOFF, scoreCvsq } from '@/scales/cvsq';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
@@ -280,5 +281,49 @@ describe('the verification ledger', () => {
       'NOT VERIFIED', 'UNRESOLVED', 'FAILED'];
     const unknown = [...new Set(statuses)].filter((s) => !known.some((k) => s.startsWith(k)));
     expect(unknown, 'an entry carries a status the ledger does not define').toEqual([]);
+  });
+});
+
+/**
+ * The CVS-Q cut-off in the code and the cut-off in the citation ledger must be the same number.
+ *
+ * They were not. The ledger recorded "the ≥7 cut-off ... used by this project's instrument", taking
+ * the figure from the PORTUGUESE cross-cultural version; the code implements ≥6, which is the
+ * ORIGINAL 16-item instrument's cut-off and the one this study administers. A contradiction between
+ * the code and the project's own verified record is the kind that gets resolved in the wrong
+ * direction: changing the constant to 7 would silently reclassify every participant scoring exactly
+ * 6, at baseline and at session end, and in both directions of the change score.
+ *
+ * The instrument's own authors settle it — see docs/CITATION_VERIFICATION.md entry 24b — and this
+ * test keeps the two in step.
+ */
+describe('the CVS-Q cut-off agrees with the verified record', () => {
+  const ledger = readFileSync(resolve(__dirname, '..', 'docs/CITATION_VERIFICATION.md'), 'utf8');
+
+  it('is six, the original instrument’s cut-off', () => {
+    expect(CVSQ_CUTOFF).toBe(6);
+  });
+
+  it('classifies exactly at the boundary, not one either side of it', () => {
+    expect(scoreCvsq(Array(16).fill(0), Array(16).fill(0)).symptomatic).toBe(false);
+    // Six items at severity 1 (frequency 1 x intensity 1) → item score 1 each → total 6.
+    const six = Array(16).fill(0).map((_, i) => (i < 6 ? 1 : 0));
+    const scored = scoreCvsq(six, six);
+    expect(scored.total).toBe(6);
+    expect(scored.symptomatic).toBe(true);
+    const five = Array(16).fill(0).map((_, i) => (i < 5 ? 1 : 0));
+    expect(scoreCvsq(five, five).symptomatic).toBe(false);
+  });
+
+  it('the ledger records six as this project’s cut-off, and seven as the Portuguese version’s', () => {
+    expect(ledger).toMatch(/whose cut-off is \*\*≥6\*\*/);
+    expect(ledger).toMatch(/≥7 is the \*\*Portuguese\*\* version's cut-off/);
+  });
+
+  it('the ledger still says the ≥6 is not read from the primary source', () => {
+    // It rests on the same-authors CVS-Q teen statement; the Seguí (2015) full text was unreachable
+    // from this environment. An honest ledger says which, and this keeps that caveat in place until
+    // someone actually reads the paper.
+    expect(ledger).toMatch(/not a reading of the primary/);
   });
 });

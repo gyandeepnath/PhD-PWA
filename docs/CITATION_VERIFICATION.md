@@ -560,8 +560,57 @@ specificity over 70%, ICC 0.802. Cantó-Sancho et al. confirms the Portuguese ad
 workers, Cronbach's alpha 0.793, and the cut-off: *"A worker who scored ≥7 points would have computer
 vision syndrome."*
 
-**What this licenses.** The ≥7 cut-off and the 16-item structure used by this project's instrument, and
-the psychometric claims made for it. **What it does not license:** the CVS-Q was developed and
+**CORRECTION — THE CUT-OFF. This entry previously read "the ≥7 cut-off ... used by this project's
+instrument". That was wrong, and wrong in a way that would have changed a classification variable
+in the data had it been acted on.**
+
+≥7 is the **Portuguese** version's cut-off, quoted above from Cantó-Sancho et al. This project
+administers the **original 16-item CVS-Q**, whose cut-off is **≥6** — which is what
+`src/scales/cvsq.ts` implements. The two are different instruments' thresholds and conflating them
+would have reclassified every participant scoring exactly 6.
+
+The original's own authors say so. Seguí-Crespo is a co-author of the CVS-Q teen adaptation (record
+24b below), which states: *"When comparing both questionnaires (CVS-Q vs. CVS-Q teen), it is
+observed that the total number of items in the adolescent questionnaire is lower (16 vs. 14), the
+cut-off point being the same, although this differs for other linguistic versions that are also
+derived from the original."* The teen cut-off is ≥6, so the original's is ≥6, and that paper
+explicitly flags the linguistic versions as differing — which is exactly the trap this entry fell
+into.
+
+**Provenance of the ≥6, stated exactly.** The Seguí (2015) full text could not be read from this
+environment: the publisher and the institutional repository copy are both blocked by the network
+egress proxy, and the PubMed abstract confirms a cut-off was derived by ROC analysis without giving
+its value. The ≥6 figure therefore rests on record 24b's statement that the two cut-offs are the
+same, from a paper two of the original's authors wrote. **The investigator should confirm it once
+against the Seguí (2015) full text, which is the one source that settles it directly.** Until then
+this is a same-authors secondary statement, not a reading of the primary.
+
+### 24b. Seguí-Crespo et al. (2024) — CVS-Q teen, and the original's cut-off
+**Status: CONFIRMED.** PMID 39285189 · DOI [10.1038/s41598-024-70821-9](https://doi.org/10.1038/s41598-024-70821-9)
+Record and full text retrieved from PubMed / PubMed Central (PMC11405871).
+
+> Seguí-Crespo, M., Cantó-Sancho, N., Sánchez-Brau, M., & Ronda-Pérez, E. (2024). CVS-Q teen: an
+> adapted, reliable and validated tool to assess computer vision syndrome in adolescents.
+> *Scientific Reports, 14*(1), 21576.
+
+Author list, journal, volume, issue, pages and year are as PubMed returns them. Note that
+Seguí-Crespo here and Seguí (2015) at entry 24 are the SAME researcher under two name forms, and
+Cantó-Sancho appears in both this record and the Portuguese validation — so 24, 24b and the
+Portuguese record are **not independent**. That is precisely why 24b is cited for what the original
+instrument's authors say about their own cut-off, and for nothing else.
+
+Verified full text gives, for the ADOLESCENT instrument: 14 items, cut-off ≥6 points, sensitivity
+85.2%, specificity 76.5%, AUC 0.879 (95% CI 0.836–0.922), ICC 0.77, Cohen's κ 0.49, person
+reliability 0.69. And, for the ORIGINAL 16-item CVS-Q by direct comparison: sensitivity 75.0%,
+specificity 70.2%, AUC 0.826, and the same ≥6 cut-off.
+
+**What this licenses.** The ≥6 cut-off this project's instrument uses, and the original's
+sensitivity/specificity/AUC figures quoted above. **What it does not license:** anything about
+adolescents — this study enrols 18–35 — and it is not a substitute for reading Seguí (2015).
+
+**What entry 24 licenses.** The 16-item structure used by this project's instrument and the
+psychometric claims made for it; ≥7 **only** as the Portuguese version's cut-off, which is how
+LITERATURE_REVIEW.md already cites it. **What it does not license:** the CVS-Q was developed and
 validated as an *occupational* screening tool for habitual workplace exposure, not as a within-session
 change score after a few minutes of reading. Using it as a repeated pre/post measure across ten short
 conditions is outside its validated use, and that must be stated as a limitation rather than left
