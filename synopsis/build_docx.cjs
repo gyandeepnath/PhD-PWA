@@ -15,12 +15,18 @@ const IN = process.argv[2];
 const OUT = process.argv[3];
 const md = fs.readFileSync(IN, 'utf8');
 
-const FONT = 'Times New Roman';
-const SIZE = 24;        // half-points => 12pt
-const SIZE_SMALL = 20;  // 10pt for tables
-const PAGE_W = 11906;   // A4 width in DXA
-const MARGIN = 1440;    // 1 inch
-const CONTENT_W = PAGE_W - 2 * MARGIN; // 9026
+/*
+ * Page geometry comes from the university's Annexure, via one module, rather than being restated
+ * here. It was restated here, as one inch on all four sides with 1.42 line spacing, and that is not
+ * what AdtU asks for: the binding margin was 0.46 cm short and the leading below 1.5.
+ */
+const SPEC = require('./adtu_spec.cjs');
+
+const FONT = SPEC.font;
+const SIZE = SPEC.size;         // half-points => 12pt
+const SIZE_SMALL = 20;          // 10pt for tables
+const PAGE_W = SPEC.page.width;
+const CONTENT_W = SPEC.contentWidth;
 
 /**
  * Paragraph spacing.
@@ -335,7 +341,7 @@ let inReferences = false;
 let onTitlePage = true;
 let titleParaSeen = false;
 
-const HANGING = 720;   // 0.5 inch, as APA specifies
+const HANGING = SPEC.refHanging;   // 0.5 inch, as APA specifies
 
 function bodyPara(text, extra = {}) {
   const reference = inReferences && !extra.alignment;
@@ -344,13 +350,13 @@ function bodyPara(text, extra = {}) {
     titleParaSeen = true;
     return new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: sp(isTitle ? { before: 1400, after: 400, line: 360 } : { before: 60, after: 200, line: 340 }),
+      spacing: sp(isTitle ? { before: 1400, after: 400, line: 360 } : { before: 60, after: 200, line: SPEC.line }),
       children: inline(text, isTitle ? { size: 28, bold: true } : {}),
       ...extra,
     });
   }
   return new Paragraph({
-    spacing: sp(reference ? { after: 100, line: 340 } : { after: 140, line: 340 }),
+    spacing: sp(reference ? { after: 100, line: SPEC.lineSingle } : { after: 140, line: SPEC.line }),
     alignment: reference ? AlignmentType.LEFT : AlignmentType.JUSTIFIED,
     ...(reference ? { indent: { left: HANGING, hanging: HANGING } } : {}),
     children: inline(text),
@@ -461,7 +467,7 @@ while (i < lines.length) {
       buf.push(lines[i].trim().replace(/^>\s?/, '')); i++;
     }
     children.push(new Paragraph({
-      spacing: sp({ before: 120, after: 180, line: 320 }),
+      spacing: sp({ before: 120, after: 180, line: SPEC.line }),
       indent: { left: 360, right: 240 },
       alignment: AlignmentType.JUSTIFIED,
       border: { left: { style: BorderStyle.SINGLE, size: 12, color: '4F8EF7', space: 8 } },
@@ -483,7 +489,7 @@ while (i < lines.length) {
     }
     children.push(new Paragraph({
       numbering: { reference: 'bullets', level: 0 },
-      spacing: sp({ after: 90, line: 320 }),
+      spacing: sp({ after: 90, line: SPEC.line }),
       alignment: AlignmentType.JUSTIFIED,
       children: inline(text),
     }));
@@ -500,7 +506,7 @@ while (i < lines.length) {
       i++; text += ' ' + lines[i].trim();
     }
     children.push(new Paragraph({
-      spacing: sp({ after: 120, line: 320 }),
+      spacing: sp({ after: 120, line: SPEC.line }),
       indent: { left: 600, hanging: 600 },
       alignment: AlignmentType.JUSTIFIED,
       children: [
@@ -528,10 +534,21 @@ while (i < lines.length) {
   i++;
 }
 
+/*
+ * Document properties are derived from the markdown, not typed here.
+ *
+ * They were left over from an earlier build: the submitted synopsis was filed as "Review of
+ * Literature — Display Polarity and Text Colour", authored by "PhD Synopsis", described as a
+ * literature review. None of that is visible in the body, so it survived every read-through; it is
+ * what a committee member sees in File > Info and what any document-management system indexes on.
+ */
+const docTitle = (md.split('\n').find((l) => l.trim()) || '').trim();
+if (!docTitle || docTitle.length < 20) throw new Error('cannot derive a document title from the first line of the markdown');
+
 const doc = new Document({
-  creator: 'PhD Synopsis',
-  title: 'Review of Literature — Display Polarity and Text Colour',
-  description: 'Literature review prepared for PhD synopsis presentation',
+  creator: 'Gyandeep Nath',
+  title: docTitle,
+  description: 'PhD synopsis, Programme of Optometry, Assam down town University',
   numbering: {
     config: [{
       reference: 'bullets',
@@ -543,7 +560,7 @@ const doc = new Document({
   },
   styles: {
     default: {
-      document: { run: { font: FONT, size: SIZE }, paragraph: { spacing: sp({ line: 340 }) } },
+      document: { run: { font: FONT, size: SIZE }, paragraph: { spacing: sp({ line: SPEC.line }) } },
       heading1: { run: { font: FONT, size: 32, bold: true, color: '1A1A2E' }, paragraph: { spacing: { before: 320, after: 160 } } },
       heading2: { run: { font: FONT, size: 28, bold: true, color: '1A1A2E' }, paragraph: { spacing: { before: 300, after: 150 } } },
       heading3: { run: { font: FONT, size: 26, bold: true, color: '243B53' }, paragraph: { spacing: { before: 260, after: 130 } } },
@@ -553,8 +570,8 @@ const doc = new Document({
   sections: [{
     properties: {
       page: {
-        size: { width: PAGE_W, height: 16838 }, // A4
-        margin: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+        size: { width: SPEC.page.width, height: SPEC.page.height },   // A4
+        margin: { ...SPEC.margin },                                    // Annexure AdtU/PhD/A(i)
       },
     },
     children,

@@ -43,6 +43,8 @@ REFS = {
     "Effect of incomplete blinking on tear film stability","Optometry and Vision Science","90","7","650–657","10.1097/OPX.0b013e31829962ec","art"),
  20:(["World Wide Web Consortium"],2023,
     "Web content accessibility guidelines (WCAG) 2.2",None,None,None,None,None,"web:https://www.w3.org/TR/WCAG22/"),
+# WITHDRAWN — NOT VERIFIED, must not be emitted into any reference list. See
+# docs/CITATION_VERIFICATION.md and docs/ILLUMINATION_AMENDMENT.md.
  21:(["Advanced Perceptual Contrast Algorithm"],None,
     "APCA: A candidate perceptual contrast method incorporating polarity and typographic parameters",None,None,None,None,None,"web:https://git.apcacontrast.com/"),
  22:(["Warm, J. S.","Parasuraman, R.","Matthews, G."],2008,
@@ -73,6 +75,8 @@ REFS = {
     "conf:In |Proceedings of the 21st Computer Vision Winter Workshop| (pp. 1–8). Rimske Toplice, Slovenia."),
  34:(["Klinke, T.","Hannak, W.","Böning, K.","Jakstat, H."],2024,
     "A comparative study of the sensitivity and specificity of the Ishihara test with various displays","International Dental Journal","74","4","892–896","10.1016/j.identj.2023.12.009","art"),
+# WITHDRAWN — NOT VERIFIED, must not be emitted into any reference list. See
+# docs/CITATION_VERIFICATION.md and docs/ILLUMINATION_AMENDMENT.md.
  35:(["Bureau of Indian Standards"],2009,
     "IS 3646: Code of practice for interior illumination",None,None,None,None,None,"rep:Bureau of Indian Standards."),
  36:(["Xie, X.","Song, F.","Liu, Y.","Wang, S.","Yu, D."],2021,

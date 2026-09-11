@@ -7,14 +7,27 @@
  * cells, which cannot express a curve — and two of the three figures below ARE curves.
  */
 import { chromium } from 'playwright';
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const DIR = 'figures';
 const SCALE = 3;
-// The bundled headless-shell build does not match this Playwright version's expected path, so the
-// full Chromium already present is named explicitly rather than downloading anything.
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+/*
+ * Prefer a pre-installed Chromium when the browser download is blocked by the network policy, and
+ * fall through to Playwright's own resolution when none of the candidates is present.
+ *
+ * This used to name one revision-pinned path and nothing else, so the rasteriser could not run on a
+ * fresh checkout, on CI, or after a Playwright upgrade moved the revision — it threw "executable
+ * doesn't exist" with no way forward but editing the file. playwright.config.ts and
+ * playwright.prod.config.ts already do it this way; this is the same pattern, not a new one.
+ */
+const CANDIDATE_CHROME = [
+  process.env.CHROME_PATH ?? '',
+  '/opt/pw-browsers/chromium/chrome-linux/chrome',
+  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+].find((p) => p && existsSync(p));
+
+const browser = await chromium.launch(CANDIDATE_CHROME ? { executablePath: CANDIDATE_CHROME } : {});
 const page = await browser.newPage({ deviceScaleFactor: SCALE });
 
 /*

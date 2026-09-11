@@ -12,9 +12,16 @@ not index are marked `NOT INDEXED IN PUBMED` and remain unverified until checked
 authority.
 
 Statuses: `CONFIRMED` (every field matches) · `CONFIRMED, FIELD DIFFERS` (record is the right paper,
-one or more fields need correcting — the correct value is given) · `NOT INDEXED IN PUBMED` (outside
-PubMed's scope by subject or publication type; a secondary authority is named where one was reachable)
-· `UNRESOLVED` (not yet checked or ambiguous) · `FAILED` (DOI dead, or resolves to a different paper).
+one or more fields need correcting — the correct value is given) · `METADATA CONFIRMED, SUBSTANTIVE
+CLAIM NOT CONFIRMED` (the right paper, but what it is cited FOR has not been checked against its
+text) · `NOT INDEXED IN PUBMED` (outside PubMed's scope by subject or publication type; a secondary
+authority is named where one was reachable, and corroboration is not confirmation) · `NOT VERIFIED`
+(found only in secondary reporting and never read at source — must not be cited as given) ·
+`UNRESOLVED` (not yet checked or ambiguous) · `FAILED` (DOI dead, or resolves to a different paper).
+
+**That list is closed.** `tests/citationIntegrity.test.ts` fails the build on any status not in it.
+Two statuses were in use here for months without appearing in this legend, which is how a status
+comes to read as "verified" to everyone who scans the file without anyone having decided that it is.
 
 ---
 

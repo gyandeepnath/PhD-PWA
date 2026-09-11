@@ -1,3 +1,20 @@
+<!--
+SUPERSEDED — DO NOT USE, DO NOT QUOTE, DO NOT REBUILD FROM THIS FILE.
+
+This is the earlier short-form synopsis and it describes a study that is no longer being run:
+a three-factor design with ambient illumination as a manipulated whole-plot factor, two sittings
+48 to 72 hours apart, and twenty condition-runs per participant. The title still carries the
+"ERGONOMICS OF VISUAL PERCEPTION" prefix that the guide and committee asked to be dropped.
+
+The study as it now stands is two polarities x five text colours = ten conditions in ONE sitting,
+with ambient illumination held constant at 300 lux as a controlled variable. The authoritative
+document is SYNOPSIS_AdtU.md; SYNOPSIS_FULL_REFERENCE.md holds the long-form text of the chapters
+that were condensed for submission.
+
+This file is kept only because docs/AUDIT_FINDINGS.md and docs/AUDIT_ROUND2.md cite line numbers in
+it. Synopsis_Gyandeep_Nath_AdtU_Short.docx, built from it, is stale in the same way.
+-->
+
 ERGONOMICS OF VISUAL PERCEPTION: EFFECTS OF DISPLAY POLARITY, TEXT COLOUR AND AMBIENT ILLUMINATION ON VISUAL FATIGUE, OCULAR BEHAVIOUR AND TASK PERFORMANCE
 
 A Synopsis Submitted in Partial Fulfilment of the Requirements for the

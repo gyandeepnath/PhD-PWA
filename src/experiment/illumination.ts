@@ -16,8 +16,11 @@
  *    to emerge, so the design straddles the effect rather than sampling one side of it.
  *  - They differ by roughly one log unit, so a pupillary difference is physiologically plausible
  *    rather than nominal.
- *  - The moderate level is deliberately BELOW the 300-500 lux the Indian interior-illumination
- *    code (IS 3646) specifies for offices and classrooms: the study is about domestic reading.
+ *  - The moderate level was set below the illuminance that published guidance reports for offices
+ *    and classrooms, the study being about domestic reading. The guidance figures themselves were
+ *    never verified at source (docs/ILLUMINATION_AMENDMENT.md records EN 12464-1, ISO 9241 and
+ *    IS 3646 as NOT VERIFIED and not to be cited), so they are recorded here as the reasoning of
+ *    the day rather than as an authority the design rests on.
  *  - Two levels rather than a graded series is what makes crossing illumination with all ten
  *    display conditions feasible inside one protocol.
  *
@@ -120,12 +123,17 @@ export const ILLUMINATION: Record<IlluminationLevel, IlluminationSpec> = {
  * found higher cognitive load under negative polarity for YOUNGER adults specifically in a DIM
  * environment — i.e. in the condition being removed. This design cannot speak to that.
  *
- * WHY 300 LUX. ISO 9241-referenced guidance for screen work puts the ambient range at 300-500 lux,
- * below the 500-750 lux for paper tasks, because a display is self-luminous and the screen-to-
- * surround luminance ratio has to be controlled. 300 is the bottom of that range: bright enough
- * that the room dominates the face illumination (collapsing the polarity confound to 1.05) and low
- * enough that the display is not washed out. The accepted band is 250-350 lux; a sitting outside it
- * is flagged as a protocol deviation exactly as before.
+ * WHY 300 LUX. The reason is photometric and is computed above from this build's own locked
+ * condition table: at 300 lux the room, not the stimulus, dominates the illuminance on the face,
+ * which collapses the polarity confound from 2.35 to 1.05. It is also low enough that the display
+ * is not washed out. The accepted band is 250-350 lux; a sitting outside it is flagged as a
+ * protocol deviation exactly as before.
+ *
+ * Secondary sources report screen-work guidance in the region of 300-500 lux, which is consistent
+ * with this choice, but EN 12464-1, ISO 9241 and IS 3646 could not be read at source from this
+ * environment and docs/ILLUMINATION_AMENDMENT.md records them as NOT VERIFIED and not to be cited.
+ * The number therefore rests on the photometry above, which is reproducible here, and not on a
+ * standard nobody has opened. The synopsis states the same thing in Section 3.4.
  */
 export const ILLUMINATION_LEVELS: IlluminationLevel[] = ['moderate'];
 

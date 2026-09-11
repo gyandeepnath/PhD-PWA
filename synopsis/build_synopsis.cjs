@@ -1,7 +1,17 @@
 /**
- * Build the AdtU-formatted PhD synopsis .docx from SYNOPSIS_AdtU.md
+ * SUPERSEDED. The synopsis is built by build_docx.cjs; this is its predecessor, kept because it is
+ * the only record of how several Annexure requirements were originally implemented.
  *
- * AdtU Annexure AdtU/PhD/A(i) page specification:
+ * It is reachable from nothing — no npm script, no other file. Do not run it expecting a current
+ * document: it does not handle the figure, page-break or flow markers the synopsis now uses.
+ *
+ * The page specification it encodes now lives in adtu_spec.cjs, which build_docx.cjs reads. When
+ * this file was the builder, that specification existed only as the comment below; the document
+ * then moved to build_docx.cjs, which restated the geometry from scratch and got it wrong — one
+ * inch on all four sides instead of 3.0 cm and 2.0 cm, and 1.42 line spacing instead of 1.5. That
+ * is the whole argument for a spec module rather than a comment.
+ *
+ *   AdtU Annexure AdtU/PhD/A(i) page specification:
  *   Left margin 3.0 cm | Right margin 2.0 cm | Top 2.54 cm | Bottom 2.54 cm
  *   Times New Roman, line spacing 1.5, printed single side.
  *

@@ -77,6 +77,35 @@ beforeAll(() => {
 afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }); });
 
 describe('the synopsis document', () => {
+  it('matches the page specification the university sets', () => {
+    /*
+     * AdtU Annexure AdtU/PhD/A(i): left 3.0 cm, right 2.0 cm, top and bottom 2.54 cm, Times New
+     * Roman, line spacing 1.5. That was recorded only as a comment in the builder the synopsis used
+     * to be produced by; when it moved to build_docx.cjs the numbers were restated as one inch all
+     * round with 1.42 spacing, and nothing compared the two. The binding margin was 0.46 cm short
+     * of requirement — the kind of thing a submission is returned for before anyone reads a word.
+     */
+    const spec = require(join(ROOT, 'synopsis', 'adtu_spec.cjs'));
+    const xml = part(docxPath, 'word/document.xml');
+
+    const pgMar = /<w:pgMar\b[^>]*\/>/.exec(xml);
+    expect(pgMar, 'the document declares no page margins').not.toBeNull();
+    for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+      const got = new RegExp(`w:${side}="(\\d+)"`).exec(pgMar![0]);
+      expect(Number(got?.[1]), `${side} margin`).toBe(spec.margin[side]);
+    }
+
+    const pgSz = /<w:pgSz\b[^>]*\/>/.exec(xml);
+    expect(Number(/w:w="(\d+)"/.exec(pgSz![0])?.[1]), 'page width').toBe(spec.page.width);
+    expect(Number(/w:h="(\d+)"/.exec(pgSz![0])?.[1]), 'page height').toBe(spec.page.height);
+
+    // Body text at 1.5; the reference list is the one deliberate exception, set single with a
+    // hanging indent as APA requires.
+    const lines = new Set([...xml.matchAll(/<w:spacing[^>]*w:line="(\d+)"/g)].map((m) => Number(m[1])));
+    expect([...lines].sort((a, b) => a - b), 'an unexpected line height is in use')
+      .toEqual([spec.lineSingle, spec.line]);
+  });
+
   it('never specifies a line height without saying how to interpret it', () => {
     /*
      * The regression this file exists for. `<w:spacing w:line="340"/>` with no `w:lineRule` is read

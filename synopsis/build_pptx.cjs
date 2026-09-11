@@ -82,7 +82,26 @@ const plain = (md) => String(md).replace(/\*/g, '');
 const EM = 0.44;
 function lineCount(text, w, size) {
   const perLine = Math.max(8, (w * 72) / (EM * size));
-  return Math.max(1, Math.ceil(plain(text).length / perLine));
+  // A hard line break starts a new line whatever the measure says. Without this the title slide and
+  // the closing slide — the only multi-line strings in the deck — were measured as a third of their
+  // height, and the overflow gate was fed that same under-estimate and certified them clear.
+  return String(text).split('\n')
+    .reduce((acc, segment) => acc + Math.max(1, Math.ceil(plain(segment).length / perLine)), 0);
+}
+
+/**
+ * The crest, centred, at its own aspect ratio.
+ *
+ * It was drawn 5.76 x 0.94in against an intrinsic 1158 x 290 — 53% too wide — so the circular
+ * "Assam down town University, Estd. 2010" seal and the circular NAAC A+ badge rendered as
+ * flattened ovals on the first and last slide of the deck. Reading the PNG header costs nothing and
+ * removes the chance of ever typing a wrong pair of numbers again.
+ */
+function logoBox(y, h = 0.94) {
+  const buf = fs.readFileSync(A('adtu_logo.png'));
+  if (buf.length < 24 || buf.readUInt32BE(12) !== 0x49484452) throw new Error('adtu_logo.png is not a readable PNG');
+  const w = h * (buf.readUInt32BE(16) / buf.readUInt32BE(20));
+  return { x: (W - w) / 2, y, w, h };
 }
 
 /* ---------------------------------------------------------------- slide furniture */
@@ -230,7 +249,7 @@ function arrowRight(s, x, y, len) {
 /* ============================================================== 1. TITLE */
 {
   const s = slide(null, false);
-  s.addImage({ path: A('adtu_logo.png'), x: 4.62, y: 0.5, w: 5.76, h: 0.94 });
+  s.addImage({ path: A('adtu_logo.png'), ...logoBox(0.5) });
 
   para(s, 'ASSAM DOWN TOWN UNIVERSITY', 1.0, 1.66, 13.0, 17, { align: 'center', bold: true, charSpacing: 1.2 });
   para(s, 'Shankar Madhab Path, Gandhinagar, Panikhaiti, Guwahati, Assam – 781026',
@@ -382,10 +401,9 @@ function arrowRight(s, x, y, len) {
   let y2 = subhead(s, 'Ambient illumination', rx, TOP, half);
   y2 = bullets(s, [
     'Illumination modulates the legibility cost of negative polarity (Dobres *et al.*, 2017) and the fatigue cost of coloured text under it (Fan *et al.*, 2024), consistent with a pupil-mediated account in which room light and display polarity trade against one another.',
-    'The evidence is not uniform, and the pattern of that disagreement determined the present design. The proofreading advantage was independent of ambient lighting (Buchner & Baumgartner, 2007), whereas threshold legibility showed a clear interaction (Dobres *et al.*, 2017).',
-    'That is, the performance-side effect of polarity appears not to depend on room light, while the effects that do depend on it are concentrated in the ocular and tear-film measures.',
+    'The evidence is not uniform, and that disagreement determined the present design: the proofreading advantage was independent of ambient lighting (Buchner & Baumgartner, 2007) whereas threshold legibility showed a clear interaction (Dobres *et al.*, 2017). The performance-side effect of polarity appears not to depend on room light; the effects that do are concentrated in the ocular and tear-film measures.',
     'Lin, M., *et al.* (2025) is the most directly relevant work on that second point: reading in a dark room from a bright screen produced the greatest tear-film destabilisation and the largest blink changes, with incomplete blinking rising over time in every condition.',
-    'Ambient illuminance is accordingly held constant here at a single measured level rather than manipulated. The grounds are set out under Methods.',
+    'Ambient illuminance is accordingly held constant here at a single measured level rather than manipulated. What that forfeits is stated plainly: Sethi and Ziat (2023) located the cognitive cost of negative polarity in younger adults specifically under dim conditions, and this design cannot speak to it.',
   ], rx, y2, half);
   mark(s, y2);
 
@@ -393,7 +411,7 @@ function arrowRight(s, x, y, len) {
   y3 = bullets(s, [
     'The ocular outcomes of this study are derived from the tablet’s own front camera rather than from dedicated instrumentation. In a darkened room the display is the dominant source of light falling on the reader’s face, and the two polarities differ greatly in how much light they emit: computed from the locked condition table, a positive-polarity screen casts roughly thirty times the illuminance of a negative-polarity one at the reading distance used.',
     'Against a 10 lux room that leaves the face lit about 2.3 times more brightly in positive than in negative polarity; against a 300 lux room the ratio falls to about 1.05. Camera exposure, and with it the achieved frame rate on which blink classification depends, would therefore have varied systematically with the primary independent variable.',
-    'Undersampling biases the measured minimum eyelid aperture upward, inflating the incomplete-blink ratio in the direction the hypothesis predicts — and an artefact of that shape is indistinguishable from the effect it imitates. A narrower question answered with a trustworthy instrument was therefore preferred; what that forfeits is stated in the synopsis.',
+    'Undersampling biases the measured minimum eyelid aperture upward, inflating the incomplete-blink ratio in the direction the hypothesis predicts — and an artefact of that shape is indistinguishable from the effect it imitates. A narrower question answered with a trustworthy instrument was therefore preferred.',
   ], M, y3, CW);
   mark(s, y3);
 
@@ -609,7 +627,7 @@ function arrowRight(s, x, y, len) {
   mark(s, yl);
 
   let yr = subhead(s, 'Blink classification and analysis', rx, cy, half);
-  yr = caption(s, 'Eye-aspect ratio, expressed relative to the open-eye baseline set at calibration.', rx, yr, half);
+  yr = caption(s, 'Eye-aspect ratio (Soukupová & Čech, 2016), expressed relative to the open-eye baseline set at calibration.', rx, yr, half);
   yr = table(s, [
     ['Eye-aspect ratio at its minimum', 'Classification'],
     ['Never falls below 0.75 × baseline', 'No blink registered'],
@@ -661,7 +679,7 @@ const REFS = [
   'Buchner, A., & Baumgartner, N. (2007). Text–background polarity affects performance irrespective of ambient illumination and colour contrast. *Ergonomics, 50*(7), 1036–1063.',
   'Buchner, A., Mayr, S., & Brandt, M. (2009). The advantage of positive text–background polarity is due to high display luminance. *Ergonomics, 52*(7), 882–886.',
   'Cardona, G., García, C., Serés, C., Vilaseca, M., & Gispets, J. (2011). Blink rate, blink amplitude, and tear film integrity during dynamic visual display terminal tasks. *Current Eye Research, 36*(3), 190–197.',
-  'Ccami-Bernal, F., Soriano-Moreno, D. R., Romero-Robles, M. A., Barriga-Chambi, F., Tuco, K. G., Castro-Diaz, S. D., … Benites-Zapata, V. A. (2024). Prevalence of computer vision syndrome: A systematic review and meta-analysis. *Journal of Optometry, 17*(1), 100482.',
+  'Ccami-Bernal, F., Soriano-Moreno, D. R., Romero-Robles, M. A., Barriga-Chambi, F., Tuco, K. G., Castro-Diaz, S. D., Nuñez-Lupaca, J. N., Pacheco-Mendoza, J., Galvez-Olortegui, T., & Benites-Zapata, V. A. (2024). Prevalence of computer vision syndrome: A systematic review and meta-analysis. *Journal of Optometry, 17*(1), 100482.',
   'Dobres, J., Chahine, N., & Reimer, B. (2017). Effects of ambient illumination, contrast polarity, and letter size on text legibility under glance-like reading. *Applied Ergonomics, 60*, 68–73.',
   'Fan, Q., Xie, J., Dong, Z., & Wang, Y. (2024). The effect of ambient illumination and text color on visual fatigue under negative polarity. *Sensors, 24*(11), 3516.',
   'Fjaervoll, K., Fjaervoll, H., Magno, M., Nøland, S. T., Dartt, D. A., Vehof, J., & Utheim, T. P. (2022). Review on the possible pathophysiological mechanisms underlying visual display terminal-associated dry eye disease. *Acta Ophthalmologica, 100*(8), 861–877.',
@@ -684,6 +702,48 @@ const REFS = [
   'World Wide Web Consortium. (2023, October 5). *Web content accessibility guidelines (WCAG) 2.2*. https://www.w3.org/TR/WCAG22/',
 ];
 
+/**
+ * The verification footnote is COMPUTED from docs/CITATION_VERIFICATION.md, never typed.
+ *
+ * It used to read "checked against its PubMed record or, where PubMed does not index it, against
+ * the issuing authority" — which claimed more than the ledger supports: for the items PubMed does
+ * not index, the issuing authority was unreachable from this environment and the ledger says in
+ * terms that corroboration is not confirmation. Replacing one overstatement with a hand-counted
+ * sentence only moves the problem: the first count written here, "20 of 25", was wrong — the true
+ * figure is 22 and 3. A sentence about how carefully the work was done is exactly the sentence that
+ * must not be guessed at, so it is derived, and a reference the ledger does not cover fails the
+ * build rather than being quietly counted as verified.
+ */
+function verificationFootnote() {
+  const ledger = fs.readFileSync(path.join(__dirname, '..', 'docs', 'CITATION_VERIFICATION.md'), 'utf8');
+  const statuses = new Map();
+  for (const entry of ledger.split('\n### ').slice(1)) {
+    const status = /\*\*Status:\s*([A-Z][^.*]*)/.exec(entry);
+    const head = /^\d+\.\s*([^,(&—]+)/.exec(entry);
+    if (status && head) statuses.set(head[1].trim().split(' ')[0], status[1].trim());
+  }
+
+  let confirmed = 0, notIndexed = 0;
+  const unresolved = [];
+  for (const ref of REFS) {
+    const surname = /^([^,(]+)/.exec(ref)[1].trim().replace(/\.$/, '').split(' ')[0];
+    const hits = [...statuses].filter(([k]) => k.startsWith(surname) || surname.startsWith(k)).map(([, v]) => v);
+    if (!hits.length) { unresolved.push(surname); continue; }
+    if (hits.some((h) => h.includes('NOT INDEXED'))) notIndexed += 1;
+    else if (hits.some((h) => h.startsWith('CONFIRMED'))) confirmed += 1;
+    else unresolved.push(`${surname} (${hits[0]})`);
+  }
+  if (unresolved.length) {
+    throw new Error(`reference with no usable status in the verification ledger: ${unresolved.join(', ')}`);
+  }
+
+  const word = (n) => ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'][n] ?? String(n);
+  return `${confirmed} of the ${REFS.length} references above are confirmed field by field against their PubMed `
+    + `records. The remaining ${word(notIndexed)} are not indexed in PubMed; their metadata is corroborated by secondary `
+    + `sources but was not verified at the issuing authority, which this environment could not reach. The verification `
+    + `record accompanies the synopsis and states which is which.`;
+}
+
 [REFS.slice(0, 13), REFS.slice(13)].forEach((group, page) => {
   const s = slide(`6. References (${page + 1} of 2)`);
   let y = TOP;
@@ -691,8 +751,7 @@ const REFS = [
   group.forEach((r) => { y = para(s, r, M, y, CW, CAP, { lineSpacing: 15 }) + 0.12; });
   mark(s, y);
   if (page === 1) {
-    para(s, 'Every reference listed has been checked against its PubMed record or, where PubMed does not index it, '
-      + 'against the issuing authority. The verification record accompanies the synopsis.',
+    para(s, verificationFootnote(),
       M, BOT - 0.35, CW, CAP, { italic: true, color: GREY });
   }
 });
@@ -700,7 +759,7 @@ const REFS = [
 /* ============================================================== 16. THANK YOU */
 {
   const s = slide(null, false);
-  s.addImage({ path: A('adtu_logo.png'), x: 4.62, y: 2.7, w: 5.76, h: 0.94 });
+  s.addImage({ path: A('adtu_logo.png'), ...logoBox(2.7) });
   para(s, 'Thank you', 1.0, 4.5, 13.0, 32, { align: 'center', bold: true, color: HEADCOL });
   para(s, 'Questions and suggestions are welcome', 1.0, 5.4, 13.0, 14, { align: 'center' });
   para(s,
@@ -716,27 +775,70 @@ const REFS = [
  * Stripping every pPr but the first in each paragraph fixes it at the source.
  */
 function tidyParagraphProperties(file) {
-  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'pptx-'));
-  execFileSync('unzip', ['-qq', '-o', file, '-d', dir]);
-  let touched = 0;
-  const slidesDir = path.join(dir, 'ppt', 'slides');
-  for (const f of fs.readdirSync(slidesDir).filter((x) => x.endsWith('.xml'))) {
-    const p = path.join(slidesDir, f);
-    const before = fs.readFileSync(p, 'utf8');
-    const after = before.replace(/<a:p>[\s\S]*?<\/a:p>/g, (para_) => {
-      let seen = false;
-      return para_.replace(/<a:pPr[^>]*\/>|<a:pPr[^>]*>[\s\S]*?<\/a:pPr>/g, (m) => {
-        if (seen) return '';
-        seen = true;
-        return m;
-      });
-    });
-    if (after !== before) { fs.writeFileSync(p, after); touched += 1; }
+  for (const bin of ['unzip', 'zip']) {
+    try { execFileSync(bin, ['-v'], { stdio: 'ignore' }); } catch {
+      throw new Error(`\`${bin}\` is not on PATH; it is needed to rewrite the deck's paragraph properties`);
+    }
   }
-  fs.rmSync(file);
-  execFileSync('zip', ['-qXr', file, '.'], { cwd: dir });
-  fs.rmSync(dir, { recursive: true, force: true });
-  return touched;
+
+  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'pptx-'));
+  const staged = `${file}.tmp`;
+  try {
+    execFileSync('unzip', ['-qq', '-o', file, '-d', dir]);
+    let touched = 0;
+    const slidesDir = path.join(dir, 'ppt', 'slides');
+    for (const f of fs.readdirSync(slidesDir).filter((x) => x.endsWith('.xml'))) {
+      const p = path.join(slidesDir, f);
+      const before = fs.readFileSync(p, 'utf8');
+      const after = before.replace(/<a:p>[\s\S]*?<\/a:p>/g, (para_) => {
+        let seen = false;
+        return para_.replace(/<a:pPr[^>]*\/>|<a:pPr[^>]*>[\s\S]*?<\/a:pPr>/g, (m) => {
+          if (seen) return '';
+          seen = true;
+          return m;
+        });
+      });
+      if (after !== before) { fs.writeFileSync(p, after); touched += 1; }
+    }
+
+    /*
+     * Assert the invariant rather than report a count.
+     *
+     * `touched` says how many files were rewritten, which is not the same as saying the deck is
+     * correct: if pptxgenjs ever emits `<a:p attr="…">`, or renames the paragraph-property element,
+     * every regex above misses, `touched` falls to zero, and the build still prints success while
+     * shipping bullets that a renderer will drop. What must hold is that no paragraph carries more
+     * than one <a:pPr>, so that is what is checked.
+     */
+    const offenders = [];
+    for (const f of fs.readdirSync(slidesDir).filter((x) => x.endsWith('.xml'))) {
+      const xml = fs.readFileSync(path.join(slidesDir, f), 'utf8');
+      for (const para_ of xml.match(/<a:p>[\s\S]*?<\/a:p>/g) ?? []) {
+        const n = (para_.match(/<a:pPr\b/g) ?? []).length;
+        if (n > 1) offenders.push(`${f}: a paragraph carries ${n} <a:pPr> elements`);
+      }
+    }
+    if (offenders.length) {
+      throw new Error(`paragraph properties were not tidied — pptxgenjs's XML shape has probably `
+        + `changed:\n  ${offenders.slice(0, 5).join('\n  ')}`);
+    }
+
+    /*
+     * Stage and rename, never delete-then-recreate.
+     *
+     * This used to rmSync(file) before shelling out to zip. If zip was absent, or failed part way
+     * through on a full disk, the finished deck had already been destroyed and there was nothing to
+     * fall back to — the build reported an error and left no deliverable at all.
+     */
+    fs.rmSync(staged, { force: true });
+    execFileSync('zip', ['-qXr', staged, '.'], { cwd: dir });
+    if (!fs.existsSync(staged) || fs.statSync(staged).size < 1024) throw new Error('zip produced no usable archive');
+    fs.renameSync(staged, file);
+    return touched;
+  } finally {
+    fs.rmSync(staged, { force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 pres.writeFile({ fileName: OUT }).then((f) => {

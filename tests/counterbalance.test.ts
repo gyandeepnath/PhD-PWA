@@ -125,8 +125,10 @@ describe('illumination: the protocol this build actually runs', () => {
   });
 
   it('targets the level at which the polarity confound collapses', () => {
-    // 300 lux is the bottom of the ISO 9241-referenced 300-500 lux range for screen work, and the
-    // level at which the room dominates the face illumination rather than the stimulus.
+    // 300 lux is the level at which the room dominates the face illumination rather than the
+    // stimulus, collapsing the polarity confound from 2.35 to 1.05. It is fixed on that photometric
+    // ground alone: the lighting standards often quoted for screen work are recorded as NOT
+    // VERIFIED in docs/ILLUMINATION_AMENDMENT.md and are not cited as authority anywhere.
     const spec = specFor('moderate')!;
     expect(spec.target).toBe(300);
     expect(spec.min).toBe(250);

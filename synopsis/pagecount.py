@@ -5,7 +5,8 @@ LibreOffice cannot render in this container, so page count is computed by
 re-implementing Word's line-breaking with real font metrics.  Liberation Serif
 is metric-compatible with Times New Roman, so string widths are exact.
 
-Geometry (must match build_synopsis.cjs):
+Geometry: from synopsis/adtu_spec.cjs, which is the single record of AdtU Annexure AdtU/PhD/A(i)
+and is what build_docx.cjs reads. Keep the constants below in step with it.
   A4 11906 x 16838 twips; margins L1701 R1134 T1440 B1440
   content width  = 9071 twips = 453.55 pt
   content height = 13958 twips = 697.90 pt
