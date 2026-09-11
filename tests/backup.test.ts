@@ -242,6 +242,17 @@ describe('restoring carries the enrolment number forward', () => {
 describe('a restore does not destroy what is already on the device', () => {
   beforeEach(clearDb);
 
+  /*
+   * This test USED TO PASS IN A DEVICE STATE THAT CANNOT OCCUR.
+   *
+   * It wrote the media row but never the sessions row, so `existing` was falsy inside
+   * importSessionBackup and the overwrite purge never ran — the blob survived because nothing had
+   * tried to delete it. In the field the session row is always there (that is what makes the mode
+   * 'overwrite'), purgeSession deletes every media row first, and the carry-forward loop then read
+   * an empty store. The guard was dead in exactly the mode it exists for.
+   *
+   * Both states are now tested, and the overwrite one restores the session row first.
+   */
   it('keeps a media blob that is still here, because the backup carries only the inventory row', async () => {
     // put() replaces the whole record, so writing the blob-stripped inventory row straight over a
     // row that still holds its binary would silently destroy consented media. That media is the
@@ -256,6 +267,25 @@ describe('a restore does not destroy what is already on the device', () => {
 
     const after = await get('media_captures', m.media_id);
     expect((after as unknown as { blob?: unknown }).blob).toBeTruthy();
+    expect((after as unknown as { blob_present?: boolean }).blob_present).toBe(true);
+    expect(res.warnings?.join(' ')).toMatch(/kept/i);
+  });
+
+  it('keeps it through a REAL overwrite, where the session is on the device and is purged first', async () => {
+    const b = withFixtureMedia(buildFixtureBundle());
+    const m = b.media[0];
+    const parsed = parseSessionBackup(serialiseSessionBackup(b));
+
+    // The device state an overwrite actually meets: the session is here, and so is the binary.
+    await importSessionBackup(parsed.backup!);
+    await put('media_captures', { ...m, blob: new Blob(['pretend-video']) } as never);
+    expect(await get('sessions', b.session.session_id)).toBeTruthy();
+
+    const res = await importSessionBackup(parsed.backup!, 'overwrite');
+    expect(res.ok).toBe(true);
+
+    const after = await get('media_captures', m.media_id);
+    expect((after as unknown as { blob?: unknown }).blob, 'the purge destroyed a consented video').toBeTruthy();
     expect((after as unknown as { blob_present?: boolean }).blob_present).toBe(true);
     expect(res.warnings?.join(' ')).toMatch(/kept/i);
   });

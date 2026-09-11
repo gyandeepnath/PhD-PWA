@@ -23,7 +23,7 @@
  *     inventory rows are, flagged blob_present: false, so a restored session reports its media as
  *     missing rather than appearing to still hold it.
  */
-import { get, getAll, put, ensureEnrolmentAtLeast, MAX_PLAUSIBLE_ENROLMENT } from './db';
+import { get, getAll, getAllByIndex, put, ensureEnrolmentAtLeast, MAX_PLAUSIBLE_ENROLMENT } from './db';
 import { purgeSession, sessionForExport } from './gather';
 import { fnv1a } from './export';
 import type { SessionBundle } from './gather';
@@ -434,6 +434,8 @@ export async function importSessionBackup(
   let collision: string | undefined;
   /** The device's participant row, kept across a purge when the backup carries none. */
   let priorParticipant: unknown = null;
+  /** Media binaries already on the device, captured BEFORE any purge. See where it is filled. */
+  const survivingBlobs = new Map<string, unknown>();
   const data = backup.data;
   const session = data.session as StoreMap['sessions'];
   const sessionId = (session as unknown as { session_id: string }).session_id;
@@ -476,6 +478,26 @@ export async function importSessionBackup(
       priorParticipant = data.participant
         ? null
         : ((await get('participants', (session as unknown as { participant_id: string }).participant_id)) ?? null);
+      /*
+       * THE BLOBS HAVE TO BE TAKEN BEFORE THE PURGE, NOT AFTER.
+       *
+       * A backup carries the media INVENTORY and never the binary — the video is far too large to
+       * put in a JSON file — so the loop at the foot of this function exists to carry a blob that
+       * is still on the device forward onto the restored inventory row. It reads the device's row
+       * with get('media_captures', ...), and in overwrite mode purgeSession has already deleted
+       * every one of them. The guard was dead in precisely the mode that needs it: the read
+       * returned undefined, blobsKept stayed 0, the "files have been kept" warning never fired, and
+       * `written.media_captures` still reported the inventory count. The operator read "Session
+       * restored" and "media_captures: 4" over four annotation clips that no longer existed.
+       *
+       * That is the annotation sub-study's only source material — three minutes of a participant's
+       * face, consented separately, not re-collectable — destroyed by a restore whose purpose was
+       * to recover data.
+       */
+      for (const r of (await getAllByIndex('media_captures', 'by_session', sessionId)) as unknown[]) {
+        const rec = r as { media_id?: string; blob?: unknown };
+        if (rec.media_id && rec.blob) survivingBlobs.set(rec.media_id, rec.blob);
+      }
       await purgeSession(sessionId);
       if (priorParticipant) {
         await put('participants', priorParticipant as StoreMap['participants']);
@@ -555,8 +577,14 @@ export async function importSessionBackup(
     let blobsKept = 0;
     for (const row of media) {
       const r = row as unknown as Record<string, unknown> & { media_id?: string };
+      /*
+       * The map first, because in overwrite mode the store has already been purged and the read
+       * below can only ever return undefined. In refuse-if-present mode nothing was purged and the
+       * read is still the right source. Both paths, one expression.
+       */
       const prev = r.media_id ? await get('media_captures', r.media_id) : undefined;
-      const prevBlob = (prev as unknown as { blob?: unknown } | undefined)?.blob;
+      const prevBlob = (r.media_id ? survivingBlobs.get(r.media_id) : undefined)
+        ?? (prev as unknown as { blob?: unknown } | undefined)?.blob;
       if (prevBlob) {
         await put('media_captures', { ...r, blob: prevBlob, blob_present: true } as unknown as StoreMap['media_captures']);
         blobsKept++;

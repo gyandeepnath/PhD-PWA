@@ -65,11 +65,40 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
     });
   }, [passage, target]);
 
+  /**
+   * WORDS, not tokens. The split above is CAPTURING — `split(/(\s+)/)` — because rendering needs the
+   * whitespace runs back to preserve the passage's spacing. That makes `tokens` about twice as long
+   * as the passage is in words, one separator between every pair.
+   *
+   * `tokens.length` was then used as the word count in two places: the correct-rejection pool
+   * behind search_d_prime, and the exported `distractor_words`. Measured on the shipped corpus,
+   * passage 0 has 601 words and 1,201 tokens, so `distractor_words` exported 1,189 against a true
+   * 589 — every passage roughly doubled, while the codebook calls the column "non-target words in
+   * the passage".
+   *
+   * It does not cancel in a within-subject contrast. d′ is computed from the false-alarm RATE, and
+   * doubling its denominator shrinks that rate by a factor that depends on the false-alarm count —
+   * itself a dependent measure that varies with the display condition under test. So the inflation
+   * is larger for the conditions in which participants tap more wrongly, which is the effect the
+   * search task exists to detect.
+   */
+  const wordCount = useMemo(() => tokens.filter((t) => t.isWord).length, [tokens]);
+
   const [started, setStarted] = useState(false);
   const [foundIdx, setFoundIdx] = useState<Set<number>>(new Set());
   const start = useRef(now());
   const clickTimes = useRef<number[]>([]);
-  const falseDet = useRef(0);
+  /**
+   * Non-target WORDS tapped, not taps on them.
+   *
+   * This was a counter incremented on every tap, while a re-tap on an already-found target returned
+   * early — so the two halves of the same signal-detection model counted different things: hits
+   * were words, false alarms were tap events. A participant who double-tapped a wrong word accrued
+   * two false alarms for one word, and in the limit the false-alarm count could exceed the pool it
+   * is a proportion of. `export.ts` describes the measure as "non-target words tapped are false
+   * alarms, the rest are correct rejections", which is what a set of token indices gives.
+   */
+  const falseDet = useRef<Set<number>>(new Set());
   const foundRef = useRef<Set<number>>(new Set());
   const done = useRef(false);
 
@@ -85,7 +114,7 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
       timeToFirstTargetMs: times.length ? times[0] - start.current : null,
       targetsFound: found,
       targetsMissed: Math.max(0, totalTargets - found),
-      falseDetections: falseDet.current,
+      falseDetections: falseDet.current.size,
       accuracyRate: totalTargets > 0 ? found / totalTargets : 0,
       searchEfficiency: elapsed > 0 ? found / (elapsed / 60000) : 0,
       // Words as trials. Uses the same signal-detection machinery as the reaction-time block, so a
@@ -93,10 +122,10 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
       dPrime: computeSdt({
         hits: found,
         misses: Math.max(0, totalTargets - found),
-        falseAlarms: falseDet.current,
-        correctRejections: Math.max(0, tokens.length - totalTargets - falseDet.current),
+        falseAlarms: falseDet.current.size,
+        correctRejections: Math.max(0, wordCount - totalTargets - falseDet.current.size),
       }).d_prime,
-      distractorWords: Math.max(0, tokens.length - totalTargets),
+      distractorWords: Math.max(0, wordCount - totalTargets),
       meanInterTargetIntervalMs: intervals.length
         ? intervals.reduce((s, v) => s + v, 0) / intervals.length
         : null,
@@ -140,7 +169,7 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
       setFoundIdx(new Set(foundRef.current));
       if (foundRef.current.size >= totalTargets) finish('voluntary_full');
     } else {
-      falseDet.current += 1;
+      falseDet.current.add(tok.i);
     }
   };
 
