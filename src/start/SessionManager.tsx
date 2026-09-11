@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   revokeMediaGrant,
   listSessions, listDeleted, softDeleteSession, restoreSession, purgeSession, purgeExpired,
-  renameSession, sessionLabel, BIN_RETENTION_MS, MAX_DISPLAY_LABEL,
+  renameSession, sessionLabel, recordWithdrawal, BIN_RETENTION_MS, MAX_DISPLAY_LABEL,
 } from '@/storage/gather';
 import { listResumable, type ResumePointer } from '@/storage/sessionPersistence';
 import { parseSessionBackup, importSessionBackup } from '@/storage/backup';
@@ -191,6 +191,45 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
     );
   };
 
+  /**
+   * Record that the participant withdrew — the branch the operator manual already instructs.
+   *
+   * §6 of the manual tells the operator to ask "Would you like the data from this session deleted?"
+   * and, when the answer is NO, to "Export, and record the withdrawal so the sitting is excluded
+   * from analysis rather than merely incomplete." There was no control to do that with. The
+   * tombstone it would set, `withdrawn_at`, is read by the analysis export and blocked on twice by
+   * the join checks, and is deliberately carried through a backup restore unchanged while
+   * `deleted_at` is cleared — so the design was complete except for the one thing that starts it.
+   *
+   * The operator's only route was Delete, which puts the session in the recycle bin, and which a
+   * restore from any backup file silently reverses.
+   */
+  const withdraw = async (s: SessionRecord) => {
+    const label = sessionLabel(s);
+    if (s.withdrawn_at != null) {
+      window.alert(`${label} is already recorded as withdrawn (${new Date(s.withdrawn_at).toLocaleString()}).`);
+      return;
+    }
+    if (!window.confirm(
+      `Record that the participant in ${label} WITHDREW from the study?\n\n`
+      + 'Use this when they have withdrawn but have NOT asked for their data to be deleted. Ask '
+      + 'them; the consent form offers both.\n\n'
+      + 'The measurements are kept and exported, marked so the analysis excludes them. Any '
+      + 'photographs or video are DESTROYED — that part cannot be undone.\n\n'
+      + 'If they asked for deletion instead, cancel this and use Delete, then Purge from the '
+      + 'recycle bin.',
+    )) return;
+    const { mediaDestroyed } = await recordWithdrawal(s.session_id);
+    await refresh();
+    window.alert(
+      `${label} is recorded as withdrawn.\n\n`
+      + `${mediaDestroyed} media file(s) destroyed.\n\n`
+      + 'Export it now if you have not already. The withdrawal travels with the data and survives a '
+      + 'restore from a backup, so the sitting cannot re-enter the analysis by accident. Copies of '
+      + 'media files already taken off this tablet are not covered — delete those by hand.',
+    );
+  };
+
   const del = async (s: SessionRecord) => {
     // Confirmed, like purge is. Delete sits next to Resume and Export on a row of small buttons, on
     // a touch screen, operated by someone standing next to a participant. The bin makes it
@@ -281,6 +320,9 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
                   incompleteness, so allowing it here cannot silently contaminate the analysis. */}
               <Btn onClick={() => onOpen(s.session_id)} color="#1a1a2e" outline>Export</Btn>
               <MediaControls s={s} onRevoke={revokeMedia} />
+              <Btn onClick={() => withdraw(s)} color="#c98a22" outline>
+                {s.withdrawn_at != null ? 'Withdrawn' : 'Withdrew'}
+              </Btn>
               <Btn onClick={() => del(s)} color="#e64c4c" outline>Delete</Btn>
             </Row>
           ))}
@@ -293,6 +335,9 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
               <Btn onClick={() => onOpen(s.session_id)} color="#1a1a2e">Open</Btn>
               <Btn onClick={() => rename(s)} color="#5a5a7a" outline>Rename</Btn>
               <MediaControls s={s} onRevoke={revokeMedia} />
+              <Btn onClick={() => withdraw(s)} color="#c98a22" outline>
+                {s.withdrawn_at != null ? 'Withdrawn' : 'Withdrew'}
+              </Btn>
               <Btn onClick={() => del(s)} color="#e64c4c" outline>Delete</Btn>
             </Row>
           ))}

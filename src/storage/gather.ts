@@ -302,6 +302,50 @@ export async function revokeMediaGrant(
   return removed;
 }
 
+/**
+ * Record that the participant withdrew from the study, keeping their data but marking it unusable.
+ *
+ * THIS EXISTED AS A TOMBSTONE WITH NOTHING TO SET IT. `withdrawn_at` is read in three places —
+ * analysisExport exports it as the `withdrawn` column, joinIntegrity blocks on it twice — and
+ * importSessionBackup deliberately carries it through a restore UNCHANGED while clearing
+ * `deleted_at`, precisely so that a withdrawal survives what a bin does not. The operator manual
+ * instructs "record the withdrawal so the sitting is excluded from analysis rather than merely
+ * incomplete". No code anywhere assigned it. The whole design was correct and unreachable, and the
+ * operator's only route was Delete — which puts the session in the recycle bin, and which a restore
+ * from any backup file silently reverses.
+ *
+ * Retain-and-exclude rather than destroy, deliberately, and the two are offered separately: the
+ * manual has the operator ASK the participant which they want, because the consent form offers
+ * both. Deletion is Delete → Purge and is already here. This is the other branch — for a
+ * participant who does not ask for deletion but has stopped taking part — and it is the one that
+ * has to survive a restore, because data already exported cannot be recalled, only marked.
+ *
+ * Media is destroyed either way. A recording of someone's face is the one thing that cannot be
+ * defensibly retained past a withdrawal, and unlike the numbers it is still only on this device.
+ */
+export async function recordWithdrawal(sessionId: string): Promise<{ mediaDestroyed: number }> {
+  const session = await get('sessions', sessionId) as SessionRecord | undefined;
+  if (!session) return { mediaDestroyed: 0 };
+
+  // The tombstone first, for the same reason revokeMediaGrant withdraws consent before deleting:
+  // if the loop below fails part-way, what survives is already covered by a recorded withdrawal.
+  await put('sessions', {
+    ...session,
+    withdrawn_at: session.withdrawn_at ?? Date.now(),
+    media_consent: session.media_consent
+      ? { ...session.media_consent, setup_photos: false, annotation_video: false }
+      : session.media_consent,
+    media_consent_revoked_at: Date.now(),
+  });
+
+  let mediaDestroyed = 0;
+  for (const m of (await getAllByIndex('media_captures', 'by_session', sessionId)) as MediaRecord[]) {
+    await remove('media_captures', m.media_id);
+    mediaDestroyed++;
+  }
+  return { mediaDestroyed };
+}
+
 /** Permanently delete a session and ALL of its child records across every store. */
 export async function purgeSession(sessionId: string): Promise<void> {
   const bundle = await gatherSession(sessionId);

@@ -472,6 +472,12 @@ export interface ImportResult {
  * through, which matters because a partial restore is otherwise indistinguishable from a session
  * that genuinely lost records.
  */
+/** The earlier of two optional timestamps; null when neither is set. A withdrawal cannot be undone. */
+function earliest(a: number | null | undefined, b: number | null | undefined): number | null {
+  const ts = [a, b].filter((t): t is number => typeof t === 'number' && Number.isFinite(t));
+  return ts.length ? Math.min(...ts) : null;
+}
+
 /** Rows this device holds for a session, across every store a backup covers. For the refusal. */
 async function countDeviceRows(sessionId: string): Promise<number> {
   let n = 0;
@@ -657,15 +663,26 @@ export async function importSessionBackup(
       ...(session as unknown as Record<string, unknown>),
       deleted_at: null,
       /*
-       * withdrawn_at is carried through UNCHANGED, unlike deleted_at.
+       * withdrawn_at comes from WHICHEVER COPY HAS ONE, earliest wins — not from the file.
        *
        * Clearing deleted_at is right: a backup taken from a binned session must not restore into
-       * the bin. Applying the same treatment to a withdrawal would be the opposite of right — it
-       * would resurrect data a participant asked to have removed, through the very procedure the
-       * operator manual tells them to run when a tablet is replaced. The two tombstones mean
-       * different things and are handled differently.
+       * the bin. Applying the same treatment to a withdrawal would be the opposite of right.
+       *
+       * But taking it from the file was nearly as bad, and that is what this did. A backup is
+       * written when a session is exported; a participant withdraws afterwards. The file therefore
+       * has no withdrawn_at in exactly the case that matters, so restoring it — the procedure the
+       * manual tells the operator to run when a tablet is replaced — quietly erased the withdrawal
+       * and returned the sitting to the analysis with nothing marking it. The tombstone survived
+       * the restore only when the restore could not have harmed it.
+       *
+       * A withdrawal is a fact about a person, not a property of a file. It cannot be undone by
+       * restoring older bytes, so the earliest recorded one on either side wins and there is no
+       * path here that clears it.
        */
-      withdrawn_at: (session as unknown as { withdrawn_at?: number | null }).withdrawn_at ?? null,
+      withdrawn_at: earliest(
+        (session as unknown as { withdrawn_at?: number | null }).withdrawn_at,
+        (existing as unknown as { withdrawn_at?: number | null } | undefined)?.withdrawn_at,
+      ),
       status: (session as unknown as { session_end_time?: number | null }).session_end_time != null
         ? 'complete'
         : (session as unknown as { status?: string }).status === 'complete' ? 'complete' : 'in_progress',
