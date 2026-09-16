@@ -248,6 +248,7 @@ dprime_overall <- rt_summary %>%
             any_unstable = any(d_prime_unstable, na.rm = TRUE))
 cat("\n=== Aggregated d' per participant ===\n"); print(dprime_overall)
 
+
 # --- Ocular fatigue (interpret per the codebook; gate duration tiers on effective_fps) -----
 # CVS markers: blink_rate (expected to DROP with screen concentration) and incomplete_blink_ratio
 # (expected to RISE — the marker that correlates with CVS symptoms; Portello & Rosenfield 2013).
@@ -653,6 +654,111 @@ if (any(!is.na(eye$perclos_p80))) {
   m_primary_adj <- fit_binom(paste0("polarity * colour", ilx_term, " + session_position + perclos_p80"),
                              eye %>% filter(!is.na(perclos_p80)))
   cat("\n=== PRIMARY adjusted for PERCLOS (sensitivity) ===\n"); print(summary(m_primary_adj))
+
+# ===========================================================================================
+# SECONDARY OUTCOMES from ANALYSIS_PLAN.md §4 that this file did not model at all.
+#
+# Four of the seven rows of that table were missing: reading speed, visual search, sensitivity
+# (d-prime was averaged descriptively, never modelled) and response bias. They are pre-registered
+# outcomes, so their absence is not a stylistic gap — an analyst running this file produced a
+# thesis with four of its own stated outcomes unanalysed.
+# ===========================================================================================
+
+# --- Reading speed (§4: LMM) -------------------------------------------------------------
+# "Check against observed_duration_ms first — a truncated exposure produces a normal-looking
+# speed." That check is §5.4 above, which computes observed_frac; it is reported here beside the
+# model rather than left for the reader to connect.
+if ("reading_speed_wpm" %in% names(eye) && sum(is.finite(eye$reading_speed_wpm)) > 0) {
+  cat("\n=== Reading speed (secondary, §4) ===\n")
+  cat("exposure completeness on these rows: ", qc_rng(eye$observed_frac), "\n")
+  m_wpm <- tryCatch(
+    lmer(as.formula(paste0("reading_speed_wpm ~ polarity * colour", ilx_term,
+                           " + session_position + (1 | participant_id)", re_sitting)),
+         data = eye),
+    error = function(err) NULL
+  )
+  if (is.null(m_wpm)) cat("the reading-speed model did not fit.\n") else print(summary(m_wpm))
+} else {
+  cat("\n[reading speed] reading_speed_wpm carries no finite values — not modelled.\n")
+}
+
+# --- Response bias and sensitivity (§4: LMM each) -----------------------------------------
+# §4 is explicit about why these are separate: "A polarity effect on `criterion` WITHOUT one on
+# `d_prime` is a bias shift, not a sensitivity change. Worth reporting as a distinct finding rather
+# than folding into 'RT performance'." Folding them in is exactly what this file did.
+if ("criterion" %in% names(rt) && sum(is.finite(rt$criterion)) > 0) {
+  cat("\n=== Response bias: criterion (secondary, §4) ===\n")
+  m_crit <- tryCatch(
+    lmer(as.formula(paste0("criterion ~ polarity * colour", ilx_term,
+                           " + session_position + (1 | participant_id)", re_sitting)),
+         data = rt),
+    error = function(err) NULL
+  )
+  if (is.null(m_crit)) cat("the criterion model did not fit.\n") else print(summary(m_crit))
+}
+
+# §4 on d-prime: "With 20 go and 12 no-go trials, one block's d' is imprecise. Check `d_prime_se`
+# and consider weighting." Weighted by inverse variance, so an imprecise block carries the weight it
+# has earned rather than the same weight as a precise one. Unstable blocks are reported, not dropped.
+if ("d_prime" %in% names(rt) && sum(is.finite(rt$d_prime)) > 0) {
+  cat("\n=== Sensitivity: d-prime, inverse-variance weighted (secondary, §4) ===\n")
+  dp <- rt %>% filter(is.finite(d_prime))
+  n_unstable <- sum(dp$d_prime_unstable %in% c(TRUE, "true"), na.rm = TRUE)
+  cat("blocks flagged d_prime_unstable: ", qc_pct(n_unstable, nrow(dp)), " - RETAINED\n")
+  usable_se <- with(dp, is.finite(d_prime_se) & d_prime_se > 0)
+  if (all(usable_se)) {
+    dp$dp_w <- 1 / dp$d_prime_se^2
+    cat("weights: 1 / d_prime_se^2\n")
+  } else {
+    dp$dp_w <- 1
+    cat("d_prime_se is missing or zero on ", qc_pct(sum(!usable_se), nrow(dp)),
+        " of blocks, so the fit is UNWEIGHTED. §4 asks for weighting to be considered; it could not be applied here.\n")
+  }
+  m_dp <- tryCatch(
+    lmer(as.formula(paste0("d_prime ~ polarity * colour", ilx_term,
+                           " + session_position + (1 | participant_id)", re_sitting)),
+         data = dp, weights = dp$dp_w),
+    error = function(err) NULL
+  )
+  if (is.null(m_dp)) cat("the d-prime model did not fit.\n") else print(summary(m_dp))
+}
+
+# --- Visual search (§4: LMM, censored) ----------------------------------------------------
+# §4: "`search_termination` says whether the block ended by completion or by the 40 s cap. Capped
+# rows are a lower bound; treating them as measurements biases the mean downward. Either model them
+# as censored or report the completion rate alongside."
+#
+# TWO THINGS TO STATE PLAINLY. The column is called `termination_mode` in the export, not
+# `search_termination` — the plan named a column that does not exist, which is the same defect class
+# that stopped this whole file running. And the second of the plan's two permitted options is taken:
+# the completion rate is reported beside an uncensored fit. A genuinely censored LMM needs a package
+# this template does not carry, and adding a dependency silently is worse than saying which option
+# was used. The fit below is therefore BIASED DOWNWARD to the extent that rows hit the cap, and the
+# completion rate is the number that says how much.
+search <- tryCatch(read_export("05_visual_search.csv"), error = function(err) NULL)
+if (!is.null(search) && "search_time_ms" %in% names(search)) {
+  vs <- search %>% left_join(cond, by = c("participant_id", "condition_id")) %>%
+    filter(is.finite(search_time_ms))
+  cat("\n=== Visual search (secondary, §4) ===\n")
+  if ("termination_mode" %in% names(vs)) {
+    tm <- table(vs$termination_mode, useNA = "ifany")
+    cat("termination_mode: ", paste(names(tm), as.integer(tm), sep = "=", collapse = ", "), "\n")
+    capped <- sum(vs$termination_mode == "time_limit", na.rm = TRUE)
+    cat("blocks ending at the time limit (right-censored): ", qc_pct(capped, nrow(vs)), "\n")
+    cat("the model below is UNCENSORED, so its mean is biased DOWNWARD by that fraction.\n")
+  } else {
+    cat("termination_mode absent — the censoring rate cannot be reported for this export.\n")
+  }
+  m_vs <- tryCatch(
+    lmer(as.formula(paste0("search_time_ms ~ polarity * colour", ilx_term,
+                           " + session_position + (1 | participant_id)", re_sitting)),
+         data = vs),
+    error = function(err) NULL
+  )
+  if (is.null(m_vs)) cat("the visual-search model did not fit.\n") else print(summary(m_vs))
+} else {
+  cat("\n[visual search] 05_visual_search.csv not found or carries no search_time_ms.\n")
+}
 }
 
 # --- NASA-TLX: SESSION-level workload -------------------------------------------------------

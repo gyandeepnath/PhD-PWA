@@ -1142,3 +1142,49 @@ attempted join to `12_quality_flags.csv` on `condition_id`, a column that file d
 exposure. That is an incoherent row, and it means the §5.4 check cannot be made to fire on the
 fixture — the check is exercised for presence, not for its threshold behaviour. Changing the constant
 touches a fixture several suites depend on and was left for a round with room to re-verify properly.
+
+---
+
+## Round 9 — four pre-registered outcomes were never modelled
+
+`ANALYSIS_PLAN.md` §4 tabulates seven secondary outcomes. Four of them appeared nowhere in the R
+template: reading speed, visual search, sensitivity and response bias. d-prime was averaged
+descriptively per participant and never modelled. These are pre-registered outcomes, so their
+absence is not a stylistic gap — an analyst running this file produced a thesis with four of its own
+stated outcomes unanalysed, and nothing in the output said so.
+
+All four are now fitted, each following what §4 specifies rather than what seemed reasonable:
+
+- **Reading speed.** §4 says "Check against `observed_duration_ms` first — a truncated exposure
+  produces a normal-looking speed." That check is §5.4, added in Round 8; the exposure-completeness
+  range is now printed beside the model rather than left for the reader to connect.
+- **Response bias, separately from sensitivity.** §4 is explicit about why: "A polarity effect on
+  `criterion` WITHOUT one on `d_prime` is a bias shift, not a sensitivity change. Worth reporting as
+  a distinct finding rather than folding into 'RT performance'." Folding them in is what the file did.
+- **Sensitivity, inverse-variance weighted.** §4: "With 20 go and 12 no-go trials, one block's d' is
+  imprecise. Check `d_prime_se` and consider weighting." Weighted by `1 / d_prime_se^2`, so an
+  imprecise block carries the weight it has earned. When the standard error is missing or zero the
+  fit falls back to unweighted and says so, rather than appearing to have done what §4 asked.
+- **Visual search, with its censoring declared.** §4 permits either a censored model or reporting the
+  completion rate alongside. The second option is taken and named as such: a genuinely censored LMM
+  needs a package this template does not carry, and adding a dependency silently is worse than
+  saying which option was used. The fit prints the share of blocks ending at the time limit and
+  states that its own mean is biased downward by that share. On the gate's fixture that share is 60%,
+  which is exactly why the warning has to be there.
+
+**The plan named a column the export does not write.** §4 instructed the analyst to read
+`search_termination`; the export writes `termination_mode`. This is the same defect class as the
+`lux_all_in_range` fault that stopped the whole R template running, sitting in the plan document
+instead of the code. Corrected in place, with the discrepancy recorded rather than quietly edited.
+
+**The gate's fixture was degenerate for these outcomes.** `d_prime`, `d_prime_se` and `criterion`
+were identical across all twelve cloned participants, so the weighted model failed with "not a
+positive definite matrix" and the section reported "did not fit" on every run — a section the gate
+cannot actually check. The signal-detection measures now vary deterministically, as the blink counts
+and PERCLOS already did, and no section reports a failed fit.
+
+**Still open, unchanged:** whether the template should read the purpose-built `analysis_long.csv`
+rather than reconstructing the modelling unit from the numbered bundle; the split-sitting operator
+toggle; the gaze one-sample acceptance threshold; and the incoherent fixture
+`observed_duration_ms` (hardcoded 178,000 ms against a ~61,000-72,000 ms reading time), which means
+§5.4's threshold behaviour is asserted for presence but never made to fire.

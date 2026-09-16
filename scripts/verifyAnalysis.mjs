@@ -177,6 +177,15 @@ for (let i = 0; i < 12; i++) {
     m.blink_count_incomplete = 4 + ((i * 7 + k * 5) % 9);
     m.perclos_p80 = Math.round((0.02 + ((i * 3 + k) % 9) * 0.004) * 1000) / 1000;
   });
+  // The signal-detection measures need varying too, or the weighted d-prime model fails with
+  // "not a positive definite matrix" — constant across participants is degenerate, the same way
+  // identical blink counts made the binomial response constant. A section that reports "did not
+  // fit" on every run is a section the gate cannot check.
+  (b.rtSummaries ?? []).forEach((r, k) => {
+    r.d_prime = Math.round((1.2 + ((i * 4 + k * 3) % 13) * 0.11) * 1000) / 1000;
+    r.d_prime_se = Math.round((0.28 + ((i + k) % 5) * 0.03) * 1000) / 1000;
+    r.criterion = Math.round((-0.3 + ((i * 3 + k * 5) % 11) * 0.06) * 1000) / 1000;
+  });
   const out = root + '/' + pid;
   mkdirSync(out, { recursive: true });
   for (const f of buildExportFiles(b)) writeFileSync(out + '/' + f.filename, f.content);
@@ -222,6 +231,15 @@ for (let i = 0; i < 12; i++) {
         // called emmeans, which returns marginal MEANS — no contrast, no statistic, no p-value.
         ['the interaction is tested, not just described', 'OMNIBUS TEST'],
         ['the passage intercept ANALYSIS_PLAN.md §2 prescribes is in the structure', '(1 | passage)'],
+        // Four of the seven §4 secondary outcomes were not modelled at all. They are
+        // pre-registered, so an analyst running this file produced a thesis with four of its own
+        // stated outcomes unanalysed.
+        ['§4 reading speed is modelled', 'Reading speed (secondary'],
+        ['§4 response bias is modelled separately from sensitivity', 'Response bias: criterion'],
+        ['§4 sensitivity is modelled, not just averaged', 'Sensitivity: d-prime'],
+        ['§4 visual search is modelled', 'Visual search (secondary'],
+        ['the visual-search censoring rate is reported', 'right-censored'],
+        ['the uncensored fit declares its own downward bias', 'biased DOWNWARD'],
       ]) ok(`R: ${label}`, rOut.includes(needle), `"${needle}" not in the output`);
 
       // A threshold that is not in the protocol must say so where it is read, not only in a comment.
