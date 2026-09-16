@@ -12,6 +12,8 @@ import {
   fpsAdequateForTiers,
   fpsAdequateForRatio,
   observedDurationMs,
+  observedDurationInWindow,
+  samplingGapThreshold,
   computeClosureMetrics,
   interBlinkInterval,
   fitEarBaseline,
@@ -115,15 +117,40 @@ export class EyeMetricsAggregator {
    *
    * Every fixture and unit test started its clock at 0, which is why nothing caught it.
    */
-  private binnedBlinkRates(events: BlinkEvent[], durationMs: number, originMs: number) {
-    if (durationMs <= 0) return { first_half_blink_rate: null, second_half_blink_rate: null };
-    const mid = durationMs / 2;
+  /**
+   * SPLIT on wall clock, but DIVIDE by observed time — two different questions, two different
+   * durations.
+   *
+   * The halves are about WHEN in the exposure a blink happened, so the split point has to be
+   * wall-clock: half way through the participant's three minutes, not half way through the frames
+   * that happened to solve. That part was already right.
+   *
+   * The DENOMINATOR was not. Both halves divided by their share of the wall-clock span, so time in
+   * which the participant was not being watched was charged to the rate — the exact defect that was
+   * fixed for `blink_rate` and left standing in the two columns beside it. Reproduced on this
+   * aggregator: a true and constant 15 blinks/min over 180 s with two 20 s dropouts gave
+   * blink_rate 15.01 (correct) alongside first_half 12.00 and second_half 11.33. In
+   * 07_eye_metrics.csv that row reads as a ~20% within-condition decline in blink rate, in both
+   * halves, entirely from look-aways — and both columns carry role 'dv', so the codebook offers
+   * them as evidence of within-condition drift rather than as QC. A reduced blink rate is this
+   * study's own marker of visual fatigue, so the artefact imitates the finding.
+   */
+  private binnedBlinkRates(
+    events: BlinkEvent[],
+    spanMs: number,
+    originMs: number,
+    gapMs: number,
+  ) {
+    if (spanMs <= 0) return { first_half_blink_rate: null, second_half_blink_rate: null };
+    const mid = spanMs / 2;
     const rel = (e: BlinkEvent) => e.onset_ms - originMs;
     const first = events.filter((e) => rel(e) < mid).length;
     const second = events.filter((e) => rel(e) >= mid).length;
+    const firstObserved = observedDurationInWindow(this.ear, originMs, originMs + mid, gapMs);
+    const secondObserved = observedDurationInWindow(this.ear, originMs + mid, Infinity, gapMs);
     return {
-      first_half_blink_rate: blinkRatePerMinute(first, mid),
-      second_half_blink_rate: blinkRatePerMinute(second, durationMs - mid),
+      first_half_blink_rate: blinkRatePerMinute(first, firstObserved),
+      second_half_blink_rate: blinkRatePerMinute(second, secondObserved),
     };
   }
 
@@ -195,7 +222,7 @@ export class EyeMetricsAggregator {
     const fps = effectiveFps(this.ear.map((s) => s.t_ms));
     // The origin of the condition's own clock, not zero: see binnedBlinkRates.
     const originMs = this.ear.length ? this.ear[0].t_ms : 0;
-    const bins = this.binnedBlinkRates(events, spanMs, originMs);
+    const bins = this.binnedBlinkRates(events, spanMs, originMs, samplingGapThreshold(this.ear));
     const closure = computeClosureMetrics(this.ear, baseline, events);
     const ibi = interBlinkInterval(events);
 

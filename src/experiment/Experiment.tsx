@@ -828,9 +828,30 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                       : 'self-reported colour-vision deficiency']
                     : [],
                 );
+                /*
+                 * The COUNTS have to describe the administration that produced the STATUS.
+                 *
+                 * cvd_status is deliberately sticky — a failure at sitting 1 survives a pass at
+                 * sitting 2, because the plate set is identical and deterministically seeded, so a
+                 * retest measures recall as much as colour vision. The counts beside it were
+                 * written unconditionally on every administration. A participant who scored 3/6 and
+                 * was marked screen_failed, then 6/6 at the next sitting, exported as
+                 * cvd_status=screen_failed with cvd_screen_correct=6 of 6 — a verdict sitting next
+                 * to the numbers of a different, passing administration that flatly contradict it.
+                 *
+                 * Exclusion was never affected (cvd_status and eligible are both merged and
+                 * sticky), so this is a QC-column contradiction rather than a wrong exclusion — but
+                 * it is exactly the kind an analyst would resolve the wrong way, by trusting the
+                 * numbers over the flag.
+                 *
+                 * When stickiness kept an earlier verdict, keep that administration's counts too.
+                 */
+                const inheritedVerdict = status === p.cvd_status && status !== r.status;
                 await put('participants', {
                   ...p,
-                  cvd_screen_correct: r.testCorrect, cvd_screen_total: r.testTotal, cvd_status: status,
+                  cvd_screen_correct: inheritedVerdict ? p.cvd_screen_correct : r.testCorrect,
+                  cvd_screen_total: inheritedVerdict ? p.cvd_screen_total : r.testTotal,
+                  cvd_status: status,
                   eligible: verdict.eligible,
                   exclusion_reason: verdict.exclusion_reason,
                 });

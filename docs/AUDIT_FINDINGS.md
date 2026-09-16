@@ -782,3 +782,63 @@ than reported and are recorded here as such.
   necessarily local. The restore now says so rather than implying the check is complete.
 - `system_performance_logs` is declared, purged, and never written, and is in no backup path.
   Nothing is lost today; a ratchet test requires the backup to cover it if a writer ever appears.
+
+---
+
+## Round 4 — ledger triage, and what it turned up that the ledger did not have
+
+Every unmarked finding in this file was re-checked against the code as it stands, by agents
+instructed to open the code rather than trust the entry. **Thirteen of fourteen were already FIXED**
+and had simply never had their headings updated — each verdict was confirmed with a reproduction on
+the real module, not by reading the diff.
+
+The value was not in the confirmations. It was in the residuals: defects adjacent to a fixed one,
+which the original finding did not describe and which survived its fix.
+
+**Fixed in this pass**
+
+- **The within-condition halves still charged unobserved time to the rate.** `blink_rate` was moved
+  onto observed time precisely because charging dropouts to a rate makes a tracking failure look
+  like the effect under study — a reduced blink rate is this protocol's own marker of visual
+  fatigue. `first_half_blink_rate` and `second_half_blink_rate`, sitting beside it, were left on the
+  wall-clock span. Reproduced on the real aggregator: a true and constant 15 blinks/min over 180 s
+  with two 20 s dropouts gave `blink_rate` 15.03 next to halves of 12.01 and 11.35 — a fabricated
+  ~20% within-condition decline, in both halves, entirely from look-aways. Both columns carry role
+  `dv`, so the codebook offers them as evidence of drift rather than as QC. The split stays
+  wall-clock (the halves are about *when* in the exposure a blink happened); only the denominator
+  changed. The gap threshold is computed once on the whole series and applied to both halves, so a
+  half containing a long dropout cannot raise its own threshold and absorb it.
+- **`effective_fps` was documented as the processing rate in three places** after it was changed to
+  measure the EAR series. An analyst reading 18.0 would conclude the camera ran at 18 fps, when it
+  ran at 30 and solved 60% of frames. Corrected in `07_eye_metrics.csv`, `10_wide_summary.csv` and
+  the analysis codebook.
+- **`adaptation_ms_before` still said "0 for the first condition".** False since the pre-first grey
+  field was added — a `session_position=0` row now carries a normal adaptation value, and 0 means
+  the field was *not delivered*. The old sentence was the only trace the original defect left.
+- **`cvd_screen_correct`/`_total` were last-write-wins while `cvd_status` is sticky.** A participant
+  who scored 3/6 and was marked `screen_failed`, then 6/6 at the next sitting, exported
+  `screen_failed` beside 6 of 6 — a verdict next to numbers from a different, passing administration
+  that contradict it. Exclusion was never affected; this is the kind of QC contradiction an analyst
+  resolves the wrong way, by trusting the numbers over the flag. The counts now follow the
+  administration that produced the status.
+
+**Still LIVE, and an investigator decision rather than a code change**
+
+- **Single-vs-split sitting length is a free per-sitting operator toggle.** One participant can be
+  run as one ~110-minute sitting and the next as two halves, on the operator's judgement of how
+  tired they look, with nothing in the export recording that it was a judgement rather than a
+  study-wide setting. That is fatigue exposure varying between participants for a reason correlated
+  with how they presented. Either fix the structure study-wide, or record the reason per sitting the
+  way the lux deviation and repeat-run notes already are.
+
+**Residuals recorded, not acted on**
+
+- The gaze acceptance criterion counts a target as covered at **one** sample, where the original
+  finding asked for five. At 30 fps an 800 ms dwell yields ~24, so a target contributing one sample
+  had an almost entirely unsolved dwell, and six such targets would still report `valid = true`.
+  Weaker than intended rather than broken; how strict the bar should be is a methods decision.
+- `calibration_targets_detected` counts raw samples while the validity check counts finite ones, so
+  the two can disagree by a target whose dwell produced only non-finite gaze estimates.
+- The resume path enters the condition loop without a grey field, so a resumed condition starts from
+  whatever the participant was last looking at. Narrower than the original finding, which was about
+  every first condition, but the same mechanism.

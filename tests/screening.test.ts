@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolveCvdStatus } from '@/screening/ishihara';
 import { isFigurePixel, scoreIshihara, PLATES } from '@/screening/ishihara';
 import { cvsqItemScore, scoreCvsq, CVSQ_ITEMS, CVSQ_CUTOFF } from '@/scales/cvsq';
 
@@ -185,5 +187,45 @@ describe('the screening set carries no learnable non-chromatic cue', () => {
       const controls = buildScreeningPlates(seed).filter((p) => p.axis === 'control');
       expect(controls).toHaveLength(1);
     }
+  });
+});
+
+/**
+ * The screen counts must describe the administration that produced the status.
+ *
+ * cvd_status is deliberately sticky: a failure at sitting 1 survives a pass at sitting 2, because
+ * the plate set is identical and deterministically seeded, so a retest measures recall as much as
+ * colour vision. The counts beside it were written unconditionally on every administration.
+ *
+ * So a participant who scored 3/6 and was marked screen_failed, then 6/6 at the next sitting,
+ * exported cvd_status=screen_failed with cvd_screen_correct=6 of 6 — a verdict sitting next to the
+ * numbers of a different, passing administration that flatly contradict it. Exclusion was never
+ * affected, since cvd_status and eligible are both merged and sticky; it is the kind of QC
+ * contradiction an analyst resolves the wrong way, by trusting the numbers over the flag.
+ */
+describe('a carried-forward screen failure keeps its own counts', () => {
+  const experiment = readFileSync('src/experiment/Experiment.tsx', 'utf8');
+
+  it('detects when stickiness inherited an earlier verdict', () => {
+    expect(experiment).toMatch(/const inheritedVerdict = status === p\.cvd_status && status !== r\.status;/);
+  });
+
+  it('writes the prior administration’s counts in exactly that case', () => {
+    expect(experiment).toMatch(/cvd_screen_correct: inheritedVerdict \? p\.cvd_screen_correct : r\.testCorrect/);
+    expect(experiment).toMatch(/cvd_screen_total: inheritedVerdict \? p\.cvd_screen_total : r\.testTotal/);
+  });
+
+  it('is the case resolveCvdStatus actually produces', () => {
+    // prior failed, this administration passed -> status stays screen_failed while r.status is
+    // 'normal', which is precisely the inheritedVerdict condition.
+    expect(resolveCvdStatus('screen_failed', 'normal')).toBe('screen_failed');
+    // and a first failure is NOT inherited: status comes from this administration, counts follow it
+    expect(resolveCvdStatus('normal', 'screen_failed')).toBe('screen_failed');
+  });
+
+  it('the codebook says which administration the counts belong to', () => {
+    const cb = readFileSync('src/storage/export.ts', 'utf8');
+    const entry = cb.split('\n').find((l) => l.includes("column: 'cvd_screen_correct'")) ?? '';
+    expect(entry).toMatch(/administration that produced cvd_status/);
   });
 });

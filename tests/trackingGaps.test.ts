@@ -11,6 +11,7 @@
  * the rate turns a dropout into a finding.
  */
 import { describe, it, expect } from 'vitest';
+import { EyeMetricsAggregator, type FrameSample } from '@/tracking/aggregator';
 import {
   classifyBlinks, observedDurationMs, samplingGapThreshold, faceEar, eyeAspectRatio,
   computeClosureMetrics, LONG_CLOSURE_MS, fitEarBaseline, MIN_EAR_BASELINE_SAMPLES,
@@ -319,5 +320,77 @@ describe('an open-eye baseline is only accepted when frames actually solved', ()
     const fit = fitEarBaseline(Array.from({ length: 200 }, () => 0));
     expect(fit.baseline).toBeNull();
     expect(fit.usable).toBe(0);
+  });
+});
+
+/**
+ * The within-condition halves must divide by observed time, like the rate beside them.
+ *
+ * blink_rate was fixed to use observed time — dropouts excluded — because charging unobserved time
+ * to a rate made a tracking failure look exactly like the effect under study: a reduced blink rate
+ * is this protocol's own marker of visual fatigue. The two columns beside it were left on the
+ * wall-clock span.
+ *
+ * So a row could carry a correct blink_rate next to two half-rates that were both wrong in the same
+ * direction, and 07_eye_metrics.csv gives both halves role 'dv' — the codebook offers them as
+ * evidence of within-condition drift, not as QC. The artefact imitates the finding.
+ *
+ * The SPLIT stays wall-clock: the halves are about when in the participant's exposure a blink
+ * happened, not about which frames solved.
+ */
+describe('within-condition half rates exclude dropouts', () => {
+  const frame = (t_ms: number, ear: number): FrameSample => ({
+    t_ms, ear, pose: { pitch: 1, yaw: 2, roll: 0.5 },
+    zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.22, luma: 120,
+  });
+
+  /** 180 s at 30 fps, a true and CONSTANT 15 blinks/min, with two 20 s dropouts. */
+  const withDropouts = (dropouts: [number, number][]) => {
+    const a = new EyeMetricsAggregator();
+    const OPEN = 0.30;
+    const T0 = 500_000;           // a realistic performance.now() origin, not 0
+    for (let i = 0; i < 180 * 30; i++) {
+      const t = i * 33.3;
+      if (dropouts.some(([from, to]) => t > from && t < to)) continue;
+      a.ingest(frame(T0 + t, i % 120 < 3 ? OPEN * 0.5 : OPEN));
+    }
+    return a.finalize({
+      conditionId: 'c', sessionId: 's', cameraActive: true,
+      baselineEarValue: OPEN, earThresholdUsed: OPEN * 0.75,
+      gazeCalibrated: false, headPitchCalibrated: false,
+    });
+  };
+
+  it('reports a constant blink rate as constant, in both halves, despite the dropouts', () => {
+    const r = withDropouts([[40_000, 60_000], [110_000, 130_000]]);
+    // Truth is 15/min throughout. On the wall-clock denominator these came out 12.0 and 11.3.
+    expect(r.blink_rate!).toBeGreaterThan(14);
+    expect(r.bins.first_half_blink_rate!).toBeGreaterThan(14);
+    expect(r.bins.second_half_blink_rate!).toBeGreaterThan(14);
+    expect(r.bins.first_half_blink_rate!).toBeLessThan(16.5);
+    expect(r.bins.second_half_blink_rate!).toBeLessThan(16.5);
+  });
+
+  it('does not fabricate a within-condition decline out of a dropout in one half only', () => {
+    // The nastiest shape: all the lost time in the FIRST half. On the old denominator this read as
+    // a large rise across the condition; the participant's blink rate never changed.
+    const r = withDropouts([[20_000, 70_000]]);
+    const first = r.bins.first_half_blink_rate!;
+    const second = r.bins.second_half_blink_rate!;
+    expect(Math.abs(first - second) / second, 'a drift that is an artefact of look-aways').toBeLessThan(0.15);
+  });
+
+  it('still splits on the wall clock, so the halves are halves of the EXPOSURE', () => {
+    // No dropouts: observed time and the wall clock agree, so both halves report the true rate.
+    // Not asserted to closer than one blink: the generator emits on a fixed 120-frame cadence, so
+    // 45 blinks split 23/22 across the midpoint and that alone is 0.67/min. Tightening past it
+    // would be fitting the test to an artefact of the fixture.
+    const r = withDropouts([]);
+    const first = r.bins.first_half_blink_rate!;
+    const second = r.bins.second_half_blink_rate!;
+    expect(Math.abs(first - second) / second).toBeLessThan(0.05);
+    expect(first).toBeGreaterThan(14);
+    expect(second).toBeGreaterThan(14);
+    expect(r.observed_duration_ms!).toBeGreaterThan(178_000);
   });
 });

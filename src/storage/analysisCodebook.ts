@@ -200,7 +200,7 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
   { column: 'camera_active', role: 'qc', unit: 'boolean', missing: 'no eye record',
     description: 'Whether tracking ran for this condition. False means every ocular column in the row is empty by cause, not by chance.' },
   { column: 'effective_fps', role: 'qc', unit: 'fps', missing: 'camera not running',
-    description: 'Achieved tracking throughput.' },
+    description: 'Achieved sampling rate of the EAR series — face-solved frames per second, not the camera frame rate. This is what fps_adequate_for_ratio gates on.' },
   { column: 'fps_adequate_for_ratio', role: 'qc', unit: 'boolean', missing: 'camera not running',
     description: 'Whether the frame rate supports the primary outcome. Below the floor the sampled minimum EAR is biased UPWARD, so incomplete_blink_ratio is inflated — a directional bias, not symmetric noise. Rows are flagged and never dropped, because frame rate covaries with room brightness, which is held constant by protocol rather than manipulated: dropping them would still delete data non-randomly with respect to how well the camera saw each participant.' },
   { column: 'face_presence_ratio', role: 'qc', unit: '0-1', missing: 'camera not running',

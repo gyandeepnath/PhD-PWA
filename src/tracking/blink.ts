@@ -216,15 +216,35 @@ export function samplingGapThreshold(samples: EarSample[]): number {
  * reduced blink rate is the study's own marker of visual fatigue — so a tracking failure was
  * indistinguishable from the effect being measured.
  */
-export function observedDurationMs(samples: EarSample[]): number {
+export function observedDurationMs(samples: EarSample[], gapMs?: number): number {
   if (samples.length < 2) return 0;
-  const gap = samplingGapThreshold(samples);
+  const gap = gapMs ?? samplingGapThreshold(samples);
   let total = 0;
   for (let i = 1; i < samples.length; i++) {
     const d = samples[i].t_ms - samples[i - 1].t_ms;
     if (d > 0 && d <= gap) total += d;
   }
   return total;
+}
+
+/**
+ * Observed time inside a half-open window [fromMs, toMs), on a gap threshold from the WHOLE series.
+ *
+ * WHY THE THRESHOLD IS PASSED IN. samplingGapThreshold() derives "what counts as a dropout" from
+ * the median inter-sample interval of the samples it is given. Recomputing it on a half would let
+ * a half that happens to contain a long dropout raise its own threshold and absorb that dropout as
+ * normal sampling — the half most in need of the correction would get the least of it. The
+ * condition's sampling rate is one property of the condition, so it is measured once and applied
+ * to both halves.
+ */
+export function observedDurationInWindow(
+  samples: EarSample[],
+  fromMs: number,
+  toMs: number,
+  gapMs: number,
+): number {
+  const inside = samples.filter((s) => s.t_ms >= fromMs && s.t_ms < toMs);
+  return observedDurationMs(inside, gapMs);
 }
 
 export function classifyBlinks(samples: EarSample[], baseline: number | null): BlinkEvent[] {
