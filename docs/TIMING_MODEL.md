@@ -198,6 +198,59 @@ Interaction power is **45% at full exposure**, against a synopsis target of 81%.
 created by any of the shortening options — it is there now, and it is the reason reading exposure
 is the most expensive thing in the protocol to cut. It needs addressing on its own terms.
 
+### What "on its own terms" costs — the number that was missing
+
+The paragraph above has said "needs addressing" for some time without saying what addressing it
+would take. Here is the arithmetic, and it changes the decision.
+
+Required n for a paired contrast at α = .05 two-tailed is `(z₁₋α/₂ + z₁₋β)² / d_z²`. Taking the
+observed `d_z` from the power table above, at each modelled reading exposure:
+
+| read/cond | median sitting | interaction power at n=130 | n for 81% interaction | participant-hours |
+|---|---|---|---|---|
+| 73 s | 80 min | 27% | 569 | 759 |
+| 120 s | 88 min | 37% | 394 | 578 |
+| **177 s (as shipped)** | **98 min** | **45%** | **311** | **508** |
+| 240 s | 108 min | 51% | 263 | 473 |
+| 300 s | 118 min | 56% | 236 | 464 |
+
+**Timing is not the binding constraint.** The feasibility gate (median ≤ 120 min) passes with 22
+minutes of headroom, and nothing in the protocol is close to breaching it. The binding constraint is
+the interaction, and **no feasible session length rescues it at the planned n**: even at 300 s per
+condition — the longest exposure modelled, median sitting 118 min, still inside the gate — power
+reaches only 56% against a target of 81%.
+
+Two consequences worth stating plainly.
+
+**Longer sittings are CHEAPER in total contact time, not dearer.** Reaching 81% interaction power
+costs 508 participant-hours at the shipped 177 s (n = 311) and 464 at 300 s (n = 236) — 44 hours
+less, and 75 fewer participants to recruit, despite each sitting running 20 minutes longer. The
+intuition that shortening the sitting saves effort is wrong once the target is a fixed power rather
+than a fixed n: exposure buys precision per participant more cheaply than recruitment buys it.
+
+**The two outcomes pull in opposite directions.** The polarity main effect is robust — it needs
+n = 144 for 92% power at the shipped exposure, barely above the 130 planned, and its cheapest route
+is the *shortest* exposure (225 participant-hours at 73 s). The interaction's cheapest route is the
+longest. A protocol optimised for one is not optimised for the other.
+
+### The decision this forces, which is the investigator's
+
+At n = 130 analysed (145 enrolled), the study is powered for the polarity main effect (89%, against
+a 92% target) and is **not** powered for the polarity × colour interaction (45%, against 81%). The
+options are:
+
+1. **Enrol for the interaction** — roughly 236–311 analysed participants, 1.8×–2.4× the current
+   plan, with 300 s per condition the cheaper route in total contact hours.
+2. **Keep n ≈ 145 and re-designate the interaction as exploratory**, with the polarity main effect
+   as the confirmatory outcome. This costs nothing operationally and requires the synopsis and the
+   analysis plan to say so, pre-registered, rather than reporting an underpowered interaction as
+   though it were confirmatory.
+3. Reduce the number of colour levels, which raises `d_z` for the surviving contrasts — at the cost
+   of the research question the five-colour design exists to answer.
+
+Nothing in the software prevents any of these. This is recorded here because the code cannot decide
+it and the decision should not be made implicitly by letting recruitment stop wherever it stops.
+
 ---
 
 # What the literature changes

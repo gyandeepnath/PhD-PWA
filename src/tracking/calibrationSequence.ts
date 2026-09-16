@@ -46,6 +46,29 @@ export type CalibrationStep = EarBaselineStep | GazeTargetStep;
 /** Dwell per gaze target. Long enough to fixate and settle, short enough that nine of them are tolerable. */
 export const GAZE_DWELL_MS = 800;
 
+/**
+ * Pause after a step appears, before sampling starts, so the participant is looking at the thing
+ * being measured rather than at where it used to be.
+ *
+ * Named rather than inline because the feasibility model has to be able to add it up. See
+ * `calibrationMachineMs()`.
+ */
+export const STEP_SETTLE_MS = 250;
+
+/**
+ * How long the routine occupies the tablet, excluding anything the participant or operator does.
+ *
+ * The feasibility model used to carry calibration as a hardcoded 150-second guess, under a file
+ * header claiming "every app-controlled duration is read from the real CONFIG". That was true of
+ * everything except this, and it stopped being harmless when a six-second open-eye baseline window
+ * was added to the routine: the protocol got longer and the model that decides whether the protocol
+ * fits its feasibility gate did not know. Deriving it here means the model follows the routine
+ * automatically, and a future change to either constant cannot silently desynchronise them.
+ */
+export function calibrationMachineMs(): number {
+  return calibrationSequence().reduce((total, step) => total + STEP_SETTLE_MS + step.ms, 0);
+}
+
 export function calibrationSequence(): CalibrationStep[] {
   return [
     { kind: 'ear_baseline', ms: CONFIG.EAR_BASELINE_MS },

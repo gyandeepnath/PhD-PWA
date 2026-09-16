@@ -15,6 +15,7 @@ import { CONDITIONS } from '../../src/experiment/conditions';
 import { PASSAGES, QUESTIONS_PER_PASSAGE } from '../../src/experiment/passages';
 import { blockPlan } from '../../src/experiment/counterbalance';
 import { nonAgingDelay } from '../../src/lib/foreperiod';
+import { calibrationMachineMs } from '../../src/tracking/calibrationSequence';
 
 // ---------------------------------------------------------------- rng
 let seed = 20260817;
@@ -178,7 +179,23 @@ export function simulateSitting(
   add('preflight_checklist', gauss(55, 15));
   if (spec.first) add('colour_vision (5 plates)', gauss(80, 20) * care);
   add('camera_setup', gauss(90, 30));
-  add('calibration (9-pt + EAR + pitch)', gauss(150, 40));
+  /*
+   * Calibration, split into the part the app controls and the part people control.
+   *
+   * This was a single hardcoded `gauss(150, 40)`, in a file whose own header says "every
+   * app-controlled duration is read from the real CONFIG". It was the one exception, and the
+   * exception stopped being harmless when a six-second open-eye baseline window was added to the
+   * routine: the protocol got longer and the model that decides whether the protocol fits inside
+   * the feasibility gate did not know it had. A feasibility model that does not track the protocol
+   * is worse than none, because it keeps answering.
+   *
+   * The machine half now comes from calibrationMachineMs(), which sums the real sequence — so the
+   * two cannot drift again. The human half is what it always was: reading the instruction card,
+   * the operator settling the participant, and nine deliberate taps. Named separately so a reader
+   * can see which half a future change moved.
+   */
+  add('calibration (machine: sequence)', calibrationMachineMs() / S);
+  add('calibration (human: intro, seating, 9 taps)', gauss(140, 40) * care);
   // CVS-Q: 16 items, each a frequency choice plus a conditional intensity choice.
   const cvsq = spec.cvsq ?? 'both';
   if (cvsq === 'both') add('cvsq_baseline (16 items)', 16 * gauss(13, 3) * care / 1);

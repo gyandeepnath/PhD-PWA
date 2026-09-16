@@ -14,7 +14,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { calibrationSequence, GAZE_DWELL_MS } from '@/tracking/calibrationSequence';
+import {
+  calibrationSequence, calibrationMachineMs, GAZE_DWELL_MS, STEP_SETTLE_MS,
+} from '@/tracking/calibrationSequence';
 import { GAZE_TARGETS } from '@/tracking/gazeCalibration';
 import {
   baselineEar, classifyBlinks, fitEarBaseline, EAR_TIERS,
@@ -178,5 +180,48 @@ describe('within-sitting drift is visible in the export', () => {
 
   it('reports nothing rather than a thin number when the condition was barely observed', () => {
     expect(conditionAt(0.30, MIN_EAR_BASELINE_SAMPLES - 1).open_ear_measured).toBeNull();
+  });
+});
+
+/**
+ * The feasibility model must follow the calibration routine, not carry its own copy of it.
+ *
+ * scripts/lib/timingModel.ts opens with "Every app-controlled duration is read from the real
+ * CONFIG." That was true of every step except calibration, which was a hardcoded `gauss(150, 40)` —
+ * and the exception stopped being harmless the moment a six-second open-eye baseline window was
+ * added to the routine. The protocol got 6.25 s longer per participant and the model that decides
+ * whether the protocol fits inside its 120-minute feasibility gate did not know it had.
+ *
+ * A feasibility model that has silently desynchronised from the protocol is worse than no model,
+ * because it keeps answering.
+ */
+describe('calibration duration is derived, not restated', () => {
+  const timingModel = readFileSync('scripts/lib/timingModel.ts', 'utf8');
+
+  it('sums the real sequence, including the settle before each step', () => {
+    const steps = calibrationSequence();
+    const expected = steps.reduce((t, s) => t + STEP_SETTLE_MS + s.ms, 0);
+    expect(calibrationMachineMs()).toBe(expected);
+    // One EAR window plus nine gaze targets, each preceded by a settle.
+    expect(calibrationMachineMs()).toBe(10 * STEP_SETTLE_MS + CONFIG.EAR_BASELINE_MS + 9 * GAZE_DWELL_MS);
+  });
+
+  it('moves when the protocol moves — the property the hardcoded number did not have', () => {
+    // The baseline window is the thing that was added and missed. It must be inside the total.
+    expect(calibrationMachineMs()).toBeGreaterThan(9 * (STEP_SETTLE_MS + GAZE_DWELL_MS));
+    expect(calibrationMachineMs() - 9 * (STEP_SETTLE_MS + GAZE_DWELL_MS))
+      .toBe(CONFIG.EAR_BASELINE_MS + STEP_SETTLE_MS);
+  });
+
+  it('the timing model calls it instead of hardcoding a guess', () => {
+    expect(timingModel).toMatch(/calibrationMachineMs\(\)/);
+    expect(timingModel, 'the old hardcoded calibration estimate is back')
+      .not.toMatch(/calibration \(9-pt \+ EAR \+ pitch\)/);
+  });
+
+  it('the screen uses the same settle constant the model adds up', () => {
+    // An inline 250 in the component would desynchronise it from the model again.
+    const routine = readFileSync('src/start/CalibrationRoutine.tsx', 'utf8');
+    expect(routine).toMatch(/setTimeout\(r, STEP_SETTLE_MS\)/);
   });
 });

@@ -20,7 +20,7 @@
  * non-ocular measure — but it has to be a deliberate choice, so it is a separate button.
  */
 import { useState } from 'react';
-import { calibrationSequence, type CalibrationStep } from '@/tracking/calibrationSequence';
+import { calibrationSequence, STEP_SETTLE_MS, type CalibrationStep } from '@/tracking/calibrationSequence';
 import type { CalibrationOutcome } from '@/tracking/useTracking';
 
 interface Props {
@@ -49,7 +49,7 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
     for (let i = 0; i < STEPS.length; i++) {
       const step = STEPS[i];
       setIdx(i);
-      await new Promise((r) => setTimeout(r, 250)); // let the participant settle on what just appeared
+      await new Promise((r) => setTimeout(r, STEP_SETTLE_MS)); // let the participant settle on what just appeared
       if (step.kind === 'ear_baseline') {
         await measureEarBaseline(step.ms);
         beginGazeCalibration();
