@@ -1070,3 +1070,75 @@ are mutation-tested.
 - Offline collection holds. There is no `fetch` or `XMLHttpRequest` anywhere in `src/`; both dynamic
   imports are precached and covered by `verifyBundle`; fonts are self-hosted and their failure is
   measured and exported. Losing the network mid-sitting changes nothing.
+
+---
+
+## Round 8 — the plan's mandatory checks, the passage intercept, and a test that never tested
+
+**§5's quality checks were not optional and were not there**
+
+`ANALYSIS_PLAN.md` §5 opens "These are not optional and they come first." Only §5.2 was implemented.
+§5.1 selected the lux columns and never read them; §5.3 (`face_presence_ratio`, `off_axis_ratio`),
+§5.4 (`observed_duration_ms` against `reading_time_ms`) and §5.5 (the careless-responding flags)
+appeared nowhere in the file. §5.4 is the one that hides best: when the camera stops part-way, every
+RATE in the row still looks entirely normal, because a rate divides by the time actually observed.
+
+The panel reports and drops nothing. §5.2 states the reason in general terms — frame rate covaries
+with ambient illumination, so dropping flagged rows deletes data non-randomly with respect to a
+factor — and it applies to the rest of §5 as well.
+
+Only one threshold in the panel comes from the protocol: `face_presence_ratio >= 0.90`, the pilot
+gate stated in that column's own codebook entry. The other two are analyst defaults and say so at
+the point they are read, not only in a comment. A number that looks pre-registered and is not is
+worse than no number at all.
+
+§5.5 is reported from `12_quality_flags.csv` rather than joined onto the modelling frame, and that is
+a limitation of the file: it carries no `condition_id`, only `participant_id` + `condition_label` +
+`session_index`, and joining on the label is what this template's own join note warns against.
+**Recorded as a finding:** the per-condition quality file cannot be joined to the modelling frame by
+the key the template mandates. Counts answer §5.5's question; a per-row merge would need the export
+to carry `condition_id` in that file.
+
+**The passage intercept the documentation claimed**
+
+§2 prescribes `(1 | passage_id)` and §5b asserted that a passage effect "loads onto the residual in
+the Python fit and not in the R one". `passage_id` occurred zero times in the R template. Because
+passage is decoupled from condition by design this does not bias the display coefficients — what it
+does is leave passage variance in the residual, where in a binomial GLMM unmodelled cluster
+structure surfaces as overdispersion, understating the standard errors on exactly the condition-level
+terms under test. It is now carried through every rung of the reduction ladder, since the plan's
+pre-specified reduction order concerns the participant structure and says nothing about passage, and
+it is dropped only if keeping it prevents a fit at all — loudly, the way reduction 2 already is.
+
+**The interaction was never tested**
+
+The line headed "The polarity x colour interaction — Objective 2's crossover test" called
+`emmeans(~ colour | polarity)`, which returns estimated marginal MEANS. Not a contrast, not a test
+statistic, no p-value. The only thing resembling a test of the study's second objective was the four
+separate Wald z's in `summary()`, with no omnibus test over them and no multiplicity handling. A
+likelihood-ratio test against the additive model now runs first, and the marginal means print on the
+response scale — that one call had omitted `type = "response"` while sitting under a heading that
+said "back-transformed to the proportion scale".
+
+The heading deliberately does NOT state the degrees of freedom. A full 2 x 5 crossing gives 4, but
+`lme4` drops aliased columns from a rank-deficient design and reports the df it actually used — on
+the gate's own fixture it reports 3. A heading asserting 4 would be describing a test that was not
+run.
+
+**The gate's fixture repeated itself twelve times**
+
+Found while reading the panel's own output: the modelling frame was 1440 rows where 12 participants
+x 10 conditions is 120. The twelve cloned participants shared `condition_id` values, so every join on
+`condition_id` matched twelve rows instead of one. The models fitted happily on a dataset whose every
+observation appeared twelve times — green, and checking nothing real, with any genuine fan-out bug
+in the template free to hide inside the noise. Condition ids are now unique per participant and the
+gate asserts the frame is exactly 120 rows.
+
+The per-file column check from Round 6 caught this round's first mistake before it shipped: an
+attempted join to `12_quality_flags.csv` on `condition_id`, a column that file does not have.
+
+**Noted, not acted on:** the fixture's `observed_duration_ms` is a hardcoded 178,000 ms against a
+`reading_time_ms` of ~61,000-72,000 ms, so the fixture claims the camera observed 2.7x the reading
+exposure. That is an incoherent row, and it means the §5.4 check cannot be made to fire on the
+fixture — the check is exercised for presence, not for its threshold behaviour. Changing the constant
+touches a fixture several suites depend on and was left for a round with room to re-verify properly.

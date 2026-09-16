@@ -425,10 +425,37 @@ fit_binom <- function(rhs, data, extra_re = re_sitting) {
         control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 }
 
-primary_structure <- "maximal: (1 + polarity | participant) + (1 | participant:sitting)"
-fit <- fit_noting(update(f_primary, as.formula(paste0(". ~ . + (1 + polarity | participant_id)", re_sitting))))
+# ANALYSIS_PLAN.md §2 prescribes a passage intercept: "passage is decoupled from condition by
+# design, so it can carry its own intercept and is not confounded with the display factors." It
+# appeared nowhere in this file, while §5b asserted that a passage effect "loads onto the residual
+# in the Python fit and not in the R one" — a safeguard the documentation claimed and the code did
+# not have. Because passage is decoupled from condition it does not bias the display coefficients;
+# what it does is leave passage variance in the residual, and in a binomial GLMM unmodelled cluster
+# structure surfaces as overdispersion, i.e. as understated standard errors on the condition-level
+# terms actually being tested.
+#
+# It is carried through every rung of the ladder rather than being the first thing dropped, because
+# the plan's pre-specified reduction order is about the PARTICIPANT structure (drop the polarity
+# slope, then the sitting intercept) and says nothing about passage. A dataset with too few distinct
+# passages to support it is handled at the end, loudly, the same way reduction 2 is.
+re_passage <- if (length(unique(na.omit(eye$passage_id))) > 1) " + (1 | passage_id)" else ""
+if (!nzchar(re_passage)) {
+  cat("\nNOTE: fewer than two distinct passage_id values — the (1 | passage_id) intercept that\n")
+  cat("      ANALYSIS_PLAN.md §2 prescribes cannot be fitted and passage variance stays in the residual.\n")
+}
+
+primary_structure <- "maximal: (1 + polarity | participant) + (1 | participant:sitting) + (1 | passage)"
+fit <- fit_noting(update(f_primary, as.formula(paste0(". ~ . + (1 + polarity | participant_id)", re_sitting, re_passage))))
 if (is.null(fit$model) || isSingular(fit$model)) {
-  primary_structure <- "reduction 1: (1 | participant) + (1 | participant:sitting)"
+  primary_structure <- "reduction 1: (1 | participant) + (1 | participant:sitting) + (1 | passage)"
+  fit <- fit_noting(update(f_primary, as.formula(paste0(". ~ . + (1 | participant_id)", re_sitting, re_passage))))
+}
+if (is.null(fit$model) && nzchar(re_passage)) {
+  # The passage intercept is prescribed, so it is dropped only when keeping it prevents a fit at
+  # all — and then it is said out loud, because §5b's claim that R fits it stops being true here.
+  primary_structure <- "reduction 1b: (1 | participant) + (1 | participant:sitting) - NO PASSAGE INTERCEPT"
+  cat("\nNOTE: the model would not fit with (1 | passage_id); it has been dropped and passage\n")
+  cat("      variance now loads onto the residual.\n")
   fit <- fit_noting(update(f_primary, as.formula(paste0(". ~ . + (1 | participant_id)", re_sitting))))
 }
 if (is.null(fit$model)) {
@@ -542,8 +569,43 @@ if (USE_ILLUMINATION) {
 } else {
   print(emmeans(m_primary, ~ polarity, type = "response"))
 }
+# OMNIBUS TEST of the interaction, before any marginal means are read.
+#
+# This section previously printed emmeans(~ colour | polarity) under the heading "the polarity x
+# colour interaction", and that call returns estimated marginal MEANS — not a contrast, not a test
+# statistic, and no p-value. The interaction was therefore never formally tested: all that existed
+# were the four separate Wald z's in summary(m_primary), with no omnibus test over them and no
+# multiplicity handling across the four.
+#
+# A likelihood-ratio test against the additive model is the test. It is ONE statistic for the whole
+# interaction, which is the question Objective 2 asks — does the polarity effect depend on colour —
+# rather than four separate questions about individual cells.
+#
+# The degrees of freedom are read from the printed table and NOT stated here. A full 2 x 5 crossing
+# gives 4, but lme4 drops aliased columns from a rank-deficient design and reports the df it
+# actually used; a heading asserting 4 would then be describing a test that was not run.
+cat("\n=== OMNIBUS TEST: does the polarity effect depend on colour? (likelihood-ratio test) ===\n")
+cat("    Degrees of freedom are in the Df column below. If it is under 4, the design matrix was\n")
+cat("    rank deficient and lme4 dropped aliased column(s) — check why before interpreting.\n")
+# The formula is kept on a line of its own. tests/analysisTemplates.test.ts harvests model terms
+# from any line carrying a `~`, so a tryCatch handler sharing that line contributes `e` and `NULL`
+# to the term list and the check reports two undefined symbols that are not model terms at all.
+m_additive <- tryCatch(
+  update(m_primary, . ~ . - polarity:colour),
+  error = function(err) NULL
+)
+if (is.null(m_additive)) {
+  cat("the additive model did not fit, so the interaction could not be tested by LRT.\n")
+} else {
+  print(anova(m_additive, m_primary))
+  cat("\nRead the p-value on the second row: it tests the interaction AS A WHOLE. The per-cell\n")
+  cat("contrasts below describe the shape of an interaction; they do not establish that there is one.\n")
+}
+
 cat("\nThe polarity x colour interaction — Objective 2's crossover test:\n")
-print(emmeans(m_primary, ~ colour | polarity))
+# type = 'response' so these print as proportions. They were printed on the log-odds scale under a
+# heading that said 'back-transformed', because this one call omitted it.
+print(emmeans(m_primary, ~ colour | polarity, type = "response"))
 
 # --- The contrast-matched anchor: the ONE clean test of polarity ----------------------------
 # Black-on-white and white-on-black are both 21:1, so this contrast varies polarity with

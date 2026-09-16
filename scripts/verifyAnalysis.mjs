@@ -218,6 +218,10 @@ for (let i = 0; i < 12; i++) {
         ['§5.4 exposure completeness is reported', 'exposure completeness'],
         ['§5.5 careless responding is reported', 'careless responding'],
         ['flagged rows are retained, not silently dropped', 'RETAINED'],
+        // The interaction had no formal test: the line headed "the polarity x colour interaction"
+        // called emmeans, which returns marginal MEANS — no contrast, no statistic, no p-value.
+        ['the interaction is tested, not just described', 'OMNIBUS TEST'],
+        ['the passage intercept ANALYSIS_PLAN.md §2 prescribes is in the structure', '(1 | passage)'],
       ]) ok(`R: ${label}`, rOut.includes(needle), `"${needle}" not in the output`);
 
       // A threshold that is not in the protocol must say so where it is read, not only in a comment.
