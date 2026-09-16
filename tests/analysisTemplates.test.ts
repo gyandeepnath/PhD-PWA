@@ -47,6 +47,9 @@ function namesCreatedIn(text: string): Set<string> {
   const made = new Set<string>();
   for (const m of text.matchAll(/^\s*([A-Za-z_.][\w.]*)\s*<-/gm)) made.add(m[1]);
   for (const m of text.matchAll(/\b([A-Za-z_.][\w.]*)\s*=\s*(?!=)/g)) made.add(m[1]);
+  // `frame$column <- ...` creates a usable model term just as surely as a bare assignment; the
+  // logit-transformed PERCLOS response is built that way and was reported as undefined.
+  for (const m of text.matchAll(/\$([A-Za-z_.][\w.]*)\s*<-/g)) made.add(m[1]);
   return made;
 }
 
@@ -156,5 +159,79 @@ describe('no column is documented twice', () => {
   it('documents every column the long analysis file actually writes', () => {
     const documented = new Set(ANALYSIS_CODEBOOK.map((c) => c.column));
     expect(ANALYSIS_LONG_COLUMNS.filter((c) => !documented.has(c))).toEqual([]);
+  });
+});
+
+/**
+ * Column references checked against THE FILE THEY ARE READ FROM, not against the union.
+ *
+ * The formula check above is deliberately narrow, and a defect walked straight through the gap it
+ * leaves. `analysis_template.R` selected `lux_all_in_range` from `01_session_info.csv`, where the
+ * exporter writes `lux_logged_all_in_range`; `dplyr::select()` raises on a missing column, so the
+ * R template stopped at the join and fitted nothing at all.
+ *
+ * Two structural reasons it passed. The `EXPORTED` set above is the UNION of every file's columns,
+ * and `lux_all_in_range` is real — it exists in `analysis_long.csv`, a different export product. And
+ * the harvester reads model formulas only, never `select()` arguments, so the reference was never
+ * examined in the first place.
+ *
+ * This check closes both: it binds each data frame to the CSV it was read from and requires every
+ * selected column to exist in THAT file.
+ */
+describe('R template column references resolve in the file they are read from', () => {
+  const r = src('src/analysis/analysis_template.R');
+
+  /**
+   * `name <- read_export("NN_file.csv")`, and the older
+   * `name <- read_csv(file.path(DATA_DIR, "NN_file.csv"))` it replaced. Both forms are matched so
+   * that this check does not quietly stop finding anything the next time the loader is reshaped —
+   * which is exactly what happened when pooling across participant folders was introduced, and is
+   * what the "binds every data frame" assertion below exists to catch.
+   */
+  const frames = new Map<string, string>();
+  for (const m of r.matchAll(/([A-Za-z_.][\w.]*)\s*<-\s*read_export\(\s*"([^"]+)"/g)) frames.set(m[1], m[2]);
+  for (const m of r.matchAll(/([A-Za-z_.][\w.]*)\s*<-\s*read_csv\(\s*file\.path\(\s*DATA_DIR\s*,\s*"([^"]+)"/g)) {
+    frames.set(m[1], m[2]);
+  }
+
+  /** Columns the exporter actually writes into one numbered file. */
+  const columnsOf = (filename: string) =>
+    new Set(CODEBOOK.filter((c) => c.file === filename).map((c) => c.column));
+
+  /** Argument list of a call, respecting nested parentheses. */
+  function argsAt(text: string, openParen: number): string {
+    let depth = 0;
+    for (let i = openParen; i < text.length; i++) {
+      if (text[i] === '(') depth++;
+      else if (text[i] === ')') { depth--; if (depth === 0) return text.slice(openParen + 1, i); }
+    }
+    return '';
+  }
+
+  it('binds every data frame to a numbered export file', () => {
+    // If the read block is ever rewritten in a way this parser cannot see, the check below would
+    // silently pass by having nothing to check. Fail loudly instead.
+    expect(frames.size).toBeGreaterThanOrEqual(8);
+    for (const file of frames.values()) expect(columnsOf(file).size).toBeGreaterThan(0);
+  });
+
+  it('selects no column that its source file does not contain', () => {
+    const problems: string[] = [];
+    for (const [frame, file] of frames) {
+      const cols = columnsOf(file);
+      const created = namesCreatedIn(r);
+      for (const m of r.matchAll(new RegExp(`\\b${frame}\\s*%>%\\s*(?:\\n\\s*)?select\\s*\\(`, 'g'))) {
+        const open = m.index! + m[0].length - 1;
+        for (const raw of argsAt(r, open).split(',')) {
+          const arg = raw.trim().replace(/^-/, '');
+          // Skip helpers (anything called), renames, and empties.
+          if (!arg || arg.includes('(') || arg.includes('=') || arg.includes('"')) continue;
+          if (!/^[A-Za-z_.][\w.]*$/.test(arg)) continue;
+          if (created.has(arg)) continue;
+          if (!cols.has(arg)) problems.push(`${file}: select(${arg}) — not a column of that file`);
+        }
+      }
+    }
+    expect(problems).toEqual([]);
   });
 });

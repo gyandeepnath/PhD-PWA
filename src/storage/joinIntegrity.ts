@@ -407,6 +407,28 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
         + 'affects the outcome before pooling, and report the range in the write-up.',
     });
   }
+  /*
+   * A build change WITHIN one sitting. The check above groups sittings BY provenance and fires when
+   * there is more than one group, so it compares sittings with each other and an intra-sitting
+   * change is invisible to it: that sitting still contributes exactly one provenance. The session
+   * record now carries the extra hashes, recorded when a resume found the running build different
+   * from the one that stamped the session.
+   */
+  const splitBuild = bundles.filter((b) => (b.session.additional_builds?.length ?? 0) > 0);
+  if (splitBuild.length > 0) {
+    issues.push({
+      severity: 'warning', code: 'build_changed_mid_sitting',
+      participant_id: null,
+      session_id: splitBuild.map((b) => b.session.session_id).join(';'),
+      detail: `${splitBuild.length} sitting(s) were resumed under a different build from the one that `
+        + 'started them, so their conditions were not all collected by the same instrument: '
+        + `${splitBuild.map((b) => `${b.session.session_id} [${[b.session.provenance.git_hash, ...(b.session.additional_builds ?? [])].join(' -> ')}]`).join(' | ')}. `
+        + 'This needs no operator action to happen: a waiting service worker activates by itself once '
+        + 'every window is closed, which a tablet sleeping or rebooting mid-sitting achieves. Check '
+        + 'what changed between those builds — anything touching the blink pipeline splits the '
+        + 'within-participant contrast along session_position — before using the sitting.',
+    });
+  }
   if (unstamped) {
     issues.push({
       severity: 'warning', code: 'build_provenance_missing',

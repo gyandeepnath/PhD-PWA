@@ -21,9 +21,19 @@
  * that an analyst pointing the template at a real bundle gets output rather than a traceback, and
  * that the sections docs/ANALYSIS_PLAN.md requires are among them.
  *
- * `analysis_template.R` is not run here because R is not available in this environment. That is a
- * gap, and it is stated rather than papered over — the R template is the one that implements the
- * plan, so it is the one that most needs this.
+ * `analysis_template.R` IS run here now, and the gap this comment used to describe was not
+ * hypothetical. The R template — the one docs/ANALYSIS_PLAN.md §5b calls the implementation of the
+ * plan — did not run at all: it selected `lux_all_in_range` from 01_session_info.csv, where the
+ * exporter writes `lux_logged_all_in_range`, and dplyr stopped at that join. Everything below it,
+ * including the primary model, had never executed.
+ *
+ * The R fixture is MULTI-PARTICIPANT and the Python one is not, for a reason worth stating: the
+ * per-session export is one folder per sitting, so a single folder gives `(1 | participant_id)` a
+ * single level and glmer stops with "grouping factors must have > 1 sampled level". A one-folder
+ * fixture could therefore only ever have tested the R template's data loading, never its models.
+ * The clones are perturbed deterministically because twelve identical participants make the
+ * binomial response constant, which glmer also refuses — and that refusal is a property of the
+ * fixture, not of the template.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
@@ -112,6 +122,100 @@ for (const f of buildExportFiles(buildFixtureBundle())) {
   ok('and refits on the adequately-sampled rows, as the plan requires',
     `${r2.stdout}`.includes('PRIMARY refit, adequately-sampled conditions ONLY'),
     'the pre-registered sensitivity refit did not run');
+  // =========================================================================
+  // The R template.
+  // =========================================================================
+  const rscript = spawnSync('Rscript', ['--version'], { stdio: 'ignore' }).status === 0 ? 'Rscript' : null;
+  if (!rscript) {
+    console.log('\n[verify-analysis] Rscript not found — the R template was SKIPPED (not passed).');
+    console.log('[verify-analysis] install R and the template\'s packages to check it runs.');
+  } else {
+    const pkgProbe = spawnSync('Rscript', ['-e',
+      'q(status = as.integer(!all(sapply(c("tidyverse","lme4","lmerTest","emmeans","performance"), requireNamespace, quietly = TRUE))))',
+    ], { stdio: 'ignore' });
+    if (pkgProbe.status !== 0) {
+      console.log('\n[verify-analysis] R present but its packages are not — the R template was SKIPPED (not passed).');
+      console.log('[verify-analysis] install.packages(c("tidyverse","lme4","lmerTest","emmeans","performance"))');
+    } else {
+      console.log('\n' + '='.repeat(104));
+      console.log('ANALYSIS TEMPLATE (R) — the authoritative template must run on a MULTI-PARTICIPANT export');
+      console.log('='.repeat(104));
+
+      const rDir = join(dir, 'r');
+      mkdirSync(rDir, { recursive: true });
+      const rDumper = join(dir, 'dumpMany.ts');
+      writeFileSync(rDumper, `
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { buildExportFiles } from ${JSON.stringify(join(process.cwd(), 'src/storage/export.ts'))};
+import { buildFixtureBundle } from ${JSON.stringify(join(process.cwd(), 'src/sim/bundleFixture.ts'))};
+const root = ${JSON.stringify(rDir)};
+for (let i = 0; i < 12; i++) {
+  const base = buildFixtureBundle();
+  const pid = 'P' + String(i + 1).padStart(3, '0');
+  const sid = 'S' + String(i + 1).padStart(3, '0');
+  // Substituted in the JSON-ESCAPED form, not the raw one. FIXTURE.pid is 'VER,"01' — it carries a
+  // comma and a quote on purpose, to stress the CSV writer — so the raw string never appears in
+  // JSON.stringify output, and a naive split/join silently replaces nothing. Every participant then
+  // keeps the same id, and lme4 stops with "grouping factors must have > 1 sampled level".
+  const esc = (v) => JSON.stringify(v).slice(1, -1);
+  const b = JSON.parse(JSON.stringify(base)
+    .split(esc(base.session.participant_id)).join(pid)
+    .split(esc(base.session.session_id)).join(sid));
+  b.session.enrolment_number = i + 1;
+  // Deterministic variation — see the header note on "Response is constant".
+  (b.eyeMetrics ?? []).forEach((m, k) => {
+    m.blink_count_full = 26 + ((i * 5 + k * 3) % 11);
+    m.blink_count_micro = (i + k) % 3;
+    m.blink_count_incomplete = 4 + ((i * 7 + k * 5) % 9);
+    m.perclos_p80 = Math.round((0.02 + ((i * 3 + k) % 9) * 0.004) * 1000) / 1000;
+  });
+  const out = root + '/' + pid;
+  mkdirSync(out, { recursive: true });
+  for (const f of buildExportFiles(b)) writeFileSync(out + '/' + f.filename, f.content);
+}
+`);
+      execFileSync('npx', ['tsx', rDumper], { stdio: 'pipe' });
+
+      // DATA_DIR is overridden from outside rather than by editing the shipped file, so what runs
+      // here is byte-for-byte what the analyst is given.
+      const rRun = spawnSync('Rscript', [join(process.cwd(), 'src/analysis/analysis_template.R')], {
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+        env: { ...process.env, VISULAB_DATA_DIR: rDir },
+      });
+
+      const rOut = `${rRun.stdout}\n${rRun.stderr}`;
+      ok('the R template runs to completion without raising', rRun.status === 0,
+        (rRun.stderr || '').trim().split('\n').filter((l) => /^Error|^! /.test(l)).slice(-2).join(' | ')
+          || (rRun.stderr || '').trim().split('\n').slice(-2).join(' | '));
+
+      for (const [label, needle] of [
+        ['the PRIMARY outcome is fitted', 'PRIMARY: incomplete-blink ratio'],
+        ['the primary random structure is stated', 'PRIMARY MODEL RANDOM STRUCTURE'],
+        ['overdispersion is checked, as the plan requires', 'OVERDISPERSION CHECK'],
+        ['the dispersion verdict is carried to the top of the output', 'PRIMARY MODEL DISPERSION'],
+        ['the frame-rate sensitivity is addressed', 'frame-rate adequacy'],
+        ['reaction time is fitted', 'RT mixed model'],
+        ['fatigue is fitted', 'Fatigue mixed model'],
+        ['comprehension is fitted', 'Comprehension logistic mixed model'],
+        ['the key secondary appears', 'CVS-Q'],
+        ['the achromatic anchor is reported', 'Achromatic anchor'],
+      ]) ok(`R: ${label}`, rOut.includes(needle), `"${needle}" not in the output`);
+
+      // The pre-registered coding. Treatment contrasts made the printed polarity row the effect in
+      // ACHROMATIC TEXT ONLY, while the plan states H1's falsification rule on the average effect.
+      ok('R: polarity is sum-to-zero coded, and says so',
+        /sum-to-zero \+\/-0\.5/.test(rOut), 'the contrast-coding banner did not print');
+      ok('R: main effects are declared as average effects',
+        rOut.includes('AVERAGE effects, not simple effects'), 'the coding note did not print');
+
+      // ANALYSIS_PLAN.md §4 specifies fatigue_delta; fatigue_mean is permitted only as a fallback,
+      // and the fallback must announce itself rather than pass for the specified analysis.
+      ok('R: fatigue uses the plan-specified response',
+        /\[fatigue\] response: fatigue_delta/.test(rOut),
+        'the fatigue model did not fit fatigue_delta');
+    }
+  }
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }

@@ -449,5 +449,30 @@ describe('which build measured these rows', () => {
     const r = checkJoin(complete('P01'), EXPECT);
     expect(r.issues.map((i) => i.code)).not.toContain('mixed_build_provenance');
     expect(r.issues.map((i) => i.code)).not.toContain('build_provenance_missing');
+    expect(r.issues.map((i) => i.code)).not.toContain('build_changed_mid_sitting');
+  });
+
+  /*
+   * A build change INSIDE one sitting. mixed_build_provenance groups sittings by provenance and
+   * fires on more than one group, so it compares sittings with EACH OTHER — a sitting resumed under
+   * new code still contributes exactly one provenance and passes it silently. The path needs no
+   * operator action: with skipWaiting:false a waiting worker activates once every window is gone,
+   * which a tablet sleeping or rebooting mid-sitting achieves by itself.
+   */
+  it('flags a single sitting that was resumed under a different build', () => {
+    const one = bundle({ pid: 'P1', sid: 's1', start: 1, illumination: 'moderate', conditions: tenA });
+    one.session.additional_builds = ['bbbb222'];
+    const r = checkJoin([one], NOW);
+    const issue = r.issues.find((i) => i.code === 'build_changed_mid_sitting')!;
+    expect(issue).toBeTruthy();
+    expect(issue.session_id).toBe('s1');
+    // The order matters: it says which instrument started the sitting and which finished it.
+    expect(issue.detail).toContain('aaaa111 -> bbbb222');
+  });
+
+  it('does not flag a sitting that merely carries an empty build list', () => {
+    const one = bundle({ pid: 'P1', sid: 's1', start: 1, illumination: 'moderate', conditions: tenA });
+    one.session.additional_builds = [];
+    expect(checkJoin([one], NOW).issues.map((i) => i.code)).not.toContain('build_changed_mid_sitting');
   });
 });

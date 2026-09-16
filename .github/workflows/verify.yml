@@ -76,6 +76,45 @@ jobs:
         # the whole export pipeline.
         run: npm run verify:export
 
+      # ---------------------------------------------------------------------
+      # The shipped Python analysis template, run against the app's own export.
+      #
+      # This gate existed and had never once executed. `verify.yml` did not call
+      # it, and `deploy.yml` reaches it through `npm run verify` but a runner has
+      # no pandas, so `verifyAnalysis.mjs` took its SKIPPED branch there too — a
+      # branch that deliberately prints "SKIPPED (not passed)" and exits 0 so it
+      # cannot masquerade as a pass. Nothing was wrong with the gate. It was
+      # simply never the thing standing between a broken template and a release.
+      #
+      # It matters because the template is what the investigator actually runs on
+      # the collected data. A template that no longer parses the export is found
+      # at analysis time, after the participants have gone home.
+      #
+      # Deliberately unpinned: if a current pandas or statsmodels breaks the
+      # template, that is exactly what someone running it today would hit, and
+      # this is where it should surface.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install analysis dependencies (Python)
+        run: pip install pandas numpy statsmodels scipy
+
+      # R is the AUTHORITATIVE template — ANALYSIS_PLAN.md §5b calls the Python one a
+      # cross-check in a second toolchain. It is installed from the Ubuntu archive rather
+      # than built from CRAN source, which keeps this step to about a minute instead of
+      # the twenty a source build of lme4 and its dependencies takes.
+      - name: Install analysis dependencies (R)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            r-base-core r-cran-tidyverse r-cran-lme4 r-cran-lmertest \
+            r-cran-emmeans r-cran-performance
+
+      - name: Verify analysis templates
+        run: npm run verify:analysis
+
       - name: Stress suite
         # Adversarial input, pipeline, state-machine, metamorphic, recovery and
         # component sweeps. Catches the silent-corruption class that unit tests

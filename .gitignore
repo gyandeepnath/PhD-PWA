@@ -18,3 +18,9 @@ vitest.config.js
 ALL_SOURCE.md
 synopsis/node_modules/
 package-staging/
+
+# Python bytecode. A .pyc was committed by the round that added the Python analysis
+# gate: verify:analysis imports the template, so the cache is rebuilt on every run and
+# the working tree is dirty afterwards. It is a build artefact of running a check.
+__pycache__/
+*.pyc

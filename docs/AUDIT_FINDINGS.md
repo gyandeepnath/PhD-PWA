@@ -912,3 +912,161 @@ resume should always take the longer switch field is a methods decision for the 
   export recording that it was a judgement call. Investigator decision.
 - The gaze acceptance criterion still counts a target as covered at one sample where the original
   finding asked for five. A methods decision about how strict the bar should be, not a defect.
+
+---
+
+## Round 6 — the R analysis template
+
+R was installed in the audit environment for the first time, which turned a set of static
+suspicions into executed fact. The headline: **`analysis_template.R` did not run.** Not "ran with
+caveats" — it stopped at its first join and no model in the file had ever been fitted.
+
+**It selected a column that does not exist**
+
+`select(..., lux_all_in_range)` from `01_session_info.csv`, where the exporter writes
+`lux_logged_all_in_range` — a deliberate rename, because that column reports only on readings
+actually TAKEN and must be read together with `lux_complete`. The bare name is real, but it lives in
+`analysis_long.csv`, a different export product. Executed result:
+
+    Error in `select()`: ! Can't subset columns that don't exist. Column `lux_all_in_range` doesn't exist.
+
+`tests/analysisTemplates.test.ts` could not catch this by construction. Its `EXPORTED` set is the
+UNION of every file's columns, so a column belonging to a different CSV passes; and it harvests
+model-formula terms only, never `select()` arguments, so the reference was never examined. Both gaps
+are now closed by a check that binds each data frame to the file it was read from and requires every
+selected column to exist in THAT file. The check reproduces the defect by name before the fix.
+
+**It could only ever have been run on one participant**
+
+The app exports one folder per sitting. The template read one folder, so `(1 | participant_id)` had
+a single level and `lme4` stops with `grouping factors must have > 1 sampled level`. The documented
+instruction — "point DATA_DIR at the folder containing the exported CSVs" — therefore described a
+run that cannot produce the thesis result, and the alternative was concatenating 130 folders by
+hand, which `analysisExport.ts` names as "where analysis errors are actually introduced". A
+`read_export()` helper now pools across participant folders, typing columns once over the pooled
+frame so a column that is empty for one participant and numeric for another cannot abort the load.
+
+**Three requirements of the plan were unimplemented**
+
+- §2 sum-to-zero coding. R's default treatment contrasts made the printed `polarity` row the effect
+  **in achromatic text only** — a duplicate of the achromatic anchor model fitted separately further
+  down for exactly that special case. The plan states H1's falsification rule on the average effect
+  and says in terms: "This is not a stylistic preference; it changes what the coefficient means."
+  The study's headline hypothesis was being adjudicated against the wrong estimand. Colour is
+  sum-coded too, and that is the part that does the work: a main effect averages over the other
+  factor only when the other factor is sum-coded.
+- §4 `fatigue_delta`. The model fitted `fatigue_mean` unconditionally, carrying every participant's
+  scale-use bias into the residual. `fatigue_delta` was reachable all along — it is in
+  `10_wide_summary.csv`, which the template already loads, but the join pulled only
+  `engagement_flag`. The fallback is kept and now announces itself.
+- §4 PERCLOS "LMM on logit. Bounded; do not model raw." It was fitted raw — the same error the
+  file's own note correctly rejects for the primary outcome, repeated on the secondary one.
+
+**§2's mandatory overdispersion check was absent**
+
+Blinks within a condition are not independent Bernoulli trials, so dispersion above 1 is the
+expectation. An unadjusted binomial GLMM understates every standard error on the primary outcome,
+which inflates significance on the polarity x colour interaction the study exists to test. Worse, it
+was asymmetric: the Python GEE carries robust sandwich errors and was protected, so the two files
+could disagree on significance for a purely mechanical reason while the plan requires them to agree
+on it. The check now runs and its verdict is printed beside the random structure at the top of the
+output. It is reported, never applied silently — refitting as beta-binomial changes the model the
+thesis reports.
+
+**Smaller things the run surfaced**
+
+- `check_model()` hard-requires the `see` package, which the template's own `install.packages` line
+  did not list (it listed `afex`, which is never loaded). An analyst installing exactly what they
+  were told hit a hard stop after the primary model. Diagnostic plots are now guarded: they are
+  looked at, never inferred from, and must not end a run that has already produced the inference.
+- `fit_noting` discarded the glmer error object, so a failure to fit surfaced only as
+  `!is.null(m_primary) is not TRUE` with no diagnosis.
+
+**The gate that was documented as missing now exists**
+
+`scripts/verifyAnalysis.mjs` said plainly that R "is not run here because R is not available in this
+environment. That is a gap... the R template is the one that implements the plan, so it is the one
+that most needs this." It now runs both templates, and CI installs R from the Ubuntu archive to do
+it. The R fixture is multi-participant and deterministically perturbed, because twelve identical
+clones make the binomial response constant and glmer refuses that too — a property of the fixture,
+not the template. `DATA_DIR` reads `VISULAB_DATA_DIR` when set, so the gate checks the bytes the
+analyst is given rather than an edited copy.
+
+`docs/ANALYSIS_PLAN.md` §5b has been corrected. Its previous text described the Python template's
+defects and said an analyst "who ran that file instead of the R one" satisfied none of the plan's
+requirements — implying R satisfied them. That was written without checking R, and R had the same
+two defects plus one that stopped it running.
+
+**Reported, not fixed — these need the investigator**
+
+- The template is pointed at the numbered per-session bundle. `analysis_long.csv` exists to be the
+  modelling unit directly and already carries `polarity_c`, `position_c`, `n_incomplete`,
+  `n_blinks_total` and `analysable`. Pooling now works, so this is no longer blocking, but reading
+  the purpose-built product would be better than reconstructing it.
+- `(1 | passage_id)` is prescribed by §2 and is absent. Passage is decoupled from condition by
+  design, so this does not bias the point estimates, but the variance loads onto the residual.
+- §5's pre-inference QC is largely unimplemented: `face_presence_ratio`, `off_axis_ratio`,
+  `observed_duration_ms` against `reading_time_ms`, the careless-responding flags, and the
+  complete-case requirement on `session_status` / `analysable`. Directionally this dilutes a real
+  effect toward null.
+- The primary interaction has no omnibus test; `emmeans(~ colour | polarity)` prints marginal means,
+  not a contrast.
+- Four of the seven secondary outcomes in §4 are not modelled: reading speed, visual search
+  (§4 warns that 40 s-capped rows bias the mean downward if treated as measurements), response
+  bias `criterion`, and the d-prime LMM weighted by `d_prime_se`.
+
+---
+
+## Round 7 — a sitting could be collected by two builds, and nothing said so
+
+The update gate is correct and, as far as the code can be traced, airtight for the path it guards.
+`UpdateBanner` reads `sittingsInProgress()` from IndexedDB — shared across windows, so a sitting open
+anywhere blocks the button everywhere — treats an unanswered or rejected query as "blocked" rather
+than "allowed", re-polls on an interval and on focus, and re-asks synchronously inside `apply()`
+before the update is applied. It guards the BUTTON.
+
+It cannot guard the path where nobody presses anything. With `skipWaiting: false` a waiting service
+worker activates on its own once every client of the old one is gone, and a study tablet reaches
+that state without an operator: it sleeps, Android reclaims the page, or it is rebooted. The
+operator then taps Resume — which the operator manual explicitly tells them to do after a mid-session
+reload — and the remaining conditions are collected by the new build.
+
+`DEPLOYMENT.md` states the safety property as "it takes control only after every window of the app
+has been closed, which on a study tablet means between sessions". That last clause is an assumption,
+not an invariant, and the operator manual contradicts it in its own troubleshooting table.
+
+**What the export said.** `provenance()` is called exactly once, in `beginSession`, and every later
+write spreads the loaded record. Nothing anywhere compared a loaded session's `git_hash` with the
+running `GIT_HASH` — the only read of `provenance.git_hash` in the whole app was the export. So one
+`app_version`, one `git_hash` and one `condition_def_hash` were written for all ten conditions of a
+sitting that two builds had collected. If the build touched the blink pipeline, the within-participant
+contrast is split by an instrument change confounded with `session_position`. If it touched the
+condition table, `condition_def_hash` positively misstates which stimuli were shown — and that hash
+exists to make exactly that impossible.
+
+`joinIntegrity`'s `mixed_build_provenance` could not catch it. That check groups sittings BY
+provenance and fires when there is more than one group, so it compares sittings with each other; a
+sitting resumed under new code still contributes exactly one provenance.
+
+**Recorded, not blocked.** Refusing to resume would strand a participant already in the chair, and
+the requirement is only that the export stop asserting one build when there were two. The resume path
+now compares the stored hash with the running one and appends the difference to
+`session.additional_builds`. Two new columns carry it: `build_changed_mid_sitting` (boolean, which is
+what an analyst filters on) and `session_builds` (the ordered evidence, `'aaaa111+bbbb222'`). A new
+`build_changed_mid_sitting` integrity issue names the sittings and the transition. Both directions
+are mutation-tested.
+
+**Areas examined this round and found sound** — reported because a clean area is a result:
+
+- Nothing in the app, its config or the generated worker touches IndexedDB or origin storage on
+  install or activate. Workbox deletes stale precaches only. The cross-build schema hazard is
+  handled explicitly and non-destructively.
+- A precache miss cannot produce plausible zeros. `copy-mediapipe.mjs` fails the build if the
+  tracking runtime is missing or truncated; `verifyBundle.mjs` runs as `postbuild` and fails if any
+  shipped asset is absent from the precache manifest; the camera preview loads FaceMesh and shows an
+  explicit "the primary outcome would be empty for every condition" panel before the participant is
+  seated. When tracking is off the row written is `disabledEyeMetrics`, in which every count and rate
+  is null, not 0.
+- Offline collection holds. There is no `fetch` or `XMLHttpRequest` anywhere in `src/`; both dynamic
+  imports are precached and covered by `verifyBundle`; fonts are self-hosted and their failure is
+  measured and exported. Losing the network mid-sitting changes nothing.

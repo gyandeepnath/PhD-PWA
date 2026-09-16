@@ -66,7 +66,21 @@ function scenario(name: string, mutate: (b: SessionBundle) => void,
     for (const entry of m.files) {
       const actual = files.find((f) => f.filename === entry.filename);
       if (!actual) problems.push(`manifest lists a file that was not emitted: ${entry.filename}`);
-      else if (actual.content.length !== entry.bytes) problems.push(`manifest byte count wrong for ${entry.filename}`);
+      /*
+       * Compared as BYTES, the way the manifest records them.
+       *
+       * This asserted `actual.content.length` — a count of UTF-16 code units — which is the exact
+       * defect export.ts was corrected for: the manifest is what an operator checks a copied file's
+       * size against on the receiving machine, and it is the only defence against a truncated
+       * transfer, so it has to be in the same units the file system reports. This check was
+       * therefore asserting the old, wrong invariant, and it passed only because every file in the
+       * fixture happened to be pure ASCII. The moment any non-ASCII character reached the export —
+       * an operator's typed note, or a dash in the codebook's own prose — 27 of the 28 scenarios
+       * failed, blaming the export for being right.
+       */
+      else if (new TextEncoder().encode(actual.content).length !== entry.bytes) {
+        problems.push(`manifest byte count wrong for ${entry.filename}`);
+      }
     }
     if (m.non_finite_cells > 0) problems.push(`non_finite_cells = ${m.non_finite_cells}`);
   }

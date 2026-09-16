@@ -206,9 +206,20 @@ the tool rather than choices:
 Its header used to call itself "authoritative inference", and three requirements of this plan were
 absent from it: the frame-rate sensitivity refit of §5.2, the sum-to-zero polarity coding of §2, and
 the `fatigue_delta` preference of §4. An analyst who ran that file instead of the R one satisfied
-none of them and had nothing in the output to say so. `npm run verify:analysis` now runs the Python
-template against a fixture export on every `npm run verify` and fails if any required section is
-missing — it had never been run against the app's own output at all, and did not work when it was.
+none of them and had nothing in the output to say so.
+
+**That correction was written without checking the R file, and the sentence above implied a
+guarantee that did not exist.** The R template carried the same sum-to-zero and `fatigue_delta`
+defects, and it did not run at all: it selected `lux_all_in_range` from `01_session_info.csv`, where
+the exporter writes `lux_logged_all_in_range`, so `dplyr` stopped at that join and no model below it
+had ever executed. It also read a single exported folder, which gives `(1 | participant_id)` one
+level, and fitted PERCLOS raw against the instruction in §4. All of these are now fixed, and the
+`§5b` claim that R "does implement this plan" is true for the first time.
+
+`npm run verify:analysis` runs BOTH templates against a fixture export and fails if any required
+section is missing. The R fixture is multi-participant, because a single-folder fixture can only
+exercise data loading and never a model. Neither template had ever been run against the app's own
+output; neither worked when it was.
 
 ---
 

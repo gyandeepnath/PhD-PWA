@@ -3,9 +3,15 @@
 # Authoritative inference for the within-subjects design: linear mixed models
 # with a random intercept per participant. Run after exporting the CSV bundle.
 #
-#   install.packages(c("tidyverse","lme4","lmerTest","afex","emmeans","performance"))
+#   install.packages(c("tidyverse","lme4","lmerTest","emmeans","performance"))
 #
-# Point DATA_DIR at the folder containing the exported CSVs.
+# `afex` was listed here and is never loaded; `see` was NOT listed and check_model()
+# hard-requires it. An analyst who installed exactly what this line named therefore
+# hit "Package `see` required for model diagnostic plots" part-way through the run,
+# after the primary model had been fitted and before the sections below it.
+#
+# Point DATA_DIR at the folder holding the exported CSVs, OR at a folder that
+# CONTAINS one exported folder per participant. Both work — see read_export below.
 # ---------------------------------------------------------------------------
 
 library(tidyverse)
@@ -14,22 +20,68 @@ library(lmerTest)   # p-values for lmer via Satterthwaite
 library(emmeans)
 library(performance)
 
-DATA_DIR <- "."
+# Edit this, or set VISULAB_DATA_DIR in the environment and leave it alone. The
+# environment variable exists so that scripts/verifyAnalysis.mjs can point this file at a
+# fixture export WITHOUT editing it — the gate then checks the bytes the analyst is
+# actually given, rather than a copy of them that has been altered to be testable.
+DATA_DIR <- Sys.getenv("VISULAB_DATA_DIR", unset = ".")
+
+# ---------------------------------------------------------------------------
+# Load one numbered export file, pooled across every participant folder found.
+#
+# The app exports ONE FOLDER PER SITTING. 130 participants is 130 folders, and this
+# file used to read a single folder — so every model below was asked to fit
+# `(1 | participant_id)` against one participant and stopped at
+#
+#     Error: grouping factors must have > 1 sampled level
+#
+# The documented instruction ("point DATA_DIR at the folder containing the exported
+# CSVs") therefore described a run that cannot produce the thesis result, and the
+# alternative was for the analyst to concatenate 130 folders by hand — which
+# src/storage/analysisExport.ts calls out as "where analysis errors are actually
+# introduced: a mis-sorted join, a participant counted twice, a sitting silently
+# missing".
+#
+# Pooling here instead. DATA_DIR may be one exported folder or a parent of many;
+# recursive = TRUE finds both, and a single folder still yields exactly one file, so
+# the single-sitting case behaves as before.
+#
+# Types are read from the union of all files rather than guessed per file, because
+# readr guesses column types from the first rows of EACH file independently: a
+# column that is empty for participant 001 and numeric for 002 would otherwise be
+# chr in one and dbl in the other, and bind_rows() would abort mid-load.
+# ---------------------------------------------------------------------------
+read_export <- function(name) {
+  paths <- list.files(DATA_DIR, pattern = paste0("^", name, "$"),
+                      full.names = TRUE, recursive = TRUE)
+  if (length(paths) == 0) {
+    stop(sprintf("no %s found under DATA_DIR (%s). Point DATA_DIR at an exported folder, or at a folder of them.",
+                 name, normalizePath(DATA_DIR, mustWork = FALSE)))
+  }
+  parts <- lapply(paths, function(p) read_csv(p, col_types = cols(.default = col_character()),
+                                              progress = FALSE))
+  out <- bind_rows(parts)
+  # Re-infer types ONCE, over the pooled frame, so every column is typed from all
+  # the evidence rather than from whichever participant happened to be read first.
+  out <- type_convert(out, col_types = cols(), na = c("", "NA"))
+  attr(out, "n_folders") <- length(paths)
+  out
+}
 
 # Photometry covariates (per session, in 01_session_info.csv): screen_white_luminance_cd_m2 and
 # brightness_percent. With a single fixed device they are constant and can be ignored; across
 # devices/brightness settings, join them in as a between-session covariate alongside log_contrast.
-session_info <- read_csv(file.path(DATA_DIR, "01_session_info.csv"))
+session_info <- read_export("01_session_info.csv")
 
-conditions  <- read_csv(file.path(DATA_DIR, "02_conditions.csv"))
-fatigue     <- read_csv(file.path(DATA_DIR, "03_fatigue_scores.csv"))
-comprehension <- read_csv(file.path(DATA_DIR, "04_comprehension.csv"))
-rt_summary  <- read_csv(file.path(DATA_DIR, "09_rt_summary.csv"))
-eye_metrics <- read_csv(file.path(DATA_DIR, "07_eye_metrics.csv"))
-quality     <- read_csv(file.path(DATA_DIR, "12_quality_flags.csv"))  # engagement / careless-responding
-wide        <- read_csv(file.path(DATA_DIR, "10_wide_summary.csv"))   # carries session_index per condition
-participant <- read_csv(file.path(DATA_DIR, "11_participant.csv"))   # demographics + vision covariates
-cvsq        <- read_csv(file.path(DATA_DIR, "13_cvsq.csv"))          # CVS-Q symptom questionnaire (per item)
+conditions  <- read_export("02_conditions.csv")
+fatigue     <- read_export("03_fatigue_scores.csv")
+comprehension <- read_export("04_comprehension.csv")
+rt_summary  <- read_export("09_rt_summary.csv")
+eye_metrics <- read_export("07_eye_metrics.csv")
+quality     <- read_export("12_quality_flags.csv")  # engagement / careless-responding
+wide        <- read_export("10_wide_summary.csv")   # carries session_index per condition
+participant <- read_export("11_participant.csv")   # demographics + vision covariates
+cvsq        <- read_export("13_cvsq.csv")          # CVS-Q symptom questionnaire (per item)
 
 # --- Quality control: optionally exclude disengaged conditions -----------------------------
 # Boredom/disengagement over the long session mimics fatigue and adds noise. The engagement
@@ -54,7 +106,11 @@ clean_ids <- quality %>% filter(engagement_flag != "bad") %>% select(participant
 # The participant table is one row per EXPORT, i.e. per sitting, and its mutable covariates can
 # differ between them, so it is de-duplicated before joining rather than silently multiplying rows.
 cond <- conditions %>%
-  left_join(wide %>% select(condition_id, engagement_flag), by = "condition_id") %>%
+  # fatigue_delta rides along here because it lives in 10_wide_summary.csv and nowhere
+  # else: ANALYSIS_PLAN.md §4 specifies it as the fatigue response, but this join pulled
+  # only engagement_flag, so the specified response was unreachable and the model
+  # silently fitted fatigue_mean instead.
+  left_join(wide %>% select(condition_id, engagement_flag, fatigue_delta), by = "condition_id") %>%
   left_join(participant %>%
               select(participant_id, age, gender, daily_screen_hours, correction_type, cvd_status) %>%
               distinct(participant_id, .keep_all = TRUE),
@@ -63,7 +119,14 @@ cond <- conditions %>%
   # the condition record, so it must be joined in before it can enter the model.
   left_join(session_info %>% select(participant_id, session_index, ambient_illumination_level,
                                     illumination_block, illumination_order_first, lux_mean,
-                                    lux_all_in_range),
+                                    # lux_logged_all_in_range, NOT lux_all_in_range. The bare name
+                                    # exists — in analysis_long.csv, a different export product —
+                                    # and this file reads the numbered bundle, where the exporter
+                                    # renames it deliberately: it reports only on readings actually
+                                    # TAKEN, so it must be read together with lux_complete. Selecting
+                                    # the wrong one raised "Column `lux_all_in_range` doesn't exist"
+                                    # at this join, and nothing below it had ever run.
+                                    lux_complete, lux_logged_all_in_range),
             by = c("participant_id", "session_index")) %>%
   mutate(
     log_contrast = log10(wcag_contrast_ratio),
@@ -76,6 +139,31 @@ cond <- conditions %>%
     below_aa = as.integer(below_wcag_aa),
     session_index = ifelse(is.na(session_index), 1L, session_index)
   )
+
+# ---------------------------------------------------------------------------
+# SUM-TO-ZERO CODING for the two crossed design factors. docs/ANALYSIS_PLAN.md §2:
+# "polarity_c — sum-to-zero coded (+/-0.5). With an interaction present, a dummy-coded
+# main effect is the simple effect at the other factor's reference level rather than
+# an average effect. This is not a stylistic preference; it changes what the
+# coefficient means."
+#
+# This file used R's default treatment contrasts, so the `polarity` row of
+# summary(m_primary) was the polarity effect IN ACHROMATIC TEXT ONLY — a duplicate of
+# the achromatic anchor model fitted separately further down precisely because that is
+# the matched-contrast special case. The plan states H1's falsification rule on that
+# coefficient, so the study's headline hypothesis was being adjudicated against an
+# estimand the plan did not specify.
+#
+# COLOUR is sum-coded too, and that is the part that does the work: a main effect of
+# polarity averages over the other factor only when the other factor is sum-coded.
+# contr.sum(2)/2 gives exactly the +/-0.5 the plan names (positive +0.5, negative -0.5).
+# emmeans is invariant to the coding, so every marginal-mean section below is unchanged.
+# ---------------------------------------------------------------------------
+contrasts(cond$polarity) <- contr.sum(nlevels(cond$polarity)) / 2
+contrasts(cond$colour)   <- contr.sum(nlevels(cond$colour))
+cat("\ncontrast coding — polarity:", paste(levels(cond$polarity), collapse = " / "),
+    "as sum-to-zero +/-0.5; colour: sum-to-zero over",
+    nlevels(cond$colour), "levels. Main effects are AVERAGE effects, not simple effects.\n")
 if (DROP_DISENGAGED) cond <- cond %>% filter(is.na(engagement_flag) | engagement_flag != "bad")
 # When all data come from single sittings, session_index is constant — drop it from the formula
 # automatically to avoid a rank-deficient fit.
@@ -117,8 +205,20 @@ cat("\nMarginal means by polarity:\n"); print(emmeans(m_rt, ~ polarity))
 fat <- fatigue %>%
   filter(stage == "post_condition") %>%
   left_join(cond, by = c("participant_id", "condition_id"))
+# docs/ANALYSIS_PLAN.md §4 specifies `fatigue_delta`: "Change from the participant's own
+# baseline removes between-person scale use. Use `fatigue_mean` only if baselines are
+# missing." This fitted fatigue_mean unconditionally, carrying every participant's
+# scale-use bias into the residual. The fallback is kept — and announced, so a run that
+# silently lacked baselines cannot be mistaken for the specified analysis.
+fat_response <- if ("fatigue_delta" %in% names(fat) && any(!is.na(fat$fatigue_delta))) {
+  "fatigue_delta"
+} else {
+  cat("\n[fatigue] fatigue_delta unavailable — falling back to fatigue_mean, which ANALYSIS_PLAN.md §4 permits only when baselines are missing.\n")
+  "fatigue_mean"
+}
+cat("\n[fatigue] response:", fat_response, "\n")
 m_fat <- lmer(
-  as.formula(paste0("fatigue_mean ~ log_contrast + polarity + session_position", si_term, " + (1 | participant_id)")),
+  as.formula(paste0(fat_response, " ~ log_contrast + polarity + session_position", si_term, " + (1 | participant_id)")),
   data = fat
 )
 cat("\n=== Fatigue mixed model ===\n"); print(summary(m_fat))
@@ -240,8 +340,41 @@ if (is.null(fit$model)) {
 m_primary <- fit$model
 stopifnot(!is.null(m_primary))
 
+# ---------------------------------------------------------------------------
+# OVERDISPERSION. ANALYSIS_PLAN.md §2: "Overdispersion must be checked. Blinks within a
+# condition are not independent Bernoulli trials; if the dispersion statistic exceeds
+# ~1.5, refit with glmmTMB(..., family = betabinomial)."
+#
+# It was never checked here. Blink classification within one condition is serially
+# correlated, so dispersion above 1 is the expectation rather than a worry — and an
+# unadjusted binomial GLMM then understates every standard error on the primary outcome,
+# which inflates significance on exactly the polarity x colour interaction the study is
+# built to test. Note the asymmetry this created with the Python cross-check: its GEE
+# carries robust sandwich standard errors and is protected, so the two files could
+# disagree on significance for a purely mechanical reason while the plan requires them
+# to agree on it.
+#
+# Reported, never applied silently: refitting as beta-binomial changes the model the
+# thesis reports, and that is the investigator's call to make deliberately.
+# ---------------------------------------------------------------------------
+dispersion_note <- tryCatch({
+  od <- performance::check_overdispersion(m_primary)
+  ratio <- as.numeric(od$dispersion_ratio)
+  cat("\n=== OVERDISPERSION CHECK (ANALYSIS_PLAN.md §2) ===\n")
+  print(od)
+  if (is.finite(ratio) && ratio > 1.5) {
+    cat("\n*** dispersion ratio ", round(ratio, 2), " EXCEEDS 1.5.\n",
+        "*** The plan requires a refit as glmmTMB(..., family = betabinomial) before\n",
+        "*** any inference is drawn from the standard errors below.\n", sep = "")
+    sprintf("OVERDISPERSED (ratio %.2f) — betabinomial refit required", ratio)
+  } else {
+    sprintf("dispersion ratio %.2f, within tolerance", ratio)
+  }
+}, error = function(e) paste("overdispersion check could not be computed:", conditionMessage(e)))
+
 cat("\n################################################################\n")
 cat("PRIMARY MODEL RANDOM STRUCTURE: ", primary_structure, "\n")
+cat("PRIMARY MODEL DISPERSION:       ", dispersion_note, "\n")
 if (length(fit$notes)) cat("fit notes:\n  ", paste(fit$notes, collapse = "\n  "), "\n")
 cat("################################################################\n")
 
@@ -336,8 +469,20 @@ m_blink <- lmer(as.formula(paste0("blink_rate ~ polarity * colour", il_term,
                                   " + session_position + (1 | participant_id)")), data = eye)
 cat("\n=== Blink-rate mixed model (secondary) ===\n"); print(summary(m_blink))
 if (any(!is.na(eye$perclos_p80))) {
-  m_perclos <- lmer(as.formula(paste0("perclos_p80 ~ polarity", il_term,
-                                      " + session_position + (1 | participant_id)")), data = eye)
+  # ANALYSIS_PLAN.md §4, PERCLOS row: "LMM on logit. Bounded; do not model raw."
+  # It was fitted raw — the same error this file's own note correctly rejects for the
+  # primary outcome, repeated on the secondary one. PERCLOS is a proportion of time with
+  # no trial count behind it, so there is no binomial to fall back on and the logit is
+  # what the plan asks for. Exact 0 and 1 have no logit, so they are squeezed inward by
+  # half of the smallest non-zero spacing the measure can express; the squeeze is applied
+  # to the ENDPOINTS ONLY and reported, because silently moving data is how a bounded
+  # outcome quietly becomes a different one.
+  eye_pc <- eye %>% filter(!is.na(perclos_p80))
+  n_squeezed <- sum(eye_pc$perclos_p80 <= 0 | eye_pc$perclos_p80 >= 1)
+  if (n_squeezed > 0) cat("\n[perclos] ", n_squeezed, " value(s) at 0 or 1 squeezed inward for the logit.\n")
+  eye_pc$perclos_logit <- qlogis(pmin(pmax(eye_pc$perclos_p80, 0.0005), 0.9995))
+  m_perclos <- lmer(as.formula(paste0("perclos_logit ~ polarity", il_term,
+                                      " + session_position + (1 | participant_id)")), data = eye_pc)
   cat("\n=== PERCLOS P80 (drowsiness covariate) ===\n"); print(summary(m_perclos))
   # SENSITIVITY: re-fit the primary model with PERCLOS as a covariate. This is what separates
   # visual fatigue from plain sleepiness — PERCLOS is never an outcome here (§4.3: it is
@@ -373,4 +518,12 @@ if (file.exists(tlx_path)) {
 
 # --- Assumption checks ---------------------------------------------------------------------
 cat("\n=== RT model assumption checks ===\n")
-print(check_model(m_rt))
+# Diagnostic PLOTS, and optional by nature: they are looked at, never inferred from.
+# An unavailable plotting package must not end a run that has already produced the
+# pre-registered inference. `see` is a hard requirement of check_model() and is not
+# part of this template's install line, so the common case is that it is absent.
+if (requireNamespace("see", quietly = TRUE)) {
+  print(check_model(m_rt))
+} else {
+  cat("\n[diagnostics] install.packages(\"see\") for check_model() plots — skipped, not run.\n")
+}

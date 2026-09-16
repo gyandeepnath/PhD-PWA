@@ -233,6 +233,21 @@ export interface SessionRecord {
    */
   media_consent_revoked_at?: number | null;
   provenance: Provenance;
+  /**
+   * Build hashes OTHER than `provenance.git_hash` that collected part of this sitting.
+   *
+   * `provenance` is stamped once, when the session record is created, and every later write spreads
+   * the loaded record — so it describes the build that STARTED the sitting and nothing re-examines
+   * it. That is fine while one build runs a sitting end to end, and a sitting is not guaranteed to
+   * be that: the update gate blocks the apply BUTTON while a sitting is in progress, but a waiting
+   * service worker activates on its own once every client is gone, which a tablet sleeping or being
+   * rebooted mid-sitting achieves without anyone pressing anything. The operator then taps Resume
+   * and the remaining conditions are collected by the new build, under the old build's stamp.
+   *
+   * Recorded rather than blocked. Refusing to resume would strand a participant who is sitting in
+   * the chair; the requirement is only that the export stop asserting one build when there were two.
+   */
+  additional_builds?: string[];
   device_type: string;
   browser: string;
   screen_resolution: string;

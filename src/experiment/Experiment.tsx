@@ -202,6 +202,34 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         setResuming(false);
         return;
       }
+
+      /*
+       * Did a different build start this sitting?
+       *
+       * The update gate guards the apply BUTTON: UpdateBanner re-reads sittingsInProgress from
+       * IndexedDB, including synchronously inside apply(), so nobody can press it out from under a
+       * participant. It cannot guard the path that needs no press. With skipWaiting:false a waiting
+       * worker activates by itself once every client of the old one is gone — which a tablet
+       * sleeping, being reclaimed or rebooted mid-sitting achieves on its own. The operator then
+       * taps Resume and the remaining conditions are collected by a different instrument.
+       *
+       * Nothing detected that. provenance is stamped once in beginSession and every later write
+       * spreads the loaded record, so one app_version, one git_hash and one condition_def_hash were
+       * exported for all ten conditions. joinIntegrity's mixed_build_provenance compares sittings
+       * with each other and sees one group, so it cannot see a change WITHIN a sitting. If the build
+       * touched the blink pipeline, the within-participant contrast is split by an instrument change
+       * confounded with session_position; if it touched the condition table, condition_def_hash
+       * positively misstates which stimuli were shown — the hash existing to make that impossible.
+       *
+       * Recorded, not blocked: refusing the resume would strand a participant already in the chair.
+       */
+      if (s.provenance?.git_hash && s.provenance.git_hash !== GIT_HASH) {
+        const seen = s.additional_builds ?? [];
+        if (!seen.includes(GIT_HASH)) {
+          s.additional_builds = [...seen, GIT_HASH];
+          await put('sessions', s);
+        }
+      }
       // Rebuild THIS sitting's slice of the full counterbalanced plan (offset/cps default to a
       // single full session for legacy records written before split-session support).
       const offset = s.condition_offset ?? 0;
