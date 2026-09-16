@@ -34,7 +34,7 @@ const LIVE_HZ = 4;
 import { estimateHeadPose, isOffAxis, noseVerticalFraction } from './headPose';
 import { estimateGaze } from './gaze';
 import { meanLumaFromRGBA } from './lighting';
-import { fitGazeCalibration, type GazeCalibration, type GazeSample } from './gazeCalibration';
+import { fitGazeCalibration, GAZE_TARGETS, type GazeCalibration, type GazeSample } from './gazeCalibration';
 import { v4 as uuidv4 } from 'uuid';
 import { EyeMetricsAggregator, disabledEyeMetrics } from './aggregator';
 import { put } from '@/storage/db';
@@ -549,13 +549,21 @@ export function useTracking(): TrackingApi {
 
     const cal = fitGazeCalibration(gazeSamplesRef.current);
     gazeCalRef.current = cal;
-    const targetsDetected = Object.values(gazeSamplesRef.current).filter((a) => a.length > 0).length;
+    /*
+     * Taken from the fit, not recounted here. Recounting here is what produced the defect: this
+     * line filtered on `a.length > 0` over the RAW samples, while fitGazeCalibration decides
+     * validity after dropping non-finite ones. A target that returned nothing but NaN was therefore
+     * exported as "detected" in the QC column and simultaneously excluded from the calibration —
+     * and the QC column is exactly what an analyst reads to decide whether a sitting's gaze data
+     * can be trusted. It overstated coverage in the only case where it mattered.
+     */
+    const targetsDetected = cal.targetsWithSamples;
     await put('calibration_data', {
       calibration_id: uuidv4(),
       session_id: sessionId,
       is_real_calibration: cal.valid,
       targets_detected: targetsDetected,
-      targets_total: 9,
+      targets_total: GAZE_TARGETS.length,
       ear_baseline: earBaseline,
       gaze_h_threshold: cal.valid ? cal.hThreshold : null,
       gaze_v_threshold: cal.valid ? cal.vThreshold : null,

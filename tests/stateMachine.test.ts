@@ -132,3 +132,51 @@ describe('stage machine', () => {
     expect(progress[progress.length - 1]).toBe(100);
   });
 });
+
+/*
+ * The resume path re-enters the condition loop through the grey field rather than dropping the
+ * participant straight into the reading task (Experiment.tsx). It does that by setting
+ * { stage: 'ADAPTATION', stepIndex: loopTarget - 1 }, which relies on ADAPTATION naming the
+ * condition it FOLLOWS. If that arithmetic were off by one the participant would silently repeat a
+ * finished condition or skip an unrun one — the same exported sitting would then carry two rows for
+ * one condition, or none for another, with nothing marking either.
+ */
+describe('resuming re-enters the loop through the grey field, at the right condition', () => {
+  const settle = (s: MachineState, n: number): MachineState => {
+    // A resume landing on a break boundary passes through BREAK_SCREEN first; that is intended,
+    // because the mid-sitting illuminance prompt lives on that screen.
+    let next = nextState(s, n);
+    if (next.stage === 'BREAK_SCREEN') next = nextState(next, n);
+    return next;
+  };
+
+  it('lands on exactly the condition the resume pointer names, for every resume point', () => {
+    for (let loopTarget = 0; loopTarget < N_CONDITIONS; loopTarget++) {
+      const entry: MachineState = { stage: 'ADAPTATION', stepIndex: loopTarget - 1 };
+      const arrived = settle(entry, N_CONDITIONS);
+      expect(arrived.stage).toBe('READING_TASK');
+      expect(arrived.stepIndex).toBe(loopTarget);
+    }
+  });
+
+  it('resuming at condition 0 enters the same state a fresh sitting walks into', () => {
+    // Not a restatement of the formula: this reads the grey-field state a FRESH machine actually
+    // reaches on its way to condition 0, and requires the resume entry to equal it. If the two
+    // paths ever diverge, the first condition of a resumed sitting stops being comparable with
+    // the first condition of every other one.
+    const fresh = walk().find((v) => v.stage === 'ADAPTATION');
+    expect(fresh).toBeDefined();
+    const resumeEntry: MachineState = { stage: 'ADAPTATION', stepIndex: 0 - 1 };
+    expect(resumeEntry).toEqual(fresh);
+    expect(settle(resumeEntry, N_CONDITIONS)).toEqual({ stage: 'READING_TASK', stepIndex: 0 });
+  });
+
+  it('works for a split sitting, where the plan is shorter than the full design', () => {
+    const half = N_CONDITIONS / 2;
+    for (let loopTarget = 0; loopTarget < half; loopTarget++) {
+      const arrived = settle({ stage: 'ADAPTATION', stepIndex: loopTarget - 1 }, half);
+      expect(arrived.stage).toBe('READING_TASK');
+      expect(arrived.stepIndex).toBe(loopTarget);
+    }
+  });
+});

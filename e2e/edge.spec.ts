@@ -79,7 +79,12 @@ test('reload mid-session offers resume and continues at a condition', async ({ p
     );
   }
   const stage = await stageNow(page);
-  expect(['READING_TASK', 'COMPREHENSION', 'DISPLAY_PERCEPTION']).toContain(stage);
+  // ADAPTATION is the expected landing stage, not an alternative to tolerate: a resume now
+  // re-enters the loop through the grey field so the resumed condition gets the same controlled
+  // adaptation every other condition gets, instead of starting from whatever the participant was
+  // looking at across the interruption. The measured stages stay in the list because this
+  // assertion is about being back in the LOOP, and a slower machine may already have advanced.
+  expect(['ADAPTATION', 'READING_TASK', 'COMPREHENSION', 'DISPLAY_PERCEPTION']).toContain(stage);
   // Specifically NOT back into setup: re-administering the baseline CVS-Q and baseline fatigue
   // would destroy the two measurements every change score is computed FROM.
   expect(['CVSQ_BASELINE', 'BASELINE_FATIGUE', 'INSTRUCTIONS']).not.toContain(stage);

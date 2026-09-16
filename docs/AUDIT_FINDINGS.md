@@ -842,3 +842,73 @@ which the original finding did not describe and which survived its fix.
 - The resume path enters the condition loop without a grey field, so a resumed condition starts from
   whatever the participant was last looking at. Narrower than the original finding, which was about
   every first condition, but the same mechanism.
+
+---
+
+## Round 5
+
+**The codebook declared a type for every column and nothing checked it**
+
+`scripts/buildCodebook.ts:76` asserts only that `type` is non-empty. Across ~650 columns the
+declared type was therefore documentation that no test could contradict, and it had already drifted:
+`calibration_targets_detected` was declared `integer` and emitted `"9/9"`.
+
+That is not cosmetic. `as.integer("9/9")` in R is `NA` with a warning, not an error, so a QC filter
+written from the codebook — drop sittings with too few calibration targets — silently kept every
+sitting instead of dropping the bad ones. The column reads as a number to a person and parses to
+missing in the analysis, and nothing anywhere reports the discrepancy.
+
+`scripts/verifyExport.ts` now checks every emitted value against its declared type over the real
+export path (4,985 typed cells in the fixture). Empty stays legal for every type — it means "not
+applicable" throughout this export, and completeness is a separate check that already exists.
+Reintroducing the ratio string fails the gate by name: *"01_session_info.csv:calibration_targets_detected
+declared integer, got \"9/9\""*.
+
+The column now emits a bare count. The denominator carried no information — it is `GAZE_TARGETS.length`
+on every row, and the unit already states the range.
+
+**`targets_detected` and the validity verdict counted different things**
+
+`useTracking.ts:552` counted targets with at least one RAW sample; `fitGazeCalibration` decides
+validity after dropping non-finite ones. `faceEar` returns NaN for a degenerate landmark solve, so a
+target whose entire dwell failed to solve was exported as "detected" and excluded from the fit at the
+same time — the QC column overstating coverage in precisely the case it exists to reveal.
+
+Fixed at the root rather than by duplicating the filter: `fitGazeCalibration` now returns
+`targetsWithSamples`, the same count its own verdict is decided on, and the caller reads it. One
+definition, so the two cannot drift apart again. `targets_total` now derives from
+`GAZE_TARGETS.length` instead of a literal `9`.
+
+**A resumed condition began with no grey field**
+
+Every other condition in a sitting is preceded by a controlled adaptation field. The resume path
+went straight to `READING_TASK` (`Experiment.tsx`), so a condition reached after an interruption
+started from whatever the participant had been looking at — the setup UI, the room, the operator's
+screen. This is the same mechanism the pre-first-condition field exists to remove, reached by a
+different route, and it landed on the one condition whose onset was least controlled.
+
+The export was already honest about it: `adaptation_ms_before` recorded 0 rather than claiming a
+field that never ran. So this was a protocol gap, not a fabrication — but a resumed condition was
+not comparable with the others.
+
+Resume now re-enters at `{ stage: 'ADAPTATION', stepIndex: loopTarget - 1 }`. Reusing the existing
+step rather than adding a special case buys two things: the polarity-switch duration is computed
+across the interruption from the real pair of conditions, and a resume landing on a break boundary
+still gets its `BREAK_SCREEN`, which is where the mid-sitting illuminance prompt lives. A
+`loopTarget` of 0 yields stepIndex -1, which is exactly the state a fresh sitting walks into.
+
+The arithmetic is guarded in `tests/stateMachine.test.ts` across every resume point and for a split
+sitting, because an off-by-one here would silently repeat a finished condition or skip an unrun one.
+Both directions were mutation-tested and both fail the guard.
+
+**Residual, recorded rather than silently decided:** the adaptation duration rule compares the
+previous condition's polarity with the next one's, which assumes the previous condition is what the
+eye is still adapted to. After an interruption of unknown length it is the room instead. Whether a
+resume should always take the longer switch field is a methods decision for the investigator.
+
+**Still open, unchanged from Round 4**
+
+- The split-vs-single sitting length remains a free per-sitting operator toggle, with nothing in the
+  export recording that it was a judgement call. Investigator decision.
+- The gaze acceptance criterion still counts a target as covered at one sample where the original
+  finding asked for five. A methods decision about how strict the bar should be, not a defect.

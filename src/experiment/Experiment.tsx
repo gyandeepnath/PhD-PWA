@@ -297,7 +297,33 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         setMachine({ stage: owed, stepIndex: loopTarget });
       } else {
         resumeJumpTo.current = null;
-        setMachine({ stage: 'READING_TASK', stepIndex: loopTarget });
+        /*
+         * Re-enter through the GREY FIELD, not straight into the reading task.
+         *
+         * Every other condition in the sitting is preceded by a controlled adaptation field; a
+         * resumed one was not, so it began from whatever the participant happened to be looking at
+         * across the interruption — the setup UI, the room, the operator's screen. That is the same
+         * mechanism the pre-first-condition field exists to remove (see stateMachine.ts), just
+         * reached by a different route, and it lands on the one condition whose onset is least
+         * controlled.
+         *
+         * stepIndex is loopTarget - 1 because ADAPTATION names the condition it FOLLOWS: the screen
+         * reads plan[stepIndex] as the previous condition and plan[stepIndex + 1] as the next, and
+         * the transition advances to READING_TASK at stepIndex + 1. loopTarget 0 therefore gives
+         * -1, which is exactly the pre-first-condition case a fresh sitting takes.
+         *
+         * Two things follow from reusing the existing step rather than bolting on a special case:
+         * the polarity-switch duration is computed across the interruption from the real pair of
+         * conditions, and a resume landing on a break boundary still gets its BREAK_SCREEN — which
+         * is where the mid-sitting illuminance prompt lives.
+         *
+         * RESIDUAL, recorded rather than silently decided: the duration rule compares the previous
+         * condition's polarity with the next one's, which assumes the previous condition is what
+         * the eye is still adapted to. After an interruption of unknown length that assumption does
+         * not hold — the room is. Whether a resume should always take the longer switch field is a
+         * methods decision, not one to make here.
+         */
+        setMachine({ stage: 'ADAPTATION', stepIndex: loopTarget - 1 });
       }
       setResuming(false);
     })();

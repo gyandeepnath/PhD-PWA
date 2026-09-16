@@ -10,7 +10,7 @@
  *   npx tsx scripts/verifyExport.ts --quiet    assertions only (non-zero exit on failure)
  *   npx tsx scripts/verifyExport.ts --show 10_wide_summary.csv   dump one file in full
  */
-import { buildExportFiles, fnv1a } from '../src/storage/export';
+import { buildExportFiles, fnv1a, CODEBOOK } from '../src/storage/export';
 import { buildFixtureBundle, FIXTURE, readingMs, fatigueMean, ibrFor, rtFor } from '../src/sim/bundleFixture';
 import { CONDITIONS } from '../src/experiment/conditions';
 import { PASSAGES } from '../src/experiment/passages';
@@ -428,6 +428,56 @@ for (const f of files.filter((x) => /^\d\d_.*\.csv$/.test(x.filename) && x.filen
     }
   }
 }
+
+// ================================================================ declared type vs emitted value
+/*
+ * The codebook declares a `type` for every column, and until this gate existed nothing checked that
+ * the data agreed with it. `scripts/buildCodebook.ts` asserts only that the field is NON-EMPTY, so
+ * the declaration was documentation that no test could contradict.
+ *
+ * It had already drifted. `calibration_targets_detected` was declared `integer` and emitted "9/9".
+ * That is not a cosmetic mismatch: `as.integer("9/9")` in R is NA with a warning, not an error, so
+ * a QC filter written against the codebook — drop sittings with too few calibration targets —
+ * silently kept every sitting instead. A column that reads as a number to a human and parses to NA
+ * in the analysis is worse than a missing column, because nothing reports it.
+ *
+ * Empty means "not applicable / not recorded" everywhere in this export and is accepted for every
+ * type; that distinction belongs to the column's own completeness check above, not here.
+ */
+const INTEGER_RE = /^-?\d+$/;
+const NUMBER_RE = /^-?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/;
+const BOOLEAN_VALUES = new Set(['true', 'false']);
+
+function conforms(type: string, value: string): boolean {
+  if (type === 'integer') return INTEGER_RE.test(value);
+  if (type === 'number' || type === 'float') return NUMBER_RE.test(value) && Number.isFinite(Number(value));
+  if (type === 'boolean') return BOOLEAN_VALUES.has(value);
+  // string, text and factor(n) are unconstrained here; factor levels are checked by the
+  // condition-reference assertions above, which know the permitted level sets.
+  return true;
+}
+
+const typeOffenders = new Map<string, Set<string>>();
+let typedCells = 0;
+for (const f of files.filter((x) => x.filename.endsWith('.csv') && x.filename !== '00_CODEBOOK.csv')) {
+  const t = table(f.content);
+  for (const header of t.headers) {
+    const entry = CODEBOOK.find((c) => c.file === f.filename && c.column === header);
+    if (!entry?.type) continue;
+    for (const row of t.rows) {
+      const value = row[header] ?? '';
+      if (value === '') continue;
+      typedCells++;
+      if (!conforms(entry.type, value)) {
+        const key = `${f.filename}:${header} declared ${entry.type}`;
+        (typeOffenders.get(key) ?? typeOffenders.set(key, new Set()).get(key)!).add(value);
+      }
+    }
+  }
+}
+ok(`every emitted value parses as its declared codebook type (${typedCells} typed cells)`,
+  typeOffenders.size === 0,
+  [...typeOffenders].map(([k, v]) => `${k}, got ${[...v].slice(0, 4).map((x) => JSON.stringify(x)).join(', ')}`).join('; '));
 
 // ================================================================ report
 log('\n' + '='.repeat(104));

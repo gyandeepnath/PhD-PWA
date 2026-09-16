@@ -27,6 +27,15 @@ export interface GazeCalibration {
   hThreshold: number;
   vThreshold: number;
   valid: boolean;
+  /**
+   * How many targets contributed at least one USABLE sample — the same count the validity test
+   * below is decided on. It is returned rather than recomputed by the caller because it was
+   * recomputed by the caller, with a different filter, and the two answers disagreed: the exported
+   * QC column counted raw samples while validity counted finite ones, so a target whose every frame
+   * was a degenerate landmark solve (faceEar returns NaN) was reported as detected and excluded
+   * from the fit at the same time. One definition, owned here.
+   */
+  targetsWithSamples: number;
 }
 
 const median = (xs: number[]): number => {
@@ -93,5 +102,6 @@ export function fitGazeCalibration(raw: Record<string, GazeSample[]>): GazeCalib
     hThreshold: valid ? hThreshold : DEFAULT_GAZE_THRESHOLD,
     vThreshold: valid ? vThreshold : DEFAULT_GAZE_THRESHOLD,
     valid,
+    targetsWithSamples,
   };
 }

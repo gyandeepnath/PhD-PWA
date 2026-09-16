@@ -110,4 +110,35 @@ describe('calibration validity requires coverage and both axes', () => {
     expect(r.hThreshold).toBe(DEFAULT_GAZE_THRESHOLD);
     expect(r.vThreshold).toBe(DEFAULT_GAZE_THRESHOLD);
   });
+
+  /*
+   * The QC column and the validity test must count the same thing. They did not: the exported
+   * count filtered raw samples while the fit filtered finite ones, so a target that returned
+   * nothing but NaN — the degenerate-landmark case faceEar produces — was simultaneously
+   * "detected" in the export and absent from the calibration.
+   */
+  it('does not count a target whose samples are all non-finite', async () => {
+    const { fitGazeCalibration } = await import('@/tracking/gazeCalibration');
+    const s = goodSamples();
+    s.tl = [{ h: NaN, v: NaN }, { h: NaN, v: NaN }, { h: NaN, v: NaN }];
+    const cal = fitGazeCalibration(s);
+    expect(cal.targetsWithSamples).toBe(GAZE_TARGETS.length - 1);
+  });
+
+  it('reports a detected count that agrees with the validity verdict it was judged on', async () => {
+    const { fitGazeCalibration } = await import('@/tracking/gazeCalibration');
+    const MIN_TARGETS = Math.ceil(GAZE_TARGETS.length * (2 / 3));
+
+    // All nine usable: counted as nine, and validity is not blocked by coverage.
+    expect(fitGazeCalibration(goodSamples()).targetsWithSamples).toBe(GAZE_TARGETS.length);
+
+    // Four targets reduced to NaN leaves five usable, below the two-thirds floor. A count that
+    // still said nine would contradict the invalid verdict sitting beside it in the same row.
+    const s = goodSamples();
+    for (const id of ['tl', 'tr', 'bl', 'br'] as const) s[id] = [{ h: NaN, v: NaN }];
+    const cal = fitGazeCalibration(s);
+    expect(cal.targetsWithSamples).toBe(GAZE_TARGETS.length - 4);
+    expect(cal.targetsWithSamples).toBeLessThan(MIN_TARGETS);
+    expect(cal.valid).toBe(false);
+  });
 });

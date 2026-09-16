@@ -338,7 +338,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '01_session_info.csv', column: 'gaze_calibration_valid', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the nine-point gaze mapping met its acceptance criterion. When false, gaze columns are coarse-zone only and should not be treated as calibrated.' },
   { file: '01_session_info.csv', column: 'calibration_ear_baseline', type: 'number', unit: 'ratio', role: 'qc', description: 'Open-eye eye-aspect-ratio baseline for this participant, measured at centre fixation before the gaze targets, in the posture the reading task is performed in. Every blink threshold is expressed as a fraction of this, so it is referenced to the individual rather than a population default. Compare against open_ear_measured in 07_eye_metrics.csv for within-sitting drift.' },
   { file: '01_session_info.csv', column: 'calibration_pitch_baseline_frac', type: 'number', unit: 'ratio', role: 'qc', description: 'Frontal head-pose reference captured at calibration. Head-pose columns are relative to this when head_pitch_calibrated is true.' },
-  { file: '01_session_info.csv', column: 'calibration_targets_detected', type: 'integer', unit: '0-9', role: 'qc', description: 'Calibration targets successfully detected out of nine. Low values indicate a poor camera setup for that sitting.' },
+  { file: '01_session_info.csv', column: 'calibration_targets_detected', type: 'integer', unit: 'targets', role: 'qc', description: "How many of the nine calibration targets produced at least one usable sample. Counted on the same finite-filtered pool the calibration fit is judged on, so it cannot disagree with gaze_calibration_valid. Low values mean a poor camera setup for that sitting." },
   { file: '01_session_info.csv', column: 'calibration_ear_samples', type: 'integer', unit: 'count', role: 'qc', description: 'Frames of the dedicated centre-fixation baseline window that yielded a usable eye-aspect ratio, and so fed calibration_ear_baseline. The nine gaze targets contribute none — they move the eye through three vertical postures and the fissure is widest in up-gaze. Six seconds at 30 fps contributes ~180; a low value means the baseline every blink threshold is a fraction of rests on very little, and the ocular measures for that sitting should be treated with caution. Blank for sittings recorded before this was captured.' },
   { file: '02_conditions.csv', column: 'polarity', type: 'factor(2)', unit: '-', role: 'iv', description: 'positive = dark text on light background; negative = light text on dark.' },
   { file: '02_conditions.csv', column: 'background_color', type: 'string', unit: 'hex', role: 'iv', description: 'Background colour rendered for this condition-run.' },
@@ -633,7 +633,14 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       gaze_calibration_valid: latestCalibration?.is_real_calibration ?? '',
       calibration_ear_baseline: latestCalibration?.ear_baseline ?? '',
       calibration_pitch_baseline_frac: latestCalibration?.pitch_baseline_frac ?? '',
-      calibration_targets_detected: latestCalibration ? `${latestCalibration.targets_detected}/${latestCalibration.targets_total}` : '',
+      /*
+       * A bare count, not "7/9". The codebook declares this column `integer` and an analyst filters
+       * on it to drop sittings with a poor camera setup — but the emitted value was a ratio STRING,
+       * so `as.integer()` in R yields NA without an error and the filter silently passes every
+       * sitting. The denominator carried no information either: it is GAZE_TARGETS.length on every
+       * row, and the codebook's unit already states the range.
+       */
+      calibration_targets_detected: latestCalibration ? latestCalibration.targets_detected : '',
       calibration_ear_samples: latestCalibration?.ear_samples_usable ?? '',
       calibration_runs: bundle.calibration.length,
     }]);
