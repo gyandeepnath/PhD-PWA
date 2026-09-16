@@ -158,9 +158,17 @@ for (let i = 0; i < 12; i++) {
   // JSON.stringify output, and a naive split/join silently replaces nothing. Every participant then
   // keeps the same id, and lme4 stops with "grouping factors must have > 1 sampled level".
   const esc = (v) => JSON.stringify(v).slice(1, -1);
-  const b = JSON.parse(JSON.stringify(base)
+  let json = JSON.stringify(base)
     .split(esc(base.session.participant_id)).join(pid)
-    .split(esc(base.session.session_id)).join(sid));
+    .split(esc(base.session.session_id)).join(sid);
+  // condition_id has to be made unique per participant too, and this is not housekeeping. The
+  // fixture's condition ids are fixed values, so twelve clones shared them; every join on
+  // condition_id then matched twelve rows instead of one and the modelling frame came out at 1440
+  // rows for what should be 120. The models still fitted — on a dataset each of whose observations
+  // appeared twelve times — so the gate would have been green while checking nothing real, and a
+  // genuine fan-out bug in the template could have hidden inside the noise.
+  for (const c of base.conditions) json = json.split(esc(c.condition_id)).join(pid + '-' + c.condition_id);
+  const b = JSON.parse(json);
   b.session.enrolment_number = i + 1;
   // Deterministic variation — see the header note on "Response is constant".
   (b.eyeMetrics ?? []).forEach((m, k) => {
@@ -200,7 +208,29 @@ for (let i = 0; i < 12; i++) {
         ['comprehension is fitted', 'Comprehension logistic mixed model'],
         ['the key secondary appears', 'CVS-Q'],
         ['the achromatic anchor is reported', 'Achromatic anchor'],
+        // ANALYSIS_PLAN.md §5: "These are not optional and they come first." §5.1, §5.3, §5.4 and
+        // §5.5 appeared nowhere in the R file, so conditions where the face left frame or where the
+        // camera saw only part of the exposure entered the primary fit at full weight — which
+        // dilutes a real effect toward null.
+        ['the §5 quality checks run', 'QUALITY CHECKS'],
+        ['§5.1 illumination constancy is reported', 'illumination constancy'],
+        ['§5.3 participant presence is reported', 'participant present'],
+        ['§5.4 exposure completeness is reported', 'exposure completeness'],
+        ['§5.5 careless responding is reported', 'careless responding'],
+        ['flagged rows are retained, not silently dropped', 'RETAINED'],
       ]) ok(`R: ${label}`, rOut.includes(needle), `"${needle}" not in the output`);
+
+      // A threshold that is not in the protocol must say so where it is read, not only in a comment.
+      ok('R: analyst-chosen QC thresholds are labelled as such',
+        rOut.includes('ANALYST DEFAULT'), 'no threshold was marked as an analyst default');
+
+      // The modelling frame must be one row per participant x condition. The fixture's condition ids
+      // were shared across clones, so every join on condition_id matched twelve rows and the frame
+      // came out twelve times too large — models fitting happily on data that repeated itself.
+      const frameRows = /rows failing at least one §5 check:\s*\d+\/(\d+)/.exec(rOut);
+      ok('R: the modelling frame is one row per participant x condition',
+        frameRows != null && Number(frameRows[1]) === 120,
+        `expected 120 rows (12 participants x 10 conditions), got ${frameRows ? frameRows[1] : 'no match'}`);
 
       // The pre-registered coding. Treatment contrasts made the printed polarity row the effect in
       // ACHROMATIC TEXT ONLY, while the plan states H1's falsification rule on the average effect.

@@ -126,7 +126,8 @@ cond <- conditions %>%
                                     # TAKEN, so it must be read together with lux_complete. Selecting
                                     # the wrong one raised "Column `lux_all_in_range` doesn't exist"
                                     # at this join, and nothing below it had ever run.
-                                    lux_complete, lux_logged_all_in_range),
+                                    lux_complete, lux_logged_all_in_range,
+                                    session_status, session_complete),
             by = c("participant_id", "session_index")) %>%
   mutate(
     log_contrast = log10(wcag_contrast_ratio),
@@ -252,6 +253,106 @@ cat("\n=== Aggregated d' per participant ===\n"); print(dprime_overall)
 # (expected to RISE — the marker that correlates with CVS symptoms; Portello & Rosenfield 2013).
 # Drowsiness covariate: perclos_p80. Blink rate is non-monotonic, so model the set, not rate alone.
 eye <- eye_metrics %>% left_join(cond, by = c("participant_id", "condition_id")) %>% filter(camera_active == 1)
+
+# ===========================================================================================
+# QUALITY CHECKS — ANALYSIS_PLAN.md §5, "These are not optional and they come first."
+#
+# They were not implemented. §5.2 (frame rate) was, and is further down; §5.1 selected the lux
+# columns and never used them; §5.3, §5.4 and §5.5 appeared nowhere in this file at all. The
+# consequence is one-directional: conditions where the face left frame, or where the camera saw only
+# part of the exposure, entered the primary fit at full weight, and every one of those dilutes a
+# real polarity or colour effect toward null.
+#
+# NOTHING IS DROPPED HERE. These are checks, and §5.2 states the reason in general terms: frame rate
+# covaries with ambient illumination, so dropping flagged rows deletes data non-randomly with
+# respect to a factor. The panel reports, sets `qc_clean`, and a single sensitivity refit at the end
+# of the primary section shows whether the conclusion depends on the flagged rows.
+#
+# ON THRESHOLDS. Only ONE of these numbers comes from the protocol: face_presence_ratio >= 0.90 is
+# the pilot gate stated in the codebook entry for that column. The other two are ANALYST DEFAULTS.
+# They are named here, at the top, so they can be changed deliberately and so that no one can mistake
+# them for pre-registered values. The distributions are printed beside each count so the choice is an
+# informed one rather than an inherited one.
+# ===========================================================================================
+QC_FACE_PRESENCE_MIN <- 0.90   # PROTOCOL: codebook, face_presence_ratio — "pilot gate: >= 0.90".
+QC_OFF_AXIS_MAX      <- 0.20   # ANALYST DEFAULT — not in the protocol. Change deliberately.
+QC_EXPOSURE_MIN_FRAC <- 0.90   # ANALYST DEFAULT — not in the protocol. Fraction of reading_time_ms
+                               # the camera must actually have observed.
+
+cat("\n\n==========================================================================\n")
+cat("QUALITY CHECKS (ANALYSIS_PLAN.md §5) — reported before any inference\n")
+cat("==========================================================================\n")
+
+qc_pct <- function(n, d) if (d > 0) sprintf("%d/%d (%.1f%%)", n, d, 100 * n / d) else "0/0"
+qc_rng <- function(x) {
+  x <- x[is.finite(x)]
+  if (!length(x)) return("no finite values")
+  sprintf("median %.3f, range %.3f-%.3f", median(x), min(x), max(x))
+}
+
+# --- §5.1 Did the illumination CONTROL hold? -------------------------------------------
+# A constancy check, not a separation check: the design holds illuminance fixed, so the reading
+# should be a tight cluster and a sitting outside 250-350 lux is a protocol deviation.
+sess_qc <- eye %>% distinct(participant_id, session_index, .keep_all = TRUE)
+cat("\n5.1 illumination constancy\n")
+cat("    lux_mean across sittings:      ", qc_rng(sess_qc$lux_mean), "\n")
+cat("    sittings outside 250-350 lux:  ",
+    qc_pct(sum(is.finite(sess_qc$lux_mean) & (sess_qc$lux_mean < 250 | sess_qc$lux_mean > 350)),
+           nrow(sess_qc)), "\n")
+cat("    lux_complete FALSE:            ", qc_pct(sum(!sess_qc$lux_complete, na.rm = TRUE), nrow(sess_qc)), "\n")
+cat("    a LOGGED reading out of range: ", qc_pct(sum(!sess_qc$lux_logged_all_in_range, na.rm = TRUE), nrow(sess_qc)),
+    " (says nothing about readings never taken - read with lux_complete)\n")
+
+# --- §5.2 pointer ----------------------------------------------------------------------
+cat("\n5.2 frame-rate adequacy — reported with the primary model below, where the plan's\n")
+cat("    with-and-without refit is run. Not repeated here.\n")
+
+# --- §5.3 Was the participant present? -------------------------------------------------
+low_presence <- with(eye, is.finite(face_presence_ratio) & face_presence_ratio < QC_FACE_PRESENCE_MIN)
+high_offaxis <- with(eye, is.finite(off_axis_ratio) & off_axis_ratio > QC_OFF_AXIS_MAX)
+cat("\n5.3 participant present\n")
+cat("    face_presence_ratio:           ", qc_rng(eye$face_presence_ratio), "\n")
+cat("    below the", QC_FACE_PRESENCE_MIN, "protocol gate:   ", qc_pct(sum(low_presence), nrow(eye)), "\n")
+cat("    off_axis_ratio:                ", qc_rng(eye$off_axis_ratio), "\n")
+cat("    above", QC_OFF_AXIS_MAX, "(ANALYST DEFAULT):  ", qc_pct(sum(high_offaxis), nrow(eye)), "\n")
+
+# --- §5.4 Was the exposure complete? ---------------------------------------------------
+# The dangerous one: when the camera stops part-way, every RATE in the row still looks entirely
+# normal, because a rate divides by the time actually observed. Only this comparison shows it.
+eye$observed_frac <- with(eye, ifelse(is.finite(observed_duration_ms) & is.finite(reading_time_ms) & reading_time_ms > 0,
+                                      observed_duration_ms / reading_time_ms, NA_real_))
+short_exposure <- with(eye, is.finite(observed_frac) & observed_frac < QC_EXPOSURE_MIN_FRAC)
+cat("\n5.4 exposure completeness (observed_duration_ms / reading_time_ms)\n")
+cat("    observed fraction:             ", qc_rng(eye$observed_frac), "\n")
+cat("    below", QC_EXPOSURE_MIN_FRAC, "(ANALYST DEFAULT):  ", qc_pct(sum(short_exposure), nrow(eye)), "\n")
+cat("    not computable (a duration missing):", qc_pct(sum(is.na(eye$observed_frac)), nrow(eye)), "\n")
+
+# --- §5.5 Careless responding ----------------------------------------------------------
+# Reported from 12_quality_flags.csv rather than joined onto the modelling frame, and that is a
+# limitation of the FILE, not a shortcut: it carries no condition_id, only participant_id +
+# condition_label + session_index, and joining on the label is what the join note at the top of this
+# file warns against. Counts answer §5.5's question; a per-row merge would need the export to carry
+# the key.
+cat("\n5.5 careless responding (from 12_quality_flags.csv, not joined - see note)\n")
+for (flag in c("careless_straight_lined", "careless_rushed_fatigue", "careless_rushed_perception")) {
+  if (flag %in% names(quality)) {
+    cat("   ", format(flag, width = 30), qc_pct(sum(quality[[flag]] %in% c(TRUE, "true"), na.rm = TRUE), nrow(quality)), "\n")
+  }
+}
+
+# --- §1 complete case ------------------------------------------------------------------
+cat("\n1.  completeness of sittings\n")
+cat("    session_complete FALSE:        ", qc_pct(sum(!sess_qc$session_complete, na.rm = TRUE), nrow(sess_qc)), "\n")
+if ("session_status" %in% names(sess_qc)) {
+  st <- table(sess_qc$session_status, useNA = "ifany")
+  cat("    session_status:                ", paste(names(st), as.integer(st), sep = "=", collapse = ", "), "\n")
+}
+
+# --- the combined flag -----------------------------------------------------------------
+eye$qc_clean <- !(low_presence | high_offaxis | short_exposure)
+cat("\nrows failing at least one §5 check:", qc_pct(sum(!eye$qc_clean), nrow(eye)),
+    "- RETAINED. The sensitivity refit below reports the conclusion with and without them.\n")
+cat("==========================================================================\n")
 
 # ===========================================================================================
 # CONFIRMATORY ANALYSIS — the PRIMARY outcome (synopsis §3.9)
