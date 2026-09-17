@@ -9,7 +9,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { assessStorageHealth, type StorageHealth } from '@/storage/storageHealth';
 import { CONFIG } from '@/experiment/config';
 import { N_CONDITIONS } from '@/experiment/conditions';
-import { repeatRunAcknowledged, REPEAT_NOTE_MIN_CHARS } from '@/experiment/participantProgress';
+import { repeatRunAcknowledged, REPEAT_NOTE_MIN_CHARS, SPLIT_REASON_MIN_CHARS } from '@/experiment/participantProgress';
 import { ILLUMINATION, luxInRange, type IlluminationLevel, N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 import type { MediaConsent } from '@/storage/media';
 import { WavyBackground } from '@/components/WavyBackground';
@@ -54,6 +54,16 @@ export interface SessionInitData {
   luxDeviationNote: string | null;
   /** Researcher acknowledged re-running a participant who had already completed the protocol. */
   repeatRunNote: string | null;
+  /**
+   * Why this sitting was split, when it was. Null for a single sitting.
+   *
+   * The structure choice was a free per-participant toggle with nothing recording the grounds. If it
+   * is ever made on how the participant LOOKS — tired, elderly, restless — then fatigue exposure
+   * varies between people for a reason correlated with the outcome, and no column showed it. A
+   * scheduling reason is harmless and a clinical one is a covariate; the difference is only
+   * recoverable if it was written down at the moment of the decision.
+   */
+  sittingSplitReason: string | null;
 }
 export interface IlluminationAssignment {
   level: IlluminationLevel;
@@ -79,6 +89,7 @@ export function SessionInit({
   const [lux, setLux] = useState('');
   const [deviation, setDeviation] = useState('');
   const [repeatNote, setRepeatNote] = useState('');
+  const [splitReason, setSplitReason] = useState('');
   const [assigned, setAssigned] = useState<IlluminationAssignment | null>(null);
   const [lum, setLum] = useState('');
   const [bright, setBright] = useState('');
@@ -114,9 +125,12 @@ export function SessionInit({
   const repeatAcknowledged = repeatRunAcknowledged(assigned?.priorPasses ?? 0, repeatNote);
   // Out-of-range is permitted only with an explicit written reason, so a deviation is recorded
   // as data rather than silently accepted or silently blocked.
+  // A split is permitted only with an explicit written reason, on the same terms as an
+  // out-of-range illuminance: recorded as data rather than silently accepted or silently blocked.
+  const splitAcknowledged = sitting === 'single' || splitReason.trim().length >= SPLIT_REASON_MIN_CHARS;
   const valid =
     /^[A-Za-z0-9_-]{1,20}$/.test(pid) && luxEntered && (inRange || deviation.trim().length >= 3)
-    && repeatAcknowledged;
+    && repeatAcknowledged && splitAcknowledged;
 
   return (
     <div className={shell} style={{ position: 'relative' }}>
@@ -203,8 +217,26 @@ export function SessionInit({
           <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: -6 }}>
             {sitting === 'single'
               ? `Single sitting: all ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT} conditions (about 90 min to 2 h).`
-              : `Split: ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2} conditions now, the remaining ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2} in a later sitting (re-enter the same Participant ID; the condition order is preserved).`}
+              : `Split: ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2} conditions now, the remaining ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2} in a later sitting (re-enter the same Participant ID; the condition order is preserved). Both halves export as ONE participant.`}
           </p>
+          {sitting === 'split' && (
+            <div style={{ marginTop: 12 }}>
+              <Field label={`⚠ Why is this sitting being split? (≥${SPLIT_REASON_MIN_CHARS} chars — recorded with the session)`}>
+                <input
+                  data-testid="split-reason"
+                  className="vl-input"
+                  value={splitReason}
+                  onChange={(e) => setSplitReason(e.target.value)}
+                  placeholder="e.g. room booked for 1 h only — scheduling, not participant state"
+                />
+              </Field>
+              <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: 6 }}>
+                Say whether the reason is logistical or about this participant. A scheduling reason is
+                harmless; splitting because someone looks tired makes fatigue exposure depend on how
+                they presented, which is a covariate the analysis has to know about.
+              </p>
+            </div>
+          )}
         </div>
         {err && <p className="mt-3 font-lab text-xs text-[#e64c4c]">{err}</p>}
         <button
@@ -216,7 +248,9 @@ export function SessionInit({
               setErr(
                 !repeatAcknowledged
                   ? 'This participant has already completed all ten conditions. Record why they are being run again, correct the ID, or delete the earlier sitting in the dashboard.'
-                  : luxEntered && spec && !inRange
+                  : !splitAcknowledged
+                    ? `A split sitting needs a reason of at least ${SPLIT_REASON_MIN_CHARS} characters, so that a clinical judgement is not indistinguishable from a scheduling one later.`
+                    : luxEntered && spec && !inRange
                     ? `Illuminance is outside ${spec.min}–${spec.max} lux. Adjust the room, or record a reason for the deviation.`
                     : 'Enter a valid Participant ID and a measured lux value.',
               );
@@ -229,6 +263,7 @@ export function SessionInit({
               whiteLuminance: lum === '' ? null : Number(lum),
               brightnessPercent: bright === '' ? null : Number(bright),
               repeatRunNote: completedProtocol ? repeatNote.trim() : null,
+              sittingSplitReason: sitting === 'split' ? splitReason.trim() : null,
               conditionsPerSession: sitting === 'split' ? CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2 : CONFIG.CONDITIONS_PER_SESSION_DEFAULT,
               luxDeviationNote: inRange ? null : deviation.trim(),
             });

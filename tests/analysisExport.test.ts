@@ -501,3 +501,48 @@ describe('absence is reported, never invented', () => {
     expect(rows.every((r) => r.global_position === '')).toBe(true);
   });
 });
+
+/*
+ * A SPLIT PARTICIPANT MUST COME OUT AS ONE PARTICIPANT.
+ *
+ * The app writes one numbered folder per SITTING, which is the right shape for checking a sitting
+ * and the wrong shape for analysis: a split participant has two of them. analysis_long.csv is where
+ * that is resolved, and these assertions lock the resolution down rather than leaving it as an
+ * emergent property. The investigator's requirement is explicit — if a sitting is split, the halves
+ * must be merged once both are done, and the final data must not be separate.
+ */
+describe('a split participant merges into one participant, not two', () => {
+  const halves = (pid: string) => [
+    sitting(pid, { sid: `${pid}-h1`, start: 1, illumination: 'moderate', block: 0, conditionsPerSession: 5, offset: 0 }),
+    sitting(pid, { sid: `${pid}-h2`, start: 2, illumination: 'moderate', block: 0, conditionsPerSession: 5, offset: 5 }),
+  ];
+
+  it('yields one participant row carrying every condition, not two partial ones', () => {
+    const { ds, rows } = long(halves('P77'));
+    // One participant in the integrity ledger, not one per sitting.
+    expect(ds.integrity.participants).toHaveLength(1);
+    expect(ds.integrity.participants[0].participant_id).toBe('P77');
+    expect(ds.integrity.participants[0].condition_runs).toBe(N_CONDITIONS);
+    // And one row per condition-run, all under the same participant id.
+    expect(rows).toHaveLength(N_CONDITIONS);
+    expect(new Set(rows.map((r) => r.participant_id))).toEqual(new Set(['P77']));
+  });
+
+  it('keeps both sittings distinguishable inside the merged set', () => {
+    // Merged is not the same as flattened. Which half a row came from has to survive, because the
+    // second half happens on a different day: adaptation, practice and time-of-day all differ, and
+    // an analyst who cannot see the boundary cannot test whether it mattered.
+    const { rows } = long(halves('P78'));
+    expect(new Set(rows.map((r) => String(r.session_id)))).toEqual(new Set(['P78-h1', 'P78-h2']));
+    const positions = rows.map((r) => Number(r.session_position)).sort((a, b) => a - b);
+    expect(positions).toEqual(Array.from({ length: N_CONDITIONS }, (_, i) => i));
+  });
+
+  it('covers every condition exactly once across the two halves', () => {
+    // The failure this guards against is a split that silently repeats the first five conditions
+    // instead of continuing into the second five — ten rows that look complete and are not.
+    const { rows } = long(halves('P79'));
+    const labels = rows.map((r) => String(r.condition_label));
+    expect(new Set(labels).size).toBe(N_CONDITIONS);
+  });
+});

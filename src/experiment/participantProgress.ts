@@ -64,6 +64,17 @@ export function passageRepeatNumber(
 export const REPEAT_NOTE_MIN_CHARS = 3;
 
 /**
+ * Minimum length of the reason required when a sitting is SPLIT.
+ *
+ * Same threshold and same purpose as REPEAT_NOTE_MIN_CHARS: long enough that "ok" or "." will not
+ * pass, short enough that it is not an obstacle at the point of care. The reason has to be captured
+ * at the moment of the decision, because whether a split was logistical or clinical is not
+ * recoverable afterwards — and if it was clinical, fatigue exposure varies between participants
+ * for a reason correlated with the outcome.
+ */
+export const SPLIT_REASON_MIN_CHARS = REPEAT_NOTE_MIN_CHARS;
+
+/**
  * May a sitting start for a participant with this history?
  *
  * A participant who has completed the protocol is not refused outright — a sitting voided by a

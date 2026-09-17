@@ -92,7 +92,16 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
        */
       await page.waitForTimeout(150);
       await setInput(page, 'lux', await validLux(page));
-      if (opts.split) await click(page, /^split$/);
+      if (opts.split) {
+        await click(page, /^split$/);
+        /*
+         * A split now requires a written reason before setup can begin, the same way an
+         * out-of-range illuminance does. Without it "Begin setup" stays disabled and every
+         * downstream step in the split suite times out on a dead control — the identical failure
+         * mode the lux literal above used to cause.
+         */
+        await page.getByTestId('split-reason').fill('e2e: scheduling, not participant state');
+      }
       await click(page, /Begin setup/);
       await waitStageChange(page, stage);
       break;

@@ -549,6 +549,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       illumination_block: block,
       protocol_pass: passes,
       repeat_run_note: d.repeatRunNote,
+      sitting_split_reason: d.sittingSplitReason,
       illumination_order_first: illuminationOrderFor(enrol)[0],
       lux_readings: [{ checkpoint: 'start', lux: d.ambientLux, at: Date.now() }],
       lux_all_in_range: luxInRange(level, d.ambientLux),

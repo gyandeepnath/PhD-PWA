@@ -1236,3 +1236,38 @@ load-bearing rather than decorative.
 
 The exposure is bounded: gaze is a secondary measure, and the primary outcome's EAR baseline is
 fitted in `measureEarBaseline` and does not depend on this.
+
+---
+
+## Round 12 — the split-sitting decision is now recorded, and the merge is locked
+
+This closes the one finding that had been LIVE since Round 4 and was an investigator decision rather
+than a defect. The investigator's ruling: keep the flexibility, record the reason, and make certain
+the halves merge.
+
+**The reason is now required.** Picking "split" opens a free-text field and "Begin setup" stays
+disabled until it holds at least `SPLIT_REASON_MIN_CHARS`, on exactly the terms an out-of-range
+illuminance already imposes. The prompt asks specifically whether the reason is logistical or about
+the participant, because that is the distinction that matters and it is not recoverable afterwards. It
+exports as `sitting_split_reason`, and the codebook entry says why an analyst has to read it before
+pooling: if splits were granted because a participant looked tired, fatigue exposure varies between
+people for a reason correlated with the outcome, which makes it a covariate rather than a free choice.
+
+**The merge already worked, and is now protected.** `analysis_long.csv` pools every sitting on the
+device into one row per participant x condition-run, so a split participant was already arriving as
+ONE participant with all ten conditions — existing tests showed `condition_runs` at the full ten and
+`global_position` spanning 0..19 continuously across four sittings. That was an emergent property of
+several separate pieces of logic rather than anything asserted. Three tests now assert it directly:
+one participant row and not one per sitting; both sittings still distinguishable inside the merged
+set, because the second half happens on a different day and an analyst who cannot see the boundary
+cannot test whether it mattered; and every condition covered exactly once, which is the guard against
+a split that silently repeats the first five instead of continuing into the second five. Making both
+halves run offset 0 fails two of the three.
+
+**What stays separate, by design:** the numbered per-sitting folders. Each is the faithful record of
+one sitting and a split participant has two. The merge belongs in the analysis dataset, not in the
+per-sitting record, and the setup screen now says so at the point of the decision — "Both halves
+export as ONE participant."
+
+The split end-to-end suite still passes; its helper now fills the reason, because the gating would
+otherwise have left it timing out on a disabled button — the same failure the lux literal once caused.

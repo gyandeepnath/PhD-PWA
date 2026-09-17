@@ -147,6 +147,14 @@ export interface SessionRecord {
    * the moment the decision is made rather than reconstructed later from someone's memory.
    */
   repeat_run_note?: string | null;
+  /**
+   * Why this sitting was split into two, when it was. Null for a single sitting.
+   *
+   * The structure was a free per-participant toggle and nothing recorded the grounds for it. If the
+   * choice was ever made on how the participant presented, fatigue exposure varies between people
+   * for a reason correlated with the outcome, and no exported column showed it.
+   */
+  sitting_split_reason?: string | null;
   /** Which level the participant received first — the counterbalancing assignment, for reporting. */
   illumination_order_first: IlluminationLevel | null;
   /** Illuminance logged at start / middle / end of the session (§3.4). */
