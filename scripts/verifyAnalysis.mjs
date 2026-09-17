@@ -82,9 +82,65 @@ for (const f of buildExportFiles(buildFixtureBundle())) {
     + `import analysis_template as t\nt.DATA_DIR = ${JSON.stringify(dataDir)}\nt.main()\n`,
   ], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 
-  const r = run(join(dir, 'out'));
+  /*
+   * A MULTI-PARTICIPANT tree for the Python template too, for the same reason the R one needs it.
+   *
+   * The design has ten cells and one sitting has ten rows, so a single-participant fixture makes the
+   * GEE saturated: it fits perfectly, every standard error is NaN or machine epsilon, and no
+   * coefficient can be tested. The gate's assertion was that the section's TITLE appears in the
+   * output, so it stayed green while the pre-registered primary model estimated nothing testable.
+   *
+   * Built here rather than reusing the R tree because that one is created later in this file and
+   * only when R is installed; the Python path must not depend on R being present.
+   */
+  const pyDir = join(dir, 'py-cohort');
+  mkdirSync(pyDir, { recursive: true });
+  const pyDumper = join(dir, 'dumpPy.ts');
+  writeFileSync(pyDumper, `
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { buildExportFiles } from ${JSON.stringify(join(process.cwd(), 'src/storage/export.ts'))};
+import { buildFixtureBundle } from ${JSON.stringify(join(process.cwd(), 'src/sim/bundleFixture.ts'))};
+const root = ${JSON.stringify(pyDir)};
+const esc = (v) => JSON.stringify(v).slice(1, -1);
+for (let i = 0; i < 12; i++) {
+  const base = buildFixtureBundle();
+  const pid = 'P' + String(i + 1).padStart(3, '0');
+  let json = JSON.stringify(base)
+    .split(esc(base.session.participant_id)).join(pid)
+    .split(esc(base.session.session_id)).join('S' + String(i + 1).padStart(3, '0'));
+  for (const c of base.conditions) json = json.split(esc(c.condition_id)).join(pid + '-' + c.condition_id);
+  const b = JSON.parse(json);
+  b.session.enrolment_number = i + 1;
+  // Between-participant variation, so the random/cluster structure has something to estimate.
+  (b.eyeMetrics ?? []).forEach((m, k) => {
+    m.blink_count_incomplete = Math.max(1, m.blink_count_incomplete + ((i * 3 + k) % 5) - 2);
+  });
+  const out = root + '/' + pid;
+  mkdirSync(out, { recursive: true });
+  for (const f of buildExportFiles(b)) writeFileSync(out + '/' + f.filename, f.content);
+}
+`);
+  execFileSync('npx', ['tsx', pyDumper], { stdio: 'pipe' });
+
+  const r = run(pyDir);
   ok('the template runs to completion without raising', r.status === 0,
     (r.stderr || '').trim().split('\n').slice(-3).join(' | '));
+
+  // The primary model must ESTIMATE, not merely print its heading. With a constant response every
+  // coefficient came back zero to machine precision with NaN standard errors, and a title check
+  // could not tell that apart from a real fit.
+  const primaryBlock = `${r.stdout}`.split('PRIMARY: incomplete-blink ratio')[1] ?? '';
+  const polarityRow = /^polarity_c\s+(-?[\d.]+(?:e[-+]?\d+)?)\s+(\S+)/m.exec(primaryBlock);
+  ok('the primary model estimates a polarity coefficient', polarityRow != null,
+    'no polarity_c row in the primary model output');
+  if (polarityRow) {
+    const coef = Number(polarityRow[1]);
+    const se = Number(polarityRow[2]);
+    ok('the polarity coefficient is not zero to machine precision',
+      Number.isFinite(coef) && Math.abs(coef) > 1e-6, `coefficient was ${polarityRow[1]}`);
+    ok('the polarity coefficient has a usable standard error',
+      Number.isFinite(se) && se > 1e-6, `standard error was ${polarityRow[2]} — a saturated or constant fit`);
+  }
 
   const out = `${r.stdout}\n${r.stderr}`;
   // The sections docs/ANALYSIS_PLAN.md names. Absence of one means an analyst ran the file and was
@@ -109,10 +165,10 @@ for (const f of buildExportFiles(buildFixtureBundle())) {
   // And the sensitivity refit must actually fire when there is something to be sensitive to.
   const dir2 = join(dir, 'flagged');
   mkdirSync(dir2, { recursive: true });
-  execFileSync('cp', ['-r', ...['.'].map(() => join(dir, 'out') + '/.'), dir2]);
+  execFileSync('cp', ['-r', ...['.'].map(() => pyDir + '/.'), dir2]);
   const mark = spawnSync(py, ['-c',
     `import pandas as pd\n`
-    + `p = ${JSON.stringify(join(dir2, '07_eye_metrics.csv'))}\n`
+    + `p = ${JSON.stringify(join(dir2, 'P001', '07_eye_metrics.csv'))}\n`
     + `d = pd.read_csv(p)\nd.loc[d.index[:4], 'fps_adequate_for_ratio'] = False\nd.to_csv(p, index=False)\n`,
   ], { encoding: 'utf8' });
   ok('the fixture can be marked with inadequate frame rates', mark.status === 0, mark.stderr);

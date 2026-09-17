@@ -1533,3 +1533,83 @@ view, which is the one used while the participant is still in the chair, does no
 continued without an EAR baseline also still reports QC `good` on every row with a blink rate of
 0/min, because the camera genuinely is running well and only the baseline is missing; `ConditionSummary`
 carries no baseline or `observed_duration_ms` field for the dashboard to show.
+
+## Round 19 — the golden fixture contradicted itself on the primary outcome
+
+The worst instance of the green-while-measuring-nothing pattern this audit has found, because it sat
+on the primary outcome.
+
+`bundleFixture.ts` hardcoded `blink_count_full: 30, blink_count_micro: 2, blink_count_incomplete: 8`
+for **all ten conditions** — constant — while `incomplete_blink_ratio` varied 0.050 to 0.329. Two
+consequences:
+
+**The exported row contradicted itself.** `n_incomplete = 8` beside `n_blinks_total = 40` is 0.2,
+printed next to a ratio column reading 0.05. The codebook instructs an analyst to re-derive the
+proportion from the counts, and doing so disagreed with the column in every one of the ten rows.
+Verified directly: ratio-from-counts was 0.2000 in all ten while the column ran 0.05 to 0.329.
+
+**The primary model estimated nothing.** Both templates build the response from the COUNTS, never
+from the ratio column, so the response was constant. Every coefficient came back zero to machine
+precision with NaN standard errors — and the gate's assertion was that the section's *title* appeared
+in the output. Green, on a pre-registered primary model that had fitted nothing.
+
+**Fixed by derivation rather than by new constants.** `blinkTotalFor`, `blinkMicroFor`,
+`blinkIncompleteFor` and `blinkFullFor` now vary per condition, and `ibrFor` is computed FROM them, so
+the ratio cannot disagree with its own numerator and denominator. The denominator varies deliberately
+(35 to 62): the reason the outcome is modelled binomially at all is that a proportion from 35 blinks
+is not the same measurement as one from 62, and a constant denominator cannot exercise that. Both
+existing assertions on `ibrFor` kept passing without edit, because they compare against the helper —
+and they now mean something.
+
+**The reading exposure was the root incoherence.** `readingMs` gave 61-72 s for ~580-word passages,
+which is 480-560 words per minute; the app's own skim detector flags anything above 400. So the
+fixture whose comment calls it "a normal first pass through the protocol" was a participant the app
+classified as **skimming all ten passages**, with engagement `warn` and a quality score of 0.6 on
+every row — and no test asserted the flags either way, so nothing said so. Raised to ~175-186 s,
+which matches the shipped exposure the timing model is built around. Blink rates now land at 12-20
+per minute instead of three times that, and reading speed at 186-202 wpm. `ear_sample_count` was also
+still 5340, coherent with the *old* hardcoded 178,000 ms and left behind when that was removed —
+implying 87 fps against an `effective_fps` of 29.4 in the same record. It is derived now.
+
+**The Python template had the same single-folder defect as R.** `load()` read one folder, so the GEE
+was estimated on one participant: ten design cells against ten rows is a saturated fit, every
+standard error NaN or at machine epsilon, no coefficient testable. It now pools across participant
+folders exactly as the R loader does — which matters beyond the gate, because §5b requires the two
+toolchains to agree in sign and significance and they cannot be compared at all if one is fitted on a
+single participant.
+
+The gate now asserts the primary model **estimates**: a `polarity_c` coefficient that is present,
+finite, non-zero beyond machine precision, and carrying a usable standard error. With the old
+constant response all four of those fail.
+
+**An honest note on the mutation test.** Reverting the fixture to constant counts did NOT fail the
+gate, because the gate's own dumper perturbs counts per participant to guarantee a non-degenerate
+response. That is correct for what the gate is for — it tests the template, not the fixture — but it
+means **fixture coherence has no guard of its own**. That is the next piece of work, and the
+remaining incoherences found in the same audit and not yet fixed are listed below.
+
+**Still incoherent in the fixture, not yet acted on:**
+
+- `fatigue_mean` contradicts the mean of its own five item columns in all ten rows (items are constant
+  at 1.6; the derived column runs 1.00 to 4.33), and condition 1 reports `fatigue_delta` of -0.20 —
+  fatigue *fell* — while every item is at or above baseline. `fatigue_delta` is the plan's specified
+  fatigue response.
+- CVS-Q `total_score` contradicts its own per-item columns: baseline 3 against a scorer result of 0,
+  session end 11 against 16. The CVS-Q change is the key secondary outcome.
+- `d_prime` is 6.13 where the production scorer on the fixture's own counts gives 3.343, `criterion`
+  -1.68 against -0.288, and `d_prime_se` 0.4 with `d_prime_unstable: false` where the production rule
+  makes it true. A d-prime of 6.13 is not a physiologically possible sensitivity. The fixture's own
+  comment claims it matches the production scorer's log-linear correction; the production scorer
+  deliberately uses the 1/(2N) rule and says so.
+- `rtSummaryFor` documents "one miss and one false alarm per condition" and produces neither: the
+  miss is gated on a trial index that is not a signal trial, so hit rate is 1.0 — a ceiling — in every
+  condition.
+- `mean_rt_hits_ms` is a hardcoded constant that at condition 9 sits 4.7 SD above the median exported
+  beside it, and `lapse_count` claims lapses in five conditions whose slowest trial is 365 ms against
+  a 600 ms threshold.
+- `media.checksum_fnv1a` is `'00000000'` where the real FNV-1a of the blob is `3286d3b6`, so the
+  media-integrity claim the codebook makes for that column is unverified end to end.
+- In the fuzz harness: the head-pose property is gated on all 478 landmarks being finite when each has
+  a 10% chance of NaN, so it executes with probability ~1e-44 and the block degenerates to "does not
+  throw"; and the gaze property asserts only that a threshold is finite and positive, which is true by
+  construction for every possible input.

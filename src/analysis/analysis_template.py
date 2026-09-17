@@ -31,13 +31,43 @@ import os
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+import glob
 import statsmodels.formula.api as smf
 
-DATA_DIR = "."
+# Point DATA_DIR at one exported folder, OR at a folder containing one per participant.
+# VISULAB_DATA_DIR overrides it from the environment, so scripts/verifyAnalysis.mjs can run this
+# file against a fixture WITHOUT editing it — the gate then checks the bytes the analyst is given.
+DATA_DIR = os.environ.get("VISULAB_DATA_DIR", ".")
 
 
 def load(name: str) -> pd.DataFrame:
-    return pd.read_csv(os.path.join(DATA_DIR, name))
+    """Load one numbered export file, pooled across every participant folder found.
+
+    The app exports ONE FOLDER PER SITTING, so 130 participants is 130 folders. This used to read a
+    single folder, which meant the GEE below was estimated on one participant: the design has ten
+    cells and a sitting has ten rows, so the fit was saturated, every standard error came out NaN or
+    at machine epsilon, and no coefficient could be tested. The documented instruction therefore
+    described a run that cannot produce the thesis result, and the alternative was concatenating 130
+    folders by hand — which analysisExport.ts calls out as "where analysis errors are actually
+    introduced: a mis-sorted join, a participant counted twice, a sitting silently missing".
+
+    The R template was corrected the same way. Keeping the two loaders equivalent matters, because
+    ANALYSIS_PLAN.md 5b requires the two toolchains to agree in sign and in significance, and they
+    cannot be compared at all if one of them is fitted on a single participant.
+
+    A single exported folder still yields exactly one match, so that case behaves as before.
+    """
+    matches = sorted(glob.glob(os.path.join(DATA_DIR, "**", name), recursive=True))
+    if not matches:
+        raise FileNotFoundError(
+            f"no {name} found under DATA_DIR ({os.path.abspath(DATA_DIR)}). "
+            "Point DATA_DIR at an exported folder, or at a folder of them."
+        )
+    # Concatenated with the dtypes re-inferred over the POOLED frame. pandas types each file
+    # independently, so a column that is empty for participant 001 and numeric for 002 would come
+    # back as object in one and float in the other, and the concat would silently upcast to object —
+    # which is how the condition_id join in this file failed once before.
+    return pd.concat([pd.read_csv(m) for m in matches], ignore_index=True)
 
 
 def main() -> None:

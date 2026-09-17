@@ -45,10 +45,53 @@ export const FIXTURE = {
   t0: 1_700_000_000_000,
 } as const;
 
-export const readingMs = (i: number) => 61000 + i * 1234;
+/*
+ * Reading exposure, raised from 61-72 s to ~175-186 s.
+ *
+ * The corpus passages run to about 580 words, so 61 s was 560 words per minute — and the app's own
+ * skim detector flags anything above 400 wpm. The "normal first pass through the protocol" fixture
+ * was therefore a participant the app classified as SKIMMING all ten passages, and every export and
+ * aggregate test built on it ran down the skim-penalised branch with engagement `warn` and a quality
+ * score of 0.6. No test asserted the flags either way, so nothing said so.
+ *
+ * ~175 s also matches the shipped reading exposure the timing model is built around, which makes the
+ * derived blink rates below land in the physiological range instead of at three times it.
+ */
+export const readingMs = (i: number) => 175000 + i * 1234;
 export const fatigueMean = (i: number) => Math.round((1 + i * 0.37) * 100) / 100;
-export const ibrFor = (i: number) => Math.round((0.05 + i * 0.031) * 1000) / 1000;
-export const blinkRateFor = (i: number) => Math.round((12 + i * 0.9) * 10) / 10;
+
+/*
+ * THE PRIMARY OUTCOME'S COUNTS, and the ratio DERIVED from them.
+ *
+ * The fixture used to hardcode 30 full / 2 micro / 8 incomplete for all ten conditions — constant —
+ * while `incomplete_blink_ratio` varied 0.050 to 0.329. Two consequences, both bad:
+ *
+ * 1. The exported row CONTRADICTED ITSELF. n_incomplete=8 beside n_blinks_total=40 is 0.2, printed
+ *    next to a ratio column saying 0.05. The codebook tells an analyst to re-derive the proportion
+ *    from the counts, and doing so disagreed with the column in all ten rows.
+ * 2. Both analysis templates build the primary response from the COUNTS, never from the ratio
+ *    column. So the response was constant, every coefficient came out zero to machine precision
+ *    with NaN standard errors, and the gate's assertion — a check that the section's TITLE appears
+ *    in the output — stayed green while the pre-registered primary model estimated nothing.
+ *
+ * Now the counts vary and the ratio is computed FROM them, so the two cannot disagree. The
+ * denominator varies too, deliberately: the whole reason the outcome is modelled binomially is that
+ * a proportion from 35 blinks is not the same measurement as one from 62, and a fixture with a
+ * constant denominator cannot exercise that.
+ */
+export const blinkTotalFor = (i: number) => 35 + i * 3;
+export const blinkMicroFor = (i: number) => i % 3;
+export const blinkIncompleteFor = (i: number) => Math.round(blinkTotalFor(i) * (0.05 + i * 0.031));
+export const blinkFullFor = (i: number) => blinkTotalFor(i) - blinkMicroFor(i) - blinkIncompleteFor(i);
+/** Derived, so the exported ratio agrees with the exported numerator and denominator. */
+export const ibrFor = (i: number) =>
+  Math.round((blinkIncompleteFor(i) / blinkTotalFor(i)) * 10000) / 10000;
+/** Blinks per minute implied by the same counts over the same observed exposure. */
+export const blinkRateFor = (i: number) =>
+  Math.round((blinkTotalFor(i) / (readingMs(i) / 60000)) * 10) / 10;
+/** Complete blinks per minute, from blinkFullFor rather than a flat 0.8 of the total rate. */
+export const blinkRateFullFor = (i: number) =>
+  Math.round((blinkFullFor(i) / (readingMs(i) / 60000)) * 10) / 10;
 export const rtFor = (i: number) => 340 + i * 7;
 
 export interface FixtureOptions {
@@ -371,11 +414,15 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       // exposure it was observing. ANALYSIS_PLAN.md §5.4 has the analyst divide one by the other to
       // find a truncated exposure, so an incoherent pair made that check untestable — it can never
       // fire on a ratio that is always well above 1.
-      observed_duration_ms: readingMs(i), ear_sample_count: 5340,
+      observed_duration_ms: readingMs(i),
+      // Samples the camera would actually have taken over that exposure at this frame rate. The
+      // hardcoded 5340 was coherent with the OLD 178,000 ms constant and survived its removal, which
+      // left it implying 87 fps against an effective_fps of 29.4 in the same record.
+      ear_sample_count: Math.round(29.4 * (readingMs(i) / 1000)),
       // Slightly below the 0.312 calibration baseline: the open eye drifts down over a sitting.
       open_ear_measured: 0.298,
       blink_rate: blinkRateFor(i),
-      blink_rate_full: Math.round(blinkRateFor(i) * 0.8 * 10) / 10,
+      blink_rate_full: blinkRateFullFor(i),
       incomplete_blink_ratio: ibrFor(i),
       blink_duration_mean_ms: 180,
       bins: {
@@ -389,9 +436,9 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       long_closure_count: 0,
       long_closure_total_ms: 0,
       blink_rate_micro: 0.4,
-      blink_count_full: 30,
-      blink_count_micro: 2,
-      blink_count_incomplete: 8,
+      blink_count_full: blinkFullFor(i),
+      blink_count_micro: blinkMicroFor(i),
+      blink_count_incomplete: blinkIncompleteFor(i),
       ear_baseline: 0.312,
       ear_threshold_used: 0.234, ear_complete_threshold: 0.234,
       head_pitch_mean: -3.2,
