@@ -5,7 +5,7 @@
  */
 import type { SessionBundle } from '@/storage/gather';
 import { CONFIG } from '@/experiment/config';
-import { FPS_RATIO_THRESHOLD } from '@/tracking/blink';
+import { FPS_RATIO_THRESHOLD, FPS_TIER_THRESHOLD } from '@/tracking/blink';
 import type { FatigueRecord, DisplayPerceptionRecord, ComprehensionRecord, RtSummaryRecord, EyeMetricsRecord } from '@/storage/types';
 import { PASSAGES } from '@/experiment/passages';
 
@@ -408,7 +408,20 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
     const offAxis = cameraActive ? (eye?.off_axis_ratio ?? null) : null;
 
     const facePresenceFlag: QcFlag = cameraActive ? flag(facePresence, 0.8, 0.5) : 'warn';
-    const fpsFlag: QcFlag = cameraActive ? flag(fps, 25, 15) : 'warn';
+    /*
+     * Judged on FPS_RATIO_THRESHOLD, not FPS_TIER_THRESHOLD.
+     *
+     * This read `flag(fps, 25, 15)`. 25 is the floor for the micro/partial TIERS; the primary
+     * outcome needs 30, and tests/ocularIntegrity.test.ts exists to assert that gap — "27 fps is
+     * fine for the tiers and not fine for the ratio". So a condition at 26-29.9 fps was flagged
+     * `good`, coloured green in the QC table, and rolled up into a `good` qc.overall, while this
+     * same file's own reason string said the ratio for that condition is biased upward. The caveat
+     * existed as prose in a different table from the green tick the operator was reading.
+     *
+     * Now: good only at or above the ratio threshold, warn between the two floors — the band where
+     * the tiers are usable and the primary outcome is not — and bad below the tier floor.
+     */
+    const fpsFlag: QcFlag = cameraActive ? flag(fps, FPS_RATIO_THRESHOLD, FPS_TIER_THRESHOLD) : 'warn';
     const offAxisFlag: QcFlag = cameraActive ? flag(offAxis, 0.2, 0.4, false) : 'warn';
     // Lighting: 'good' is in range; 'low'/'overexposed' degrade blink/EAR detection → warn.
     const lightingQuality = cameraActive ? (eye?.lighting_quality ?? null) : null;
@@ -485,9 +498,23 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       clarity_score: perc?.text_clarity_score ?? null,
 
       camera_active: cameraActive,
-      blink_rate: eye?.blink_rate ?? null,
-      blink_rate_full: eye?.blink_rate_full ?? null,
-      incomplete_blink_ratio: eye?.incomplete_blink_ratio ?? null,
+      /*
+       * Gated on camera_active, which the eight ocular fields below already were and these three —
+       * including the PRIMARY OUTCOME — were not. aggregator.ts says why in terms: "camera_active =
+       * false is not a sufficient guard on its own: it puts the burden on every downstream consumer
+       * to remember to filter, and the app's own dashboard did not." The defence was added to eight
+       * fields and omitted from the three that matter most.
+       *
+       * The live writer nulls everything when the camera is off, so this is not currently reachable
+       * from a fresh run — but the shape is representable and exists in the repo's own fixtures and
+       * fuzz generator, and a restored backup from an older schema would display
+       * "incomplete-blink ratio 0" and "blink rate 0/min" for a condition the QC table beside it
+       * labels camera-off. A zero primary outcome reads as the cleanest possible result. The gate
+       * costs nothing.
+       */
+      blink_rate: cameraActive ? (eye?.blink_rate ?? null) : null,
+      blink_rate_full: cameraActive ? (eye?.blink_rate_full ?? null) : null,
+      incomplete_blink_ratio: cameraActive ? (eye?.incomplete_blink_ratio ?? null) : null,
       mean_inter_blink_interval_ms: cameraActive ? (eye?.mean_inter_blink_interval_ms ?? null) : null,
       perclos_p80: cameraActive ? (eye?.perclos_p80 ?? null) : null,
       perclos_p70: cameraActive ? (eye?.perclos_p70 ?? null) : null,

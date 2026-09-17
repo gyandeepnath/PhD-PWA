@@ -48,8 +48,23 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
     });
   }, [sessionId]);
 
+  /*
+   * Cleared and guarded, because the header re-renders with the NEW participant immediately while
+   * this gather is still in flight.
+   *
+   * Without the clear, every tab kept rendering the previous participant's numbers under the newly
+   * selected name until IndexedDB answered — a visible window on a tablet gathering ten conditions
+   * of eye metrics, with nothing on screen saying so. Without the cancellation guard, switching
+   * A -> B -> C quickly leaves whichever gather resolves LAST in control, so B's data can sit under
+   * C's name indefinitely. On a screen whose purpose is deciding whether to re-run a participant,
+   * that is the worst available failure. The cohort effect below already used this pattern.
+   */
   useEffect(() => {
-    if (sessionId) gatherSession(sessionId).then(setBundle);
+    if (!sessionId) { setBundle(null); return; }
+    let cancelled = false;
+    setBundle(null);
+    gatherSession(sessionId).then((b) => { if (!cancelled) setBundle(b); });
+    return () => { cancelled = true; };
   }, [sessionId]);
 
   /*
@@ -309,10 +324,31 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
 
       {bundle && tab === 'overview' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-          <Stat label="Conditions completed" value={`${summaries.filter((s) => s.mean_rt_hits_ms != null).length}/${summaries.length}`} />
+          {/*
+            Counted on hit_rate, not on mean_rt_hits_ms.
+            mean_rt_hits_ms is null when there were no valid non-anticipatory hits — which is exactly
+            what a participant who stopped responding to the go target produces. That condition RAN,
+            and produced a damning result, and this tile called it "not completed": the operator reads
+            9/10, concludes condition 7 never happened, and re-runs it. hit_rate is null only when the
+            block contained no signal trials at all, and its own type comment makes that distinction:
+            "a hit rate of zero is a real and damning measurement... not the same statement as 'this
+            block contained no signal trials'".
+          */}
+          <Stat label="Conditions completed" value={`${summaries.filter((s) => s.hit_rate != null).length}/${summaries.length}`} />
           <Stat label="Mean RT (hits)" value={fmt(avg(summaries.map((s) => s.mean_rt_hits_ms)), 'ms')} />
           <Stat label="Mean fatigue Δ vs baseline" value={fmt(avg(summaries.map((s) => s.fatigue_delta)))} />
-          <Stat label="Comprehension accuracy" value={fmt(100 * (avg(summaries.map((s) => s.comprehension_correct)) ?? 0), '%')} />
+          {/*
+            The ?? 0 used to sit INSIDE the multiplication, so a null average became 0 before fmt
+            could render it as an em dash, and a sitting where comprehension was never administered
+            displayed "0%" — which reads as "answered every question wrong" and is a strong signal to
+            exclude or re-run. The aggregator goes out of its way to keep this null rather than 0
+            (aggregate.ts: "never 0, which would read as 'attempted and got none right'"), and the
+            display threw that guarantee away. Its two neighbours above were always correct.
+          */}
+          <Stat label="Comprehension accuracy" value={(() => {
+            const acc = avg(summaries.map((s) => s.comprehension_correct));
+            return acc == null ? fmt(null) : fmt(100 * acc, '%');
+          })()} />
           <Stat label="Camera QC (conditions OK)" value={`${summaries.filter((s) => s.qc.overall === 'good').length}/${summaries.length}`} />
           <Stat label="Engagement (conditions OK)" value={`${summaries.filter((s) => s.engagement === 'good').length}/${summaries.length}`} />
         </div>

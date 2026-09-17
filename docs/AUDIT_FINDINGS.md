@@ -1476,3 +1476,60 @@ uuid and a resumed sitting re-runs calibration.
 
 The `ANALYSIS_CODEBOOK` completeness test caught all three immediately — it requires every
 `analysis_long` column to be documented, and named exactly the three I had added.
+
+## Round 18 — the dashboard's own numbers
+
+The operator uses this screen to decide whether a sitting worked and whether to re-run a participant,
+so a plausible-looking wrong number here gets acted on. The aggregation was well covered; the
+DISPLAY was not covered at all, and four defects lived in that gap.
+
+**"Comprehension accuracy 0%" for a sitting where comprehension was never administered.** The tile
+read `fmt(100 * (avg(...) ?? 0), '%')` — the `?? 0` inside the multiplication, so the null was
+consumed before the formatter could render it as an em dash. `0%` reads as "answered every question
+wrong", which is a strong reason to exclude or re-run a participant. The aggregator goes out of its
+way to keep this value null, with a comment saying "never 0, which would read as 'attempted and got
+none right'", and the display threw that guarantee away. Its two neighbouring tiles were always
+correct, which is what made it easy to miss.
+
+**"Conditions completed 9/10" for a sitting where all ten ran.** The count filtered on
+`mean_rt_hits_ms != null`, which is null when there were no valid non-anticipatory hits — exactly
+what a participant who stops responding to the go target produces. That condition ran, and produced
+a damning result, and the tile called it not completed; the operator re-runs a condition that did
+happen. Now counted on `hit_rate`, whose own type comment draws the distinction: a hit rate of zero
+is a measurement, null means the block had no signal trials.
+
+**One participant's numbers under another's name.** The gather effect had no cancellation guard and
+did not clear the bundle. The header re-renders with the new participant immediately, so every tab
+kept showing the previous participant's data under the new name until IndexedDB answered — and
+switching A to B to C quickly left whichever gather resolved LAST in control, so B's numbers could
+sit under C's name indefinitely. The cohort effect added in Round 15 already used the guard this one
+lacked.
+
+**A camera fast enough for the tiers, flagged good for the ratio.** `qc.fps` was `flag(fps, 25, 15)`,
+and 25 is `FPS_TIER_THRESHOLD`; the primary outcome needs `FPS_RATIO_THRESHOLD` = 30, and
+`tests/ocularIntegrity.test.ts` exists to assert that gap. So 26-29.9 fps was flagged `good`,
+coloured green, and rolled into a `good` overall — while this same file's reason string said the
+ratio for that condition is biased upward. The caveat existed as prose in a different table from the
+tick the operator reads. Now good only at or above the ratio threshold, warn in the band between the
+two floors.
+
+**A test was asserting the defect.** `tests/export.test.ts` carried
+`expect(s[0].qc.overall).toBe('good') // fps 28`. Corrected, with a tripwire on the boundary itself
+so moving the line back to the tier floor fails.
+
+**Also gated three ocular fields that had escaped it.** `blink_rate`, `blink_rate_full` and
+`incomplete_blink_ratio` — the primary outcome among them — were not gated on `camera_active`, while
+their eight neighbours were. `aggregator.ts` says why in terms: "camera_active = false is not a
+sufficient guard on its own: it puts the burden on every downstream consumer to remember to filter,
+and the app's own dashboard did not." The live writer nulls everything when the camera is off, so
+this is not reachable from a fresh run today, but the shape exists in the repo's own fixtures and
+fuzz generator and a restored backup would display a zero primary outcome for a camera that never
+ran. The gate costs nothing.
+
+**Reported and not acted on, for a later round:** the per-sitting view still shows the
+incomplete-blink ratio without `blink_count_total` beside it, so a ratio from 4 blinks carries the
+same visual authority as one from 60 — the cohort tab surfaces that denominator and the per-sitting
+view, which is the one used while the participant is still in the chair, does not. A sitting that
+continued without an EAR baseline also still reports QC `good` on every row with a blink rate of
+0/min, because the camera genuinely is running well and only the baseline is missing; `ConditionSummary`
+carries no baseline or `observed_duration_ms` field for the dashboard to show.

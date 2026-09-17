@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { FPS_RATIO_THRESHOLD, FPS_TIER_THRESHOLD } from '@/tracking/blink';
 import { buildConditionSummaries, baselineFatigueMean } from '@/dashboard/aggregate';
 import { buildExportFiles, escapeCsv, toCsv, fnv1a } from '@/storage/export';
 import type { SessionBundle } from '@/storage/gather';
@@ -84,11 +85,38 @@ describe('condition aggregation', () => {
     expect(s[0].fatigue_delta).toBe(1); // 2 - 1
     expect(s[1].fatigue_delta).toBe(3); // 4 - 1
   });
-  it('flags QC: good camera condition vs camera-off condition', () => {
+  it('flags QC: a camera fast enough for the tiers but not for the ratio is WARN, not good', () => {
+    /*
+     * This asserted `good` at 28 fps, and in doing so encoded the defect.
+     *
+     * 28 is above FPS_TIER_THRESHOLD (25) and below FPS_RATIO_THRESHOLD (30). In that band the
+     * micro/partial tiers are usable and the PRIMARY OUTCOME is not: below the ratio floor the
+     * sampled minimum EAR is biased upward, so incomplete_blink_ratio comes out inflated — a
+     * directional bias, and aggregate.ts's own reason string says so for this very condition. The
+     * flag said good while the prose beside it said biased, and an operator reads the flag.
+     *
+     * So this now asserts warn. The camera-off case stays warn rather than bad, which is a separate
+     * and deliberate distinction: a refused camera is a valid choice, not a fault.
+     */
     const s = buildConditionSummaries(bundle());
-    expect(s[0].qc.overall).toBe('good'); // fps 28, presence .95, offAxis .1
+    expect(s[0].qc.fps).toBe('warn'); // fps 28: fine for the tiers, not for the ratio
+    expect(s[0].qc.facePresence).toBe('good'); // .95 — the other signals are unaffected
+    expect(s[0].qc.overall).toBe('warn'); // and overall is the worst of them
     expect(s[1].camera_active).toBe(false);
     expect(s[1].qc.overall).toBe('warn'); // camera off -> warn, not bad
+  });
+
+  it('calls the camera good only at or above the frame rate the primary outcome needs', () => {
+    // A tripwire on the boundary itself: the point of the change is that the good/warn line sits at
+    // FPS_RATIO_THRESHOLD, and an edit moving it back to the tier floor must fail here.
+    const at = (fps: number) => {
+      const b = bundle();
+      b.eyeMetrics[0].effective_fps = fps;
+      return buildConditionSummaries(b)[0].qc.fps;
+    };
+    expect(at(FPS_RATIO_THRESHOLD)).toBe('good');
+    expect(at(FPS_RATIO_THRESHOLD - 0.1)).toBe('warn');
+    expect(at(FPS_TIER_THRESHOLD - 0.1)).toBe('bad');
   });
   it('carries the below-AA contrast flag (C4)', () => {
     const s = buildConditionSummaries(bundle());
