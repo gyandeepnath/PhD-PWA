@@ -1330,3 +1330,52 @@ here and adding one for a single branch did not justify a new dependency, so the
 static assertions over the source — the technique `pwaPolicy.test.ts` already uses against
 `vite.config.ts`. That proves the branch and its controls exist and are reachable before `onDone()`.
 It does **not** prove the screen renders correctly. A render test would be stronger.
+
+## Round 14 — the visual-search cap, and censoring that follows the hypothesis
+
+Investigator ruling: the 40 s cap was too tight, with 60 s proposed. The exploration and the outcome.
+
+**What was already there.** "Done searching" is on screen throughout, and the task ends by itself the
+moment the last target is found, recording `voluntary_full`. So early completion already worked and
+the three termination modes already distinguished finishing, giving up and running out of time. Only
+the cap value was open.
+
+**What 60 s costs.** Measured on the shipped timing model at the 177 s reading exposure: median
+sitting 98 min at either value, p95 moving 120 → 121 min. At 90 s it is the same 121 min, because the
+modelled search time rarely reaches 60 s at all. About a minute in the tail.
+
+**What it buys.** A capped block is a lower bound, not a measurement, and the cap only ever binds on a
+participant who has neither finished nor given up — exactly the people whose real search time is
+worth having. It also eases the confound recorded at line 209 of this document: search accuracy is
+`found / target-count` inside a FIXED window, and the corpus runs 8 to 14 targets per passage, so a
+fixed window makes the high-count passages permanently harder. A longer window lets more participants
+finish regardless of count.
+
+Raised to 60 s. `PROTOCOL.md` and the §4 table were updated with it, and the on-screen instruction
+derives the number from the constant, so it followed on its own. **It must not change once collection
+starts** — times under two different caps are not comparable, and the censoring rate is part of what
+the number means.
+
+**The part that matters more than the cap.** A uniform censoring rate biases every condition's mean
+downward by about the same amount, and a between-condition comparison partly survives it. A rate that
+VARIES by condition does not: if low-contrast or dark-polarity blocks hit the cap more often, the
+difference in mean search time is partly a difference in how often the clock ran out — and that bias
+points the same way as the hypothesis, which is the worst available direction. The template reported
+one overall completion rate, which cannot show this.
+
+It now breaks the censoring rate down by polarity and colour, prints the spread in percentage points,
+and if that spread exceeds 10 points says explicitly that the time model must not be read before
+either using the completion outcome or fitting a properly censored model.
+
+**Completion as an outcome in its own right** — the investigator's own suggestion, and it is sound.
+"Did they find every target inside the window" is immune to censoring by construction, because it uses
+the fact that the clock ran out instead of pretending a time was measured, and it is a binomial
+proportion like the primary outcome. It is reported beside the time model rather than instead of it,
+for two reasons stated in the code: it is less powerful, since finishing at 10 s and at 59 s both
+count as success; and it is only informative if it varies, so the template says so and defers to the
+time model when completion is above 95% or below 5%.
+
+**A bug I wrote and the run caught.** `summarise(n_capped = sum(capped), pct_capped = mean(capped))`
+was first written with the count named `capped`. dplyr evaluates those arguments in order and in one
+scope, so the count replaced the logical column before `mean()` read it, and every rate printed as
+1200%. Found by reading the actual output rather than by trusting the code.

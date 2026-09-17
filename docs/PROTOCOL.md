@@ -55,7 +55,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
         → COMPREHENSION     3×4-option MCQ per passage — gist, inference, detail — one row per item (accuracy + RT)
         → DISPLAY_PERCEPTION comfort + clarity, rated IMMEDIATELY after reading (perception fresh)
         → POST_FATIGUE       5-item VAS, immediately after the strongest fatigue inducer (reading)
-        → VISUAL_SEARCH     intro → tap every target word, 40 s limit (selective attention)
+        → VISUAL_SEARCH     intro → tap every target word, 60 s limit (selective attention)
         → REACTION_TIME     pure colour go/no-go (one dot at a RANDOM screen location each trial;
                             respond only to the target colour) — reports RT mean/median/SD/CV,
                             omission & commission errors, d′. (Pure go/no-go by design — no flanker

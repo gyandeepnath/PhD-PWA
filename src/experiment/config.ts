@@ -40,7 +40,28 @@ const BASE_CONFIG = {
   COMPREHENSION_FEEDBACK_MS: 0,
 
   // Visual search: hard time limit.
-  VS_TIME_LIMIT_MS: 40000,
+  /*
+   * 60 s, raised from 40 s. The reasoning, because a cap is a measurement decision:
+   *
+   * A capped block is a LOWER BOUND, not a measurement. Averaging 40 s in as though the participant
+   * finished at 40 s biases the mean downward, and the more blocks hit the cap the worse it gets.
+   * The participant can always leave early — "Done searching" is on screen throughout, and the task
+   * ends by itself the moment the last target is found — so the cap only ever binds on someone who
+   * has neither finished nor given up. Raising it buys real search times from exactly those people.
+   *
+   * It is nearly free. The timing model at the shipped 177 s reading exposure gives a median sitting
+   * of 98 min at either value, and p95 moves from 120 to 121 min; 90 s costs the same, because the
+   * modelled search time rarely reaches even 60 s. The cost is about a minute in the tail.
+   *
+   * It also eases a confound recorded in AUDIT_FINDINGS: search accuracy is found/target-count
+   * inside a FIXED window, and the corpus varies from 8 to 14 targets per passage, so a fixed window
+   * makes the high-count passages systematically harder. A longer window lets more participants
+   * finish regardless of count, which shrinks that difference rather than averaging it away.
+   *
+   * NOT to be changed once collection starts. Search times under two different caps are not
+   * comparable, and the censoring rate is part of what the number means.
+   */
+  VS_TIME_LIMIT_MS: 60000,
 
   // Reaction time — pure colour go/no-go (one dot at a random location; respond only to the target
   // colour), run under the active display condition. Tuned for fatigue/attention-stability goals.

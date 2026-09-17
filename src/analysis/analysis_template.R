@@ -749,6 +749,70 @@ if (!is.null(search) && "search_time_ms" %in% names(search)) {
   } else {
     cat("termination_mode absent — the censoring rate cannot be reported for this export.\n")
   }
+  # -----------------------------------------------------------------------------------------
+  # CENSORING BY CONDITION. This is the part that decides whether the time model means anything.
+  #
+  # A uniform censoring rate biases every condition's mean downward by roughly the same amount, and
+  # a comparison BETWEEN conditions partly survives it. A rate that VARIES by condition does not:
+  # if low-contrast or dark-polarity blocks hit the cap more often, then the conditions are censored
+  # unequally, and the difference in mean search time is partly a difference in how often the clock
+  # ran out. That bias points the same way as the hypothesis, which is the worst possible direction.
+  #
+  # So the rate is broken out by polarity and colour before any coefficient is read.
+  # -----------------------------------------------------------------------------------------
+  if ("termination_mode" %in% names(vs)) {
+    vs$capped <- vs$termination_mode == "time_limit"
+    vs$completed <- vs$termination_mode == "voluntary_full"
+    cat("\ncensoring rate by condition (the number that decides whether the time model is usable):\n")
+    by_cond <- vs %>%
+      group_by(polarity, colour) %>%
+      # n_capped, NOT capped: summarise() evaluates its arguments in order and in the same scope, so
+      # naming the count `capped` replaced the logical column before the next line averaged it —
+      # mean() then returned the COUNT and every rate printed as 1200%.
+      summarise(n = dplyr::n(),
+                n_capped = sum(capped, na.rm = TRUE),
+                pct_capped = round(100 * mean(capped, na.rm = TRUE), 1),
+                pct_completed = round(100 * mean(completed, na.rm = TRUE), 1),
+                .groups = "drop")
+    print(as.data.frame(by_cond))
+    spread_pct <- diff(range(by_cond$pct_capped))
+    cat("\nspread in censoring across conditions:", round(spread_pct, 1), "percentage points\n")
+    if (is.finite(spread_pct) && spread_pct > 10) {
+      cat("*** The censoring rate differs by more than 10 points between conditions. The mean search\n")
+      cat("*** time is then partly a measure of how often the clock ran out, and that bias runs WITH\n")
+      cat("*** the hypothesis. Use the completion model below as the primary search outcome, or fit\n")
+      cat("*** a properly censored model, before drawing any conclusion from the times.\n")
+    }
+
+    # COMPLETION AS AN OUTCOME IN ITS OWN RIGHT — "did they find every target inside the window?"
+    #
+    # This is immune to the censoring problem by construction: it uses the fact that the clock ran
+    # out rather than pretending a time was measured. It is a binomial proportion, the same family
+    # as the primary outcome. It is LESS powerful than a clean time measure, because someone who
+    # finished in 10 s and someone who finished at 59 s both count as a success — so it is reported
+    # beside the time model, not instead of it, and which one is primary depends on the censoring
+    # rate printed above.
+    #
+    # It is also only informative if it VARIES. If nearly everyone completes, or nearly no one does,
+    # there is almost nothing to model and the time measure is the better instrument.
+    cat("\n=== Visual search: completed within the window (binomial, censoring-immune) ===\n")
+    rate <- mean(vs$completed, na.rm = TRUE)
+    cat("overall completion rate:", round(100 * rate, 1), "%\n")
+    if (!is.finite(rate) || rate < 0.05 || rate > 0.95) {
+      cat("completion is near-constant at this cap, so it carries little information — read the time\n")
+      cat("model instead, and note the cap in the limitations.\n")
+    } else {
+      m_vs_done <- tryCatch(
+        glmer(as.formula(paste0("completed ~ polarity * colour", ilx_term,
+                                " + session_position + (1 | participant_id)", re_sitting)),
+              data = vs, family = binomial),
+        error = function(err) NULL
+      )
+      if (is.null(m_vs_done)) cat("the completion model did not fit.\n") else print(summary(m_vs_done))
+    }
+  }
+
+  cat("\n=== Visual search: time, UNCENSORED (read the censoring table above first) ===\n")
   m_vs <- tryCatch(
     lmer(as.formula(paste0("search_time_ms ~ polarity * colour", ilx_term,
                            " + session_position + (1 | participant_id)", re_sitting)),

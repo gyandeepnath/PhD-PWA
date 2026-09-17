@@ -239,6 +239,13 @@ for (let i = 0; i < 12; i++) {
         ['§4 sensitivity is modelled, not just averaged', 'Sensitivity: d-prime'],
         ['§4 visual search is modelled', 'Visual search (secondary'],
         ['the visual-search censoring rate is reported', 'right-censored'],
+        // Uniform censoring biases every condition alike and a between-condition comparison partly
+        // survives it. Censoring that VARIES by condition does not — the difference in mean search
+        // time becomes partly a difference in how often the clock ran out, biased WITH the
+        // hypothesis. So the breakdown matters more than the overall rate.
+        ['censoring is broken down by condition, not just overall', 'censoring rate by condition'],
+        ['the spread in censoring across conditions is quantified', 'spread in censoring across conditions'],
+        ['completion is offered as a censoring-immune outcome', 'completed within the window'],
         ['the uncensored fit declares its own downward bias', 'biased DOWNWARD'],
       ]) ok(`R: ${label}`, rOut.includes(needle), `"${needle}" not in the output`);
 
