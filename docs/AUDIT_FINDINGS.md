@@ -1379,3 +1379,44 @@ time model when completion is above 95% or below 5%.
 was first written with the count named `capped`. dplyr evaluates those arguments in order and in one
 scope, so the count replaced the logical column before `mean()` read it, and every rate printed as
 1200%. Found by reading the actual output rather than by trusting the code.
+
+## Round 15 — an all-participants view, because the dashboard could only see one sitting
+
+Investigator request: see one participant's data and the pooled analysis of everyone at the same
+time, as it accrues, so that a condition or an analysis failing does not go unnoticed.
+
+The dashboard was strictly per-sitting — pick a session, gather that bundle, show its tabs. That
+answers "did this sitting work" and cannot answer "is the study working", and the two fail in
+different ways. A single sitting looks fine while a condition is quietly broken in all of them: a
+colour that never yields usable blink data, a position always thin, an exclusion rule firing far more
+often than expected. Those are visible only across participants, and if they are first noticed at
+analysis the participants have gone home.
+
+**An "All Participants" tab now sits beside the per-sitting ones.** It reads the POOLED file —
+`analysis_long.csv`, via `buildAnalysisDataset` — rather than recomputing from bundles. That is
+deliberate: the numbers shown are the ones the models will actually see, not a parallel calculation
+that can drift from them.
+
+What it surfaces, chosen for what would otherwise hide:
+
+- **Per-condition n, side by side.** Under counterbalancing every condition should accrue at the same
+  rate, so a gap is the earliest visible sign that one is failing rather than lagging. A spread of
+  more than one participant raises an explicit warning.
+- **Rows with a usable outcome, against rows present.** A condition where blinks were never counted is
+  broken, not noisy, and a mean computed over the survivors looks perfectly reasonable.
+- **The blink total behind each mean.** The ratio's precision rests on how many blinks were counted,
+  not on how many rows exist — ten rows of four blinks is not ten measurements.
+- **Exclusion reasons, tallied.** A rule firing far more than expected is a study problem, not a
+  participant problem.
+- **The join and provenance issues** already computed by `checkJoin`, including the mixed-build and
+  mid-sitting-build checks from Round 7.
+
+It recomputes when the session list changes — which is what happens when a sitting finishes — so it
+tracks the study as it is collected instead of being a snapshot someone must remember to refresh.
+
+**Verified as rendering, not merely compiling.** The aggregation has eight unit tests pinning its
+arithmetic, including an empty device and the rule that a blank frame-rate flag is "camera never ran"
+rather than "inadequate" — counting blank as inadequate would invent a camera fault in every sitting
+that declined the camera. On top of that the full-run end-to-end spec now opens the tab and asserts
+the pooled table draws with the right count. A panel that throws on mount would leave the researcher
+with a blank tab and no error, which is worse than no tab at all.

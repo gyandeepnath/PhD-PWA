@@ -7,15 +7,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { get, put } from '@/storage/db';
 import { gatherSession, listSessions, type SessionBundle } from '@/storage/gather';
-import { buildConditionSummaries, baselineFatigueMean, type ConditionSummary } from './aggregate';
+import { buildConditionSummaries, baselineFatigueMean, cohortSummary, type ConditionSummary, type CohortSummary } from './aggregate';
 import { buildExportFiles, downloadExport, downloadSessionMedia } from '@/storage/export';
 import { buildAnalysisDataset } from '@/storage/analysisExport';
 import { BarPanel, LinePanel, type Datum } from './charts';
 import type { SessionRecord } from '@/storage/types';
+import { N_CONDITIONS } from '@/experiment/conditions';
 
-type Tab = 'overview' | 'reaction' | 'fatigue' | 'search' | 'eye' | 'export';
+type Tab = 'overview' | 'cohort' | 'reaction' | 'fatigue' | 'search' | 'eye' | 'export';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
+  { id: 'cohort', label: 'All Participants' },
   { id: 'reaction', label: 'Reaction Time' },
   { id: 'fatigue', label: 'Fatigue' },
   { id: 'search', label: 'Search & Perception' },
@@ -24,6 +26,8 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 const FLAG_COLOR = { good: '#22c97a', warn: '#f5a623', bad: '#e64c4c' } as const;
+const cohortHead: React.CSSProperties = { padding: '6px 10px', fontWeight: 400, whiteSpace: 'nowrap' };
+const cohortCell: React.CSSProperties = { padding: '6px 10px', whiteSpace: 'nowrap' };
 const bar = (s: ConditionSummary[], key: keyof ConditionSummary, flagKey = false): Datum[] =>
   s.map((c) => ({ label: c.condition_label, value: c[key] as number | null, flag: flagKey ? c.qc.overall : undefined }));
 
@@ -34,6 +38,8 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   const [tab, setTab] = useState<Tab>('overview');
   const [exporting, setExporting] = useState(false);
   const [analysisSummary, setAnalysisSummary] = useState<string | null>(null);
+  const [cohort, setCohort] = useState<CohortSummary | null>(null);
+  const [cohortBusy, setCohortBusy] = useState(false);
 
   useEffect(() => {
     listSessions().then((s) => {
@@ -45,6 +51,31 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   useEffect(() => {
     if (sessionId) gatherSession(sessionId).then(setBundle);
   }, [sessionId]);
+
+  /*
+   * The cohort is recomputed whenever the session LIST changes — which is what happens when a
+   * sitting finishes — so the view tracks the study as it is collected rather than being a snapshot
+   * somebody has to remember to refresh. It gathers every session, so it is deliberately not run on
+   * mount of every tab: `sessions` changing is the signal, and the work is skipped while it is empty.
+   */
+  useEffect(() => {
+    if (sessions.length === 0) { setCohort(null); return; }
+    let cancelled = false;
+    setCohortBusy(true);
+    (async () => {
+      const bundles = [];
+      for (const s of sessions) {
+        const b = await gatherSession(s.session_id);
+        if (cancelled) return;
+        if (b) bundles.push(b);
+      }
+      const ds = buildAnalysisDataset(bundles);
+      if (cancelled) return;
+      setCohort(cohortSummary(ds.files, ds.integrity, N_CONDITIONS));
+      setCohortBusy(false);
+    })().catch(() => { if (!cancelled) setCohortBusy(false); });
+    return () => { cancelled = true; };
+  }, [sessions]);
 
   const summaries = useMemo(() => (bundle ? buildConditionSummaries(bundle) : []), [bundle]);
   const baseline = bundle ? baselineFatigueMean(bundle) : null;
@@ -169,6 +200,112 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       </div>
 
       {!bundle && <p className="font-lab text-sm text-[#5a5a7a]">No session data found.</p>}
+
+      {tab === 'cohort' && (
+        <div style={{ display: 'grid', gap: 14 }}>
+          <p className="font-lab text-xs text-[#5a5a7a]">
+            Every participant on this device, pooled the way the analysis pools them — read from
+            analysis_long.csv, so these are the numbers the models will see rather than a parallel
+            calculation that can drift from them. The per-sitting tabs answer “did this sitting work”.
+            This one answers “is the study working”, and those fail in different ways.
+          </p>
+          {cohortBusy && <p className="font-lab text-sm text-[#5a5a7a]">Pooling every session…</p>}
+          {!cohortBusy && cohort == null && <p className="font-lab text-sm text-[#5a5a7a]">No sessions on this device yet.</p>}
+          {cohort != null && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                <Stat label="Participants" value={String(cohort.participants)} />
+                <Stat label="Analysable participants" value={`${cohort.analysable_participants}/${cohort.participants}`} />
+                <Stat label="Condition-runs pooled" value={String(cohort.rows)} />
+                <Stat
+                  label="Smallest / largest condition n"
+                  value={`${cohort.minConditionN} / ${cohort.maxConditionN}`}
+                />
+              </div>
+
+              {cohort.maxConditionN - cohort.minConditionN > 1 && (
+                <div style={{ border: '1px solid #f5a623', borderRadius: 10, padding: '12px 14px', background: '#fffaf0' }}>
+                  <p className="font-lab text-xs" style={{ color: '#8a5a00' }}>
+                    One condition is running behind the others by more than one participant
+                    ({cohort.minConditionN} vs {cohort.maxConditionN}). With a counterbalanced design every
+                    condition should accrue at the same rate, so a gap usually means that condition is
+                    failing or being abandoned rather than simply lagging.
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]" style={{ marginBottom: 6 }}>
+                  Primary outcome by condition
+                </p>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="font-lab" style={{ fontSize: 12, borderCollapse: 'collapse', width: '100%' }}>
+                    <thead>
+                      <tr style={{ textAlign: 'left', color: '#5a5a7a' }}>
+                        <th style={cohortHead}>Condition</th>
+                        <th style={cohortHead}>Polarity</th>
+                        <th style={cohortHead}>Colour</th>
+                        <th style={cohortHead}>n</th>
+                        <th style={cohortHead}>Analysable</th>
+                        <th style={cohortHead}>With outcome</th>
+                        <th style={cohortHead}>Mean IBR</th>
+                        <th style={cohortHead}>Blinks</th>
+                        <th style={cohortHead}>Low fps</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cohort.conditions.map((c) => (
+                        <tr key={c.condition_label} style={{ borderTop: '1px solid #e8e4dc' }}>
+                          <td style={cohortCell}>{c.condition_label}</td>
+                          <td style={cohortCell}>{c.polarity}</td>
+                          <td style={cohortCell}>{c.text_colour}</td>
+                          <td style={cohortCell}>{c.n}</td>
+                          <td style={cohortCell}>{c.n_analysable}</td>
+                          <td style={{ ...cohortCell, color: c.n_with_outcome < c.n ? '#e64c4c' : undefined }}>{c.n_with_outcome}</td>
+                          <td style={cohortCell}>{c.mean_ibr == null ? '—' : c.mean_ibr.toFixed(3)}</td>
+                          <td style={cohortCell}>{c.blinks_total}</td>
+                          <td style={{ ...cohortCell, color: c.n_fps_inadequate > 0 ? '#f5a623' : undefined }}>{c.n_fps_inadequate}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: 6 }}>
+                  “Blinks” is the denominator the ratio actually rests on — ten rows of four blinks is
+                  not ten measurements. “With outcome” below n means rows where no blink was counted at
+                  all; a condition where that is common is broken, not merely noisy.
+                </p>
+              </div>
+
+              {cohort.exclusions.length > 0 && (
+                <div>
+                  <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]" style={{ marginBottom: 6 }}>
+                    Why rows were excluded
+                  </p>
+                  {cohort.exclusions.map((e) => (
+                    <p key={e.reason} className="font-lab text-xs" style={{ color: '#5a5a7a' }}>
+                      {e.n}x — {e.reason}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {cohort.issues.length > 0 && (
+                <div>
+                  <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]" style={{ marginBottom: 6 }}>
+                    Join and provenance checks
+                  </p>
+                  {cohort.issues.map((i, k) => (
+                    <p key={`${i.code}-${k}`} className="font-lab text-xs" style={{ color: i.severity === 'error' ? '#e64c4c' : '#8a5a00', lineHeight: 1.5 }}>
+                      [{i.severity}] {i.code} — {i.detail}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {bundle && tab === 'overview' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
@@ -328,14 +465,14 @@ function OcularTable({ summaries }: { summaries: ConditionSummary[] }) {
         <tbody>
           {summaries.map((s) => (
             <tr key={s.condition_id}>
-              <td style={cell}>{s.condition_label}</td>
-              <td style={cell}>{n(s.blink_rate, 1)}</td>
-              <td style={cell}>{n(s.incomplete_blink_ratio)}</td>
-              <td style={cell}>{n(s.mean_inter_blink_interval_ms, 0)}</td>
-              <td style={cell}>{n(s.perclos_p80)}</td>
-              <td style={cell}>{n(s.perclos_p70)}</td>
-              <td style={cell}>{n(s.long_closure_count, 0)}</td>
-              <td style={cell}>{n(s.effective_fps, 0)}{s.camera_active && !s.fps_adequate_for_tiers ? ' ⚠' : ''}</td>
+              <td style={cohortCell}>{s.condition_label}</td>
+              <td style={cohortCell}>{n(s.blink_rate, 1)}</td>
+              <td style={cohortCell}>{n(s.incomplete_blink_ratio)}</td>
+              <td style={cohortCell}>{n(s.mean_inter_blink_interval_ms, 0)}</td>
+              <td style={cohortCell}>{n(s.perclos_p80)}</td>
+              <td style={cohortCell}>{n(s.perclos_p70)}</td>
+              <td style={cohortCell}>{n(s.long_closure_count, 0)}</td>
+              <td style={cohortCell}>{n(s.effective_fps, 0)}{s.camera_active && !s.fps_adequate_for_tiers ? ' ⚠' : ''}</td>
             </tr>
           ))}
         </tbody>
@@ -351,12 +488,12 @@ function EngagementTable({ summaries }: { summaries: ConditionSummary[] }) {
         <tbody>
           {summaries.map((s) => (
             <tr key={s.condition_id}>
-              <td style={cell}>{s.condition_label}</td>
+              <td style={cohortCell}>{s.condition_label}</td>
               <td style={{ ...cell, fontWeight: 700, color: FLAG_COLOR[s.engagement] }}>{s.engagement}</td>
-              <td style={cell}>{n(s.quality_score)}</td>
-              <td style={cell}>{n(s.reading_time_ms, 0)}</td>
-              <td style={cell}>{n(s.fatigue_response_ms, 0)}</td>
-              <td style={cell}>{s.engagement_reasons.length ? s.engagement_reasons.join('; ') : '—'}</td>
+              <td style={cohortCell}>{n(s.quality_score)}</td>
+              <td style={cohortCell}>{n(s.reading_time_ms, 0)}</td>
+              <td style={cohortCell}>{n(s.fatigue_response_ms, 0)}</td>
+              <td style={cohortCell}>{s.engagement_reasons.length ? s.engagement_reasons.join('; ') : '—'}</td>
             </tr>
           ))}
         </tbody>
@@ -372,9 +509,9 @@ function QcTable({ summaries }: { summaries: ConditionSummary[] }) {
         <tbody>
           {summaries.map((s) => (
             <tr key={s.condition_id}>
-              <td style={cell}>{s.condition_label}</td>
-              <td style={cell}>{s.camera_active ? 'on' : 'off'}</td>
-              <td style={cell}>{n(s.effective_fps, 0)}{s.camera_active && !s.fps_adequate_for_tiers ? ' ⚠' : ''}</td>
+              <td style={cohortCell}>{s.condition_label}</td>
+              <td style={cohortCell}>{s.camera_active ? 'on' : 'off'}</td>
+              <td style={cohortCell}>{n(s.effective_fps, 0)}{s.camera_active && !s.fps_adequate_for_tiers ? ' ⚠' : ''}</td>
               <td style={{ ...cell, color: FLAG_COLOR[s.qc.facePresence] }}>{n(s.face_presence_ratio)}</td>
               <td style={{ ...cell, color: FLAG_COLOR[s.qc.offAxis] }}>{n(s.off_axis_ratio)}</td>
               <td style={{ ...cell, color: FLAG_COLOR[s.qc.lighting] }}>{s.lighting_quality ?? '—'}</td>

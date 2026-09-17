@@ -515,3 +515,150 @@ export function meanOrNull(xs: (number | null)[]): number | null {
   const vals = xs.filter((x): x is number => x != null);
   return vals.length ? vals.reduce((s, x) => s + x, 0) / vals.length : null;
 }
+
+/* ==========================================================================================
+ * COHORT VIEW — every participant at once, beside the one being looked at.
+ *
+ * The dashboard was strictly per-sitting: pick a session, gather that bundle, show its tabs. That
+ * answers "did this sitting work" and cannot answer "is the study working", and the two fail in
+ * different ways. A single sitting looks fine while a condition is quietly broken in all of them; a
+ * colour that never produces usable blink data, a position that is always thin, an exclusion rule
+ * firing far more often than expected. Those are visible only across participants, and if they are
+ * first noticed at analysis the participants have gone home.
+ *
+ * This reads the POOLED analysis file rather than recomputing from bundles, deliberately: the
+ * numbers shown are then the ones the analysis will actually see, not a parallel calculation that
+ * can drift from it.
+ * ========================================================================================== */
+
+export interface CohortConditionRow {
+  condition_label: string;
+  polarity: string;
+  text_colour: string;
+  /** Rows present for this condition across all participants. */
+  n: number;
+  /** Rows the exporter judged analysable. */
+  n_analysable: number;
+  /** Rows with a usable primary outcome — a denominator of at least one blink. */
+  n_with_outcome: number;
+  /** Mean incomplete-blink ratio over rows that have one. Null when none do. */
+  mean_ibr: number | null;
+  /** Total blinks behind that mean. The ratio's precision rests on this, not on n. */
+  blinks_total: number;
+  /** Rows whose frame rate was too low for the ratio to be trusted. */
+  n_fps_inadequate: number;
+}
+
+export interface CohortSummary {
+  participants: number;
+  analysable_participants: number;
+  rows: number;
+  /** One row per condition, in condition_label order. */
+  conditions: CohortConditionRow[];
+  /** condition_label -> how many times it ran at each session position. */
+  positionBalance: Record<string, number[]>;
+  /** Counts of each exclusion_reason actually seen, worst first. */
+  exclusions: { reason: string; n: number }[];
+  /** Blocking and warning issues from the join check. */
+  issues: { code: string; severity: string; detail: string }[];
+  /** The smallest and largest condition n — an early warning that one is falling behind. */
+  minConditionN: number;
+  maxConditionN: number;
+}
+
+/** Minimal RFC-4180 reader. The pooled file is written by toCsv, which quotes and doubles quotes. */
+function readCsv(text: string): Record<string, string>[] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; } else quoted = false;
+      } else field += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else if (c !== '\r') field += c;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  const [head, ...body] = rows.filter((r) => r.length > 1);
+  if (!head) return [];
+  return body.map((r) => Object.fromEntries(head.map((h, i) => [h, r[i] ?? ''])));
+}
+
+const isTrue = (v: string | undefined) => v === 'true' || v === 'TRUE' || v === '1';
+
+/**
+ * Summarise the pooled dataset for the cohort tab.
+ *
+ * `analysisFiles` is what buildAnalysisDataset returns; the long file is located by name rather than
+ * by index so a reordering of the export cannot silently point this at the wrong table.
+ */
+export function cohortSummary(
+  analysisFiles: { filename: string; content: string }[],
+  integrity: { total_participants: number; analysable_participants: number; issues: { code: string; severity: string; detail: string }[] },
+  nConditions: number,
+): CohortSummary {
+  const long = analysisFiles.find((f) => f.filename === 'analysis_long.csv');
+  const rows = long ? readCsv(long.content) : [];
+
+  const byCondition = new Map<string, CohortConditionRow>();
+  const positionBalance: Record<string, number[]> = {};
+  const exclusionCounts = new Map<string, number>();
+
+  for (const r of rows) {
+    const label = r.condition_label || '(unlabelled)';
+    let c = byCondition.get(label);
+    if (!c) {
+      c = {
+        condition_label: label, polarity: r.polarity ?? '', text_colour: r.text_colour ?? '',
+        n: 0, n_analysable: 0, n_with_outcome: 0, mean_ibr: null, blinks_total: 0, n_fps_inadequate: 0,
+      };
+      byCondition.set(label, c);
+    }
+    c.n++;
+    if (isTrue(r.analysable)) c.n_analysable++;
+    // fps_adequate_for_ratio is only meaningful where the camera ran at all; a blank is "unknown",
+    // which is not the same as inadequate and must not be counted as either.
+    if (r.fps_adequate_for_ratio !== '' && !isTrue(r.fps_adequate_for_ratio)) c.n_fps_inadequate++;
+
+    const denom = Number(r.n_blinks_total);
+    const ratio = Number(r.incomplete_blink_ratio);
+    if (Number.isFinite(denom) && denom > 0 && Number.isFinite(ratio)) {
+      // Accumulated as a running sum in mean_ibr, divided out below. The blink total is carried
+      // because it, not the row count, is what the ratio's precision actually rests on.
+      c.mean_ibr = (c.mean_ibr ?? 0) + ratio;
+      c.n_with_outcome++;
+      c.blinks_total += denom;
+    }
+
+    const pos = Number(r.session_position);
+    if (Number.isFinite(pos) && pos >= 0 && pos < nConditions) {
+      (positionBalance[label] ??= Array.from({ length: nConditions }, () => 0))[pos]++;
+    }
+    const reason = (r.exclusion_reason ?? '').trim();
+    if (reason) exclusionCounts.set(reason, (exclusionCounts.get(reason) ?? 0) + 1);
+  }
+
+  const conditions = [...byCondition.values()]
+    .map((c) => ({ ...c, mean_ibr: c.n_with_outcome > 0 && c.mean_ibr != null ? c.mean_ibr / c.n_with_outcome : null }))
+    .sort((a, b) => a.condition_label.localeCompare(b.condition_label));
+
+  const ns = conditions.map((c) => c.n);
+  return {
+    participants: integrity.total_participants,
+    analysable_participants: integrity.analysable_participants,
+    rows: rows.length,
+    conditions,
+    positionBalance,
+    exclusions: [...exclusionCounts.entries()]
+      .map(([reason, n]) => ({ reason, n }))
+      .sort((a, b) => b.n - a.n),
+    issues: integrity.issues,
+    minConditionN: ns.length ? Math.min(...ns) : 0,
+    maxConditionN: ns.length ? Math.max(...ns) : 0,
+  };
+}

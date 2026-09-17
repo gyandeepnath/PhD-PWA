@@ -21,6 +21,20 @@ test('full experiment run writes data and reaches the dashboard', async ({ page 
 
   await expect(page.getByText('Analysis Dashboard')).toBeVisible();
 
+  /*
+   * The cohort tab has to RENDER, not merely compile.
+   *
+   * It pools every session on the device through buildAnalysisDataset and reads analysis_long.csv
+   * back out, so it touches far more machinery than the per-sitting tabs do. Its aggregation is unit
+   * tested; nothing checked that the tab draws. A table that throws on mount would leave the
+   * researcher with a blank panel and no error, which is the one outcome worse than no tab at all.
+   */
+  await page.getByRole('button', { name: 'All Participants' }).click();
+  await expect(page.getByText('Condition-runs pooled')).toBeVisible();
+  await expect(page.getByText('Primary outcome by condition')).toBeVisible();
+  // One sitting of ten conditions has just been driven, so the pooled count must be exactly that.
+  await expect(page.getByText(String(N_CONDITIONS), { exact: true }).first()).toBeVisible();
+
   const c = await dbCounts(page, ['sessions', 'participants', 'conditions', 'rt_summaries', 'cvsq_scores', 'fatigue_scores', 'nasa_tlx', 'comprehension_results', 'display_perception', 'visual_search']);
   expect(c.sessions).toBeGreaterThanOrEqual(1);
   expect(c.participants).toBeGreaterThanOrEqual(1);
