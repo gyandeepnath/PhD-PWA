@@ -727,6 +727,18 @@ export interface CalibrationRecord {
   /** Per-target detection success. */
   targets_detected: number;
   targets_total: number;
+  /**
+   * Usable samples per gaze target, and the trust verdict derived from them.
+   *
+   * targets_detected alone could not distinguish nine targets with two dozen samples each from six
+   * with a single frame each — both satisfy the acceptance rule and both exported
+   * gaze_calibration_valid TRUE. These make the verdict checkable, and make the acceptance bar
+   * revisitable: it is applied live, so without the counts a stricter threshold could never be
+   * applied to data already collected.
+   */
+  samples_per_target?: Record<string, number> | null;
+  gaze_trust?: 'good' | 'thin' | 'unusable' | null;
+  gaze_targets_well_covered?: number | null;
   ear_baseline: number | null;
   /**
    * How many frames of the calibration routine produced a usable EAR.

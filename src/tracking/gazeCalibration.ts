@@ -12,6 +12,12 @@
  */
 import { DEFAULT_GAZE_THRESHOLD } from './gaze';
 
+/** Dwell per gaze target. Long enough to fixate and settle, short enough that nine are tolerable. */
+export const GAZE_DWELL_MS = 800;
+
+/** The frame rate the protocol assumes, used only when the measured rate is unavailable. */
+const NOMINAL_FPS = 30;
+
 /**
  * How many USABLE samples a target must contribute before it counts as covered.
  *
@@ -49,6 +55,20 @@ export interface GazeCalibration {
   hThreshold: number;
   vThreshold: number;
   valid: boolean;
+  /**
+   * Usable samples per target, keyed by target id, for every one of the nine — including the ones
+   * that produced nothing.
+   *
+   * This is the evidence behind the verdict, and without it `valid` was an assertion nobody could
+   * check. Two very different runs reduced to the same `true`: nine targets with two dozen samples
+   * each, and six targets with a single frame each. The operator saw no difference and the export
+   * recorded none, so a calibration that had barely happened was indistinguishable from a good one.
+   *
+   * Keeping the counts also makes the acceptance bar a decision that can be revisited. The bar is
+   * applied live, so without these numbers a stricter threshold could never be applied to data
+   * already collected.
+   */
+  samplesPerTarget: Record<string, number>;
   /**
    * How many targets contributed at least one USABLE sample — the same count the validity test
    * below is decided on. It is returned rather than recomputed by the caller because it was
@@ -115,6 +135,10 @@ export function fitGazeCalibration(raw: Record<string, GazeSample[]>): GazeCalib
    */
   const covered = (a: GazeSample[]) => a.length >= MIN_SAMPLES_PER_TARGET;
   const targetsWithSamples = Object.values(samplesByTarget).filter(covered).length;
+  // Every target appears, including those that produced nothing: a missing key and a zero are the
+  // same fact, and only one of them survives being read by someone else later.
+  const samplesPerTarget: Record<string, number> = {};
+  for (const t of GAZE_TARGETS) samplesPerTarget[t.id] = (samplesByTarget[t.id] ?? []).length;
   const MIN_TARGETS = Math.ceil(GAZE_TARGETS.length * (2 / 3));
   const separableH = edgeH > centerSpreadH * 1.5;
   const separableV = edgeV > centerSpreadV * 1.5;
@@ -129,5 +153,86 @@ export function fitGazeCalibration(raw: Record<string, GazeSample[]>): GazeCalib
     vThreshold: valid ? vThreshold : DEFAULT_GAZE_THRESHOLD,
     valid,
     targetsWithSamples,
+    samplesPerTarget,
   };
+}
+
+/**
+ * Fraction of a target's dwell that must actually have been solved before the target counts as
+ * WELL covered, as opposed to merely counted.
+ *
+ * Derived, not chosen: the expected number of samples is the dwell duration times the frame rate
+ * the camera actually achieved, so this is "at least half the dwell produced a usable landmark
+ * solve" rather than a magic sample count that silently means something different on a slower
+ * tablet. Half is deliberately lenient — it is the bar for a WARNING, not for rejection.
+ */
+export const GAZE_WELL_COVERED_FRACTION = 0.5;
+
+export type GazeTrust = 'good' | 'thin' | 'unusable';
+
+export interface GazeQuality {
+  /** The verdict an operator is shown, and an analyst can filter on. */
+  trust: GazeTrust;
+  /** Targets meeting MIN_SAMPLES_PER_TARGET — the acceptance bar. */
+  covered: number;
+  /** Targets that solved at least GAZE_WELL_COVERED_FRACTION of their dwell. */
+  wellCovered: number;
+  /** Samples the median covered target contributed. */
+  medianSamples: number;
+  /** What a fully solved dwell would have produced at the observed frame rate. */
+  expectedSamples: number;
+  total: number;
+}
+
+/**
+ * Grade a calibration on the evidence behind it, not only on whether it cleared the bar.
+ *
+ * WHY THIS EXISTS. `valid` is a single boolean over a deliberately lenient bar: a target counts as
+ * covered at MIN_SAMPLES_PER_TARGET samples, and two thirds of the targets must be covered. A run
+ * where six of nine targets each produced ONE solved frame therefore satisfies it. The operator was
+ * shown nothing at all in that case — the failure screen fires only when the fit is invalid — so a
+ * calibration that had barely happened looked exactly like a good one, and the sitting exported as
+ * `gaze_calibration_valid`. That is the difference between a calibration and a gesture.
+ *
+ * `trust` is reported, and the caller decides what to do with it. A `thin` verdict is not a failure:
+ * the gaze mapping did fit, and the thresholds it produced may be perfectly serviceable. It means
+ * the fit rests on little evidence and somebody should know that before the participant reads for an
+ * hour and a half.
+ */
+export function gazeQuality(cal: GazeCalibration, effectiveFps?: number): GazeQuality {
+  const counts = GAZE_TARGETS.map((t) => cal.samplesPerTarget[t.id] ?? 0);
+  const covered = counts.filter((n) => n >= MIN_SAMPLES_PER_TARGET).length;
+
+  /*
+   * The reference rate, and an honest note about it: no measured frame rate exists at calibration
+   * time. effective_fps is computed per CONDITION, from the reading exposure, which has not happened
+   * yet. So the expectation is normally the protocol's nominal 30 fps, and a genuinely slower tablet
+   * will therefore look thinner than it is.
+   *
+   * That is the safe direction to be wrong in — it over-warns rather than under-warns — and it is
+   * why the raw per-target counts are reported alongside the verdict instead of only the grade. An
+   * operator looking at "9 of 9 targets, median 11 of 24 expected" can see a slow camera for what it
+   * is; a bare "thin" would leave them guessing.
+   */
+  const fps = Number.isFinite(effectiveFps) && (effectiveFps as number) > 0 ? (effectiveFps as number) : NOMINAL_FPS;
+  const expectedSamples = Math.max(1, Math.round((GAZE_DWELL_MS / 1000) * fps));
+  const wellCoveredBar = Math.max(MIN_SAMPLES_PER_TARGET, Math.ceil(expectedSamples * GAZE_WELL_COVERED_FRACTION));
+  const wellCovered = counts.filter((n) => n >= wellCoveredBar).length;
+
+  const coveredCounts = counts.filter((n) => n >= MIN_SAMPLES_PER_TARGET).sort((a, b) => a - b);
+  const medianSamples = coveredCounts.length === 0
+    ? 0
+    : coveredCounts.length % 2 === 1
+      ? coveredCounts[(coveredCounts.length - 1) / 2]
+      : (coveredCounts[coveredCounts.length / 2 - 1] + coveredCounts[coveredCounts.length / 2]) / 2;
+
+  const trust: GazeTrust = !cal.valid
+    ? 'unusable'
+    // Two thirds of the targets must be WELL covered, mirroring the coverage rule the validity test
+    // applies — the same shape of requirement, held to evidence rather than to presence.
+    : wellCovered >= Math.ceil(GAZE_TARGETS.length * (2 / 3))
+      ? 'good'
+      : 'thin';
+
+  return { trust, covered, wellCovered, medianSamples, expectedSamples, total: GAZE_TARGETS.length };
 }

@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fitGazeCalibration, GAZE_TARGETS, type GazeSample } from '@/tracking/gazeCalibration';
 import { estimateGaze } from '@/tracking/gaze';
 import type { Point } from '@/tracking/blink';
@@ -181,5 +183,124 @@ describe('the per-target coverage bar is the thing that decides coverage', () =>
     // The original audit finding asked for 5. This assertion is a tripwire, not an endorsement:
     // changing the constant must come with changing this line, and with the investigator's decision.
     expect(MIN_SAMPLES_PER_TARGET).toBe(1);
+  });
+});
+
+/*
+ * THE GIMMICK CASE.
+ *
+ * `valid` is one boolean over a deliberately lenient bar, and it could not tell apart a calibration
+ * that happened from one that barely did: nine targets with a full dwell each, and six targets with
+ * a single solved frame each, both returned true, both showed the operator nothing, and both
+ * exported gaze_calibration_valid TRUE. These tests exist to keep that distinction real.
+ */
+describe('gaze quality separates a real calibration from a token one', () => {
+  const spread = (h: number, v: number, n: number) => Array.from({ length: n }, () => ({ h, v }));
+  const run = async (perTarget: number, only?: string[]) => {
+    const { fitGazeCalibration, gazeQuality, GAZE_TARGETS } = await import('@/tracking/gazeCalibration');
+    const all: Record<string, { h: number; v: number }[]> = {
+      cc: spread(0, 0, perTarget),
+      ml: spread(-0.20, 0, perTarget), mr: spread(0.20, 0, perTarget),
+      tc: spread(0, -0.20, perTarget), bc: spread(0, 0.20, perTarget),
+      tl: spread(-0.18, -0.18, perTarget), tr: spread(0.18, -0.18, perTarget),
+      bl: spread(-0.18, 0.18, perTarget), br: spread(0.18, 0.18, perTarget),
+    };
+    const samples = only ? Object.fromEntries(Object.entries(all).filter(([k]) => only.includes(k))) : all;
+    const cal = fitGazeCalibration(samples);
+    return { cal, q: gazeQuality(cal), n: GAZE_TARGETS.length };
+  };
+
+  it('grades a fully tracked nine-point run as good', async () => {
+    // 800 ms at ~30 fps is about 24 samples per target.
+    const { cal, q, n } = await run(24);
+    expect(cal.valid).toBe(true);
+    expect(q.trust).toBe('good');
+    expect(q.wellCovered).toBe(n);
+  });
+
+  it('grades the one-frame-per-target run as thin, though it passes validity', async () => {
+    // THE case. It satisfies the acceptance rule and used to be indistinguishable from the above.
+    const { cal, q } = await run(1);
+    expect(cal.valid).toBe(true);
+    expect(q.trust).toBe('thin');
+    expect(q.wellCovered).toBe(0);
+  });
+
+  it('grades a rejected fit as unusable, never merely thin', async () => {
+    const { cal, q } = await run(24, ['cc', 'mr']);
+    expect(cal.valid).toBe(false);
+    expect(q.trust).toBe('unusable');
+  });
+
+  it('counts a target well covered only past half its dwell', async () => {
+    const { GAZE_DWELL_MS, GAZE_WELL_COVERED_FRACTION } = await import('@/tracking/gazeCalibration');
+    const expected = Math.round((GAZE_DWELL_MS / 1000) * 30);
+    const bar = Math.ceil(expected * GAZE_WELL_COVERED_FRACTION);
+    expect((await run(bar)).q.wellCovered).toBe((await run(bar)).n);
+    expect((await run(bar - 1)).q.wellCovered).toBe(0);
+  });
+
+  it('reports the evidence, not only the grade', async () => {
+    // A bare verdict leaves an operator guessing whether the camera is slow or the participant
+    // moved. The counts are what make the warning actionable.
+    const { q, n } = await run(6);
+    expect(q.covered).toBe(n);
+    expect(q.medianSamples).toBe(6);
+    expect(q.expectedSamples).toBeGreaterThan(6);
+  });
+
+  it('records a sample count for every target, including those that produced none', async () => {
+    const { GAZE_TARGETS } = await import('@/tracking/gazeCalibration');
+    const { cal } = await run(24, ['cc', 'ml', 'mr', 'tc', 'bc']);
+    expect(Object.keys(cal.samplesPerTarget).sort()).toEqual(GAZE_TARGETS.map((t) => t.id).sort());
+    expect(cal.samplesPerTarget.tl).toBe(0);
+  });
+});
+
+/*
+ * The warning has to be WIRED, not merely available.
+ *
+ * Deleting the branch that shows it failed no test: the grading above is pure and well covered, and
+ * the screen that acts on it was covered by nothing. There is no DOM-rendering harness in this
+ * project, and adding one for a single branch is not worth a new dependency, so this is a STATIC
+ * assertion over the source — the same technique tests/pwaPolicy.test.ts uses against
+ * vite.config.ts and tests/analysisTemplates.test.ts uses against the R template.
+ *
+ * Be clear about what it does and does not prove. It proves the branch and its controls are present
+ * and reachable from the thin verdict. It does not prove the screen renders correctly. A render test
+ * would be stronger; this is what stops the warning being quietly deleted.
+ */
+describe('the thin-calibration warning is wired into the routine', () => {
+  const source = () =>
+    readFileSync(resolve(__dirname, '..', 'src/start/CalibrationRoutine.tsx'), 'utf8');
+
+  it('branches on the thin verdict before advancing', () => {
+    const src = source();
+    expect(src).toMatch(/gazeQuality\.trust === 'thin'/);
+    // It must come BEFORE onDone(), or the routine advances past its own warning.
+    const branch = src.indexOf("gazeQuality.trust === 'thin'");
+    const done = src.indexOf('onDone();', branch);
+    expect(branch).toBeGreaterThan(-1);
+    expect(done).toBeGreaterThan(branch);
+  });
+
+  it('offers both a re-run and an explicit accept, so the choice is the operator\'s', () => {
+    const src = source();
+    expect(src).toContain('calibration-retry-thin');
+    expect(src).toContain('calibration-accept-thin');
+  });
+
+  it('shows the evidence and not just a verdict', () => {
+    // An operator told only "thin" cannot tell a slow camera from a participant who moved.
+    const src = source();
+    for (const field of ['wellCovered', 'medianSamples', 'expectedSamples', 'covered']) {
+      expect(src).toContain(`gazeQuality.${field}`);
+    }
+  });
+
+  it('says that the primary outcome is unaffected', () => {
+    // Gaze is secondary; the blink thresholds come from the EAR baseline. An operator who thinks a
+    // thin gaze fit has ruined the sitting may abandon a participant who was fine.
+    expect(source()).toMatch(/does NOT affect the primary outcome/i);
   });
 });

@@ -39,6 +39,7 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
   const [busy, setBusy] = useState(false);
   /** Calibration ran but produced no usable fit. Null while there is nothing to report. */
   const [poorFit, setPoorFit] = useState<CalibrationOutcome | null>(null);
+  const [thinFit, setThinFit] = useState<CalibrationOutcome | null>(null);
   /** Calibration threw. Null while there is no error. */
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -85,14 +86,60 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
      * detect: a clean nine-of-nine gaze fit with no EAR baseline advanced silently.
      */
     if (!outcome.gazeValid || outcome.earBaseline == null) { setFailure(null); setPoorFit(outcome); return; }
+    /*
+     * A CALIBRATION CAN PASS AND STILL BE WORTH NOTHING.
+     *
+     * The screen above fires on failure. Nothing fired when the fit was technically valid but rested
+     * on almost no evidence — six of nine targets each contributing a single solved frame satisfies
+     * the acceptance rule, and the operator was shown exactly what a clean nine-of-nine run showed
+     * them: nothing. The sitting then exported as gaze_calibration_valid. That is the difference
+     * between a calibration and a gesture, and it was invisible at the only moment it could be acted
+     * on — while the participant is still in the chair and the routine can be re-run.
+     *
+     * This is a WARNING, not a gate. The mapping did fit and its thresholds may be serviceable, so
+     * the decision stays with the operator; what changes is that they get to make it.
+     */
+    if (outcome.gazeQuality.trust === 'thin') { setFailure(null); setThinFit(outcome); return; }
     onDone();
   };
 
-  const step: CalibrationStep | null = idx >= 0 && poorFit == null && failure == null ? STEPS[idx] : null;
+  const step: CalibrationStep | null =
+    idx >= 0 && poorFit == null && thinFit == null && failure == null ? STEPS[idx] : null;
   const target = step?.kind === 'gaze_target' ? step : null;
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#0a0a12', overflow: 'hidden' }}>
+      {thinFit != null && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', textAlign: 'center', padding: 24 }}>
+          <h1 className="font-serif" style={{ fontSize: 28, fontWeight: 300 }}>Gaze calibration is not trustworthy</h1>
+          <p className="font-lab" style={{ fontSize: 14, color: '#f0d8c8', maxWidth: 560, marginTop: 12, lineHeight: 1.6 }}>
+            It passed the acceptance rule, but only just. {thinFit.gazeQuality.covered} of{' '}
+            {thinFit.gazeQuality.total} targets registered at all, and only{' '}
+            {thinFit.gazeQuality.wellCovered} of {thinFit.gazeQuality.total} were tracked through
+            even half their dwell. The median covered target contributed{' '}
+            {thinFit.gazeQuality.medianSamples} usable readings where a fully tracked dwell would
+            give about {thinFit.gazeQuality.expectedSamples}.
+          </p>
+          <p className="font-lab" style={{ fontSize: 14, color: '#c8d8f0', maxWidth: 560, marginTop: 12, lineHeight: 1.6 }}>
+            A fit from that little evidence is a guess with a threshold attached. Gaze zones for this
+            sitting would be reported as calibrated measurements when they are closer to noise.
+            Usually it is the camera: the face too far away or off to one side, the eyes in shadow,
+            or spectacle glare across the lid margin. Re-running it costs about fifteen seconds.
+          </p>
+          <p className="font-lab" style={{ fontSize: 13, color: '#9aa8c4', maxWidth: 560, marginTop: 12, lineHeight: 1.6 }}>
+            This does NOT affect the primary outcome. Blink thresholds come from the open-eye
+            baseline, which was measured successfully. Only the gaze measures are at stake.
+          </p>
+          <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button onClick={() => { setThinFit(null); start(); }} className="font-lab" data-testid="calibration-retry-thin" style={{ background: '#4f8ef7', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 28px', fontSize: 14, cursor: 'pointer' }}>
+              Re-run calibration →
+            </button>
+            <button onClick={() => { setThinFit(null); onDone(); }} className="font-lab" data-testid="calibration-accept-thin" style={{ background: 'transparent', color: '#c8d8f0', border: '1px solid #46506a', borderRadius: 12, padding: '14px 28px', fontSize: 14, cursor: 'pointer' }}>
+              Accept and continue
+            </button>
+          </div>
+        </div>
+      )}
       {(poorFit != null || failure != null) && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', textAlign: 'center', padding: 24 }}>
           <h1 className="font-serif" style={{ fontSize: 28, fontWeight: 300 }}>Calibration did not succeed</h1>

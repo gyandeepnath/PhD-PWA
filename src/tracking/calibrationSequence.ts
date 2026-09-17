@@ -24,7 +24,7 @@
  * array, so a test that reads it is reading what the participant will actually be taken through.
  */
 import { CONFIG } from '@/experiment/config';
-import { GAZE_TARGETS } from './gazeCalibration';
+import { GAZE_TARGETS, GAZE_DWELL_MS } from './gazeCalibration';
 
 /** Centre fixation, straight ahead, blinking normally. The only window the EAR baseline is fitted from. */
 export interface EarBaselineStep {
@@ -43,8 +43,16 @@ export interface GazeTargetStep {
 
 export type CalibrationStep = EarBaselineStep | GazeTargetStep;
 
-/** Dwell per gaze target. Long enough to fixate and settle, short enough that nine of them are tolerable. */
-export const GAZE_DWELL_MS = 800;
+/*
+ * GAZE_DWELL_MS lives in gazeCalibration.ts and is re-exported here, where it used to be defined.
+ *
+ * It moved because gazeQuality() needs it — the expected sample count for a target is its dwell
+ * times the achieved frame rate — and importing it from here created a cycle: this module already
+ * imports GAZE_TARGETS from there. Both uses sit inside function bodies so the cycle happened to
+ * work, which is exactly the kind of thing that stops working after a bundler reorders modules.
+ * The dwell is a property of the gaze calibration, so it belongs with it.
+ */
+export { GAZE_DWELL_MS } from './gazeCalibration';
 
 /**
  * Pause after a step appears, before sampling starts, so the participant is looking at the thing

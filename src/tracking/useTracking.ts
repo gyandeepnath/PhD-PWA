@@ -34,7 +34,7 @@ const LIVE_HZ = 4;
 import { estimateHeadPose, isOffAxis, noseVerticalFraction } from './headPose';
 import { estimateGaze } from './gaze';
 import { meanLumaFromRGBA } from './lighting';
-import { fitGazeCalibration, GAZE_TARGETS, type GazeCalibration, type GazeSample } from './gazeCalibration';
+import { fitGazeCalibration, gazeQuality as gradeGaze, GAZE_TARGETS, type GazeCalibration, type GazeQuality, type GazeSample } from './gazeCalibration';
 import { v4 as uuidv4 } from 'uuid';
 import { EyeMetricsAggregator, disabledEyeMetrics } from './aggregator';
 import { put } from '@/storage/db';
@@ -164,6 +164,15 @@ export interface CalibrationOutcome {
   earBaseline: number | null;
   /** How many frames of the routine yielded a usable EAR. Distinguishes a thin fit from a solid one. */
   earSamplesUsable: number;
+  /**
+   * How much evidence the gaze fit actually rests on.
+   *
+   * gazeValid is one boolean over a deliberately lenient bar, and it hid the distinction that
+   * matters: nine targets with two dozen samples each, and six targets with a single frame each,
+   * both produced `true` and both showed the operator nothing. This carries the counts so a
+   * calibration that barely happened can be told apart from one that did.
+   */
+  gazeQuality: GazeQuality;
 }
 
 export function useTracking(): TrackingApi {
@@ -558,12 +567,16 @@ export function useTracking(): TrackingApi {
      * can be trusted. It overstated coverage in the only case where it mattered.
      */
     const targetsDetected = cal.targetsWithSamples;
+    const quality = gradeGaze(cal);
     await put('calibration_data', {
       calibration_id: uuidv4(),
       session_id: sessionId,
       is_real_calibration: cal.valid,
       targets_detected: targetsDetected,
       targets_total: GAZE_TARGETS.length,
+      samples_per_target: cal.samplesPerTarget,
+      gaze_trust: quality.trust,
+      gaze_targets_well_covered: quality.wellCovered,
       ear_baseline: earBaseline,
       gaze_h_threshold: cal.valid ? cal.hThreshold : null,
       gaze_v_threshold: cal.valid ? cal.vThreshold : null,
@@ -571,7 +584,7 @@ export function useTracking(): TrackingApi {
       ear_samples_usable: earSamplesUsable,
       calibrated_at: Date.now(),
     });
-    return { gazeValid: cal.valid, earBaseline, earSamplesUsable };
+    return { gazeValid: cal.valid, earBaseline, earSamplesUsable, gazeQuality: quality };
   }, []);
 
   const beginCondition = useCallback(() => {

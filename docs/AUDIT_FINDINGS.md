@@ -1271,3 +1271,62 @@ export as ONE participant."
 
 The split end-to-end suite still passes; its helper now fills the reason, because the gating would
 otherwise have left it timing out on a disabled button — the same failure the lux literal once caused.
+
+## Round 13 — gaze calibration could pass and be worth nothing
+
+The investigator's question was the right one: how does a researcher know the nine-dot routine is not
+a gimmick? The failure path was already handled — an invalid fit or a missing EAR baseline shows
+"Calibration did not succeed" with a retry and an explicit continue-anyway. The gap was on the
+**passing** side.
+
+`valid` is one boolean over a deliberately lenient bar: a target counts as covered at
+`MIN_SAMPLES_PER_TARGET` (currently 1) and two thirds of the targets must be covered. So a run where
+six of nine targets each produced a **single solved frame** satisfies it. In that case the operator
+was shown exactly what a clean nine-of-nine run showed them — nothing — and the sitting exported
+`gaze_calibration_valid` TRUE. Two completely different runs collapsed to the same output, which is
+the difference between a calibration and a gesture, and it was invisible at the only moment it could
+be acted on: while the participant is still in the chair and the routine takes fifteen seconds.
+
+**The evidence is now kept.** `fitGazeCalibration` returns `samplesPerTarget` — a count for every one
+of the nine, including those that produced nothing, because a missing key and a zero are the same
+fact and only one of them survives being read by someone else. This also makes the acceptance bar
+revisitable: it is applied live, so without these counts a stricter threshold could never be applied
+to data already collected.
+
+**The verdict is graded, and the bar is derived rather than chosen.** `gazeQuality()` returns
+`good` / `thin` / `unusable`. A target is *well covered* when it solved at least half its dwell,
+where the expectation is the dwell duration times the frame rate — so it means "at least half the
+dwell produced a usable landmark solve" rather than a magic sample count that silently means
+something different on a slower tablet. `good` requires two thirds of targets well covered, mirroring
+the shape of the validity rule but held to evidence rather than presence.
+
+Stated honestly: there is **no measured frame rate at calibration time** — `effective_fps` is
+computed per condition, from a reading exposure that has not happened yet — so the reference is the
+protocol's nominal 30 fps. A genuinely slower tablet will look thinner than it is. That is the safe
+direction to be wrong in, and it is why the raw counts are reported next to the grade instead of the
+grade alone.
+
+**The operator is now told.** A thin verdict raises "Gaze calibration is not trustworthy", naming the
+numbers — how many targets registered, how many were tracked past half their dwell, the median
+readings against what a full dwell would give — the likely causes, and that re-running costs about
+fifteen seconds. It offers re-run or accept. It is a WARNING, not a gate: the mapping did fit and its
+thresholds may be serviceable, so the decision stays with the operator; what changed is that they get
+to make it. It also says plainly that the primary outcome is unaffected, because an operator who
+believes a thin gaze fit has ruined the sitting might abandon a participant who was fine.
+
+**The analyst can filter.** `gaze_trust` and `gaze_targets_well_covered` are exported, and the
+codebook says which column to use: `gaze_calibration_valid` is TRUE for both `good` and `thin`, so
+`gaze_trust` is the one to filter gaze measures on.
+
+**An import cycle was removed on the way.** `gazeQuality` needs the dwell, and importing it from
+`calibrationSequence` closed a loop — that module already imports `GAZE_TARGETS` from
+`gazeCalibration`. Both uses sat inside function bodies so it happened to work, which is exactly the
+kind of thing that stops working after a bundler reorders modules. The dwell moved to
+`gazeCalibration`, where it belongs, and is re-exported from its old home.
+
+**A gap worth naming.** Deleting the branch that shows the warning failed no test: the grading is pure
+and well covered, the screen acting on it was covered by nothing. There is no DOM-rendering harness
+here and adding one for a single branch did not justify a new dependency, so the wiring is guarded by
+static assertions over the source — the technique `pwaPolicy.test.ts` already uses against
+`vite.config.ts`. That proves the branch and its controls exist and are reachable before `onDone()`.
+It does **not** prove the screen renders correctly. A render test would be stronger.
