@@ -1590,12 +1590,8 @@ remaining incoherences found in the same audit and not yet fixed are listed belo
 
 **Still incoherent in the fixture, not yet acted on:**
 
-- `fatigue_mean` contradicts the mean of its own five item columns in all ten rows (items are constant
-  at 1.6; the derived column runs 1.00 to 4.33), and condition 1 reports `fatigue_delta` of -0.20 —
-  fatigue *fell* — while every item is at or above baseline. `fatigue_delta` is the plan's specified
-  fatigue response.
-- CVS-Q `total_score` contradicts its own per-item columns: baseline 3 against a scorer result of 0,
-  session end 11 against 16. The CVS-Q change is the key secondary outcome.
+- ~~`fatigue_mean` contradicts the mean of its own five items~~ — FIXED in Round 20.
+- ~~CVS-Q `total_score` contradicts its own per-item columns~~ — FIXED in Round 20.
 - `d_prime` is 6.13 where the production scorer on the fixture's own counts gives 3.343, `criterion`
   -1.68 against -0.288, and `d_prime_se` 0.4 with `d_prime_unstable: false` where the production rule
   makes it true. A d-prime of 6.13 is not a physiologically possible sensitivity. The fixture's own
@@ -1613,3 +1609,50 @@ remaining incoherences found in the same audit and not yet fixed are listed belo
   a 10% chance of NaN, so it executes with probability ~1e-44 and the block degenerates to "does not
   throw"; and the gaze property asserts only that a threshold is finite and positive, which is true by
   construction for every possible input.
+
+## Round 20 — a coherence gate over the fixture, and the two outcomes it was wrong about
+
+Round 19 ended on an honest admission: reverting the fixture to constant blink counts did not fail the
+analysis gate, because that gate perturbs counts per participant itself. It tests the template, which
+is what it is for — and it left **fixture coherence with no guard at all**. This is that guard, plus
+the two remaining incoherences that bore on named outcomes.
+
+**Subjective fatigue.** `fatigue_mean` ran 1.00 to 4.33 while the five item columns beside it were
+constant at 2,2,2,1,1 — an item mean of 1.6 — in all ten rows, so `03_fatigue_scores.csv` contradicted
+itself on the response `ANALYSIS_PLAN.md` §4 specifies. Worse, condition 1 reported `fatigue_delta` of
+-0.20 — fatigue *falling* — while every item sat at or above its baseline value.
+
+`src/sim/participant.ts` already did this the right way round: draw the items, take their mean. The
+fixture now does the same. The profile rises fastest on eye strain and slowest on headache, which is
+the ordering an optometrist would expect over time on task, and the baseline is all-ones so the delta
+starts at 0.00 and climbs monotonically to 4.00 instead of opening negative.
+
+**CVS-Q.** `total_score` was 3 against all-zero items, where the real scorer gives 0; and 11 against
+all-one items, where it gives 16. The per-item `freq_*` and `intensity_*` columns are exported beside
+the total, so `13_cvsq.csv` contradicted itself — on the KEY SECONDARY outcome, whose change score the
+fixture put at 8 where its own items say 16. Both rows are now scored by `scoreCvsq`, and
+`symptomatic` comes from the scorer too rather than being asserted separately: it is a comparison
+against `CVSQ_CUTOFF` and there is no reason for a fixture to hold an opinion about it. This also
+means the scorer-to-export path for the key secondary is now exercised end to end, which it never was.
+
+**The gate.** `tests/fixtureCoherence.test.ts` re-derives each field from its own components rather
+than checking that a value round-trips — which is the distinction that matters, because every one of
+these values round-tripped perfectly. Thirteen assertions covering: the ratio against its counts, the
+denominator varying at all, the blink rate against counts over observed exposure, the rate being
+physiologically possible, `ear_sample_count` against `effective_fps`, `fatigue_mean` against its items,
+the delta never falling while items rise, CVS-Q against the scorer, and reading speed against the
+app's own skim ceiling.
+
+Each of the four original defects was reintroduced in turn and the gate failed on every one: constant
+counts 3 failures, constant fatigue items 1, a hand-picked CVS-Q total 2, the old reading exposure 2.
+
+**Still open from the same audit, and now guarded against regression but not yet corrected:** the
+signal-detection block, where `d_prime` is 6.13 against the production scorer's 3.343 on the fixture's
+own counts, `criterion` -1.68 against -0.288, and `d_prime_se` 0.4 with `d_prime_unstable: false`
+where the production rule makes it true; the documented "one miss and one false alarm per condition"
+that the code gates on a non-signal trial index and so never produces, leaving hit rate at a ceiling
+1.0; `mean_rt_hits_ms` as a hardcoded constant sitting 4.7 SD above the median exported beside it;
+`lapse_count` claiming lapses in conditions whose slowest trial is 365 ms against a 600 ms threshold;
+media checksums of `'00000000'` where the real FNV-1a is `3286d3b6`; and in the fuzz harness a
+head-pose property that executes with probability ~1e-44 and a gaze property that is true by
+construction.

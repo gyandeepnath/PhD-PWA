@@ -22,6 +22,7 @@ import { PASSAGES } from '@/experiment/passages';
 import { blockPlan } from '@/experiment/counterbalance';
 import { illuminationForBlock, illuminationOrderFor, summariseLux, specFor } from '@/experiment/illumination';
 import { DB_VERSION } from '@/storage/schemaEnums';
+import { scoreCvsq } from '@/scales/cvsq';
 
 export const FIXTURE = {
   /** Embeds a comma and a quote on purpose: the hardest thing for a CSV writer to get right. */
@@ -58,7 +59,33 @@ export const FIXTURE = {
  * derived blink rates below land in the physiological range instead of at three times it.
  */
 export const readingMs = (i: number) => 175000 + i * 1234;
-export const fatigueMean = (i: number) => Math.round((1 + i * 0.37) * 100) / 100;
+/*
+ * The five fatigue items, and the mean DERIVED from them.
+ *
+ * `fatigue_mean` was `1 + i * 0.37` (1.00 rising to 4.33) while the five item columns beside it were
+ * constant at 2,2,2,1,1 — an item mean of 1.6 — in all ten rows. The exported file therefore
+ * contradicted itself on the plan's specified fatigue response, and condition 1 reported
+ * `fatigue_delta` of -0.20, fatigue FALLING, while every item sat at or above its baseline value.
+ *
+ * `src/sim/participant.ts` already does this the right way round: it draws the items and takes their
+ * mean. Same here. The profile rises fastest on eye strain and slowest on headache, which is the
+ * ordering an optometrist would expect over time on task, and the baseline is all-ones so the delta
+ * starts at zero rather than negative.
+ */
+export const fatigueItemsFor = (i: number) => ({
+  eye_strain: Math.min(10, 1 + Math.round(i * 0.7)),
+  dryness: Math.min(10, 1 + Math.round(i * 0.6)),
+  blur: Math.min(10, 1 + Math.round(i * 0.4)),
+  burning: Math.min(10, 1 + Math.round(i * 0.3)),
+  headache: Math.min(10, 1 + Math.round(i * 0.2)),
+});
+export const FATIGUE_BASELINE_ITEMS = { eye_strain: 1, dryness: 1, blur: 1, burning: 1, headache: 1 } as const;
+const meanOfItems = (it: Record<string, number>) => {
+  const v = Object.values(it);
+  return Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 100) / 100;
+};
+export const fatigueBaselineMean = () => meanOfItems(FATIGUE_BASELINE_ITEMS);
+export const fatigueMean = (i: number) => meanOfItems(fatigueItemsFor(i));
 
 /*
  * THE PRIMARY OUTCOME'S COUNTS, and the ratio DERIVED from them.
@@ -303,7 +330,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       hours_since_sleep: 6,
       eligible: true,
       exclusion_reason: null,
-      baseline_fatigue: 1.2,
+      baseline_fatigue: fatigueBaselineMean(),
       session_id: sid,
     },
     conditions,
@@ -313,8 +340,8 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
         session_id: sid,
         condition_id: null,
         stage: 'baseline',
-        eye_strain: 1, dryness: 1, blur: 2, burning: 1, headache: 1,
-        fatigue_mean: 1.2,
+        ...FATIGUE_BASELINE_ITEMS,
+        fatigue_mean: fatigueBaselineMean(),
         touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true },
         all_touched: true,
         response_time_ms: 9000,
@@ -324,7 +351,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
         session_id: sid,
         condition_id: c.condition_id,
         stage: 'post_condition' as const,
-        eye_strain: 2, dryness: 2, blur: 2, burning: 1, headache: 1,
+        ...fatigueItemsFor(i),
         fatigue_mean: fatigueMean(i),
         touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true },
         all_touched: true,
@@ -332,16 +359,37 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       })),
     ],
     cvsq: [
-      {
-        cvsq_id: 'cvsq-base', session_id: sid, stage: 'baseline', frame: 'habitual_computer_work' as const,
-        frequency: Array(16).fill(0), intensity: Array(16).fill(0),
-        total_score: 3, symptomatic: false, response_time_ms: 41_000,
-      },
-      {
-        cvsq_id: 'cvsq-end', session_id: sid, stage: 'session_end', frame: 'this_session' as const,
-        frequency: Array(16).fill(1), intensity: Array(16).fill(1),
-        total_score: 11, symptomatic: true, response_time_ms: 38_000,
-      },
+      /*
+       * Scored by the REAL scorer, not by a hand-picked total.
+       *
+       * These carried `total_score: 3` against all-zero items (the scorer gives 0) and
+       * `total_score: 11` against all-one items (the scorer gives 16). The per-item freq_* and
+       * intensity_* columns are exported beside the total, so `13_cvsq.csv` contradicted itself —
+       * and on the KEY SECONDARY outcome, whose change score the fixture put at 8 where its own
+       * items say 16. Nothing compared the two, so the whole scorer-to-export path for the key
+       * secondary was unverified end to end.
+       *
+       * `symptomatic` comes from the scorer too, rather than being asserted separately: it is a
+       * comparison against CVSQ_CUTOFF and there is no reason for the fixture to hold an opinion
+       * about it.
+       */
+      ...[
+        {
+          cvsq_id: 'cvsq-base', session_id: sid, stage: 'baseline' as const,
+          frame: 'habitual_computer_work' as const,
+          frequency: Array(16).fill(0) as number[], intensity: Array(16).fill(0) as number[],
+          response_time_ms: 41_000,
+        },
+        {
+          cvsq_id: 'cvsq-end', session_id: sid, stage: 'session_end' as const,
+          frame: 'this_session' as const,
+          frequency: Array(16).fill(1) as number[], intensity: Array(16).fill(1) as number[],
+          response_time_ms: 38_000,
+        },
+      ].map((row) => {
+        const scored = scoreCvsq(row.frequency, row.intensity);
+        return { ...row, total_score: scored.total, symptomatic: scored.symptomatic };
+      }),
     ],
     media: [],
     tlx: [
