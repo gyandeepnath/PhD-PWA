@@ -1420,3 +1420,26 @@ rather than "inadequate" — counting blank as inadequate would invent a camera 
 that declined the camera. On top of that the full-run end-to-end spec now opens the tab and asserts
 the pooled table draws with the right count. A panel that throws on mount would leave the researcher
 with a blank tab and no error, which is worse than no tab at all.
+
+## Round 16 — the per-condition quality file had no join key
+
+`12_quality_flags.csv` carried `participant_id` + `session_index` + `condition_label` and no
+`condition_id`. Every other per-condition table has one, and the analysis templates' own stated rule
+is to join on `condition_id` and NEVER on participant + label, because a label repeats across
+sittings.
+
+So the per-condition quality signals — straight-lining, rushed fatigue and perception responses, low
+face presence, skimmed reading — could not be attached to the modelling frame the safe way at all.
+The R template read `engagement_flag` from the wide summary instead and reported the
+careless-responding flags as study-wide counts. That answers "how often did this happen in the study"
+and cannot answer "was THIS condition for THIS participant rushed", which is the question
+`ANALYSIS_PLAN.md` §5.5 asks. The columns existed in the export and were unusable.
+
+`condition_id` now leads that file. Nothing else had to change: the export verifier's join-key section
+picked it up automatically and the check count rose from 656 to 659, because a declared key column is
+required to carry a value in every row.
+
+The R template now joins those flags per condition and, more usefully, crosses them with the design:
+careless responding that clusters in one polarity is a property of that condition rather than of those
+participants, and a study-wide percentage cannot show that. The gate asserts both the per-condition
+join and the crossing, so neither can silently revert to a count.

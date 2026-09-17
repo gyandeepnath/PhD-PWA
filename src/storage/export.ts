@@ -284,6 +284,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '09_rt_summary.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
   { file: '10_wide_summary.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
   { file: '11_participant.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
+  { file: '12_quality_flags.csv', column: 'condition_id', type: 'string', unit: '-', role: 'id', description: 'Join key for this row, matching 02_conditions.csv and every other per-condition table. Join on THIS, never on participant_id + condition_label: a label repeats across sittings, and without this column the per-condition quality signals in this file could not be attached to the modelling frame at all.' },
   { file: '12_quality_flags.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
   { file: '13_cvsq.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
   { file: '14_nasa_tlx.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code. Join key across every file in the bundle. The PROTOCOL REQUIRES that it carry no identifying information — no name, initials or roll number — and the link to the enrolment record is held separately. The app validates only the character class, not the content: this is a requirement on the operator, not a guarantee the software can make.' },
@@ -757,9 +758,22 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
     participant ? [{ ...participant }] : []);
 
   // 12 — engagement / careless-responding quality flags (boredom & disengagement detection)
+  /*
+   * condition_id leads this file, and its absence was a real defect rather than an omission.
+   *
+   * Every other per-condition table carries it, and the analysis templates' own join rule is to join
+   * on condition_id and NEVER on participant_id + condition_label, because a label repeats across
+   * sittings. This file had only the label, so the per-condition quality signals — straight-lining,
+   * rushed responses, low face presence — could not be joined onto the modelling frame the safe way
+   * at all. The R template therefore read `engagement_flag` from the wide summary and reported the
+   * careless-responding flags only as overall counts, which answers "how often did this happen in the
+   * study" and cannot answer "was THIS condition for THIS participant rushed", which is the question
+   * ANALYSIS_PLAN.md §5.5 actually asks.
+   */
   csv('12_quality_flags.csv',
-    ['participant_id', 'session_index', 'condition_label', 'session_position', 'engagement_flag', 'quality_score', 'blink_count_total', 'insufficient_blinks', 'reading_time_ms', 'fatigue_response_ms', 'perception_response_ms', 'reading_skim', 'reading_interrupted', 'condition_interrupted', 'rt_disengaged', 'careless_rushed_fatigue', 'careless_rushed_perception', 'careless_straight_lined', 'comprehension_wrong', 'low_face_presence', 'reasons'],
+    ['condition_id', 'participant_id', 'session_index', 'condition_label', 'session_position', 'engagement_flag', 'quality_score', 'blink_count_total', 'insufficient_blinks', 'reading_time_ms', 'fatigue_response_ms', 'perception_response_ms', 'reading_skim', 'reading_interrupted', 'condition_interrupted', 'rt_disengaged', 'careless_rushed_fatigue', 'careless_rushed_perception', 'careless_straight_lined', 'comprehension_wrong', 'low_face_presence', 'reasons'],
     summaries.map((s) => ({
+      condition_id: s.condition_id,
       participant_id: pid, session_index: session.session_index, condition_label: s.condition_label,
       session_position: s.session_position, engagement_flag: s.engagement, quality_score: s.quality_score,
       blink_count_total: s.blink_count_total, insufficient_blinks: s.insufficient_blinks,

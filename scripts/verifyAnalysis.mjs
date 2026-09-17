@@ -225,7 +225,12 @@ for (let i = 0; i < 12; i++) {
         ['§5.1 illumination constancy is reported', 'illumination constancy'],
         ['§5.3 participant presence is reported', 'participant present'],
         ['§5.4 exposure completeness is reported', 'exposure completeness'],
-        ['§5.5 careless responding is reported', 'careless responding'],
+        // Per CONDITION, not study-wide. A study-wide rate says how often careless responding
+        // happened; a per-row flag says which rows, which is the only form that can enter a
+        // sensitivity analysis or be crossed with the design factors. It needed condition_id in
+        // 12_quality_flags.csv, which that file did not carry.
+        ['§5.5 careless responding is joined per condition', 'joined per condition on condition_id'],
+        ['careless responding is crossed with the design', 'any careless flag, by polarity'],
         ['flagged rows are retained, not silently dropped', 'RETAINED'],
         // The interaction had no formal test: the line headed "the polarity x colour interaction"
         // called emmeans, which returns marginal MEANS — no contrast, no statistic, no p-value.

@@ -111,6 +111,17 @@ cond <- conditions %>%
   # only engagement_flag, so the specified response was unreachable and the model
   # silently fitted fatigue_mean instead.
   left_join(wide %>% select(condition_id, engagement_flag, fatigue_delta), by = "condition_id") %>%
+  # The careless-responding signals of §5.5, joined PER CONDITION.
+  #
+  # This could not be done before: 12_quality_flags.csv carried only participant_id +
+  # condition_label + session_index, and joining on a label is what the note at the top of this file
+  # warns against because labels repeat across sittings. The flags were therefore reportable only as
+  # study-wide counts, which answers "how often did this happen" and not "was THIS condition for THIS
+  # participant rushed" — the question §5.5 actually asks. The export now carries condition_id in
+  # that file, so the join is the same safe one every other table uses.
+  left_join(quality %>% select(condition_id, careless_straight_lined, careless_rushed_fatigue,
+                               careless_rushed_perception, low_face_presence, reading_skim),
+            by = "condition_id") %>%
   left_join(participant %>%
               select(participant_id, age, gender, daily_screen_hours, correction_type, cvd_status) %>%
               distinct(participant_id, .keep_all = TRUE),
@@ -329,16 +340,27 @@ cat("    below", QC_EXPOSURE_MIN_FRAC, "(ANALYST DEFAULT):  ", qc_pct(sum(short_
 cat("    not computable (a duration missing):", qc_pct(sum(is.na(eye$observed_frac)), nrow(eye)), "\n")
 
 # --- §5.5 Careless responding ----------------------------------------------------------
-# Reported from 12_quality_flags.csv rather than joined onto the modelling frame, and that is a
-# limitation of the FILE, not a shortcut: it carries no condition_id, only participant_id +
-# condition_label + session_index, and joining on the label is what the join note at the top of this
-# file warns against. Counts answer §5.5's question; a per-row merge would need the export to carry
-# the key.
-cat("\n5.5 careless responding (from 12_quality_flags.csv, not joined - see note)\n")
-for (flag in c("careless_straight_lined", "careless_rushed_fatigue", "careless_rushed_perception")) {
-  if (flag %in% names(quality)) {
-    cat("   ", format(flag, width = 30), qc_pct(sum(quality[[flag]] %in% c(TRUE, "true"), na.rm = TRUE), nrow(quality)), "\n")
-  }
+# Now joined per condition rather than counted study-wide, because the export carries condition_id in
+# 12_quality_flags.csv. The distinction matters: a study-wide rate says how often careless responding
+# happened, and a per-row flag says WHICH rows it happened in — which is the only form that can enter
+# a sensitivity analysis or be crossed with the design factors.
+cat("\n5.5 careless responding (joined per condition on condition_id)\n")
+careless_flags <- c("careless_straight_lined", "careless_rushed_fatigue", "careless_rushed_perception")
+present_flags <- careless_flags[careless_flags %in% names(eye)]
+for (flag in present_flags) {
+  cat("   ", format(flag, width = 30), qc_pct(sum(eye[[flag]] %in% c(TRUE, "true"), na.rm = TRUE), nrow(eye)), "\n")
+}
+if (length(present_flags) == 0) {
+  cat("    none of the careless-responding columns reached the modelling frame — check the join.\n")
+}
+# Crossed with the design, because careless responding that clusters in one condition is a
+# property of that condition rather than of those participants.
+if (length(present_flags) > 0) {
+  eye$any_careless <- Reduce(`|`, lapply(present_flags, function(f) eye[[f]] %in% c(TRUE, "true")))
+  by_pol <- eye %>% group_by(polarity) %>%
+    summarise(pct = round(100 * mean(any_careless, na.rm = TRUE), 1), .groups = "drop")
+  cat("    any careless flag, by polarity:",
+      paste(by_pol$polarity, paste0(by_pol$pct, "%"), sep = "=", collapse = ", "), "\n")
 }
 
 # --- §1 complete case ------------------------------------------------------------------
