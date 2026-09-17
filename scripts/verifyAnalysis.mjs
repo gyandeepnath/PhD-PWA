@@ -36,7 +36,7 @@
  * fixture, not of the template.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -266,6 +266,44 @@ for (let i = 0; i < 12; i++) {
       ok('R: fatigue uses the plan-specified response',
         /\[fatigue\] response: fatigue_delta/.test(rOut),
         'the fatigue model did not fit fatigue_delta');
+
+      // §5.4 has to FIRE, not merely print. A check whose count is structurally always zero reads
+      // exactly like a check that passed, and this one was in that state: the fixture's
+      // observed_duration_ms was a hardcoded 178,000 ms against a ~61,000-72,000 ms reading time, so
+      // the observed fraction sat near 2.7 and could never fall below any sane floor. The fixture is
+      // coherent now, which makes a deliberately truncated copy a real test of the check.
+      const shortDir = join(dir, 'r-short');
+      execFileSync('cp', ['-r', rDir, shortDir], { stdio: 'pipe' });
+      const shortFile = join(shortDir, 'P001', '07_eye_metrics.csv');
+      const lines = readFileSync(shortFile, 'utf8').split('\n');
+      const cols = lines[0].split(',');
+      const obsIdx = cols.indexOf('observed_duration_ms');
+      ok('the fixture exposes observed_duration_ms to truncate', obsIdx >= 0,
+        '07_eye_metrics.csv has no observed_duration_ms column');
+      if (obsIdx >= 0) {
+        for (let i = 1; i < lines.length; i++) {
+          if (!lines[i].trim()) continue;
+          const cells = lines[i].split(',');
+          // Halve it: the camera saw half the exposure, and every RATE on the row still looks normal.
+          cells[obsIdx] = String(Math.round(Number(cells[obsIdx]) / 2));
+          lines[i] = cells.join(',');
+        }
+        writeFileSync(shortFile, lines.join('\n'));
+        const shortRun = spawnSync('Rscript', [join(process.cwd(), 'src/analysis/analysis_template.R')], {
+          encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+          env: { ...process.env, VISULAB_DATA_DIR: shortDir },
+        });
+        const shortOut = `${shortRun.stdout}\n${shortRun.stderr}`;
+        ok('R: with a truncated exposure, the template still runs', shortRun.status === 0,
+          (shortRun.stderr || '').trim().split('\n').filter((l) => /^Error/.test(l)).slice(-1).join(' | '));
+        const flagged = /below 0\.9 \(ANALYST DEFAULT\):\s*(\d+)\//.exec(shortOut);
+        ok('R: §5.4 detects a half-length exposure rather than reporting zero',
+          flagged != null && Number(flagged[1]) === 10,
+          `expected 10 flagged rows (one participant x ten conditions), got ${flagged ? flagged[1] : 'no match'}`);
+        ok('R: the flagged rows are counted as failing a §5 check',
+          /rows failing at least one §5 check:\s*10\//.test(shortOut),
+          'the combined qc_clean flag did not pick them up');
+      }
     }
   }
 } finally {

@@ -365,7 +365,13 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       session_id: sid,
       camera_active: true,
       effective_fps: 29.4,
-      fps_adequate_for_tiers: true, fps_adequate_for_ratio: true, observed_duration_ms: 178000, ear_sample_count: 5340,
+      fps_adequate_for_tiers: true, fps_adequate_for_ratio: true,
+      // Derived from the SAME index the reading time is, because a hardcoded 178,000 ms sat beside a
+      // reading_time_ms of ~61,000-72,000 ms: the fixture claimed the camera observed 2.7x the
+      // exposure it was observing. ANALYSIS_PLAN.md §5.4 has the analyst divide one by the other to
+      // find a truncated exposure, so an incoherent pair made that check untestable — it can never
+      // fire on a ratio that is always well above 1.
+      observed_duration_ms: readingMs(i), ear_sample_count: 5340,
       // Slightly below the 0.312 calibration baseline: the open eye drifts down over a sitting.
       open_ear_measured: 0.298,
       blink_rate: blinkRateFor(i),

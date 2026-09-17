@@ -1185,6 +1185,27 @@ and PERCLOS already did, and no section reports a failed fit.
 
 **Still open, unchanged:** whether the template should read the purpose-built `analysis_long.csv`
 rather than reconstructing the modelling unit from the numbered bundle; the split-sitting operator
-toggle; the gaze one-sample acceptance threshold; and the incoherent fixture
-`observed_duration_ms` (hardcoded 178,000 ms against a ~61,000-72,000 ms reading time), which means
-§5.4's threshold behaviour is asserted for presence but never made to fire.
+toggle; and the gaze one-sample acceptance threshold. (The incoherent fixture
+`observed_duration_ms` listed here was closed in Round 10.)
+
+---
+
+## Round 10 — a check that could not fail
+
+§5.4 was added in Round 8 and the gate asserted that it printed. It could not have printed anything
+else. The fixture's `observed_duration_ms` was a hardcoded 178,000 ms sitting beside a
+`reading_time_ms` of ~61,000-72,000 ms, so the fixture claimed the camera had observed 2.7x the
+exposure it was observing. The observed fraction was therefore always well above 1 and the check's
+count was structurally zero — which reads on the console exactly like a check that passed.
+
+This is the same class as the stress suite asserting the manifest's byte count in UTF-16 code units
+(Round 7) and the R fixture whose twelve clones shared condition ids (Round 8): green, and measuring
+nothing. It is worth naming as a pattern, because it is the failure mode that survives longest — a
+broken check announces itself, a vacuous one does not.
+
+`observed_duration_ms` is now derived from the same index `reading_time_ms` is, so a clean fixture
+row says the camera saw the whole exposure. That makes a deliberately truncated copy a real test:
+the gate now copies the fixture, halves `observed_duration_ms` for one participant, re-runs the
+template, and requires §5.4 to report exactly 10 flagged rows — one participant x ten conditions —
+and the combined `qc_clean` flag to pick up the same 10. Nothing in the export depended on the old
+constant; all 810 tests and 653 export checks pass unchanged.
