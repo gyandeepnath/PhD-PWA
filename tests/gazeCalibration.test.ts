@@ -142,3 +142,44 @@ describe('calibration validity requires coverage and both axes', () => {
     expect(cal.valid).toBe(false);
   });
 });
+
+/*
+ * The coverage bar is a METHODS decision, and it used to be a bare `> 0` inside a filter. Naming it
+ * only helps if changing it actually changes the verdict — otherwise the constant is decoration.
+ */
+describe('the per-target coverage bar is the thing that decides coverage', () => {
+  const spread = (h: number, v: number, n: number) => Array.from({ length: n }, () => ({ h, v }));
+  const runWith = async (perTarget: number) => {
+    const { fitGazeCalibration } = await import('@/tracking/gazeCalibration');
+    return fitGazeCalibration({
+      cc: spread(0, 0, perTarget),
+      ml: spread(-0.20, 0, perTarget), mr: spread(0.20, 0, perTarget),
+      tc: spread(0, -0.20, perTarget), bc: spread(0, 0.20, perTarget),
+      tl: spread(-0.18, -0.18, perTarget), tr: spread(0.18, -0.18, perTarget),
+      bl: spread(-0.18, 0.18, perTarget), br: spread(0.18, 0.18, perTarget),
+    });
+  };
+
+  it('accepts a run at exactly the bar, and counts every target', async () => {
+    const { MIN_SAMPLES_PER_TARGET, GAZE_TARGETS } = await import('@/tracking/gazeCalibration');
+    const cal = await runWith(MIN_SAMPLES_PER_TARGET);
+    expect(cal.targetsWithSamples).toBe(GAZE_TARGETS.length);
+    expect(cal.valid).toBe(true);
+  });
+
+  it('counts no target when every dwell falls one sample short of the bar', async () => {
+    const { MIN_SAMPLES_PER_TARGET } = await import('@/tracking/gazeCalibration');
+    // At a bar of 1 this is the empty run; at 5 it is four samples per target. Either way the
+    // verdict must follow the constant rather than a hardcoded `> 0`.
+    const cal = await runWith(MIN_SAMPLES_PER_TARGET - 1);
+    expect(cal.targetsWithSamples).toBe(0);
+    expect(cal.valid).toBe(false);
+  });
+
+  it('documents the bar currently in force, so raising it is a deliberate edit', async () => {
+    const { MIN_SAMPLES_PER_TARGET } = await import('@/tracking/gazeCalibration');
+    // The original audit finding asked for 5. This assertion is a tripwire, not an endorsement:
+    // changing the constant must come with changing this line, and with the investigator's decision.
+    expect(MIN_SAMPLES_PER_TARGET).toBe(1);
+  });
+});

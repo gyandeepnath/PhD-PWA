@@ -12,6 +12,28 @@
  */
 import { DEFAULT_GAZE_THRESHOLD } from './gaze';
 
+/**
+ * How many USABLE samples a target must contribute before it counts as covered.
+ *
+ * This was written as `a.length > 0` — a methods decision spelled as an expression, where nobody
+ * reviewing the protocol would ever find it. It is named here so that it can be read, argued with
+ * and changed in one place.
+ *
+ * WHAT THE CURRENT VALUE MEANS. At 1, a target whose 800 ms dwell yielded a single solved frame
+ * counts the same as one that yielded all of them. At ~30 fps that dwell should produce roughly 24
+ * samples, so such a target had an almost entirely unsolved dwell, and its contribution to the
+ * fitted threshold is one noisy point standing in for a distribution. Six targets in that state
+ * still satisfy the two-thirds coverage rule and the sitting is exported `gaze_calibration_valid`.
+ *
+ * The original audit finding asked for 5. Raising it is a one-line change here, and it is NOT made
+ * unilaterally: the bar decides how many sittings are declared valid, and therefore the analysable
+ * n for every gaze measure. That is the investigator's call, not a tidy-up.
+ *
+ * Gaze is a secondary measure — the primary outcome is the incomplete-blink ratio, whose baseline
+ * is fitted in measureEarBaseline and does not depend on this — so the exposure is bounded.
+ */
+export const MIN_SAMPLES_PER_TARGET = 1;
+
 /** 9 calibration targets at normalised screen positions (col,row in {0,0.5,1}). */
 export const GAZE_TARGETS: { id: string; x: number; y: number }[] = [
   { id: 'tl', x: 0.1, y: 0.1 }, { id: 'tc', x: 0.5, y: 0.1 }, { id: 'tr', x: 0.9, y: 0.1 },
@@ -87,13 +109,17 @@ export function fitGazeCalibration(raw: Record<string, GazeSample[]>): GazeCalib
    *
    * Both axes must now separate, and at least two thirds of the targets must have produced
    * samples, with the centre among them.
+   *
+   * How many samples make a target "covered" is MIN_SAMPLES_PER_TARGET, named above rather than
+   * left as a bare `> 0` in this expression.
    */
-  const targetsWithSamples = Object.values(samplesByTarget).filter((a) => a.length > 0).length;
+  const covered = (a: GazeSample[]) => a.length >= MIN_SAMPLES_PER_TARGET;
+  const targetsWithSamples = Object.values(samplesByTarget).filter(covered).length;
   const MIN_TARGETS = Math.ceil(GAZE_TARGETS.length * (2 / 3));
   const separableH = edgeH > centerSpreadH * 1.5;
   const separableV = edgeV > centerSpreadV * 1.5;
   const valid = targetsWithSamples >= MIN_TARGETS
-    && center.length > 0
+    && covered(center)
     && separableH
     && separableV;
 

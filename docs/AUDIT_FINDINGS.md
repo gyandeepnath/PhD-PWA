@@ -1209,3 +1209,30 @@ the gate now copies the fixture, halves `observed_duration_ms` for one participa
 template, and requires §5.4 to report exactly 10 flagged rows — one participant x ten conditions —
 and the combined `qc_clean` flag to pick up the same 10. Nothing in the export depended on the old
 constant; all 810 tests and 653 export checks pass unchanged.
+
+---
+
+## Round 11 — the gaze coverage bar is now a decision, not an expression
+
+The criterion deciding whether a calibration target counted as covered was `a.length > 0`, written
+inline in a filter. That is a methods decision spelled as an expression, in a place nobody reviewing
+the protocol would ever find it.
+
+It is now `MIN_SAMPLES_PER_TARGET`, exported and documented where it can be read and argued with.
+The value is unchanged at 1, deliberately: the bar decides how many sittings are declared
+`gaze_calibration_valid`, and therefore the analysable n for every gaze measure. That is the
+investigator's call and not something to settle inside a refactor.
+
+What the current value means is written down beside it. At 1, a target whose 800 ms dwell yielded a
+single solved frame counts the same as one that yielded all of them; at ~30 fps that dwell should
+produce roughly 24 samples, so such a target had an almost entirely unsolved dwell and contributes
+one noisy point where a distribution belongs. Six targets in that state still satisfy the two-thirds
+coverage rule. The original audit finding asked for 5.
+
+Three tests bind the verdict to the constant rather than to a hardcoded `> 0`, including a tripwire
+asserting the value currently in force — so raising the bar cannot happen silently; it requires
+editing that line too. Raising it to 5 fails two tests, which is the evidence that the constant is
+load-bearing rather than decorative.
+
+The exposure is bounded: gaze is a secondary measure, and the primary outcome's EAR baseline is
+fitted in `measureEarBaseline` and does not depend on this.
