@@ -24,6 +24,7 @@ import { illuminationForBlock, illuminationOrderFor, summariseLux, specFor } fro
 import { DB_VERSION } from '@/storage/schemaEnums';
 import { scoreCvsq } from '@/scales/cvsq';
 import { computeSdt } from '@/lib/signalDetection';
+import { fnv1a } from '@/storage/export';
 import { CONFIG } from '@/experiment/config';
 
 export const FIXTURE = {
@@ -598,9 +599,20 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
  * Blobs, because the properties worth checking — that a blob survives a restore, that the inventory
  * names the file on disk — are invisible when the media array is empty.
  */
+/*
+ * Media whose checksums are the checksums OF THE BLOBS.
+ *
+ * These were '00000000' and '00000001' — placeholders — where the real FNV-1a of the blob contents
+ * is 3286d3b6 and 4b52b20c. The codebook describes that column as "FNV-1a over the file bytes.
+ * Confirms a given file is the one this session recorded and has not been altered or swapped", and
+ * nothing compared it to the blob, so the media-integrity claim was unverified end to end on the one
+ * bundle every other check runs against. `bytes` was hardcoded too, and is now the blob's own size.
+ */
 export function withFixtureMedia(b: SessionBundle): SessionBundle {
   const sid = b.session.session_id;
   const consent = { camera_metrics: true, setup_photos: true, annotation_video: true, granted_at: b.session.session_start_time };
+  const setupBody = 'setup-photo-';
+  const videoBody = 'reading-video-';
   return {
     ...b,
     session: { ...b.session, media_consent: consent },
@@ -608,17 +620,17 @@ export function withFixtureMedia(b: SessionBundle): SessionBundle {
       {
         media_id: 'media-setup-start', session_id: sid, kind: 'photo', checkpoint: 'setup_start',
         condition_label: null, captured_at: b.session.session_start_time + 1000,
-        mime: 'image/jpeg', bytes: 12, width: 640, height: 480, duration_ms: null,
-        checksum_fnv1a: '00000000', consent_snapshot: consent,
-        blob: new Blob(['setup-photo-'], { type: 'image/jpeg' }),
+        mime: 'image/jpeg', bytes: setupBody.length, width: 640, height: 480, duration_ms: null,
+        checksum_fnv1a: fnv1a(setupBody), consent_snapshot: consent,
+        blob: new Blob([setupBody], { type: 'image/jpeg' }),
       },
       {
         media_id: 'media-reading-01', session_id: sid, kind: 'video', checkpoint: 'reading_segment',
         condition_label: b.conditions[0]?.condition_label ?? 'P1',
         captured_at: b.session.session_start_time + 2000,
-        mime: 'video/webm', bytes: 14, width: 640, height: 480, duration_ms: 20_000,
-        checksum_fnv1a: '00000001', consent_snapshot: consent,
-        blob: new Blob(['reading-video-'], { type: 'video/webm' }),
+        mime: 'video/webm', bytes: videoBody.length, width: 640, height: 480, duration_ms: 20_000,
+        checksum_fnv1a: fnv1a(videoBody), consent_snapshot: consent,
+        blob: new Blob([videoBody], { type: 'video/webm' }),
       },
     ] as SessionBundle['media'],
   };

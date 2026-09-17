@@ -14,8 +14,9 @@ import { conditionOrderFor, passageForCondition, sessionPlan, blockPlan } from '
 import { illuminationOrderFor, illuminationForBlock, N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 import { computeSdt } from '@/lib/signalDetection';
 import { classifyBlinks, summariseBlinks, effectiveFps, baselineEar, type EarSample, type Point } from '@/tracking/blink';
-import { estimateHeadPose } from '@/tracking/headPose';
-import { fitGazeCalibration, GAZE_TARGETS } from '@/tracking/gazeCalibration';
+import { estimateHeadPose, HEAD_LANDMARKS } from '@/tracking/headPose';
+import { fitGazeCalibration, gazeQuality, GAZE_TARGETS, MIN_SAMPLES_PER_TARGET } from '@/tracking/gazeCalibration';
+import { DEFAULT_GAZE_THRESHOLD } from '@/tracking/gaze';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { buildExportFiles } from '@/storage/export';
 import { wcagContrastRatio } from '@/lib/contrast';
@@ -145,6 +146,31 @@ export function runFuzz(iterations: number, seed = 1): FuzzFailure[] {
       }
       const cal = fitGazeCalibration(byTarget);
       if (!Number.isFinite(cal.hThreshold) || cal.hThreshold <= 0) fail('gaze', i, `hThreshold ${cal.hThreshold}`);
+
+      /*
+       * The assertion above is TRUE BY CONSTRUCTION and was the only one here.
+       * fitGazeCalibration returns Math.max(0.06, ...) on the valid path and a positive constant on
+       * the invalid one, with non-finite inputs mapped to 0 before either — so no input can falsify
+       * it. Meanwhile the failure mode gazeCalibration.ts documents at length went unchecked: `valid`
+       * exported TRUE while a threshold sat at its unfitted floor, which made every gaze zone in
+       * that sitting a guess presented as a measurement.
+       *
+       * These can fail, and are what the file's own comments say matter.
+       */
+      // A valid fit must have FITTED both axes, not left one at the default floor.
+      if (cal.valid && (cal.hThreshold === DEFAULT_GAZE_THRESHOLD || cal.vThreshold === DEFAULT_GAZE_THRESHOLD))
+        fail('gaze', i, 'valid fit left an axis at the unfitted default threshold');
+      // An invalid fit must not advertise coverage it does not have.
+      const counted = Object.values(cal.samplesPerTarget).filter((n) => n >= MIN_SAMPLES_PER_TARGET).length;
+      if (counted !== cal.targetsWithSamples)
+        fail('gaze', i, `targetsWithSamples ${cal.targetsWithSamples} disagrees with samplesPerTarget ${counted}`);
+      // Every target must be accounted for, including the ones that produced nothing.
+      if (Object.keys(cal.samplesPerTarget).length !== GAZE_TARGETS.length)
+        fail('gaze', i, `samplesPerTarget covers ${Object.keys(cal.samplesPerTarget).length} of ${GAZE_TARGETS.length} targets`);
+      // The trust verdict must never call a rejected fit merely thin.
+      const q = gazeQuality(cal);
+      if (!cal.valid && q.trust !== 'unusable') fail('gaze', i, `invalid fit graded ${q.trust}`);
+      if (q.wellCovered > q.covered) fail('gaze', i, `wellCovered ${q.wellCovered} exceeds covered ${q.covered}`);
     });
 
     // 5) Aggregation + export on a partial/sparse bundle (missing records, empty conditions).
@@ -175,14 +201,48 @@ export function runFuzz(iterations: number, seed = 1): FuzzFailure[] {
       }
     });
 
-    // 6) Head pose on degenerate / extreme landmark arrays — must stay finite, never throw.
+    /*
+     * 6) Head pose on degenerate / extreme landmark arrays — must stay finite, never throw.
+     *
+     * THE REGIME IS CHOSEN PER ITERATION, and that is the whole point. This drew every one of the
+     * 478 landmarks from maybeWeird, which returns NaN with probability 0.1, and then guarded its
+     * only substantive assertion on ALL of them being finite. That is 0.9^956 — about 1e-44 — so the
+     * assertion could never execute and the block degenerated to "estimateHeadPose does not throw".
+     * The documented regression it exists to catch, that finite landmarks must yield a finite pose,
+     * was untested here.
+     *
+     * Half the iterations now draw a MEASURABLE FACE, which makes the finite branch reachable; the
+     * other half stay contaminated, which keeps the does-not-throw coverage the old form had.
+     *
+     * "Measurable" has to mean more than "finite", and getting that wrong is instructive. Coordinates
+     * drawn independently are all finite and still routinely collapse the ear span, and
+     * estimateHeadPose returns NaN for a finite-but-degenerate face ON PURPOSE — its comment explains
+     * that reporting 0 degrees there would be a measurement of "looking straight ahead" rather than
+     * an absence, biasing the postural summary toward perfect posture exactly when tracking is worst.
+     * So the invariant is not "finite landmarks yield a finite pose"; it is "a face with real extent
+     * yields a finite pose". The five landmarks the estimator reads are placed to have that extent.
+     */
     guard('headpose', i, () => {
-      const lm: Point[] = Array.from({ length: 478 }, () => ({ x: maybeWeird(rng) / 100, y: maybeWeird(rng) / 100 }));
+      const clean = i % 2 === 0;
+      const coord = () => (clean ? randInt(rng, 0, 50) : maybeWeird(rng));
+      const lm: Point[] = Array.from({ length: 478 }, () => ({ x: coord() / 100, y: coord() / 100 }));
+      if (clean) {
+        // A face with genuine extent: ears well apart, eyes apart and above a nose below them.
+        lm[HEAD_LANDMARKS.leftEar] = { x: 0.25, y: 0.50 };
+        lm[HEAD_LANDMARKS.rightEar] = { x: 0.75, y: 0.50 };
+        lm[HEAD_LANDMARKS.leftEyeCorner] = { x: 0.40, y: 0.45 };
+        lm[HEAD_LANDMARKS.rightEyeCorner] = { x: 0.60, y: 0.45 };
+        lm[HEAD_LANDMARKS.noseTip] = { x: 0.50, y: 0.55 + randInt(rng, 0, 20) / 200 };
+        lm[HEAD_LANDMARKS.chin] = { x: 0.50, y: 0.85 };
+      }
       const pose = estimateHeadPose(lm);
-      // NaN landmarks may legitimately yield NaN pose, but finite landmarks must yield finite pose.
-      const allFinite = lm.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
-      if (allFinite && !(Number.isFinite(pose.pitch) && Number.isFinite(pose.yaw) && Number.isFinite(pose.roll)))
-        fail('headpose', i, `non-finite pose from finite landmarks: ${JSON.stringify(pose)}`);
+      if (clean && !(Number.isFinite(pose.pitch) && Number.isFinite(pose.yaw) && Number.isFinite(pose.roll)))
+        fail('headpose', i, `non-finite pose from a measurable face: ${JSON.stringify(pose)}`);
+      // And whatever the regime, a pose value must never be a non-finite NUMBER dressed as a
+      // measurement: it is either finite or explicitly unmeasurable, never Infinity.
+      for (const [k, v] of Object.entries(pose)) {
+        if (v === Infinity || v === -Infinity) fail('headpose', i, `${k} is ${v}`);
+      }
     });
   }
 

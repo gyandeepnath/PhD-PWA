@@ -1646,10 +1646,8 @@ app's own skim ceiling.
 Each of the four original defects was reintroduced in turn and the gate failed on every one: constant
 counts 3 failures, constant fatigue items 1, a hand-picked CVS-Q total 2, the old reading exposure 2.
 
-**Still open from the same audit:** media checksums of `'00000000'` where the real FNV-1a is
-`3286d3b6`; and in the fuzz harness a head-pose property that executes with probability ~1e-44 and a
-gaze property that is true by construction. The signal-detection block listed here was fixed in
-Round 21.
+**Still open from the same audit:** nothing. The signal-detection block was fixed in Round 21, and
+the media checksums and both dead fuzz properties in Round 22.
 
 ## Round 21 — the signal-detection block had its own scorer, and it was wrong
 
@@ -1699,3 +1697,44 @@ standard error against its own instability flag, the counts against the trial ro
 alarm actually occurring, sensitivity varying across conditions, the mean RT being the mean of the hit
 RTs and lying within three SD of the median, and the lapse count against the threshold. Each of the
 four defects was reintroduced and the gate failed on every one.
+
+## Round 22 — two fuzz properties that could not fail, and a checksum that certified nothing
+
+**The head-pose property executed with probability about 1e-44.** It drew all 478 landmarks from a
+generator that returns NaN one time in ten, then guarded its only substantive assertion on ALL of
+them being finite: 0.9^956. So the block degenerated to "estimateHeadPose does not throw", and the
+regression it existed to catch went untested.
+
+Making it reachable was instructive, because the first attempt FAILED — 307 times. Coordinates drawn
+independently are all finite and still routinely collapse the ear span, and `estimateHeadPose` returns
+non-finite for a finite-but-degenerate face **on purpose**: its comment explains that reporting 0
+degrees there would be a measurement of "looking straight ahead" rather than an absence, biasing the
+postural summary toward perfect posture exactly when tracking is worst. So the invariant as written
+was wrong — it is not "finite landmarks yield a finite pose" but "a face with real extent yields a
+finite pose". Half the iterations now place the five landmarks the estimator reads at a geometry with
+genuine extent and require a finite pose; the other half stay contaminated and keep the
+does-not-throw coverage. A second assertion forbids Infinity in any regime, since a non-finite number
+dressed as a measurement is the failure that matters.
+
+Worth noting how close this came to being read the wrong way round: the debug output showed
+`{"pitch":null}` and looked like a null-versus-NaN convention problem, when it was `JSON.stringify`
+converting NaN to null. Chasing the wrong one would have "fixed" correct code.
+
+**The gaze property was true by construction.** It asserted only that `hThreshold` is finite and
+positive. `fitGazeCalibration` returns `Math.max(0.06, ...)` on the valid path and a positive constant
+on the invalid one, with non-finite inputs mapped to zero before either — so no possible input could
+falsify it. Meanwhile the failure mode that file documents at length went unchecked: `valid` exported
+TRUE while an axis sat at its unfitted default, which makes every gaze zone in that sitting a guess
+presented as a measurement. Five assertions replace it: a valid fit must have fitted BOTH axes and not
+left one at the default; `targetsWithSamples` must agree with `samplesPerTarget`; every one of the
+nine targets must be accounted for including those that produced nothing; a rejected fit must grade
+`unusable` and never merely `thin`; and `wellCovered` cannot exceed `covered`. Breaking
+`samplesPerTarget` so it omits zero-sample targets produces 2,888 failures where the old assertion
+produced none.
+
+**The media checksums certified nothing.** They were `'00000000'` and `'00000001'` — placeholders —
+where the real FNV-1a of the blobs is `3286d3b6` and `4b52b20c`. The codebook describes that column as
+"FNV-1a over the file bytes. Confirms a given file is the one this session recorded and has not been
+altered or swapped", and nothing compared it to the blob, so the media-integrity claim was unverified
+end to end on the one bundle every other check runs against. Both are computed with the app's own
+`fnv1a` now, and `bytes` comes from the blob rather than a hardcoded number.
