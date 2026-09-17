@@ -1352,7 +1352,17 @@ fixed window makes the high-count passages permanently harder. A longer window l
 finish regardless of count.
 
 Raised to 60 s. `PROTOCOL.md` and the §4 table were updated with it, and the on-screen instruction
-derives the number from the constant, so it followed on its own. **It must not change once collection
+derives the number from the constant, so it followed on its own.
+
+**CORRECTION to this round, recorded in place.** This entry originally also said the plan "named a
+column the export does not write" — `search_termination` — and I edited §4 to say `termination_mode`.
+That was wrong. `search_termination` is a real column of `analysis_long.csv`, populated from
+`termination_mode` at `analysisExport.ts:334` and documented in `analysisCodebook.ts`. I had checked
+only the numbered bundle's `CODEBOOK` and concluded from its absence there that the column did not
+exist, when in fact the plan is written against the pooled file — the same root cause the R audit
+identified for `lux_all_in_range`. §4 now names both columns and the file each belongs to. The lesson
+is narrow and worth keeping: this project has TWO export products with TWO codebooks, and "the export
+does not write it" is a claim about one of them until both have been checked. **It must not change once collection
 starts** — times under two different caps are not comparable, and the censoring rate is part of what
 the number means.
 
@@ -1443,3 +1453,26 @@ The R template now joins those flags per condition and, more usefully, crosses t
 careless responding that clusters in one polarity is a property of that condition rather than of those
 participants, and a study-wide percentage cannot show that. The gate asserts both the per-condition
 join and the crossing, so neither can silently revert to a count.
+
+## Round 17 — QC columns that gate an analysis were not in the file the analysis reads
+
+Found by checking my own work from the two previous rounds rather than by an audit of someone else's.
+
+`analysis_long.csv` is documented as the modelling unit — "one row per participant x condition-run,
+with the design factors, the outcomes, the covariates and the quality flags already on it". Three
+columns added in Rounds 12 and 13 never reached it:
+
+- `gaze_trust` and `gaze_targets_well_covered`. The per-session codebook I wrote in Round 13 tells the
+  analyst, in capitals, to filter gaze measures on `gaze_trust` rather than on `gaze_calibrated` —
+  because the latter is TRUE for both a good fit and a thin one. But `gaze_trust` existed only in the
+  per-sitting file. **The advice pointed at a column the pooled analysis could not see.**
+- `sitting_split_reason`. The whole point of Round 12 was to make the split judgement visible as a
+  covariate. A covariate that exists only in a per-sitting file cannot enter a pooled model.
+
+All three are now on the pooled rows, repeated across the sitting because the calibration and the
+structure choice are session-level facts and a row cannot be filtered on a value it cannot reach. The
+calibration is selected by `calibrated_at` rather than by array order, since records sort by a random
+uuid and a resumed sitting re-runs calibration.
+
+The `ANALYSIS_CODEBOOK` completeness test caught all three immediately — it requires every
+`analysis_long` column to be documented, and named exactly the three I had added.
