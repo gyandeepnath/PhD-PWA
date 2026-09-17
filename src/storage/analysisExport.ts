@@ -31,7 +31,7 @@
  */
 import type { SessionBundle } from './gather';
 import type { ExportFile } from './export';
-import { toCsv, round, fnv1a, beginNonFiniteCount, nonFiniteCellCount } from './export';
+import { toCsv, round, fnv1a, beginNonFiniteCount, nonFiniteCellCount, countOutOfDeclaredRange } from './export';
 import {
   checkJoin, groupByProvenance, unresolvedParticipantKey,
   type JoinIntegrity, type JoinExpectation,
@@ -577,6 +577,15 @@ export function buildAnalysisDataset(
    * timestamp inside the data would make identical data produce different bytes, and the checksums
    * would then certify nothing.
    */
+  /*
+   * Checked against ANALYSIS_CODEBOOK, which is keyed by column alone — this export writes one long
+   * table rather than a numbered bundle, so there is no file dimension to key on.
+   */
+  const outOfRange = countOutOfDeclaredRange(
+    files,
+    (_filename, column) => ANALYSIS_CODEBOOK.find((c) => c.column === column)?.unit,
+  );
+
   const manifest = {
     exported_at: new Date().toISOString(),
     builds: groupByProvenance(bundles),
@@ -594,6 +603,15 @@ export function buildAnalysisDataset(
       )],
     },
     non_finite_cells: nonFiniteCellCount(),
+    /*
+     * Cells outside the range ANALYSIS_CODEBOOK declares for their column, counted the same way and
+     * for the same reason as non_finite_cells above: the value is written through unaltered because
+     * clamping would fabricate a measurement, so a count has to travel with the file for that
+     * silence to be honest. This file is the modelling unit, so a bound it promises and does not
+     * keep is the one most likely to reach a model.
+     */
+    out_of_declared_range_cells: outOfRange.cells,
+    out_of_declared_range_columns: outOfRange.columns,
     files: files.map((f) => ({
       filename: f.filename, bytes: f.content.length, checksum_fnv1a: fnv1a(f.content),
     })),

@@ -10,7 +10,7 @@
  *   npx tsx scripts/verifyExport.ts --quiet    assertions only (non-zero exit on failure)
  *   npx tsx scripts/verifyExport.ts --show 10_wide_summary.csv   dump one file in full
  */
-import { buildExportFiles, fnv1a, CODEBOOK } from '../src/storage/export';
+import { buildExportFiles, fnv1a, CODEBOOK, countOutOfDeclaredRange } from '../src/storage/export';
 import { buildFixtureBundle, FIXTURE, readingMs, fatigueMean, ibrFor, rtFor } from '../src/sim/bundleFixture';
 import { CONDITIONS } from '../src/experiment/conditions';
 import { PASSAGES } from '../src/experiment/passages';
@@ -478,6 +478,32 @@ for (const f of files.filter((x) => x.filename.endsWith('.csv') && x.filename !=
 ok(`every emitted value parses as its declared codebook type (${typedCells} typed cells)`,
   typeOffenders.size === 0,
   [...typeOffenders].map(([k, v]) => `${k}, got ${[...v].slice(0, 4).map((x) => JSON.stringify(x)).join(', ')}`).join('; '));
+
+// ================================================================ declared range vs emitted value
+/*
+ * The codebook declares a UNIT for every column, and 21 of them say '0-1', 12 say '0-100', 9 say
+ * '0-10' and 37 say 'count'. Nothing checked the data against those declarations.
+ *
+ * The export passes an out-of-range value through unaltered, and that is right: clamping 1.8 to 1.0
+ * would fabricate a measurement, which this export refuses to do anywhere. But escapeCsv states the
+ * other half of the bargain for the neighbouring class — it blanks a non-finite value and says the
+ * silence "is only tolerable because a count of how often it happened travels in the manifest" —
+ * and the range case had no such count. A corrupt store or a restored older-schema backup could put
+ * incomplete_blink_ratio at 1.8 inside a column the codebook promises is bounded, and a model
+ * fitted on a proportion of 1.8 does not fail. It produces a number.
+ *
+ * This asserts the clean fixture is inside every range it declares; tests/declaredRange.test.ts
+ * asserts the counter actually fires on a corrupted one.
+ */
+const declaredRange = countOutOfDeclaredRange(files);
+ok(`every value is inside the range its own codebook entry declares`,
+  declaredRange.cells === 0,
+  `${declaredRange.cells} cell(s) out of range: ${declaredRange.columns.slice(0, 4).join('; ')}`);
+
+const manifestForRange = files.find((f) => f.filename === 'export_manifest.json');
+ok('the manifest carries the out-of-range count, beside non_finite_cells',
+  manifestForRange != null && 'out_of_declared_range_cells' in JSON.parse(manifestForRange.content),
+  'the manifest does not report out_of_declared_range_cells');
 
 // ================================================================ report
 log('\n' + '='.repeat(104));

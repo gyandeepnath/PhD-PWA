@@ -76,6 +76,106 @@ let nonFiniteCells = 0;
 export function beginNonFiniteCount(): void { nonFiniteCells = 0; }
 export function nonFiniteCellCount(): number { return nonFiniteCells; }
 
+/**
+ * The numeric range a codebook `unit` declares, or null when it declares no range.
+ *
+ * Handles the forms this codebook actually uses: '0-1', '0-100', '0-9', '0-10', '0-2', '0-3' and
+ * 'ratio 1-21'. Units that are dimensions rather than ranges ('ms', 'lux', 'count', 'degrees', '-')
+ * return null and are handled separately or not at all.
+ */
+export function rangeOfUnit(unit: string | undefined): [number, number] | null {
+  if (!unit) return null;
+  const m = /^(?:ratio )?(-?\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/.exec(unit.trim());
+  return m ? [Number(m[1]), Number(m[2])] : null;
+}
+
+/**
+ * Cells whose value falls outside the range their own codebook entry declares.
+ *
+ * WHY THIS EXISTS, and why it counts rather than corrects.
+ *
+ * The codebook declares a `unit` for every column and 21 of them say '0-1', 12 say '0-100', 9 say
+ * '0-10'. Nothing checked the data against those declarations, and the export passes a value
+ * straight through: a corrupt store, a restored older-schema backup or a bad import could put
+ * `incomplete_blink_ratio` at 1.8, `hit_rate` at 2.5 or `blink_count_full` at -3, and the file would
+ * carry them inside columns the codebook promises are bounded. A model fitted on a proportion of 1.8
+ * does not fail; it produces a number.
+ *
+ * Passing the value through is the RIGHT behaviour — clamping 1.8 to 1.0 would fabricate a
+ * measurement, which this export refuses to do anywhere. What was missing is the other half of the
+ * same bargain, and `escapeCsv` above states it exactly: a silence is only tolerable when a count of
+ * how often it happened travels in the manifest. This is that count, for this class.
+ *
+ * Empty cells are skipped: absence is reported by the completeness checks, not here. Non-numeric
+ * text in a numeric column is left to the declared-type gate in scripts/verifyExport.ts.
+ */
+export function countOutOfDeclaredRange(
+  files: { filename: string; content: string }[],
+  /**
+   * How to find the declared unit for a column. Defaults to the per-session CODEBOOK, keyed by file
+   * AND column because the same column name means different things in different files.
+   *
+   * Passed in so the POOLED analysis export can hold its own declarations to the same standard:
+   * `analysis_long.csv` is the modelling unit and is documented by ANALYSIS_CODEBOOK, which is keyed
+   * by column alone. A check that only covered the per-session files would leave the file the models
+   * actually read unguarded — which is exactly the gap that let three QC columns go missing from it.
+   */
+  unitFor: (filename: string, column: string) => string | undefined =
+    (filename, column) => CODEBOOK.find((c) => c.file === filename && c.column === column)?.unit,
+): { cells: number; columns: string[] } {
+  const offenders = new Set<string>();
+  let cells = 0;
+  for (const file of files) {
+    if (!file.filename.endsWith('.csv') || file.filename === '00_CODEBOOK.csv') continue;
+    const rows = parseCsvForRangeCheck(file.content);
+    if (rows.length < 2) continue;
+    const headers = rows[0];
+    for (const row of rows.slice(1)) {
+      headers.forEach((header, i) => {
+        const unit = unitFor(file.filename, header);
+        if (!unit) return;
+        const raw = (row[i] ?? '').trim();
+        if (raw === '') return;
+        const value = Number(raw);
+        if (!Number.isFinite(value)) return;
+        const range = rangeOfUnit(unit);
+        if (range) {
+          if (value < range[0] || value > range[1]) {
+            cells++;
+            offenders.add(`${file.filename}:${header} (declared ${unit}, saw ${raw})`);
+          }
+        } else if (unit === 'count' && (value < 0 || !Number.isInteger(value))) {
+          // A count is a non-negative integer by definition; the unit says so without a range.
+          cells++;
+          offenders.add(`${file.filename}:${header} (declared count, saw ${raw})`);
+        }
+      });
+    }
+  }
+  return { cells, columns: [...offenders].sort() };
+}
+
+/** Minimal RFC-4180 reader, local to the range check so it cannot drift from the writer above. */
+function parseCsvForRangeCheck(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; } else quoted = false;
+      } else field += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else if (c !== '\r') field += c;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows.filter((r) => r.length > 1);
+}
+
 /** CSV-escape a single value: wrap in quotes and double internal quotes when needed. */
 export function escapeCsv(value: unknown): string {
   if (value == null) return '';
@@ -902,6 +1002,12 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
     mime: 'application/json',
   });
 
+  /*
+   * Computed over the files as written, not from the records, so it sees exactly what the analyst
+   * will see — including anything a formatter or a rounding step introduced on the way out.
+   */
+  const outOfRange = countOutOfDeclaredRange(files);
+
   // Manifest with checksums
   const manifest = {
     exported_at: new Date().toISOString(),
@@ -913,6 +1019,19 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
      * and the affected columns must be investigated before the data is analysed.
      */
     non_finite_cells: nonFiniteCellCount(),
+    /**
+     * How many numeric cells fell OUTSIDE the range their own codebook entry declares, and which
+     * columns they were in.
+     *
+     * Companion to non_finite_cells above, and for the same reason: the value is written through
+     * unaltered, because clamping it would fabricate a measurement, so the only thing that keeps
+     * that silence honest is a count travelling with the file. After the upstream guards this
+     * should be 0. Any other value means a column the codebook promises is bounded is carrying
+     * something it should not — investigate before analysing, and do not assume the bound held just
+     * because the codebook states it.
+     */
+    out_of_declared_range_cells: outOfRange.cells,
+    out_of_declared_range_columns: outOfRange.columns,
     /**
      * Referential integrity of the joins this export performed. joins_sound=false means at least
      * one condition's measurements cannot be trusted to belong to it - see 16_integrity_report.csv

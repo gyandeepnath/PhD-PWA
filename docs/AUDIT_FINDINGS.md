@@ -1738,3 +1738,53 @@ where the real FNV-1a of the blobs is `3286d3b6` and `4b52b20c`. The codebook de
 altered or swapped", and nothing compared it to the blob, so the media-integrity claim was unverified
 end to end on the one bundle every other check runs against. Both are computed with the app's own
 `fnv1a` now, and `bytes` comes from the blob rather than a hardcoded number.
+
+## Round 23 — the codebook declared ranges that nothing enforced
+
+Found while auditing hardcoded bounds, and it is the mirror image of the declared-TYPE gate from
+Round 5. The codebook states a `unit` for every column: 21 say `0-1`, 12 say `0-100`, 9 say `0-10`,
+37 say `count`. Nothing compared the data against those declarations.
+
+Demonstrated on the real export path. Injecting the values a corrupt store, a restored older-schema
+backup or a bad import could carry produced a file that cheerfully contained:
+
+| column | declared | emitted |
+|---|---|---|
+| `incomplete_blink_ratio` — the PRIMARY OUTCOME | `0-1` | `1.8` |
+| `face_presence_ratio` | `0-1` | `-0.4` |
+| `perclos_p80` | `0-1` | `42` |
+| `blink_count_full` | `count` | `-3` |
+| `hit_rate` | `0-1` | `2.5` |
+
+with `non_finite_cells: 0` and no integrity issue raised. A model fitted on a proportion of 1.8 does
+not fail; it produces a number.
+
+**Passing the value through is the right behaviour.** Clamping 1.8 to 1.0 would fabricate a
+measurement, and this export refuses to fabricate anywhere. What was missing is the other half of the
+same bargain, which `escapeCsv` already states for the neighbouring class: it blanks a non-finite
+value rather than writing "NaN", and its comment says that silence "is only tolerable because a count
+of how often it happened travels in the manifest". The range case had no such count.
+
+`countOutOfDeclaredRange` supplies it. Both manifests now carry
+`out_of_declared_range_cells` and `out_of_declared_range_columns`, the latter naming the column, the
+declared unit and the value seen. It is computed over the files AS WRITTEN rather than from the
+records, so it sees what the analyst sees — including anything a rounding step introduced on the way
+out, and including propagation: injecting one bad `face_presence_ratio` is reported in both
+`07_eye_metrics.csv` and `10_wide_summary.csv`.
+
+**The pooled file is covered too, on its own terms.** `analysis_long.csv` is the modelling unit and is
+documented by a different codebook keyed by column alone, so the checker takes the unit lookup as a
+parameter. A gate that covered only the numbered bundle would have left the file the models actually
+read unguarded — which is precisely the gap that let three QC columns go missing from it in Round 17.
+
+Distinctions the gate gets right, each with a test: a `count` of 0 passes because zero blinks is a
+real and damning measurement while -3 is corruption; an empty cell is skipped because absence is the
+completeness checks' business; and `'1-n'` — the unit for trial indices — is correctly NOT read as a
+range, because its upper bound is however many there were. A tripwire requires every unit in the
+codebook that states two numeric bounds to parse, so a new spelling like `'0..1'` cannot make the
+whole check pass by examining nothing.
+
+**Checked and found sound while looking:** the test-suite tolerances. Every `toBeCloseTo` with a
+0- or 1-digit precision is tight relative to the rounding of the value it checks (a duration to
+0.5 ms, a contrast ratio to 0.05, a blink rate to 0.05 against a value stored at one decimal), so
+none of them is a loose guard masking a real drift.
