@@ -21,6 +21,8 @@
 import { describe, it, expect } from 'vitest';
 import { buildFixtureBundle, readingMs, ibrFor, fatigueMean, fatigueBaselineMean } from '@/sim/bundleFixture';
 import { scoreCvsq } from '@/scales/cvsq';
+import { computeSdt } from '@/lib/signalDetection';
+import { CONFIG } from '@/experiment/config';
 import { PASSAGES } from '@/experiment/passages';
 import { ENGAGEMENT } from '@/dashboard/aggregate';
 
@@ -133,5 +135,86 @@ describe('the reading exposure is one a participant could actually have produced
     bundle.eyeMetrics.forEach((m, i) => {
       expect(m.observed_duration_ms!).toBeLessThanOrEqual(readingMs(i));
     });
+  });
+});
+
+describe('the reaction-time summary is a summary of its own trials', () => {
+  const trialsOf = (conditionId: string) =>
+    bundle.reactionTrials.filter((t) => t.condition_id === conditionId);
+
+  it('agrees with the production signal-detection scorer, field for field', () => {
+    /*
+     * The fixture carried its own inverse-normal approximation and a comment claiming it matched
+     * production. It matched neither the implementation nor the rule: production uses 1/(2N) and
+     * says so, the fixture clamped at 1e-6, and the result was d' = 6.13 where production on the
+     * fixture's own counts gives ~3.03. A d' of 6.13 is not a physiologically possible sensitivity.
+     */
+    for (const r of bundle.rtSummaries) {
+      const sdt = computeSdt({
+        hits: r.hits, misses: r.misses, falseAlarms: r.false_alarms, correctRejections: r.correct_rejections,
+      });
+      expect(r.d_prime).toBe(sdt.d_prime);
+      expect(r.criterion).toBe(sdt.criterion);
+      expect(r.d_prime_se).toBe(sdt.d_prime_se);
+      expect(r.d_prime_unstable).toBe(sdt.d_prime_unstable);
+      expect(r.hit_rate).toBe(sdt.hit_rate);
+      expect(r.false_alarm_rate).toBe(sdt.false_alarm_rate);
+    }
+  });
+
+  it('never reports a standard error that contradicts its own instability flag', () => {
+    // `d_prime_se: 0.4` with `d_prime_unstable: false` was not merely wrong, it was a combination
+    // the production rule cannot produce, and tests/scoring.test.ts asserts that rule of production.
+    for (const r of bundle.rtSummaries) {
+      if (r.d_prime_se == null) continue;
+      expect(r.d_prime_unstable).toBe(r.d_prime_se > 0.3);
+    }
+  });
+
+  it('has counts that tally with the trial rows they summarise', () => {
+    for (const r of bundle.rtSummaries) {
+      const trials = trialsOf(r.condition_id);
+      expect(r.total_trials).toBe(trials.length);
+      expect(r.signal_trials).toBe(trials.filter((t) => t.is_signal).length);
+      expect(r.hits).toBe(trials.filter((t) => t.accuracy === 'hit').length);
+      expect(r.misses).toBe(trials.filter((t) => t.accuracy === 'miss').length);
+      expect(r.false_alarms).toBe(trials.filter((t) => t.accuracy === 'false_alarm').length);
+    }
+  });
+
+  it('actually contains the miss and false alarm its generator documents', () => {
+    // The miss was gated on a trial index that is not a signal trial, so it never fired and the hit
+    // rate was a ceiling 1.0 in every condition.
+    for (const r of bundle.rtSummaries) {
+      expect(r.misses).toBeGreaterThan(0);
+      expect(r.false_alarms).toBeGreaterThan(0);
+      expect(r.hit_rate!).toBeLessThan(1);
+    }
+  });
+
+  it('varies sensitivity across conditions, so a model of it has something to fit', () => {
+    const ds = bundle.rtSummaries.map((r) => r.d_prime);
+    expect(new Set(ds).size).toBeGreaterThan(3);
+  });
+
+  it('reports the mean hit RT as the mean of the hit RTs', () => {
+    for (const r of bundle.rtSummaries) {
+      const hits = trialsOf(r.condition_id).filter((t) => t.accuracy === 'hit');
+      const mean = hits.reduce((a, t) => a + (t.response_time_ms as number), 0) / hits.length;
+      expect(r.mean_rt_hits_ms).toBeCloseTo(mean, 1);
+      // And consistently with the spread exported beside it: a mean 4.7 SD from the median was how
+      // the hardcoded constant showed up.
+      expect(Math.abs(r.mean_rt_hits_ms! - r.median_rt_hits_ms!)).toBeLessThan(3 * r.rt_sd_ms!);
+    }
+  });
+
+  it('counts a lapse only where a trial actually exceeded the lapse threshold', () => {
+    // `lapse_count: i % 2` claimed lapses in five conditions whose slowest trial is 365 ms against a
+    // 600 ms floor, and rides into analysis_long.csv as rt_lapses.
+    for (const r of bundle.rtSummaries) {
+      const slow = trialsOf(r.condition_id)
+        .filter((t) => t.response_time_ms != null && t.response_time_ms > CONFIG.RT_LAPSE_THRESHOLD_MS);
+      expect(r.lapse_count).toBe(slow.length);
+    }
   });
 });

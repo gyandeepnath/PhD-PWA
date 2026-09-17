@@ -23,6 +23,8 @@ import { blockPlan } from '@/experiment/counterbalance';
 import { illuminationForBlock, illuminationOrderFor, summariseLux, specFor } from '@/experiment/illumination';
 import { DB_VERSION } from '@/storage/schemaEnums';
 import { scoreCvsq } from '@/scales/cvsq';
+import { computeSdt } from '@/lib/signalDetection';
+import { CONFIG } from '@/experiment/config';
 
 export const FIXTURE = {
   /** Embeds a comma and a quote on purpose: the hardest thing for a CSV writer to get right. */
@@ -119,7 +121,24 @@ export const blinkRateFor = (i: number) =>
 /** Complete blinks per minute, from blinkFullFor rather than a flat 0.8 of the total rate. */
 export const blinkRateFullFor = (i: number) =>
   Math.round((blinkFullFor(i) / (readingMs(i) / 60000)) * 10) / 10;
-export const rtFor = (i: number) => 340 + i * 7;
+/*
+ * The mean hit reaction time for a condition, DERIVED from that condition's own trials.
+ *
+ * This was `340 + i * 7`, a constant the fixture asserted and the export round-tripped. At condition
+ * 9 it claimed 403 ms where the real mean of the trials is 344.9 — sitting 4.7 SD above the
+ * median exported in the next column — and `rt_cv` disagreed with `rt_sd_ms / mean_rt_hits_ms` for
+ * the same reason. The two assertions that compared the export against this value were certifying
+ * the mean-RT path against a number that was not the mean of anything in the bundle, so a future
+ * refactor that correctly recomputed it from the trials would have been reported as a regression.
+ *
+ * Defined after rtTrialsFor, which it reads. The trial id arguments do not affect the timings.
+ */
+export const rtFor = (i: number) => {
+  const rts = rtTrialsFor('x', 'x', i)
+    .filter((t) => t.accuracy === 'hit')
+    .map((t) => t.response_time_ms as number);
+  return Math.round((rts.reduce((a, b) => a + b, 0) / rts.length) * 100) / 100;
+};
 
 export interface FixtureOptions {
   /** Which lux checkpoints to include. Default: all three. */
@@ -146,14 +165,44 @@ export interface FixtureOptions {
  */
 const RT_TOTAL_TRIALS = 32;
 
+/**
+ * Misses per condition, rising with time on task.
+ *
+ * A FIXED number of misses gives every condition the same hit rate, and d' is a function of the
+ * rates — so it came out identical in all ten conditions, and the `Sensitivity: d-prime` model the
+ * plan specifies had a constant response to fit. That is the same defect the blink counts had.
+ * Rising with position is also the direction fatigue would push it.
+ */
+const rtMissesFor = (i: number) => 1 + Math.floor(i / 3);
+/** False alarms per condition, alternating so the criterion moves independently of sensitivity. */
+const rtFalseAlarmsFor = (i: number) => 1 + (i % 2);
+
 function rtTrialsFor(conditionId: string, sid: string, i: number) {
+  // Which positions are signals — a fixed pattern, not a random one. 5 of every 8, so 20 of 32.
+  const signalAt = (t: number) => (t * 5) % 8 < 5;
+  /*
+   * The misses and false alarms are placed by ORDINAL position within their own pool, not by raw
+   * trial index. The miss used to be gated on `t === 3`, and t=3 is not a signal trial —
+   * (3*5)%8 is 7, which fails the test above — so `miss` was never true, the hit rate was a ceiling
+   * 1.0 in all ten conditions, and the comment claimed behaviour the code did not have.
+   */
+  let signalsSeen = 0;
+  let noiseSeen = 0;
+  const missPositions = new Set<number>();
+  const faPositions = new Set<number>();
+  for (let t = 0; t < RT_TOTAL_TRIALS; t++) {
+    if (signalAt(t)) {
+      if (signalsSeen < rtMissesFor(i)) missPositions.add(t);
+      signalsSeen++;
+    } else {
+      if (noiseSeen < rtFalseAlarmsFor(i)) faPositions.add(t);
+      noiseSeen++;
+    }
+  }
   return Array.from({ length: RT_TOTAL_TRIALS }, (_, t) => {
-    // First 20 positions in the shuffled block are signals; a fixed pattern, not a random one.
-    const isSignal = (t * 5) % 8 < 5;
-    // One miss and one false alarm per condition, at fixed positions, so the summary has something
-    // other than a perfect score to summarise.
-    const miss = isSignal && t === 3;
-    const falseAlarm = !isSignal && t === 6;
+    const isSignal = signalAt(t);
+    const miss = missPositions.has(t);
+    const falseAlarm = faPositions.has(t);
     const responded = (isSignal && !miss) || falseAlarm;
     const accuracy = miss ? 'miss' : isSignal ? 'hit' : falseAlarm ? 'false_alarm' : 'correct_rejection';
     return {
@@ -186,19 +235,28 @@ function rtSummaryFor(conditionId: string, sid: string, i: number) {
     : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
   const sd = Math.sqrt(rts.reduce((a, b) => a + (b - mean) ** 2, 0) / (rts.length - 1));
   const round2 = (x: number) => Math.round(x * 100) / 100;
-  const hitRate = hits.length / signals.length;
-  const faRate = fas.length / noise.length;
-  // Log-linear correction, matching the production scorer's treatment of extreme rates.
-  const z = (pr: number) => {
-    const p = Math.min(Math.max(pr, 1e-6), 1 - 1e-6);
-    // Acklam-style inverse normal, sufficient for a fixture.
-    const a = 0.147;
-    const x = 2 * p - 1;
-    const ln = Math.log(1 - x * x);
-    const s = 2 / (Math.PI * a) + ln / 2;
-    return Math.sign(x) * Math.sqrt(Math.sqrt(s * s - ln / a) - s) * Math.SQRT2;
-  };
-  const dPrime = round2(z(hitRate) - z(faRate));
+  const lapses = rts.filter((r) => r > CONFIG.RT_LAPSE_THRESHOLD_MS).length;
+  /*
+   * SENSITIVITY FROM THE PRODUCTION SCORER, not from a second implementation.
+   *
+   * This file used to carry its own inverse-normal approximation, clamping extreme rates at 1e-6,
+   * and a comment claiming it matched "the production scorer's log-linear correction". It matched
+   * neither: signalDetection.ts deliberately uses the 1/(2N) rule and its own comment says in terms
+   * that this is NOT the log-linear correction. The clamp put z(1 - 1e-6) at about 4.75, so the
+   * fixture reported d' = 6.13 where the production scorer on the fixture's OWN counts gives 3.343,
+   * and criterion -1.68 against -0.288. A d' of 6.13 is not a physiologically possible sensitivity.
+   *
+   * `d_prime_se: 0.4` with `d_prime_unstable: false` was worse than wrong, it was internally
+   * impossible: production ties the flag to the standard error (unstable === se > 0.3) and
+   * tests/scoring.test.ts asserts that of production, so the fixture asserted a combination the real
+   * code cannot produce. Calling computeSdt removes the possibility of disagreement.
+   */
+  const sdt = computeSdt({
+    hits: hits.length,
+    misses: signals.length - hits.length,
+    falseAlarms: fas.length,
+    correctRejections: noise.length - fas.length,
+  });
   return {
     condition_id: conditionId,
     session_id: sid,
@@ -208,24 +266,30 @@ function rtSummaryFor(conditionId: string, sid: string, i: number) {
     false_alarms: fas.length,
     misses: signals.length - hits.length,
     correct_rejections: noise.length - fas.length,
-    hit_rate: round2(hitRate),
-    false_alarm_rate: round2(faRate),
-    mean_rt_hits_ms: rtFor(i),
+    hit_rate: sdt.hit_rate,
+    false_alarm_rate: sdt.false_alarm_rate,
+    // The mean of the hit reaction times, not a hardcoded constant. rtFor(i) put condition 9 at
+    // 403 ms where the real mean of its own trials is 344.9 — 4.7 SD above the median exported in
+    // the next column — and rt_cv disagreed with rt_sd_ms / mean_rt_hits_ms for the same reason.
+    mean_rt_hits_ms: round2(mean),
     median_rt_hits_ms: median,
     rt_sd_ms: round2(sd),
     error_rate: round2((signals.length - hits.length + fas.length) / trials.length),
     rt_cv: round2(sd / mean),
     anticipations: 0,
-    lapse_count: i % 2,
-    lapse_rate: round2((i % 2) / signals.length),
+    // Counted against the real threshold. `i % 2` claimed an attention lapse in five of the ten
+    // conditions while the slowest trial anywhere in the block is 365 ms, against a 600 ms floor —
+    // and lapse_count rides into analysis_long.csv as rt_lapses, the frame the gates run on.
+    lapse_count: lapses,
+    lapse_rate: round2(lapses / signals.length),
     inverse_efficiency_ms: round2(mean / (1 - (signals.length - hits.length + fas.length) / trials.length)),
     first_half_mean_rt_ms: round2(rts.slice(0, Math.floor(rts.length / 2)).reduce((a, b) => a + b, 0) / Math.floor(rts.length / 2)),
     second_half_mean_rt_ms: round2(rts.slice(Math.floor(rts.length / 2)).reduce((a, b) => a + b, 0) / (rts.length - Math.floor(rts.length / 2))),
-    d_prime: dPrime,
-    d_prime_se: 0.4,
-    d_prime_unstable: false,
-    criterion: round2(-(z(hitRate) + z(faRate)) / 2),
-    d_prime_estimable: true,
+    d_prime: sdt.d_prime,
+    d_prime_se: sdt.d_prime_se,
+    d_prime_unstable: sdt.d_prime_unstable,
+    criterion: sdt.criterion,
+    d_prime_estimable: sdt.estimable,
   };
 }
 

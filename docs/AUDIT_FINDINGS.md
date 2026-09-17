@@ -1646,13 +1646,56 @@ app's own skim ceiling.
 Each of the four original defects was reintroduced in turn and the gate failed on every one: constant
 counts 3 failures, constant fatigue items 1, a hand-picked CVS-Q total 2, the old reading exposure 2.
 
-**Still open from the same audit, and now guarded against regression but not yet corrected:** the
-signal-detection block, where `d_prime` is 6.13 against the production scorer's 3.343 on the fixture's
-own counts, `criterion` -1.68 against -0.288, and `d_prime_se` 0.4 with `d_prime_unstable: false`
-where the production rule makes it true; the documented "one miss and one false alarm per condition"
-that the code gates on a non-signal trial index and so never produces, leaving hit rate at a ceiling
-1.0; `mean_rt_hits_ms` as a hardcoded constant sitting 4.7 SD above the median exported beside it;
-`lapse_count` claiming lapses in conditions whose slowest trial is 365 ms against a 600 ms threshold;
-media checksums of `'00000000'` where the real FNV-1a is `3286d3b6`; and in the fuzz harness a
-head-pose property that executes with probability ~1e-44 and a gaze property that is true by
-construction.
+**Still open from the same audit:** media checksums of `'00000000'` where the real FNV-1a is
+`3286d3b6`; and in the fuzz harness a head-pose property that executes with probability ~1e-44 and a
+gaze property that is true by construction. The signal-detection block listed here was fixed in
+Round 21.
+
+## Round 21 — the signal-detection block had its own scorer, and it was wrong
+
+`rtSummaryFor` carried a second implementation of signal-detection theory: its own inverse-normal
+approximation, clamping extreme rates at 1e-6, under a comment claiming it matched "the production
+scorer's log-linear correction". It matched neither. `signalDetection.ts` deliberately uses the
+1/(2N) rule and its own comment says in terms that this is NOT the log-linear correction, and the
+1e-6 clamp put z(1 - 1e-6) at about 4.75. The results:
+
+| field | fixture | production scorer, on the fixture's own counts |
+|---|---|---|
+| `d_prime` | 6.13 | ~3.03 |
+| `criterion` | -1.68 | ~-0.13 |
+| `d_prime_se` | 0.4, hardcoded | ~0.70 |
+| `d_prime_unstable` | false, hardcoded | true |
+
+A d-prime of 6.13 is not a physiologically possible sensitivity. And the last two were not merely
+wrong but internally impossible: production ties the flag to the standard error
+(`unstable === se > 0.3`) and `tests/scoring.test.ts` asserts that of production, so the fixture
+asserted a combination the real code cannot emit. All of these now come from `computeSdt`, which
+removes the possibility of disagreement rather than correcting one side of it.
+
+**The documented miss never happened.** The generator's comment promised "one miss and one false alarm
+per condition, so the summary has something other than a perfect score to summarise", and gated the
+miss on `t === 3` — a trial index that is not a signal trial, since `(3*5)%8` is 7 and fails the test
+two lines above. So the hit rate was a ceiling 1.0 in all ten conditions. Misses and false alarms are
+now placed by ordinal position within their own pool, and the counts VARY by condition (misses rising
+with time on task, false alarms alternating) so that d-prime and criterion move independently. Without
+that, fixing the miss alone would have left d-prime constant at 3.03 in every condition — the same
+constant-response trap the blink counts had, on the outcome §4 calls Sensitivity.
+
+**`mean_rt_hits_ms` was a constant, not a mean.** `340 + i * 7` put condition 9 at 403 ms where the
+real mean of its own trials is 344.9 — 4.7 SD above the median exported in the next column — and
+`rt_cv` disagreed with `rt_sd_ms / mean_rt_hits_ms` for the same reason. Two assertions compared the
+export against that constant, so the mean-RT path was certified against a number that was not the
+mean of anything in the bundle; a refactor that correctly recomputed it would have been reported as a
+regression. `rtFor` now derives from the trials, and both assertions kept their form and became
+meaningful.
+
+**`lapse_count` claimed lapses that no trial could produce.** `i % 2` asserted an attention lapse in
+five of ten conditions while the slowest trial anywhere in the block is 365 ms, against a 600 ms
+threshold — and it rides into `analysis_long.csv` as `rt_lapses`, the frame the analysis gates run on.
+Counted against `CONFIG.RT_LAPSE_THRESHOLD_MS` now, which gives zero, correctly.
+
+Seven more assertions on the coherence gate cover all of it: every SDT field against `computeSdt`, the
+standard error against its own instability flag, the counts against the trial rows, the miss and false
+alarm actually occurring, sensitivity varying across conditions, the mean RT being the mean of the hit
+RTs and lying within three SD of the median, and the lapse count against the threshold. Each of the
+four defects was reintroduced and the gate failed on every one.
