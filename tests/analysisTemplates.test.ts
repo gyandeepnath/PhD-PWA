@@ -235,3 +235,58 @@ describe('R template column references resolve in the file they are read from', 
     expect(problems).toEqual([]);
   });
 });
+
+/**
+ * EVERY NUMERIC THRESHOLD IN THE R TEMPLATE MUST DECLARE ITS PROVENANCE.
+ *
+ * Three of the QC bounds carried a label saying whether the value came from the protocol or was an
+ * analyst's choice, and four others were bare literals at their use sites — the dispersion refit
+ * trigger, the censoring-spread warning, the completion-informative band and the PERCLOS logit
+ * squeeze. That is an inconsistency in the file's own standard, and it matters for a specific
+ * reason: a number that decides how a result is READ cannot be defended in a viva or reproduced by
+ * anyone else unless it says where it came from.
+ *
+ * The lux band was worse than unlabelled — it was DUPLICATED. This file hardcoded 250 and 350 while
+ * src/experiment/illumination.ts defines the same band, so the two could drift; and this project has
+ * already been bitten by exactly that, when an end-to-end helper's hardcoded lux literal silently
+ * put every test out of range after the protocol retargeted its illuminance.
+ */
+describe('the R template declares where each of its thresholds came from', () => {
+  const r = () => src('src/analysis/analysis_template.R');
+
+  it('names every threshold instead of leaving it a bare literal at the use site', () => {
+    const src_ = r();
+    for (const name of [
+      'QC_FACE_PRESENCE_MIN', 'QC_OFF_AXIS_MAX', 'QC_EXPOSURE_MIN_FRAC',
+      'DISPERSION_REFIT_AT', 'CENSOR_SPREAD_WARN_PP', 'COMPLETION_INFORMATIVE',
+      'PERCLOS_LOGIT_SQUEEZE',
+    ]) {
+      expect(src_).toContain(name);
+      // Defined once and then USED — a constant nothing reads is decoration.
+      expect(src_.split(name).length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('marks each one as protocol-derived or as an analyst choice', () => {
+    // The distinction is the point: a value from the protocol is defensible by citation, and one
+    // chosen by the analyst has to be visible so it can be argued with and changed deliberately.
+    const src_ = r();
+    expect(src_).toMatch(/QC_FACE_PRESENCE_MIN[^\n]*PROTOCOL/);
+    expect(src_).toMatch(/DISPERSION_REFIT_AT[^\n]*PROTOCOL/);
+    for (const name of ['QC_OFF_AXIS_MAX', 'QC_EXPOSURE_MIN_FRAC', 'CENSOR_SPREAD_WARN_PP',
+      'COMPLETION_INFORMATIVE', 'PERCLOS_LOGIT_SQUEEZE']) {
+      expect(src_).toMatch(new RegExp(name + '[^\\n]*ANALYST DEFAULT'));
+    }
+  });
+
+  it('does not re-derive the accepted illuminance band the app already owns', () => {
+    /*
+     * The app defines the band in src/experiment/illumination.ts and writes its own verdict into
+     * lux_logged_all_in_range. Reading the flag cannot drift; re-deriving the band can.
+     */
+    const src_ = r();
+    const bandLiteralInCode = /^[^#\n]*\b(?:250|350)\b/m.test(src_);
+    expect(bandLiteralInCode).toBe(false);
+    expect(src_).toContain('lux_logged_all_in_range');
+  });
+});

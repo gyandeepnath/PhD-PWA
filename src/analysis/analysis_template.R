@@ -291,6 +291,25 @@ QC_OFF_AXIS_MAX      <- 0.20   # ANALYST DEFAULT — not in the protocol. Change
 QC_EXPOSURE_MIN_FRAC <- 0.90   # ANALYST DEFAULT — not in the protocol. Fraction of reading_time_ms
                                # the camera must actually have observed.
 
+# The remaining numeric thresholds this file applies, named here rather than buried as bare literals
+# at their use sites. Three of the QC bounds above were already labelled with their provenance and
+# these four were not, which is an inconsistency in this file's own standard: a number that decides
+# how a result is read has to say where it came from, or nobody can defend it or reproduce it.
+DISPERSION_REFIT_AT  <- 1.5     # PROTOCOL: ANALYSIS_PLAN.md §2 — "if the dispersion statistic
+                                # exceeds ~1.5, refit with glmmTMB(..., family = betabinomial)".
+CENSOR_SPREAD_WARN_PP <- 10     # ANALYST DEFAULT — not in the protocol. Percentage points of spread
+                                # in the visual-search censoring rate ACROSS CONDITIONS beyond which
+                                # the time model must not be read unqualified. Any non-zero spread is
+                                # a problem in principle; this is the point at which it stops being
+                                # arguably negligible.
+COMPLETION_INFORMATIVE <- c(0.05, 0.95)  # ANALYST DEFAULT — not in the protocol. Outside this band
+                                # the completion outcome is near-constant and carries little
+                                # information, so the time model is the better instrument.
+PERCLOS_LOGIT_SQUEEZE <- 5e-4   # ANALYST DEFAULT — not in the protocol. Exact 0 and 1 have no logit,
+                                # so endpoints are moved inward by this much. The count of values
+                                # moved is REPORTED, because silently relocating data is how a
+                                # bounded outcome quietly becomes a different one.
+
 cat("\n\n==========================================================================\n")
 cat("QUALITY CHECKS (ANALYSIS_PLAN.md §5) — reported before any inference\n")
 cat("==========================================================================\n")
@@ -308,12 +327,18 @@ qc_rng <- function(x) {
 sess_qc <- eye %>% distinct(participant_id, session_index, .keep_all = TRUE)
 cat("\n5.1 illumination constancy\n")
 cat("    lux_mean across sittings:      ", qc_rng(sess_qc$lux_mean), "\n")
-cat("    sittings outside 250-350 lux:  ",
-    qc_pct(sum(is.finite(sess_qc$lux_mean) & (sess_qc$lux_mean < 250 | sess_qc$lux_mean > 350)),
-           nrow(sess_qc)), "\n")
-cat("    lux_complete FALSE:            ", qc_pct(sum(!sess_qc$lux_complete, na.rm = TRUE), nrow(sess_qc)), "\n")
-cat("    a LOGGED reading out of range: ", qc_pct(sum(!sess_qc$lux_logged_all_in_range, na.rm = TRUE), nrow(sess_qc)),
-    " (says nothing about readings never taken - read with lux_complete)\n")
+# The accepted band is NOT re-derived here. It lives in src/experiment/illumination.ts (min 250,
+# max 350 for the level this protocol uses) and the app writes its own verdict into
+# lux_logged_all_in_range. This file used to hardcode 250 and 350 as bare literals, which duplicates
+# an app constant so the two can drift — and this project has already been bitten by exactly that,
+# when an end-to-end helper's hardcoded lux literal silently put every test out of range after the
+# protocol retargeted its illuminance to 300. Reading the flag cannot drift. The observed range is
+# printed above so a reader can still see where the readings actually sat.
+cat("    a LOGGED reading out of band:  ",
+    qc_pct(sum(!sess_qc$lux_logged_all_in_range, na.rm = TRUE), nrow(sess_qc)),
+    " (the app's own verdict; says nothing about readings NEVER TAKEN)\n")
+cat("    lux_complete FALSE:            ", qc_pct(sum(!sess_qc$lux_complete, na.rm = TRUE), nrow(sess_qc)),
+    " (read the two together: a sitting can be in band on the readings it took and still be missing two)\n")
 
 # --- §5.2 pointer ----------------------------------------------------------------------
 cat("\n5.2 frame-rate adequacy — reported with the primary model below, where the plan's\n")
@@ -513,8 +538,8 @@ dispersion_note <- tryCatch({
   ratio <- as.numeric(od$dispersion_ratio)
   cat("\n=== OVERDISPERSION CHECK (ANALYSIS_PLAN.md §2) ===\n")
   print(od)
-  if (is.finite(ratio) && ratio > 1.5) {
-    cat("\n*** dispersion ratio ", round(ratio, 2), " EXCEEDS 1.5.\n",
+  if (is.finite(ratio) && ratio > DISPERSION_REFIT_AT) {
+    cat("\n*** dispersion ratio ", round(ratio, 2), " EXCEEDS ", DISPERSION_REFIT_AT, ".\n",
         "*** The plan requires a refit as glmmTMB(..., family = betabinomial) before\n",
         "*** any inference is drawn from the standard errors below.\n", sep = "")
     sprintf("OVERDISPERSED (ratio %.2f) — betabinomial refit required", ratio)
@@ -666,7 +691,8 @@ if (any(!is.na(eye$perclos_p80))) {
   eye_pc <- eye %>% filter(!is.na(perclos_p80))
   n_squeezed <- sum(eye_pc$perclos_p80 <= 0 | eye_pc$perclos_p80 >= 1)
   if (n_squeezed > 0) cat("\n[perclos] ", n_squeezed, " value(s) at 0 or 1 squeezed inward for the logit.\n")
-  eye_pc$perclos_logit <- qlogis(pmin(pmax(eye_pc$perclos_p80, 0.0005), 0.9995))
+  eye_pc$perclos_logit <- qlogis(pmin(pmax(eye_pc$perclos_p80, PERCLOS_LOGIT_SQUEEZE),
+                                      1 - PERCLOS_LOGIT_SQUEEZE))
   m_perclos <- lmer(as.formula(paste0("perclos_logit ~ polarity", il_term,
                                       " + session_position + (1 | participant_id)")), data = eye_pc)
   cat("\n=== PERCLOS P80 (drowsiness covariate) ===\n"); print(summary(m_perclos))
@@ -799,7 +825,7 @@ if (!is.null(search) && "search_time_ms" %in% names(search)) {
     print(as.data.frame(by_cond))
     spread_pct <- diff(range(by_cond$pct_capped))
     cat("\nspread in censoring across conditions:", round(spread_pct, 1), "percentage points\n")
-    if (is.finite(spread_pct) && spread_pct > 10) {
+    if (is.finite(spread_pct) && spread_pct > CENSOR_SPREAD_WARN_PP) {
       cat("*** The censoring rate differs by more than 10 points between conditions. The mean search\n")
       cat("*** time is then partly a measure of how often the clock ran out, and that bias runs WITH\n")
       cat("*** the hypothesis. Use the completion model below as the primary search outcome, or fit\n")
@@ -820,7 +846,7 @@ if (!is.null(search) && "search_time_ms" %in% names(search)) {
     cat("\n=== Visual search: completed within the window (binomial, censoring-immune) ===\n")
     rate <- mean(vs$completed, na.rm = TRUE)
     cat("overall completion rate:", round(100 * rate, 1), "%\n")
-    if (!is.finite(rate) || rate < 0.05 || rate > 0.95) {
+    if (!is.finite(rate) || rate < COMPLETION_INFORMATIVE[1] || rate > COMPLETION_INFORMATIVE[2]) {
       cat("completion is near-constant at this cap, so it carries little information — read the time\n")
       cat("model instead, and note the cap in the limitations.\n")
     } else {

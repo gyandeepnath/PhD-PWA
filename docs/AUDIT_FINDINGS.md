@@ -1788,3 +1788,51 @@ whole check pass by examining nothing.
 0- or 1-digit precision is tight relative to the rounding of the value it checks (a duration to
 0.5 ms, a contrast ratio to 0.05, a blink rate to 0.05 against a value stored at one decimal), so
 none of them is a loose guard masking a real drift.
+
+## Round 24 — the hardcoded-bounds audit, and the thresholds I had left bare myself
+
+A six-dimension audit was run for unnecessary hardcoded bounds that could affect the integrity of the
+results. **It completed only in part and the incomplete portion is recorded here rather than glossed:**
+two of the six scans finished, four (truncations, duplicated constants, validation gates, design facts
+as literals) were cut off by a session limit, and none of the roughly twenty candidates from the two
+that did finish was adversarially verified. The dimensions that ran are reported below; the rest are
+**not** covered and must not be read as clean.
+
+**The clamp dimension came back clean, and thoroughly so.** All 91 `Math.max` / `Math.min` / `clamp`
+sites were read with their comments. The headline: **no clamp anywhere binds the primary outcome.**
+`incomplete_blink_ratio` is `total > 0 ? incomplete / total : null` with no floor, no ceiling and no
+rounding — it is not passed through the export's `round()` helper at all, so it leaves at full double
+precision. Several clamps that look dangerous were traced and found provably inert or deliberately
+documented:
+
+- the PERCLOS `openness` clamp to [0,1] feeds only two comparisons at 0.2 and 0.3, so the bound cannot
+  change any classification;
+- the signal-detection rate bounds apply only to d-prime, while `hit_rate` and `false_alarm_rate` are
+  exported UNCLAMPED, so the adjustment is fully reconstructable;
+- `viewportScale.ts` is the exemplar of the pattern this audit was looking for — a clamp WITH a marker,
+  where the file states that `stimulus_scale == MIN_SCALE` is the signature of a row that did not fit,
+  and a separate integrity check warns when the scale varies within a sitting;
+- the reading-time `Math.max(0, ...)` exports `reading_wall_clock_ms` and `reading_hidden_ms` beside
+  the adjusted value precisely so the adjustment is auditable rather than silent.
+
+**What I found in my own work, which is the part worth recording.** The QC panel I added in Round 8
+labelled three of its thresholds with their provenance — one PROTOCOL, two ANALYST DEFAULT — and left
+four others as bare literals at their use sites: the dispersion refit trigger, the censoring-spread
+warning, the completion-informative band and the PERCLOS logit squeeze. That is an inconsistency in
+the standard I had just set in the same file, and it matters for a concrete reason: a number that
+decides how a result is READ cannot be defended or reproduced unless it says where it came from. All
+four are now named constants carrying their provenance, and the ones that are my choices rather than
+the protocol's say so.
+
+**One was worse than unlabelled — it was duplicated.** The illumination check hardcoded 250 and 350
+while `src/experiment/illumination.ts` defines the same band, so the two could drift apart. This
+project has already been bitten by exactly that: an end-to-end helper's hardcoded lux literal silently
+put every test out of range after the protocol retargeted its illuminance to 300 lux. The band is no
+longer re-derived at all — the app writes its own verdict into `lux_logged_all_in_range` and the
+template reads the flag, which cannot drift. The observed range is still printed so a reader can see
+where the readings sat, and the flag is now reported beside `lux_complete` with a note that the two
+must be read together, since a sitting can be in band on the readings it took and still be missing two.
+
+Three tests guard it: every threshold must be named AND used, each must be marked protocol-derived or
+analyst-chosen, and no bare 250/350 may reappear in code. Relabelling one constant or reinstating the
+band literal each fails a test.

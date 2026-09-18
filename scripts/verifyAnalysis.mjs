@@ -305,6 +305,10 @@ for (let i = 0; i < 12; i++) {
         // time becomes partly a difference in how often the clock ran out, biased WITH the
         // hypothesis. So the breakdown matters more than the overall rate.
         ['censoring is broken down by condition, not just overall', 'censoring rate by condition'],
+        // Every threshold this file applies must say where it came from. Three were labelled and
+        // four were bare literals, which is an inconsistency in the file's own standard: a number
+        // that decides how a result is read has to be defensible and reproducible.
+        ['analyst-chosen thresholds are still declared as such', 'ANALYST DEFAULT'],
         ['the spread in censoring across conditions is quantified', 'spread in censoring across conditions'],
         ['completion is offered as a censoring-immune outcome', 'completed within the window'],
         ['the uncensored fit declares its own downward bias', 'biased DOWNWARD'],
