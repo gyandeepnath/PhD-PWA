@@ -137,3 +137,26 @@ describe('the pooled analysis file is held to its own declarations too', () => {
     expect(manifest.out_of_declared_range_columns.join('\n')).toContain('incomplete_blink_ratio');
   });
 });
+
+describe("the 'ratio' unit asserts a floor and not a ceiling", () => {
+  it('accepts a ratio above 1, because eight real columns can legitimately exceed it', () => {
+    /*
+     * open_ear_measured, ear_baseline, ear_threshold_used, calibration_ear_baseline,
+     * calibration_pitch_baseline_frac, face_size_ratio, rt_cv and inter_blink_interval_cv all
+     * declare 'ratio'. An eye aspect ratio is a ratio of distances and a coefficient of variation is
+     * sd/mean — both can exceed 1. Reading 'ratio' as 0-1 would invent a bound the codebook never
+     * claimed and flag real data as corrupt.
+     */
+    const b = JSON.parse(JSON.stringify(buildFixtureBundle()));
+    b.eyeMetrics[0].inter_blink_interval_cv = 1.7;
+    expect(countOutOfDeclaredRange(buildExportFiles(b)).cells).toBe(0);
+  });
+
+  it('rejects a negative ratio, which is corruption rather than a measurement', () => {
+    const b = JSON.parse(JSON.stringify(buildFixtureBundle()));
+    b.eyeMetrics[0].open_ear_measured = -0.2;
+    const r = countOutOfDeclaredRange(buildExportFiles(b));
+    expect(r.cells).toBeGreaterThan(0);
+    expect(r.columns.join('\n')).toContain('open_ear_measured (declared ratio, saw -0.2');
+  });
+});

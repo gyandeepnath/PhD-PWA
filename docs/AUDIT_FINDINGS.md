@@ -1836,3 +1836,15 @@ must be read together, since a sitting can be in band on the readings it took an
 Three tests guard it: every threshold must be named AND used, each must be marked protocol-derived or
 analyst-chosen, and no bare 250/350 may reappear in code. Relabelling one constant or reinstating the
 band literal each fails a test.
+
+**Follow-up to Round 23, same day.** The range gate skipped the eight columns declaring `unit: 'ratio'`
+because that spelling states no bounds. Checked each one rather than assuming: `open_ear_measured`,
+`ear_baseline`, `ear_threshold_used` and `calibration_ear_baseline` are eye aspect ratios (roughly
+0.1-0.4 for an open eye), `rt_cv` and `inter_blink_interval_cv` are coefficients of variation, and
+both kinds can exceed 1 legitimately. So reading `'ratio'` as 0-1 would invent a bound the codebook
+never claimed and flag real data as corrupt — skipping the ceiling is right.
+
+None of them can be NEGATIVE, though, and that much is checkable without inventing anything: a
+negative EAR or a negative coefficient of variation is corruption, not a measurement. `'ratio'` now
+asserts a floor and no ceiling, with a test in each direction — a CV of 1.7 passes, an EAR of -0.2 is
+reported.

@@ -148,6 +148,17 @@ export function countOutOfDeclaredRange(
           // A count is a non-negative integer by definition; the unit says so without a range.
           cells++;
           offenders.add(`${file.filename}:${header} (declared count, saw ${raw})`);
+        } else if (unit === 'ratio' && value < 0) {
+          /*
+           * `ratio` asserts a floor and NOT a ceiling, which is what the eight columns declaring it
+           * actually are. The eye aspect ratio is a ratio of distances (roughly 0.1-0.4 for an open
+           * eye) and a coefficient of variation is sd/mean — both can exceed 1 legitimately, so
+           * reading 'ratio' as 0-1 would invent a bound the codebook never claimed and flag real
+           * data. Neither can be NEGATIVE, though, so that much is checkable without inventing
+           * anything, and a negative EAR or CV is corruption rather than a measurement.
+           */
+          cells++;
+          offenders.add(`${file.filename}:${header} (declared ratio, saw ${raw} — a ratio cannot be negative)`);
         }
       });
     }
