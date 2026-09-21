@@ -2057,3 +2057,57 @@ throughout the GEE. The "polarity coefficient has a usable standard error" asser
 Round 19 failed immediately. That assertion exists because the primary model once fitted a constant
 response and reported nothing while the gate stayed green; it caught a different instance of the same
 class within minutes of being useful.
+
+## Round 29 — the counterbalancing is sound; the passage rotation is not what four documents said
+
+An audit of the counterbalancing. **The headline is that the design is correct**, and it was verified
+computationally rather than by reading: the carryover matrix built from the real generated rows has
+every ordered pair of conditions exactly once with a zero diagonal — a genuine Williams square
+balanced for first-order carryover, not merely a Latin square. Row assignment is exactly uniform at
+the planned enrolment, and the split-sitting carryover loss was already documented in the repository
+in precise and accurate detail.
+
+**One real finding: passage is not orthogonal to condition, and four places said it was.**
+
+`PASSAGE_ROTATION_PERIOD` is 13, and its own comment states the criterion honestly — it is the
+smallest choice giving a perfectly uniform passage x POSITION count. That is true and it is what the
+period buys. But thirteen rotation offsets cannot reduce uniformly onto ten conditions: offsets 10,
+11 and 12 collide with 0, 1 and 2. Verified over 130 participants:
+
+    passage x position  : 13-13   (uniform, as designed)
+    passage x condition : 10-20   (each condition meets three passages twice as often as seven)
+
+and within participants 11-20, condition 0 never meets three of the ten passages at all. The
+imbalance is structural, not sampling noise — it repeats with the rotation period and does not shrink
+with recruitment.
+
+Four places claimed otherwise: the module header and the function doc in `counterbalance.ts`, four
+codebook entries for `passage_id`, the pooled codebook, `PROTOCOL.md` ("orthogonal to display
+condition"), and `ANALYSIS_PLAN.md`, which justified the `(1 | passage_id)` random intercept on the
+grounds that "passage is decoupled from condition by design, so it... is not confounded with the
+display factors". All corrected. The plan's bullet now says the opposite: the random intercept is
+doing real work precisely BECAUSE passage is not balanced against condition.
+
+**A test asserted the claim and passed because it only ever ran the first block.** It looped
+`p = 1..10` under the title "over a block of N participants, every condition is paired with every
+passage once" — and participants 1-10 are the one block where that holds. Retitled to say which block
+it checks, and two tests added that assert the real properties: passage x position exactly uniform,
+and passage x condition 2:1 with exactly three passages at 20 and seven at 10 per condition. Changing
+the rotation period to 11 fails three of them.
+
+**A correction to my own first attempt, worth recording.** My initial verification reported the
+opposite result — condition x passage uniform, position x passage 0-26 — because I called
+`passageForCondition(enrolment, condition)` when the signature is
+`(conditionIndex, enrolmentNumber)`. The swap produces a different, coincidentally condition-uniform
+mapping. I would have reported the audit as a false alarm on the strength of it. Recomputing with the
+right argument order reproduced the finding exactly.
+
+**Not changed, and it is the investigator's call.** A two-dimensional rotation
+(`passage = (condition + row + floor((e-1)/10)) mod 10`) would make passage x condition exactly
+uniform and remove the leak onto the polarity contrast, at the cost of passage x position becoming
+12-14 rather than 13-13. That is a change to what participants actually see, so it is a protocol
+decision rather than a repair. The leak is small in practice — the corpus is length- and
+difficulty-matched by construction, so the realised imbalance in mean passage word count across the
+polarity contrast is about 0.4% — but it is structural, and the honest options are to change the
+rotation before collection starts or to state it as a limitation. The documents now say which
+situation the study is in.

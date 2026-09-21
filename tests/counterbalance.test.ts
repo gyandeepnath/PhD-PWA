@@ -81,12 +81,53 @@ describe('passage decoupling from condition', () => {
     }
   });
 
-  it('over a block of N participants, every condition is paired with every passage once', () => {
+  it('pairs every condition with every passage exactly once over the FIRST block of N participants', () => {
+    // True, and narrower than it looks — see the two tests below. The title used to generalise to
+    // "a block of N participants" while the loop only ever ran the first one.
     const pair = Array.from({ length: N }, () => Array(N).fill(0));
     for (let p = 1; p <= N; p++) {
       for (let c = 0; c < N; c++) pair[c][passageForCondition(c, p)]++;
     }
     for (const cond of pair) for (const cell of cond) expect(cell).toBe(1);
+  });
+
+  /*
+   * WHAT THE ROTATION ACTUALLY BUYS, pinned so nobody has to take a comment's word for it.
+   *
+   * PASSAGE_ROTATION_PERIOD is 13 because it gives a perfectly uniform passage x POSITION count at
+   * the planned enrolment. It does NOT make passage orthogonal to CONDITION, and several comments,
+   * the protocol and four codebook entries said it did. Thirteen rotation offsets cannot reduce
+   * uniformly onto ten conditions — offsets 10, 11 and 12 collide with 0, 1 and 2 — so the imbalance
+   * is structural and does not shrink with recruitment.
+   *
+   * These two tests exist so the real property is asserted rather than assumed, and so that changing
+   * the rotation scheme has to come with changing what this file claims.
+   */
+  it('makes passage x POSITION exactly uniform across the planned cohort', () => {
+    const COHORT = 130;
+    const posXpass = Array.from({ length: N }, () => Array(N).fill(0));
+    for (let e = 1; e <= COHORT; e++) {
+      conditionOrderFor(e).forEach((condIdx, pos) => { posXpass[pos][passageForCondition(condIdx, e)]++; });
+    }
+    const counts = posXpass.flat();
+    expect(Math.min(...counts)).toBe(COHORT / N);
+    expect(Math.max(...counts)).toBe(COHORT / N);
+  });
+
+  it('does NOT make passage x CONDITION uniform, and the imbalance is 2:1', () => {
+    const COHORT = 130;
+    const condXpass = Array.from({ length: N }, () => Array(N).fill(0));
+    for (let e = 1; e <= COHORT; e++) {
+      conditionOrderFor(e).forEach((condIdx) => { condXpass[condIdx][passageForCondition(condIdx, e)]++; });
+    }
+    const counts = condXpass.flat();
+    // Each condition meets three passages twice as often as the other seven.
+    expect(Math.min(...counts)).toBe(10);
+    expect(Math.max(...counts)).toBe(20);
+    for (const row of condXpass) {
+      expect(row.filter((n) => n === 20)).toHaveLength(3);
+      expect(row.filter((n) => n === 10)).toHaveLength(7);
+    }
   });
 
   it('is NOT the old yoked mapping (passage !== conditionIndex for all participants)', () => {

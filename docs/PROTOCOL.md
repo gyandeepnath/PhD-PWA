@@ -29,10 +29,18 @@ session, and the known limitations a PhD write-up should disclose.
 - **Condition order**: balanced Williams Latin square, assigned by a **sequential enrolment index**
   (controls first-order carryover; every condition appears in every serial position equally over
   each block of 10 participants).
-- **Passage assignment**: rotated independently of condition (each condition meets each passage
-  equally over a block of 10) so passage difficulty is **orthogonal to display condition**. With ten
-  passages covering ten condition-runs, each passage is read exactly ONCE per participant — the
-  practice effect that the two-sitting design had to carry as a covariate is absent by construction.
+- **Passage assignment**: rotated against condition with a period of 13, chosen because it makes
+  passage **exactly uniform against SERIAL POSITION** across the cohort. It does **not** make passage
+  orthogonal to display condition, and this document previously said it did. Thirteen rotation
+  offsets cannot reduce uniformly onto ten conditions, so over 130 participants each condition meets
+  three of the ten passages twice as often as the other seven, and within some blocks of ten a
+  condition never meets three of them at all. The imbalance is structural and does not shrink with
+  recruitment; it leaks only weakly onto the polarity contrast because the corpus is length- and
+  difficulty-matched by construction, which is a mitigation rather than orthogonality. Carry the
+  passage random intercept, and report passage as a modelled covariate rather than a balanced one.
+  With ten passages covering ten condition-runs, each passage is still read exactly ONCE per
+  participant — the practice effect that the two-sitting design had to carry as a covariate is
+  absent by construction.
 
 ## 2. Session flow (as implemented)
 

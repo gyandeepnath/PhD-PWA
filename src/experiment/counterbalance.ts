@@ -102,7 +102,19 @@ export const PASSAGE_ROTATION_PERIOD = 13;
 /**
  * Passage index assigned to a given condition for a given participant.
  *
- * Decoupled from display condition AND from serial position; see PASSAGE_ROTATION_PERIOD.
+ * Decoupled from SERIAL POSITION, and only partly from display condition.
+ *
+ * PASSAGE_ROTATION_PERIOD is 13 because that is the smallest choice giving a perfectly uniform
+ * passage x position count at the planned enrolment — and that is exactly what it buys. It does NOT
+ * make passage orthogonal to condition: 13 rotation offsets cannot reduce uniformly onto 10
+ * conditions, because offsets 10, 11 and 12 collide with 0, 1 and 2. Measured over 130 participants,
+ * each condition meets three of the ten passages 20 times and the other seven 10 times, and within
+ * participants 11-20 condition 0 never meets three of them at all.
+ *
+ * This comment and several others used to call the mapping decoupled from condition outright. It is
+ * not, the imbalance is structural rather than sampling noise, and it does not shrink with
+ * recruitment. The leak onto the polarity contrast is small only because the corpus is length- and
+ * difficulty-matched by construction; that is a mitigation, not orthogonality.
  */
 export function passageForCondition(conditionIndex: number, enrolmentNumber: number): number {
   const n = Number.isFinite(enrolmentNumber) ? Math.floor(enrolmentNumber) : 1;
@@ -116,7 +128,7 @@ export interface PlannedStep {
   position: number;
   /** Index into CONDITIONS. */
   conditionIndex: number;
-  /** Index into PASSAGES (decoupled from condition). */
+  /** Index into PASSAGES (uniform against position; only partly balanced against condition). */
   passageIndex: number;
 }
 
@@ -152,7 +164,7 @@ export function annotationSegmentSteps(plan: PlannedStep[]): number[] {
   return steps;
 }
 
-/** Full ordered plan (condition + decoupled passage per serial position) for a participant. */
+/** Full ordered plan (condition + rotated passage per serial position) for a participant. */
 export function sessionPlan(enrolmentNumber: number): PlannedStep[] {
   return conditionOrderFor(enrolmentNumber).map((conditionIndex, position) => ({
     position,

@@ -95,8 +95,14 @@ Notes on each term:
 - **`position_c`** — order within the sitting, centred. The Williams square balances position across
   participants, so this is a nuisance term rather than a confound, but leaving it out pushes
   fatigue-driven variance into the residual.
-- **`(1 | passage_id)`** — passage is decoupled from condition by design, so it can carry its own
-  intercept and is not confounded with the display factors.
+- **`(1 | passage_id)`** — and it is needed, because passage is NOT fully balanced against
+  condition. The rotation period makes passage uniform against serial position, not against
+  condition: each condition meets three of the ten passages twice as often as the other seven, an
+  imbalance that is structural and does not shrink with recruitment. This bullet previously said
+  passage was "decoupled from condition by design", which was wrong. The random intercept is
+  therefore doing real work rather than being a convenience, and the residual leak onto the polarity
+  contrast should be acknowledged in the limitations — it is small only because the corpus is
+  length- and difficulty-matched.
 - **Overdispersion must be checked.** Blinks within a condition are not independent Bernoulli trials;
   if the dispersion statistic exceeds ~1.5, refit with `glmmTMB(..., family = betabinomial)`.
 
