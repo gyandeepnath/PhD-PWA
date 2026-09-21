@@ -2111,3 +2111,54 @@ difficulty-matched by construction, so the realised imbalance in mean passage wo
 polarity contrast is about 0.4% — but it is structural, and the honest options are to change the
 rotation before collection starts or to state it as a limitation. The documents now say which
 situation the study is in.
+
+## Round 30 — the tablet could be rotated mid-block and nothing recorded it
+
+An audit of `src/tasks/`, the components where the measurements are actually taken.
+
+**A rotation to portrait blocks the participant's input and does not stop the task.** The overlay
+`Experiment.tsx` renders is a SIBLING of the running view, not a replacement for it, so the task
+underneath stays mounted: the reaction-time block is a bare async loop with no abort path, the
+visual-search timer is armed once and never paused, and the reading page clock keeps accruing.
+Nothing in `src/tasks/` observes orientation at all.
+
+`trackHiddenTime` cannot see it. Rotating does not fire `visibilitychange`, and because the page
+stays visible nothing is throttled — so `condition_hidden_ms` and `reading_hidden_ms` both stay 0
+through the entire episode.
+
+What that costs, per task: a rotation during the reaction-time block converts go trials into misses
+and no-go trials into correct rejections, and `09_rt_summary.csv` carries no column that separates
+those from genuine inattention; during visual search it burns the time limit; during reading it sits
+inside `reading_time_ms` and inside the window the ocular measures are counted over.
+
+And the overlay told the participant **"The task resumes as soon as the tablet is landscape again"**,
+which was not true of any of the four tasks.
+
+**Measured, not paused, and the distinction is deliberate.** Pausing every task means an abort path
+through an async trial loop, a re-armable search timer, and a decision about what a half-delivered
+trial means — that is a protocol question as much as an engineering one, and it is the investigator's.
+Measuring it is the smaller half of the bargain this export already keeps everywhere else: a measured
+interruption can be excluded, a silent one cannot. `condition_portrait_ms` and
+`condition_portrait_events` are now exported beside their hidden-time counterparts, with a codebook
+entry saying explicitly that hidden time does not cover this and why.
+
+**Implemented by parameterising the existing tracker, not by copying it.** `trackHiddenTime` already
+took its target, its predicate and its clock as options; only the event name was fixed. Adding that
+one option let `trackPortraitTime` reuse the same implementation. That module's own header records
+what happened the last time this logic existed twice — the reading task and the adaptation field each
+kept a copy and the two disagreed, losing an interval that had already begun — so a second copy was
+the one thing not to write. The tracker still counts a rotation that was already in progress when the
+condition began, which is exactly the case that bug lost.
+
+The overlay now says the task underneath is still running and that the time is recorded.
+
+**Three further findings from the same audit, verified and not yet acted on:** `error_rate` is emitted
+as `0` rather than null for a block in which nothing was scored, and because the `rt_disengaged` check
+tests `error_rate > 0.3` without a null guard, that fabricated 0 silences the very flag built to catch
+a rhythmically-tapping participant — whose every trial becomes an anticipation, emptying both
+signal-detection pools. A fast double-tap on "Next page" can skip a page of the passage, because the
+guard is React state re-locked in a passive effect rather than a ref latch, and the page-dwell record
+attributes both taps to the same page. And two `09_rt_summary.csv` codebook entries describe values
+the code does not emit: `signal_trials` is documented as "go trials in the block" but carries the
+SCORED go pool, and `trial_category` is documented with levels "go / no-go" while the data says
+"signal / noise", so a filter on `"go"` returns nothing.

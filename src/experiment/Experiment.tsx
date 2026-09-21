@@ -12,7 +12,7 @@ import {
 } from '@/experiment/illumination';
 import { participantProgress, passageRepeatNumber } from './participantProgress';
 import { mergeExclusionReasons } from './eligibility';
-import { trackHiddenTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
+import { trackHiddenTime, trackPortraitTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { PASSAGES } from './passages';
 import { annotationSegmentSteps, blockPlan, isAnnotationSubsample, type PlannedStep } from './counterbalance';
 import { CONFIG, isE2ETimingActive } from './config';
@@ -83,6 +83,10 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const nConditionsRef = useRef<number>(N_CONDITIONS);
   /** Backgrounding across the whole of the current condition. See the note where it is started. */
   const conditionHidden = useRef<HiddenTimeTracker | null>(null);
+  // Portrait is tracked beside hidden time, not folded into it: they are different interruptions
+  // with different consequences, and an analyst needs to tell a backgrounded tablet from a rotated
+  // one. Same tracker implementation, a different event.
+  const conditionPortrait = useRef<HiddenTimeTracker | null>(null);
   // Transition lock: ignore re-entrant advance() calls (e.g. accidental double-taps on a tablet)
   // until the machine actually changes — prevents skipping a stage. Reset on every stage change.
   const transitioning = useRef(false);
@@ -786,6 +790,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
      */
     conditionHidden.current?.stop();
     conditionHidden.current = trackHiddenTime();
+    conditionPortrait.current?.stop();
+    conditionPortrait.current = trackPortraitTime();
     // Coarse resume pointer: an interruption during this condition resumes by redoing it.
     saveResume(session.session_id, machine.stepIndex);
     // NOTE: tracking.beginCondition() is deliberately NOT called here. See the ReadingTask
@@ -1256,12 +1262,16 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 const started = conditionStarted.current[machine.stepIndex] ?? existing.started_at;
                 const away = conditionHidden.current?.stop() ?? null;
                 conditionHidden.current = null;
+                const rotated = conditionPortrait.current?.stop() ?? null;
+                conditionPortrait.current = null;
                 await put('conditions', {
                   ...existing,
                   completed_at: Date.now(),
                   condition_duration_sec: (Date.now() - started) / 1000,
                   condition_hidden_ms: away?.hiddenMs,
                   condition_hidden_events: away?.events,
+                  condition_portrait_ms: rotated?.hiddenMs,
+                  condition_portrait_events: rotated?.events,
                 });
               }
               saveResume(session.session_id, machine.stepIndex + 1);
@@ -1437,7 +1447,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             and head-position measure for the rest of this sitting meaningless.
           </p>
           <p className="font-lab" style={{ fontSize: 14, color: '#8fa0c0', marginTop: 12 }}>
-            The task resumes as soon as the tablet is landscape again.
+            Rotate back now — the task underneath is still running, and time spent in portrait is
+            recorded against this condition.
           </p>
         </div>
       )}

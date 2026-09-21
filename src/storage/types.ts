@@ -367,6 +367,15 @@ export interface ConditionRecord {
   condition_hidden_ms?: number;
   condition_hidden_events?: number;
   /**
+   * Milliseconds this condition spent with the tablet in PORTRAIT, and how many rotations.
+   *
+   * Hidden time cannot see this: rotating does not fire `visibilitychange`, the page stays visible
+   * so nothing is throttled, and the blocking overlay is a sibling of the running task rather than a
+   * replacement for it. The task keeps running and the participant cannot reach it.
+   */
+  condition_portrait_ms?: number;
+  condition_portrait_events?: number;
+  /**
    * The grey-field duration the protocol asked for, beside `adaptation_ms_before`, which is what
    * the participant actually saw. They differ when the device sleeps or the app is backgrounded
    * mid-field: the countdown is frame-driven and stops, and on waking the screen advances at once.

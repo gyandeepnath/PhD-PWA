@@ -185,3 +185,69 @@ describe('the reading exposure measures the same window it subtracts from', () =
     expect(next).toMatch(/wallClockMs: Math\.round\(wall\)/);
   });
 });
+
+/**
+ * PORTRAIT IS THE SAME INTERRUPTION ON AN EVENT THE VISIBILITY API DOES NOT REPORT.
+ *
+ * Rotating a tablet does not fire `visibilitychange`; the page stays visible, so nothing is
+ * throttled and `trackHiddenTime` sees nothing. Meanwhile the blocking overlay Experiment.tsx draws
+ * is a SIBLING of the running task, not a replacement — the reaction-time block is a bare async loop
+ * with no abort path, the search timer is armed once and never paused, and the reading page clock
+ * keeps accruing. So a rotation converts go trials into misses indistinguishable from inattention,
+ * and the overlay used to tell the participant the task had paused.
+ *
+ * Measuring it is the smaller half of the bargain — pausing every task is a protocol question as
+ * much as an engineering one — but a measured interruption can be excluded and a silent one cannot.
+ */
+describe('portrait time is tracked like hidden time, on its own event', () => {
+  const fakeTarget = () => {
+    const handlers: Record<string, (() => void)[]> = {};
+    return {
+      addEventListener: (n: string, h: () => void) => { (handlers[n] ??= []).push(h); },
+      removeEventListener: (n: string, h: () => void) => {
+        handlers[n] = (handlers[n] ?? []).filter((x) => x !== h);
+      },
+      fire: (n: string) => (handlers[n] ?? []).forEach((h) => h()),
+      count: (n: string) => (handlers[n] ?? []).length,
+    };
+  };
+
+  it('accumulates an interval and counts the rotations', async () => {
+    const { trackPortraitTime } = await import('@/lib/hiddenTime');
+    const target = fakeTarget();
+    let t = 0;
+    let portrait = false;
+    const tr = trackPortraitTime({ target, isHidden: () => portrait, clock: () => t, eventName: 'change' });
+
+    t = 100; portrait = true; target.fire('change');   // rotated
+    t = 900; portrait = false; target.fire('change');  // rotated back
+    t = 1000; portrait = true; target.fire('change');  // and again
+    t = 1200;
+    const r = tr.read();
+    expect(r.hiddenMs).toBe(1000); // 800 closed + 200 still in progress
+    expect(r.events).toBe(2);
+  });
+
+  it('counts a rotation that had already happened when the condition began', async () => {
+    // The condition starts while the tablet is already sideways: the edge has passed, and a tracker
+    // that only watched for edges would report zero for an interruption spanning the whole block.
+    const { trackPortraitTime } = await import('@/lib/hiddenTime');
+    const target = fakeTarget();
+    let t = 0;
+    const tr = trackPortraitTime({ target, isHidden: () => true, clock: () => t, eventName: 'change' });
+    t = 500;
+    expect(tr.read()).toEqual({ hiddenMs: 500, events: 1 });
+  });
+
+  it('listens on its own event and detaches that same one', async () => {
+    // The shared implementation takes the event name as an option precisely so this does not become
+    // a second copy of the tracker — two copies is how reading and adaptation once disagreed.
+    const { trackPortraitTime } = await import('@/lib/hiddenTime');
+    const target = fakeTarget();
+    const tr = trackPortraitTime({ target, isHidden: () => false, clock: () => 0, eventName: 'change' });
+    expect(target.count('change')).toBe(1);
+    expect(target.count('visibilitychange')).toBe(0);
+    tr.stop();
+    expect(target.count('change')).toBe(0);
+  });
+});

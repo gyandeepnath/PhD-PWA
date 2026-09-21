@@ -17,7 +17,7 @@
  * the throttling. The reaction-time block is the extreme case — trials are about a second each with
  * a one-second response window, so a backgrounded RT block produces misses and lapses that describe
  * the operating system, not the participant — but every task in a condition has a clock in it:
- * search time against a 40-second limit, response times on the questionnaires, the exposure window
+ * search time against its own limit, response times on the questionnaires, the exposure window
  * the eye metrics are counted over.
  *
  * So the condition as a whole is tracked, not just the tasks that happened to grow their own copy.
@@ -47,6 +47,14 @@ interface Options {
   isHidden?: () => boolean;
   /** Defaults to the app's monotonic clock. */
   clock?: () => number;
+  /**
+   * Which event signals that the blocked/unblocked state may have changed.
+   *
+   * Parameterised so the portrait tracker below can reuse this implementation rather than grow a
+   * second copy of it — which is what happened the first time, when the reading task and the
+   * adaptation field each kept their own and the two disagreed.
+   */
+  eventName?: string;
 }
 
 /**
@@ -81,7 +89,8 @@ export function trackHiddenTime(opts: Options = {}): HiddenTimeTracker {
     }
   };
 
-  target?.addEventListener('visibilitychange', onVisibility);
+  const eventName = opts.eventName ?? 'visibilitychange';
+  target?.addEventListener(eventName, onVisibility);
 
   const read = (): HiddenTime => ({
     hiddenMs: Math.round(accumulated + (since != null ? clock() - since : 0)),
@@ -93,7 +102,7 @@ export function trackHiddenTime(opts: Options = {}): HiddenTimeTracker {
     stop: () => {
       if (!stopped) {
         stopped = true;
-        target?.removeEventListener('visibilitychange', onVisibility);
+        target?.removeEventListener(eventName, onVisibility);
       }
       const final = read();
       // Close any interval still open, so a second stop() cannot keep accruing against a clock
@@ -103,4 +112,37 @@ export function trackHiddenTime(opts: Options = {}): HiddenTimeTracker {
       return final;
     },
   };
+}
+
+/**
+ * How long the tablet spent in PORTRAIT, and how many times it was rotated there.
+ *
+ * The same measurement as hidden time and for the same reason, on an event the visibility API does
+ * not report. Rotating a tablet does not fire `visibilitychange`, the page stays visible so nothing
+ * is throttled, and the blocking overlay Experiment.tsx renders over the task is a SIBLING of it —
+ * the task underneath stays mounted and keeps running. The reaction-time block is a bare async loop
+ * with no abort path, the visual-search timer is armed once and never paused, and the reading page
+ * clock keeps accruing.
+ *
+ * So a rotation mid-block silently converts go trials into misses that are indistinguishable in the
+ * export from genuine inattention, burns the search limit, and inflates the reading exposure the
+ * ocular window is counted over — while the overlay tells the participant "The task resumes as soon
+ * as the tablet is landscape again", which was not true of any of the four tasks.
+ *
+ * Pausing every task is the better fix and a much larger change: it means an abort path through an
+ * async trial loop, a re-armable search timer, and a decision about what a half-delivered trial
+ * means. That is a protocol question as much as an engineering one. This is the smaller half of the
+ * bargain the rest of this export already keeps — the interval is MEASURED and exported, so affected
+ * conditions can be found and excluded rather than silently entering the analysis.
+ */
+export function trackPortraitTime(opts: Options = {}): HiddenTimeTracker {
+  const mq = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(orientation: portrait)')
+    : null;
+  return trackHiddenTime({
+    clock: opts.clock,
+    target: opts.target ?? mq ?? undefined,
+    isHidden: opts.isHidden ?? (() => mq?.matches === true),
+    eventName: opts.eventName ?? 'change',
+  });
 }
