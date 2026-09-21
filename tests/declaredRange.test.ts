@@ -14,9 +14,13 @@
  * happened travels in the manifest". These tests hold the range check to the same bargain.
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { buildExportFiles, countOutOfDeclaredRange, rangeOfUnit, CODEBOOK } from '@/storage/export';
 import { buildFixtureBundle, withFixtureMedia } from '@/sim/bundleFixture';
 import { buildAnalysisDataset } from '@/storage/analysisExport';
+import { ANALYSIS_CODEBOOK } from '@/storage/analysisCodebook';
+import { CONFIG } from '@/experiment/config';
 
 describe('the declared-range unit parser', () => {
   it('reads the range forms this codebook actually uses', () => {
@@ -158,5 +162,56 @@ describe("the 'ratio' unit asserts a floor and not a ceiling", () => {
     const r = countOutOfDeclaredRange(buildExportFiles(b));
     expect(r.cells).toBeGreaterThan(0);
     expect(r.columns.join('\n')).toContain('open_ear_measured (declared ratio, saw -0.2');
+  });
+});
+
+/**
+ * A CODEBOOK DESCRIPTION MUST NOT RESTATE A NUMBER THE CODE OWNS.
+ *
+ * The visual-search cap was raised from 40 s to 60 s. `PROTOCOL.md`, the analysis plan and the
+ * on-screen instruction all followed — the last of those because it derives the number from the
+ * constant. Four places restated it as prose and did not: both codebooks, an internal comment in the
+ * pooled exporter, and the simulator's two literals.
+ *
+ * The one in `analysisCodebook.ts` was the worst of them, because `analysis_long.csv` is the file the
+ * confirmatory analysis reads and the very next entry tells the analyst that time-capped rows are a
+ * lower bound and must be censored. An analyst was being handed an explicit instruction to censor, at
+ * a threshold 20 s below the real one. Blocks between 40 s and 60 s are not a rare tail — the timing
+ * model puts search time at a mean of 30 s with an SD of 8, so 40 s is about +1.25 SD.
+ *
+ * The repo's own Round 14 note had already written the lesson down — "this project has TWO export
+ * products with TWO codebooks" — and the 40 s text survived in both anyway. Hence a test rather than
+ * a resolution to be careful.
+ */
+describe('codebook prose derives durations rather than restating them', () => {
+  const sourceOf = (rel: string) => readFileSync(resolve(__dirname, '..', rel), 'utf8');
+
+  it('renders the cap the code actually uses, in both codebooks', () => {
+    const seconds = CONFIG.VS_TIME_LIMIT_MS / 1000;
+    expect(CODEBOOK.find((c) => c.column === 'search_time_ms')!.description)
+      .toContain(`${seconds}-second limit`);
+    const entry = ANALYSIS_CODEBOOK.find((c) => c.column === 'search_termination') as { description: string };
+    expect(entry.description).toContain(`${seconds} s cap`);
+  });
+
+  it('leaves no stale 40-second literal anywhere in the storage layer or the simulator', () => {
+    // 40 was the previous value. Any surviving copy of it is, by construction, a copy that did not
+    // follow the change — which is exactly how this defect was created.
+    for (const rel of [
+      'src/storage/export.ts', 'src/storage/analysisCodebook.ts',
+      'src/storage/analysisExport.ts', 'src/storage/types.ts', 'src/sim/participant.ts',
+    ]) {
+      const src = sourceOf(rel);
+      expect(src).not.toMatch(/\b40[ -]s(?:econd)?\b/);
+      expect(src).not.toMatch(/\b40000\b/);
+    }
+  });
+
+  it('keeps the simulator censoring at the same cap the app enforces', () => {
+    // The simulator is what the power and recovery analyses rest on, so a stale cap there is a stale
+    // power estimate — a quieter failure than a wrong codebook and a harder one to notice.
+    const src = sourceOf('src/sim/participant.ts');
+    expect(src).toContain('CONFIG.VS_TIME_LIMIT_MS');
+    expect(src).toMatch(/const searchCapMs = CONFIG\.VS_TIME_LIMIT_MS/);
   });
 });

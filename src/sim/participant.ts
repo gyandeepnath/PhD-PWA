@@ -149,8 +149,16 @@ export function generateParticipant(enrolmentNumber: number, seed: number): SimP
     // ---- Visual search ----
     const targets = passage.searchTargetCount;
     const secPerTarget = GT.search.sec_per_target + (belowAA ? GT.search.below_aa_penalty_sec_per_target : 0);
-    const searchTimeMs = Math.min(40000, targets * secPerTarget * 1000 + gaussian(rng, 0, 2500));
-    const found = searchTimeMs >= 40000 ? Math.round(targets * (0.6 + 0.3 * rng())) : targets;
+    /*
+     * The cap comes from CONFIG, not from a literal. Two 40000s lived here and survived the raise to
+     * 60 s, so the simulator was censoring at a threshold the app no longer uses — and this file is
+     * what the power and recovery analyses are built on, which makes a stale cap a stale power
+     * estimate. Bound once so the ceiling and the censoring test cannot diverge.
+     */
+    const searchCapMs = CONFIG.VS_TIME_LIMIT_MS;
+    const searchTimeMs = Math.min(searchCapMs, targets * secPerTarget * 1000 + gaussian(rng, 0, 2500));
+    const searchCensored = searchTimeMs >= searchCapMs;
+    const found = searchCensored ? Math.round(targets * (0.6 + 0.3 * rng())) : targets;
     const searchAccuracy = found / targets;
 
     // ---- Display perception ----

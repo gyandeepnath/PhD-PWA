@@ -345,7 +345,8 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
          */
         search_d_prime: round(searchById.get(sum.condition_id)?.search_d_prime ?? null),
         search_false_detections: searchById.get(sum.condition_id)?.false_detections ?? null,
-        // Whether the block ended by the participant finishing or by the 40 s cap. A time-capped
+        // Whether the block ended by the participant finishing or by the time cap (the value lives in
+        // CONFIG.VS_TIME_LIMIT_MS; restating it here is how the previous value outlived its raise). A time-capped
         // block censors search_time_ms, so this decides whether that row is a measurement or a bound.
         search_termination: searchById.get(sum.condition_id)?.termination_mode ?? null,
         rt_mean_hits_ms: round(sum.mean_rt_hits_ms),

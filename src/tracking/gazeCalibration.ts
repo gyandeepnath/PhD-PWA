@@ -15,6 +15,27 @@ import { DEFAULT_GAZE_THRESHOLD } from './gaze';
 /** Dwell per gaze target. Long enough to fixate and settle, short enough that nine are tolerable. */
 export const GAZE_DWELL_MS = 800;
 
+/**
+ * Floor applied to a FITTED gaze threshold.
+ *
+ * This was a bare 0.06 written twice, and it is the one clamp in the tracking code that can pin a
+ * real measurement without leaving a mark. The fitted threshold is the midpoint between the centre
+ * spread and the edge offset, so the floor binds whenever those sum to less than about 0.12 — a
+ * participant with limited gaze excursion, or a camera far enough away that the iris offsets are
+ * small. That is not a degenerate fit: the validity test only asks that the edges separate from the
+ * centre by 1.5x, which such a participant can satisfy comfortably.
+ *
+ * When it binds, every classification uses a threshold wider than the one their eyes earned, so more
+ * samples fall in the centre zone and gaze_deviation_ratio is biased DOWNWARD. One-directional, and
+ * on a participant characteristic rather than at random — so if it binds more often in one condition
+ * it is confounded with the independent variable.
+ *
+ * The floor stays: a threshold at or near zero would classify ordinary measurement noise as a gaze
+ * excursion. What changes is that the override is now RECORDED rather than silent, which is the
+ * pattern viewportScale.ts already sets for its own minimum.
+ */
+export const MIN_FITTED_GAZE_THRESHOLD = 0.06;
+
 /** The frame rate the protocol assumes, used only when the measured rate is unavailable. */
 const NOMINAL_FPS = 30;
 
@@ -70,6 +91,14 @@ export interface GazeCalibration {
    */
   samplesPerTarget: Record<string, number>;
   /**
+   * TRUE when MIN_FITTED_GAZE_THRESHOLD raised either axis above what the fit produced.
+   *
+   * Without this the override is invisible: the exported threshold reads like a measurement of this
+   * participant when it is partly a floor, and the resulting bias in gaze_deviation_ratio runs one
+   * way. An analyst can now exclude or model these sittings; before, they could not find them.
+   */
+  thresholdFloored: boolean;
+  /**
    * How many targets contributed at least one USABLE sample — the same count the validity test
    * below is decided on. It is returned rather than recomputed by the caller because it was
    * recomputed by the caller, with a different filter, and the two answers disagreed: the exported
@@ -113,8 +142,13 @@ export function fitGazeCalibration(raw: Record<string, GazeSample[]>): GazeCalib
 
   // Threshold = midpoint between centre spread and edge offset (clamped to a sane floor).
   const safe = (x: number) => (Number.isFinite(x) ? x : 0);
-  const hThreshold = Math.max(0.06, (safe(centerSpreadH) + safe(edgeH)) / 2);
-  const vThreshold = Math.max(0.06, (safe(centerSpreadV) + safe(edgeV)) / 2);
+  const hFitted = (safe(centerSpreadH) + safe(edgeH)) / 2;
+  const vFitted = (safe(centerSpreadV) + safe(edgeV)) / 2;
+  const hThreshold = Math.max(MIN_FITTED_GAZE_THRESHOLD, hFitted);
+  const vThreshold = Math.max(MIN_FITTED_GAZE_THRESHOLD, vFitted);
+  // Recorded before the valid/invalid branch below, because the question this answers is whether the
+  // FIT was floored, not which value ended up being returned.
+  const thresholdFloored = hFitted < MIN_FITTED_GAZE_THRESHOLD || vFitted < MIN_FITTED_GAZE_THRESHOLD;
 
   /**
    * Validity is judged on COVERAGE and on both axes, not on a bare sample count.
@@ -154,6 +188,9 @@ export function fitGazeCalibration(raw: Record<string, GazeSample[]>): GazeCalib
     valid,
     targetsWithSamples,
     samplesPerTarget,
+    // Only meaningful for a fit that was used. An invalid fit returns DEFAULT_GAZE_THRESHOLD on both
+    // axes, so nothing was floored — saying otherwise would invent an override that never happened.
+    thresholdFloored: valid ? thresholdFloored : false,
   };
 }
 

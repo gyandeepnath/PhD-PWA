@@ -352,7 +352,9 @@ export interface ConditionRecord {
    * How long the app was in the background during this condition, and how many separate times.
    *
    * Reading and the adaptation field measure their own hidden time; nothing else in a condition did.
-   * Every task in one carries a clock — visual search against a 40-second limit, response times on
+   * Every task in one carries a clock — visual search against its time limit (CONFIG.VS_TIME_LIMIT_MS;
+   * the number is deliberately not repeated here, because the fixed duration that used to sit in
+   * this sentence outlived the raise to 60 s), response times on
    * the questionnaires, and a reaction-time block of one-second trials with one-second response
    * windows. A hidden tab has its timers and animation frames throttled, so a backgrounded RT block
    * yields misses and lapses that describe the operating system rather than the participant, and
@@ -739,6 +741,15 @@ export interface CalibrationRecord {
   samples_per_target?: Record<string, number> | null;
   gaze_trust?: 'good' | 'thin' | 'unusable' | null;
   gaze_targets_well_covered?: number | null;
+  /**
+   * Whether the fitted gaze threshold was raised by its floor on either axis.
+   *
+   * The floor exists so that near-zero thresholds do not classify measurement noise as a gaze
+   * excursion, and it must stay. But when it binds, the exported threshold is partly a constant
+   * rather than a measurement of this participant, and every classification then uses a wider
+   * threshold than their eyes earned — which biases gaze_deviation_ratio downward, one-directionally.
+   */
+  gaze_threshold_floored?: boolean | null;
   ear_baseline: number | null;
   /**
    * How many frames of the calibration routine produced a usable EAR.

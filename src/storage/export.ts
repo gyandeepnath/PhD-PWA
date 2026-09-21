@@ -3,6 +3,7 @@
  * per-file checksums. Pure (`buildExportFiles`) so it is fully unit-testable; `downloadExport`
  * is the thin browser wrapper that streams the files to the device.
  */
+import { CONFIG } from '@/experiment/config';
 import { normaliseBundle, sessionForExport, type SessionBundle } from './gather';
 import type { SessionRecord } from './types';
 import type { MediaRecord } from './media';
@@ -455,6 +456,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '01_session_info.csv', column: 'calibration_pitch_baseline_frac', type: 'number', unit: 'ratio', role: 'qc', description: 'Frontal head-pose reference captured at calibration. Head-pose columns are relative to this when head_pitch_calibrated is true.' },
   { file: '01_session_info.csv', column: 'gaze_trust', type: 'factor(3)', unit: '-', role: 'qc', description: "How much evidence the gaze fit rests on: good (two thirds of targets tracked through at least half their dwell), thin (it met the acceptance rule but on very little data), unusable (the fit was rejected). gaze_calibration_valid is TRUE for both good and thin, so THIS is the column to filter gaze measures on. A thin calibration produces thresholds that are closer to noise than to measurement." },
   { file: '01_session_info.csv', column: 'gaze_targets_well_covered', type: 'integer', unit: 'targets', role: 'qc', description: "How many of the nine targets were tracked through at least half their dwell, as opposed to merely registering at all. Read beside calibration_targets_detected: a large gap between them means most targets were caught only in passing." },
+  { file: '01_session_info.csv', column: 'gaze_threshold_floored', type: 'boolean', unit: '-', role: 'qc', description: "TRUE when the fitted gaze threshold hit its minimum on either axis, so the threshold used is partly a floor rather than a measurement of this participant. It binds for a participant with limited gaze excursion or a distant camera, and when it does, classifications use a wider threshold than their eyes earned — which biases gaze_deviation_ratio DOWNWARD. Filter or model these sittings; before this column existed they could not be found." },
   { file: '01_session_info.csv', column: 'calibration_targets_detected', type: 'integer', unit: 'targets', role: 'qc', description: "How many of the nine calibration targets produced at least one usable sample. Counted on the same finite-filtered pool the calibration fit is judged on, so it cannot disagree with gaze_calibration_valid. Low values mean a poor camera setup for that sitting." },
   { file: '01_session_info.csv', column: 'calibration_ear_samples', type: 'integer', unit: 'count', role: 'qc', description: 'Frames of the dedicated centre-fixation baseline window that yielded a usable eye-aspect ratio, and so fed calibration_ear_baseline. The nine gaze targets contribute none — they move the eye through three vertical postures and the fissure is widest in up-gaze. Six seconds at 30 fps contributes ~180; a low value means the baseline every blink threshold is a fraction of rests on very little, and the ocular measures for that sitting should be treated with caution. Blank for sittings recorded before this was captured.' },
   { file: '02_conditions.csv', column: 'polarity', type: 'factor(2)', unit: '-', role: 'iv', description: 'positive = dark text on light background; negative = light text on dark.' },
@@ -480,7 +482,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '04_comprehension.csv', column: 'response_time_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Time from the item appearing to submission, timed per item rather than across the set.' },
   { file: '05_visual_search.csv', column: 'search_target', type: 'string', unit: '-', role: 'meta', description: 'Target word the participant was asked to tap in the passage.' },
   { file: '05_visual_search.csv', column: 'targets_in_set', type: 'integer', unit: 'count', role: 'meta', description: 'Authoritative number of target occurrences, computed from the passage text with the same tokenisation the task uses. This is the denominator of accuracy_rate.' },
-  { file: '05_visual_search.csv', column: 'search_time_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Time spent on the search task. The 40-second limit is enforced by a timer, and a browser throttles '
+  { file: '05_visual_search.csv', column: 'search_time_ms', type: 'number', unit: 'ms', role: 'dv', description: `Time spent on the search task. The ${CONFIG.VS_TIME_LIMIT_MS / 1000}-second limit is enforced by a timer, and a browser throttles `
       + 'timers while the app is in the background, so a block interrupted that way can exceed it — see '
       + 'condition_hidden_ms on 02_conditions.csv, which flags the condition though it cannot localise the absence '
       + 'to this task. Absent any interruption the limit holds.' },
@@ -684,7 +686,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'session_status', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'protocol_pass', 'repeat_run_note', 'sitting_split_reason', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'build_changed_mid_sitting', 'session_builds', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'stimulus_scale', 'layout_viewport', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'preflight_complete', 'e2e_timing', 'stimulus_font_ok', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'gaze_trust', 'gaze_targets_well_covered', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected', 'calibration_ear_samples', 'calibration_runs'],
+    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'session_status', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'protocol_pass', 'repeat_run_note', 'sitting_split_reason', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'build_changed_mid_sitting', 'session_builds', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'stimulus_scale', 'layout_viewport', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'preflight_complete', 'e2e_timing', 'stimulus_font_ok', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'gaze_trust', 'gaze_targets_well_covered', 'gaze_threshold_floored', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected', 'calibration_ear_samples', 'calibration_runs'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
       session_index: session.session_index,
@@ -766,6 +768,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
        */
       gaze_trust: latestCalibration?.gaze_trust ?? '',
       gaze_targets_well_covered: latestCalibration?.gaze_targets_well_covered ?? '',
+      gaze_threshold_floored: latestCalibration?.gaze_threshold_floored ?? '',
       calibration_targets_detected: latestCalibration ? latestCalibration.targets_detected : '',
       calibration_ear_samples: latestCalibration?.ear_samples_usable ?? '',
       calibration_runs: bundle.calibration.length,

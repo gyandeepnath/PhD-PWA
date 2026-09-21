@@ -13,6 +13,7 @@
  * genuinely differs — an empty `n_incomplete` means the camera was not running, an empty
  * `search_termination` means the block was never reached.
  */
+import { CONFIG } from '@/experiment/config';
 
 export type ColumnRole =
   /** Identifies a row or a grouping level. Never a predictor. */
@@ -150,7 +151,7 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
   { column: 'search_false_detections', role: 'secondary', unit: 'count', missing: 'not completed',
     description: 'Non-target words tapped, counted once per word. A rise with stable search_accuracy is a criterion shift rather than a sensitivity change, and a large value beside a high search_accuracy and a short search_time_ms is the signature of tapping indiscriminately.' },
   { column: 'search_termination', role: 'qc', unit: '-', missing: 'not completed',
-    description: 'Whether the block ended by the participant finishing or by the 40 s cap. Decides whether search_time_ms is a measurement or a bound.' },
+    description: `Whether the block ended by the participant finishing or by the ${CONFIG.VS_TIME_LIMIT_MS / 1000} s cap. Decides whether search_time_ms is a measurement or a bound.` },
   { column: 'rt_mean_hits_ms', role: 'secondary', unit: 'ms', missing: 'no valid hits',
     description: 'Mean reaction time on correct go trials.' },
   { column: 'rt_median_hits_ms', role: 'secondary', unit: 'ms', missing: 'no valid hits',

@@ -1848,3 +1848,59 @@ None of them can be NEGATIVE, though, and that much is checkable without inventi
 negative EAR or a negative coefficient of variation is corruption, not a measurement. `'ratio'` now
 asserts a floor and no ceiling, with a test in each direction — a CV of 1.7 passes, an EAR of -0.2 is
 reported.
+
+## Round 25 — the cap I raised, and the four places that did not follow
+
+The hardcoded-bounds audit was resumed and got further: 12 of 30 agents completed, 18 still lost to a
+session limit. It confirmed five findings. Three of them are direct fallout from my own Round 14
+change, and that is the part worth stating plainly: I raised the visual-search cap from 40 s to 60 s,
+updated `PROTOCOL.md` and the analysis plan, noted that the on-screen instruction "followed on its
+own" because it derives the number — and left four copies of the old value behind.
+
+**Where the stale 40 survived.** Both codebooks, an internal comment in the pooled exporter, a type
+comment, and two literals in the simulator.
+
+The one in `analysisCodebook.ts` was the most serious, and not because of its severity grade.
+`analysis_long.csv` is the file the confirmatory analysis reads, and the entry immediately above the
+stale one tells the analyst that time-capped rows are a lower bound and must be treated as censored.
+So the analyst was handed an explicit instruction to censor, at a threshold 20 s below the real one.
+Blocks between 40 s and 60 s are not a rare tail: the timing model puts search time at a mean of 30 s
+with an SD of 8, which puts 40 s at about +1.25 SD. An analyst who believed the cap was 40 s would
+read those blocks as impossible — and the sibling codebook hands them a ready-made explanation for
+deleting them ("a browser throttles timers while the app is in the background") — which would delete
+genuine slow searches, the exact observations the raise was made to buy, in a condition-dependent way.
+
+**The simulator was worse in a quieter way.** `src/sim/participant.ts` censored at two hardcoded
+40000s, so the power and recovery analyses were resting on a cap the app no longer uses. A stale cap
+there is a stale power estimate, and nothing would have announced it.
+
+**The repo had already written down the lesson and it did not help.** The Round 14 correction note
+says, in terms: "this project has TWO export products with TWO codebooks, and 'the export does not
+write it' is a claim about one of them until both have been checked." The 40 s text survived in both
+anyway. That is the argument for a test rather than a resolution to be careful: every one of these
+sites now derives the number from `CONFIG.VS_TIME_LIMIT_MS`, and a test asserts that no stale 40-second
+literal survives anywhere in the storage layer or the simulator, that both codebooks render the cap
+the code actually uses, and that the simulator censors at that same cap.
+
+**The other confirmed finding is a genuine clamp, and the only one the audit found that can pin a real
+measurement without leaving a mark.** `gazeCalibration.ts` floored the fitted gaze threshold at a bare
+`0.06`, written twice. The fitted value is the midpoint between the centre spread and the edge offset,
+so the floor binds whenever those sum to under about 0.12 — a participant with limited gaze excursion,
+or a camera far enough away that the iris offsets are small. That is not a degenerate fit: the validity
+test only asks that the edges separate from the centre by 1.5x, which such a participant satisfies
+comfortably. When it binds, every classification uses a threshold wider than their eyes earned, so more
+samples land in the centre zone and `gaze_deviation_ratio` is biased DOWNWARD — one-directionally, on
+a participant characteristic, so if it binds more often in one condition it is confounded with the
+independent variable.
+
+The floor stays, because a threshold near zero would classify ordinary measurement noise as a gaze
+excursion. What changed is that the override is now recorded: `MIN_FITTED_GAZE_THRESHOLD` is named,
+`thresholdFloored` is returned from the fit, and `gaze_threshold_floored` is exported so those sittings
+can be found. Before, they could not be. This is the pattern `viewportScale.ts` already sets for its
+own minimum — a clamp is acceptable when its firing is visible in the data.
+
+**Still not covered.** 18 verify agents and the last of the scan dimensions never ran. Two further
+confirmed findings from the completed set remain unactioned — the signal-detection correction label
+restated in both codebooks rather than single-sourced from `signalDetection.ts`, and one more — and
+the truncation, validation and design-facts dimensions have still never completed. None of that is
+clean; it is unexamined.

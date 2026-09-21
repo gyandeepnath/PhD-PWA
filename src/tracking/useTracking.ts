@@ -577,6 +577,7 @@ export function useTracking(): TrackingApi {
       samples_per_target: cal.samplesPerTarget,
       gaze_trust: quality.trust,
       gaze_targets_well_covered: quality.wellCovered,
+      gaze_threshold_floored: cal.thresholdFloored,
       ear_baseline: earBaseline,
       gaze_h_threshold: cal.valid ? cal.hThreshold : null,
       gaze_v_threshold: cal.valid ? cal.vThreshold : null,
