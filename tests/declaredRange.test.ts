@@ -255,3 +255,45 @@ describe('both codebooks carry the extreme-rate correction, from one source', ()
     expect(RATE_CORRECTION_NOTE).not.toMatch(/et al\.|&\s*[A-Z]/);
   });
 });
+
+/**
+ * THE PRIMARY OUTCOME'S LIMITATION MUST TRAVEL WITH THE DATA.
+ *
+ * `docs/LITERATURE_VALIDATION.md` establishes — honestly and at length — that the 0.60-of-baseline
+ * cut separating complete from incomplete blinks has NO published validation, for webcam EAR at any
+ * baseline fraction, while the 0.75 registration cut does have precedent. The repository knew this.
+ * The exported codebook did not say it, so an analyst opening the bundle was told
+ * `incomplete_blink_ratio` is THE PRIMARY OUTCOME and nothing about what the classification rests on.
+ *
+ * A limitation that lives only in a document nobody has to open is not a limitation that has been
+ * stated. This keeps it attached to the column it qualifies.
+ */
+describe('the primary outcome carries its classifier provenance', () => {
+  const primary = () => CODEBOOK.find((c) => c.column === 'incomplete_blink_ratio')!.description;
+
+  it('names both cuts, so the classification can be reconstructed', () => {
+    expect(primary()).toContain('0.75');
+    expect(primary()).toContain('0.60');
+  });
+
+  it('says plainly that the completeness cut is the unvalidated one', () => {
+    // The distinction is the point: registration is defensible, completeness is the load-bearing
+    // assumption, and conflating them would overstate what the column supports.
+    expect(primary()).toMatch(/0\.60 completeness cut has NONE|completeness cut has NONE/);
+    expect(primary()).toContain('LITERATURE_VALIDATION.md');
+  });
+
+  it('does not describe the ratio as comparable to published proportions', () => {
+    // Blink metrics differ systematically by device, algorithm and blink definition, so an absolute
+    // incomplete-blink ratio is not interchangeable across methods.
+    expect(primary()).toMatch(/within-study relative measure/i);
+  });
+
+  it('keeps the same account at the definition site, where the numbers live', () => {
+    const blink = readFileSync(resolve(__dirname, '..', 'src/tracking/blink.ts'), 'utf8');
+    const tiers = blink.slice(Math.max(0, blink.indexOf('export const EAR_TIERS') - 2600),
+      blink.indexOf('export const EAR_TIERS'));
+    expect(tiers).toContain('LITERATURE_VALIDATION.md');
+    expect(tiers).toMatch(/NO published validation/);
+  });
+});

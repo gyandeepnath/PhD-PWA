@@ -30,6 +30,39 @@ export interface Point {
 export const LEFT_EYE_EAR = [33, 160, 158, 133, 153, 144];
 export const RIGHT_EYE_EAR = [362, 385, 387, 263, 373, 380];
 
+/**
+ * The fractions of the participant's own open-eye EAR baseline that DEFINE the primary outcome.
+ *
+ * `partial` (0.75) registers a blink; `full` (0.60) separates a complete blink from an incomplete
+ * one. Every incomplete_blink_ratio in this study is the ratio of those two cuts, so these three
+ * numbers matter more than any other constant in the codebase — and they sat here bare, while the
+ * frame-rate threshold immediately below them carries five paragraphs.
+ *
+ * WHERE THEY COME FROM. docs/LITERATURE_VALIDATION.md examines this at length. Summarised here so a
+ * reader at the definition site is not left to guess, and stated as that document states it:
+ *
+ *  - Baseline NORMALISATION is the better-supported choice over an absolute threshold, which is
+ *    criticised in the literature for failing to generalise across facial geometry and illumination.
+ *  - 0.75 for REGISTRATION has one retrieved published precedent — Ersoy et al. (2026), which
+ *    calibrates each person for 5 s from MediaPipe Face Mesh and sets the cut at exactly 75% of
+ *    their baseline. It is a preprint, not peer-reviewed, and its outcome is eye open/closed rather
+ *    than blink completeness. Ru (2026) uses 50% of baseline instead, so the published fraction is
+ *    not settled and 0.75 sits at the PERMISSIVE end — it will admit small lid movements, twitches
+ *    and squints into the denominator of the ratio.
+ *  - 0.60 for COMPLETENESS has NO published validation. The validation document is explicit: none
+ *    was found for MediaPipe FaceMesh, for any webcam EAR, at 0.60 or at any other baseline
+ *    fraction. Every retrieved study that classifies complete versus incomplete blinks against a
+ *    reference standard uses a different signal entirely — near-infrared segmentation, a
+ *    keratograph, high-speed infrared imaging or a masked clinical observer.
+ *  - Incomplete blinks are the demonstrably harder class even with far better instrumentation:
+ *    Nousias et al. (2022) report F1 95.3% for complete blinks and 80.9% for incomplete ones.
+ *
+ * So the registration cut is defensible and the completeness cut is the study's load-bearing
+ * assumption. That is a limitation to STATE, not a reason to change the number — moving it would
+ * substitute one unvalidated fraction for another. Do not edit these without reading that document,
+ * and do not edit them at all once collection has started: ratios computed under two different cuts
+ * are not comparable, and the cut is part of what the outcome means.
+ */
 export const EAR_TIERS = { full: 0.6, partial: 0.75, micro: 0.88 } as const;
 export const FPS_TIER_THRESHOLD = 25;
 

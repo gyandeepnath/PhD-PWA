@@ -1994,3 +1994,43 @@ It now interpolates the same `RATE_CORRECTION_NOTE` single-sourced beside the im
 eight. The condition count derived from the table and the factorial beside it did not, so the text
 predated GREEN being added to the original four-colour set and never followed. Both factors are now
 derived from the condition table, so the sentence cannot contradict its own count again.
+
+## Round 27 — the primary outcome's defining threshold, and where its justification was kept
+
+`EAR_TIERS = { full: 0.6, partial: 0.75, micro: 0.88 }` sat in `blink.ts` with no comment at all,
+while the frame-rate threshold immediately below it carries five paragraphs. These three fractions of
+the participant's own baseline DEFINE the primary outcome: 0.75 registers a blink, 0.60 separates
+complete from incomplete, and every `incomplete_blink_ratio` in the study is the ratio of those two
+cuts.
+
+The audit flagged it as an undocumented cutoff gating the primary outcome. It is not undocumented —
+`docs/LITERATURE_VALIDATION.md` examines it in depth, and what that document establishes is more
+important than the missing comment:
+
+- Baseline normalisation is the better-supported choice over an absolute threshold.
+- **0.75 for registration** has one retrieved published precedent — a preprint that calibrates each
+  person for 5 s from MediaPipe Face Mesh and sets the cut at exactly 75% of their baseline, for eye
+  open/closed rather than blink completeness. Another retrieved study uses 50%, so the published
+  fraction is not settled and 0.75 sits at the permissive end.
+- **0.60 for completeness has NO published validation.** The document is explicit: none found for
+  MediaPipe FaceMesh, for any webcam EAR, at 0.60 or at any other baseline fraction. Every retrieved
+  study classifying blink completeness against a reference standard uses a different signal —
+  near-infrared segmentation, a keratograph, high-speed infrared imaging, or a masked clinical
+  observer. Incomplete blinks are also the harder class even with far better instrumentation.
+
+**So the real finding is not that the number is undocumented. It is that the study's load-bearing
+assumption was documented in a file the shipped data never points at.** The codebook entry for
+`incomplete_blink_ratio` read, in full: "THE PRIMARY OUTCOME. Incomplete blinks / all detected blinks,
+during reading. A bounded proportion: model on the logit scale or with a beta/binomial mixed model."
+An analyst opening the bundle was told what the column is and nothing about what the classification
+rests on.
+
+Both now carry the account. The definition site summarises what the validation document found,
+including the part that is uncomfortable, and says that moving the number would substitute one
+unvalidated fraction for another — it is a limitation to state, not a number to tune. The codebook
+entry carries the same thing to the analyst, and adds the consequence: treat the ratio as a
+within-study relative measure rather than a value comparable to published incomplete-blink
+proportions, because blink metrics differ systematically by device, algorithm and blink definition.
+
+A limitation that lives only in a document nobody has to open is not a limitation that has been
+stated. Four tests keep the two accounts attached to the numbers they qualify.
