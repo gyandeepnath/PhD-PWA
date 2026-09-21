@@ -1947,3 +1947,50 @@ tallied by hand for a recruitment flow diagram. **Investigator decision, not a d
 
 **Still not covered:** 18 verify agents never ran, so the candidates from the threshold dimension
 beyond the five confirmed above were never adversarially checked. That ground is unexamined, not clean.
+
+## Round 26 — one split participant made every other participant unanalysable
+
+Working through the audit candidates the verify agents never reached. This is the most serious defect
+this audit produced, and it lands precisely on the design decision the investigator had just made.
+
+`buildAnalysisDataset` derives how many sittings a complete participant should have using a
+**pool-wide** `Math.min` over `conditions_per_session` across every session on the device, and
+`checkJoin` then compares EVERY participant against that one number. So a single split participant
+sets the expectation for the whole cohort.
+
+Demonstrated on the real path:
+
+    three participants, each ten conditions in one sitting  ->  analysable 3 / 3
+    the same three, plus ONE split participant              ->  analysable 1 / 4
+
+The three single-sitting participants each had `condition_runs = 10` — complete by every measure —
+and were excluded as `incomplete_split_sitting`. The reason they were excluded is something a
+DIFFERENT participant did.
+
+Three things make this the worst shape a defect can take here. `analysable` is the column the
+confirmatory analysis filters on, so the exclusion is silent and downstream. The excluded participants
+are complete, so nothing about their own data would ever prompt a second look. And the investigator
+has deliberately kept the split option, so a real cohort is EXPECTED to be mixed — which means the
+majority case is the one that broke, and it would have broken at analysis time, after the participants
+had gone home.
+
+The expectation is now read from each participant's own sittings, falling back to the pool-wide figure
+only when they record none. Total condition-runs remains the invariant, which is what the original
+comment correctly identified as the thing that does not change. Same cohort now gives 4 / 4, and the
+mirror case — one single-sitting participant among splits — is covered too. The check keeps its teeth:
+a split participant genuinely missing a half is still blocked. Reverting to the pool-wide expectation
+fails two of the three new tests.
+
+**Two more from the same batch, both stale prose making a positive false claim.**
+
+`analysisCodebook.ts` described `search_d_prime` as "Log-linear corrected". The code calls
+`computeSdt`, and that module's comment says in terms: "The 1/(2N) rule, NOT the log-linear correction
+— an earlier comment here called it 'loglinear-style', and they are different, separately named
+procedures." So the codebook named the wrong statistical procedure to the analyst, and the module had
+already recorded that this exact mislabel was fixed once in the code — it survived in the codebook.
+It now interpolates the same `RATE_CORRECTION_NOTE` single-sourced beside the implementation.
+
+`LandingPage.tsx` rendered the study overview as "10 (2 polarity × 4 colour)". Two times four is
+eight. The condition count derived from the table and the factorial beside it did not, so the text
+predated GREEN being added to the original four-colour set and never followed. Both factors are now
+derived from the condition table, so the sentence cannot contradict its own count again.

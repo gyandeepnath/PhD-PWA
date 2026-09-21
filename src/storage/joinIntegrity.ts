@@ -209,8 +209,35 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
     const nLevels = expect.illuminationLevels ?? N_ILLUMINATION_BLOCKS;
     const runs = ordered.reduce((n, b) => n + b.conditions.length, 0);
 
-    // --- sitting count -------------------------------------------------------------------
-    if (ordered.length < expect.sittingsPerParticipant) {
+    /*
+     * --- sitting count -------------------------------------------------------------------
+     *
+     * EXPECTED PER PARTICIPANT, from that participant's own conditions_per_session.
+     *
+     * It used to come from `expect.sittingsPerParticipant`, which buildAnalysisDataset derives with
+     * a POOL-WIDE `Math.min` over every session on the device. One split participant therefore set
+     * the expectation for everybody: in a cohort of three single-sitting participants plus one
+     * split, the minimum is 5, the expectation becomes 2 sittings, and all three single-sitting
+     * participants — each with a complete ten condition-runs — were excluded as
+     * `incomplete_split_sitting`. Verified: analysable went from 3/3 to 0/3 on adding the fourth.
+     *
+     * That is the worst shape a defect can take here. `analysable` is the column the confirmatory
+     * analysis filters on, the excluded participants are COMPLETE, and the reason they are excluded
+     * is something a DIFFERENT participant did. Worse, the investigator has deliberately kept the
+     * split option, so a real cohort is expected to be mixed — the majority case is the one that
+     * breaks.
+     *
+     * The invariant that does not change is total condition-runs, so the packaging is read from this
+     * participant's own sittings and only falls back to the pool-wide figure when they record none.
+     */
+    const ownCps = ordered
+      .map((b) => b.session.conditions_per_session)
+      .filter((n): n is number => Number.isFinite(n) && n > 0);
+    const expectedSittings = ownCps.length > 0
+      ? Math.max(1, Math.round(expect.conditionsPerParticipant / Math.min(...ownCps)))
+      : expect.sittingsPerParticipant;
+
+    if (ordered.length < expectedSittings) {
       /*
        * Two different shortfalls, and they must not share a message.
        *
@@ -222,19 +249,19 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
        */
       if (nLevels > 1) {
         add('blocking', 'incomplete_crossover',
-          `Only ${ordered.length} of ${expect.sittingsPerParticipant} sittings present. The illumination factor is `
+          `Only ${ordered.length} of ${expectedSittings} sittings present. The illumination factor is `
           + 'between-sittings, so a participant with one sitting contributes no within-participant '
           + 'illumination contrast and cannot enter the crossover analysis as a complete case.');
       } else {
         add('blocking', 'incomplete_split_sitting',
-          `Only ${ordered.length} of ${expect.sittingsPerParticipant} sittings present. The ten conditions were `
+          `Only ${ordered.length} of ${expectedSittings} sittings present. The conditions were `
           + 'split across sittings for scheduling and at least one half is missing, so this '
           + 'participant has an incomplete condition set. Illumination is not involved: it is a '
           + 'single level throughout.');
       }
-    } else if (ordered.length > expect.sittingsPerParticipant) {
+    } else if (ordered.length > expectedSittings) {
       add('blocking', 'too_many_sittings',
-        `${ordered.length} sittings found where ${expect.sittingsPerParticipant} were expected. This is either a `
+        `${ordered.length} sittings found where ${expectedSittings} were expected. This is either a `
         + 'duplicate enrolment or an abandoned sitting that was restarted; which rows are the real '
         + 'ones is a decision for the researcher, not for this exporter.');
     }
@@ -246,7 +273,7 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
         'At least one sitting has no assigned illumination level, so it cannot be placed on the '
         + 'whole-plot factor.');
     } else if (nLevels > 1
-               && ordered.length === expect.sittingsPerParticipant
+               && ordered.length === expectedSittings
                && new Set(known).size !== known.length) {
       /*
        * Only meaningful while illumination has more than one level. Under the single-level protocol

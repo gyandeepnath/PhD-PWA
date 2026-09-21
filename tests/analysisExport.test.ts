@@ -546,3 +546,53 @@ describe('a split participant merges into one participant, not two', () => {
     expect(new Set(labels).size).toBe(N_CONDITIONS);
   });
 });
+
+/*
+ * A PARTICIPANT IS JUDGED BY THEIR OWN PACKAGING, NOT BY SOMEBODY ELSE'S.
+ *
+ * The expected sitting count came from a POOL-WIDE Math.min over conditions_per_session across every
+ * session on the device. One split participant therefore set the expectation for everybody: three
+ * single-sitting participants, each with a complete ten condition-runs, were excluded as
+ * incomplete_split_sitting because a FOURTH participant had been split. analysable went 3/3 -> 0/3.
+ *
+ * That is the worst shape a defect can take in this file. `analysable` is what the confirmatory
+ * analysis filters on, the excluded participants are complete, and the cause is another
+ * participant's scheduling. And the investigator has deliberately kept the split option, so a real
+ * cohort is expected to be mixed — the majority case is the one that broke.
+ */
+describe('a mixed cohort of single and split sittings', () => {
+  const single = (pid: string) => [
+    sitting(pid, { sid: `${pid}-only`, start: 1, illumination: 'moderate', block: 0, conditionsPerSession: N_CONDITIONS, offset: 0 }),
+  ];
+  const split = (pid: string) => [
+    sitting(pid, { sid: `${pid}-h1`, start: 1, illumination: 'moderate', block: 0, conditionsPerSession: N_CONDITIONS / 2, offset: 0 }),
+    sitting(pid, { sid: `${pid}-h2`, start: 2, illumination: 'moderate', block: 0, conditionsPerSession: N_CONDITIONS / 2, offset: N_CONDITIONS / 2 }),
+  ];
+
+  it('does not let one split participant make the single-sitting ones unanalysable', () => {
+    const { ds } = long([...single('A1'), ...single('A2'), ...single('A3'), ...split('B1')]);
+    expect(ds.integrity.analysable_participants).toBe(4);
+    for (const p of ds.integrity.participants) {
+      expect(p.condition_runs).toBe(N_CONDITIONS);
+      expect(p.excluded_by).toEqual([]);
+    }
+  });
+
+  it('does not let one single-sitting participant make the split ones unanalysable either', () => {
+    // The mirror case, since the pool-wide minimum could equally have come from the other side.
+    const { ds } = long([...split('B1'), ...split('B2'), ...single('A1')]);
+    expect(ds.integrity.analysable_participants).toBe(3);
+  });
+
+  it('still blocks a split participant who is missing a half', () => {
+    // The check has to keep its teeth: the whole point of it is a participant whose condition set is
+    // genuinely incomplete, and that must not be lost in making it per-participant.
+    const halfOnly = [
+      sitting('C1', { sid: 'C1-h1', start: 1, illumination: 'moderate', block: 0, conditionsPerSession: N_CONDITIONS / 2, offset: 0 }),
+    ];
+    const { ds } = long(halfOnly);
+    const verdict = ds.integrity.participants[0];
+    expect(verdict.condition_runs).toBe(N_CONDITIONS / 2);
+    expect(verdict.excluded_by.length).toBeGreaterThan(0);
+  });
+});

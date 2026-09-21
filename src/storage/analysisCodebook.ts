@@ -148,7 +148,7 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
   { column: 'search_accuracy', role: 'secondary', unit: '0-1', missing: 'not completed',
     description: 'Targets found over targets present.' },
   { column: 'search_d_prime', role: 'secondary', unit: "d'", missing: 'not completed',
-    description: "PREFER THIS TO search_accuracy as the search outcome. Sensitivity over words-as-trials: hits are target words tapped, false alarms are non-target words tapped, and the correct-rejection pool is the rest of the passage. search_accuracy ignores false detections entirely, so a participant who taps indiscriminately finds every target in seconds and scores 1.0 on it with no quality flag raised; d-prime does not reward that. Log-linear corrected, so it is finite at ceiling and floor." },
+    description: `PREFER THIS TO search_accuracy as the search outcome. Sensitivity over words-as-trials: hits are target words tapped, false alarms are non-target words tapped, and the correct-rejection pool is the rest of the passage. search_accuracy ignores false detections entirely, so a participant who taps indiscriminately finds every target in seconds and scores 1.0 on it with no quality flag raised; d-prime does not reward that. ${RATE_CORRECTION_NOTE}` },
   { column: 'search_false_detections', role: 'secondary', unit: 'count', missing: 'not completed',
     description: 'Non-target words tapped, counted once per word. A rise with stable search_accuracy is a criterion shift rather than a sensitivity change, and a large value beside a high search_accuracy and a short search_time_ms is the signature of tapping indiscriminately.' },
   { column: 'search_termination', role: 'qc', unit: '-', missing: 'not completed',

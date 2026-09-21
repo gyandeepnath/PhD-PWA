@@ -37,7 +37,13 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
         <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">Study Overview</p>
         <div style={{ marginTop: 16 }}>
           {[
-            ['Conditions', `${CONDITIONS.length} (2 polarity × 4 colour)`],
+            /*
+             * Derived, not stated. This read "2 polarity x 4 colour" beside a condition count that
+             * already derived from the table — so it rendered "10 (2 polarity x 4 colour)", and
+             * 2 x 4 is 8. The text predates GREEN being added to the original four-colour set and
+             * was never updated, which made the study overview shown to operators contradict itself.
+             */
+            ['Conditions', `${CONDITIONS.length} (${new Set(CONDITIONS.map((c) => c.polarity)).size} polarity × ${new Set(CONDITIONS.map((c) => c.colorName)).size} colour)`],
             ['Design', 'Within-subjects, Williams Latin square'],
             ['Duration', '~60–90 min'],
             ['Tasks', 'Reading · Search · Go/No-Go'],
