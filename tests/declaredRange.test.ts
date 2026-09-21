@@ -21,6 +21,7 @@ import { buildFixtureBundle, withFixtureMedia } from '@/sim/bundleFixture';
 import { buildAnalysisDataset } from '@/storage/analysisExport';
 import { ANALYSIS_CODEBOOK } from '@/storage/analysisCodebook';
 import { CONFIG } from '@/experiment/config';
+import { RATE_CORRECTION_NOTE, computeSdt } from '@/lib/signalDetection';
 
 describe('the declared-range unit parser', () => {
   it('reads the range forms this codebook actually uses', () => {
@@ -213,5 +214,44 @@ describe('codebook prose derives durations rather than restating them', () => {
     const src = sourceOf('src/sim/participant.ts');
     expect(src).toContain('CONFIG.VS_TIME_LIMIT_MS');
     expect(src).toMatch(/const searchCapMs = CONFIG\.VS_TIME_LIMIT_MS/);
+  });
+});
+
+/**
+ * THE d-PRIME CORRECTION HAS TO TRAVEL WITH THE DATA.
+ *
+ * `computeSdt` bounds a rate of exactly 0 or 1 into [1/(2N), 1 - 1/(2N)] before the z-transform,
+ * because 1.0 has no z-score. Neither codebook said so. An analyst re-deriving d-prime from the
+ * exported hits / misses / false alarms / correct rejections therefore gets a DIFFERENT number for
+ * any block at a ceiling or a floor — and a go/no-go block with 20 signal trials reaches a ceiling
+ * easily — with nothing in the file explaining the discrepancy.
+ *
+ * The note is defined once beside the implementation and interpolated into both codebooks, rather
+ * than written out twice: a description restated in two places is how the visual-search cap came to
+ * say 40 s in both codebooks twenty seconds after it became 60.
+ */
+describe('both codebooks carry the extreme-rate correction, from one source', () => {
+  it('describes the correction wherever d-prime is documented', () => {
+    expect(CODEBOOK.find((c) => c.column === 'd_prime')!.description).toContain(RATE_CORRECTION_NOTE);
+    const pooled = ANALYSIS_CODEBOOK.find((c) => c.column === 'd_prime') as { description: string };
+    expect(pooled.description).toContain(RATE_CORRECTION_NOTE);
+  });
+
+  it('describes what the code actually does, including that the rates export uncorrected', () => {
+    // The reconstructability claim is the load-bearing part: it is what lets an analyst check the
+    // adjustment rather than take it on trust.
+    expect(RATE_CORRECTION_NOTE).toContain('1/(2N)');
+    expect(RATE_CORRECTION_NOTE).toContain('UNCORRECTED');
+    const sdt = computeSdt({ hits: 20, misses: 0, falseAlarms: 0, correctRejections: 12 });
+    expect(sdt.hit_rate).toBe(1);          // exported raw, at the ceiling
+    expect(sdt.false_alarm_rate).toBe(0);  // exported raw, at the floor
+    expect(Number.isFinite(sdt.d_prime!)).toBe(true); // yet d-prime is finite, because of the bound
+  });
+
+  it('does not attribute the rule to a source the module never cites', () => {
+    // Inventing a citation for a procedure is worse than leaving it uncited, and this repo's
+    // standing rule is that a reference must resolve to something real.
+    expect(RATE_CORRECTION_NOTE).not.toMatch(/\b(19|20)\d{2}\b/);
+    expect(RATE_CORRECTION_NOTE).not.toMatch(/et al\.|&\s*[A-Z]/);
   });
 });

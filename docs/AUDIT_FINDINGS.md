@@ -1899,8 +1899,21 @@ excursion. What changed is that the override is now recorded: `MIN_FITTED_GAZE_T
 can be found. Before, they could not be. This is the pattern `viewportScale.ts` already sets for its
 own minimum — a clamp is acceptable when its firing is visible in the data.
 
-**Still not covered.** 18 verify agents and the last of the scan dimensions never ran. Two further
-confirmed findings from the completed set remain unactioned — the signal-detection correction label
-restated in both codebooks rather than single-sourced from `signalDetection.ts`, and one more — and
-the truncation, validation and design-facts dimensions have still never completed. None of that is
-clean; it is unexamined.
+**The d-prime correction was documented nowhere.** The audit flagged the correction's identity as
+something that should be single-sourced rather than restated; reading the two codebooks showed the
+sharper version of the problem — neither mentioned it at all. `computeSdt` bounds a rate of exactly 0
+or 1 into [1/(2N), 1 - 1/(2N)] before the z-transform, because 1.0 has no z-score. A go/no-go block
+with 20 signal trials reaches a ceiling easily, so an analyst re-deriving d-prime from the exported
+hits, misses, false alarms and correct rejections gets a DIFFERENT number for those blocks, with
+nothing in the file explaining the discrepancy.
+
+`RATE_CORRECTION_NOTE` is now defined once beside the implementation and interpolated into both
+codebooks — written out twice is how the search cap came to say 40 s in both of them twenty seconds
+after it became 60. It states exactly what the code does, including that `hit_rate` and
+`false_alarm_rate` export UNCORRECTED so the adjustment is reconstructable, and it deliberately does
+NOT attribute the rule to a source: the module cites none, and inventing a citation for a procedure is
+worse than leaving it uncited. A test asserts the absence of any year or author pattern in it.
+
+**Still not covered, and this is a gap rather than a clean result.** 18 verify agents never ran, and
+the truncation, validation and design-facts scan dimensions have still never completed. That ground is
+unexamined.

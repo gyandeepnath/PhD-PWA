@@ -14,6 +14,23 @@ export interface SdtInput {
   correctRejections: number;
 }
 
+/**
+ * How the extreme-rate correction is described wherever it has to be described.
+ *
+ * Single-sourced because it was described NOWHERE, which is the quieter half of the same problem: an
+ * analyst re-deriving d-prime from the exported hits/misses/false-alarms/correct-rejections gets a
+ * different number for any block at a ceiling or floor, and neither codebook said why. A rate of 1.0
+ * has no z-score, so something has to be done, and what was done has to travel with the data.
+ *
+ * Stated exactly as the implementation below behaves — no more. In particular it names the rule and
+ * does NOT attribute it to a source, because this module does not cite one and inventing a citation
+ * for a procedure is worse than leaving it uncited.
+ */
+export const RATE_CORRECTION_NOTE =
+  'Rates of exactly 0 or 1 are bounded to 1/(2N) and 1 - 1/(2N) before the z-transform, where N is '
+  + 'that pool\'s trial count; every other rate passes through unchanged. hit_rate and '
+  + 'false_alarm_rate are exported UNCORRECTED, so the adjustment is reconstructable.';
+
 export interface SdtResult {
   /** Hits / signal trials. Null when the block held no signal trials — never 0, which is a claim. */
   hit_rate: number | null;
