@@ -1914,6 +1914,36 @@ after it became 60. It states exactly what the code does, including that `hit_ra
 NOT attribute the rule to a source: the module cites none, and inventing a citation for a procedure is
 worse than leaving it uncited. A test asserts the absence of any year or author pattern in it.
 
-**Still not covered, and this is a gap rather than a clean result.** 18 verify agents never ran, and
-the truncation, validation and design-facts scan dimensions have still never completed. That ground is
-unexamined.
+**The three dimensions the workflow never finished were then covered directly**, since a third
+attempt would likely have hit the same limit.
+
+*Design facts as literals.* The codebooks describe the design in words — "the ten conditions", "the
+nine targets", "the sixteen items", "Five levels" — and all of it is correct today. Interpolating
+every string would be churn against a design far more stable than a cap that was being actively
+tuned; the CVS-Q's sixteen items are definitional to a validated instrument, not a choice. A tripwire
+was added instead: it asserts that the factorial actually crosses (five colours present in BOTH
+polarities, or polarity x colour is not estimable at all), that the counts are 10 / 9 / 16, and that
+any prose naming one of those numbers is only written while the number still holds. It also asserts
+that at least three of those phrases are genuinely present, so rewording the descriptions cannot make
+the block vacuous. Filtering one colour out of the condition table fails three of the seven tests.
+
+One false alarm worth recording: an initial probe reported "1 distinct colour" across the condition
+table, which would have meant the design did not cross at all. The field is `colorName`, not
+`color_name` — the probe was wrong, not the data. Checked before reporting.
+
+*Truncations.* Every `.slice(0, N)` in the storage layer is on an EXAMPLE LIST inside an integrity
+warning, and each such message carries the full count in its own text (`${orphans.length} row(s)...`)
+with the slice supplying a sample. The magnitude is not hidden and no measurement is truncated. Clean.
+
+*Validation gates.* The age bounds derive from `CONFIG` rather than being restated, and the exclusion
+machinery is careful — `mergeExclusionReasons` merges reasons across stages, with comments recording
+two earlier defects (writing `eligible: TRUE` with an empty reason, and replacing rather than merging).
+One inconsistency, reported rather than changed: contact-lens wear and colour-vision deficiency are
+recorded as exclusions on the participant record, while age outside 18-35 blocks in the UI before any
+record exists — two criteria stated in the same sentence on the same screen, one of which leaves a
+trace and one of which does not. That is plausibly the RIGHT choice, since writing a record about
+someone who was screened out has consent implications, but it means an age screen-out has to be
+tallied by hand for a recruitment flow diagram. **Investigator decision, not a defect to fix here.**
+
+**Still not covered:** 18 verify agents never ran, so the candidates from the threshold dimension
+beyond the five confirmed above were never adversarially checked. That ground is unexamined, not clean.
