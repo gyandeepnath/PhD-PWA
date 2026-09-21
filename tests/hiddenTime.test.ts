@@ -16,6 +16,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { trackHiddenTime } from '@/lib/hiddenTime';
 
 const readFileSyncSync = (p: string) => readFileSync(p, 'utf8');
@@ -249,5 +250,52 @@ describe('portrait time is tracked like hidden time, on its own event', () => {
     expect(target.count('visibilitychange')).toBe(0);
     tr.stop();
     expect(target.count('change')).toBe(0);
+  });
+});
+
+/**
+ * THE READING TASK'S PAGE ADVANCE IS LATCHED ON A REF, NOT ON RENDERED STATE.
+ *
+ * `unlocked` is React state, re-locked in a passive effect that React schedules AFTER the commit. So
+ * the commit from the first tap renders the next page with the button still live, and a second tap
+ * inside that window passed the guard. Reading is when the window is widest — FaceMesh inference runs
+ * every frame — and a participant who taps, sees nothing, and taps again is behaving normally.
+ *
+ * The cost was invisible in the export: `pageStart` had not been reset either, so both pushes
+ * measured from the same page's start. Page N+1 was credited with a dwell it never had while being
+ * on screen for a couple of hundred milliseconds, the minimum-dwell QC looked normal, the skim floor
+ * was not tripped, and the comprehension items drawn from that page were simply failed.
+ *
+ * There is no DOM-rendering harness in this project, so this is a STATIC assertion over the source —
+ * the technique tests/pwaPolicy.test.ts uses against vite.config.ts. It proves the latch exists, is
+ * checked before any dwell is recorded, and is released in the same effect that re-locks the button.
+ * It does NOT prove the component renders correctly; a render test would be stronger.
+ */
+describe('the reading page advance cannot fire twice for one page', () => {
+  const source = () => readFileSync(resolve(__dirname, '..', 'src/tasks/ReadingTask.tsx'), 'utf8');
+
+  it('checks a ref latch, not only the unlocked state', () => {
+    const src = source();
+    expect(src).toMatch(/if \(!unlocked \|\| advancing\.current\) return;/);
+  });
+
+  it('sets the latch before recording the dwell or advancing', () => {
+    const src = source();
+    const guard = src.indexOf('advancing.current) return;');
+    const set = src.indexOf('advancing.current = true;', guard);
+    const push = src.indexOf('pageDwells.current.push', guard);
+    expect(set).toBeGreaterThan(guard);
+    expect(push).toBeGreaterThan(set);
+  });
+
+  it('releases the latch where the button is re-locked and the clock restamped', () => {
+    // Held for exactly the window during which those two are stale, and no longer.
+    const src = source();
+    const release = src.indexOf('advancing.current = false;');
+    const relock = src.indexOf('setUnlocked(false);', release);
+    const restamp = src.indexOf('pageStart.current = now();', release);
+    expect(relock).toBeGreaterThan(release);
+    expect(restamp).toBeGreaterThan(release);
+    expect(restamp - release).toBeLessThan(200); // same effect body, not a distant one
   });
 });

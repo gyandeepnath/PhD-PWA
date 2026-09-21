@@ -2206,8 +2206,36 @@ no rows at all. Both corrected, with the wrong reading named so nobody re-derive
 own entry said "over all trials" while the note two lines away said anticipations are excluded from
 it — also corrected.
 
-**Still open from that audit:** a fast double-tap on "Next page" can skip a page of the passage. The
-guard is React state re-locked in a passive effect rather than a ref latch, so the commit from the
-first tap renders the next page with the button still live; the second tap passes the guard, and the
-page-dwell record attributes both taps to the same page, so nothing in the export shows that a page
-of the stimulus was never read. The other three tasks all use a ref latch for exactly this.
+**The double-tap that could skip a page, closed in Round 32.**
+
+## Round 32 — a double-tap could skip a page of the passage, and nothing would show it
+
+The last of the three findings from the task-component audit.
+
+`next()` guarded on `if (!unlocked) return;` — React STATE, re-locked in the passive effect keyed on
+`[page, started]`, which React schedules AFTER the commit. So the commit from the first tap rendered
+the next page with `unlocked` still true and the button still on screen, and a second tap arriving
+inside that window passed the guard. Reading is when that window is widest: FaceMesh inference runs
+every frame, so a main-thread stall of a couple of hundred milliseconds is ordinary, and a
+participant who taps, sees nothing happen, and taps again is behaving normally.
+
+What it cost was invisible in the export. `pageStart.current` had not been reset either, so BOTH
+pushes measured from the same page's start: page N is recorded at roughly its true dwell, page N+1 is
+credited with a dwell it never had, and page N+1 was actually on screen for a couple of hundred
+milliseconds. `reading_min_page_dwell_ms` looks entirely normal, the skim floor is not tripped
+because the other pages were read slowly, and nothing anywhere records that a page of the stimulus
+went unread — while the comprehension items drawn from it are simply failed and the ocular exposure
+is one page short. On the second-to-last page the duplicate tap ends the whole exposure early,
+calling `onComplete` and closing the annotation clip.
+
+A ref latch closes it, set synchronously before any dwell is recorded and released in the same effect
+that re-locks the button and restamps the page clock — so it is held for exactly the window during
+which those two are stale, and no longer. The other three tasks in that directory already latch on a
+ref for precisely this; ReadingTask was the only terminal handler relying on rendered state alone.
+
+Guarded by static assertions over the source, with the same caveat as the other UI guards in this
+ledger: there is no DOM-rendering harness here, so they prove the latch exists, is checked before any
+dwell is recorded, and is released beside the re-lock — not that the component renders correctly.
+Removing the latch check fails one of them.
+
+**That closes every finding from the task-component audit.**

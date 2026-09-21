@@ -56,6 +56,28 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
    * paused a couple of seconds more was never flagged, and a genuinely fast reader was.
    */
   const pageDwells = useRef<number[]>([]);
+  /*
+   * A REF LATCH, because the state guard below it does not close the window.
+   *
+   * `unlocked` is React state, and it is re-locked in the passive effect keyed on [page, started] —
+   * which React schedules AFTER the commit. So the commit from the first tap renders the next page
+   * with `unlocked` still true and the button still on screen, and a second tap arriving inside that
+   * window passes the guard. During reading is exactly when that window is widest: FaceMesh
+   * inference runs every frame, so a main-thread stall of a couple of hundred milliseconds is
+   * ordinary, and a participant who taps, sees nothing happen, and taps again is behaving normally.
+   *
+   * What that cost: `pageStart.current` has not been reset either, so BOTH pushes measure from the
+   * same page's start — page N is recorded twice at roughly its true dwell and page N+1 is credited
+   * with a dwell it never had, while actually being on screen for a couple of hundred milliseconds.
+   * Nothing in the export shows that a page of the stimulus went unread. The minimum-dwell QC looks
+   * entirely normal, the skim floor is not tripped, and the comprehension items drawn from that page
+   * are simply failed. On the second-to-last page the duplicate tap ends the whole exposure early.
+   *
+   * The other three tasks in this directory all latch on a ref for precisely this; ReadingTask was
+   * the only terminal handler relying on rendered state alone.
+   */
+  const advancing = useRef(false);
+
   /**
    * Hidden time for this exposure. Shared implementation, because this file's own copy seeded its
    * "hidden since" to null rather than to the CURRENT visibility state — so a page that began while
@@ -95,6 +117,9 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
 
   useEffect(() => {
     if (!started) return;
+    // Released here, in the same effect that re-locks the button and restamps the page clock, so the
+    // latch is held for exactly the window during which those two are stale.
+    advancing.current = false;
     setUnlocked(false);
     pageStart.current = now();
     let raf = 0;
@@ -136,7 +161,8 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
   }
 
   const next = () => {
-    if (!unlocked) return;
+    if (!unlocked || advancing.current) return;
+    advancing.current = true;
     pageDwells.current.push(Math.round(now() - pageStart.current));
     if (isLast) {
       // read() includes an interval still open, so a participant who returns to the app and
