@@ -290,3 +290,42 @@ describe('the R template declares where each of its thresholds came from', () =>
     expect(src_).toContain('lux_logged_all_in_range');
   });
 });
+
+/**
+ * THE TWO TOOLCHAINS MUST COMPUTE THE SAME COVARIATE.
+ *
+ * `analysis_long.csv` centres `position_c` on `(N_CONDITIONS - 1) / 2` — the DESIGN's last position.
+ * The Python template centred on `session_position.max() / 2`, the position this dataset happens to
+ * contain, while its own comment claimed the two codings were "kept identical". They agree only when
+ * the data includes position 9: a cohort in which no participant reached the last condition centres
+ * at 4.0 in one place and 4.5 in the other, so the covariate both files call position_c is not the
+ * same covariate. It also drifts with the dataset rather than the protocol, so re-running the same
+ * analysis after adding one participant can move it.
+ *
+ * ANALYSIS_PLAN.md §5b requires the two toolchains to agree in sign and in significance. They cannot
+ * be compared at all if a shared covariate is defined differently in each.
+ */
+describe('position_c is centred on the design, not on the data', () => {
+  it('does not centre the Python template on the observed maximum', () => {
+    const py = src('src/analysis/analysis_template.py');
+    expect(py).not.toMatch(/session_position"\]\.max\(\)\s*\/\s*2/);
+    expect(py).toMatch(/\(n_conditions - 1\)\s*\/\s*2/);
+  });
+
+  it('takes the condition count from the export that states it, counting DISTINCT conditions', () => {
+    /*
+     * load() pools every participant folder, so counting ROWS of the reference file gave 120 for a
+     * 12-participant cohort — a centring constant of 59.5, which drove the GEE's standard errors to
+     * NaN. The gate's own "usable standard error" assertion caught it.
+     */
+    const py = src('src/analysis/analysis_template.py');
+    expect(py).toContain('00_condition_reference.csv');
+    expect(py).toMatch(/nunique\(\)/);
+  });
+
+  it('matches the definition the pooled exporter uses', () => {
+    // The source of truth both are meant to agree with.
+    const exporter = src('src/storage/analysisExport.ts');
+    expect(exporter).toMatch(/position_c: sum\.session_position - \(N_CONDITIONS - 1\) \/ 2/);
+  });
+});

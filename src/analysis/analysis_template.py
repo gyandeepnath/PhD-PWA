@@ -132,7 +132,35 @@ def main() -> None:
     # re-derived here because this file reads the numbered CSVs, and the codings are kept identical
     # to that file's: negative = -0.5, positive = +0.5; position centred on (N_CONDITIONS - 1) / 2.
     cond["polarity_c"] = np.where(cond["polarity"] == "positive", 0.5, -0.5)
-    cond["position_c"] = cond["session_position"] - (cond["session_position"].max() / 2)
+
+    # Centred on the DESIGN's last position, not on the one this dataset happens to contain.
+    #
+    # This read `session_position.max() / 2`, which agrees with analysis_long.csv only when the data
+    # includes position 9 — and the comment above claims the two codings are identical. A cohort in
+    # which no participant reached the last condition centres at 4.0 here and at 4.5 there, so the
+    # covariate the two toolchains call position_c is not the same covariate. It also drifts with the
+    # dataset rather than with the protocol, which means re-running the same analysis after one more
+    # participant is added can move it.
+    #
+    # 00_condition_reference.csv lists every condition of a full sitting whether or not it ran (the
+    # export writes it that way on purpose), so it is the authoritative count available to this file.
+    # Falling back to the observed maximum is kept for a bundle that predates that file, and it says
+    # so rather than silently differing.
+    # DISTINCT conditions, not rows: load() pools every participant folder, so a 12-participant
+    # cohort returns 120 reference rows. Counting them gave a centring constant of 59.5 and drove the
+    # GEE's standard errors to NaN — caught by the gate's own "usable standard error" assertion.
+    try:
+        n_conditions = int(load("00_condition_reference.csv")["condition_label"].nunique())
+    except (FileNotFoundError, KeyError):
+        n_conditions = 0
+    if n_conditions <= 0:
+        n_conditions = int(cond["session_position"].max()) + 1
+        print(
+            f"[position_c] 00_condition_reference.csv unavailable — centring on the observed "
+            f"{n_conditions} positions instead of the design's. This differs from analysis_long.csv "
+            f"if any position is absent from the data."
+        )
+    cond["position_c"] = cond["session_position"] - (n_conditions - 1) / 2
     # CVS-Q change, per SITTING. Pivoting on participant_id alone silently averaged the two sittings
     # (pivot_table defaults to aggfunc="mean"), which destroyed the illumination contrast that is
     # the entire reason for administering it twice. 13_cvsq.csv now carries session_index.

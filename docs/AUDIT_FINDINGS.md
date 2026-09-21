@@ -2034,3 +2034,26 @@ proportions, because blink metrics differ systematically by device, algorithm an
 
 A limitation that lives only in a document nobody has to open is not a limitation that has been
 stated. Four tests keep the two accounts attached to the numbers they qualify.
+
+## Round 28 — the two toolchains computed a shared covariate differently
+
+`analysis_long.csv` centres `position_c` on `(N_CONDITIONS - 1) / 2` — the DESIGN's last position.
+The Python template centred on `session_position.max() / 2`, the position this dataset happens to
+contain, while its own comment two lines above claimed the codings were "kept identical to that
+file's". They agree only when the data includes position 9. A cohort in which no participant reached
+the last condition centres at 4.0 in one place and 4.5 in the other, so the covariate both files call
+`position_c` is not the same covariate — and it drifts with the dataset rather than the protocol, so
+re-running the same analysis after one more participant is added can move it.
+
+`ANALYSIS_PLAN.md` §5b requires the two toolchains to agree in sign and in significance. They cannot
+be compared at all if a shared covariate is defined differently in each. The count now comes from
+`00_condition_reference.csv`, which the export writes with every condition of a full sitting whether
+or not it ran, so it is the authoritative source available to a file that reads the numbered bundle.
+
+**A bug I introduced doing it, caught by a gate added earlier in this audit.** The first version
+counted ROWS of that reference file — but `load()` pools every participant folder, so a
+12-participant cohort returned 120 rows, a centring constant of 59.5, and NaN standard errors
+throughout the GEE. The "polarity coefficient has a usable standard error" assertion added in
+Round 19 failed immediately. That assertion exists because the primary model once fitted a constant
+response and reported nothing while the gate stayed green; it caught a different instance of the same
+class within minutes of being useful.
