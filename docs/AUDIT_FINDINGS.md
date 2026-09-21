@@ -2162,3 +2162,52 @@ attributes both taps to the same page. And two `09_rt_summary.csv` codebook entr
 the code does not emit: `signal_trials` is documented as "go trials in the block" but carries the
 SCORED go pool, and `trial_category` is documented with levels "go / no-go" while the data says
 "signal / noise", so a filter on `"go"` returns nothing.
+
+## Round 31 — a fabricated zero that silenced the detector built to catch it
+
+The worst of the three findings left over from the task-component audit, and the shape of it is worth
+stating precisely because it is the same shape as several others in this ledger.
+
+`error_rate` was computed as `scoredTrials ? (misses + fa) / scoredTrials : 0`. The zero is the
+defect. A participant tapping rhythmically has every response land inside the 150 ms anticipation
+cutoff, so every trial is scored `'anticipation'` — which is none of hit, miss, false alarm or
+correct rejection — and all four detection pools come back empty. That block exported
+`error_rate = 0`: a perfect score, for the block least deserving of one.
+
+Then it silenced the alarm. `conditionEngagement`'s disengagement test null-guards
+`false_alarm_rate` and `lapse_rate`, with a comment saying an unmeasured rate "is not evidence of
+engagement OR of disengagement, so it must not satisfy the comparison". `error_rate` was left
+unguarded — because its type said `number`, so it could not be null. The one rate that could be
+fabricated was the one without a guard, `0 > 0.3` was false, no penalty was charged, and the
+condition passed the pre-registered engagement filter with its ocular data intact. The codebook
+names this phenotype in terms: "a rhythmically-tapping, disengaged participant is the phenotype this
+task exists to detect."
+
+**Both halves were needed.** Nulling the rate stops the fabrication, and on its own it fixes nothing:
+with all three rates honestly null, every guard correctly declines to fire and the participant still
+passes. So there is now a rule for the state itself — trials were presented and not one produced a
+detection judgement. It is checked on the scored pools rather than on the anticipation count, so it
+catches that state however it arises: rhythmic tapping, a rotation that blocked every response, a
+stylus held down. And it is withheld when the condition was interrupted, on the same principle the
+surrounding code already applies — a throttled block produces the same signature, and the two cannot
+be told apart from the rates.
+
+Both halves are mutation-tested. Removing the new rule fails two tests; restoring the fabricated
+zero now fails the TYPECHECK, because the type says `number | null` and the arithmetic downstream
+was made to handle it — inverse efficiency is null rather than being computed against an assumed
+perfect accuracy, which would have been the same fabrication one layer on.
+
+**Two codebook entries described values the code does not emit.** `signal_trials` was documented as
+"Go trials in the block" but carries the SCORED go pool — it is `hit_rate`'s denominator, so it
+excludes anticipations. Deriving the no-go count as `total_trials - signal_trials` gives 17 where 12
+were presented, for a block with five anticipations on go trials. And `trial_category` was documented
+with levels "go / no-go" while the column contains `signal` / `noise`, so a filter on `"go"` returned
+no rows at all. Both corrected, with the wrong reading named so nobody re-derives it. `error_rate`'s
+own entry said "over all trials" while the note two lines away said anticipations are excluded from
+it — also corrected.
+
+**Still open from that audit:** a fast double-tap on "Next page" can skip a page of the passage. The
+guard is React state re-locked in a passive effect rather than a ref latch, so the commit from the
+first tap renders the next page with the button still live; the second tap passes the guard, and the
+page-dwell record attributes both taps to the same page, so nothing in the export shows that a page
+of the stimulus was never read. The other three tasks all use a ref latch for exactly this.

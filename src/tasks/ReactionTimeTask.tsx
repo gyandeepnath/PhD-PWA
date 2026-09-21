@@ -51,7 +51,7 @@ export interface RtResult {
     mean_rt_hits_ms: number | null;
     median_rt_hits_ms: number | null;
     rt_sd_ms: number | null;
-    error_rate: number;
+    error_rate: number | null;
     rt_cv: number | null;
     anticipations: number;
     lapse_count: number;
@@ -348,10 +348,27 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
      * denominator diluted the error rate of exactly the participants who were producing them.
      */
     const scoredTrials = hits.length + misses + fa + cr;
-    const errorRate = scoredTrials ? (misses + fa) / scoredTrials : 0;
+    /*
+     * NULL when nothing was scored, not 0.
+     *
+     * 0 is a perfect score, and the block that produces an empty denominator is the opposite of a
+     * perfect one: a participant tapping rhythmically has every response land inside the 150 ms
+     * anticipation cutoff, so every trial is an anticipation and all four detection pools are empty.
+     * The codebook names that phenotype as the one this task exists to detect.
+     *
+     * The fabricated 0 then silenced the detector. conditionEngagement's rt_disengaged test
+     * null-guards false_alarm_rate and lapse_rate — with a comment saying an unmeasured rate "is not
+     * evidence of engagement OR of disengagement" — and left error_rate unguarded because its type
+     * said it could not be null. So the one rate that could be fabricated was the one without a
+     * guard, `0 > 0.3` was false, no penalty was charged, and the condition passed the engagement
+     * filter with its ocular data intact.
+     */
+    const errorRate = scoredTrials > 0 ? (misses + fa) / scoredTrials : null;
     const lapseCount = validHitRts.filter((rt) => rt > CONFIG.RT_LAPSE_THRESHOLD_MS).length;
-    const accuracyProp = 1 - errorRate;
-    const ies = meanRt != null && accuracyProp > 0 ? meanRt / accuracyProp : null;
+    // Inverse efficiency needs an accuracy to divide by; without a scored trial there is none, and
+    // an IES computed against an assumed perfect accuracy would be the same fabrication one layer on.
+    const accuracyProp = errorRate != null ? 1 - errorRate : null;
+    const ies = meanRt != null && accuracyProp != null && accuracyProp > 0 ? meanRt / accuracyProp : null;
 
     // Within-block vigilance: valid hit RTs in the first vs second half of the (chronological) block.
     const mid = recs.length / 2;

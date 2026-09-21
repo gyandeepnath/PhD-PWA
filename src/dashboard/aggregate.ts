@@ -292,9 +292,31 @@ export function conditionEngagement(args: {
   // relying on that coercion would be an accident; the guard says so explicitly.
   const rtRatesHigh = !!rt && (
     (rt.false_alarm_rate != null && rt.false_alarm_rate > ENGAGEMENT.RT_FALSE_ALARM_MAX) ||
-    rt.error_rate > ENGAGEMENT.RT_ERROR_MAX ||
+    (rt.error_rate != null && rt.error_rate > ENGAGEMENT.RT_ERROR_MAX) ||
     (rt.lapse_rate != null && rt.lapse_rate > ENGAGEMENT.RT_LAPSE_MAX)
   );
+
+  /*
+   * A BLOCK THAT RAN AND SCORED NOTHING IS THE DISENGAGEMENT THIS TASK EXISTS TO DETECT.
+   *
+   * Every rate above is null-guarded, and correctly — an unmeasured rate is not evidence either way.
+   * But that leaves the worst case falling through all three: a participant tapping rhythmically has
+   * every response land inside the 150 ms anticipation cutoff, so every trial is an anticipation,
+   * all four detection pools come back empty, and all three rates are null. Nothing fired.
+   *
+   * It used to be worse and in the opposite direction — error_rate was fabricated as 0 for exactly
+   * this block, and `0 > 0.3` is false, so the fabricated perfect score silenced the detector. Now
+   * the rates are honestly null, which stops the fabrication but does not by itself catch anyone.
+   * This is the rule that does: trials were presented and not one produced a detection judgement.
+   *
+   * Checked on the SCORED pools rather than on the anticipation count, so it catches the same state
+   * however it arises — rhythmic tapping, a rotation that blocked every response, a stylus held
+   * down — rather than only the one route that motivated it.
+   */
+  const rtRanButScoredNothing = !!rt
+    && rt.total_trials > 0
+    && rt.hit_rate == null
+    && rt.false_alarm_rate == null;
   /*
    * HIGH ERROR RATES IN AN INTERRUPTED CONDITION ARE NOT EVIDENCE ABOUT THE PARTICIPANT.
    *
@@ -305,12 +327,24 @@ export function conditionEngagement(args: {
    * the flag is withheld and the interruption is named instead. The interruption is already
    * penalised above; penalising both would charge one event twice.
    */
-  const rt_disengaged = rtRatesHigh && !condition_interrupted;
-  if (rt_disengaged) penalise(0.3, 'reaction-time block shows disengagement (high FA/error/lapse rate)');
-  else if (rtRatesHigh) {
+  const rtDisengagementSignal = rtRatesHigh || rtRanButScoredNothing;
+  const rt_disengaged = rtDisengagementSignal && !condition_interrupted;
+  if (rt_disengaged) {
+    penalise(
+      0.3,
+      rtRanButScoredNothing
+        ? `reaction-time block ran ${rt!.total_trials} trials and scored none of them — every `
+          + 'response fell inside the anticipation cutoff, which is what rhythmic tapping produces'
+        : 'reaction-time block shows disengagement (high FA/error/lapse rate)',
+    );
+  } else if (rtDisengagementSignal) {
     reasons.push(
-      'reaction-time error rates are high, but the app was hidden during this condition — the '
-      + 'timers are throttled while hidden, so this cannot be read as disengagement',
+      rtRanButScoredNothing
+        ? 'the reaction-time block scored no trial at all, but the app was hidden during this '
+          + 'condition — a throttled block can produce the same signature, so this cannot be read '
+          + 'as disengagement'
+        : 'reaction-time error rates are high, but the app was hidden during this condition — the '
+          + 'timers are throttled while hidden, so this cannot be read as disengagement',
     );
   }
 

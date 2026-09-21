@@ -226,3 +226,53 @@ describe('an interrupted condition is not scored as a careless participant', () 
     expect(e.condition_interrupted).toBe(false);
   });
 });
+
+/**
+ * A BLOCK THAT RAN AND SCORED NOTHING.
+ *
+ * A participant tapping rhythmically has every response land inside the 150 ms anticipation cutoff,
+ * so every trial is an anticipation and all four detection pools come back empty. The codebook names
+ * that as the phenotype the task exists to detect.
+ *
+ * It was invisible twice over. `error_rate` was emitted as 0 for that block — a perfect score — and
+ * the disengagement test read `error_rate > 0.3` without a null guard, while guarding the two rates
+ * either side of it. So the fabricated 0 silenced the detector, the condition passed the engagement
+ * filter, and its ocular data entered the analysis.
+ *
+ * Nulling the rate fixes the fabrication but not the detection: with all three rates honestly null,
+ * nothing fires. Both halves are needed.
+ */
+describe('a reaction-time block that scored no trial at all', () => {
+  const unscoredRt = {
+    total_trials: 32,
+    signal_trials: 0,
+    hits: 0,
+    misses: 0,
+    false_alarms: 0,
+    correct_rejections: 0,
+    hit_rate: null,
+    false_alarm_rate: null,
+    error_rate: null,
+    lapse_rate: null,
+    anticipations: 32,
+  };
+
+  it('is flagged as disengaged even though every rate is null', () => {
+    const e = conditionEngagement({ reading_time_ms: 180_000, word_count: 580, rt: rt(unscoredRt) });
+    expect(e.rt_disengaged).toBe(true);
+    expect(e.reasons.join(' ')).toMatch(/scored none of them/);
+  });
+
+  it('is withheld when the app was hidden, because throttling produces the same signature', () => {
+    // The existing principle: an interruption and disengagement cannot be told apart from the rates,
+    // so the flag is withheld and the interruption named instead.
+    const e = conditionEngagement({ reading_time_ms: 180_000, word_count: 580, rt: rt(unscoredRt), condition_hidden_ms: 40_000 });
+    expect(e.rt_disengaged).toBe(false);
+    expect(e.reasons.join(' ')).toMatch(/cannot be read as disengagement/);
+  });
+
+  it('does not fire for a normal block', () => {
+    const e = conditionEngagement({ reading_time_ms: 180_000, word_count: 580, rt: rt() });
+    expect(e.rt_disengaged).toBe(false);
+  });
+});

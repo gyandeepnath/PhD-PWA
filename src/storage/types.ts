@@ -576,7 +576,13 @@ export interface RtSummaryRecord {
   median_rt_hits_ms: number | null;
   rt_sd_ms: number | null;
   /** Overall error rate = (misses + false alarms) / total trials. */
-  error_rate: number;
+  /**
+   * Misses plus false alarms over SCORED trials. Null when no trial was scored at all — which is
+   * what a participant tapping rhythmically produces, since every response lands inside the
+   * anticipation cutoff and all four detection pools come back empty. It was 0 there, and 0 is a
+   * perfect score for the block least deserving of one.
+   */
+  error_rate: number | null;
   /** RT coefficient of variation (SD/mean) — fatigue often shows as inconsistency before slowing. */
   rt_cv: number | null;
   /** Responses faster than the anticipation cutoff (excluded from RT means). */
