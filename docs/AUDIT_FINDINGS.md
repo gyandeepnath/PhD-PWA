@@ -2276,3 +2276,58 @@ primary outcome's classifier threshold, documented in `LITERATURE_VALIDATION.md`
 codebook entry. The second was the passage rotation, described as orthogonal to condition in four
 places while the code's own comment named the narrower property it actually achieves. A limitation
 recorded somewhere is not a limitation stated where it is needed.
+
+## Round 34 — the QC tile was green at a presence the analysis counts as a failure
+
+`face_presence_ratio` is the fraction of frames in a condition in which a face was detected. Every
+ocular measure in the study — the primary outcome among them — is computed only from frames where
+there was a face, so this column is what says how much of the exposure window the ocular row actually
+rests on.
+
+Three parts of this repository stated its gate, and they did not agree.
+
+The codebook entry for the column, in the export the analyst receives, said: *"Pilot gate: >= 0.90 in
+at least 90% of condition-runs."* `analysis_template.R` applied exactly that, as
+`QC_FACE_PRESENCE_MIN <- 0.90`, with the comment `# PROTOCOL: codebook, face_presence_ratio` — one of
+only three thresholds in that file labelled as coming from the protocol rather than from the analyst.
+And `aggregate.ts` coloured the operator's QC tile with `flag(facePresence, 0.8, 0.5)` — a bare
+literal, sourced to nothing.
+
+So a condition-run at 0.85 showed the operator a green tick and was counted, months later, as failing
+a QC gate by the analysis reading the same column. Green is the more damaging direction of the two.
+The operator is the last person who can do anything about a thin face-presence run — reseat the
+participant, fix the tablet angle, re-run the condition while they are still in the room — and the
+tick told them there was nothing to fix. By the time the R script disagrees, there is only a row to
+drop.
+
+This is the second instance of this exact shape in this one file. The fps flag, fixed in an earlier
+round, was judged against the tier floor of 25 while the primary outcome needs 30, so 26–29.9 fps was
+green while this file's own reason string called the ratio biased. A display threshold drifting from
+the threshold the science is held to is evidently a repeatable mistake here, so the fix is structural
+rather than a corrected number:
+
+- `ENGAGEMENT.FACE_PRESENCE_PILOT_GATE` now holds the gate once, with its provenance.
+- The three codebook entries that mention it are built from that constant, so the export prose cannot
+  restate it wrongly. The literal `0.90` no longer appears anywhere in TypeScript.
+- One restatement remains that cannot be derived, because it is in another language:
+  `QC_FACE_PRESENCE_MIN` in the R template. `tests/export.test.ts` now asserts it directly against the
+  app's constant. Cross-language drift is the durable half of this defect — the dashboard and the R
+  script are read months apart, by which time only the export survives to reconcile them.
+
+Two thresholds on this column were also being conflated. `low_face_presence`, the boolean on
+`12_quality_flags.csv`, fires at 0.5 — the participant turning away — and its codebook entry said only
+that the face was detected for "too little of the condition", stating no number. An analyst filtering
+on that boolean would have believed they were applying the pilot gate; they were applying a bar 40
+points lower. The entry now states its own threshold, says plainly that it is the lower of the two,
+and tells the analyst to filter on the ratio if the gate is what they mean.
+
+Off-axis was checked at the same time and is consistent: the dashboard uses 0.2/0.4 and the R template
+`QC_OFF_AXIS_MAX <- 0.20`, and the R file correctly labels that one ANALYST DEFAULT rather than
+protocol. No finding there.
+
+Four mutations were run against the new tests — the flag call reverted to the literal, the constant
+moved to 0.8, the R constant moved to 0.80, and the codebook interpolation dropped — and each was
+caught. The codebook-prose assertion is deliberately described in the test as the weak one it now is:
+since the prose is derived, it can only catch the sentence losing its number, not the two disagreeing.
+Saying so in the test is the point; a check that cannot fail should not be left looking like one that
+can.

@@ -52,6 +52,22 @@ export const ENGAGEMENT = {
   /** Camera face presence below this (when camera active) flags the participant turning away. */
   FACE_PRESENCE_MIN: 0.5,
   /**
+   * Face presence at or above which the QC tile reads GOOD. The protocol gate, not a display default.
+   *
+   * The codebook entry for `face_presence_ratio` states the pilot gate as ">= 0.90 in at least 90%
+   * of condition-runs", and analysis_template.R applies exactly that as QC_FACE_PRESENCE_MIN. The
+   * dashboard tile was judged against a bare literal 0.8, so a condition-run at 0.85 was coloured
+   * green for the operator while the analysis that later reads the same column counts it as failing
+   * the gate. The operator is the ONLY person who can still act on it -- by re-seating the
+   * participant and re-running the condition, on the day -- and the green tick is what stopped them.
+   *
+   * Same defect as the fps flag (tier floor 25 vs ratio floor 30, fixed in buildConditionSummaries):
+   * a display threshold drifting away from the threshold the science is held to. Both are now named
+   * against their source, and tests/export.test.ts asserts the three statements of this gate --
+   * codebook prose, dashboard flag, R template constant -- still agree.
+   */
+  FACE_PRESENCE_PILOT_GATE: 0.9,
+  /**
    * Minimum blinks in a condition for its incomplete-blink RATIO to be worth interpreting.
    *
    * The ratio is a binomial proportion, so its precision depends entirely on how many blinks were
@@ -441,7 +457,13 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
     const fps = cameraActive ? (eye?.effective_fps ?? null) : null;
     const offAxis = cameraActive ? (eye?.off_axis_ratio ?? null) : null;
 
-    const facePresenceFlag: QcFlag = cameraActive ? flag(facePresence, 0.8, 0.5) : 'warn';
+    /*
+     * Green only at the protocol's own gate. See ENGAGEMENT.FACE_PRESENCE_PILOT_GATE for why 0.9 and
+     * not the 0.8 that used to be written here as a literal.
+     */
+    const facePresenceFlag: QcFlag = cameraActive
+      ? flag(facePresence, ENGAGEMENT.FACE_PRESENCE_PILOT_GATE, ENGAGEMENT.FACE_PRESENCE_MIN)
+      : 'warn';
     /*
      * Judged on FPS_RATIO_THRESHOLD, not FPS_TIER_THRESHOLD.
      *

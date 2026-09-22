@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { FPS_RATIO_THRESHOLD, FPS_TIER_THRESHOLD } from '@/tracking/blink';
-import { buildConditionSummaries, baselineFatigueMean } from '@/dashboard/aggregate';
-import { buildExportFiles, escapeCsv, toCsv, fnv1a } from '@/storage/export';
+import { buildConditionSummaries, baselineFatigueMean, ENGAGEMENT } from '@/dashboard/aggregate';
+import { buildExportFiles, escapeCsv, toCsv, fnv1a, CODEBOOK } from '@/storage/export';
 import type { SessionBundle } from '@/storage/gather';
 import type { Provenance } from '@/storage/types';
 
@@ -118,6 +120,69 @@ describe('condition aggregation', () => {
     expect(at(FPS_RATIO_THRESHOLD - 0.1)).toBe('warn');
     expect(at(FPS_TIER_THRESHOLD - 0.1)).toBe('bad');
   });
+  it('calls face presence good only at the pilot gate the protocol and the R template use', () => {
+    /*
+     * Three statements of one threshold, and they did not agree.
+     *
+     *   export.ts CODEBOOK      face_presence_ratio -> "Pilot gate: >= 0.90 in at least 90% of
+     *                           condition-runs."
+     *   analysis_template.R     QC_FACE_PRESENCE_MIN <- 0.90, labelled PROTOCOL and sourced to that
+     *                           very codebook line.
+     *   aggregate.ts            flag(facePresence, 0.8, 0.5) -- a bare literal, sourced to nothing.
+     *
+     * So a condition-run at 0.85 was GREEN on the dashboard and counted as a QC failure by the
+     * analysis, months later, off the same column. Green is the more damaging direction: the
+     * operator is the last person able to fix it, by re-seating the participant and re-running the
+     * condition while they are still in the room, and the tick told them there was nothing to fix.
+     *
+     * This is the same shape as the fps flag two tests above, which is why it is asserted the same
+     * way: on the boundary, so moving the line back to a display-convenient value fails here.
+     */
+    const at = (ratio: number) => {
+      const b = bundle();
+      b.eyeMetrics[0].face_presence_ratio = ratio;
+      return buildConditionSummaries(b)[0].qc.facePresence;
+    };
+    expect(at(ENGAGEMENT.FACE_PRESENCE_PILOT_GATE)).toBe('good');
+    expect(at(ENGAGEMENT.FACE_PRESENCE_PILOT_GATE - 0.01)).toBe('warn');
+    expect(at(0.85)).toBe('warn'); // the run that used to read green while failing the gate
+    expect(at(ENGAGEMENT.FACE_PRESENCE_MIN - 0.01)).toBe('bad');
+  });
+
+  it("states the gate in the codebook prose the analyst actually reads", () => {
+    /*
+     * Weaker than it looks, deliberately, and saying so is the point: the codebook string is now
+     * BUILT from ENGAGEMENT.FACE_PRESENCE_PILOT_GATE, so this cannot catch the two disagreeing.
+     * What it does catch is the prose losing the number — a template edit that drops the
+     * interpolation, or renders it as "0.9" where "0.90" is what a reader scans for. The analyst
+     * has nothing but this sentence to tell them what the gate is.
+     */
+    const entry = CODEBOOK.find(
+      (r) => r.file === '07_eye_metrics.csv' && r.column === 'face_presence_ratio',
+    );
+    expect(entry, 'no codebook entry for face_presence_ratio').toBeTruthy();
+    const prose = (entry as Record<string, string>).description.match(/Pilot gate: >= ([0-9.]+)/);
+    expect(prose, 'the codebook no longer states a pilot gate for face_presence_ratio').toBeTruthy();
+    expect(Number((prose as RegExpMatchArray)[1])).toBe(ENGAGEMENT.FACE_PRESENCE_PILOT_GATE);
+  });
+
+  it('keeps the R template on the same pilot gate as the app', () => {
+    /*
+     * The ONE restatement of this gate that lives outside TypeScript and so cannot be derived away:
+     * QC_FACE_PRESENCE_MIN in analysis_template.R. It is labelled PROTOCOL in that file and sourced
+     * to the codebook line above, and until this test existed nothing checked that the source still
+     * said what the label claims. Cross-language drift is the durable half of this defect — the
+     * dashboard and the R script are read months apart, by which time only the export remains.
+     */
+    const rSource = readFileSync(resolve(__dirname, '..', 'src/analysis/analysis_template.R'), 'utf8');
+    const rDecl = rSource.match(/^QC_FACE_PRESENCE_MIN\s*<-\s*([0-9.]+)/m);
+    expect(rDecl, 'analysis_template.R no longer declares QC_FACE_PRESENCE_MIN').toBeTruthy();
+    expect(
+      Number((rDecl as RegExpMatchArray)[1]),
+      'the R analysis applies a different face-presence gate than the dashboard shows green at',
+    ).toBe(ENGAGEMENT.FACE_PRESENCE_PILOT_GATE);
+  });
+
   it('carries the below-AA contrast flag (C4)', () => {
     const s = buildConditionSummaries(bundle());
     expect(s[1].below_wcag_aa).toBe(true);

@@ -9,7 +9,7 @@ import { normaliseBundle, sessionForExport, type SessionBundle } from './gather'
 import type { SessionRecord } from './types';
 import type { MediaRecord } from './media';
 import { summariseLux, LUX_CHECKPOINTS } from '@/experiment/illumination';
-import { buildConditionSummaries } from '@/dashboard/aggregate';
+import { buildConditionSummaries, ENGAGEMENT } from '@/dashboard/aggregate';
 import { PASSAGES } from '@/experiment/passages';
 import { CONDITIONS } from '@/experiment/conditions';
 import { auditBundle } from './integrity';
@@ -259,6 +259,18 @@ export function fnv1a(str: string): string {
  * `role` values: iv = independent variable, dv = dependent variable, primary = the confirmatory
  * outcome, covariate, qc = quality control, id = identifier, provenance.
  */
+/**
+ * The face-presence pilot gate, rendered for codebook prose. DERIVED, so this file cannot restate it
+ * wrongly: the gate lives once, as ENGAGEMENT.FACE_PRESENCE_PILOT_GATE.
+ *
+ * It was previously typed as a literal "0.90" in the codebook and as a literal 0.8 in the dashboard
+ * QC flag, and the two drifted — see the constant's own comment. Only one restatement now remains
+ * outside TypeScript, QC_FACE_PRESENCE_MIN in analysis_template.R, and that one cannot be derived
+ * across languages, so tests/export.test.ts asserts it directly.
+ */
+const FACE_PRESENCE_PILOT_GATE = ENGAGEMENT.FACE_PRESENCE_PILOT_GATE.toFixed(2);
+const FACE_PRESENCE_PILOT_GATE_PCT = Math.round(ENGAGEMENT.FACE_PRESENCE_PILOT_GATE * 100);
+
 export const CODEBOOK: Record<string, string>[] = [
   // ---- 00_condition_reference.csv
   { file: '00_condition_reference.csv', column: 'condition_label', type: 'string', unit: '-', role: 'id', description: 'Condition code. P1-P5 positive polarity, N1-N5 negative. Synopsis Table 3.4.' },
@@ -355,7 +367,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '07_eye_metrics.csv', column: 'effective_fps', type: 'number', unit: 'frames/s', role: 'qc', description: "Achieved sampling rate OF THE EAR SERIES — the frames in which a face was actually solved, not the frames the pipeline processed. A camera running at 30 fps whose face solves in 60% of frames reports about 18 here, and that is the correct number to gate the primary outcome on, because the ratio is counted in that series. It is not the camera frame rate. Below ~25 the duration-based metrics are sub-Nyquist; proportion measures remain valid." },
   { file: '07_eye_metrics.csv', column: 'fps_adequate_for_tiers', type: 'boolean', unit: '-', role: 'qc', description: 'effective_fps >= 25. Gate duration-based blink metrics on this.' },
   { file: '07_eye_metrics.csv', column: 'perclos_p80', type: 'number', unit: '0-1', role: 'covariate', description: 'Proportion of time eyes >80% closed. A SLEEPINESS covariate, never a visual-fatigue outcome — it is insensitive in moderate drowsiness.' },
-  { file: '07_eye_metrics.csv', column: 'face_presence_ratio', type: 'number', unit: '0-1', role: 'qc', description: 'Fraction of frames with a detected face. Pilot gate: >= 0.90 in at least 90% of condition-runs.' },
+  { file: '07_eye_metrics.csv', column: 'face_presence_ratio', type: 'number', unit: '0-1', role: 'qc', description: `Fraction of frames with a detected face. Pilot gate: >= ${FACE_PRESENCE_PILOT_GATE} in at least 90% of condition-runs.` },
   { file: '07_eye_metrics.csv', column: 'ear_baseline', type: 'number', unit: 'ratio', role: 'qc', description: 'Per-participant open-eye eye-aspect-ratio from calibration. All blink thresholds are relative to this.' },
   { file: '07_eye_metrics.csv', column: 'head_pitch_calibrated', type: 'boolean', unit: '-', role: 'qc', description: 'True when head_pitch_mean is relative to the participant\'s own frontal posture rather than a population default.' },
 
@@ -580,7 +592,8 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '10_wide_summary.csv', column: 'blink_rate', type: 'number', unit: 'blinks/min', role: 'dv', description: 'Total blink rate for this condition-run.' },
   { file: '10_wide_summary.csv', column: 'blink_rate_full', type: 'number', unit: 'blinks/min', role: 'dv', description: 'Complete-blink rate for this condition-run.' },
   { file: '10_wide_summary.csv', column: 'effective_fps', type: 'number', unit: 'fps', role: 'qc', description: "Achieved sampling rate of the EAR series (face-solved frames), not the camera's frame rate. See 07_eye_metrics.csv. Duration-based ocular measures are unreliable below about 25; check this before modelling them." },
-  { file: '10_wide_summary.csv', column: 'face_presence_ratio', type: 'number', unit: '0-1', role: 'qc', description: 'Proportion of the condition with a face detected. Low values mean the ocular row rests on little data.' },
+  { file: '10_wide_summary.csv', column: 'face_presence_ratio', type: 'number', unit: '0-1', role: 'qc', description: 'Proportion of the condition with a face detected. Low values mean the ocular row rests on little data. '
+    + `Same measure and same pilot gate (>= ${FACE_PRESENCE_PILOT_GATE_PCT}%) as the 07_eye_metrics.csv column of this name.` },
   { file: '10_wide_summary.csv', column: 'qc_overall', type: 'string', unit: '-', role: 'qc', description: 'Overall quality verdict for the condition-run: good, warn or bad. Use it to define the sensitivity analysis, not to delete rows silently.' },
   { file: '11_participant.csv', column: 'enrolment_number', type: 'integer', unit: '1-n', role: 'id', description: 'Sequential enrolment index. Drives the counterbalancing row assignment and the illumination order, so it is not an arbitrary identifier and must not be reshuffled.' },
   { file: '11_participant.csv', column: 'age', type: 'integer', unit: 'years', role: 'covariate', description: 'Age at enrolment. The sample is delimited to 18 to 35.' },
@@ -620,7 +633,11 @@ export const CODEBOOK: Record<string, string>[] = [
       + 'participant would be a guess. See condition_hidden_ms on 02_conditions.csv for the duration.' },
   { file: '12_quality_flags.csv', column: 'reading_interrupted', type: 'boolean', unit: '-', role: 'qc', description: 'The app was backgrounded or the screen went off for more than 5 s during the reading exposure. The ocular measures for this condition therefore cover a window that includes time the participant was not looking at the stimulus.' },
   { file: '12_quality_flags.csv', column: 'comprehension_wrong', type: 'boolean', unit: '-', role: 'qc', description: 'True when the participant scored below chance across the three items for this condition. A single slip does not fire it.' },
-  { file: '12_quality_flags.csv', column: 'low_face_presence', type: 'boolean', unit: '-', role: 'qc', description: 'True when a face was detected for too little of the condition for the ocular measures to be trustworthy.' },
+  { file: '12_quality_flags.csv', column: 'low_face_presence', type: 'boolean', unit: '-', role: 'qc', description: `True when face_presence_ratio is below ${ENGAGEMENT.FACE_PRESENCE_MIN} — a face detected for less than `
+    + `${Math.round(ENGAGEMENT.FACE_PRESENCE_MIN * 100)}% of the condition, which is the participant turning away rather than a `
+    + 'tracking wobble. This is a LOWER bar than the pilot gate stated for face_presence_ratio on '
+    + `07_eye_metrics.csv (>= ${FACE_PRESENCE_PILOT_GATE_PCT}%): a run can pass this flag and still fail the gate. Filter on the `
+    + 'ratio itself, not on this boolean, if the gate is what you mean.' },
   { file: '12_quality_flags.csv', column: 'reasons', type: 'string', unit: '-', role: 'qc', description: 'Human-readable list of every penalty that fired, semicolon separated. Read this before excluding a row.' },
   { file: '13_cvsq.csv', column: 'session_index', type: 'integer', unit: '1 or 2', role: 'iv', description: 'Which sitting this administration belongs to. The CVS-Q is given twice per sitting (baseline and session_end), so without this a pooled dataset cannot tell the two rows apart. Under the single-sitting protocol that is two rows per participant; the contrast of interest is baseline-to-close WITHIN the sitting.' },
   { file: '13_cvsq.csv', column: 'ambient_illumination_level', type: 'factor(1)', unit: '-', role: 'meta', description: "The sitting's illumination level. CONSTANT in this dataset — see 01_session_info.csv. Retained so a pooled file that also contains earlier two-level data stays separable." },
