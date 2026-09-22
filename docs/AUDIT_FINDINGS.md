@@ -2239,3 +2239,40 @@ dwell is recorded, and is released beside the re-lock — not that the component
 Removing the latch check fails one of them.
 
 **That closes every finding from the task-component audit.**
+
+## Round 33 — two codebook entries contradicted each other on the key secondary outcome
+
+The CVS-Q cut-off itself is one of the best-documented constants in this repository: `CVSQ_CUTOFF = 6`
+carries a paragraph on why six and not the value used by another linguistic version, cites the
+instrument's own authors, points at two citation-ledger entries, and states plainly what is NOT
+verified — the Seguí (2015) full text could not be read from the build environment, so the value
+rests on a same-authors statement rather than on the primary, and the comment says to confirm it once
+against the paper. No finding there.
+
+The finding is what the cut-off is applied TO. The `frame` codebook entry is equally careful and says
+explicitly that `habitual_computer_work` is the validated frame, whose frequency anchors are defined
+in events per week and against which the cut-off is calibrated, while `this_session` is a deliberate
+re-anchoring to the ~90-minute exposure and a DOCUMENTED DEVIATION whose "total must not be read
+against the published cut-off or against published norms".
+
+And two entries away, `symptomatic` read, in full: *"Whether the total reached the validated cut-off
+for computer vision syndrome."* It is computed for BOTH rows — including the one the `frame` entry
+says must not be compared to that cut-off — and described without qualification as the validated
+comparison. Two entries in the same codebook, on the key secondary outcome, telling an analyst
+opposite things. Only one of them was right.
+
+`symptomatic` now names the frame it is interpretable in, repeats the `frame` entry's own instruction
+rather than contradicting it, and warns against reading a baseline-to-close change in the boolean as
+a change in caseness — the two administrations ask different questions, so a difference between them
+is not a difference in the same quantity.
+
+The value is still exported for both rows. Suppressing it would hide the arithmetic rather than the
+caveat, and this export's standing position everywhere else is to emit the number and carry the
+warning with it. Three tests assert the two entries now agree.
+
+This is the third instance this audit has found of the same shape: the repository KNOWS a limitation,
+documents it carefully in one place, and ships a column that states the opposite. The first was the
+primary outcome's classifier threshold, documented in `LITERATURE_VALIDATION.md` and absent from the
+codebook entry. The second was the passage rotation, described as orthogonal to condition in four
+places while the code's own comment named the narrower property it actually achieves. A limitation
+recorded somewhere is not a limitation stated where it is needed.

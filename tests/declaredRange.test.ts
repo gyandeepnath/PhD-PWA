@@ -297,3 +297,38 @@ describe('the primary outcome carries its classifier provenance', () => {
     expect(tiers).toMatch(/NO published validation/);
   });
 });
+
+/**
+ * TWO CODEBOOK ENTRIES MUST NOT CONTRADICT EACH OTHER ON THE KEY SECONDARY OUTCOME.
+ *
+ * The `frame` entry says, correctly and at length, that the session-end CVS-Q re-anchors the items to
+ * the ~90-minute exposure and that such a total "must not be read against the published cut-off or
+ * against published norms". The `symptomatic` entry computed exactly that comparison for both rows
+ * and described it as "the validated cut-off for computer vision syndrome", with no qualification.
+ *
+ * An analyst reading the file could take either entry at face value, and only one of them is right.
+ * The value is still exported for both rows — suppressing it would hide the arithmetic rather than
+ * the caveat — but the caveat now travels on the column that makes the claim, not only on its
+ * neighbour.
+ */
+describe('the CVS-Q caseness flag is qualified to the frame it was validated in', () => {
+  const entry = (col: string) => CODEBOOK.find((c) => c.column === col)!.description;
+
+  it('does not describe the cut-off as validated without naming the frame', () => {
+    const d = entry('symptomatic');
+    expect(d).toMatch(/habitual_computer_work/);
+    expect(d).toMatch(/INTERPRETABLE ONLY|only on the/i);
+  });
+
+  it('agrees with what the frame column says rather than contradicting it', () => {
+    // The frame entry is the one that was right; this asserts the two now say the same thing.
+    expect(entry('frame')).toMatch(/must not be read against the published cut-off/);
+    expect(entry('symptomatic')).toMatch(/must not be read against the published cut-off/);
+  });
+
+  it('warns against reading the baseline-to-close change as a change in caseness', () => {
+    // The two administrations ask different questions, so a difference between them is not a
+    // difference in the same quantity — the frame entry makes that point and this one now does too.
+    expect(entry('symptomatic')).toMatch(/do not read a baseline-to-close change/i);
+  });
+});
