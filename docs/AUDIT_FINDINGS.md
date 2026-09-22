@@ -2540,3 +2540,28 @@ Four mutations verified: the participant read moved back after the purge, the `_
 restored, the dead tie-break restored, and the soft delete blocked again. A fifth confirmed the
 checksum still refuses a genuinely altered file, and a sixth that `evenWhenFull` did not become a
 blanket override.
+
+## Round 37 — the partial-restore report under-stated the store that failed, and justified itself with a false premise
+
+Two small things on the same handful of lines, both about what the operator is told when a restore
+dies half way.
+
+**The count was assigned after the loop.** `written[store] = rows.length` ran once the whole store
+had been written, so a store that threw on its fourth row of 320 contributed **nothing** to the
+"the device now holds a PARTIAL copy (…)" list in the error. The report therefore understated exactly
+the store the operator needs named, and implied the failure happened before that store rather than
+inside it — which changes what they would do about it. The counts are now incremented per row, and a
+test kills a write on the fourth reaction trial and asserts the message says `reaction_trials: 3`.
+
+**The comment justifying the non-atomic restore was wrong about why.** It said IndexedDB "gives no
+transaction across this many stores through the wrapper in use". The wrapper is `idb` 8, which takes
+an array of store names; the premise is false, which means the trade-off it records was never
+actually weighed. The real obstacle is different, and harder: an IndexedDB transaction auto-commits
+as soon as the microtask queue drains with no request outstanding, so a single transaction spanning
+these writes could contain no `await` on anything that is not an IDB request — and this function
+awaits `get`, `getAll` and `ensureEnrolmentAtLeast` between writes. Making the restore atomic is a
+restructuring of the function, not a change of one call. The comment now says that, so the next
+person to read it is deciding against the real obstacle instead of an invented one.
+
+A comment that gives a wrong reason for a real limitation is the same defect class as a codebook
+entry that states a threshold the code does not apply. Both are load-bearing: somebody acts on them.

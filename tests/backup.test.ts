@@ -718,6 +718,35 @@ describe('a restore says what it could not restore, and what it is about to dest
     });
   });
 
+  it('names the store that failed, with the rows that did land', async () => {
+    /*
+     * `written[store] = rows.length` was assigned AFTER the row loop, so a store that failed part
+     * way through contributed nothing at all to the "device now holds a PARTIAL copy (...)" list —
+     * understating precisely the store the operator needs named, and implying the failure happened
+     * before it rather than inside it. The counts are now incremented per row.
+     */
+    const b = buildFixtureBundle();
+    const parsed = parseSessionBackup(serialiseSessionBackup(b));
+
+    const real = IDBObjectStore.prototype.put;
+    let seen = 0;
+    IDBObjectStore.prototype.put = function patched(this: IDBObjectStore, ...args: unknown[]) {
+      if (this.name === 'reaction_trials' && ++seen > 3) throw new Error('device died mid-store');
+      return (real as (...a: unknown[]) => IDBRequest).apply(this, args);
+    } as typeof real;
+    let res;
+    try {
+      res = await importSessionBackup(parsed.backup!);
+    } finally {
+      IDBObjectStore.prototype.put = real;
+    }
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/PARTIAL copy/);
+    expect(res.error, 'the store that failed was left out of the report').toMatch(/reaction_trials: 3/);
+    expect(res.written.reaction_trials).toBe(3);
+  });
+
   it('warns on the fields, not on the participant happening to have a second sitting', async () => {
     // The old predicate passed whenever purgeSession spared the row. This asserts the warning turns
     // on what the backup actually blanks: same overwrite, nothing lost, nothing said.

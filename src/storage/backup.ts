@@ -800,16 +800,36 @@ export async function importSessionBackup(
     }
     }
 
-    // From here on a failure leaves the device holding a PARTIAL copy. IndexedDB gives no
-    // transaction across this many stores through the wrapper in use, so the next best thing is to
-    // report the partial state precisely rather than let the exception escape: SessionManager's
-    // catch would otherwise tell the operator "Could not read the file", for a file it read
-    // perfectly and half-imported. A half-restored session also re-exports as a fresh,
-    // checksum-valid backup that looks complete, so the operator has to be told now.
+    /*
+     * From here on a failure leaves the device holding a PARTIAL copy.
+     *
+     * This used to say the restore could not be one transaction because "IndexedDB gives no
+     * transaction across this many stores through the wrapper in use". That premise is FALSE — idb
+     * 8 takes an array of store names — and a false premise means the trade-off was never actually
+     * weighed. The real obstacle is different and harder: an IndexedDB transaction auto-commits as
+     * soon as the microtask queue drains with no request outstanding, so a single transaction
+     * spanning these writes would have to contain no `await` on anything that is not an IDB
+     * request. This function awaits `get`, `getAll` and `ensureEnrolmentAtLeast` between writes, so
+     * making it atomic is a restructuring of the function, not a change of one call.
+     *
+     * Until that is done, the next best thing is to report the partial state precisely rather than
+     * let the exception escape: SessionManager's catch would otherwise tell the operator "Could not
+     * read the file", for a file it read perfectly and half-imported. A half-restored session also
+     * re-exports as a fresh, checksum-valid backup that looks complete, so the operator has to be
+     * told now.
+     *
+     * The counts are incremented PER ROW, not assigned after the loop. Assigned after, a store that
+     * failed half way through contributed nothing at all to the partial-copy list in the error —
+     * so the report understated exactly the store that failed, which is the one the operator needs
+     * named.
+     */
     for (const { key, store } of RESTORE_PLAN) {
       const rows = (data[key] as unknown[]) ?? [];
-      for (const row of rows) await put(store, row as StoreMap[typeof store]);
-      written[store] = rows.length;
+      written[store] = 0;
+      for (const row of rows) {
+        await put(store, row as StoreMap[typeof store]);
+        written[store] += 1;
+      }
     }
 
     // Media: the backup carries the inventory row but never the binary. Writing that row straight
@@ -817,6 +837,7 @@ export async function importSessionBackup(
     // whole record rather than merging fields. Carry any surviving blob forward.
     const media = (data.media as unknown[]) ?? [];
     let blobsKept = 0;
+    written.media_captures = 0;
     for (const row of media) {
       const r = row as unknown as Record<string, unknown> & { media_id?: string };
       /*
@@ -833,8 +854,8 @@ export async function importSessionBackup(
       } else {
         await put('media_captures', row as StoreMap['media_captures']);
       }
+      written.media_captures += 1;
     }
-    written.media_captures = media.length;
     if (blobsKept) {
       warnings.push(`${blobsKept} media file(s) were already on this device and their contents have been kept; the rest are listed in the inventory but their files are gone.`);
     }
