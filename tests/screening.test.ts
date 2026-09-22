@@ -354,6 +354,25 @@ describe('the exported codebook states the rule the screen actually applied', ()
       .toContain(`${SCREEN_TEST_PLATES - SCREEN_ALLOWED_SLIPS} or more correct is 'normal'`);
   });
 
+  it('tells the analyst which way the screen is likely to be wrong', () => {
+    /*
+     * "Sensitivity and specificity are unknown" is honest and not actionable. The DIRECTION is
+     * knowable from the design: the palettes are iso-luminant in sRGB relative luminance — the
+     * normal trichromat's luminous efficiency — and differ mainly along red-green, the axis on
+     * which a dichromat's luminance function departs most from it. A dichromat may read the digit
+     * off a luminance edge and score full marks, so the errors run toward false negatives.
+     *
+     * Not measured, and the entry says so: quantifying it needs a Brettel/Vienot-class simulation
+     * against this display's measured primaries. Stated so a normal result is not read as a clean
+     * screen, which is the reading that puts a colour-deficient participant into a text-colour
+     * analysis.
+     */
+    const correct = cvdEntry('cvd_screen_correct');
+    expect(correct).toMatch(/false negative|score full marks/i);
+    expect(correct).toMatch(/has not been measured/i);
+    expect(correct).toMatch(/cvd_clinical as the real one/);
+  });
+
   it('warns the analyst that a failed screen is IN the sample', () => {
     // The consequence of the screen no longer excluding: rows with screen_failed now reach the
     // confirmatory analysis, and the codebook has to say so rather than leave it to be discovered.

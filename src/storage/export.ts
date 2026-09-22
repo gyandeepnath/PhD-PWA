@@ -612,6 +612,9 @@ export const CODEBOOK: Record<string, string>[] = [
     + `value is. THE PASS RULE: ${SCREEN_TEST_PLATES - SCREEN_ALLOWED_SLIPS} or more correct is 'normal', fewer is 'screen_failed' — an allowance of `
     + `${SCREEN_ALLOWED_SLIPS} with nothing published behind it, set so one mis-tap does not overturn an administration. Null when the screen was not run. `
     + 'This is NOT the Ishihara test: it is a home-made screen with no published sensitivity or specificity, and it is a covariate and a flag, never a criterion for exclusion. '
+    + 'The likely direction of its error is known even though its magnitude is not: the figure and background palettes are matched on sRGB relative luminance, which is the NORMAL observer\'s luminous efficiency, '
+    + 'and they differ mainly along red-green — the axis on which a dichromat\'s luminance function departs most from it. A dichromat may therefore read the digit as a plain luminance figure and score full marks. '
+    + 'Treat a normal result here as weak evidence and cvd_clinical as the real one. This has not been measured with a dichromat simulation; it is stated so nobody reads a pass as a clean screen. '
     + 'Digits, plate order and luminance polarity vary per administration, so two administrations are not the same test and the counts are not directly comparable between them. '
     + "When a participant was screened at more than one sitting and an earlier FAILURE was carried forward, these counts are that failing administration's, not the later one's — the numbers always describe the administration that produced cvd_status." },
   { file: '11_participant.csv', column: 'cvd_screen_total', type: 'integer', unit: 'count', role: 'qc', description: `Confusion plates scored. The denominator for cvd_screen_correct, and ${SCREEN_TEST_PLATES} in every administration of this build — the greyscale control plate is presented but not scored. Null when the screen was not run.` },

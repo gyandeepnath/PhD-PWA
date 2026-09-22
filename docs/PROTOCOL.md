@@ -184,6 +184,15 @@ re-measured each sitting (fatigue resets between sittings — documented, not as
   exclusion, alongside the participant's own self-report. When the app's screen does not pass, the
   app prompts the researcher on the spot to administer the formal plates, because that is the only
   moment the question can still be settled.
+- **The direction of that screen's likely error, for the limitations section.** Its figure and
+  background palettes are matched on sRGB relative luminance — the *normal trichromat's* luminous
+  efficiency — and they differ mainly along red–green, the axis on which a dichromat's luminance
+  function departs most from that formula. A dichromat may therefore be able to read the digit as an
+  ordinary luminance figure and score full marks, so the screen's errors are expected to run toward
+  **false negatives**. This has not been quantified: doing so needs a Brettel/Viénot-class dichromat
+  simulation against this display's measured primaries. It is stated because "sensitivity and
+  specificity are unknown" does not tell a reader which way the error runs, and because it is one
+  more reason the formal plates, not this screen, are the criterion.
 
 
 ---

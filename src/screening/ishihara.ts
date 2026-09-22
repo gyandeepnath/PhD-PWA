@@ -23,6 +23,27 @@
  *    The polarity is now balanced within the set and varies between administrations, so a constant
  *    direction cannot be learned. `luminancePolarityBalance()` is what the test asserts against.
  *
+ *    AND THE LIMIT OF THAT, STATED PLAINLY. The luminance it balances is sRGB relative luminance,
+ *    0.2126R + 0.7152G + 0.0722B — by definition the NORMAL TRICHROMAT's luminous efficiency. The
+ *    palettes differ almost purely by a red-green trade with blue held near constant, which is the
+ *    axis along which a dichromat's luminance function departs most from that formula. So the
+ *    figure and the background are matched in the luminance space of the observer the screen is NOT
+ *    trying to detect, and may separate cleanly in the space of the one it is.
+ *
+ *    What that would mean: a dichromat could read the digit as an ordinary luminance figure, score
+ *    5 of 5, and be recorded `normal`. Balancing the POLARITY defeats a learnable direction — "the
+ *    digit is the darker patch" scores at most 3 of 5 on a balanced set — but it does not defeat
+ *    reading a visible boundary of either sign, which is a different mechanism and the one at issue
+ *    here.
+ *
+ *    NOT MEASURED, and not asserted as fact: establishing it needs a proper dichromat simulation
+ *    (Brettel/Viénot-class colorimetry) against this display's measured primaries, which has not
+ *    been done. It is recorded here because it is a testable, fixable condition rather than an
+ *    unknowable one, and because "sensitivity and specificity are unknown" above does not tell a
+ *    reader WHICH direction the likely error runs in. It runs toward false negatives — a dichromat
+ *    passing — which is precisely why the operator's formal plates and not this screen are the
+ *    criterion for exclusion.
+ *
  * 2. MEMORY. The plate set, the digits and the order were fixed constants, and the screen runs in
  *    BOTH sittings. A participant who failed at sitting 1 could "pass" at sitting 2 by recalling
  *    six digits, so the retest measured recall rather than colour vision. Digits, order and
@@ -183,6 +204,11 @@ export function buildScreeningPlates(seed: number): Plate[] {
  * How many of a set's confusion plates carry the figure in the lighter palette.
  *
  * Exposed so the test can assert the balance directly rather than re-deriving luminance from hex.
+ *
+ * "Lighter" here is sRGB relative luminance — the normal trichromat's. See mitigation 1 in the
+ * module header for why that is the right measure for the property this function is asserting (a
+ * learnable constant direction) and the wrong one for the property it must not be read as asserting
+ * (that a dichromat cannot see an edge).
  */
 export function luminancePolarityBalance(plates: Plate[]): { figureLighter: number; total: number } {
   const rel = (hex: string) => {

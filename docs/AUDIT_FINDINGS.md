@@ -2565,3 +2565,38 @@ person to read it is deciding against the real obstacle instead of an invented o
 
 A comment that gives a wrong reason for a real limitation is the same defect class as a codebook
 entry that states a threshold the code does not apply. Both are load-bearing: somebody acts on them.
+
+## Round 38 — the screen's iso-luminance is matched in the wrong observer's luminance space
+
+Mitigation 1 in `ishihara.ts`'s header is real and it works: the figure used to be the darker region
+on all five confusion plates, so "the digit is the darker patch" was a learnable rule that a
+colour-blind observer could apply to every plate. The polarity is now balanced within each set and
+varies between administrations, and a test asserts it, so that rule scores at most 3 of 5 and fails.
+
+What the header did not say is which luminance. `luminancePolarityBalance` uses sRGB relative
+luminance, `0.2126R + 0.7152G + 0.0722B` — by definition the **normal trichromat's** luminous
+efficiency. The confusion palettes differ almost purely by a red-green trade with blue held near
+constant, which is exactly the axis along which a dichromat's luminance function departs most from
+that formula. So the figure and the background are matched in the luminance space of the observer the
+screen is not trying to detect, and may separate cleanly in the space of the one it is.
+
+If they do, a dichromat reads the digit as an ordinary luminance figure, scores 5 of 5, and is
+recorded `normal`. Balanced polarity does not help: it defeats a learnable *direction*, and this is
+reading a visible boundary of *either* sign — a different mechanism.
+
+**This has not been measured, and nothing here asserts it as fact.** Establishing it needs a proper
+dichromat simulation (Brettel/Viénot-class colorimetry) against this display's measured primaries,
+which has not been done and is a stimulus question for the investigator rather than a defect to
+quietly patch. What is recorded is the direction: the screen's errors are expected to run toward
+**false negatives**, a dichromat passing.
+
+That is worth stating precisely because "its sensitivity and specificity are unknown" — which the
+header has always said — does not tell a reader which way the error runs, and the two directions call
+for opposite responses. A screen that over-excludes costs data; a screen that under-detects puts a
+colour-deficient participant into a confirmatory analysis of a text-colour factor. The module header,
+`PROTOCOL.md` and the exported codebook entry for `cvd_screen_correct` now all say it, and a test
+holds the codebook to it, so an analyst reading a `normal` does not read it as a clean screen.
+
+Round 35's fix is what bounds the damage: the app's screen is a covariate and the operator's formal
+plates are the criterion, so a dichromat who passes this screen is still caught by `cvd_clinical` —
+provided the operator ran it, which is what the new operator notice exists to make sure of.
