@@ -73,6 +73,19 @@ for (const d of ['0', '5', '8', '', 'x', '88', ' ']) {
       check('ishihara correct count within 0..plates', c >= 0 && c <= plates.length, c + '/' + plates.length);
     } catch (e) { check('scoreIshihara does not throw', false, (e as Error).message.slice(0, 80)); }
   }
+  /*
+   * A set with no confusion plates measured nothing, so it must not come back a pass. This harness
+   * is how the case was reachable at all: `PLATES ?? []` above feeds an empty array whenever that
+   * export is renamed or removed, and the pass rule `testCorrect >= test.length - 1` then reads
+   * `0 >= -1`. A scoring function that certifies an empty administration is worse than one that
+   * throws.
+   */
+  const degenerate = ISH.scoreIshihara([] as never, {});
+  check(
+    'an empty plate set is inconclusive, not a pass',
+    (degenerate as unknown as { status: string }).status === 'inconclusive',
+    (degenerate as unknown as { status: string }).status,
+  );
 }
 
 // ---------------------------------------------------------------- CVS-Q

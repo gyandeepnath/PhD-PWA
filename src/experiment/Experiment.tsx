@@ -41,7 +41,7 @@ import { ComprehensionTask } from '@/tasks/ComprehensionTask';
 import { VisualSearchTask } from '@/tasks/VisualSearchTask';
 import { ReactionTimeTask, resetRtTargetMemory, setRtTargetMemory, goTargetColor } from '@/tasks/ReactionTimeTask';
 import { IshiharaTest } from '@/screening/IshiharaTest';
-import { resolveCvdStatus } from '@/screening/ishihara';
+import { resolveCvdStatus, countsComeFromPriorAdministration } from '@/screening/ishihara';
 import { Cvsq } from '@/scales/Cvsq';
 import { NasaTlx } from '@/scales/NasaTlx';
 import { LuxCheckpointPanel } from '@/start/LuxCheckpoint';
@@ -854,26 +854,57 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               const p = await get('participants', session.participant_id);
               if (p) {
                 /**
-                 * A failed screen has to reach `eligible`, and must not be undone at sitting 2.
+                 * A failed screen must not be undone at sitting 2.
                  *
-                 * Two faults sat here. The handler wrote cvd_status and nothing else, so a
-                 * participant who failed the plates was exported as eligible=TRUE with an empty
-                 * exclusion_reason — while the codebook instructs the analyst to drop rows where
-                 * eligible is false, and the protocol excludes colour-vision deficiency outright.
-                 * The confirmatory analysis of the TEXT-COLOUR factor would then have included a
-                 * participant who cannot perceive those colours normally. And because the
-                 * participant record is shared across sittings and the plate set is identical and
-                 * deterministically seeded, a pass at sitting 2 overwrote a sitting-1
-                 * `screen_failed` with `normal`, erasing the exclusion entirely.
+                 * The participant record is shared across a participant's sittings, and the plate
+                 * set used to be a fixed module constant, so a pass at sitting 2 overwrote a
+                 * sitting-1 `screen_failed` with `normal` and erased the result. The digits, order
+                 * and polarity are now per-administration, which makes the retest a real one rather
+                 * than a memory test — but a failure is still sticky, because the two
+                 * administrations are not the same test and the failing one is not cancelled by a
+                 * later pass on different plates.
                  *
-                 * A failure is therefore sticky, and it propagates into eligibility.
+                 * Stickiness is about the RECORD, not about eligibility: this screen does not
+                 * exclude. See the note below `status`.
                  */
                 const status = resolveCvdStatus(p.cvd_status, r.status);
 
-                // 'screen_inconclusive' does NOT exclude — nothing was measured, so there is no
-                // basis to exclude — but it is recorded, so the analyst can see the screen did not
-                // produce a result rather than reading an absent one as a pass.
-                const failsColourVision = status === 'screen_failed' || status === 'self_reported_deficient';
+                /*
+                 * THE APP'S OWN SCREEN DOES NOT EXCLUDE. The formal plates do.
+                 *
+                 * This read `status === 'screen_failed' || status === 'self_reported_deficient'`,
+                 * and 'screen_failed' can only come from this app's own 4-of-5 rule. So a
+                 * participant who missed two of five home-made plates was written out
+                 * eligible=false with 'failed the colour-vision screening' — and the codebook tells
+                 * the analyst that rows with eligible=false MUST be dropped from the confirmatory
+                 * analysis. A complete ~2-hour dataset, discarded on an instrument that four places
+                 * in this repository say is never a criterion:
+                 *
+                 *   - ishihara.ts's own header: "Formal Ishihara or Farnsworth plates ... remain
+                 *     the basis for exclusion."
+                 *   - the exported codebook, cvd_screen_correct: "a covariate and a flag, never a
+                 *     criterion for exclusion".
+                 *   - OPERATOR_MANUAL.md: "it never excludes anyone on its own".
+                 *   - the profile stage in this same file, a few hundred lines up, which carries a
+                 *     comment recording that this exact thing was fixed THERE: "using it to exclude
+                 *     contradicted its own module header". The fix was never carried across.
+                 *
+                 * The direction of the error is the unusual one. Over-exclusion by an instrument
+                 * with unknown specificity does not merely lose data: it biases the retained sample
+                 * on colour perception, which is the very axis the text-colour factor sits on.
+                 *
+                 * What still excludes: 'self_reported_deficient' (the participant's own report, an
+                 * exclusion under the protocol) and 'colour-vision deficiency on formal plates'
+                 * (asserted by the profile stage from cvd_clinical). 'screen_failed' is recorded,
+                 * exported and sticky, and the operator is shown a notice telling them to
+                 * administer the formal plates — which is the only action that can still resolve it,
+                 * and it has to happen while the participant is in the room.
+                 *
+                 * 'screen_inconclusive' likewise does not exclude — nothing was measured, so there
+                 * is no basis to — but it is recorded, so the analyst sees that the screen produced
+                 * no result rather than reading an absent one as a pass.
+                 */
+                const failsColourVision = status === 'self_reported_deficient';
                 /*
                  * Through the same merge the profile stage uses, so neither can erase the other's
                  * verdict. This stage's hand-rolled version was the correct one — it merged and was
@@ -883,11 +914,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 const verdict = mergeExclusionReasons(
                   p.exclusion_reason,
                   'colour_vision',
-                  failsColourVision
-                    ? [status === 'screen_failed'
-                      ? 'failed the colour-vision screening'
-                      : 'self-reported colour-vision deficiency']
-                    : [],
+                  failsColourVision ? ['self-reported colour-vision deficiency'] : [],
                 );
                 /*
                  * The COUNTS have to describe the administration that produced the STATUS.
@@ -907,7 +934,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                  *
                  * When stickiness kept an earlier verdict, keep that administration's counts too.
                  */
-                const inheritedVerdict = status === p.cvd_status && status !== r.status;
+                const inheritedVerdict = countsComeFromPriorAdministration(status, r.status);
                 await put('participants', {
                   ...p,
                   cvd_screen_correct: inheritedVerdict ? p.cvd_screen_correct : r.testCorrect,
@@ -918,8 +945,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 });
               }
             }
-            advance();
           }}
+          /*
+           * Advancing is the component's call, not this handler's. A screen that does not pass puts
+           * an operator notice up first — the formal plates have to be administered while the
+           * participant is still here — and that notice is what calls this.
+           */
+          onDone={advance}
         />
       );
       break;

@@ -2331,3 +2331,110 @@ caught. The codebook-prose assertion is deliberately described in the test as th
 since the prose is derived, it can only catch the sentence losing its number, not the two disagreeing.
 Saying so in the test is the point; a check that cannot fail should not be left looking like one that
 can.
+
+## Round 35 — the app's own colour screen was excluding people, against four places that said it never does
+
+`src/screening/ishihara.ts` builds six home-made plates: one greyscale control everyone should pass,
+and five red-green confusion plates. Four correct out of the five is a pass. Its own header says, in
+capitals, what it is not — *"It is not the Ishihara test. It is six home-made plates with no published
+operating characteristics"* — and names what is: *"Formal Ishihara or Farnsworth plates, administered
+by the operator, remain the basis for exclusion."*
+
+The COLOR_VISION stage handler read:
+
+```ts
+const failsColourVision = status === 'screen_failed' || status === 'self_reported_deficient';
+```
+
+`screen_failed` has exactly one source: that 4-of-5 rule. So a participant who missed two of five
+home-made plates was written out `eligible = false` with `exclusion_reason = 'failed the
+colour-vision screening'`, and the exported codebook instructs the analyst that *rows with false must
+be excluded from the confirmatory analysis*. A complete sitting — consent, screening, ten conditions,
+around two hours of the participant's time and the researcher's — discarded on that.
+
+Four places in this repository say it must not be:
+
+- `ishihara.ts`'s own header, quoted above.
+- the exported codebook, `cvd_screen_correct`: *"a covariate and a flag, never a criterion for
+  exclusion"*.
+- `OPERATOR_MANUAL.md`: *"it never excludes anyone on its own"*.
+- the PARTICIPANT_PROFILE stage, a few hundred lines up the same file, which carries a comment
+  recording that this exact thing was found and fixed **there**: *"The app's own six-plate digital
+  screen has no published operating characteristics and is a flag, not a criterion — using it to
+  exclude contradicted its own module header."*
+
+The last one is the finding behind the finding. The fix was applied to one of the two stages that
+could assert a colour-vision exclusion and not to the other, and nothing noticed, because the tests
+covering this stage asserted stickiness and merge behaviour — that a failure *reaches* `eligible` —
+which is the property that had to change.
+
+The direction of the error is the uncomfortable one. The usual worry about a weak screen is that it
+lets someone through. Here it threw people out, using an instrument whose specificity is unknown by
+its own admission, and the people it throws out are selected on colour perception — the exact axis
+the text-colour factor sits on. Over-exclusion by an uncharacterised instrument is not a conservative
+error; it biases the retained sample on the dependent variable's own dimension.
+
+**What changed.** `screen_failed` no longer touches `eligible`. What still excludes is the
+participant's own self-report, asserted here, and `cvd_clinical = deficient` — the operator's formal
+plates — asserted by the profile stage. The screen result is not lost: `cvd_status` stays sticky
+across sittings, and the counts ship beside it, so the analyst can model on it or run a sensitivity
+analysis without those participants. `eligibility.ts` keeps the `/colour-vision screening/` pattern
+although nothing emits it any more, deliberately and with a comment saying so, because that is what
+lets the next administration RETIRE a stale exclusion written by an earlier build instead of leaving
+it attached to a record for ever, asserted by nothing and removable by nothing.
+
+**Not excluding is only safe if somebody acts on it.** `src/dashboard/` contains no reference to
+`cvd` or `eligible` at all, so before this the first human to read `cvd_status = screen_failed` was
+the analyst, months later, with `cvd_clinical = not_done` beside it and no participant left to screen.
+The app now stops on an operator notice when its screen does not pass: the result has already been
+written when the notice appears, so it is an instruction and not a confirmation step, and what it
+instructs is to administer the formal plates *now, while the participant is in the room*, because
+that is the only moment the question can still be settled. It says plainly that nobody is being
+excluded and that this is not a diagnosis, and it repeats the manual's instruction not to tell the
+participant they have a deficiency on the strength of it. `screen_inconclusive` gets the same notice:
+that state means the greyscale control was missed — one mis-tap on the first of six screens — so the
+attempt measured nothing, and the setup state machine will not re-present the stage because a total
+was recorded. The formal plates are the remedy there too.
+
+### Three smaller defects in the same module
+
+**The counts of a self-reporting participant's screen were thrown away.** The predicate deciding
+whether to keep a prior administration's counts was written inline as
+`status === p.cvd_status && status !== r.status`, comparing a `StoredCvdStatus` against an
+`IshiharaResult['status']` — two different enumerations. For a participant who self-reported a
+deficiency at the profile stage, two stages before this one, both comparisons were true for the wrong
+reason on their FIRST sitting, so the handler wrote the prior counts: null. Three things followed. The
+codebook says a null count means the screen was not run, which was then false — it had run and been
+scored. The operator manual tells the operator to compare the self-report against the app's screen and
+record both if they disagree, which that row can no longer support. And `cvd_screen_total != null` is
+what the setup state machine uses to decide this stage is satisfied, so the screen was re-administered
+on every resume of that participant's session. It is now a pure function,
+`countsComeFromPriorAdministration`, with the full nine-row truth table as its test — the old test was
+a regex over the source line, which could not see the defect it was guarding.
+
+**An empty plate set scored as a clean bill of colour vision.** The pass rule
+`testCorrect >= test.length - 1` reads `0 >= -1` when there are no confusion plates, so
+`scoreIshihara([], {})` returned `normal`. Unreachable from the app, which always builds six plates —
+but the stress harness calls it with `PLATES ?? []`, which is how it was reachable at all, and the
+allowance is absolute rather than proportional, so a one-plate set passed at zero correct too. A set
+with nothing in it now scores `inconclusive`: it measured nothing, and the repository's standing rule
+is that a check which could not run has not passed. A stress check asserts it.
+
+**The codebook's arithmetic did not match the numbers it described.** It said *"six-plate digital
+screen"* and, for the denominator, *"Plates presented."* The value is 5 — the control plate is
+presented and scored into neither the numerator nor the denominator. An analyst reconciling `4 / 5`
+against "six-plate … plates presented" concludes a plate was dropped. And the pass rule itself was
+documented **nowhere outside the source**: not in `docs/`, not in `spec/`, not in either codebook. From
+the exported bundle alone, nothing said what turned `cvd_screen_correct = 4` into
+`cvd_status = normal`, nor that 3 would have produced a different verdict. Both entries now state the
+rule, the denominator and why the control is excluded, built from `SCREEN_TEST_PLATES` and
+`SCREEN_ALLOWED_SLIPS` so the prose cannot drift from the scorer. `cvd_status` now warns that a
+`screen_failed` row is IN the confirmatory sample and says to check `cvd_clinical` on it.
+
+`PROTOCOL.md` and `spec/CONSTANTS.md` still called it "Ishihara screening" — the name the module and
+its columns were deliberately renamed away from, because it asserts a validated instrument to anyone
+reading the data. The rename had reached the CSV columns and the operator manual and stopped there.
+Both now name it for what it is and state that it does not exclude.
+
+Four mutations were run and each was caught: restoring the exclusion, restoring the old inheritance
+predicate, removing the empty-set guard, and skipping the operator notice.

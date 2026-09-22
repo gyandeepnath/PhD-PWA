@@ -38,9 +38,21 @@ export type ExclusionSource = 'profile' | 'colour_vision';
  * stops the two drifting — a reason a stage can emit but not recognise would be duplicated on every
  * re-run, and one it recognises but cannot emit would be silently dropped.
  *
- * Colour vision — BOTH the screen result and the self-report — belongs to the colour-vision stage,
- * which runs after the profile stage and holds the sticky `cvd_status`. The profile stage records
- * the self-report into that status and says nothing about it here, so the two cannot disagree.
+ * Colour vision belongs to the colour-vision stage, which runs after the profile stage and holds
+ * the sticky `cvd_status`. The profile stage records the self-report into that status and says
+ * nothing about it here, so the two cannot disagree.
+ *
+ * RECOGNISED BUT NO LONGER EMITTED: /colour-vision screening/. The app's own six-plate screen used
+ * to assert 'failed the colour-vision screening' as an exclusion, contradicting its own module
+ * header, the exported codebook and the operator manual, all three of which say that screen is a
+ * flag and that the operator's FORMAL plates are the criterion. It no longer asserts it.
+ *
+ * The pattern stays. A stage's own reasons are identified by what they say, so keeping it is what
+ * lets the colour-vision stage RETIRE a stale exclusion written by an earlier build: the next
+ * administration strips it and the participant is eligible again, which is the corrected verdict.
+ * Dropping the pattern instead would leave that reason permanently attached to a record, asserted
+ * by nothing and removable by nothing. The information itself is not lost — `cvd_status` still
+ * reads `screen_failed`, and the screen counts are still exported beside it.
  */
 const OWNED_BY: Record<ExclusionSource, RegExp[]> = {
   profile: [/inclusion range/i, /contact-lens/i, /formal plates/i],

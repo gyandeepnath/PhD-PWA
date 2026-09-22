@@ -123,9 +123,12 @@ Setup chain: SESSION_INIT → CONSENT → PARTICIPANT_PROFILE → COLOR_VISION �
 CAMERA_SETUP → CALIBRATION → CVSQ_BASELINE → BASELINE_FATIGUE → [×8 loop] → CVSQ_END →
 SESSION_COMPLETE → EXPORT_DASHBOARD. Tracked steps = 8 setup + 8×6 = 56.
 - Consent: informed-consent gate (no-video statement, withdrawal, voluntary).
-- Colour-vision: digital Ishihara SCREENING (dot-mosaic plates via 5×7 font mask; control plate +
-  5 red-green confusion plates; status normal/screen_failed/inconclusive). Honestly framed as a
-  screening aid, not diagnostic; result stored on participant (ishihara_correct/total, cvd_status).
+- Colour-vision: digital colour-vision SCREEN — NOT the Ishihara test (dot-mosaic plates via 5×7
+  font mask; one greyscale control plate + 5 red-green confusion plates; pass = 4 of 5 confusion
+  plates with the control correct; status normal/screen_failed/inconclusive). Honestly framed as a
+  screening aid, not diagnostic, and **not a criterion for exclusion** — the operator's formal
+  plates (cvd_clinical) are. Result stored on participant as cvd_screen_correct/cvd_screen_total
+  (renamed from ishihara_correct/total, which asserted a validated instrument) and cvd_status.
 - CVS-Q (Seguí 2015): validated 16-item freq×intensity, recode 0/1/2, cutoff ≥6; at baseline + end.
 - Pre-flight: 7-item researcher checklist (brightness/auto-brightness/night-shift/clean/lux/lenses/
   backlight/distance) gating session start; sets preflight_complete.

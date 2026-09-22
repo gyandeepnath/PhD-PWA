@@ -50,7 +50,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
   → CONSENT             participant: informed consent (recorded here, not pre-emptively)
   → PARTICIPANT_PROFILE demographics + vision covariates (age 18–35 per protocol, correction, self-report CVD…)
   → PREFLIGHT           researcher: display/room configured (brightness fixed, night-shift OFF, …)
-  → COLOR_VISION        digital Ishihara screening (runs AFTER night-shift is off)
+  → COLOR_VISION        digital colour-vision SCREEN, not the Ishihara test (runs AFTER night-shift is off)
   → CAMERA_SETUP        webcam permission (or skip → no eye tracking)
   → CALIBRATION         centre-fixation open-eye EAR + frontal-pitch baseline (6 s), then 9-point gaze calibration
                           (head frontal during calibration → pitch zero) / positioning check
@@ -176,7 +176,14 @@ order — is **reused across sittings**, and the next sitting resumes at the glo
 where the last stopped, so each condition is still run exactly once. `session_index` (sitting
 number) is recorded and added as a covariate when sittings vary; baseline fatigue and CVS-Q are
 re-measured each sitting (fatigue resets between sittings — documented, not assumed away).
-- The **Ishihara screening** is a digital screening aid, not a clinical diagnosis.
+- The **app's digital colour-vision screen** is a screening aid, not a clinical diagnosis and not
+  the Ishihara test: six home-made plates (one greyscale control, five red-green confusion plates)
+  with no published sensitivity or specificity, scored 4 of 5 to pass. It is recorded as a covariate
+  (`cvd_status`, `cvd_screen_correct`, `cvd_screen_total`) and **does not exclude anyone**. The
+  operator's **formal plates** (Ishihara or Farnsworth, recorded as `cvd_clinical`) are the basis for
+  exclusion, alongside the participant's own self-report. When the app's screen does not pass, the
+  app prompts the researcher on the spot to administer the formal plates, because that is the only
+  moment the question can still be settled.
 
 
 ---

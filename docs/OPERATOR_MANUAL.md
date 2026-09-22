@@ -145,6 +145,20 @@ confirmatory analysis can drop them. Enter what is true rather than what will le
 
 If the two disagree, record both and note it. The formal result is what the analysis uses.
 
+**If the app's screen does not pass**, the tablet stops and tells you so before going on. Nothing has
+gone wrong and nobody is excluded — the result is already saved. What it is asking you to do is
+**administer the formal plates now, while the participant is still with you**, and record the result
+on the profile form. That is the only moment the question can be settled: the app's screen cannot
+settle it, and after the session there is no participant to screen. If you genuinely cannot run the
+plates, record *not done* — it is not a pass, and the analysis will treat it as unresolved. Do not
+tell the participant they have a colour-vision deficiency on the strength of the app's screen; if the
+formal plates show one, follow the incidental-findings steps below.
+
+You will see the same notice when the app's screen gives **no result** — that means the greyscale
+control plate was missed, usually a mis-tap on the first of the six screens, so the attempt measured
+nothing. It is neither a pass nor a failure, the app will not re-present the screen, and the formal
+plates are again the remedy.
+
 **If screening turns up an abnormality** — reduced acuity, uncorrected refractive error, a binocular
 anomaly, a colour-vision deficiency:
 

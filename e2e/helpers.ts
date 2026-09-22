@@ -127,12 +127,29 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
       await click(page, /Continue/);
       await waitStageChange(page, stage);
       break;
-    case 'COLOR_VISION':
-      // One plate per dispatch: the screen shows five in sequence, so the driver loops back here
-      // until the last is answered. The stale-stage guard at the top of handleStage is what stops
-      // it from clicking into the NEXT screen once the final plate advances.
+    case 'COLOR_VISION': {
+      /*
+       * One plate per dispatch: the screen shows six in sequence (a greyscale control plate and
+       * five confusion plates), so the driver loops back here until the last is answered. The
+       * stale-stage guard at the top of handleStage is what stops it from clicking into the NEXT
+       * screen once the final plate advances.
+       *
+       * The driver answers '8' to every plate against per-administration random digits, so it will
+       * normally NOT pass — and a screen that does not pass now holds the stage on an operator
+       * notice telling the researcher to administer the formal plates. That is the honest path for
+       * this driver to take: the result is already persisted when the notice appears, and
+       * acknowledging it is what a researcher would do. Checked first, because when it is up there
+       * is no digit button to click.
+       */
+      const ack = page.getByRole('button', { name: /Recorded — continue/ });
+      if (await ack.isVisible().catch(() => false)) {
+        await ack.click({ force: true });
+        await waitStageChange(page, stage);
+        break;
+      }
       await page.getByRole('button', { name: '8', exact: true }).first().click({ force: true });
       break;
+    }
     case 'PREFLIGHT':
       await checkAllBoxes(page);
       await click(page, /All checks pass/);

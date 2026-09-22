@@ -53,7 +53,13 @@ function PlateSvg({ plate }: { plate: Plate }) {
 }
 
 interface Props {
-  onComplete: (r: IshiharaResult) => void;
+  /**
+   * Persist the result. Awaited, so the record is written before the operator notice — which is
+   * shown only for a non-passing screen — can be dismissed.
+   */
+  onComplete: (r: IshiharaResult) => void | Promise<void>;
+  /** Leave the stage. Called immediately on a pass; on anything else, when the operator taps on. */
+  onDone: () => void;
   /**
    * Per-administration seed. The digits, plate order and luminance polarity all derive from it, so
    * a participant's second sitting is not the same six plates in the same order — which would make
@@ -62,10 +68,11 @@ interface Props {
   seed: number;
 }
 
-export function IshiharaTest({ onComplete, seed }: Props) {
+export function IshiharaTest({ onComplete, onDone, seed }: Props) {
   const plates = useMemo(() => buildScreeningPlates(seed), [seed]);
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [notice, setNotice] = useState<IshiharaResult['status'] | null>(null);
   const busy = useRef(false); // guard against double-taps advancing or completing twice
   const plate = plates[idx];
   const isLast = idx === plates.length - 1;
@@ -75,12 +82,24 @@ export function IshiharaTest({ onComplete, seed }: Props) {
     busy.current = true;
     const next = { ...answers, [plate.id]: val };
     setAnswers(next);
-    if (isLast) onComplete(scoreIshihara(plates, next));
-    else {
+    if (isLast) {
+      const result = scoreIshihara(plates, next);
+      /*
+       * Persist FIRST, then decide whether to stop. The notice is an operator instruction, not a
+       * confirmation step: the result is already recorded when it appears, so a tablet that dies
+       * while the notice is up loses nothing.
+       */
+      void Promise.resolve(onComplete(result)).then(() => {
+        if (result.status === 'normal') onDone();
+        else setNotice(result.status);
+      });
+    } else {
       setIdx((i) => i + 1);
       busy.current = false; // allow the next plate's answer
     }
   };
+
+  if (notice) return <OperatorNotice status={notice} onDone={onDone} />;
 
   return (
     <div className="min-h-screen w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -105,6 +124,58 @@ export function IshiharaTest({ onComplete, seed }: Props) {
             Can't tell
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Shown to the OPERATOR when the app's screen does not pass — and only then.
+ *
+ * This screen does not exclude anyone; the operator's formal plates do. That made a non-passing
+ * result a fact the app recorded and nobody ever saw: the dashboard shows no colour-vision status
+ * at all, so the first reader of `cvd_status = screen_failed` was the analyst, months later, with
+ * `cvd_clinical = not_done` beside it and no participant left to screen.
+ *
+ * The formal plates are the only thing that can resolve it, and they have to be administered while
+ * the participant is in the room. So the app says so, at the one moment it is still actionable, and
+ * says plainly what it is NOT: a diagnosis, and not a reason to send anyone home.
+ *
+ * `screen_inconclusive` gets the same notice for a different reason. It means the greyscale control
+ * plate was missed, so the attempt measured nothing — one mis-tap on the first of six screens does
+ * it — and the setup state machine will not re-present the stage, because a total was recorded.
+ * The formal plates are the remedy there too.
+ */
+function OperatorNotice({ status, onDone }: { status: IshiharaResult['status']; onDone: () => void }) {
+  const failed = status === 'screen_failed';
+  return (
+    <div className="min-h-screen w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ maxWidth: 560, width: '100%' }}>
+        <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">For the researcher</p>
+        <h1 className="mt-2 font-serif text-3xl font-light">
+          {failed ? 'The app’s colour screen did not pass' : 'The app’s colour screen gave no result'}
+        </h1>
+        <p className="mt-4 text-[15px] leading-relaxed">
+          {failed
+            ? 'This participant did not reach the pass mark on the app’s own six-plate screen.'
+            : 'The greyscale control plate was missed, so this attempt measured nothing. It is not a pass and not a failure.'}
+          {' '}It has been recorded. <strong>It does not exclude anyone and it is not a diagnosis</strong> —
+          the screen is a home-made aid with no published sensitivity or specificity.
+        </p>
+        <p className="mt-3 text-[15px] leading-relaxed">
+          <strong>Administer the formal plates</strong> (Ishihara or Farnsworth) now, while the
+          participant is here, and record the result on the profile form as normal or deficient. That
+          result is what the analysis uses, and it is the only thing that can settle this. If you
+          cannot do it now, record <em>not done</em> honestly — it is not a pass.
+        </p>
+        <p className="mt-3 text-[13px] leading-relaxed text-[#5a5a7a]">
+          Do not tell the participant they have a colour-vision deficiency. If the formal plates show
+          one, follow the incidental-findings steps in the operator manual.
+        </p>
+        <button onClick={onDone} className="font-lab mt-8"
+          style={{ padding: '14px 28px', borderRadius: 12, border: '1px solid #d8d4cc', background: '#fff', fontSize: 15, cursor: 'pointer' }}>
+          Recorded — continue
+        </button>
       </div>
     </div>
   );

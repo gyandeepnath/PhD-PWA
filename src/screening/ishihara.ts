@@ -122,6 +122,24 @@ function shuffle<T>(items: T[], next: () => number): T[] {
 }
 
 /**
+ * Confusion plates in one administration. The greyscale control is presented as well, but it is a
+ * validity check rather than a test item and is excluded from both the numerator and the
+ * denominator — so a participant sees six plates and `cvd_screen_total` reads 5.
+ */
+export const SCREEN_TEST_PLATES = 5;
+
+/**
+ * Wrong answers tolerated on the confusion plates before the screen is called `screen_failed`.
+ *
+ * ONE, and there is nothing published behind that. The pass mark is 4 of 5, chosen so a single
+ * mis-tap on a 52 px button does not overturn an administration, and its sensitivity and
+ * specificity are unknown — which is exactly why this screen is a covariate and a flag rather than
+ * a criterion for exclusion. Named here so the exported codebook can state the rule it is applying
+ * instead of leaving an analyst to find it in the source at the right commit.
+ */
+export const SCREEN_ALLOWED_SLIPS = 1;
+
+/**
  * Build one administration's plate set: a greyscale control plate everyone should pass, then five
  * confusion plates whose digits, order and luminance polarity all derive from `seed`.
  *
@@ -136,7 +154,7 @@ export function buildScreeningPlates(seed: number): Plate[] {
 
   // Balanced polarity: exactly two of the five put the figure in the cool (lighter) palette, and
   // which two varies with the seed.
-  const coolFigure = new Set(shuffle([0, 1, 2, 3, 4], next).slice(0, 2));
+  const coolFigure = new Set(shuffle([...Array(SCREEN_TEST_PLATES).keys()], next).slice(0, 2));
 
   const plates: Plate[] = [
     {
@@ -147,7 +165,7 @@ export function buildScreeningPlates(seed: number): Plate[] {
       backgroundColors: CONTROL_BACKGROUND,
     },
   ];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < SCREEN_TEST_PLATES; i++) {
     const pair = pairs[i];
     const figureIsCool = coolFigure.has(i);
     plates.push({
@@ -222,8 +240,19 @@ export function scoreIshihara(plates: Plate[], answers: Record<number, string>):
   const controlOk = control.every((r) => r.correct);
 
   let status: IshiharaResult['status'];
-  if (!controlOk) status = 'inconclusive'; // failed the control plate → invalid attempt
-  else status = testCorrect >= test.length - 1 ? 'normal' : 'screen_failed'; // allow one slip
+  /*
+   * A set with no confusion plates measured nothing, so it is inconclusive — not a pass.
+   *
+   * Without this the rule `testCorrect >= test.length - SCREEN_ALLOWED_SLIPS` reads `0 >= -1` and
+   * returns 'normal': scoreIshihara([], {}) was a clean bill of colour vision. Unreachable from the
+   * app, which always builds six plates, but the stress harness calls this with `PLATES ?? []` and
+   * the allowance is absolute rather than proportional, so a one-plate set passed at zero correct
+   * too. A scoring function that certifies an empty administration is the "green while measuring
+   * nothing" shape this audit keeps finding.
+   */
+  if (test.length === 0) status = 'inconclusive';
+  else if (!controlOk) status = 'inconclusive'; // failed the control plate → invalid attempt
+  else status = testCorrect >= test.length - SCREEN_ALLOWED_SLIPS ? 'normal' : 'screen_failed';
 
   return { responses, correct, total: plates.length, testCorrect, testTotal: test.length, status };
 }
@@ -257,4 +286,40 @@ export function resolveCvdStatus(
   if (prior === 'self_reported_deficient') return 'self_reported_deficient';
   if (result === 'normal') return 'normal';
   return 'screen_inconclusive';
+}
+
+/**
+ * Whether the counts to store alongside `resolveCvdStatus(prior, result)` are an EARLIER
+ * administration's rather than this one's.
+ *
+ * `cvd_status` is sticky, so the status stored after an administration is not always the one that
+ * administration produced. The counts have to follow the status — a `screen_failed` verdict sitting
+ * beside a passing administration's 5-of-5 is a contradiction an analyst resolves the wrong way, by
+ * trusting the numbers over the flag.
+ *
+ * This is the predicate, and it is a function rather than an expression at the call site because
+ * the version written inline was wrong for a case nothing tested. It read
+ * `status === prior && status !== result`, comparing a StoredCvdStatus against an
+ * IshiharaResult['status'] — two different enumerations. For a participant who self-reported a
+ * deficiency at the profile stage, `status` and `prior` are both 'self_reported_deficient' and
+ * `result` is whatever the plates gave, so the predicate was TRUE and this administration's counts
+ * were discarded in favour of the prior's, which on a first sitting is null.
+ *
+ * Three things followed from that. The codebook says a null count means "it was not run", which was
+ * then false for those rows — the screen HAD run and been scored. The operator manual instructs the
+ * operator to compare the self-report against the app's screen and record both if they disagree,
+ * which that row can no longer support. And `cvd_screen_total != null` is what the setup state
+ * machine uses to decide the colour-vision stage is satisfied, so the stage was re-presented on
+ * every resume of that participant's session.
+ *
+ * Only ONE status is genuinely inherited from an earlier ADMINISTRATION: `screen_failed` carried
+ * forward over a later pass. `self_reported_deficient` does not come from an administration at all —
+ * it comes from the profile question — so it inherits nothing, and the screen that just ran is the
+ * only thing the counts could describe.
+ */
+export function countsComeFromPriorAdministration(
+  stored: StoredCvdStatus,
+  result: IshiharaResult['status'],
+): boolean {
+  return stored === 'screen_failed' && result !== 'screen_failed';
 }
