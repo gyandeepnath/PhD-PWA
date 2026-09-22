@@ -143,8 +143,11 @@ confirmatory analysis can drop them. Enter what is true rather than what will le
   re-randomised on every administration by design, so a participant cannot pass the second one from
   memory; for the same reason the two scores are not directly comparable with each other. Half the
   coloured plates are built to be invisible to one kind of red-green deficiency and half to the
-  other, so a participant who has one of them typically gets **about half** of them right rather
-  than none — a middling score is the expected pattern there, not carelessness.
+  other, and in practice a participant with either kind sees very little on **any** of them. What
+  matters is the **first, grey plate**: grey plate right and most of the coloured ones wrong is the
+  pattern of a colour-vision deficiency, and it is not carelessness. Someone who misses the grey
+  plate as well was not attending, and the app records that separately as no result rather than as
+  a failure.
 
 If the two disagree, record both and note it. The formal result is what the analysis uses.
 

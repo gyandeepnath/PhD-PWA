@@ -7,12 +7,20 @@ import { useMemo, useRef, useState } from 'react';
 import { makeRng } from '@/sim/rng';
 import { buildScreeningPlates, isFigurePixel, scoreIshihara, type Plate, type IshiharaResult } from './ishihara';
 
-const D = 280;
+export const PLATE_DIAMETER = 280;
+const D = PLATE_DIAMETER;
 const GLYPH_W_FRAC = 0.46; // glyph box width as fraction of disk diameter
 
-interface Dot { x: number; y: number; r: number; color: string }
+export interface Dot { x: number; y: number; r: number; color: string }
 
-function generateDots(plate: Plate, seed: number): Dot[] {
+/**
+ * Exported so `scripts/platePreview.ts` renders the plates with the SAME function the tablet does.
+ * A preview drawn by a re-implementation proves nothing about what the participant sees.
+ */
+/** The per-plate dot seed. One definition, so the preview cannot drift from the tablet. */
+export const dotSeed = (plate: Plate) => plate.id * 1000 + plate.digit.charCodeAt(0) * 31 + 7;
+
+export function generateDots(plate: Plate, seed: number): Dot[] {
   const rng = makeRng(seed);
   const cx = D / 2;
   const cy = D / 2;
@@ -42,7 +50,7 @@ function generateDots(plate: Plate, seed: number): Dot[] {
 function PlateSvg({ plate }: { plate: Plate }) {
   // Seeded by the plate's digit as well as its id, so the dot mosaic differs between
   // administrations along with everything else.
-  const dots = useMemo(() => generateDots(plate, plate.id * 1000 + plate.digit.charCodeAt(0) * 31 + 7), [plate]);
+  const dots = useMemo(() => generateDots(plate, dotSeed(plate)), [plate]);
   return (
     <svg width={D} height={D} style={{ borderRadius: '50%', background: '#efece6' }} aria-label="colour vision plate">
       {dots.map((d, i) => (

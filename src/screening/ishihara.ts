@@ -112,26 +112,43 @@ export interface Plate {
  * transform annihilates — a confusion axis. Take any base colour and step the same distance along
  * that axis in each direction: the two results are a METAMER PAIR for that observer. They project
  * to one colour, so there is no hue difference and no brightness difference to fall back on. Then
- * both palettes are scaled by the SAME five lightness factors, spanning 1.8x from darkest to
+ * both palettes are scaled by the SAME five lightness factors, spanning about 1.35x from darkest to
  * lightest. Scaling is linear, so the pair stays a metamer pair at every step, and the figure
  * region and the background region present the same distribution of lightnesses — which is the
  * defence a real pseudoisochromatic plate relies on, and the one the previous palettes lacked.
+ *
+ * WHY 1.35x AND NOT MORE. A first version used 1.8x, on the reasoning that more lightness noise
+ * means a better-hidden boundary. Rendered and measured in CIELAB, that cost the trichromat far
+ * more than it bought: the chromatic signal carrying the digit fell to a mean dC of 37.7 against a
+ * within-plate L* spread of 20, where the previous palettes had dC 41.8 against a spread of 11.
+ * Roughly half the signal-to-noise, and the digits stopped being comfortably legible — which would
+ * have produced FALSE screen failures in normal trichromats, the very over-exclusion this screen
+ * was recently stopped from causing. The noise was also nearly redundant: once a plate is an exact
+ * metamer for its target observer there is no edge for them at any spread, so the spread only ever
+ * mattered against the other dichromat, who is meant to read the plate anyway. It is now matched to
+ * the old set's L* spread and the chromatic signal is back above it.
  *
  * `redder` is the +axis end and `greener` the -axis end. Which one becomes the FIGURE is chosen per
  * administration; see the polarity note in `buildScreeningPlates`.
  *
  * MEASURED PROPERTIES OF THIS SET (`tests/screening.test.ts` asserts every one of them):
  *
- *   for the observer each plate targets   contrast ratio 1.000-1.005, dot ranges 99-100% overlapped
- *   for a normal trichromat               contrast ratio 1.06-1.10,   dot ranges 86-92% overlapped
- *   for the OTHER dichromat               contrast ratio 1.16-1.20,   dot ranges 70-78% overlapped
+ *   for the observer each plate targets   contrast ratio 1.001-1.007, dot ranges 97-100% overlapped
+ *   for a normal trichromat               contrast ratio 1.065-1.118, dot ranges 62-80% overlapped
+ *   for the OTHER dichromat               contrast ratio 1.187-1.204, dot ranges 35-40% overlapped
+ *
+ * and, in CIELAB, the chromatic difference that actually carries the digit for a trichromat:
+ *
+ *   figure vs background, chromatic dC   40.9-45.2   (previous palettes: 39.7-44.3)
+ *   lightness spread within a plate, L*  11-12       (previous palettes: 10-12)
  *
  * The third row is not a defect. A protanope is supposed to be able to read the deutan plates: they
  * fail via the three protan plates, and a score of 3 of 6 is well under the pass mark. Driving that
  * row to 1.00 as well is not merely hard, it is IMPOSSIBLE — see the note on SCREEN_TEST_PLATES.
  *
  * The previous palettes, measured the same way: 1.20-1.29 for a protanope with only ~20% of the dot
- * range overlapping, on all five plates, with the greener palette lighter every time.
+ * range overlapping, on all five plates, with the greener palette lighter every time — while
+ * carrying no more chromatic signal for the trichromat than this set does.
  */
 interface PalettePair {
   axis: DichromatKind;
@@ -142,33 +159,33 @@ interface PalettePair {
 const CONFUSION_PAIRS: PalettePair[] = [
   {
     axis: 'protan',
-    redder: ['#a99879', '#b4a382', '#c1af8b', '#cdba94', '#dac69e'],
-    greener: ['#62a07a', '#6aab82', '#71b78c', '#79c395', '#81cf9e'],
+    redder: ['#baa766', '#c1ad6a', '#c7b36d', '#ceb971', '#d5bf75'],
+    greener: ['#5db166', '#60b76a', '#64bd6e', '#67c472', '#6bca76'],
   },
   {
     axis: 'protan',
-    redder: ['#a99882', '#b4a38c', '#c1af96', '#cdbaa0', '#dac6aa'],
-    greener: ['#62a083', '#6aab8c', '#71b796', '#79c3a0', '#81cfaa'],
+    redder: ['#bca977', '#c3af7b', '#cab57f', '#d1bb84', '#d7c189'],
+    greener: ['#5fb277', '#62b97c', '#66bf80', '#69c585', '#6dcc89'],
   },
   {
     axis: 'protan',
-    redder: ['#ab9863', '#b7a36a', '#c4af72', '#d1ba7a', '#dec682'],
-    greener: ['#68a064', '#6fab6b', '#78b773', '#80c37b', '#88cf83'],
+    redder: ['#b1a161', '#b8a765', '#beac68', '#c4b26c', '#cbb870'],
+    greener: ['#55aa62', '#59b065', '#5cb669', '#5fbc6d', '#63c270'],
   },
   {
     axis: 'deutan',
-    redder: ['#a78f87', '#b39a90', '#c0a49b', '#ccafa5', '#d9baaf'],
-    greener: ['#5fa884', '#66b38e', '#6ec098', '#75cca2', '#7dd9ac'],
+    redder: ['#b6a071', '#bca675', '#c3ab79', '#cab27d', '#d0b782'],
+    greener: ['#66ba6d', '#6ac171', '#6ec775', '#72ce7a', '#76d47e'],
   },
   {
     axis: 'deutan',
-    redder: ['#ad8f7e', '#b99a87', '#c6a490', '#d3af9a', '#e0baa4'],
-    greener: ['#6aa87b', '#72b384', '#7ac08e', '#82cc97', '#8bd9a1'],
+    redder: ['#b39b8a', '#b9a08f', '#bfa694', '#c6ac99', '#cdb19e'],
+    greener: ['#60b587', '#64bc8c', '#67c291', '#6bc996', '#6fcf9b'],
   },
   {
     axis: 'deutan',
-    redder: ['#ae9069', '#ba9a71', '#c7a579', '#d4b081', '#e1bb89'],
-    greener: ['#6ea766', '#76b36d', '#7ec075', '#87cc7d', '#90d986'],
+    redder: ['#c19f6d', '#c8a571', '#cfab75', '#d6b179', '#ddb77d'],
+    greener: ['#78ba69', '#7cc16d', '#80c771', '#85ce75', '#89d579'],
   },
 ];
 

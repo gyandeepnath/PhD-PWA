@@ -614,8 +614,8 @@ export const CODEBOOK: Record<string, string>[] = [
     + `HOW THE PLATES ARE BUILT: the ${SCREEN_TEST_PLATES} confusion plates are split evenly between the two red-green axes — ${SCREEN_TEST_PLATES / 2} on the PROTAN confusion `
     + `axis and ${SCREEN_TEST_PLATES / 2} on the DEUTAN — and each plate's two dot palettes are computed to project to a SINGLE colour under the Viénot, Brettel & Mollon (1999) `
     + 'simulation for that deficiency: same hue and same brightness, so a dichromat of that type sees a blank disc with no edge of any kind to read. '
-    + 'A protanope should therefore miss the protan plates and be able to read the deutan ones, and vice versa. A score around half, rather than near zero or near full, is the '
-    + 'signature of a red-green deficiency here, and is not inattention. '
+    + 'A dichromat of either type therefore misses at least the three plates aimed at them, and in the rendered simulation reads the other three as uniform too: the expected pattern is a '
+    + `score at or near zero on the confusion plates WITH THE GREYSCALE CONTROL CORRECT, which is what separates a colour-vision deficiency from inattention — someone who is not attending misses the control as well, and that is recorded as screen_inconclusive rather than as a failure. The worst case the ${SCREEN_TEST_PLATES / 2}-per-axis split is sized against is a dichromat who reads all three cross-axis plates, i.e. ${SCREEN_TEST_PLATES / 2} of ${SCREEN_TEST_PLATES}, still short of the pass mark. `
     + 'WHAT IT IS NOT: this is not the Ishihara test. It is a home-made screen whose sensitivity and specificity are unknown, it models the DICHROMATIC extreme and says nothing '
     + 'established about anomalous trichromacy (the commoner condition), and it is a covariate and a flag, never a criterion for exclusion — cvd_clinical, the formal plates, is that. '
     + 'Digits, plate order, axis order and which palette carries the figure all vary per administration, so two administrations are not the same test and the counts are not directly '

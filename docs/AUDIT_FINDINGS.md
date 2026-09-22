@@ -2706,3 +2706,60 @@ corrupted, the axis split made 4/2, and the polarity selection made uniform. The
 *passed* — correctly: with three plates per axis the balance is structural, so the seeded choice
 varies the set without being what balances it. The comment already said so; the mutation confirmed
 the comment rather than exposing a gap.
+
+## Round 40 — looking at the plates, and two claims I had to withdraw
+
+Round 39's palettes passed every luminance test and were wrong anyway. Rendering them — with the
+tablet's own dot generator, not a re-implementation — and then measuring what the render showed
+turned up two things the numbers I had chosen could not see.
+
+### The lightness noise was costing the trichromat more than it bought
+
+I widened the dot-lightness spread to 1.8× on the reasoning that more noise hides a luminance
+boundary better. Every luminance assertion still passed; the spread only helps them. Measured in
+CIELAB, it had halved the signal the digit is actually carried by: chromatic dC fell to a mean of
+37.7 against an L* spread of 20, where the old palettes had 41.8 against 11. Rendered, the digits
+were no longer comfortably legible.
+
+The direction of that failure is the one this screen keeps producing. A trichromat who cannot read
+the plates **fails the screen** — and until a few rounds ago failing it removed the participant from
+the study. I had made the over-exclusion risk worse while fixing something else.
+
+The noise was also nearly redundant, which I had not noticed. Once a plate is an exact metamer for
+its target observer there is no boundary for them at *any* spread; the spread only ever mattered
+against the other dichromat, who is meant to read that plate. So it is now matched to the old set's
+L* spread (11–12) and the palettes re-picked to maximise chromatic distance instead: dC 40.9–45.2,
+against the old set's 39.7–44.3. Better than before on both axes at once.
+
+`chromaticSignal()` in `dichromat.ts` now measures this, and a test holds every plate to the **old
+palettes' worst plate** as a floor — dC ≥ 39.7, L* spread ≤ 14, ratio ≥ 3.2. Whatever else changes,
+the digit must stay at least as findable as it was before any of this work started. Nothing measured
+this before; that is why the regression happened.
+
+Dot geometry was checked at the same time and left alone. Rendering the glyph in plain black on grey
+shows all eight digits read cleanly, so the mask and the 11 px dot pitch are sound. Larger dots were
+tried, on the theory that chromatic acuity is lower than luminance acuity — at 17 and 20 px pitch
+there are too few dots left to define the glyph and it gets worse, so 11 stays.
+
+### "A score around half" was wrong, and it was in the codebook
+
+The cross-axis residual is a contrast ratio of about 1.19, so I wrote — in the exported codebook,
+the operator manual and the protocol — that a protanope would miss the three protan plates, read the
+three deutan ones, and score about half. That was reasoning about a number instead of about a plate.
+In the rendered simulation a 20% luminance difference does not carry a digit through a noisy dot
+field: **both dichromat types read all six coloured plates as uniform**, while the greyscale control
+still reads clearly.
+
+The instrument is stronger than I designed it to be, and the signature is different from the one I
+had documented. The expected pattern is a near-zero score on the confusion plates **with the control
+correct** — and that combination is exactly what separates a colour-vision deficiency from a
+participant who was not attending, since inattention takes the control down with it and is recorded
+as `screen_inconclusive` rather than as a failure. All three documents now say that, and a test pins
+it. The three-per-axis sizing is unchanged: it is now stated as the conservative case, the one where
+the cross-axis plates *are* read, which still gives only three of six.
+
+Both corrections are of the same kind, and worth naming as a pattern: a measurement can be correct
+and still be the wrong measurement, and the way that surfaces is by looking at the artefact rather
+than at the numbers describing it. The luminance tests were all passing while the plates were
+becoming unreadable; the contrast ratio was correctly computed while the conclusion drawn from it was
+false. `scripts/platePreview.ts` exists so the next person can look too.

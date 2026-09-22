@@ -197,3 +197,62 @@ export function paletteSeparation(
     rangeOverlap: oHi <= oLo || narrower <= 0 ? 0 : (oHi - oLo) / narrower,
   };
 }
+
+/**
+ * CIELAB. Needed because the property a trichromat actually reads the digit by is CHROMATIC
+ * difference, and nothing in this file measured it until a change to the plates made that painfully
+ * clear: widening the dot-lightness spread from 1.35x to 1.8x looked like a strictly better hiding
+ * of the luminance boundary, and every luminance test still passed, while the digits quietly became
+ * hard for a NORMAL observer to read. That direction of failure matters — a trichromat who cannot
+ * read the plates fails the screen, and this screen's recent history is of over-calling failures.
+ *
+ * D65 white point, sRGB primaries, CIE 1976 L*a*b*.
+ */
+function labOf(hex: string): [number, number, number] {
+  const [r, g, b] = hexToLinearRgb(hex);
+  const X = 0.4124564 * r + 0.3575761 * g + 0.1804375 * b;
+  const Y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b;
+  const Z = 0.0193339 * r + 0.1191920 * g + 0.9503041 * b;
+  const f = (t: number) => (t > 216 / 24389 ? Math.cbrt(t) : (841 / 108) * t + 4 / 29);
+  const fx = f(X / 0.95047);
+  const fy = f(Y / 1.0);
+  const fz = f(Z / 1.08883);
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+}
+
+export interface ChromaticSignal {
+  /**
+   * Chromatic distance between the two palettes' mean colours, sqrt(da*^2 + db*^2).
+   *
+   * The SIGNAL: on a plate whose two regions are matched in lightness, this is the whole of what a
+   * trichromat has to find the digit with. Lightness is deliberately excluded — including it would
+   * let a plate score well on the strength of the very cue the design is trying to remove.
+   */
+  chromaticDistance: number;
+  /**
+   * L* range across every dot colour on the plate, both palettes together.
+   *
+   * The NOISE the shape has to be read through. It is wanted — it is what stops a boundary being
+   * visible to an observer for whom the pair is not quite a metamer — but it is not free, and the
+   * ratio of the two numbers is what decides whether the plate is readable at all.
+   */
+  lightnessSpread: number;
+}
+
+/** The trichromat's side of the bargain: how much chromatic signal, against how much lightness noise. */
+export function chromaticSignal(
+  figure: readonly string[],
+  background: readonly string[],
+): ChromaticSignal {
+  const meanLab = (cs: readonly string[]) => {
+    const ls = cs.map(labOf);
+    return [0, 1, 2].map((i) => ls.reduce((s, l) => s + l[i], 0) / ls.length);
+  };
+  const f = meanLab(figure);
+  const b = meanLab(background);
+  const allL = [...figure, ...background].map((c) => labOf(c)[0]);
+  return {
+    chromaticDistance: Math.hypot(f[1] - b[1], f[2] - b[2]),
+    lightnessSpread: Math.max(...allL) - Math.min(...allL),
+  };
+}

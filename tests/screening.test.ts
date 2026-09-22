@@ -5,7 +5,7 @@ import { isFigurePixel, scoreIshihara, PLATES } from '@/screening/ishihara';
 import { cvsqItemScore, scoreCvsq, CVSQ_ITEMS, CVSQ_CUTOFF } from '@/scales/cvsq';
 import { CODEBOOK } from '@/storage/export';
 import {
-  confusionDirection, simulateDichromat, paletteSeparation, relativeLuminance,
+  confusionDirection, simulateDichromat, paletteSeparation, relativeLuminance, chromaticSignal,
   type DichromatKind,
 } from '@/screening/dichromat';
 
@@ -175,7 +175,10 @@ describe('each confusion plate is invisible to the observer it targets', () => {
       for (const p of plates(seed)) {
         const sep = paletteSeparation(p.figureColors, p.backgroundColors, p.axis as DichromatKind);
         expect(sep.contrastRatio, `seed ${seed} ${p.axis} plate ${p.id}`).toBeLessThan(1.01);
-        expect(sep.rangeOverlap, `seed ${seed} ${p.axis} plate ${p.id}`).toBeGreaterThan(0.98);
+        // Not 1.00: the palettes are stored as 8-bit hex, and rounding each channel to a byte
+        // perturbs an exact metamer pair slightly. The contrast ratio above is the primary
+        // assertion; this one says the rounding did not open a readable gap.
+        expect(sep.rangeOverlap, `seed ${seed} ${p.axis} plate ${p.id}`).toBeGreaterThan(0.95);
       }
     }
   });
@@ -206,8 +209,8 @@ describe('each confusion plate is invisible to the observer it targets', () => {
     // and with the two dot ranges heavily overlapped so there is no local edge either.
     for (const p of plates(3)) {
       const sep = paletteSeparation(p.figureColors, p.backgroundColors, null);
-      expect(sep.contrastRatio, `plate ${p.id}`).toBeLessThan(1.11);
-      expect(sep.rangeOverlap, `plate ${p.id}`).toBeGreaterThan(0.80);
+      expect(sep.contrastRatio, `plate ${p.id}`).toBeLessThan(1.13);
+      expect(sep.rangeOverlap, `plate ${p.id}`).toBeGreaterThan(0.55);
     }
   });
 
@@ -220,8 +223,34 @@ describe('each confusion plate is invisible to the observer it targets', () => {
     for (const p of plates(3)) {
       const other = p.axis === 'protan' ? 'deutan' : 'protan';
       const sep = paletteSeparation(p.figureColors, p.backgroundColors, other);
-      expect(sep.contrastRatio, `plate ${p.id}`).toBeLessThan(1.21);
-      expect(sep.rangeOverlap, `plate ${p.id}`).toBeGreaterThan(0.65);
+      expect(sep.contrastRatio, `plate ${p.id}`).toBeLessThan(1.22);
+      expect(sep.rangeOverlap, `plate ${p.id}`).toBeGreaterThan(0.30);
+    }
+  });
+
+  it('leaves a normal trichromat enough chromatic signal to read the digit', () => {
+    /*
+     * THE TEST THAT WOULD HAVE CAUGHT THE MISTAKE THIS FILE'S HISTORY CONTAINS.
+     *
+     * A first version of these palettes widened the dot-lightness spread from 1.35x to 1.8x, to
+     * hide the luminance boundary better. Every luminance assertion still passed — the spread only
+     * helps them — and the digits quietly became hard for a NORMAL observer to read: measured in
+     * CIELAB, the chromatic signal fell to a mean dC of 37.7 against an L* spread of 20, where the
+     * old palettes had 41.8 against 11. Roughly half the signal-to-noise, and nothing failed.
+     *
+     * The consequence is not cosmetic. A trichromat who cannot read the plates FAILS the screen,
+     * and this screen's recent history is precisely of over-calling failures — it was, until a few
+     * rounds ago, excluding those participants from the study outright. So the floor is set at the
+     * old palettes' worst plate: whatever else changes, the digit must stay at least as findable as
+     * it was before any of this work started.
+     */
+    for (const p of plates(3)) {
+      const sig = chromaticSignal(p.figureColors, p.backgroundColors);
+      expect(sig.chromaticDistance, `plate ${p.id} chromatic signal`).toBeGreaterThan(39.7);
+      expect(sig.lightnessSpread, `plate ${p.id} lightness noise`).toBeLessThan(14);
+      // The ratio is what legibility actually depends on; the old set's worst was about 3.3.
+      expect(sig.chromaticDistance / sig.lightnessSpread, `plate ${p.id} signal-to-noise`)
+        .toBeGreaterThan(3.2);
     }
   });
 
@@ -490,8 +519,18 @@ describe('the exported codebook states the rule the screen actually applied', ()
     expect(correct).toMatch(/DEUTAN/);
     expect(correct).toMatch(/Viénot, Brettel & Mollon \(1999\)/);
     expect(correct).toMatch(/blank disc/);
-    // The score shape an analyst will actually see, said plainly.
-    expect(correct).toMatch(/score around half/i);
+    /*
+     * The score shape an analyst will actually see. This said "score around half", from the
+     * cross-axis contrast ratio being a non-trivial 1.19-1.20 — which turned out to be reasoning
+     * about a number rather than about a plate. Rendered through the simulation (see
+     * `scripts/platePreview.ts`), a ~20% luminance difference does not carry a digit through a
+     * noisy dot field: the cross-axis plates read as uniform too. So the expected pattern is a
+     * near-zero score WITH THE CONTROL CORRECT, and the codebook must say that, because "around
+     * half" would have had an analyst treating the real signature as something else.
+     */
+    expect(correct).toMatch(/at or near zero on the confusion plates/i);
+    expect(correct).toMatch(/GREYSCALE CONTROL CORRECT/);
+    expect(correct).toMatch(/separates a colour-vision deficiency from inattention/i);
   });
 
   it('still states the limits that remain, now that the luminance one is gone', () => {
