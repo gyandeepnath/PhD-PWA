@@ -17,6 +17,7 @@
  *   - participant_id contains a comma AND a double quote, exercising CSV escaping everywhere.
  */
 import type { SessionBundle } from '@/storage/gather';
+import { SCREEN_TEST_PLATES } from '@/screening/ishihara';
 import { CONDITIONS } from '@/experiment/conditions';
 import { PASSAGES } from '@/experiment/passages';
 import { blockPlan } from '@/experiment/counterbalance';
@@ -389,8 +390,8 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       lighting_habit: 'dim',
       correction_type: 'glasses',
       cvd_status: 'normal',
-      cvd_screen_correct: 5,
-      cvd_screen_total: 5, cvd_clinical: 'normal' as const,
+      cvd_screen_correct: SCREEN_TEST_PLATES,
+      cvd_screen_total: SCREEN_TEST_PLATES, cvd_clinical: 'normal' as const,
       caffeine_today: true,
       hours_since_sleep: 6,
       eligible: true,

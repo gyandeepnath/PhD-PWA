@@ -641,7 +641,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
      * stages asserting the same reason would each strip and re-add the other's, so ownership is
      * disjoint — see eligibility.ts.
      */
-    // The FORMAL plate result is what excludes. The app's own six-plate digital screen has no
+    // The FORMAL plate result is what excludes. The app's own digital colour-vision screen has no
     // published operating characteristics and is a flag, not a criterion — using it to exclude
     // contradicted its own module header, which names formal plates as the standard.
     if (d.cvdClinical === 'deficient') {
@@ -874,7 +874,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                  *
                  * This read `status === 'screen_failed' || status === 'self_reported_deficient'`,
                  * and 'screen_failed' can only come from this app's own 4-of-5 rule. So a
-                 * participant who missed two of five home-made plates was written out
+                 * participant who missed two of the home-made confusion plates was written out
                  * eligible=false with 'failed the colour-vision screening' — and the codebook tells
                  * the analyst that rows with eligible=false MUST be dropped from the confirmatory
                  * analysis. A complete ~2-hour dataset, discarded on an instrument that four places

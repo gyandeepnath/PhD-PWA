@@ -23,32 +23,27 @@
  *    The polarity is now balanced within the set and varies between administrations, so a constant
  *    direction cannot be learned. `luminancePolarityBalance()` is what the test asserts against.
  *
- *    AND THE LIMIT OF THAT, STATED PLAINLY. The luminance it balances is sRGB relative luminance,
- *    0.2126R + 0.7152G + 0.0722B — by definition the NORMAL TRICHROMAT's luminous efficiency. The
- *    palettes differ almost purely by a red-green trade with blue held near constant, which is the
- *    axis along which a dichromat's luminance function departs most from that formula. So the
- *    figure and the background are matched in the luminance space of the observer the screen is NOT
- *    trying to detect, and may separate cleanly in the space of the one it is.
+ *    AND THE LUMINANCE THAT MATTERS IS NOT THE TRICHROMAT'S. This was the defect that produced the
+ *    present design. sRGB relative luminance, 0.2126R + 0.7152G + 0.0722B, is by definition the
+ *    NORMAL observer's luminous efficiency, and the palettes were matched on it. But they differ
+ *    almost purely along red-green, the axis on which a dichromat's luminance function departs most
+ *    from that formula — so they were iso-luminant for the observer the screen is not looking for
+ *    and, measured with the Viénot 1999 transform in `dichromat.ts`, plainly NOT for a protanope:
+ *    contrast ratio 1.20-1.29 with the dot ranges barely overlapping, the same way round on all
+ *    five plates. A protanope could read the digit off that boundary and score full marks.
  *
- *    What that would mean: a dichromat could read the digit as an ordinary luminance figure, score
- *    5 of 5, and be recorded `normal`. Balancing the POLARITY defeats a learnable direction — "the
- *    digit is the darker patch" scores at most 3 of 5 on a balanced set — but it does not defeat
- *    reading a visible boundary of either sign, which is a different mechanism and the one at issue
- *    here.
- *
- *    NOT MEASURED, and not asserted as fact: establishing it needs a proper dichromat simulation
- *    (Brettel/Viénot-class colorimetry) against this display's measured primaries, which has not
- *    been done. It is recorded here because it is a testable, fixable condition rather than an
- *    unknowable one, and because "sensitivity and specificity are unknown" above does not tell a
- *    reader WHICH direction the likely error runs in. It runs toward false negatives — a dichromat
- *    passing — which is precisely why the operator's formal plates and not this screen are the
- *    criterion for exclusion.
+ *    The fix is not a better compromise colour. Each plate now sits exactly on ONE deficiency's
+ *    confusion axis, so for that observer the two palettes are the SAME colour — nothing to see, by
+ *    construction rather than by tuning — and the dot lightnesses of the two regions are drawn from
+ *    the same 1.8x spread, which is the noise defence a real pseudoisochromatic plate relies on.
+ *    Three plates per axis; see SCREEN_TEST_PLATES for why one plate cannot serve both.
  *
  * 2. MEMORY. The plate set, the digits and the order were fixed constants, and the screen runs in
  *    BOTH sittings. A participant who failed at sitting 1 could "pass" at sitting 2 by recalling
  *    six digits, so the retest measured recall rather than colour vision. Digits, order and
  *    polarity are now drawn from a per-administration seed.
  */
+import type { DichromatKind } from './dichromat';
 
 /** 5x7 dot-matrix glyphs for digits 0-9 (rows top→bottom, '1' = lit). */
 const FONT: Record<string, string[]> = {
@@ -84,7 +79,19 @@ export function isFigurePixel(digit: string, nx: number, ny: number): boolean {
   return rows[gy][gx] === '1';
 }
 
-export type ConfusionAxis = 'protan-deutan' | 'control';
+/**
+ * Which observer a plate is built to be INVISIBLE to.
+ *
+ * This used to be the single value 'protan-deutan', which described an intention rather than a
+ * property: the palettes lay somewhere in the red-green region and were matched on the normal
+ * observer's luminance, so no plate was actually a confusion pair for anybody in particular. Each
+ * plate now sits exactly on ONE deficiency's confusion axis, computed from the Viénot 1999
+ * transform in `dichromat.ts`, so its two palettes project to the same colour for that observer —
+ * same hue, same brightness, no edge of any kind. A protanope sees a blank disc on a 'protan'
+ * plate and can read a 'deutan' one; a deuteranope, the reverse. That is deliberate, and it is what
+ * makes the score interpretable: each type reliably misses the three plates aimed at them.
+ */
+export type ConfusionAxis = DichromatKind | 'control';
 
 export interface Plate {
   id: number;
@@ -97,23 +104,72 @@ export interface Plate {
 }
 
 /**
- * A confusion-axis palette pair. Which member becomes the FIGURE is chosen per administration, so
- * that residual luminance does not point the same way on every plate.
+ * One plate's two dot palettes, and the observer it is built to defeat.
  *
- * `warm` (salmon) is the darker member of each pair and `cool` (olive) the lighter, by 3-10% of
- * relative luminance. Putting the cool palette in the figure makes the digit the LIGHTER region.
+ * HOW THESE WERE CONSTRUCTED, and why they are not hand-picked colours.
+ *
+ * For a chosen deficiency, `dichromat.ts` gives a direction in linear RGB that the Viénot 1999
+ * transform annihilates — a confusion axis. Take any base colour and step the same distance along
+ * that axis in each direction: the two results are a METAMER PAIR for that observer. They project
+ * to one colour, so there is no hue difference and no brightness difference to fall back on. Then
+ * both palettes are scaled by the SAME five lightness factors, spanning 1.8x from darkest to
+ * lightest. Scaling is linear, so the pair stays a metamer pair at every step, and the figure
+ * region and the background region present the same distribution of lightnesses — which is the
+ * defence a real pseudoisochromatic plate relies on, and the one the previous palettes lacked.
+ *
+ * `redder` is the +axis end and `greener` the -axis end. Which one becomes the FIGURE is chosen per
+ * administration; see the polarity note in `buildScreeningPlates`.
+ *
+ * MEASURED PROPERTIES OF THIS SET (`tests/screening.test.ts` asserts every one of them):
+ *
+ *   for the observer each plate targets   contrast ratio 1.000-1.005, dot ranges 99-100% overlapped
+ *   for a normal trichromat               contrast ratio 1.06-1.10,   dot ranges 86-92% overlapped
+ *   for the OTHER dichromat               contrast ratio 1.16-1.20,   dot ranges 70-78% overlapped
+ *
+ * The third row is not a defect. A protanope is supposed to be able to read the deutan plates: they
+ * fail via the three protan plates, and a score of 3 of 6 is well under the pass mark. Driving that
+ * row to 1.00 as well is not merely hard, it is IMPOSSIBLE — see the note on SCREEN_TEST_PLATES.
+ *
+ * The previous palettes, measured the same way: 1.20-1.29 for a protanope with only ~20% of the dot
+ * range overlapping, on all five plates, with the greener palette lighter every time.
  */
 interface PalettePair {
-  warm: string[];
-  cool: string[];
+  axis: DichromatKind;
+  redder: string[];
+  greener: string[];
 }
 
 const CONFUSION_PAIRS: PalettePair[] = [
-  { warm: ['#d98a6a', '#e0996f', '#cf7e5e'], cool: ['#9aa86a', '#8fa15c', '#aeb57a'] },
-  { warm: ['#c97f5c', '#d98a66', '#bf7450'], cool: ['#8ca15f', '#9caf6c', '#7d9455'] },
-  { warm: ['#cf8a72', '#dd987f', '#c47e66'], cool: ['#9aa56a', '#88a05c', '#a7b178'] },
-  { warm: ['#d28a64', '#e0966f', '#c67d58'], cool: ['#93a463', '#86a058', '#a3b074'] },
-  { warm: ['#cd8568', '#db9276', '#c17a5d'], cool: ['#8fa260', '#9bae6b', '#7e9555'] },
+  {
+    axis: 'protan',
+    redder: ['#a99879', '#b4a382', '#c1af8b', '#cdba94', '#dac69e'],
+    greener: ['#62a07a', '#6aab82', '#71b78c', '#79c395', '#81cf9e'],
+  },
+  {
+    axis: 'protan',
+    redder: ['#a99882', '#b4a38c', '#c1af96', '#cdbaa0', '#dac6aa'],
+    greener: ['#62a083', '#6aab8c', '#71b796', '#79c3a0', '#81cfaa'],
+  },
+  {
+    axis: 'protan',
+    redder: ['#ab9863', '#b7a36a', '#c4af72', '#d1ba7a', '#dec682'],
+    greener: ['#68a064', '#6fab6b', '#78b773', '#80c37b', '#88cf83'],
+  },
+  {
+    axis: 'deutan',
+    redder: ['#a78f87', '#b39a90', '#c0a49b', '#ccafa5', '#d9baaf'],
+    greener: ['#5fa884', '#66b38e', '#6ec098', '#75cca2', '#7dd9ac'],
+  },
+  {
+    axis: 'deutan',
+    redder: ['#ad8f7e', '#b99a87', '#c6a490', '#d3af9a', '#e0baa4'],
+    greener: ['#6aa87b', '#72b384', '#7ac08e', '#82cc97', '#8bd9a1'],
+  },
+  {
+    axis: 'deutan',
+    redder: ['#ae9069', '#ba9a71', '#c7a579', '#d4b081', '#e1bb89'],
+    greener: ['#6ea766', '#76b36d', '#7ec075', '#87cc7d', '#90d986'],
+  },
 ];
 
 const CONTROL_FIGURE = ['#3a3a3a', '#2e2e2e', '#444'];
@@ -145,14 +201,31 @@ function shuffle<T>(items: T[], next: () => number): T[] {
 /**
  * Confusion plates in one administration. The greyscale control is presented as well, but it is a
  * validity check rather than a test item and is excluded from both the numerator and the
- * denominator — so a participant sees six plates and `cvd_screen_total` reads 5.
+ * denominator — so a participant sees seven plates and `cvd_screen_total` reads 6.
+ *
+ * SIX, RAISED FROM FIVE, AND THE REASON IS ARITHMETIC RATHER THAN TASTE.
+ *
+ * Each plate now sits on exactly one deficiency's confusion axis, because no colour pair can sit on
+ * both. The three luminance functionals involved — the normal observer's, and the two simulated
+ * ones — span a space of rank TWO, not three: the differences (L_protan - L_normal) and
+ * (L_deutan - L_normal) are both multiples of (R - G), in the fixed ratio -1.8823. So any pair that
+ * differs in the red-green direction at all, which every red-green screening pair must, separates in
+ * at least one of the two dichromat spaces. `tests/screening.test.ts` asserts that ratio directly,
+ * so the claim is checked rather than asserted.
+ *
+ * Splitting the plates by axis means a dichromat sees nothing on the plates aimed at them and can
+ * read the rest. The set therefore has to give each axis enough plates that guessing cannot carry
+ * someone through. With five plates split 3/2, whoever got two could reach the pass mark by
+ * guessing one of them — about a one-in-five chance at ten buttons. With three plates per axis they
+ * would have to guess two of three, which is under three percent. Six plates, evenly split, is the
+ * smallest set that closes that gap for BOTH deficiencies at once.
  */
-export const SCREEN_TEST_PLATES = 5;
+export const SCREEN_TEST_PLATES = 6;
 
 /**
  * Wrong answers tolerated on the confusion plates before the screen is called `screen_failed`.
  *
- * ONE, and there is nothing published behind that. The pass mark is 4 of 5, chosen so a single
+ * ONE, and there is nothing published behind that. The pass mark is 5 of 6, chosen so a single
  * mis-tap on a 52 px button does not overturn an administration, and its sensitivity and
  * specificity are unknown — which is exactly why this screen is a covariate and a flag rather than
  * a criterion for exclusion. Named here so the exported codebook can state the rule it is applying
@@ -161,26 +234,63 @@ export const SCREEN_TEST_PLATES = 5;
 export const SCREEN_ALLOWED_SLIPS = 1;
 
 /**
- * Build one administration's plate set: a greyscale control plate everyone should pass, then five
- * confusion plates whose digits, order and luminance polarity all derive from `seed`.
+ * Build one administration's plate set: a greyscale control plate everyone should pass, then six
+ * confusion plates — three on the protan axis, three on the deutan — whose digits, order and
+ * luminance polarity all derive from `seed`.
  *
- * Polarity is BALANCED, not merely randomised: two or three of the five carry the figure in the
- * lighter palette whatever the seed, so no administration can present a set in which the digit is
- * always the darker region.
+ * POLARITY IS BALANCED, NOT MERELY RANDOMISED. Matching mean luminance is not enough if the figure
+ * is consistently the darker region: an observer with no chromatic discrimination can still learn
+ * "the digit is the darker patch" and apply it to every plate. So exactly half of the six carry the
+ * figure in the lighter palette, whatever the seed, and a constant direction scores 3 of 6 — under
+ * the pass mark.
+ *
+ * Getting to exactly half takes one step of arithmetic, because the two axes point opposite ways.
+ * On a protan plate the `redder` palette is the LIGHTER one to a normal observer (stepping along
+ * the protan confusion axis raises relative luminance); on a deutan plate it is the DARKER one. So
+ * picking `redder` as the figure on k of the three protan plates and on k of the three deutan
+ * plates gives k + (3 - k) = 3 figure-lighter plates for any k. Two is used, so that the choice
+ * still varies with the seed within each axis. `luminancePolarityBalance` measures the result
+ * rather than trusting this reasoning, and the test asserts the measurement.
  */
 export function buildScreeningPlates(seed: number): Plate[] {
   const next = rng(seed + 1);
   const digits = shuffle(DIGIT_POOL, next);
-  const pairs = shuffle(CONFUSION_PAIRS, next);
 
-  // Balanced polarity: exactly two of the five put the figure in the cool (lighter) palette, and
-  // which two varies with the seed.
-  const coolFigure = new Set(shuffle([...Array(SCREEN_TEST_PLATES).keys()], next).slice(0, 2));
+  // Shuffle WITHIN each axis, then interleave, so every administration presents three of each and
+  // the axes are not all clumped at one end of the sequence.
+  const byAxis = (a: DichromatKind) => shuffle(CONFUSION_PAIRS.filter((p) => p.axis === a), next);
+  const protan = byAxis('protan');
+  const deutan = byAxis('deutan');
+  const perAxis = SCREEN_TEST_PLATES / 2;
+  /*
+   * Checked, not assumed. An edit that retypes one plate's axis leaves the set 4/2, and the
+   * interleave below would then index past the end of the shorter list and build a plate from
+   * `undefined` — a crash at module load, which is a poor way to learn that the instrument is
+   * unbalanced. Named here so the failure says what is wrong with the SET.
+   */
+  if (protan.length !== perAxis || deutan.length !== perAxis) {
+    throw new Error(
+      `The confusion plates must be split evenly between the two red-green axes: expected `
+      + `${perAxis} protan and ${perAxis} deutan, found ${protan.length} and ${deutan.length}. `
+      + 'An axis with fewer plates is one a dichromat of that type can guess their way past.',
+    );
+  }
+  const pairs = shuffle(
+    Array.from({ length: perAxis }, (_, i) => [protan[i], deutan[i]]).flat(),
+    next,
+  );
+
+  // Two of the three plates on EACH axis put the `redder` palette in the figure; see the note above
+  // for why that is what balances the set.
+  const redderFigure = new Set<PalettePair>([
+    ...shuffle(protan, next).slice(0, 2),
+    ...shuffle(deutan, next).slice(0, 2),
+  ]);
 
   const plates: Plate[] = [
     {
       id: 1,
-      digit: digits[5],
+      digit: digits[SCREEN_TEST_PLATES],
       axis: 'control',
       figureColors: CONTROL_FIGURE,
       backgroundColors: CONTROL_BACKGROUND,
@@ -188,13 +298,13 @@ export function buildScreeningPlates(seed: number): Plate[] {
   ];
   for (let i = 0; i < SCREEN_TEST_PLATES; i++) {
     const pair = pairs[i];
-    const figureIsCool = coolFigure.has(i);
+    const figureIsRedder = redderFigure.has(pair);
     plates.push({
       id: i + 2,
       digit: digits[i],
-      axis: 'protan-deutan',
-      figureColors: figureIsCool ? pair.cool : pair.warm,
-      backgroundColors: figureIsCool ? pair.warm : pair.cool,
+      axis: pair.axis,
+      figureColors: figureIsRedder ? pair.redder : pair.greener,
+      backgroundColors: figureIsRedder ? pair.greener : pair.redder,
     });
   }
   return plates;
@@ -271,7 +381,7 @@ export function scoreIshihara(plates: Plate[], answers: Record<number, string>):
    *
    * Without this the rule `testCorrect >= test.length - SCREEN_ALLOWED_SLIPS` reads `0 >= -1` and
    * returns 'normal': scoreIshihara([], {}) was a clean bill of colour vision. Unreachable from the
-   * app, which always builds six plates, but the stress harness calls this with `PLATES ?? []` and
+   * app, which always builds a full set, but the stress harness calls this with `PLATES ?? []` and
    * the allowance is absolute rather than proportional, so a one-plate set passed at zero correct
    * too. A scoring function that certifies an empty administration is the "green while measuring
    * nothing" shape this audit keeps finding.

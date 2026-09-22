@@ -42,7 +42,7 @@ export type ExclusionSource = 'profile' | 'colour_vision';
  * the sticky `cvd_status`. The profile stage records the self-report into that status and says
  * nothing about it here, so the two cannot disagree.
  *
- * RECOGNISED BUT NO LONGER EMITTED: /colour-vision screening/. The app's own six-plate screen used
+ * RECOGNISED BUT NO LONGER EMITTED: /colour-vision screening/. The app's own digital colour-vision screen used
  * to assert 'failed the colour-vision screening' as an exclusion, contradicting its own module
  * header, the exported codebook and the operator manual, all three of which say that screen is a
  * flag and that the operator's FORMAL plates are the criterion. It no longer asserts it.

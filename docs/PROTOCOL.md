@@ -177,22 +177,34 @@ where the last stopped, so each condition is still run exactly once. `session_in
 number) is recorded and added as a covariate when sittings vary; baseline fatigue and CVS-Q are
 re-measured each sitting (fatigue resets between sittings — documented, not assumed away).
 - The **app's digital colour-vision screen** is a screening aid, not a clinical diagnosis and not
-  the Ishihara test: six home-made plates (one greyscale control, five red-green confusion plates)
-  with no published sensitivity or specificity, scored 4 of 5 to pass. It is recorded as a covariate
+  the Ishihara test: seven home-made plates (one greyscale control, six red-green confusion plates)
+  with no published sensitivity or specificity, scored 5 of 6 to pass. It is recorded as a covariate
   (`cvd_status`, `cvd_screen_correct`, `cvd_screen_total`) and **does not exclude anyone**. The
   operator's **formal plates** (Ishihara or Farnsworth, recorded as `cvd_clinical`) are the basis for
   exclusion, alongside the participant's own self-report. When the app's screen does not pass, the
   app prompts the researcher on the spot to administer the formal plates, because that is the only
   moment the question can still be settled.
-- **The direction of that screen's likely error, for the limitations section.** Its figure and
-  background palettes are matched on sRGB relative luminance — the *normal trichromat's* luminous
-  efficiency — and they differ mainly along red–green, the axis on which a dichromat's luminance
-  function departs most from that formula. A dichromat may therefore be able to read the digit as an
-  ordinary luminance figure and score full marks, so the screen's errors are expected to run toward
-  **false negatives**. This has not been quantified: doing so needs a Brettel/Viénot-class dichromat
-  simulation against this display's measured primaries. It is stated because "sensitivity and
-  specificity are unknown" does not tell a reader which way the error runs, and because it is one
-  more reason the formal plates, not this screen, are the criterion.
+- **How the plates are built.** The six confusion plates are split evenly between the two red-green
+  axes — three protan, three deutan — and each plate's two dot palettes are computed to project to a
+  **single colour** under the Viénot, Brettel & Mollon (1999) dichromat simulation for that
+  deficiency: same hue, same brightness, so an observer of that type sees a blank disc with no edge
+  of any kind to read. Figure and background dots are drawn from the same 1.8× lightness spread, so
+  there is no local luminance boundary either. A protanope should therefore miss the three protan
+  plates and be able to read the deutan ones, scoring about three; a deuteranope the reverse. A
+  middling score, rather than a near-zero one, is the signature of a red-green deficiency here.
+- **What still limits that screen, for the limitations section.** The palettes were previously
+  matched only on sRGB relative luminance — the *normal trichromat's* luminous efficiency — while
+  differing along red–green, the axis on which a dichromat's luminance function departs most from
+  that formula. Measured with the Viénot transform, the old plates separated by a contrast ratio of
+  1.20–1.29 for a protanope, on every plate and always the same way round, so a protanope could have
+  read the digit off the residual edge and scored full marks. That is fixed, as above. Three limits
+  remain and should be reported. (a) Sensitivity and specificity are still unknown; nothing here
+  establishes an operating characteristic. (b) The simulation models the **dichromatic extreme**;
+  anomalous trichromats — protanomaly and deuteranomaly, which are commoner than the dichromacies —
+  retain a shifted cone and will see a reduced rather than an absent signal, and the screen's
+  sensitivity to them is not established. (c) The transform uses standard sRGB primaries, not this
+  tablet's measured primaries; report the display's measured primaries so a reader can judge. The
+  formal plates, not this screen, remain the criterion for exclusion.
 
 
 ---

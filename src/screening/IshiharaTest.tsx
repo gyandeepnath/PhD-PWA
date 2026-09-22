@@ -62,7 +62,7 @@ interface Props {
   onDone: () => void;
   /**
    * Per-administration seed. The digits, plate order and luminance polarity all derive from it, so
-   * a participant's second sitting is not the same six plates in the same order — which would make
+   * a participant's second sitting is not the same seven plates in the same order — which would make
    * the retest a memory test rather than a colour-vision one.
    */
   seed: number;
@@ -157,7 +157,7 @@ function OperatorNotice({ status, onDone }: { status: IshiharaResult['status']; 
         </h1>
         <p className="mt-4 text-[15px] leading-relaxed">
           {failed
-            ? 'This participant did not reach the pass mark on the app’s own six-plate screen.'
+            ? 'This participant did not reach the pass mark on the app’s own colour-vision screen.'
             : 'The greyscale control plate was missed, so this attempt measured nothing. It is not a pass and not a failure.'}
           {' '}It has been recorded. <strong>It does not exclude anyone and it is not a diagnosis</strong> —
           the screen is a home-made aid with no published sensitivity or specificity.

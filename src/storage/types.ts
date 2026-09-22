@@ -62,7 +62,8 @@ export interface ParticipantRecord {
   /** Self-reported / screened colour-vision status. */
   cvd_status: 'normal' | 'self_reported_deficient' | 'screen_failed' | 'screen_inconclusive' | 'unknown';
   /**
-   * The app's own six-plate digital screen: plates correct / total, null if not run.
+   * The app's own digital colour-vision screen: CONFUSION plates correct / total, null if not run.
+   * The greyscale control plate is presented but counted in neither.
    *
    * NOT the Ishihara test, and no longer named as though it were. It has no published operating
    * characteristics and is a covariate and a flag, never the basis for exclusion.

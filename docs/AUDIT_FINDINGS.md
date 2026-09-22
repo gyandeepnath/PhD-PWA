@@ -2600,3 +2600,109 @@ holds the codebook to it, so an analyst reading a `normal` does not read it as a
 Round 35's fix is what bounds the damage: the app's screen is a covariate and the operator's formal
 plates are the criterion, so a dichromat who passes this screen is still caught by `cvd_clinical` —
 provided the operator ran it, which is what the new operator notice exists to make sure of.
+
+## Round 39 — the colour plates, rebuilt on the confusion axes instead of on a trichromat's luminance
+
+Round 38 recorded the limitation and did not fix it: the screen's plates were matched on sRGB
+relative luminance, which is the *normal* observer's luminous efficiency, while the palettes differed
+along red-green — the axis on which a dichromat's luminance function departs most from that formula.
+This round measures it properly and rebuilds the plates.
+
+### Establishing the colorimetry before touching a colour
+
+The transform is the single-plane simplification of Viénot, Brettel & Mollon (1999), valid for
+protanopia and deuteranopia. The two 3×3 matrices in `src/screening/dichromat.ts` were copied
+verbatim from `libDaltonLens.c`, fetched and read in full, and then **independently re-derived from
+first principles** — Smith & Pokorny (1975) cone fundamentals on Judd-Vos-corrected sRGB primaries,
+projected along the missing cone's axis onto the black-white-blue-yellow plane — reproducing both to
+within 4.3e-6, i.e. exactly at the published precision.
+
+What is *not* established is stated in the module header and not softened: **the 1999 paper itself
+could not be read from this environment.** It is paywalled and the fetch failed. So the claim is "this
+is what libDaltonLens implements, attributes to them, and what reconstructs from the cone
+fundamentals it names", not "this is what Viénot et al. printed". The matrices also use modern sRGB
+primaries rather than the paper's CRT primaries — right for a tablet, wrong for reproducing the
+paper's own tables — and they act on **linear** RGB, which most circulating implementations get
+wrong.
+
+### What the measurement showed, and where the earlier report was wrong
+
+Measured through that transform, the old palettes were:
+
+| observer | contrast ratio | dot-range overlap |
+|---|---|---|
+| normal trichromat | 1.03–1.10 | good |
+| **protanope** | **1.20–1.29**, greener lighter on all five plates | **~20%** |
+| deuteranope | 1.00–1.04 | good |
+
+So the concern was real for protanopes and **refuted for deuteranopes** — the earlier audit's crude
+proxy (dropping a luminance term) had reported both as badly separated. Doing the real colorimetry
+narrowed a vague worry into one specific, directional defect. It also means the polarity balance was
+doing less work than claimed: it defeats a learnable *direction*, and what a protanope had here was a
+visible boundary of either sign, which is a different mechanism.
+
+### The fix is a different design, not better colours
+
+A first attempt tried to find red-green pairs iso-luminant for all three observers. There are none,
+and the reason is structural rather than a search failing. Writing the three luminance functionals as
+row vectors over linear R,G,B, both dichromat rows differ from the normal row only in their R and G
+coefficients, and those two difference vectors are **parallel** — ratio −1.8823. The three functionals
+span a space of rank two. Any pair differing in the red-green direction, which every red-green
+screening pair must, separates in at least one dichromat space. `tests/screening.test.ts` asserts that
+ratio, so the impossibility is checked rather than claimed.
+
+So each plate now targets **one** axis:
+
+- `dichromat.ts` solves, from the matrices themselves, a direction in linear RGB that each deficiency
+  annihilates. Step a base colour equally in both directions along it and the two results project to
+  one colour for that observer — identical hue, identical brightness, nothing to see. That is exact,
+  not a proxy: it is what a projection means.
+- Both palettes are then scaled by the **same** five lightness factors spanning 1.8× (the old set
+  spanned 1.3–1.5× over three shades). Scaling is linear, so the pair stays a metamer pair at every
+  step, and the figure and background regions present the same distribution of lightnesses — the
+  noise defence a real pseudoisochromatic plate relies on, and the thing the old set lacked.
+
+Measured properties of the new set, all asserted by tests:
+
+| observer | contrast ratio | dot-range overlap |
+|---|---|---|
+| the axis the plate targets | **1.000–1.005** | **99–100%** |
+| normal trichromat | 1.06–1.10 | 86–92% |
+| the other dichromat | 1.16–1.20 | 70–78% |
+
+The third row is deliberate and not a defect: a protanope is *supposed* to read the deutan plates.
+They fail through the protan ones.
+
+### Five plates could not carry an axis split, so there are six
+
+Splitting by axis means a dichromat sees nothing on the plates aimed at them, so each axis needs
+enough plates that guessing cannot carry someone past the pass mark. With five plates split 3/2,
+whoever got the two could reach the mark by guessing one of them — about one in five at ten buttons.
+With three per axis they must guess two of three, under three percent. Six confusion plates, evenly
+split, is the smallest set that closes that gap for both deficiencies at once, so
+`SCREEN_TEST_PLATES` is 6 and the pass mark is 5 of 6. Everything downstream — codebook prose, the
+protocol, the constants sheet, the operator manual — is built from those constants or was updated
+with them.
+
+**This is a stimulus change, and the investigator should know it was made rather than discover it.**
+It adds one plate (about ten seconds) to setup, changes `cvd_screen_total` from 5 to 6, and changes
+the pass rule. No data has been collected, so nothing is invalidated. Reverting to five is a
+one-constant change, but it reopens the guess-through gap on whichever axis gets two plates.
+
+### Two things kept honest
+
+The codebook entry that Round 38 added — warning that the screen's errors ran toward false negatives
+because of the luminance edge — has been **removed**, because that is no longer true of the
+instrument. A codebook carrying a retired caveat is as wrong as one omitting a live one, and a test
+now asserts the entry states the construction and the expected score shape instead. The limits that
+*do* remain are asserted separately so that fixing one did not quietly retire the others: unknown
+operating characteristics; a model of the **dichromatic extreme** that says nothing established about
+anomalous trichromacy, which is commoner; and standard sRGB primaries rather than this tablet's
+measured ones.
+
+Five mutations were run and each was caught: one old palette pair restored (fails at exactly the
+historical 1.2370), the dot spread collapsed to three near-identical shades, a Viénot matrix entry
+corrupted, the axis split made 4/2, and the polarity selection made uniform. The last of those
+*passed* — correctly: with three plates per axis the balance is structural, so the seeded choice
+varies the set without being what balances it. The comment already said so; the mutation confirmed
+the comment rather than exposing a gap.

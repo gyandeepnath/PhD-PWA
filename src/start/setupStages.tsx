@@ -290,7 +290,7 @@ export interface ProfileData {
    * The FORMAL colour-vision result from the operator's clinical screening (Ishihara or Farnsworth
    * plates), which the operator manual already requires alongside the app.
    *
-   * This, not the app's own six-plate digital screen, is the basis for exclusion. The digital
+   * This, not the app's own digital colour-vision screen, is the basis for exclusion. The digital
    * screen has no published operating characteristics, and using it to exclude contradicted its own
    * module header, which names formal plates as the standard. 'not_done' is recorded honestly
    * rather than being treated as a pass.

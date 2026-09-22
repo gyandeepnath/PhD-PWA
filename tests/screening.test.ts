@@ -4,6 +4,10 @@ import { resolveCvdStatus, countsComeFromPriorAdministration, buildScreeningPlat
 import { isFigurePixel, scoreIshihara, PLATES } from '@/screening/ishihara';
 import { cvsqItemScore, scoreCvsq, CVSQ_ITEMS, CVSQ_CUTOFF } from '@/scales/cvsq';
 import { CODEBOOK } from '@/storage/export';
+import {
+  confusionDirection, simulateDichromat, paletteSeparation, relativeLuminance,
+  type DichromatKind,
+} from '@/screening/dichromat';
 
 /** A participant-file codebook description, as the analyst receives it. */
 const cvdEntry = (column: string) =>
@@ -35,7 +39,9 @@ describe('Ishihara screening', () => {
   it('failing the control plate → inconclusive', () => {
     const answers = Object.fromEntries(PLATES.map((p) => [p.id, p.digit]));
     const control = PLATES.find((p) => p.axis === 'control')!;
-    answers[control.id] = '9';
+    // Any digit but the right one. Hard-coding '9' worked only until a plate set came up in which
+    // the control's own digit WAS '9', at which point the test silently stopped testing anything.
+    answers[control.id] = control.digit === '9' ? '8' : '9';
     expect(scoreIshihara(PLATES, answers).status).toBe('inconclusive');
   });
 
@@ -138,15 +144,130 @@ describe('resolving a screening result into the stored status', () => {
  * And the set was a fixed module constant while the screen runs in BOTH sittings, so a participant
  * who failed at sitting 1 could pass at sitting 2 by recalling six digits.
  */
+/**
+ * The property the plates exist for, measured rather than asserted.
+ *
+ * Every confusion plate must be INVISIBLE to the observer it targets — not "low contrast", not
+ * "iso-luminant for a normal observer", but the same colour, so there is no hue difference and no
+ * brightness difference to fall back on. Before this the plates were matched on sRGB relative
+ * luminance, which is the NORMAL trichromat's luminous efficiency; measured through the Viénot 1999
+ * transform, the old set separated by a contrast ratio of 1.20-1.29 for a protanope with barely a
+ * fifth of the dot ranges overlapping, the same way round on all five plates. A protanope could
+ * read the digit off that edge and be recorded `normal`.
+ */
+describe('each confusion plate is invisible to the observer it targets', () => {
+  const plates = (seed: number) => buildScreeningPlates(seed).filter((p) => p.axis !== 'control');
+
+  it('annihilates its own confusion direction, which is what makes a pair a metamer pair', () => {
+    // The directions are solved from the matrices rather than tabulated, so this checks the solving
+    // and the matrices together. A direction the matrix does not kill is not a confusion axis.
+    for (const kind of ['protan', 'deutan'] as const) {
+      const d = confusionDirection(kind);
+      for (const c of simulateDichromat(d, kind)) expect(Math.abs(c)).toBeLessThan(1e-6);
+      // ...and it is NOT killed by the other deficiency: that is why one plate cannot serve both.
+      const other = kind === 'protan' ? 'deutan' : 'protan';
+      expect(Math.max(...simulateDichromat(d, other).map(Math.abs))).toBeGreaterThan(0.1);
+    }
+  });
+
+  it('leaves no luminance edge for its target observer, on every plate of every set', () => {
+    for (const seed of [0, 1, 2, 7, 42, 101, 999]) {
+      for (const p of plates(seed)) {
+        const sep = paletteSeparation(p.figureColors, p.backgroundColors, p.axis as DichromatKind);
+        expect(sep.contrastRatio, `seed ${seed} ${p.axis} plate ${p.id}`).toBeLessThan(1.01);
+        expect(sep.rangeOverlap, `seed ${seed} ${p.axis} plate ${p.id}`).toBeGreaterThan(0.98);
+      }
+    }
+  });
+
+  it('refuses to build an unevenly split set rather than crashing on an undefined plate', () => {
+    // The guard exists because the failure it replaces was an index past the end of the shorter
+    // axis list, producing a plate built from `undefined` at module load.
+    const src = readFileSync('src/screening/ishihara.ts', 'utf8');
+    expect(src).toMatch(/must be split evenly between the two red-green axes/);
+    expect(src).toMatch(/if \(protan\.length !== perAxis \|\| deutan\.length !== perAxis\)/);
+  });
+
+  it('presents both axes in equal number, so neither deficiency is under-probed', () => {
+    /*
+     * With five plates split 3/2, whoever got the two could reach the pass mark by guessing one of
+     * them — roughly one in five at ten buttons. Three per axis means guessing two of three, under
+     * three percent. This is the assertion that keeps the set from silently drifting back.
+     */
+    for (const seed of [0, 1, 2, 7, 42, 101, 999]) {
+      const set = plates(seed);
+      expect(set.filter((p) => p.axis === 'protan')).toHaveLength(SCREEN_TEST_PLATES / 2);
+      expect(set.filter((p) => p.axis === 'deutan')).toHaveLength(SCREEN_TEST_PLATES / 2);
+    }
+  });
+
+  it('keeps a trichromat reading hue, not lightness', () => {
+    // Iso-luminant enough for a normal observer that the digit is not simply a lightness figure,
+    // and with the two dot ranges heavily overlapped so there is no local edge either.
+    for (const p of plates(3)) {
+      const sep = paletteSeparation(p.figureColors, p.backgroundColors, null);
+      expect(sep.contrastRatio, `plate ${p.id}`).toBeLessThan(1.11);
+      expect(sep.rangeOverlap, `plate ${p.id}`).toBeGreaterThan(0.80);
+    }
+  });
+
+  it('bounds the residual edge for the OTHER dichromat, who is meant to read this plate', () => {
+    /*
+     * Not a defect, and deliberately not asserted at 1.00. A protanope SHOULD be able to read the
+     * deutan plates; they fail through the three protan ones. Bounded anyway, so the cross-axis
+     * plates do not become lightness figures for anybody.
+     */
+    for (const p of plates(3)) {
+      const other = p.axis === 'protan' ? 'deutan' : 'protan';
+      const sep = paletteSeparation(p.figureColors, p.backgroundColors, other);
+      expect(sep.contrastRatio, `plate ${p.id}`).toBeLessThan(1.21);
+      expect(sep.rangeOverlap, `plate ${p.id}`).toBeGreaterThan(0.65);
+    }
+  });
+
+  it('cannot be asked to serve both axes at once — the three luminances are rank two', () => {
+    /*
+     * The reason the set is split by axis rather than compromised across both, checked rather than
+     * asserted in prose. Writing the three luminance functionals as row vectors over linear R,G,B,
+     * both dichromat rows differ from the normal row only in the R and G coefficients, and those
+     * two difference vectors are proportional. So the reachable set of
+     * (dL_normal, dL_protan, dL_deutan) is a PLANE, and any pair differing in the red-green
+     * direction — which every red-green screening pair must — separates in at least one dichromat
+     * space. There is no colour pair that is iso-luminant for all three observers and still red-green.
+     */
+    const V = [0.2126, 0.7152, 0.0722];
+    const row = (kind: DichromatKind) => [0, 1, 2].map((col) => {
+      const basis: [number, number, number] = [0, 0, 0];
+      basis[col] = 1;
+      return relativeLuminance(simulateDichromat(basis, kind));
+    });
+    const dP = row('protan').map((x, i) => x - V[i]);
+    const dD = row('deutan').map((x, i) => x - V[i]);
+    // Blue is untouched by both, and the R and G differences are equal and opposite within each.
+    expect(Math.abs(dP[2])).toBeLessThan(1e-9);
+    expect(Math.abs(dD[2])).toBeLessThan(1e-9);
+    expect(dP[0] + dP[1]).toBeCloseTo(0, 9);
+    expect(dD[0] + dD[1]).toBeCloseTo(0, 9);
+    // ...so the two difference vectors are parallel: rank two, not three.
+    expect(dP[0] / dD[0]).toBeCloseTo(dP[1] / dD[1], 9);
+    expect(dP[0] / dD[0]).toBeCloseTo(-1.8823, 3);
+  });
+});
+
 describe('the screening set carries no learnable non-chromatic cue', () => {
   it('does not put the figure on the same side of the luminance boundary every time', async () => {
     const { buildScreeningPlates, luminancePolarityBalance } = await import('@/screening/ishihara');
     for (const seed of [0, 1, 2, 7, 42, 999]) {
       const b = luminancePolarityBalance(buildScreeningPlates(seed));
-      expect(b.total).toBe(5);
-      // Balanced, not merely random: no administration may present an all-one-way set.
-      expect(b.figureLighter).toBeGreaterThan(0);
-      expect(b.figureLighter).toBeLessThan(b.total);
+      expect(b.total).toBe(SCREEN_TEST_PLATES);
+      /*
+       * EXACTLY half, not merely "not all one way". With three plates per axis and the two axes
+       * pointing opposite ways in normal luminance, choosing `redder` as the figure on the same
+       * number of plates of each axis makes the count exactly half for any choice — so "roughly
+       * balanced" would be a weaker assertion than the construction actually guarantees, and a
+       * weaker assertion is how a guarantee quietly stops holding.
+       */
+      expect(b.figureLighter, `seed ${seed}`).toBe(SCREEN_TEST_PLATES / 2);
     }
   });
 
@@ -354,23 +475,33 @@ describe('the exported codebook states the rule the screen actually applied', ()
       .toContain(`${SCREEN_TEST_PLATES - SCREEN_ALLOWED_SLIPS} or more correct is 'normal'`);
   });
 
-  it('tells the analyst which way the screen is likely to be wrong', () => {
+  it('states how the plates are built, and what the score shape means', () => {
     /*
-     * "Sensitivity and specificity are unknown" is honest and not actionable. The DIRECTION is
-     * knowable from the design: the palettes are iso-luminant in sRGB relative luminance — the
-     * normal trichromat's luminous efficiency — and differ mainly along red-green, the axis on
-     * which a dichromat's luminance function departs most from it. A dichromat may read the digit
-     * off a luminance edge and score full marks, so the errors run toward false negatives.
-     *
-     * Not measured, and the entry says so: quantifying it needs a Brettel/Vienot-class simulation
-     * against this display's measured primaries. Stated so a normal result is not read as a clean
-     * screen, which is the reading that puts a colour-deficient participant into a text-colour
-     * analysis.
+     * This entry used to say the screen's errors ran toward FALSE NEGATIVES, because its palettes
+     * were iso-luminant only in the normal observer's luminance space and a protanope could read
+     * the digit off the residual edge. That is no longer true of the instrument, so it must no
+     * longer be true of the codebook: each plate is now a metamer pair for one deficiency, and the
+     * entry states the construction and the score shape it implies instead of a warning about a
+     * defect that has been fixed. A codebook that keeps a retired caveat is as wrong as one that
+     * omits a live one.
      */
     const correct = cvdEntry('cvd_screen_correct');
-    expect(correct).toMatch(/false negative|score full marks/i);
-    expect(correct).toMatch(/has not been measured/i);
-    expect(correct).toMatch(/cvd_clinical as the real one/);
+    expect(correct).toMatch(/PROTAN confusion/);
+    expect(correct).toMatch(/DEUTAN/);
+    expect(correct).toMatch(/Viénot, Brettel & Mollon \(1999\)/);
+    expect(correct).toMatch(/blank disc/);
+    // The score shape an analyst will actually see, said plainly.
+    expect(correct).toMatch(/score around half/i);
+  });
+
+  it('still states the limits that remain, now that the luminance one is gone', () => {
+    // Fixing one limitation must not quietly retire the others. Three stand: unknown operating
+    // characteristics, the dichromatic extreme rather than anomalous trichromacy, and not a criterion.
+    const correct = cvdEntry('cvd_screen_correct');
+    expect(correct).toMatch(/sensitivity and specificity are unknown/);
+    expect(correct).toMatch(/DICHROMATIC extreme/);
+    expect(correct).toMatch(/anomalous trichromacy/);
+    expect(correct).toMatch(/never a criterion for exclusion/);
   });
 
   it('warns the analyst that a failed screen is IN the sample', () => {

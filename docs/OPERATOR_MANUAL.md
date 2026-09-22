@@ -137,11 +137,14 @@ confirmatory analysis can drop them. Enter what is true rather than what will le
 - The **formal plates you administer** (Ishihara or Farnsworth, part of the clinical screening) are
   the basis for exclusion. Record the result in the profile form: normal, deficient, or not done.
   Record *not done* honestly if you did not do it; it is not a pass.
-- The **app's own six-plate screen** is a screening aid and a covariate. It is not the Ishihara
-  test — it has no published sensitivity or specificity — and it never excludes anyone on its own.
-  Its digits, plate order and colours are re-randomised on every administration by design, so a participant
-  cannot pass the second one from memory; for the same reason the two scores are not directly
-  comparable with each other.
+- The **app's own colour-vision screen** — seven plates: a greyscale control plus six coloured ones
+  — is a screening aid and a covariate. It is not the Ishihara test, it has no published sensitivity
+  or specificity, and it never excludes anyone on its own. Its digits, plate order and colours are
+  re-randomised on every administration by design, so a participant cannot pass the second one from
+  memory; for the same reason the two scores are not directly comparable with each other. Half the
+  coloured plates are built to be invisible to one kind of red-green deficiency and half to the
+  other, so a participant who has one of them typically gets **about half** of them right rather
+  than none — a middling score is the expected pattern there, not carelessness.
 
 If the two disagree, record both and note it. The formal result is what the analysis uses.
 
@@ -155,7 +158,7 @@ tell the participant they have a colour-vision deficiency on the strength of the
 formal plates show one, follow the incidental-findings steps below.
 
 You will see the same notice when the app's screen gives **no result** — that means the greyscale
-control plate was missed, usually a mis-tap on the first of the six screens, so the attempt measured
+control plate was missed, usually a mis-tap on the first of the seven screens, so the attempt measured
 nothing. It is neither a pass nor a failure, the app will not re-present the screen, and the formal
 plates are again the remedy.
 

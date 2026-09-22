@@ -124,8 +124,9 @@ CAMERA_SETUP → CALIBRATION → CVSQ_BASELINE → BASELINE_FATIGUE → [×8 loo
 SESSION_COMPLETE → EXPORT_DASHBOARD. Tracked steps = 8 setup + 8×6 = 56.
 - Consent: informed-consent gate (no-video statement, withdrawal, voluntary).
 - Colour-vision: digital colour-vision SCREEN — NOT the Ishihara test (dot-mosaic plates via 5×7
-  font mask; one greyscale control plate + 5 red-green confusion plates; pass = 4 of 5 confusion
-  plates with the control correct; status normal/screen_failed/inconclusive). Honestly framed as a
+  font mask; one greyscale control plate + 6 red-green confusion plates, split 3 protan / 3 deutan,
+  each pair of palettes a metamer pair for its own axis under the Viénot 1999 simulation; pass =
+  5 of 6 confusion plates with the control correct; status normal/screen_failed/inconclusive). Honestly framed as a
   screening aid, not diagnostic, and **not a criterion for exclusion** — the operator's formal
   plates (cvd_clinical) are. Result stored on participant as cvd_screen_correct/cvd_screen_total
   (renamed from ishihara_correct/total, which asserted a validated instrument) and cvd_status.
