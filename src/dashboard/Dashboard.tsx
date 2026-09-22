@@ -116,8 +116,14 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
        * consented research data and must never rest on an assertion nothing verified.
        */
       const now = Date.now();
+      /*
+       * evenWhenFull: these two stamps are what releases a session to be purged, so refusing them on
+       * a full device left the sitting exported but never confirmed, and purgeExpired holds an
+       * unconfirmed session for ever — safe, and permanently un-freeable. The files themselves have
+       * already left the device by this point; only the bookkeeping is at stake.
+       */
       const fresh = await get('sessions', bundle.session.session_id);
-      if (fresh) await put('sessions', { ...fresh, exported_at: now });
+      if (fresh) await put('sessions', { ...fresh, exported_at: now }, { evenWhenFull: true });
 
       const confirmed = window.confirm(
         `${files.length} files were sent to your downloads.\n\n`
@@ -128,7 +134,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       );
       if (confirmed) {
         const again = await get('sessions', bundle.session.session_id);
-        if (again) await put('sessions', { ...again, export_confirmed_at: Date.now() });
+        if (again) await put('sessions', { ...again, export_confirmed_at: Date.now() }, { evenWhenFull: true });
       }
     } finally { setExporting(false); }
   };

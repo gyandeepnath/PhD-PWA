@@ -27,7 +27,7 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import {
   buildSessionBackup, serialiseSessionBackup, parseSessionBackup, importSessionBackup,
-  BACKUP_FORMAT_VERSION,
+  BACKUP_FORMAT_VERSION, backupChecksum, asWrittenToFile,
 } from '@/storage/backup';
 import { buildFixtureBundle, withFixtureMedia } from '@/sim/bundleFixture';
 import { gatherSession } from '@/storage/gather';
@@ -614,5 +614,119 @@ describe('a restore says what it could not restore, and what it is about to dest
     expect(res.ok).toBe(true);
     expect(res.warnings?.join(' ')).toMatch(/exclusion_reason/);
     expect(res.warnings?.join(' ')).toMatch(/BOTH/);
+  });
+
+  it('names them in OVERWRITE too — the one mode that destroys the device copy', async () => {
+    /*
+     * The warning was dead in exactly the mode it exists for, and live in the mode that does not
+     * need it.
+     *
+     * It read the device's participant row where the warning is BUILT, some forty lines after
+     * `purgeSession`, and purgeSession deletes that row whenever no other session references it. So
+     * in overwrite mode the read returned undefined, fieldsLost returns [] on a falsy prior, and
+     * nothing was said. It fired only when the participant had a SECOND sitting on this device —
+     * the case where the row survives the purge, and the case that needs it least.
+     *
+     * The scenario it is for is the replacement tablet. P's only sitting is here; their shared
+     * record has since gained the eligibility decision, the colour-vision result and the measured
+     * baseline fatigue; the operator judges the device copy damaged and picks Overwrite with a
+     * backup taken before any of that. All three go, for both of P's sittings, silently.
+     *
+     * Same shape as the surviving-blobs guard in the same function, which was dead for the same
+     * reason and is fixed the same way: read before the purge, not after.
+     */
+    const b = buildFixtureBundle();
+    const parsed = parseSessionBackup(serialiseSessionBackup(b));
+
+    // The device holds this sitting already — and only this one, so purgeSession will take the
+    // shared participant row with it.
+    await importSessionBackup(parsed.backup!);
+    await put('participants', {
+      ...b.participant, exclusion_reason: 'recorded after this backup was taken',
+    } as never);
+
+    const res = await importSessionBackup(parsed.backup!, 'overwrite');
+    expect(res.ok).toBe(true);
+    expect(res.warnings?.join(' '), 'overwrite blanked a field and said nothing').toMatch(/exclusion_reason/);
+    expect(res.warnings?.join(' ')).toMatch(/BOTH/);
+  });
+
+  /**
+   * The checksum has to be a statement about the FILE, not about the object in memory.
+   *
+   * It was not. `undefined` was hashed as `{"__undefined__": true}` and dropped by JSON.stringify,
+   * so the string that was signed and the string that comes back differ, and the backup is refused
+   * with "The file has been altered or damaged since it was written; do not import it" — over an
+   * intact file that is the last copy of a session.
+   *
+   * Nothing in the suite could catch it, because every fixture has been through JSON.parse, which
+   * cannot produce an `undefined` value. A record written by the app can: structured clone keeps an
+   * undefined-valued property through IndexedDB, and one optional field in a record literal
+   * (`condition_hidden_ms: away?.hiddenMs`) is all it takes. A backup ships inside every export, so
+   * the blast radius was every backup the build would ever write.
+   */
+  describe('the checksum signs what the file carries', () => {
+    /** Build a backup, plant a value JSON transforms, re-sign it, and read it back. */
+    const roundTrips = (mutate: (d: Record<string, unknown>) => void) => {
+      const backup = buildSessionBackup(buildFixtureBundle());
+      mutate(backup.data as unknown as Record<string, unknown>);
+      // Re-signed with the PRODUCTION checksum function, exactly as buildSessionBackup would have
+      // done had the record carried the value from the start. A test that hashed its own way could
+      // agree with a broken writer.
+      const text = JSON.stringify({ ...backup, checksum_fnv1a: backupChecksum(backup.data) }, null, 2);
+      return parseSessionBackup(text);
+    };
+
+    it('accepts a record carrying an undefined-valued property', () => {
+      const res = roundTrips((d) => {
+        const c = (d.conditions as Record<string, unknown>[])[0];
+        c.condition_hidden_ms = undefined;
+      });
+      expect(res.error, 'an intact file was rejected as damaged').toBeUndefined();
+      expect(res.ok).toBe(true);
+    });
+
+    it('accepts non-finite numbers, which JSON writes as null', () => {
+      const res = roundTrips((d) => {
+        const c = (d.conditions as Record<string, unknown>[])[0];
+        c.condition_hidden_ms = NaN;
+      });
+      expect(res.error).toBeUndefined();
+      expect(res.ok).toBe(true);
+    });
+
+    it('still refuses a file whose data was actually altered', () => {
+      // The guard must not have been traded away for the fix: a real edit is still caught.
+      const b = buildFixtureBundle();
+      const parsed = JSON.parse(serialiseSessionBackup(b));
+      parsed.data.session.participant_id = 'SOMEONE-ELSE';
+      const res = parseSessionBackup(JSON.stringify(parsed));
+      expect(res.ok).toBe(false);
+      expect(res.error).toMatch(/failed its checksum/);
+    });
+
+    it('holds as an invariant: hashing the object equals hashing the file', () => {
+      // Stated directly, so a future value type that JSON transforms — a Date, a Map — fails here
+      // rather than in the field, on the one file that still has the data.
+      const b = buildFixtureBundle();
+      const data = buildSessionBackup(b).data;
+      const mutated = data as unknown as Record<string, unknown>;
+      const c = (mutated.conditions as Record<string, unknown>[])[0];
+      c.condition_hidden_ms = undefined;
+      c.condition_portrait_ms = Infinity;
+      expect(backupChecksum(data)).toBe(backupChecksum(asWrittenToFile(data)));
+    });
+  });
+
+  it('warns on the fields, not on the participant happening to have a second sitting', async () => {
+    // The old predicate passed whenever purgeSession spared the row. This asserts the warning turns
+    // on what the backup actually blanks: same overwrite, nothing lost, nothing said.
+    const b = buildFixtureBundle();
+    const parsed = parseSessionBackup(serialiseSessionBackup(b));
+    await importSessionBackup(parsed.backup!);
+
+    const res = await importSessionBackup(parsed.backup!, 'overwrite');
+    expect(res.ok).toBe(true);
+    expect(res.warnings?.join(' ') ?? '').not.toMatch(/held values the backup does not/);
   });
 });

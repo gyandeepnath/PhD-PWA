@@ -2438,3 +2438,105 @@ Both now name it for what it is and state that it does not exclude.
 
 Four mutations were run and each was caught: restoring the exclusion, restoring the old inheritance
 predicate, removing the empty-set guard, and skipping the operator notice.
+
+## Round 36 — four defects on the path that exists because the data cannot be re-collected
+
+A tablet that is wiped, reset or replaced destroys every session on it, and the participants cannot
+be asked to sit the protocol again. Everything below is on the restore path or the path to freeing
+space, which is the one part of this app whose failures are unrecoverable by definition.
+
+### The warning about what a restore is about to blank was dead in the only mode that destroys anything
+
+`importSessionBackup` in `overwrite` mode calls `purgeSession` and then writes the backup's rows.
+`purgeSession` deletes the participant record whenever no OTHER session still references it — which
+is the normal state on a replacement tablet, where the participant has one sitting. Forty lines
+later, the code that names the fields the backup is about to blank read the device's participant row
+*then*, after the purge, got `undefined`, and `fieldsLost` returns `[]` on a falsy prior. So nothing
+was said.
+
+The warning fired only when the participant had a second sitting on the same device — the case where
+`purgeSession` spares the row, and the case that needs the warning least. In the case it exists for:
+P's shared participant record has gained an eligibility decision, a colour-vision result and a
+measured baseline fatigue since the backup was taken; the operator judges the device copy damaged and
+picks Overwrite; all three are replaced by older blanks, **for both of P's sittings**, and the result
+reads "Session restored".
+
+This is the second guard in this one function to have been dead for exactly this reason. The
+surviving-media-blob guard read the device's rows after the same purge, and its fix — take the read
+BEFORE the purge — carries a comment saying so. The participant read was not moved with it. Both are
+now taken up front, once, before anything is destroyed.
+
+### The checksum signed something the file does not contain
+
+`canonicalValue` encoded an `undefined` property as `{"__undefined__": true}`, reasoning that
+`JSON.stringify` omits such a key, so "a field that vanished upstream and a field that was never
+defined hash identically". True, and unachievable — the file is JSON, so it cannot carry that
+distinction either. The marker put the key into the hashed string and `JSON.stringify` left it out
+of the file. On read, the recomputed canonical string differs, and `parseSessionBackup` returns:
+
+> The backup failed its checksum. The file has been altered or damaged since it was written; do not
+> import it.
+
+over an intact file that is the last copy of a session.
+
+Structured clone preserves an undefined-valued property through IndexedDB, so a single `x?.y` in a
+record literal arms it, and a backup ships inside **every** export. The test suite could not see it
+from the inside: every fixture and every restored record has been through `JSON.parse`, which cannot
+produce an `undefined` value.
+
+The hash is now taken over the data as the file will carry it — round-tripped through JSON first —
+so write and read hash the same bytes by construction. That covers the asymmetries nobody has hit
+yet as well: a `Date` canonicalised to `{}` here and to a string in the file, a `NaN` to `NaN` here
+and to `null` there. None of those types is in the record schema today, and "today" is how this
+armed itself the first time. A test states the invariant directly, and another confirms a genuinely
+altered file is still refused — the guard was not traded away for the fix.
+
+### File order silently meant nothing while two comments said it meant something
+
+`normaliseBundle`'s docstring promises "a reader scanning any file sees the session in the order it
+was actually run". The within-condition tie-breaks were written at the call site:
+
+```ts
+byCondition<ReactionTrialRecord>((r) => r.trial_id)(x, y) || x.trial_number - y.trial_number
+```
+
+`byCondition` falls back to comparing record ids, and two rows in one condition always have different
+uuids, so the left side was never zero and the `||` never evaluated. The two largest row-level files
+in the export were ordered by uuid inside each condition: `08_reaction_trials.csv` shuffled within
+each 32-trial block (1, 2, 11, 12, 13 … in the fixture), and `04_comprehension.csv` not listing gist,
+inference and detail in the order administered — which is precisely what the comment beside it
+claimed.
+
+Nothing computed was wrong. `trial_number` and `question_index` are columns in every row, the
+integrity audit checks trial numbering as a set, and every consumer keys by id. What was wrong is an
+analyst reading a trial file top to bottom for a sequential effect — post-error slowing, time-on-task
+drift — getting a scrambled sequence with nothing to indicate it. The comparator now takes the
+within-condition order as an argument, applied between position and id, so the id remains the final
+tie-break and the export stays byte-reproducible.
+
+### The recovery the message asks for was blocked by the flag that prints it
+
+`STORAGE_FULL_MESSAGE` told the operator to export the saved sessions and then "delete the exported
+sessions from the Session Manager to free space". Delete is `softDeleteSession`, which is a `put`, so
+it threw `STORAGE_FULL_MESSAGE` before touching IndexedDB. Purge — which uses `remove` and actually
+frees the space — is reachable only from the recycle bin, and the only way into the bin is the Delete
+that just failed. The instruction was a closed loop whose only exit was reloading the tab.
+
+The same guard caught the export stamps. `downloadExport` writes the files before stamping, so they
+do leave the device — but `exported_at` and `export_confirmed_at` are puts, so the sitting could
+never be marked confirmed, and `purgeExpired` holds an unconfirmed session for ever. Safe, and
+permanently un-freeable.
+
+`put` now takes `evenWhenFull` for writes whose purpose is to free space, or to record that space may
+now be freed, or to undo one of those. It is not a general override: every write that records a
+measurement stays blocked, because once the device is full nothing the participant does is being
+saved and the sitting is over. A quota error is still translated and still latches the flag.
+
+The message was wrong in one more way and now says so: Delete moves a sitting to the recycle bin and
+frees nothing. Purge is what frees space. An operator following the old instruction exactly would
+have binned three sittings and recovered no room at all.
+
+Four mutations verified: the participant read moved back after the purge, the `__undefined__` marker
+restored, the dead tie-break restored, and the soft delete blocked again. A fifth confirmed the
+checksum still refuses a genuinely altered file, and a sixth that `evenWhenFull` did not become a
+blanket override.

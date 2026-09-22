@@ -84,11 +84,35 @@ export async function gatherSession(sessionId: string): Promise<SessionBundle | 
 export function normaliseBundle(b: SessionBundle): SessionBundle {
   const conditions = [...b.conditions].sort((x, y) => x.session_position - y.session_position);
   const positionOf = new Map(conditions.map((c) => [c.condition_id, c.session_position]));
-  const byCondition = <T extends { condition_id?: string | null }>(idKey: (t: T) => string) =>
+  /**
+   * Condition position first, then the row's own administration order, then the record id.
+   *
+   * `within` used to be applied by the CALLER, as `byCondition(idKey)(x, y) || x.trial_number - ...`
+   * — and that never ran. Two rows in the same condition have different uuids, so the id tie-break
+   * returned a non-zero value and the `||` short-circuited every time. The two largest row-level
+   * files in the export were therefore ordered by uuid within each condition:
+   * `08_reaction_trials.csv` shuffled inside each 32-trial block, and `04_comprehension.csv` not
+   * listing gist, inference and detail in the order administered — which is exactly what the
+   * comment beside it said it did.
+   *
+   * No computed value was wrong: `trial_number` and `question_index` are columns in every row, the
+   * integrity audit checks trial numbering as a set, and every consumer keys by id. What was wrong
+   * is that file order silently meant nothing while this docstring and that comment both said it
+   * meant something — and an analyst reading a trial file top to bottom for a sequential effect
+   * (post-error slowing, time-on-task drift) got a scrambled sequence with no sign anything was off.
+   *
+   * The id remains the FINAL tie-break, so the ordering is still total and byte-reproducible.
+   */
+  const byCondition = <T extends { condition_id?: string | null }>(
+    idKey: (t: T) => string,
+    within?: (x: T, y: T) => number,
+  ) =>
     (x: T, y: T) => {
       const px = positionOf.get(x.condition_id ?? '') ?? Number.MAX_SAFE_INTEGER;
       const py = positionOf.get(y.condition_id ?? '') ?? Number.MAX_SAFE_INTEGER;
-      return px !== py ? px - py : idKey(x).localeCompare(idKey(y));
+      if (px !== py) return px - py;
+      const w = within ? within(x, y) : 0;
+      return w !== 0 ? w : idKey(x).localeCompare(idKey(y));
     };
   return {
     ...b,
@@ -101,14 +125,15 @@ export function normaliseBundle(b: SessionBundle): SessionBundle {
     media: [...(b.media ?? [])].sort((x, y) => x.captured_at - y.captured_at || x.media_id.localeCompare(y.media_id)),
     // Within a condition, order by the item's position in the passage rather than by its uuid, so
     // 04_comprehension.csv lists gist, inference and detail in the order they were administered.
-    comprehension: [...b.comprehension].sort((x, y) =>
-      byCondition<ComprehensionRecord>((r) => r.comprehension_id)(x, y)
-      || x.question_index - y.question_index),
+    comprehension: [...b.comprehension].sort(
+      byCondition<ComprehensionRecord>((r) => r.comprehension_id, (x, y) => x.question_index - y.question_index),
+    ),
     visualSearch: [...b.visualSearch].sort(byCondition<VisualSearchRecord>((r) => r.condition_id)),
     perception: [...b.perception].sort(byCondition<DisplayPerceptionRecord>((r) => r.perception_id)),
     eyeMetrics: [...b.eyeMetrics].sort(byCondition<EyeMetricsRecord>((r) => r.condition_id)),
-    reactionTrials: [...b.reactionTrials].sort((x, y) =>
-      byCondition<ReactionTrialRecord>((r) => r.trial_id)(x, y) || x.trial_number - y.trial_number),
+    reactionTrials: [...b.reactionTrials].sort(
+      byCondition<ReactionTrialRecord>((r) => r.trial_id, (x, y) => x.trial_number - y.trial_number),
+    ),
     rtSummaries: [...b.rtSummaries].sort(byCondition<RtSummaryRecord>((r) => r.condition_id)),
     calibration: [...b.calibration].sort((x, y) => x.calibration_id.localeCompare(y.calibration_id)),
   };
@@ -179,14 +204,22 @@ export async function listDeleted(): Promise<SessionRecord[]> {
     .sort((a, b) => (b.deleted_at ?? 0) - (a.deleted_at ?? 0));
 }
 
+/**
+ * `evenWhenFull` on both: this is the step STORAGE_FULL_MESSAGE tells the operator to take, and it
+ * is a put, so the flag that prints that message used to refuse it. Purge — the one that actually
+ * frees space — is reachable only from the recycle bin, and the only way in is this Delete. Restore
+ * is allowed for the same reason: an operator freeing space under pressure who bins the wrong
+ * session must be able to undo it, and refusing the undo of a write we permit is worse than either.
+ * Neither consumes space; both are same-size overwrites of a row already present.
+ */
 export async function softDeleteSession(sessionId: string): Promise<void> {
   const s = await get('sessions', sessionId);
-  if (s) await put('sessions', { ...normalise(s), deleted_at: Date.now() });
+  if (s) await put('sessions', { ...normalise(s), deleted_at: Date.now() }, { evenWhenFull: true });
 }
 
 export async function restoreSession(sessionId: string): Promise<void> {
   const s = await get('sessions', sessionId);
-  if (s) await put('sessions', { ...normalise(s), deleted_at: null });
+  if (s) await put('sessions', { ...normalise(s), deleted_at: null }, { evenWhenFull: true });
 }
 
 /**

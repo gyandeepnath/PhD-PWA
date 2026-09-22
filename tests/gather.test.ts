@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import { put, get, _resetForTests } from '@/storage/db';
-import { gatherSession, listSessions, purgeSession } from '@/storage/gather';
+import { gatherSession, listSessions, purgeSession, normaliseBundle } from '@/storage/gather';
+import { buildFixtureBundle } from '@/sim/bundleFixture';
 import { buildExportFiles } from '@/storage/export';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
 import type { Provenance } from '@/storage/types';
@@ -96,5 +97,70 @@ describe('gather → aggregate → export integration (fake IndexedDB)', () => {
     const files = buildExportFiles(bundle);
     expect(files.some((f) => f.filename === '10_wide_summary.csv')).toBe(true);
     expect(files.some((f) => f.filename === 'export_manifest.json')).toBe(true);
+  });
+});
+
+/**
+ * Row order inside a condition is the order the rows were ADMINISTERED, not the order their uuids
+ * happen to sort in.
+ *
+ * `normaliseBundle`'s docstring promises "a reader scanning any file sees the session in the order
+ * it was actually run", and the comment above the comprehension sort says it lists gist, inference
+ * and detail "in the order they were administered". Neither was true. The within-condition
+ * tie-breaks were written as `byCondition(idKey)(x, y) || x.trial_number - y.trial_number`, and
+ * `byCondition` falls back to comparing the record ids — two rows in one condition always have
+ * different uuids, so the `||` never evaluated.
+ *
+ * Nothing COMPUTED was wrong: trial_number and question_index are columns in every row, and every
+ * consumer keys by id. The damage is that file order silently meant nothing while two comments said
+ * it meant something. An analyst reading 08_reaction_trials.csv top to bottom for a sequential
+ * effect — post-error slowing, time-on-task drift — read a sequence shuffled inside each 32-trial
+ * block, with nothing to indicate it.
+ */
+describe('rows within a condition are in administration order', () => {
+  it('orders reaction trials by trial_number, not by trial_id', () => {
+    const b = buildFixtureBundle();
+    const n = normaliseBundle({ ...b, reactionTrials: [...b.reactionTrials].reverse() });
+    for (const c of n.conditions) {
+      const nums = n.reactionTrials.filter((t) => t.condition_id === c.condition_id).map((t) => t.trial_number);
+      expect(nums.length).toBeGreaterThan(1);
+      expect(nums, `trials out of order in ${c.condition_id}`).toEqual([...nums].sort((x, y) => x - y));
+    }
+  });
+
+  it('orders comprehension items by question_index even when the uuids sort the other way', () => {
+    /*
+     * The ids are rewritten so lexicographic order is the REVERSE of administration order. Without
+     * that the fixture's own ids already happen to sort correctly, and the test would pass against
+     * the defect — a check that cannot fail is worse than no check.
+     */
+    const b = buildFixtureBundle();
+    const comprehension = b.comprehension.map((r) => ({
+      ...r, comprehension_id: `${r.condition_id}-${9 - r.question_index}`,
+    }));
+    const n = normaliseBundle({ ...b, comprehension });
+    for (const c of n.conditions) {
+      const idx = n.comprehension.filter((r) => r.condition_id === c.condition_id).map((r) => r.question_index);
+      expect(idx.length).toBeGreaterThan(1);
+      expect(idx, `items out of order in ${c.condition_id}`).toEqual([...idx].sort((x, y) => x - y));
+    }
+  });
+
+  it('still orders conditions by session position, and stays total', () => {
+    // The id remains the FINAL tie-break, so the ordering is still deterministic and the export
+    // stays byte-reproducible. Two runs over differently-ordered inputs must agree exactly.
+    const b = buildFixtureBundle();
+    const a = normaliseBundle(b);
+    const z = normaliseBundle({
+      ...b,
+      conditions: [...b.conditions].reverse(),
+      reactionTrials: [...b.reactionTrials].reverse(),
+      comprehension: [...b.comprehension].reverse(),
+    });
+    expect(a.conditions.map((c) => c.session_position)).toEqual(
+      [...a.conditions.map((c) => c.session_position)].sort((x, y) => x - y),
+    );
+    expect(z.reactionTrials.map((t) => t.trial_id)).toEqual(a.reactionTrials.map((t) => t.trial_id));
+    expect(z.comprehension.map((r) => r.comprehension_id)).toEqual(a.comprehension.map((r) => r.comprehension_id));
   });
 });

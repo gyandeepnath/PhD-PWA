@@ -80,12 +80,29 @@ interface BackupData {
  * it) produces a different checksum for identical data, and the operator is told the file is
  * damaged when it is not.
  *
- * `undefined` is encoded explicitly. JSON.stringify silently omits a key whose value is undefined,
- * so a field that vanished upstream and a field that was never defined hash identically, and the
- * checksum cannot tell them apart. The marker makes the absence part of what is signed.
+ * THE CHECKSUM MUST BE A STATEMENT ABOUT THE FILE. That is the invariant, and it was broken.
+ *
+ * This function used to encode `undefined` as `{"__undefined__": true}`, on the reasoning that
+ * JSON.stringify silently omits a key whose value is undefined, so a field that vanished upstream
+ * and a field that was never defined would hash identically. True, and unachievable: the FILE is
+ * JSON, so it cannot carry that distinction either. The marker put the key into the hashed string
+ * and JSON.stringify left it out of the file. On read, `canonical` over the parsed object could not
+ * see it, produced a different string, and the parse failed with "The backup failed its checksum.
+ * The file has been altered or damaged since it was written; do not import it." — over an intact
+ * file, and a backup is the last copy of a session that a wiped tablet took with it.
+ *
+ * Structured clone preserves an undefined-valued property through IndexedDB, so one `x?.y` in a
+ * record literal anywhere upstream arms it, and a backup ships inside every export. The test suite
+ * could never see it: every fixture and every restored record has been through JSON.parse, which
+ * cannot produce an `undefined` value.
+ *
+ * So the hash is taken over the data AS THE FILE WILL CARRY IT — round-tripped through JSON first.
+ * That makes write and read hash the same bytes by construction, for this asymmetry and for the
+ * ones nobody has hit yet: a Date would canonicalise to `{}` here and to a string in the file, a
+ * NaN to NaN here and to null there. None of those types is in the record schema today, and
+ * "today" is how this defect armed itself the first time.
  */
 function canonicalValue(v: unknown): unknown {
-  if (v === undefined) return { __undefined__: true };
   if (v === null || typeof v !== 'object') return v;
   if (Array.isArray(v)) return v.map(canonicalValue);
   const src = v as Record<string, unknown>;
@@ -94,8 +111,25 @@ function canonicalValue(v: unknown): unknown {
   return out;
 }
 
+/**
+ * The data as JSON can represent it — what `serialiseSessionBackup` will actually write, and what
+ * `parseSessionBackup` will actually read back. Exported for the test that asserts the invariant.
+ */
+export function asWrittenToFile(data: BackupData): BackupData {
+  return JSON.parse(JSON.stringify(data)) as BackupData;
+}
+
 function canonical(data: BackupData): string {
-  return JSON.stringify(canonicalValue(data));
+  return JSON.stringify(canonicalValue(asWrittenToFile(data)));
+}
+
+/**
+ * The checksum a backup of this data carries. One function, used by the writer and by the test that
+ * holds it to its invariant — a test that recomputed the hash its own way could agree with a broken
+ * writer.
+ */
+export function backupChecksum(data: BackupData): string {
+  return fnv1a(canonical(data));
 }
 
 /**
@@ -157,7 +191,7 @@ export function buildSessionBackup(bundle: SessionBundle): SessionBackup {
       app_version: prov?.app_version ?? 'unknown',
       git_hash: prov?.git_hash ?? 'unknown',
     },
-    checksum_fnv1a: fnv1a(canonical(data)),
+    checksum_fnv1a: backupChecksum(data),
     data,
   };
 }
@@ -535,6 +569,26 @@ export async function importSessionBackup(
   let collision: string | undefined;
   /** The device's participant row, kept across a purge when the backup carries none. */
   let priorParticipant: unknown = null;
+  /**
+   * The device's participant row as it stood BEFORE this import touched anything.
+   *
+   * Read once, up front, and used for two different things: carrying the record forward when the
+   * backup has none, and naming the fields the backup is about to blank. The second read used to
+   * happen where the warning is built, about forty lines after `purgeSession`, and purgeSession
+   * deletes the participant row whenever no OTHER session references it. So in `overwrite` mode the
+   * read returned undefined, `fieldsLost` returns [] on a falsy prior, and the warning never fired.
+   *
+   * Dead in exactly the mode that destroys the device copy, and live in the mode that does not — the
+   * same shape as the surviving-blobs guard forty lines below, which was dead for the same reason.
+   * Both are now taken before the purge.
+   *
+   * The case it exists for is the replacement tablet: participant P's only sitting is on this
+   * device, their shared participant row has since gained an eligibility decision, a colour-vision
+   * result and a measured baseline fatigue, and the operator restores a backup taken before any of
+   * that. The old code warned only when P had a SECOND sitting on the same device — the case where
+   * purgeSession spares the row, and the one that needs the warning least.
+   */
+  let deviceParticipantBefore: unknown = null;
   /** Media binaries already on the device, captured BEFORE any purge. See where it is filled. */
   const survivingBlobs = new Map<string, unknown>();
   const data = backup.data;
@@ -542,6 +596,10 @@ export async function importSessionBackup(
   const sessionId = (session as unknown as { session_id: string }).session_id;
 
   const existing = await get('sessions', sessionId);
+  deviceParticipantBefore = (await get(
+    'participants',
+    (session as unknown as { participant_id: string }).participant_id,
+  )) ?? null;
   if (existing && mode === 'refuse-if-present') {
     /*
      * THE OPERATOR HAS TO BE ABLE TO TELL THE TWO COPIES APART.
@@ -601,9 +659,7 @@ export async function importSessionBackup(
        * colour-vision result and eligibility decision, for BOTH sittings, since the record is
        * shared. Carry it forward.
        */
-      priorParticipant = data.participant
-        ? null
-        : ((await get('participants', (session as unknown as { participant_id: string }).participant_id)) ?? null);
+      priorParticipant = data.participant ? null : deviceParticipantBefore;
       /*
        * THE BLOBS HAVE TO BE TAKEN BEFORE THE PURGE, NOT AFTER.
        *
@@ -649,8 +705,7 @@ export async function importSessionBackup(
      * what changed.
      */
     if (data.participant) {
-      const devicePrior = await get('participants', (session as unknown as { participant_id: string }).participant_id);
-      const lost = fieldsLost(devicePrior, data.participant);
+      const lost = fieldsLost(deviceParticipantBefore, data.participant);
       if (lost.length) {
         warnings.push(
           `The participant record on this device held values the backup does not: ${lost.join(', ')}. `

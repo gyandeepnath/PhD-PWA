@@ -92,8 +92,9 @@ let _storageFull = false;
 export const STORAGE_FULL_MESSAGE =
   'This device has run out of storage and VisuLab can no longer save anything. STOP THE SITTING NOW '
   + '— from this point on nothing the participant does is being recorded. Sessions already saved are '
-  + 'safe. Export them, copy the files off the tablet, then delete the exported sessions from the '
-  + 'Session Manager to free space before running anyone else.';
+  + 'safe. Export them, copy the files off the tablet, then in the Session Manager Delete those '
+  + 'sessions and Purge them from the recycle bin — Delete alone does not free space, Purge does — '
+  + 'before running anyone else.';
 
 /** True once a write has been rejected for want of space. Exported so the UI can say so. */
 export function storageIsFull(): boolean {
@@ -213,12 +214,41 @@ function keyOf(name: StoreName | 'meta', record: Record<string, unknown>): unkno
 
 // ---- Typed API ----
 
-export async function put<N extends StoreName>(store: N, record: StoreMap[N]): Promise<void> {
+export interface PutOptions {
+  /**
+   * Let this write through even when the device has already been declared full.
+   *
+   * THE RECOVERY THE MESSAGE ASKS FOR WAS BLOCKED BY THE FLAG THAT PRINTS IT. STORAGE_FULL_MESSAGE
+   * tells the operator to export the saved sessions and then "delete the exported sessions from the
+   * Session Manager to free space". Delete is `softDeleteSession`, which is a put — so it threw
+   * STORAGE_FULL_MESSAGE before touching IndexedDB. Purge, which actually frees the space and uses
+   * `remove`, is reachable only from the recycle bin, and the only way into the bin is the Delete
+   * that just failed. The instruction was a closed loop, and the way out was to reload the tab.
+   *
+   * The export stamps were caught by the same guard. `downloadExport` writes the files first, so
+   * they do leave the device — but `exported_at` and `export_confirmed_at` are puts, so the sitting
+   * could never be marked confirmed, and `purgeExpired` holds an unconfirmed session for ever. Safe,
+   * and permanently un-freeable.
+   *
+   * This is for writes whose purpose is to FREE space or to record that space may now be freed, and
+   * for the undo of one. It is not a general override: every write that records measurement stays
+   * blocked, because once the device is full nothing the participant does is being saved and the
+   * sitting is over. A quota error is still translated and still latches the flag, so a device that
+   * cannot even take a same-size overwrite says so.
+   */
+  evenWhenFull?: boolean;
+}
+
+export async function put<N extends StoreName>(
+  store: N,
+  record: StoreMap[N],
+  opts: PutOptions = {},
+): Promise<void> {
   if (!indexedDBAvailable()) {
     memStore(store).set(keyOf(store, record as unknown as Record<string, unknown>), record);
     return;
   }
-  if (_storageFull) throw new Error(STORAGE_FULL_MESSAGE);
+  if (_storageFull && !opts.evenWhenFull) throw new Error(STORAGE_FULL_MESSAGE);
   const db = await getDB();
   try {
     await db.put(store, record);

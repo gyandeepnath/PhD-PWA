@@ -26,6 +26,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { IDBFactory } from 'fake-indexeddb';
 import { put, get, _resetForTests, SUPERSEDED_MESSAGE, STORAGE_FULL_MESSAGE, storageIsFull } from '@/storage/db';
+import { softDeleteSession, restoreSession } from '@/storage/gather';
 import { sittingsInProgress } from '@/storage/gather';
 import { DB_NAME, DB_VERSION } from '@/storage/schemaEnums';
 import type { SessionRecord } from '@/storage/types';
@@ -128,6 +129,53 @@ describe('a device that has run out of space says so, and says the sitting is ov
     expect(STORAGE_FULL_MESSAGE).toMatch(/export/i);
     // No jargon: a research assistant reads this, not a developer.
     expect(STORAGE_FULL_MESSAGE).not.toMatch(/IndexedDB|QuotaExceeded|DOMException/i);
+  });
+
+  it('names Purge, because Delete alone frees nothing', () => {
+    // The message said "delete the exported sessions ... to free space". Delete is a soft delete to
+    // the recycle bin; the bytes go only when the row is Purged from it. An operator following the
+    // instruction exactly would have deleted three sittings and freed nothing.
+    expect(STORAGE_FULL_MESSAGE).toMatch(/Purge/);
+    expect(STORAGE_FULL_MESSAGE).toMatch(/Delete alone does not free space/);
+  });
+
+  it('lets the operator take the step the message asks for', async () => {
+    /*
+     * The recovery the flag describes was blocked by the flag.
+     *
+     * softDeleteSession is a put, so it threw STORAGE_FULL_MESSAGE before touching the database.
+     * Purge, which actually frees the space, is reachable only from the recycle bin, and the only
+     * way into the bin is the Delete that just failed. The instruction was a closed loop whose only
+     * exit was reloading the tab.
+     */
+    await put('sessions', session('a'));
+    const real = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function fail() { throw quotaFails(); };
+    try {
+      await expect(put('sessions', session('b'))).rejects.toThrow(STORAGE_FULL_MESSAGE);
+    } finally {
+      IDBObjectStore.prototype.put = real;
+    }
+    expect(storageIsFull()).toBe(true);
+
+    // The step the message names now goes through...
+    await softDeleteSession('a');
+    expect((await get('sessions', 'a'))?.deleted_at).toBeTruthy();
+    // ...and so does undoing it, for an operator who bins the wrong sitting under pressure.
+    await restoreSession('a');
+    expect((await get('sessions', 'a'))?.deleted_at).toBeNull();
+
+    // ...while an ordinary measurement write is still refused. Once the device is full the sitting
+    // is over, and that is the whole point of the flag.
+    await expect(put('sessions', session('c'))).rejects.toThrow(STORAGE_FULL_MESSAGE);
+  });
+
+  it('marks an export confirmed on a full device, so the session can ever be freed', async () => {
+    // exported_at / export_confirmed_at are puts. Refusing them left the sitting exported but never
+    // confirmed, and purgeExpired keeps an unconfirmed session for ever: safe, and un-freeable.
+    const dash = readFileSync('src/dashboard/Dashboard.tsx', 'utf8');
+    expect(dash).toMatch(/exported_at: now \}, \{ evenWhenFull: true \}/);
+    expect(dash).toMatch(/export_confirmed_at: Date\.now\(\) \}, \{ evenWhenFull: true \}/);
   });
 });
 
