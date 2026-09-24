@@ -131,7 +131,8 @@ export async function listResumable(): Promise<ResumePointer[]> {
   }
   const out: ResumePointer[] = [];
   for (const s of sessions) {
-    if (s.status !== 'in_progress' || s.deleted_at) continue;
+    // Never a withdrawn sitting: resuming one collected data after consent was taken back.
+    if (s.status !== 'in_progress' || s.deleted_at || s.withdrawn_at != null) continue;
     const cached = cache[s.session_id];
 
     /**

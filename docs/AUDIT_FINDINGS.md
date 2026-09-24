@@ -3068,3 +3068,50 @@ participant sees. Restoring the bug on one screen fails the run with "source com
 COMPREHENSION".
 
 981 tests, verify green; full, split, fit and reachability end-to-end specs pass.
+
+## Round 46 — a withdrawn sitting could be resumed, and exported as an ordinary one
+
+From the interruption data-path audit. A withdrawal the participant did not ask to be deleted is the
+retain-and-exclude branch: the measurements are kept, and nothing may analyse them. Three routes let a
+withdrawn sitting back in.
+
+**It could be resumed.** Recording a withdrawal set `withdrawn_at` and revoked photo and video consent,
+and left the sitting as it was: status in progress, resume pointer intact. The Session Manager kept
+offering Resume, and resuming wrote further condition rows and camera-active eye metrics after consent
+had been taken back. `listResumable` now skips a withdrawn sitting, the durable pointer is dropped by
+`recordWithdrawal` and the localStorage copy by the Session Manager, and `sittingsInProgress` no longer
+counts it — it used to hold the update gate shut until the operator deleted it. A withdrawn sitting is
+now listed on its own, with Export and Delete only.
+
+The camera-metrics grant is deliberately **not** revoked. Doing so was the first version of this fix, and
+it was wrong: the integrity audit reads that grant as what the participant agreed to while the data was
+measured, and would then report every lawfully collected eye-metrics row as "measured on a participant
+who did not consent". Collection is stopped by the resume block instead. A test pins both halves.
+
+**No per-session CSV said so.** `withdrawn_at` travelled in the session JSON and the backup and in the
+pooled file, never in `01_session_info.csv`; the R and Python templates read exactly those CSVs, so a
+withdrawn sitting was modelled as an ordinary one. `01_session_info.csv` now carries `withdrawn` and
+`withdrawn_at`; `session_complete` is false for a withdrawn sitting; `conditions_completed` counts
+finished runs rather than condition rows, which included a condition paused part-way.
+
+Both templates now drop a withdrawn **participant** — every sitting of theirs, not only the one the
+withdrawal was recorded on — before any join, which is what the pooled export's join check
+(`participant_withdrawn`) has always done; the two routes to a model now agree. The analysis gate's
+twelve-participant cohort carries one withdrawn participant and one paused condition in both the R and
+the Python tree; the R modelling frame must come out at 109 rows (120 less 10 withdrawn, less 1 paused).
+Disabling the drop in either template fails the gate.
+
+**The operator manual put the steps in the wrong order.** It said Export first, then press Withdrew —
+so the exported files would always carry `withdrawn = FALSE`. It now says Withdrew first, then Export,
+and to retake any export taken before. The confirmation says the same.
+
+**The cohort tab averaged them in.** It read `analysable` and nothing else, so a withdrawn participant's
+blinks were still in the cohort mean shown there. They are now counted as `n_withdrawn` and kept out of
+the mean and the position balance, like an unfinished run. The dashboard opens a withdrawn sitting with a
+banner saying nothing on the page may be analysed, and no longer says a paused condition "restarts on
+resume" for a sitting that cannot be resumed. The join-check message that called a withdrawn sitting
+reaching the exporter a bypass of the recycle bin — it reaches the exporter by design — is corrected.
+
+993 tests, verify green (including the R and Python analysis gate), stress 1256/1256; split, reachability
+and edge end-to-end specs pass, the last with a new test that withdraws a paused sitting and checks
+Resume disappears and the dashboard banner appears.

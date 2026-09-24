@@ -7,9 +7,9 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   revokeMediaGrant,
   listSessions, listDeleted, softDeleteSession, restoreSession, purgeSession, purgeExpired,
-  renameSession, sessionLabel, recordWithdrawal, BIN_RETENTION_MS, MAX_DISPLAY_LABEL,
+  renameSession, sessionLabel, recordWithdrawal, isWithdrawn, BIN_RETENTION_MS, MAX_DISPLAY_LABEL,
 } from '@/storage/gather';
-import { listResumable, type ResumePointer } from '@/storage/sessionPersistence';
+import { listResumable, clearResume, type ResumePointer } from '@/storage/sessionPersistence';
 import { parseSessionBackup, importSessionBackup } from '@/storage/backup';
 import { WavyBackground } from '@/components/WavyBackground';
 import type { SessionRecord } from '@/storage/types';
@@ -76,8 +76,11 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
     void refresh();
   }, [refresh]);
 
-  const inProgress = active.filter((s) => s.status === 'in_progress');
-  const completed = active.filter((s) => s.status === 'complete');
+  // A withdrawn sitting is listed on its own. Under "In progress" it read as a sitting waiting to be
+  // resumed, and under "Completed" as one ready for analysis; it is neither.
+  const withdrawn = active.filter(isWithdrawn);
+  const inProgress = active.filter((s) => s.status === 'in_progress' && !isWithdrawn(s));
+  const completed = active.filter((s) => s.status === 'complete' && !isWithdrawn(s));
 
   // The banner offers the most recently touched one; every other in-progress session still gets its
   // own Resume button on its own row, so none of them is stranded.
@@ -214,17 +217,21 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
       `Record that the participant in ${label} WITHDREW from the study?\n\n`
       + 'Use this when they have withdrawn but have NOT asked for their data to be deleted. Ask '
       + 'them; the consent form offers both.\n\n'
-      + 'The measurements are kept and exported, marked so the analysis excludes them. Any '
+      + 'The measurements are kept and exported, marked so the analysis excludes them. The '
+      + 'sitting can no longer be resumed, so nothing further is collected for it. Any '
       + 'photographs or video are DESTROYED — that part cannot be undone.\n\n'
       + 'If they asked for deletion instead, cancel this and use Delete, then Purge from the '
       + 'recycle bin.',
     )) return;
     const { mediaDestroyed } = await recordWithdrawal(s.session_id);
+    // The localStorage copy of the resume pointer too; recordWithdrawal drops the durable one.
+    clearResume(s.session_id);
     await refresh();
     window.alert(
       `${label} is recorded as withdrawn.\n\n`
       + `${mediaDestroyed} media file(s) destroyed.\n\n`
-      + 'Export it now if you have not already. The withdrawal travels with the data and survives a '
+      + 'Export it now, from the Withdrawn list. An export taken BEFORE this carries withdrawn = FALSE '
+      + 'and reads like an ordinary paused sitting — discard it. The withdrawal travels with the data and survives a '
       + 'restore from a backup, so the sitting cannot re-enter the analysis by accident. Copies of '
       + 'media files already taken off this tablet are not covered — delete those by hand.',
     );
@@ -321,7 +328,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
               <Btn onClick={() => onOpen(s.session_id)} color="#1a1a2e" outline>Export</Btn>
               <MediaControls s={s} onRevoke={revokeMedia} />
               <Btn onClick={() => withdraw(s)} color="#c98a22" outline>
-                {s.withdrawn_at != null ? 'Withdrawn' : 'Withdrew'}
+                Withdrew
               </Btn>
               <Btn onClick={() => del(s)} color="#e64c4c" outline>Delete</Btn>
             </Row>
@@ -336,13 +343,29 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
               <Btn onClick={() => rename(s)} color="#5a5a7a" outline>Rename</Btn>
               <MediaControls s={s} onRevoke={revokeMedia} />
               <Btn onClick={() => withdraw(s)} color="#c98a22" outline>
-                {s.withdrawn_at != null ? 'Withdrawn' : 'Withdrew'}
+                Withdrew
               </Btn>
               <Btn onClick={() => del(s)} color="#e64c4c" outline>Delete</Btn>
             </Row>
           ))}
           {completed.length === 0 && <Empty>No completed sessions yet.</Empty>}
         </Section>
+
+        {withdrawn.length > 0 && (
+          <Section title={`Withdrawn (${withdrawn.length})`}>
+            {withdrawn.map((s) => (
+              <Row key={s.session_id} s={s}
+                note={`withdrew ${new Date(s.withdrawn_at as number).toLocaleString()} · ${s.status === 'complete' ? 'sitting had finished' : 'sitting had not finished'}`}>
+                {/* Export stays: the measurements are kept, and the export carries withdrawn=TRUE,
+                    which is what makes both analysis templates drop the participant. No Resume, no
+                    Rename, no media controls — the media was destroyed when this was recorded.
+                    Delete remains for a participant who later asks for deletion as well. */}
+                <Btn onClick={() => onOpen(s.session_id)} color="#1a1a2e" outline>Export</Btn>
+                <Btn onClick={() => del(s)} color="#e64c4c" outline>Delete</Btn>
+              </Row>
+            ))}
+          </Section>
+        )}
 
         <div style={{ marginTop: 18 }}>
           {binNotice && (

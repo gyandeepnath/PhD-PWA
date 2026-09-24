@@ -93,3 +93,24 @@ test('reload mid-session offers resume and continues at a condition', async ({ p
   const c = await dbCounts(page, ['sessions']);
   expect(c.sessions).toBe(1);
 });
+
+test('a withdrawn sitting is no longer resumable and says so on the dashboard', async ({ page }) => {
+  await startNewExperiment(page);
+  await driveUntil(page, 'READING_TASK');
+  await page.reload();
+  await click(page, /Enter Research Console/);
+  await expect(page.getByText(/In progress \(1\)/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Resume/ }).first()).toBeVisible();
+
+  // Accept the confirmation, then the report alert.
+  page.on('dialog', (d) => void d.accept());
+  await page.getByRole('button', { name: 'Withdrew' }).first().click();
+
+  // Resuming a withdrawn sitting used to be offered and collected data after consent was withdrawn.
+  await expect(page.getByText(/Withdrawn \(1\)/)).toBeVisible();
+  await expect(page.getByText(/In progress \(0\)/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Resume/ })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Export' }).first().click();
+  await expect(page.getByTestId('withdrawn-banner')).toBeVisible();
+});

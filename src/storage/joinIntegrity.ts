@@ -162,17 +162,17 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
     /*
      * A withdrawn session must never reach an analysis, whatever the caller passed in.
      *
-     * listSessions() filters the recycle bin before the exporter sees anything, so today no binned
-     * session arrives here — but that is the CALLER's guarantee, and buildAnalysisDataset has no
-     * guard of its own. A second caller, or a restored backup, would inherit the hazard silently.
-     * The check belongs where the assertion is made.
+     * It does reach this exporter, by design: a withdrawal that did not ask for deletion keeps the
+     * sitting on the device, listed, and exported, so the exclusion is auditable rather than silent.
+     * The check belongs here, where the assertion "these rows are analysable" is made, not in any
+     * one caller.
      */
     if (b.session.withdrawn_at != null) {
       issues.push({
         severity: 'blocking', code: 'participant_withdrawn',
         participant_id: pid, session_id: b.session.session_id,
-        detail: 'This session is marked withdrawn by the participant. Its rows must not enter any '
-          + 'analysis. If it reached this exporter, a restore or a caller bypassed the recycle bin.',
+        detail: 'This session is marked withdrawn by the participant. Its rows are exported, flagged '
+          + 'withdrawn = TRUE, so the exclusion is auditable; they must not enter any analysis.',
       });
     }
     if (!b.participant) {

@@ -83,6 +83,38 @@ def main() -> None:
     participant = load("11_participant.csv")  # demographics + vision covariates (age, cvd_status, ...)
     cvsq = load("13_cvsq.csv")  # CVS-Q symptom questionnaire (baseline + session_end), per item
 
+    # WITHDRAWN PARTICIPANTS AND UNFINISHED CONDITION-RUNS ARE NOT ANALYSED — removed once, here,
+    # from every table before any join, exactly as the R template does (ANALYSIS_PLAN.md 5b requires
+    # the two toolchains to agree, which they cannot if they model different rows). A withdrawal is a
+    # standing instruction about the PARTICIPANT, so all of their sittings go, as the pooled export's
+    # join check already does; a condition that did not finish is not a measurement of its condition.
+    # Exports older than either column carry nothing to drop.
+    def truthy(col: pd.Series) -> pd.Series:
+        return col.astype(str).str.lower().isin(["true", "1"])
+
+    def rows_not_in(d: pd.DataFrame, col: str, values: set) -> pd.DataFrame:
+        return d[d[col].isin(values).eq(False)] if col in d.columns else d
+
+    drop_ids = set()
+    if "withdrawn" in session_info.columns:
+        wd_pids = set(session_info.loc[truthy(session_info["withdrawn"]), "participant_id"])
+        print(f"withdrawn participants removed before modelling: {len(wd_pids)}")
+        drop_ids |= set(conditions.loc[conditions["participant_id"].isin(wd_pids), "condition_id"])
+        session_info = rows_not_in(session_info, "participant_id", wd_pids)
+        cvsq = rows_not_in(cvsq, "participant_id", wd_pids)
+        participant = rows_not_in(participant, "participant_id", wd_pids)
+    if "condition_complete" in conditions.columns:
+        unfinished = set(conditions.loc[
+            conditions["condition_complete"].astype(str).str.lower().eq("false"), "condition_id"]) - drop_ids
+        print(f"unfinished condition-runs removed before modelling (paused or interrupted): {len(unfinished)}")
+        drop_ids |= unfinished
+    conditions = rows_not_in(conditions, "condition_id", drop_ids)
+    fatigue = rows_not_in(fatigue, "condition_id", drop_ids)
+    comprehension = rows_not_in(comprehension, "condition_id", drop_ids)
+    rt_summary = rows_not_in(rt_summary, "condition_id", drop_ids)
+    eye = rows_not_in(eye, "condition_id", drop_ids)
+    wide = rows_not_in(wide, "condition_id", drop_ids)
+
     # Join participant covariates onto every condition row so models can adjust for them, e.g.
     #   "... + age + C(correction_type)"  or stratify by cvd_status.
     PARTICIPANT_COVARIATES = ["age", "gender", "daily_screen_hours", "correction_type", "cvd_status"]

@@ -16,7 +16,11 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { readFileSync } from 'node:fs';
 import { put, get, getAllByIndex, _resetForTests } from '@/storage/db';
-import { recordWithdrawal, softDeleteSession } from '@/storage/gather';
+import { recordWithdrawal, softDeleteSession, sittingsInProgress, isWithdrawn } from '@/storage/gather';
+import { listResumable } from '@/storage/sessionPersistence';
+import { buildExportFiles } from '@/storage/export';
+import { auditBundle } from '@/storage/integrity';
+import { cohortSummary } from '@/dashboard/aggregate';
 import { parseSessionBackup, serialiseSessionBackup, importSessionBackup } from '@/storage/backup';
 import { buildFixtureBundle, withFixtureMedia } from '@/sim/bundleFixture';
 import type { SessionRecord } from '@/storage/types';
@@ -122,5 +126,132 @@ describe('the operator has the control the manual tells them to use', () => {
     // Now it names the button, so the instruction and the interface cannot drift apart silently.
     expect(manual).toMatch(/press \*\*Withdrew\*\*/);
     expect(manual).toMatch(/survives a restore from a backup/);
+  });
+});
+
+/*
+ * A withdrawal ends the sitting for COLLECTION, and the exports say so.
+ *
+ * Before this, recording a withdrawal set the tombstone and revoked photo and video consent and
+ * left the rest: the sitting stayed "in progress" with its resume pointer, so the Session Manager
+ * kept offering Resume and resuming collected further data after consent had been taken back. And
+ * none of the per-session CSVs carried the tombstone, so the R and Python templates — which read
+ * exactly those CSVs — modelled a withdrawn sitting as an ordinary one.
+ */
+describe('a withdrawn sitting cannot be resumed and is not "in progress"', () => {
+  beforeEach(fresh);
+
+  const inProgress = () => {
+    const b = buildFixtureBundle();
+    return { ...b.session, status: 'in_progress', session_end_time: null, resume_next_index: 4 } as SessionRecord;
+  };
+
+  it('is not offered for resume', async () => {
+    const s = inProgress();
+    await put('sessions', s);
+    expect((await listResumable()).map((p) => p.sessionId)).toContain(s.session_id);
+    await recordWithdrawal(s.session_id);
+    expect((await listResumable()).map((p) => p.sessionId)).not.toContain(s.session_id);
+  });
+
+  it('loses its durable resume pointer', async () => {
+    const s = inProgress();
+    await put('sessions', s);
+    await recordWithdrawal(s.session_id);
+    expect((await get('sessions', s.session_id) as SessionRecord).resume_next_index).toBeUndefined();
+  });
+
+  it('does not hold the update gate shut', async () => {
+    const s = inProgress();
+    await put('sessions', s);
+    expect(await sittingsInProgress()).toHaveLength(1);
+    await recordWithdrawal(s.session_id);
+    expect(await sittingsInProgress()).toHaveLength(0);
+  });
+
+  it('KEEPS the camera-metrics grant, so lawfully collected ocular data is not reported as unconsented', async () => {
+    // Revoking it looks thorough and is wrong: the integrity audit reads the grant as "what the
+    // participant agreed to while this was measured", and would then call every eye-metrics row
+    // "measured on a participant who did not consent". Collection is stopped by the resume block.
+    const b = buildFixtureBundle();
+    await put('sessions', b.session);
+    await recordWithdrawal(b.session.session_id);
+    const after = await get('sessions', b.session.session_id) as SessionRecord;
+    expect(after.media_consent?.camera_metrics).toBe(b.session.media_consent?.camera_metrics);
+    const codes = auditBundle({ ...b, session: after, media: [] }).findings.map((f) => f.check);
+    expect(codes).not.toContain('ocular_requires_consent');
+  });
+
+  it('isWithdrawn reads the tombstone and nothing else', () => {
+    expect(isWithdrawn({ withdrawn_at: 1 })).toBe(true);
+    expect(isWithdrawn({ withdrawn_at: null })).toBe(false);
+    expect(isWithdrawn({})).toBe(false);
+  });
+});
+
+describe('the per-session export says the participant withdrew', () => {
+  const row = (b: ReturnType<typeof buildFixtureBundle>) => {
+    const f = buildExportFiles(b).find((x) => x.filename === '01_session_info.csv')!;
+    const [head, body] = f.content.trim().split('\n');
+    const cols = head.split(',');
+    // The fixture participant id carries a comma inside quotes; read the columns we need from the
+    // right-hand end of the header instead of splitting a quoted field.
+    const cells = body.match(/("([^"]|"")*"|[^,]*)(,|$)/g)!.map((c) => c.replace(/,$/, ''));
+    return Object.fromEntries(cols.map((c, i) => [c, cells[i]]));
+  };
+
+  it('carries withdrawn and withdrawn_at', () => {
+    const b = buildFixtureBundle();
+    expect(row(b).withdrawn).toBe('false');
+    expect(row(b).withdrawn_at).toBe('');
+    const w = { ...b, session: { ...b.session, withdrawn_at: Date.UTC(2026, 0, 2, 3, 4, 5) } };
+    expect(row(w).withdrawn).toBe('true');
+    expect(row(w).withdrawn_at).toBe('2026-01-02T03:04:05.000Z');
+  });
+
+  it('never calls a withdrawn sitting complete, even one that finished', () => {
+    const b = buildFixtureBundle();
+    expect(row(b).session_complete).toBe('true');
+    expect(row({ ...b, session: { ...b.session, withdrawn_at: 1 } }).session_complete).toBe('false');
+  });
+
+  it('counts FINISHED condition-runs, not rows', () => {
+    const b = buildFixtureBundle();
+    const paused = { ...b, conditions: b.conditions.map((c, i) => (i === b.conditions.length - 1 ? { ...c, completed_at: null } : c)) };
+    expect(row(paused).conditions_completed).toBe(String(b.conditions.length - 1));
+    expect(row(paused).session_complete).toBe('false');
+  });
+});
+
+describe('the cohort view keeps a withdrawn participant out of its figures', () => {
+  it('counts their rows as withdrawn and excludes them from the mean', () => {
+    const head = 'condition_label,polarity,text_colour,withdrawn,condition_complete,analysable,exclusion_reason,fps_adequate_for_ratio,n_blinks_total,incomplete_blink_ratio,session_position';
+    const csv = [head,
+      'P1,positive,achromatic,false,true,true,,true,20,0.1,0',
+      'P1,positive,achromatic,true,true,false,participant_withdrawn,true,20,0.9,0',
+    ].join('\n');
+    const c = cohortSummary([{ filename: 'analysis_long.csv', content: csv }],
+      { total_participants: 2, analysable_participants: 1, issues: [] }, 10);
+    expect(c.conditions[0].n).toBe(2);
+    expect(c.conditions[0].n_withdrawn).toBe(1);
+    expect(c.conditions[0].mean_ibr).toBeCloseTo(0.1);
+    expect(c.positionBalance.P1[0]).toBe(1);
+  });
+});
+
+describe('the Session Manager lists a withdrawn sitting on its own', () => {
+  const manager = readFileSync('src/start/SessionManager.tsx', 'utf8');
+  it('under neither In progress nor Completed', () => {
+    expect(manager).toMatch(/status === 'in_progress' && !isWithdrawn\(s\)/);
+    expect(manager).toMatch(/status === 'complete' && !isWithdrawn\(s\)/);
+    expect(manager).toMatch(/Withdrawn \(\$\{withdrawn\.length\}\)/);
+  });
+  it('drops the localStorage resume pointer as well', () => {
+    const body = manager.slice(manager.indexOf('const withdraw ='), manager.indexOf('const del ='));
+    expect(body).toMatch(/clearResume\(s\.session_id\)/);
+  });
+  it('the manual orders the steps so the export carries the mark', () => {
+    const manual = readFileSync('docs/OPERATOR_MANUAL.md', 'utf8');
+    expect(manual).toMatch(/press \*\*Withdrew\*\* on that session FIRST, then \*\*Export\*\*/);
   });
 });

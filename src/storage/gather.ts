@@ -193,7 +193,17 @@ export async function listSessions(): Promise<SessionRecord[]> {
  * gate hold across all of them.
  */
 export async function sittingsInProgress(): Promise<SessionRecord[]> {
-  return (await listSessions()).filter((s) => s.status === 'in_progress');
+  // A withdrawn sitting is not in progress: no participant is part-way through it and none will
+  // return to it. It used to count here and held the update gate shut until the operator deleted it.
+  return (await listSessions()).filter((s) => s.status === 'in_progress' && !isWithdrawn(s));
+}
+
+/**
+ * The participant withdrew this sitting. The one definition every consumer uses: a withdrawn sitting
+ * is never resumed, never counted as in progress, and never analysed.
+ */
+export function isWithdrawn(s: { withdrawn_at?: number | null }): boolean {
+  return s.withdrawn_at != null;
 }
 
 /** Soft-deleted sessions still inside the retention window (the recycle bin). */
@@ -362,8 +372,23 @@ export async function recordWithdrawal(sessionId: string): Promise<{ mediaDestro
 
   // The tombstone first, for the same reason revokeMediaGrant withdraws consent before deleting:
   // if the loop below fails part-way, what survives is already covered by a recorded withdrawal.
+  /*
+   * A withdrawal ends the sitting for COLLECTION, not only for analysis.
+   *
+   * It used to set the tombstone, revoke photo and video consent, and leave the sitting otherwise as
+   * it was: in progress, with its resume pointer. The Session Manager kept offering Resume, and
+   * resuming wrote further condition rows and camera-active eye metrics AFTER the participant had
+   * withdrawn. The block is in listResumable, keyed on this tombstone; the pointer is dropped here
+   * as well so no copy of it survives to be picked up by a later route.
+   *
+   * The camera-metrics grant is deliberately NOT revoked. It records what the participant agreed to
+   * while the measurements already taken were being collected, and the integrity audit reads it as
+   * exactly that: revoking it would make every lawfully collected ocular row read as "measured
+   * without consent". Nothing further can be collected, because the sitting cannot be resumed.
+   */
+  const { resume_next_index: _dropPointer, ...rest } = session;
   await put('sessions', {
-    ...session,
+    ...rest,
     withdrawn_at: session.withdrawn_at ?? Date.now(),
     media_consent: session.media_consent
       ? { ...session.media_consent, setup_photos: false, annotation_video: false }

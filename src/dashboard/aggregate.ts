@@ -673,6 +673,12 @@ export interface CohortConditionRow {
    * out of the outcome mean and the position balance: a paused condition is not a measurement.
    */
   n_unfinished: number;
+  /**
+   * Rows from a participant who WITHDREW. Counted, and kept out of the outcome mean and the position
+   * balance for the same reason the analysis templates drop them: a withdrawal is an instruction,
+   * not a quality flag, and this tab is the one people read as "how the study is going".
+   */
+  n_withdrawn: number;
   /** Rows the exporter judged analysable. */
   n_analysable: number;
   /** Rows with a usable primary outcome — a denominator of at least one blink. */
@@ -751,7 +757,7 @@ export function cohortSummary(
     if (!c) {
       c = {
         condition_label: label, polarity: r.polarity ?? '', text_colour: r.text_colour ?? '',
-        n: 0, n_unfinished: 0, n_analysable: 0, n_with_outcome: 0, mean_ibr: null, blinks_total: 0, n_fps_inadequate: 0,
+        n: 0, n_unfinished: 0, n_withdrawn: 0, n_analysable: 0, n_with_outcome: 0, mean_ibr: null, blinks_total: 0, n_fps_inadequate: 0,
       };
       byCondition.set(label, c);
     }
@@ -766,6 +772,13 @@ export function cohortSummary(
      */
     const reason = (r.exclusion_reason ?? '').trim();
     if (reason) exclusionCounts.set(reason, (exclusionCounts.get(reason) ?? 0) + 1);
+    // Withdrawn first: a withdrawn participant's unfinished run is counted once, as withdrawn. The
+    // pooled file always carried `withdrawn`; this view read `analysable` and nothing else, so a
+    // withdrawn participant's blinks were still averaged into the cohort mean shown here.
+    if (isTrue(r.withdrawn)) {
+      c.n_withdrawn++;
+      continue;
+    }
     if (r.condition_complete === 'false' || r.condition_complete === 'FALSE') {
       c.n_unfinished++;
       continue;

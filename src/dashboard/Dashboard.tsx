@@ -341,6 +341,19 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
         </div>
       )}
 
+      {bundle && bundle.session.withdrawn_at != null && (
+        <div
+          data-testid="withdrawn-banner"
+          className="font-lab text-sm"
+          style={{ margin: '0 0 14px', padding: '12px 14px', borderRadius: 10, border: '1px solid #b83a3a', background: '#fdeeee', color: '#5a1414', lineHeight: 1.55 }}
+        >
+          <strong>The participant withdrew</strong> — recorded {new Date(bundle.session.withdrawn_at).toLocaleString()}.
+          Nothing on this page may be analysed. The measurements are kept so the withdrawal is auditable,
+          and every export of this sitting carries withdrawn = TRUE, which both analysis templates and
+          the pooled export use to leave this participant out entirely.
+        </div>
+      )}
+
       {bundle && unfinished.length > 0 && (
         <div
           data-testid="unfinished-conditions"
@@ -352,9 +365,9 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           </strong>{' '}
           — {unfinished.map((u) => `${u.condition_label} (position ${u.session_position + 1})`).join(', ')}.
           Paused or interrupted part-way, so {unfinished.length === 1 ? 'it is' : 'they are'} not a measurement and{' '}
-          {unfinished.length === 1 ? 'is' : 'are'} left out of every figure on this page. A paused condition restarts from the
-          beginning when the sitting is resumed. The partial rows are kept in the export, flagged
-          condition_complete = FALSE.
+          {unfinished.length === 1 ? 'is' : 'are'} left out of every figure on this page.
+          {bundle.session.withdrawn_at == null && ' A paused condition restarts from the beginning when the sitting is resumed.'}
+          {' '}The partial rows are kept in the export, flagged condition_complete = FALSE.
         </div>
       )}
 
@@ -495,8 +508,9 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
             <p className="font-lab text-sm" style={{ marginTop: 18, background: '#fff6e5', border: '1px solid #f0d8a8', borderRadius: 10, padding: 12 }}>
               This sitting has not finished. Exporting is allowed — a withdrawn or interrupted
               session is still a record of what happened — but the export carries
-              <code> session_complete=false</code> and only the {bundle.conditions.length} condition(s)
-              that ran. Do not pool it with completed sittings without accounting for that.
+              <code> session_complete=false</code>, and {summaries.length} of the{' '}
+              {plannedConditions} planned condition(s) finished. Do not pool it with completed
+              sittings without accounting for that.
             </p>
           )}
         </div>

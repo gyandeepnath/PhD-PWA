@@ -11,6 +11,7 @@ import type { MediaRecord } from './media';
 import { summariseLux, LUX_CHECKPOINTS } from '@/experiment/illumination';
 import { buildConditionSummaries, ENGAGEMENT } from '@/dashboard/aggregate';
 import { isConditionComplete } from './conditionStatus';
+import { isWithdrawn } from './gather';
 import { SCREEN_TEST_PLATES, SCREEN_ALLOWED_SLIPS } from '@/screening/ishihara';
 import { PASSAGES, SEARCH_EXCERPT_MAX_WORDS } from '@/experiment/passages';
 import { CONDITIONS } from '@/experiment/conditions';
@@ -456,9 +457,11 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '00_condition_reference.csv', column: 'text_color', type: 'string', unit: 'hex', role: 'iv', description: 'Text colour as an sRGB hex triplet, exactly as rendered.' },
   { file: '00_condition_reference.csv', column: 'wcag_level', type: 'string', unit: '-', role: 'covariate', description: 'Accessibility band implied by the contrast ratio: AAA, AA, AA Large, or Fail. Descriptive; model the continuous ratio, not this band.' },
   { file: '01_session_info.csv', column: 'experiment_date', type: 'string', unit: 'ISO 8601', role: 'meta', description: 'Date the sitting was run. Session timing. Under the single-sitting protocol there is no between-visit spacing to check; retained for earlier two-visit data and for split sittings.' },
-  { file: '01_session_info.csv', column: 'session_status', type: 'factor(2)', unit: '-', role: 'qc', description: 'in_progress or complete. An export may be taken at any time, including from a withdrawn or interrupted sitting, so this states whether the sitting actually finished.' },
-  { file: '01_session_info.csv', column: 'conditions_completed', type: 'integer', unit: 'count', role: 'qc', description: 'Condition rows this export actually contains. Below conditions_per_session the series is truncated and the remaining conditions were never presented.' },
-  { file: '01_session_info.csv', column: 'session_complete', type: 'boolean', unit: '-', role: 'qc', description: 'True only when the sitting was closed AND every planned condition ran. Filter on this before pooling sittings: a truncated series is unbalanced with respect to the Williams order.' },
+  { file: '01_session_info.csv', column: 'session_status', type: 'factor(2)', unit: '-', role: 'qc', description: 'in_progress or complete. An export may be taken at any time, including from a withdrawn or interrupted sitting, so this states whether the sitting actually finished. It does NOT say whether the participant withdrew: see withdrawn.' },
+  { file: '01_session_info.csv', column: 'withdrawn', type: 'boolean', unit: '-', role: 'qc', description: 'TRUE means the PARTICIPANT WITHDREW from this sitting. Not a quality flag — a standing instruction: no row of this bundle may be analysed, under any sensitivity analysis. The measurements are kept and exported so the withdrawal is auditable, which is what the participant agreed to when they withdrew without asking for deletion. This column used to be absent, so a withdrawn sitting exported CSVs identical to an ordinary paused one. The shipped R and Python templates drop a withdrawn sitting before modelling.' },
+  { file: '01_session_info.csv', column: 'withdrawn_at', type: 'datetime', unit: 'ISO 8601', role: 'qc', description: 'When the withdrawal was recorded. Blank when the participant did not withdraw.' },
+  { file: '01_session_info.csv', column: 'conditions_completed', type: 'integer', unit: 'count', role: 'qc', description: 'FINISHED condition-runs this export contains (condition_complete TRUE on 02_conditions.csv) — it used to count condition ROWS, which include a condition paused part-way. The export may contain more rows than this; the unfinished ones are flagged, not measurements. Below conditions_per_session the series is truncated and the remaining conditions were never presented.' },
+  { file: '01_session_info.csv', column: 'session_complete', type: 'boolean', unit: '-', role: 'qc', description: 'True only when the sitting was closed, the participant did not withdraw, AND every planned condition FINISHED. Filter on this before pooling sittings: a truncated series is unbalanced with respect to the Williams order.' },
   { file: '01_session_info.csv', column: 'conditions_per_session', type: 'integer', unit: '5 or 10', role: 'meta', description: 'Conditions presented in this sitting. 10 is the whole illumination block in one sitting; 5 means the block was split in two under the feasibility gate.' },
   { file: '01_session_info.csv', column: 'ambient_lux', type: 'number', unit: 'lux', role: 'iv', description: 'Measured room illuminance at the participant eye position for this sitting. The manipulation CHECK for the single 300 lux level (accepted 250-350), NOT a factor: it should be constant by design, and a reading outside the band is a protocol deviation. Use this measured value rather than the nominal level.' },
   { file: '01_session_info.csv', column: 'brightness_percent', type: 'number', unit: '0-100', role: 'covariate', description: 'Display brightness setting. Held fixed across conditions; recorded so any drift between sittings is detectable.' },
@@ -736,7 +739,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'session_status', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'protocol_pass', 'repeat_run_note', 'sitting_split_reason', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'build_changed_mid_sitting', 'session_builds', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'stimulus_scale', 'layout_viewport', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'preflight_complete', 'e2e_timing', 'stimulus_font_ok', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'gaze_trust', 'gaze_targets_well_covered', 'gaze_threshold_floored', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected', 'calibration_ear_samples', 'calibration_runs'],
+    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'session_status', 'withdrawn', 'withdrawn_at', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'protocol_pass', 'repeat_run_note', 'sitting_split_reason', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'build_changed_mid_sitting', 'session_builds', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'stimulus_scale', 'layout_viewport', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'preflight_complete', 'e2e_timing', 'stimulus_font_ok', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'gaze_trust', 'gaze_targets_well_covered', 'gaze_threshold_floored', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected', 'calibration_ear_samples', 'calibration_runs'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
       session_index: session.session_index,
@@ -748,9 +751,16 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       // early in the Williams order. These three columns make that visible in the first file an
       // analyst opens.
       session_status: session.status,
-      conditions_completed: bundle.conditions.length,
-      session_complete: session.status === 'complete'
-        && bundle.conditions.length === session.conditions_per_session,
+      // The participant withdrew. It was carried only by the session JSON and the backup, so every
+      // CSV of a withdrawn sitting was identical to an ordinary paused one — and the R and Python
+      // templates read exactly these CSVs. Both templates now drop a withdrawn sitting at source.
+      withdrawn: isWithdrawn(session),
+      withdrawn_at: session.withdrawn_at != null ? new Date(session.withdrawn_at).toISOString() : '',
+      // FINISHED conditions, not condition rows: a row exists from the moment a condition starts, so
+      // a paused condition used to count as completed here too. See storage/conditionStatus.ts.
+      conditions_completed: bundle.conditions.filter(isConditionComplete).length,
+      session_complete: session.status === 'complete' && !isWithdrawn(session)
+        && bundle.conditions.filter(isConditionComplete).length === session.conditions_per_session,
       conditions_per_session: session.conditions_per_session, condition_offset: session.condition_offset,
       ambient_lux: session.ambient_lux, ambient_illumination_level: session.ambient_illumination_level,
       illumination_block: session.illumination_block,
