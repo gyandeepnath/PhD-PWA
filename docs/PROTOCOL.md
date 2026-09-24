@@ -78,9 +78,12 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                             and is not a display-independent attention probe. For the same reason the
                             RT disengagement flag counts commission errors only; omissions are
                             outcomes, not evidence of disengagement.
-        → ADAPTATION         60 s neutral grey (120 s when polarity switches)
         → BREAK_SCREEN       self-paced rest after every 2 conditions (CONFIG.BREAK_EVERY_N_CONDITIONS);
                              neutral "X of N done", no performance feedback; never after the last
+        → ADAPTATION         60 s neutral grey (120 s when polarity switches), ALWAYS immediately
+                             before the next condition — after the break, never before it. (The
+                             break is a light screen; placed after the grey field it left every
+                             post-break condition light-adapted, at 4 of 9 transitions.)
   → CVSQ_END            validated CVS-Q again (Δ from baseline = primary validated fatigue outcome)
   → SESSION_COMPLETE    thank-you; session marked complete
   → EXPORT_DASHBOARD    researcher: charts, QC, CSV/JSON export

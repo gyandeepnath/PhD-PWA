@@ -127,25 +127,37 @@ export function nextState(state: MachineState, nConditionsRaw: number = N_CONDIT
   // Condition loop.
   const loopIdx = LOOP_ORDER.indexOf(stage);
   if (loopIdx >= 0) {
-    // REACTION_TIME is the final measured sub-stage of a condition.
+    /*
+     * REACTION_TIME is the final measured sub-stage of a condition. Then, when one is due, the
+     * self-paced BREAK — and only THEN the grey adaptation field, immediately before the next
+     * condition.
+     *
+     * The order used to be REACTION_TIME -> ADAPTATION -> BREAK_SCREEN -> READING_TASK. The break is
+     * a cream screen, self-paced, often minutes long, so every condition that followed a break began
+     * light-adapted from it and the 60/120 s polarity-switch control ran BEFORE the break instead of
+     * before the condition: defeated at four of the nine transitions in a ten-condition sitting. A
+     * negative-polarity condition after a break started from a bright field, a positive one from a
+     * field matched to its own — adaptation state at onset a function of polarity, which is the
+     * confound the INSTRUCTIONS branch above was written to remove for condition 0 and which had
+     * survived at every break.
+     */
     if (stage === 'REACTION_TIME') {
-      return stepIndex < nConditions - 1
-        ? { stage: 'ADAPTATION', stepIndex }
-        : { stage: 'CVSQ_END', stepIndex };
-    }
-    if (stage === 'ADAPTATION') {
-      // stepIndex -1 is the pre-first-condition grey field: go straight into condition 0, with no
-      // break (nothing has happened yet to rest from).
-      if (stepIndex < 0) return { stage: 'READING_TASK', stepIndex: 0 };
-      // After resting, optionally insert a self-paced break, then move to the next condition.
+      if (stepIndex >= nConditions - 1) return { stage: 'CVSQ_END', stepIndex };
       return shouldBreakAfter(stepIndex + 1, nConditions)
         ? { stage: 'BREAK_SCREEN', stepIndex }
-        : { stage: 'READING_TASK', stepIndex: stepIndex + 1 };
+        : { stage: 'ADAPTATION', stepIndex };
+    }
+    if (stage === 'ADAPTATION') {
+      // stepIndex -1 is the pre-first-condition grey field. Either way the field names the
+      // condition it FOLLOWS and hands straight to the next one: nothing may come between the
+      // adaptation field and the condition it adapts the eye for.
+      return { stage: 'READING_TASK', stepIndex: stepIndex + 1 };
     }
     return { stage: LOOP_ORDER[loopIdx + 1], stepIndex };
   }
 
-  if (stage === 'BREAK_SCREEN') return { stage: 'READING_TASK', stepIndex: stepIndex + 1 };
+  // A break is followed by the grey field, never directly by a condition. See REACTION_TIME above.
+  if (stage === 'BREAK_SCREEN') return { stage: 'ADAPTATION', stepIndex };
   // NASA-TLX sits between the end CVS-Q and completion: both are session-level instruments, and
   // asking for workload AFTER the symptom questionnaire keeps the symptom rating from being
   // primed by having just reflected on how hard the session was.

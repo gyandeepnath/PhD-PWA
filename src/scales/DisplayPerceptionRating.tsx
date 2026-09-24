@@ -31,7 +31,7 @@ export function DisplayPerceptionRating({ background, text, onComplete }: Props)
 
   return (
     <div
-      className="screen w-full p-[6%] font-sans animate-fade-in"
+      className="screen w-full p-[6%] font-sans"
       style={{ background, color: text }}
     >
       <div style={{ width: '100%', maxWidth: 720, margin: '0 auto' }}>

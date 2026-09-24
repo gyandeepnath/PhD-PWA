@@ -185,7 +185,7 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
     /* Fixed-width centred column, for the reason given in ReadingTask: a percentage column reflows
        with the device's aspect ratio, and this passage is the same stimulus material read under the
        same conditions. See STIMULUS_COLUMN_PX. */
-    <div className="screen w-full animate-fade-in" style={{ background, color: text, display: 'flex', justifyContent: 'center' }}>
+    <div className="screen w-full" style={{ background, color: text, display: 'flex', justifyContent: 'center' }}>
     <div style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', padding: '4% 0', display: 'flex', flexDirection: 'column', height: '100%' }}>
       <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 15 }}>
         <strong>Find and tap every occurrence of:</strong>{' '}

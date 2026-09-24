@@ -95,3 +95,40 @@ describe('ocular metrics are not reported for a camera that was not running', ()
     expect(s.incomplete_blink_ratio).toBeNull();
   });
 });
+
+/**
+ * Nothing inside the condition-run may flash, or sit on the stimulus, in a colour that is not the
+ * condition's own. Static assertions over the source, with the caveat this file states at the top:
+ * they prove the rule is written, not that the component renders. Both defects were found by
+ * rendering the app and photographing it, and `scripts/platePreview.ts`-style rendering is how the
+ * next one will be found too.
+ */
+describe('the condition-run carries no polarity-correlated flash or chrome', () => {
+  const read = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8');
+  const CONDITION_SCREENS = [
+    'src/tasks/ReadingTask.tsx', 'src/tasks/TaskIntro.tsx', 'src/tasks/ComprehensionTask.tsx',
+    'src/tasks/VisualSearchTask.tsx', 'src/scales/FatigueScale.tsx',
+    'src/scales/DisplayPerceptionRating.tsx', 'src/scales/NasaTlx.tsx',
+  ];
+
+  it('does not fade condition screens in from the page colour', () => {
+    // Fading from opacity 0 over cream was a near-white flash on every black-background condition —
+    // 30 ms after "Begin reading" in N5 the display was #D6D5D3 — and invisible on every white one:
+    // a blink-triggering transient on one level of the polarity factor, at the onset of the
+    // primary outcome's window.
+    for (const f of CONDITION_SCREENS) expect(read(f), f).not.toMatch(/animate-fade-in/);
+  });
+
+  it('paints the page itself in the condition background during the run', () => {
+    const css = read('src/styles/theme.css');
+    expect(css).toMatch(/body \{[^}]*background: var\(--vl-page-bg\)/);
+    expect(css).toMatch(/#root \{[^}]*background: var\(--vl-page-bg\)/);
+    expect(read('src/experiment/Experiment.tsx')).toMatch(/setProperty\('--vl-page-bg', pageGround\)/);
+  });
+
+  it('keeps the progress chrome off every condition screen, and draws Pause in the screen\'s own ink', () => {
+    const src = read('src/experiment/Experiment.tsx');
+    expect(src).toMatch(/const showProgress = [^;]*&& !isInLoop\(machine\.stage\)/);
+    expect(src).toMatch(/border: `1px solid \$\{stageInk\.ink\}`, background: 'transparent', color: stageInk\.ink/);
+  });
+});

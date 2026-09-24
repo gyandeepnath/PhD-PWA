@@ -99,8 +99,28 @@ describe('stage machine', () => {
     const expectedBreaks = Array.from({ length: N_CONDITIONS }, (_, i) => i)
       .filter((i) => (i + 1) % 2 === 0 && i < N_CONDITIONS - 1);
     expect(breaks.map((b) => b.stepIndex)).toEqual(expectedBreaks);
-    // Each BREAK_SCREEN leads into the next condition's reading task.
-    expect(nextState({ stage: 'BREAK_SCREEN', stepIndex: 1 })).toEqual({ stage: 'READING_TASK', stepIndex: 2 });
+    // Each BREAK_SCREEN leads into the grey adaptation field, and only that into the next condition.
+    expect(nextState({ stage: 'BREAK_SCREEN', stepIndex: 1 })).toEqual({ stage: 'ADAPTATION', stepIndex: 1 });
+    expect(nextState({ stage: 'ADAPTATION', stepIndex: 1 })).toEqual({ stage: 'READING_TASK', stepIndex: 2 });
+  });
+
+  it('puts the adaptation field IMMEDIATELY before every condition, including after a break', () => {
+    /*
+     * The order was REACTION_TIME -> ADAPTATION -> BREAK_SCREEN -> READING_TASK. The break is a
+     * cream, self-paced screen, so every condition after a break began light-adapted from it and the
+     * polarity-switch control ran before the break instead of before the condition — defeated at
+     * four of nine transitions, and the effect on onset adaptation depended on polarity. Asserted
+     * over the whole walk rather than at one step, so no future insertion can land between the
+     * grey field and the condition it adapts the eye for.
+     */
+    for (const n of [N_CONDITIONS, 5]) {
+      const visited = walk(n);
+      visited.forEach((v, i) => {
+        if (v.stage === 'READING_TASK') {
+          expect(visited[i - 1]?.stage, `reading ${v.stepIndex} of ${n}`).toBe('ADAPTATION');
+        }
+      });
+    }
   });
 
   it('shouldBreakAfter only fires on multiples of N before the final condition', () => {

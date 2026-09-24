@@ -195,7 +195,7 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
      * stimulus field itself and nothing about this is visible to a participant.
      */
     <div
-      className="screen w-full animate-fade-in"
+      className="screen w-full"
       style={{ background, color: text, display: 'flex', justifyContent: 'center' }}
     >
     <div

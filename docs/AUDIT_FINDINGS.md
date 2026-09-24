@@ -2825,3 +2825,76 @@ backgrounding.
 P2 (blue on white), P4 (yellow on white) and N3 (red on black) at the tablet's layout viewport: each
 names and shows its own colour, and the stimuli are drawn in it. 964 tests, 1236 stress checks,
 verify green.
+
+## Round 42 — three things the participant saw that no code audit had caught
+
+The investigator's complaint was that nobody had checked the app against the protocol by looking at
+it. An agent was sent to do exactly that: drive every stage of all ten conditions at the tablet's two
+viewports and photograph each one — 574 screenshots, each with the computed colour of every text
+node beside it. Three of its findings bear directly on the primary outcome, and each was confirmed
+here from the screenshots before anything was changed.
+
+### A flash at the onset of reading, on one level of the polarity factor
+
+Every condition screen used Tailwind's `animate-fade-in`: opacity 0 → 1 over 350 ms, on top of
+`#root`, which is cream. On a white-background condition that fade is cream-to-white and invisible.
+On a black-background condition it is a flash: **30 ms after "Begin reading" in N5 the whole display
+was `#D6D5D3`** (relative luminance 0.67), reaching black only at about 350 ms. And "Begin reading" is
+the tap that opens the blink-measurement window (`onBegin` → `tracking.beginCondition()`).
+
+So a luminance transient capable of triggering blinks was delivered at the onset of the primary
+outcome's window, on every negative-polarity condition and on no positive-polarity one — about seven
+times per condition, since every intro, rating and task screen faded the same way. A confound on the
+primary outcome, correlated with the primary factor, from a decorative animation.
+
+The fades are removed from all seven condition screens. As a second guard, `body` and `#root` now
+take their colour from `--vl-page-bg`, which `Experiment.tsx` sets to the condition's own background
+for the whole run (and to the adaptation grey on the grey field), so no frame of any future component
+can show cream behind a stimulus. Re-photographed at the same instant: black.
+
+### Chrome on the stimulus, brightest exactly where it mattered most
+
+The progress bar, its label and the Pause chip were drawn in fixed colours over every condition
+screen, reading included: a `#E5E2DC` track (16:1 against black), a `#5A5A7A` label, and a chip at
+`rgba(255,255,255,.85)`. On white they were faint. **On black they were the brightest objects on the
+display**, in peripheral vision for the whole reading exposure — salience a function of polarity. The
+bright part of the track also shrank as the session went on, so it co-varied with serial position.
+
+This file already contained the argument. `Experiment.tsx` hides the tracking chip during these
+stages because it is "a high-contrast blob on a light condition and nearly invisible on a dark one" —
+and the chrome beside it, with the same property, was left in place.
+
+Now no progress chrome is drawn anywhere in the condition-run; "X of N done" appears on the break
+screen, where it belongs. The Pause chip stays, because the operator must be able to stop, but it is
+drawn in the current screen's own ink on no ground, so it carries no contrast the text on that screen
+does not. The ⏸ glyph, which rendered as a box in Chromium, is gone.
+
+### Adaptation defeated at every break
+
+The loop ran `REACTION_TIME → ADAPTATION → BREAK_SCREEN → READING_TASK`. The break is a cream,
+self-paced screen, often minutes long. So every condition after a break began light-adapted from it,
+and the 60/120 s polarity-switch control had been delivered *before* the break rather than before the
+condition — defeated at four of nine transitions in a ten-condition sitting. A negative-polarity
+condition after a break started from a bright field; a positive one from a field already matched to
+its own. That is adaptation state at onset as a function of polarity — precisely the confound the
+`INSTRUCTIONS` branch of the same state machine was written to remove for condition 0, surviving at
+every break.
+
+The order is now `REACTION_TIME → BREAK_SCREEN → ADAPTATION → READING_TASK`. A test walks the whole
+sitting and asserts that every reading task is preceded immediately by the grey field, so no future
+insertion can land between them; the mutation that sends the break straight to reading fails it.
+The resume path enters at the break on a break boundary, so a resumed sitting keeps its mid-session
+illuminance check and still gets its field afterwards. The break screen also gained a Pause button: it
+had none, so an operator who wanted to stop at a break had to advance into the next condition's
+reading screen first, creating a row — and a spurious attempt 2 — for a passage never shown.
+
+Confirmed in the browser: the driven stage order reads `REACTION_TIME > BREAK_SCREEN > ADAPTATION >
+READING_TASK`, and the full-sitting and split-sitting end-to-end runs both complete. 968 tests,
+1236 stress checks, verify green.
+
+The same audit found a good deal more, recorded here so it is not lost while it waits: the
+visual-search passage is 2.5–2.7 screens tall with no scroll cue, and the share of targets visible
+without scrolling ranges from 1 in 10 to 12 in 12 by passage; display-perception sliders start with
+the track pre-filled to the midpoint while reading "not set"; secondary text is multiplied by opacity
+and falls to 1.5–1.7:1 in the low-contrast conditions; reading pages range from 40% to 98% full under
+the same per-page unlock; and several setup screens are misaligned. Those are the next rounds.

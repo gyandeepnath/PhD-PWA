@@ -18,7 +18,7 @@ import { annotationSegmentSteps, blockPlan, isAnnotationSubsample, type PlannedS
 import { CONFIG, isE2ETimingActive } from './config';
 import {
   initialState, nextState, progressPercent, firstUnsatisfiedSetupStage, resumeOwesBaselines,
-  type MachineState,
+  shouldBreakAfter, type MachineState,
 } from './stateMachine';
 import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
 import { put, get, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows, clearSessionStageRows, storageIsFull } from '@/storage/db';
@@ -345,10 +345,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
          * the transition advances to READING_TASK at stepIndex + 1. loopTarget 0 therefore gives
          * -1, which is exactly the pre-first-condition case a fresh sitting takes.
          *
-         * Two things follow from reusing the existing step rather than bolting on a special case:
+         * Two things follow from reusing the existing steps rather than bolting on a special case:
          * the polarity-switch duration is computed across the interruption from the real pair of
          * conditions, and a resume landing on a break boundary still gets its BREAK_SCREEN — which
-         * is where the mid-sitting illuminance prompt lives.
+         * is where the mid-sitting illuminance prompt lives. The break now comes BEFORE the grey
+         * field (see nextState), so a resume on a break boundary enters at the break and the field
+         * follows it, exactly as an uninterrupted sitting does.
          *
          * RESIDUAL, recorded rather than silently decided: the duration rule compares the previous
          * condition's polarity with the next one's, which assumes the previous condition is what
@@ -356,7 +358,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
          * not hold — the room is. Whether a resume should always take the longer switch field is a
          * methods decision, not one to make here.
          */
-        setMachine({ stage: 'ADAPTATION', stepIndex: loopTarget - 1 });
+        setMachine(loopTarget > 0 && shouldBreakAfter(loopTarget, sittingPlan.length)
+          ? { stage: 'BREAK_SCREEN', stepIndex: loopTarget - 1 }
+          : { stage: 'ADAPTATION', stepIndex: loopTarget - 1 });
       }
       setResuming(false);
     })();
@@ -803,7 +807,43 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   // ===== RENDER =====
   const nConditions = plan.length || N_CONDITIONS;
   const percent = progressPercent(machine, nConditions);
-  const showProgress = machine.stage !== 'SESSION_INIT' && machine.stage !== 'EXPORT_DASHBOARD';
+  /*
+   * NOTHING INSIDE THE CONDITION-RUN MAY BE DRAWN IN A COLOUR THAT IS NOT THE CONDITION'S OWN.
+   *
+   * The progress bar, its label and the Pause chip were drawn in FIXED colours on top of every
+   * stimulus screen, reading included: a #E5E2DC track (16:1 against black), a #5A5A7A label and a
+   * near-white chip. On a white-background condition they were faint; on a black one they were the
+   * brightest objects on the display, in peripheral vision for the whole exposure that produces the
+   * primary outcome — so their salience was a function of the polarity factor. And the bright part
+   * of the track shrank as the session went on, so it co-varied with serial position as well.
+   *
+   * This file already made exactly that argument about the tracking chip, hidden during these
+   * stages because "it is a high-contrast blob on a light condition and nearly invisible on a dark
+   * one". The same reasoning had not been applied to the chrome beside it.
+   *
+   * So: no progress chrome anywhere in the condition-run (it shows on the break screen, where
+   * "X of N done" belongs), and the Pause chip — which the operator must keep — is drawn in the
+   * current screen's OWN ink on a transparent ground, so it adds no contrast the text on that screen
+   * does not already carry.
+   */
+  const showProgress = machine.stage !== 'SESSION_INIT' && machine.stage !== 'EXPORT_DASHBOARD'
+    && !isInLoop(machine.stage);
+  /** The ink and ground of the screen currently on display, for anything overlaid on it. */
+  const stageInk = machine.stage === 'ADAPTATION'
+    ? { ground: CONFIG.ADAPTATION_COLOR, ink: '#FFFFFF' }
+    : isInLoop(machine.stage) && cond ? { ground: cond.background, ink: cond.text } : null;
+  /*
+   * The colour BEHIND every screen follows the stage. See --vl-page-bg in theme.css: in-loop screens
+   * used to fade in over cream, a near-white flash at the onset of reading on every black-background
+   * condition and an invisible one on every white-background condition.
+   */
+  const pageGround = stageInk?.ground ?? null;
+  useEffect(() => {
+    const root = document.documentElement;
+    if (pageGround) root.style.setProperty('--vl-page-bg', pageGround);
+    else root.style.removeProperty('--vl-page-bg');
+    return () => { root.style.removeProperty('--vl-page-bg'); };
+  }, [pageGround]);
   // Neutral "Condition X of N" + a rough time estimate (≈9 min/condition incl. rest), shown only
   // inside the per-condition loop and the break — never any performance information.
   const inLoopish = isInLoop(machine.stage) || machine.stage === 'BREAK_SCREEN';
@@ -1420,7 +1460,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    * come back once the block has finished and the app is only writing, because that is exactly the
    * moment a rejected write can strand the operator with no control at all.
    */
-  const canPause = isInLoop(machine.stage)
+  /*
+   * The break screen is where an operator most naturally wants to stop, and it had no Pause: it is
+   * not part of LOOP_ORDER, so the only way to pause at a break was to advance into the next
+   * condition's reading screen — creating a condition row, and a spurious attempt 2, for a passage
+   * that was never shown.
+   */
+  const canPause = (isInLoop(machine.stage) || machine.stage === 'BREAK_SCREEN')
     && (machine.stage !== 'REACTION_TIME' || rtBlockFinished)
     && !!session;
 
@@ -1522,7 +1568,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
              * (inflating comprehension and reading speed through prior exposure) and appended a
              * second set of reaction trials under the same condition_id.
              */
-            const done = machine.stage === 'ADAPTATION';
+            // Both the break and the grey field come after condition k has finished.
+            const done = machine.stage === 'ADAPTATION' || machine.stage === 'BREAK_SCREEN';
             const target = done ? machine.stepIndex + 1 : machine.stepIndex;
             const msg = done
               ? 'Pause and exit to the session manager? This condition is complete; the session will resume at the next one.'
@@ -1534,9 +1581,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             }
           }}
           className="font-lab text-xs"
-          style={{ position: 'fixed', top: 10, left: 12, zIndex: 45, padding: '5px 10px', borderRadius: 8, border: '1px solid #d8d4cc', background: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
+          aria-label="Pause"
+          style={stageInk
+            // In the condition-run: the screen's own ink on no ground at all. See showProgress above.
+            ? { position: 'fixed', top: 10, left: 12, zIndex: 45, padding: '5px 10px', borderRadius: 8, border: `1px solid ${stageInk.ink}`, background: 'transparent', color: stageInk.ink, cursor: 'pointer' }
+            : { position: 'fixed', top: 10, left: 12, zIndex: 45, padding: '5px 10px', borderRadius: 8, border: '1px solid #d8d4cc', background: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
         >
-          ⏸ Pause
+          Pause
         </button>
       )}
       {view}

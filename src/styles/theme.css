@@ -34,10 +34,27 @@ html {
   overscroll-behavior: none;
 }
 
+/*
+ * --vl-page-bg: the colour BEHIND every screen. Cream by default; set to the active condition's
+ * background for the whole condition-run by Experiment.tsx (see usePageBackground).
+ *
+ * WHY. Every in-loop screen used to fade in from opacity 0 over #root's cream. On a black-background
+ * condition that is a near-white flash: 30 ms after "Begin reading" in N5 the whole display was
+ * #D6D5D3, reaching black only at ~350 ms — at the exact moment the blink-measurement window opens.
+ * On a white-background condition the same fade is cream-to-white and invisible. So a luminance
+ * transient able to trigger blinks was applied to ONE LEVEL of the polarity factor, at the onset of
+ * the primary outcome's window, about seven times per condition. The fades were removed from the
+ * condition screens; this variable is the second guard, so that no frame of any future component
+ * can show cream behind a stimulus either.
+ */
+:root {
+  --vl-page-bg: #f8f7f5;
+}
+
 body {
   width: 100%;
   height: 100%;
-  background: #f8f7f5;
+  background: var(--vl-page-bg);
   font-family: 'Roboto', 'Helvetica Neue', Helvetica, Arial, ui-sans-serif, system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
@@ -53,7 +70,7 @@ body {
   transform: scale(var(--vl-scale));
   width: calc(100% / var(--vl-scale));
   height: calc(100% / var(--vl-scale));
-  background: #f8f7f5;
+  background: var(--vl-page-bg);
   /*
    * overflow: hidden is deliberate — the stimulus screens must not scroll, because a scrolled
    * reading page changes the exposure. It means, though, that any screen taller than the viewport
