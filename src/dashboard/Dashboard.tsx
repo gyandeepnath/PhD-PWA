@@ -92,7 +92,20 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
     return () => { cancelled = true; };
   }, [sessions]);
 
-  const summaries = useMemo(() => (bundle ? buildConditionSummaries(bundle) : []), [bundle]);
+  /*
+   * `summaries` is FINISHED condition-runs only, and every figure on this page is drawn from it.
+   *
+   * It used to be every condition row, and a row exists from the moment a condition starts. So a
+   * condition the operator had just PAUSED — which the Pause dialog says "will be restarted on
+   * resume" — appeared here with its reading, comprehension, ratings and eye metrics, averaged into
+   * every chart as a finished measurement. The investigator found it by pausing a sitting and opening
+   * this dashboard. Filtering here, once, at the source, rather than at each of the thirty-odd uses
+   * below, is what guarantees none of them can be missed; `unfinished` is shown separately, by name.
+   */
+  const allSummaries = useMemo(() => (bundle ? buildConditionSummaries(bundle) : []), [bundle]);
+  const summaries = useMemo(() => allSummaries.filter((s) => s.condition_complete), [allSummaries]);
+  const unfinished = useMemo(() => allSummaries.filter((s) => !s.condition_complete), [allSummaries]);
+  const plannedConditions = bundle?.session.conditions_per_session ?? allSummaries.length;
   const baseline = bundle ? baselineFatigueMean(bundle) : null;
   const mediaCount = (bundle?.media ?? []).length;
 
@@ -328,10 +341,32 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
         </div>
       )}
 
+      {bundle && unfinished.length > 0 && (
+        <div
+          data-testid="unfinished-conditions"
+          className="font-lab text-sm"
+          style={{ margin: '0 0 14px', padding: '12px 14px', borderRadius: 10, border: '1px solid #c98a22', background: '#fff6e5', color: '#5a3a00', lineHeight: 1.55 }}
+        >
+          <strong>
+            {unfinished.length === 1 ? '1 condition was' : `${unfinished.length} conditions were`} started and did not finish
+          </strong>{' '}
+          — {unfinished.map((u) => `${u.condition_label} (position ${u.session_position + 1})`).join(', ')}.
+          Paused or interrupted part-way, so {unfinished.length === 1 ? 'it is' : 'they are'} not a measurement and{' '}
+          {unfinished.length === 1 ? 'is' : 'are'} left out of every figure on this page. A paused condition restarts from the
+          beginning when the sitting is resumed. The partial rows are kept in the export, flagged
+          condition_complete = FALSE.
+        </div>
+      )}
+
       {bundle && tab === 'overview' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           {/*
-            Counted on hit_rate, not on mean_rt_hits_ms.
+            Counted on completion, and only completion. condition_complete is set when the
+            reaction-time block ends, whatever it scored — so a participant who stopped responding
+            still ran the condition and it still counts, which is why this was once moved off
+            mean_rt_hits_ms (null for a block with no valid hits). And a condition that was paused
+            part-way does NOT count, which counting on hit_rate never distinguished from "started".
+            The earlier note, kept for its reasoning: counted on hit_rate, not on mean_rt_hits_ms.
             mean_rt_hits_ms is null when there were no valid non-anticipatory hits — which is exactly
             what a participant who stopped responding to the go target produces. That condition RAN,
             and produced a damning result, and this tile called it "not completed": the operator reads
@@ -340,7 +375,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
             "a hit rate of zero is a real and damning measurement... not the same statement as 'this
             block contained no signal trials'".
           */}
-          <Stat label="Conditions completed" value={`${summaries.filter((s) => s.hit_rate != null).length}/${summaries.length}`} />
+          <Stat label="Conditions completed" value={`${summaries.length}/${plannedConditions}`} />
           <Stat label="Mean RT (hits)" value={fmt(avg(summaries.map((s) => s.mean_rt_hits_ms)), 'ms')} />
           <Stat label="Mean fatigue Δ vs baseline" value={fmt(avg(summaries.map((s) => s.fatigue_delta)))} />
           {/*

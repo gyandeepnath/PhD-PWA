@@ -45,6 +45,10 @@ function bundle(opts: {
   offset?: number;
   /** The build that collected it; null to model a record carrying no stamp at all. */
   provenance?: Record<string, unknown> | null;
+  /** Indices of conditions that were STARTED and not finished (no completed_at). */
+  unfinished?: number[];
+  /** attempt_number per condition index, for redone runs. */
+  attempts?: Record<number, number>;
 }): SessionBundle {
   const positions = opts.positions ?? opts.conditions.map((_, i) => (opts.offset ?? 0) + i);
   return {
@@ -60,8 +64,13 @@ function bundle(opts: {
     participant: opts.withParticipant === false
       ? undefined
       : { participant_id: opts.pid, enrolment_number: opts.enrolment ?? 1 },
+    // A finished condition always carries completed_at in the real app — it is stamped in the same
+    // handler that writes the last measurement of the run. These stubs used to omit it, which
+    // described a state the app never produces and could not tell a finished run from a paused one.
     conditions: opts.conditions.map((label, i) => ({
       condition_id: `${opts.sid}-c${i}`, condition_label: label, session_position: positions[i],
+      started_at: opts.start, completed_at: opts.unfinished?.includes(i) ? null : opts.start + 1,
+      attempt_number: opts.attempts?.[i] ?? 1,
     })),
   } as unknown as SessionBundle;
 }

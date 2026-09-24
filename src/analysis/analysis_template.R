@@ -83,6 +83,32 @@ wide        <- read_export("10_wide_summary.csv")   # carries session_index per 
 participant <- read_export("11_participant.csv")   # demographics + vision covariates
 cvsq        <- read_export("13_cvsq.csv")          # CVS-Q symptom questionnaire (per item)
 
+# --- UNFINISHED CONDITION-RUNS ARE NOT MEASUREMENTS ------------------------------------------
+# A condition that was started and not finished — paused, crashed, or abandoned part-way — leaves
+# real but partial rows in every per-condition file. The Pause dialog tells the operator it "will be
+# restarted on resume"; if the sitting never was, the rows stay. Until condition_complete existed,
+# nothing in this bundle said which runs had finished, and this template modelled them all.
+# Removed here, ONCE, at the source — from every per-condition table before any join — so that no
+# model further down can pick one up by a route nobody thought of. Not a sensitivity choice: a run
+# that did not end is not a measurement of its condition. Exports older than the column carry no
+# unfinished runs to drop, and are passed through unchanged.
+if ("condition_complete" %in% names(conditions)) {
+  unfinished_ids <- conditions$condition_id[!is.na(conditions$condition_complete) &
+                                              !as.logical(conditions$condition_complete)]
+  cat("\nunfinished condition-runs removed before modelling (paused or interrupted):",
+      length(unfinished_ids), "\n")
+  drop_unfinished <- function(d) {
+    if ("condition_id" %in% names(d)) d[!(d$condition_id %in% unfinished_ids), , drop = FALSE] else d
+  }
+  conditions    <- drop_unfinished(conditions)
+  fatigue       <- drop_unfinished(fatigue)
+  comprehension <- drop_unfinished(comprehension)
+  rt_summary    <- drop_unfinished(rt_summary)
+  eye_metrics   <- drop_unfinished(eye_metrics)
+  quality       <- drop_unfinished(quality)
+  wide          <- drop_unfinished(wide)
+}
+
 # --- Quality control: optionally exclude disengaged conditions -----------------------------
 # Boredom/disengagement over the long session mimics fatigue and adds noise. The engagement
 # flag (good/warn/bad) lets you run a sensitivity analysis: fit models on the full set AND on the

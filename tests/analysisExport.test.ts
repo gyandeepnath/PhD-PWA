@@ -59,6 +59,10 @@ interface SittingSpec {
   provenance?: Record<string, unknown>;
   /** Eye-metrics rows to attach, by position. Absent means the condition has NO eye record. */
   eyeAt?: Record<number, Record<string, unknown>>;
+  /** Positions that were STARTED and not finished (no completed_at). */
+  unfinished?: number[];
+  /** attempt_number by position, for redone runs. */
+  attempts?: Record<number, number>;
 }
 
 /** A bundle carrying only what buildLongRows and checkJoin read. */
@@ -78,6 +82,10 @@ function sitting(pid: string, s: SittingSpec): SessionBundle {
     adaptation_ms_before: 60000,
     passage_repeat_number: 1,
     reading_time_ms: 180000,
+    // Finished unless told otherwise, as a real finished condition always is. See joinIntegrity.test.ts.
+    started_at: s.start,
+    completed_at: s.unfinished?.includes(p) ? null : s.start + 1,
+    attempt_number: s.attempts?.[p] ?? 1,
   }));
   const eyeMetrics = Object.entries(s.eyeAt ?? {}).map(([p, rec]) => ({
     condition_id: `${s.sid}-c${p}`, session_id: s.sid, ...rec,
@@ -594,5 +602,52 @@ describe('a mixed cohort of single and split sittings', () => {
     const verdict = ds.integrity.participants[0];
     expect(verdict.condition_runs).toBe(N_CONDITIONS / 2);
     expect(verdict.excluded_by.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * A condition that was STARTED and did not finish is not a measurement of its condition.
+ *
+ * The investigator found this by pausing a sitting and opening the dashboard: the paused condition's
+ * data was there, as if complete. `completed_at` is stamped only when the reaction-time block ends,
+ * and nothing downstream read it. In the pooled file it was worse: coverage counted condition ROWS,
+ * a row exists from the moment a condition starts, so a sitting paused in its tenth condition and
+ * never resumed passed the complete-case check and every one of its ten rows — including an entirely
+ * empty tenth — was exported analysable = TRUE.
+ */
+describe('an unfinished condition is kept, flagged, and never analysable', () => {
+  it('does not let a sitting paused in its last condition pass as a complete case', () => {
+    const { rows, ds } = long([
+      sitting('P20', { sid: 'only', start: 1, illumination: 'moderate', block: 0, status: 'in_progress', unfinished: [9] }),
+    ]);
+    // Kept: the paused condition's rows are real data and the rule here is that nothing is dropped.
+    expect(rows).toHaveLength(N_CONDITIONS);
+    const paused = rows.find((r) => r.session_position === '9')!;
+    expect(paused.condition_complete).toBe('false');
+    expect(paused.analysable).toBe('false');
+    expect(paused.exclusion_reason).toMatch(/condition_incomplete/);
+    // And the participant is not a complete case: nine finished runs is not ten.
+    expect(ds.integrity.participants[0].analysable).toBe(false);
+    expect(ds.integrity.participants[0].excluded_by).toContain('condition_incomplete');
+    expect(rows.every((r) => r.analysable === 'false')).toBe(true);
+  });
+
+  it('marks every finished row complete, so the flag carries information', () => {
+    const { rows } = long([sitting('P21', { sid: 'only', start: 1, illumination: 'moderate', block: 0 })]);
+    expect(rows.every((r) => r.condition_complete === 'true')).toBe(true);
+    expect(rows.every((r) => r.analysable === 'true')).toBe(true);
+  });
+
+  it('carries attempt_number into the pooled file and warns on a redo, without excluding', () => {
+    // A redo finished, and its ocular exposure is fresh; its reading, comprehension and search are
+    // second-exposure values. That is for the analyst to decide, so: a warning and a column, which
+    // until now existed only on 02_conditions.csv.
+    const { rows, ds } = long([
+      sitting('P22', { sid: 'only', start: 1, illumination: 'moderate', block: 0, attempts: { 3: 2 } }),
+    ]);
+    expect(rows.find((r) => r.session_position === '3')!.attempt_number).toBe('2');
+    expect(rows.find((r) => r.session_position === '4')!.attempt_number).toBe('1');
+    expect(ds.integrity.issues.some((i) => i.code === 'condition_redone' && i.severity === 'warning')).toBe(true);
+    expect(ds.integrity.participants[0].analysable).toBe(true);
   });
 });

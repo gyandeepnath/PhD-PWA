@@ -82,6 +82,8 @@ export const ANALYSIS_LONG_COLUMNS = [
   'gaze_calibrated', 'gaze_trust', 'gaze_targets_well_covered',
   'qc_overall', 'e2e_timing', 'session_status', 'withdrawn',
   'sitting_split_reason',
+  // --- was this row a finished, first-attempt, uninterrupted run? -------------------------------
+  'condition_complete', 'attempt_number', 'condition_interrupted',
   'analysable', 'exclusion_reason',
 ] as const;
 
@@ -436,8 +438,28 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         // A withdrawal is not a data-quality flag, it is a standing instruction. Present so the
         // exclusion is auditable; the row must never be modelled.
         withdrawn: s.withdrawn_at != null,
-        analysable: ctx.analysable,
-        exclusion_reason: ctx.exclusion,
+        /*
+         * The three facts that say whether this ROW is a measurement of its condition, which the
+         * pooled file — the one people model from — carried none of. condition_complete: the run
+         * finished (see storage/conditionStatus.ts). attempt_number: above 1, the passage was read
+         * again after an interruption, so reading, comprehension and search on this row are
+         * second-exposure values; it was recorded only on 02_conditions.csv. condition_interrupted:
+         * the app was backgrounded or the tablet held in portrait for long enough to disturb the
+         * timed tasks; it was flagged only in the per-session quality file.
+         */
+        condition_complete: sum.condition_complete,
+        attempt_number: sum.attempt_number,
+        condition_interrupted: sum.condition_interrupted,
+        /*
+         * An unfinished condition is never analysable, whatever the participant-level verdict. The
+         * join check now counts only finished runs toward coverage, so a participant with one is
+         * already excluded from the complete-case set; this makes the row itself say so too, and
+         * names the reason on the row rather than only on the participant.
+         */
+        analysable: ctx.analysable && sum.condition_complete,
+        exclusion_reason: sum.condition_complete
+          ? ctx.exclusion
+          : [ctx.exclusion, 'condition_incomplete'].filter(Boolean).join(';'),
       });
     }
   }

@@ -17,6 +17,7 @@
  * which are not, and why.
  */
 import type { SessionBundle } from './gather';
+import { isConditionComplete } from './conditionStatus';
 import type { Provenance } from './types';
 import { N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 import type { IlluminationLevel } from '@/experiment/illumination';
@@ -284,6 +285,41 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
         `Both sittings ran under ${known[0]}. Illumination is the session-level independent variable; `
         + 'with only one of its levels this participant carries no illumination contrast at all, and '
         + 'pooling them would silently average two replicates of the same cell.');
+    }
+
+    /*
+     * --- unfinished and redone runs ----------------------------------------------------------
+     *
+     * Coverage below counts condition ROWS, and a row exists from the moment a condition starts. So
+     * a sitting paused in its tenth condition and never resumed had ten rows, passed coverage, and
+     * every row — including an entirely empty tenth — was exported analysable. Only a FINISHED run
+     * is a measurement of its condition (storage/conditionStatus.ts), so an unfinished one is a
+     * blocking issue in its own right: the participant is not a complete case.
+     *
+     * A REDONE run is different. It finished, and its ocular exposure is fresh, but the passage,
+     * the questions and the search target were all seen before, so the reading, comprehension and
+     * search values on it are second-exposure. That is a warning: the analyst decides, and the
+     * row-level attempt_number is there to decide with.
+     */
+    const unfinished = ordered.flatMap((b) => b.conditions
+      .filter((c) => !isConditionComplete(c))
+      .map((c) => ({ label: c.condition_label, sid: b.session.session_id })));
+    if (unfinished.length) {
+      add('blocking', 'condition_incomplete',
+        `${unfinished.length} condition-run(s) started and did not finish: `
+        + `${unfinished.map((u) => u.label).join(', ')}. Paused, crashed or abandoned part-way — the rows `
+        + 'are kept and flagged condition_complete = FALSE, but they are not measurements of their '
+        + 'conditions and the participant is not a complete case.',
+        unfinished.length === 1 ? unfinished[0].sid : null);
+    }
+    const redone = ordered.flatMap((b) => b.conditions
+      .filter((c) => isConditionComplete(c) && (c.attempt_number ?? 1) > 1)
+      .map((c) => `${c.condition_label} (attempt ${c.attempt_number})`));
+    if (redone.length) {
+      add('warning', 'condition_redone',
+        `${redone.length} condition-run(s) finished only on a restart after an interruption: `
+        + `${redone.join(', ')}. The passage, questions and search target had already been seen, so `
+        + 'reading, comprehension and search on those rows are second-exposure values. See attempt_number.');
     }
 
     // --- condition coverage --------------------------------------------------------------

@@ -2898,3 +2898,53 @@ without scrolling ranges from 1 in 10 to 12 in 12 by passage; display-perception
 the track pre-filled to the midpoint while reading "not set"; secondary text is multiplied by opacity
 and falls to 1.5–1.7:1 in the low-contrast conditions; reading pages range from 40% to 98% full under
 the same per-page unlock; and several setup screens are misaligned. Those are the next rounds.
+
+## Round 43 — a paused condition was shown, averaged and exported as a finished measurement
+
+**Reported by the investigator:** pause a sitting part-way through a condition, open the analysis
+dashboard, and the paused condition's data is there, filled in as if it had run.
+
+**The root.** A condition row is created when the condition starts, and each stage writes its own
+rows as it finishes — reading and eye metrics, then comprehension, perception, post-condition
+fatigue, visual search — and only the reaction-time handler stamps `completed_at`. Nothing downstream
+ever read that stamp. So a condition the Pause dialog itself describes as "will be restarted on
+resume" was, until resumed, presented everywhere as a measurement: on the dashboard, in its charts,
+in the cross-participant cohort view, in both export products and in the R template's models.
+
+The interruption audit that ran alongside found the worst form of it. The pooled file's
+complete-case check counted condition **rows**, and a row exists from the moment a condition starts,
+so a sitting **paused in its tenth condition and never resumed** passed as complete: every one of its
+ten rows was exported `analysable = TRUE`, including when the tenth was entirely empty. That is the
+column the codebook tells the analyst to filter on.
+
+**The fix, at one definition and every consumer.**
+
+- `storage/conditionStatus.ts` holds the single definition, `isConditionComplete` — `completed_at`
+  set — because that stamp is written in the same handler that commits a run's last measurement and
+  nowhere else.
+- **Dashboard:** `summaries` is now finished runs only, filtered once at the source so none of the
+  thirty-odd figures below it can be missed; unfinished runs are named in a notice at the top of every
+  tab, and the "Conditions completed" tile counts completion against the planned total.
+- **Cohort view:** an unfinished run is counted and kept out of the outcome mean and the
+  position-balance check — the tab that exists to show whether conditions behave as expected.
+- **Pooled export:** `condition_complete`, `attempt_number` and `condition_interrupted` are new columns;
+  an unfinished row is never analysable and carries `condition_incomplete` in its exclusion reason;
+  the join check raises `condition_incomplete` as blocking and `condition_redone` as a warning.
+- **Per-session export:** `condition_complete` on `02_conditions.csv`, and `condition_complete` plus
+  `attempt_number` on `10_wide_summary.csv` and `12_quality_flags.csv`, all documented.
+- **R template:** unfinished runs are removed once, at the source, from every per-condition table
+  before any join, with the count printed.
+
+Nothing is deleted. The standing rule here is to pass data through and flag it; a paused condition's
+reading exposure may be usable ocular data in a sensitivity analysis. What changed is that nothing
+presents it as a finished condition.
+
+**Two test fixtures were wrong in the same way.** The join-check and pooled-export test helpers built
+"complete" sittings whose conditions had no `completed_at` — a state the app never produces. They were
+corrected rather than the check being bent to accept them.
+
+**Verified four ways.** Unit tests on each layer; the R gate now carries one paused condition in its
+twelve-participant dataset and asserts the template reports removing exactly one and fits 119 rows,
+not 120 (switching the filter off fails both); the reverted join check fails its test; and in the
+browser, a sitting paused on condition 2's display-perception screen opens a dashboard that names P2
+as unfinished and reads "Conditions completed 1/10". 974 tests, 1256 stress checks, verify green.

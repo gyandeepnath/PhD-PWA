@@ -47,7 +47,8 @@ describe('conditions completed counts blocks that ran, not blocks that scored', 
      * result, and the tile called it not completed: the operator re-runs a condition that did happen.
      */
     const src = dashboardSource();
-    expect(src).toMatch(/Conditions completed[\s\S]{0,400}s\.hit_rate != null/);
+    // Now counted on completion itself: `summaries` holds finished runs only.
+    expect(src).toMatch(/<Stat label="Conditions completed" value=\{`\$\{summaries\.length\}\/\$\{plannedConditions\}`\} \/>/);
     expect(src).not.toMatch(/Conditions completed[\s\S]{0,200}s\.mean_rt_hits_ms != null/);
   });
 
@@ -130,5 +131,28 @@ describe('the condition-run carries no polarity-correlated flash or chrome', () 
     const src = read('src/experiment/Experiment.tsx');
     expect(src).toMatch(/const showProgress = [^;]*&& !isInLoop\(machine\.stage\)/);
     expect(src).toMatch(/border: `1px solid \$\{stageInk\.ink\}`, background: 'transparent', color: stageInk\.ink/);
+  });
+});
+
+/**
+ * A paused condition must not appear on the dashboard as a measurement.
+ *
+ * Reported by the investigator: pause a sitting part-way through a condition, open the dashboard,
+ * and the paused condition's data is there — averaged into the charts as though it had finished.
+ */
+describe('a paused condition is left out of every figure and named instead', () => {
+  it('marks a condition without completed_at as not complete, and one with it as complete', () => {
+    const b = buildFixtureBundle();
+    b.conditions = b.conditions.map((c, i) => (i === 9 ? { ...c, completed_at: null } : c));
+    const s = buildConditionSummaries(b);
+    expect(s.filter((x) => x.condition_complete)).toHaveLength(9);
+    expect(s[9].condition_complete).toBe(false);
+  });
+
+  it('draws every figure from finished runs only, at the source', () => {
+    const src = dashboardSource();
+    expect(src).toMatch(/const summaries = useMemo\(\(\) => allSummaries\.filter\(\(s\) => s\.condition_complete\)/);
+    // And the unfinished ones are shown by name, not silently dropped.
+    expect(src).toMatch(/data-testid="unfinished-conditions"/);
   });
 });

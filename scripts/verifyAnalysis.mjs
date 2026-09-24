@@ -226,6 +226,11 @@ for (let i = 0; i < 12; i++) {
   for (const c of base.conditions) json = json.split(esc(c.condition_id)).join(pid + '-' + c.condition_id);
   const b = JSON.parse(json);
   b.session.enrolment_number = i + 1;
+  // One PAUSED condition in the cohort: started, never finished, so no completed_at. The template
+  // must remove it before modelling and say how many it removed — checked below.
+  // Put on the LAST participant: the §5.4 truncation test below halves P001's exposures and counts
+  // exactly ten flagged rows, and must not share a participant with this one.
+  if (i === 11) b.conditions[b.conditions.length - 1].completed_at = null;
   // Deterministic variation — see the header note on "Response is constant".
   (b.eyeMetrics ?? []).forEach((m, k) => {
     m.blink_count_full = 26 + ((i * 5 + k * 3) % 11);
@@ -258,6 +263,10 @@ for (let i = 0; i < 12; i++) {
       });
 
       const rOut = `${rRun.stdout}\n${rRun.stderr}`;
+      // A paused condition is not a measurement; the dataset above carries exactly one.
+      ok('R: an unfinished condition-run is removed before any model, and counted',
+        /unfinished condition-runs removed before modelling \(paused or interrupted\): 1\b/.test(rOut),
+        'the template did not report removing the one paused condition');
       ok('the R template runs to completion without raising', rRun.status === 0,
         (rRun.stderr || '').trim().split('\n').filter((l) => /^Error|^! /.test(l)).slice(-2).join(' | ')
           || (rRun.stderr || '').trim().split('\n').slice(-2).join(' | '));
@@ -322,9 +331,10 @@ for (let i = 0; i < 12; i++) {
       // were shared across clones, so every join on condition_id matched twelve rows and the frame
       // came out twelve times too large — models fitting happily on data that repeated itself.
       const frameRows = /rows failing at least one §5 check:\s*\d+\/(\d+)/.exec(rOut);
-      ok('R: the modelling frame is one row per participant x condition',
-        frameRows != null && Number(frameRows[1]) === 120,
-        `expected 120 rows (12 participants x 10 conditions), got ${frameRows ? frameRows[1] : 'no match'}`);
+      // 12 x 10 condition-runs, less the one deliberately paused run the template must remove.
+      ok('R: the modelling frame is one row per participant x FINISHED condition',
+        frameRows != null && Number(frameRows[1]) === 119,
+        `expected 119 rows (12 participants x 10 conditions, less 1 paused), got ${frameRows ? frameRows[1] : 'no match'}`);
 
       // The pre-registered coding. Treatment contrasts made the printed polarity row the effect in
       // ACHROMATIC TEXT ONLY, while the plan states H1's falsification rule on the average effect.

@@ -10,6 +10,7 @@ import type { SessionRecord } from './types';
 import type { MediaRecord } from './media';
 import { summariseLux, LUX_CHECKPOINTS } from '@/experiment/illumination';
 import { buildConditionSummaries, ENGAGEMENT } from '@/dashboard/aggregate';
+import { isConditionComplete } from './conditionStatus';
 import { SCREEN_TEST_PLATES, SCREEN_ALLOWED_SLIPS } from '@/screening/ishihara';
 import { PASSAGES } from '@/experiment/passages';
 import { CONDITIONS } from '@/experiment/conditions';
@@ -341,6 +342,11 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '02_conditions.csv', column: 'stimulus_scale', type: 'number', unit: 'factor', role: 'qc', description: "The root scale factor THIS condition's stimuli were presented at, read when the condition started. Scaling the root scales the stimulus text, so this factor is the visual angle the condition was run at; 1.0 is the design canvas and the app never magnifies above it. The session-level stimulus_scale in 01_session_info.csv is stamped once inside session creation, before the participant has touched the tablet, and can differ from what was actually shown — use this column for anything about visual angle. A value of exactly 0.5 is the floor and means the viewport could not fit the design canvas at all, so screens were clipped. Blank for rows written before this was captured." },
   { file: '02_conditions.csv', column: 'layout_viewport', type: 'text', unit: 'px', role: 'qc', description: "The viewport in CSS pixels, as WxH, that this condition's scale was computed from — the smallest seen in the current orientation, which is the box the layout was fitted to. Distinct from screen_resolution, which describes the physical panel whether or not browser chrome is covering part of it. Blank for rows written before this was captured." },
   { file: '02_conditions.csv', column: 'attempt_number', type: 'integer', unit: 'count', role: 'qc', description: "How many times this condition was started, counting the one this row describes. 1 for a clean run. Above 1 means the condition was restarted after a pause or a crash, so the participant had already read this passage, already found the search target and already seen the comprehension questions — reading time, comprehension and search time on this row are second-exposure values. Exclude or model these rows; do not assume passage_repeat_number covers them. Blank for rows written before this was recorded." },
+  { file: '02_conditions.csv', column: 'condition_complete', type: 'boolean', unit: '-', role: 'qc', description: "TRUE when this condition-run FINISHED — its reaction-time block completed and stamped completed_at. FALSE for a condition that was started and not finished: paused, crashed or abandoned part-way. The Pause dialog tells the operator such a condition 'will be restarted on resume'; if the sitting was never resumed, its partial rows stay in every file of this bundle, and nothing else here says so. Later stages of such a run are empty and the ones present describe a run that did not end: it is NOT a measurement of its condition. Filter on this before modelling anything from this bundle." },
+  { file: '10_wide_summary.csv', column: 'condition_complete', type: 'boolean', unit: '-', role: 'qc', description: 'Whether this condition-run finished. See 02_conditions.csv. A FALSE row carries partial values and is not a measurement of its condition.' },
+  { file: '10_wide_summary.csv', column: 'attempt_number', type: 'integer', unit: 'count', role: 'qc', description: 'How many times this condition was started, counting this run. Above 1: reading, comprehension and search on this row are second-exposure values. See 02_conditions.csv.' },
+  { file: '12_quality_flags.csv', column: 'condition_complete', type: 'boolean', unit: '-', role: 'qc', description: 'Whether this condition-run finished. The other flags on a FALSE row describe a run that did not end — a missing reaction-time block, for instance, is not evidence about the participant. See 02_conditions.csv.' },
+  { file: '12_quality_flags.csv', column: 'attempt_number', type: 'integer', unit: 'count', role: 'qc', description: 'How many times this condition was started, counting this run. See 02_conditions.csv.' },
   { file: '02_conditions.csv', column: 'reading_time_ms', type: 'integer', unit: 'ms', role: 'dv', description: 'Self-paced reading duration. This is also the ocular-metrics exposure window.' },
   { file: '02_conditions.csv', column: 'reading_wall_clock_ms', type: 'integer', unit: 'ms', role: 'qc', description: 'Unadjusted first-to-last span of the reading task, before hidden time was subtracted. reading_time_ms is this minus reading_hidden_ms; both are exported so the adjustment is auditable rather than silent.' },
   { file: '02_conditions.csv', column: 'reading_hidden_ms', type: 'integer', unit: 'ms', role: 'qc', description: 'Time the app spent backgrounded or the screen off during the passage. Already subtracted from reading_time_ms. Large values mean the participant was not looking at the stimulus for part of the window the ocular measures cover.' },
@@ -816,12 +822,13 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 02 — conditions (+ reading speed in words/min, derived from passage length & reading time)
   csv('02_conditions.csv',
-    ['participant_id', 'session_id', 'session_index', 'condition_id', 'session_position', 'condition_label', 'polarity', 'background_color', 'text_color', 'color_name', 'ink_name', 'passage_id', 'wcag_contrast_ratio', 'wcag_level', 'michelson_contrast', 'below_wcag_aa', 'adaptation_ms_before', 'adaptation_ms_planned', 'passage_repeat_number', 'attempt_number', 'stimulus_scale', 'layout_viewport', 'condition_hidden_ms', 'condition_hidden_events', 'condition_portrait_ms', 'condition_portrait_events', 'reading_time_ms', 'reading_wall_clock_ms', 'reading_hidden_ms', 'reading_min_page_dwell_ms', 'reading_speed_wpm', 'condition_duration_sec'],
+    ['participant_id', 'session_id', 'session_index', 'condition_id', 'session_position', 'condition_label', 'polarity', 'background_color', 'text_color', 'color_name', 'ink_name', 'passage_id', 'wcag_contrast_ratio', 'wcag_level', 'michelson_contrast', 'below_wcag_aa', 'adaptation_ms_before', 'adaptation_ms_planned', 'passage_repeat_number', 'attempt_number', 'condition_complete', 'stimulus_scale', 'layout_viewport', 'condition_hidden_ms', 'condition_hidden_events', 'condition_portrait_ms', 'condition_portrait_events', 'reading_time_ms', 'reading_wall_clock_ms', 'reading_hidden_ms', 'reading_min_page_dwell_ms', 'reading_speed_wpm', 'condition_duration_sec'],
     bundle.conditions.map((c) => {
       const words = PASSAGES[c.passage_id]?.wordCount ?? null;
       const wpm = words != null && c.reading_time_ms ? Math.round(words / (c.reading_time_ms / 60000)) : '';
       return {
         participant_id: pid, session_index: session.session_index, ...c,
+        condition_complete: isConditionComplete(c),
         stimulus_scale: c.stimulus_scale ?? '', layout_viewport: c.layout_viewport ?? '',
         condition_hidden_ms: c.condition_hidden_ms ?? '', condition_hidden_events: c.condition_hidden_events ?? '',
         condition_portrait_ms: c.condition_portrait_ms ?? '', condition_portrait_events: c.condition_portrait_events ?? '',
@@ -887,9 +894,10 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 10 — wide one-row-per-condition summary (joined)
   csv('10_wide_summary.csv',
-    ['participant_id', 'session_index', 'condition_id', 'condition_label', 'session_position', 'polarity', 'color_name', 'wcag_contrast_ratio', 'below_wcag_aa', 'passage_id', 'mean_rt_hits_ms', 'd_prime', 'd_prime_se', 'criterion', 'fatigue_mean', 'fatigue_delta', 'comprehension_correct', 'search_accuracy', 'search_efficiency', 'comfort_score', 'clarity_score', 'blink_rate', 'blink_rate_full', 'effective_fps', 'face_presence_ratio', 'qc_overall', 'engagement_flag', 'quality_score'],
+    ['participant_id', 'session_index', 'condition_id', 'condition_complete', 'attempt_number', 'condition_label', 'session_position', 'polarity', 'color_name', 'wcag_contrast_ratio', 'below_wcag_aa', 'passage_id', 'mean_rt_hits_ms', 'd_prime', 'd_prime_se', 'criterion', 'fatigue_mean', 'fatigue_delta', 'comprehension_correct', 'search_accuracy', 'search_efficiency', 'comfort_score', 'clarity_score', 'blink_rate', 'blink_rate_full', 'effective_fps', 'face_presence_ratio', 'qc_overall', 'engagement_flag', 'quality_score'],
     summaries.map((s) => ({
       participant_id: pid, session_index: session.session_index,
+      condition_complete: s.condition_complete, attempt_number: s.attempt_number,
       /*
        * THE JOIN KEY. The header declared condition_id and this row object omitted it, so every
        * row of 10_wide_summary.csv carried a blank one — the file could not be joined to anything.
@@ -927,11 +935,13 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
    * ANALYSIS_PLAN.md §5.5 actually asks.
    */
   csv('12_quality_flags.csv',
-    ['condition_id', 'participant_id', 'session_index', 'condition_label', 'session_position', 'engagement_flag', 'quality_score', 'blink_count_total', 'insufficient_blinks', 'reading_time_ms', 'fatigue_response_ms', 'perception_response_ms', 'reading_skim', 'reading_interrupted', 'condition_interrupted', 'rt_disengaged', 'careless_rushed_fatigue', 'careless_rushed_perception', 'careless_straight_lined', 'comprehension_wrong', 'low_face_presence', 'reasons'],
+    ['condition_id', 'participant_id', 'session_index', 'condition_label', 'session_position', 'condition_complete', 'attempt_number', 'engagement_flag', 'quality_score', 'blink_count_total', 'insufficient_blinks', 'reading_time_ms', 'fatigue_response_ms', 'perception_response_ms', 'reading_skim', 'reading_interrupted', 'condition_interrupted', 'rt_disengaged', 'careless_rushed_fatigue', 'careless_rushed_perception', 'careless_straight_lined', 'comprehension_wrong', 'low_face_presence', 'reasons'],
     summaries.map((s) => ({
       condition_id: s.condition_id,
       participant_id: pid, session_index: session.session_index, condition_label: s.condition_label,
-      session_position: s.session_position, engagement_flag: s.engagement, quality_score: s.quality_score,
+      session_position: s.session_position,
+      condition_complete: s.condition_complete, attempt_number: s.attempt_number,
+      engagement_flag: s.engagement, quality_score: s.quality_score,
       blink_count_total: s.blink_count_total, insufficient_blinks: s.insufficient_blinks,
       reading_time_ms: s.reading_time_ms, fatigue_response_ms: s.fatigue_response_ms, perception_response_ms: s.perception_response_ms,
       reading_skim: s.reading_skim, reading_interrupted: s.reading_interrupted,

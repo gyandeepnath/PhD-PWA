@@ -105,3 +105,23 @@ describe('the cohort summary pools every participant', () => {
     for (const c of s.conditions) expect(c.n_fps_inadequate).toBe(0);
   });
 });
+
+describe('an unfinished condition does not enter the cohort outcome or the balance check', () => {
+  it('counts a paused run but keeps it out of the mean and the position balance', () => {
+    // This tab pools every sitting as it is saved, and exists to show whether conditions behave as
+    // expected. A sitting paused mid-condition used to put its partial condition into both.
+    const bundles = cohort(3);
+    const pausedLabel = bundles[0].conditions[4].condition_label;
+    bundles[0].conditions[4] = { ...bundles[0].conditions[4], completed_at: null };
+    const ds = buildAnalysisDataset(bundles);
+    const s = cohortSummary(ds.files, ds.integrity, N_CONDITIONS);
+    const row = s.conditions.find((c) => c.condition_label === pausedLabel)!;
+    expect(row.n).toBe(3);
+    expect(row.n_unfinished).toBe(1);
+    // Only the two finished runs of that condition can carry the outcome.
+    expect(row.n_with_outcome).toBeLessThanOrEqual(2);
+    const balance = s.positionBalance[pausedLabel].reduce((a, b) => a + b, 0);
+    expect(balance).toBe(2);
+    expect(s.exclusions.some((e) => /condition_incomplete/.test(e.reason))).toBe(true);
+  });
+});

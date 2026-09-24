@@ -8,6 +8,7 @@ import { CONFIG } from '@/experiment/config';
 import { FPS_RATIO_THRESHOLD, FPS_TIER_THRESHOLD } from '@/tracking/blink';
 import type { FatigueRecord, DisplayPerceptionRecord, ComprehensionRecord, RtSummaryRecord, EyeMetricsRecord } from '@/storage/types';
 import { PASSAGES } from '@/experiment/passages';
+import { isConditionComplete } from '@/storage/conditionStatus';
 
 export type QcFlag = 'good' | 'warn' | 'bad';
 
@@ -105,6 +106,14 @@ export const ENGAGEMENT = {
 
 export interface ConditionSummary {
   condition_id: string;
+  /**
+   * The run FINISHED (its reaction-time block completed and stamped completed_at). False for a
+   * condition that was paused, crashed or abandoned part-way: its rows are real but partial, and it
+   * is not a measurement of that condition. See storage/conditionStatus.ts.
+   */
+  condition_complete: boolean;
+  /** How many times this condition was started, counting this run; above 1 means a redo after an interruption. */
+  attempt_number: number | null;
   condition_label: string;
   session_position: number;
   polarity: 'positive' | 'negative';
@@ -531,6 +540,8 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
 
     return {
       condition_id: c.condition_id,
+      condition_complete: isConditionComplete(c),
+      attempt_number: c.attempt_number ?? null,
       condition_label: c.condition_label,
       session_position: c.session_position,
       polarity: c.polarity,
@@ -657,6 +668,11 @@ export interface CohortConditionRow {
   text_colour: string;
   /** Rows present for this condition across all participants. */
   n: number;
+  /**
+   * Rows whose run was started and never finished (condition_complete = FALSE). Counted, and kept
+   * out of the outcome mean and the position balance: a paused condition is not a measurement.
+   */
+  n_unfinished: number;
   /** Rows the exporter judged analysable. */
   n_analysable: number;
   /** Rows with a usable primary outcome — a denominator of at least one blink. */
@@ -735,11 +751,25 @@ export function cohortSummary(
     if (!c) {
       c = {
         condition_label: label, polarity: r.polarity ?? '', text_colour: r.text_colour ?? '',
-        n: 0, n_analysable: 0, n_with_outcome: 0, mean_ibr: null, blinks_total: 0, n_fps_inadequate: 0,
+        n: 0, n_unfinished: 0, n_analysable: 0, n_with_outcome: 0, mean_ibr: null, blinks_total: 0, n_fps_inadequate: 0,
       };
       byCondition.set(label, c);
     }
     c.n++;
+    /*
+     * An unfinished run contributes to the row count and nothing else. This view pools every sitting
+     * on the device as it is saved, so a sitting paused mid-condition and then opened here used to
+     * put its partial condition into the cohort mean of the primary outcome and into the
+     * position-balance check — the very tab that exists to show whether conditions are behaving as
+     * expected. A blank (a row written before the column existed) is read as finished, which is what
+     * every such row was, since the column arrived with the fix.
+     */
+    const reason = (r.exclusion_reason ?? '').trim();
+    if (reason) exclusionCounts.set(reason, (exclusionCounts.get(reason) ?? 0) + 1);
+    if (r.condition_complete === 'false' || r.condition_complete === 'FALSE') {
+      c.n_unfinished++;
+      continue;
+    }
     if (isTrue(r.analysable)) c.n_analysable++;
     // fps_adequate_for_ratio is only meaningful where the camera ran at all; a blank is "unknown",
     // which is not the same as inadequate and must not be counted as either.
@@ -759,8 +789,6 @@ export function cohortSummary(
     if (Number.isFinite(pos) && pos >= 0 && pos < nConditions) {
       (positionBalance[label] ??= Array.from({ length: nConditions }, () => 0))[pos]++;
     }
-    const reason = (r.exclusion_reason ?? '').trim();
-    if (reason) exclusionCounts.set(reason, (exclusionCounts.get(reason) ?? 0) + 1);
   }
 
   const conditions = [...byCondition.values()]
