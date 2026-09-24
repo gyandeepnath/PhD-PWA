@@ -76,6 +76,8 @@ export interface IlluminationAssignment {
   priorPasses: number;
   /** Sittings already recorded for this participant, deleted ones excluded. */
   sittings: number;
+  /** When this participant withdrew from the study, if they did (any sitting, the bin included). */
+  withdrawnAt: number | null;
 }
 
 export function SessionInit({
@@ -129,9 +131,17 @@ export function SessionInit({
   // A split is permitted only with an explicit written reason, on the same terms as an
   // out-of-range illuminance: recorded as data rather than silently accepted or silently blocked.
   const splitAcknowledged = sitting === 'single' || splitReason.trim().length >= SPLIT_REASON_MIN_CHARS;
+  /*
+   * A participant who withdrew cannot be run again under the same ID. Nothing stopped it: an RA typing
+   * the ID on the scheduled day of sitting 2 created a sitting and collected it in full, and every row
+   * was then dropped by the analysis — after the participant had given the time, and against their
+   * instruction. Refused outright, not acknowledged: withdrawal is the participant's decision to make,
+   * not the researcher's to override with a note.
+   */
+  const withdrawn = assigned?.withdrawnAt != null;
   const valid =
     /^[A-Za-z0-9_-]{1,20}$/.test(pid) && luxEntered && (inRange || deviation.trim().length >= 3)
-    && repeatAcknowledged && splitAcknowledged;
+    && repeatAcknowledged && splitAcknowledged && !withdrawn;
 
   return (
     <div className={shell} style={{ position: 'relative' }}>
@@ -143,6 +153,14 @@ export function SessionInit({
           <Field label="Participant ID — a CODE, not a name (letters, digits, - or _, ≤20)">
             <input data-testid="pid" className="vl-input" value={pid} onChange={(e) => setPid(e.target.value)} placeholder="P001" />
           </Field>
+          {withdrawn && (
+            <div data-testid="participant-withdrawn" className="font-lab text-sm"
+              style={{ border: '1px solid #b83a3a', background: '#fdeeee', color: '#5a1414', borderRadius: 10, padding: 12 }}>
+              <strong>Participant {pid} withdrew from the study</strong> on{' '}
+              {new Date(assigned!.withdrawnAt as number).toLocaleDateString()}. A new sitting cannot be
+              started under this ID.
+            </div>
+          )}
           {assigned && assigned.conditionsCompleted > 0 && (
             <div
               data-testid="prior-progress"
@@ -625,7 +643,11 @@ export function AdaptationScreen({ durationMs, nextLabel, onDone }: {
   // Shared implementation — this screen's copy was the correct one and the reading task's was not,
   // which is the reason there is now only one. Hidden OR portrait: either way the grey field is not
   // what the participant is looking at. See lib/hiddenTime.ts.
-  const hidden = useRef<HiddenTimeTracker>(trackFieldBlockedTime());
+  // Created ONCE, lazily. `useRef(trackFieldBlockedTime())` evaluates its argument on every render,
+  // and this screen re-renders on every animation frame: each render built a fresh tracker — a media
+  // query and listeners on the document — that nothing ever detached, tens of thousands per sitting.
+  const [hiddenTracker] = useState<HiddenTimeTracker>(() => trackFieldBlockedTime());
+  const hidden = useRef<HiddenTimeTracker>(hiddenTracker);
 
   useEffect(() => {
     const t = hidden.current;

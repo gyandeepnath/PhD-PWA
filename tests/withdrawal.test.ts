@@ -75,7 +75,7 @@ describe('recording a withdrawal', () => {
   });
 
   it('does nothing, and does not throw, for a session that is not here', async () => {
-    await expect(recordWithdrawal('no-such-session')).resolves.toEqual({ mediaDestroyed: 0 });
+    await expect(recordWithdrawal('no-such-session')).resolves.toEqual({ mediaDestroyed: 0, sittings: 0 });
   });
 });
 
@@ -248,10 +248,85 @@ describe('the Session Manager lists a withdrawn sitting on its own', () => {
   });
   it('drops the localStorage resume pointer as well', () => {
     const body = manager.slice(manager.indexOf('const withdraw ='), manager.indexOf('const del ='));
-    expect(body).toMatch(/clearResume\(s\.session_id\)/);
+    expect(body).toMatch(/for \(const x of siblings\) clearResume\(x\.session_id\)/);
   });
   it('the manual orders the steps so the export carries the mark', () => {
     const manual = readFileSync('docs/OPERATOR_MANUAL.md', 'utf8');
     expect(manual).toMatch(/press \*\*Withdrew\*\* on that session FIRST, then \*\*Export\*\*/);
+  });
+});
+
+
+/*
+ * The PARTICIPANT withdraws. Marking one sitting left a split participant's other sitting unmarked:
+ * listed as Completed, exported withdrawn = FALSE, averaged into the cohort view, while the join check
+ * and both templates excluded the participant.
+ */
+describe('a withdrawal applies to every sitting of the participant', () => {
+  beforeEach(fresh);
+
+  const twoSittings = async () => {
+    const b = buildFixtureBundle();
+    const s1 = { ...b.session, session_id: 'sit-1', status: 'complete' } as SessionRecord;
+    const s2 = { ...b.session, session_id: 'sit-2', status: 'in_progress', session_end_time: null, resume_next_index: 2 } as SessionRecord;
+    const binned = { ...b.session, session_id: 'sit-0', deleted_at: Date.now() } as SessionRecord;
+    const other = { ...b.session, session_id: 'other', participant_id: 'SOMEONE-ELSE' } as SessionRecord;
+    for (const s of [s1, s2, binned, other]) await put('sessions', s);
+    return { s1, s2, binned, other };
+  };
+
+  it('marks every sitting of that participant, the recycle bin included, and no one else', async () => {
+    const { s1, s2, binned, other } = await twoSittings();
+    const r = await recordWithdrawal(s2.session_id);
+    expect(r.sittings).toBe(3);
+    for (const s of [s1, s2, binned]) {
+      expect((await get('sessions', s.session_id) as SessionRecord).withdrawn_at, s.session_id).toBeTypeOf('number');
+    }
+    expect((await get('sessions', other.session_id) as SessionRecord).withdrawn_at ?? null).toBeNull();
+  });
+
+  it('every sitting takes the same withdrawal time', async () => {
+    const { s1, s2 } = await twoSittings();
+    await recordWithdrawal(s2.session_id);
+    const a = (await get('sessions', s1.session_id) as SessionRecord).withdrawn_at;
+    const b = (await get('sessions', s2.session_id) as SessionRecord).withdrawn_at;
+    expect(a).toBe(b);
+  });
+
+  it('a new sitting cannot be started for them', async () => {
+    const { priorParticipantProgress } = await import('@/storage/gather');
+    const { s2 } = await twoSittings();
+    expect((await priorParticipantProgress(s2.participant_id)).withdrawnAt).toBeNull();
+    await recordWithdrawal(s2.session_id);
+    expect((await priorParticipantProgress(s2.participant_id)).withdrawnAt).toBeTypeOf('number');
+    const form = readFileSync('src/start/setupStages.tsx', 'utf8');
+    expect(form).toMatch(/repeatAcknowledged && splitAcknowledged && !withdrawn;/);
+    const exp = readFileSync('src/experiment/Experiment.tsx', 'utf8');
+    expect(exp).toMatch(/if \(prior\.withdrawnAt != null\) \{/);
+  });
+});
+
+describe('the pooled file and the cohort view treat the participant, not the sitting, as withdrawn', () => {
+  it('a split participant who withdrew in sitting 2: sitting 1 rows are withdrawn too, and out of the cohort mean', async () => {
+    const { buildAnalysisDataset } = await import('@/storage/analysisExport');
+    const base = buildFixtureBundle();
+    const s1 = { ...base, session: { ...base.session, session_id: 'A1', withdrawn_at: null } };
+    const s2 = {
+      ...base,
+      session: { ...base.session, session_id: 'A2', withdrawn_at: Date.now(), session_start_time: base.session.session_start_time + 86_400_000 },
+      conditions: base.conditions.map((c) => ({ ...c, condition_id: 'A2-' + c.condition_id })),
+      eyeMetrics: base.eyeMetrics.map((e) => ({ ...e, condition_id: 'A2-' + e.condition_id })),
+    };
+    const ds = buildAnalysisDataset([s1, s2] as never);
+    const longFile = ds.files.find((f) => f.filename === 'analysis_long.csv')!;
+    const [head, ...body] = longFile.content.trim().split('\n');
+    const wi = head.split(',').indexOf('withdrawn');
+    const sidI = head.split(',').indexOf('session_id');
+    // Every row of the participant, sitting 1's included, reads withdrawn.
+    const cells = body.map((line) => line.match(/("([^"]|"")*"|[^,]*)(,|$)/g)!.map((c) => c.replace(/,$/, '')));
+    expect(cells.filter((c) => c[sidI] === 'A1').every((c) => c[wi] === 'true')).toBe(true);
+    const c = cohortSummary(ds.files, ds.integrity, 10);
+    expect(c.conditions.reduce((n, r) => n + r.n_with_outcome, 0)).toBe(0);
+    expect(c.conditions.reduce((n, r) => n + r.n_withdrawn, 0)).toBe(body.length);
   });
 });

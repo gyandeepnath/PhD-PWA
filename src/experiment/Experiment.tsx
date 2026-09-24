@@ -12,7 +12,7 @@ import {
 } from '@/experiment/illumination';
 import { participantProgress, passageRepeatNumber } from './participantProgress';
 import { mergeExclusionReasons } from './eligibility';
-import { trackHiddenTime, trackPortraitTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
+import { trackHiddenTime, trackPortraitTime, trackBlockingNoticeTime, setBlockingNotice, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { PASSAGES } from './passages';
 import { annotationSegmentSteps, blockPlan, isAnnotationSubsample, type PlannedStep } from './counterbalance';
 import { CONFIG, isE2ETimingActive } from './config';
@@ -88,6 +88,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   // with different consequences, and an analyst needs to tell a backgrounded tablet from a rotated
   // one. Same tracker implementation, a different event.
   const conditionPortrait = useRef<HiddenTimeTracker | null>(null);
+  /** Time the camera-lost notice covered the current condition. See ConditionRecord. */
+  const conditionNotice = useRef<HiddenTimeTracker | null>(null);
   // Transition lock: ignore re-entrant advance() calls (e.g. accidental double-taps on a tablet)
   // until the machine actually changes — prevents skipping a stage. Reset on every stage change.
   const transitioning = useRef(false);
@@ -407,6 +409,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       conditionsCompleted: prior.conditionsCompleted,
       priorPasses: passes,
       sittings: prior.sittings,
+      withdrawnAt: prior.withdrawnAt,
     };
   }, []);
 
@@ -563,6 +566,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     // condition order is identical across sittings) and resume at the global serial position where
     // their last sitting stopped. A brand-new participant gets a fresh sequential enrolment number.
     const prior = await priorParticipantProgress(d.participantId);
+    // Refused here as well as on the form: nothing may start a sitting for a participant who withdrew.
+    if (prior.withdrawnAt != null) {
+      creatingSession.current = false;
+      setSessionCreateError(`participant ${d.participantId} withdrew from the study; no new sitting can be started under this ID`);
+      return;
+    }
     const enrol = prior.enrolment ?? await nextEnrolmentNumber();
     // Which illumination block is this participant on, and how far into it? Each block is a full
     // pass through the ten conditions, so completed / 10 gives the block and completed % 10 the
@@ -837,6 +846,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     conditionHidden.current = trackHiddenTime();
     conditionPortrait.current?.stop();
     conditionPortrait.current = trackPortraitTime();
+    conditionNotice.current?.stop();
+    conditionNotice.current = trackBlockingNoticeTime();
     // Coarse resume pointer: an interruption during this condition resumes by redoing it.
     saveResume(session.session_id, machine.stepIndex);
     // NOTE: tracking.beginCondition() is deliberately NOT called here. See the ReadingTask
@@ -1392,6 +1403,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 conditionHidden.current = null;
                 const rotated = conditionPortrait.current?.stop() ?? null;
                 conditionPortrait.current = null;
+                const noticed = conditionNotice.current?.stop() ?? null;
+                conditionNotice.current = null;
                 await put('conditions', {
                   ...existing,
                   completed_at: Date.now(),
@@ -1400,6 +1413,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                   condition_hidden_events: away?.events,
                   condition_portrait_ms: rotated?.hiddenMs,
                   condition_portrait_events: rotated?.events,
+                  condition_notice_ms: noticed?.hiddenMs,
+                  condition_notice_events: noticed?.events,
                 });
               }
               saveResume(session.session_id, machine.stepIndex + 1);
@@ -1493,6 +1508,24 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       break;
   }
 
+  /*
+   * Where a pause is allowed: the condition loop and the break, never over running reaction-time
+   * trials. Computed before the early return because the camera-lost notice's effects need it.
+   */
+  const pausable = (isInLoop(machine.stage) || machine.stage === 'BREAK_SCREEN')
+    && (machine.stage !== 'REACTION_TIME' || rtBlockFinished)
+    && !!session;
+  const cameraNoticeUp = tracking.cameraLostAt != null && !cameraLossAccepted && pausable;
+  // Tell the timers the notice is over the task (see setBlockingNotice), and clear it on unmount.
+  useEffect(() => {
+    setBlockingNotice(cameraNoticeUp);
+    return () => setBlockingNotice(false);
+  }, [cameraNoticeUp]);
+  // A clip filming a run whose camera is gone cannot be compared with that run's (lost) eye data.
+  useEffect(() => {
+    if (tracking.cameraLostAt != null) annotationRecording.current?.finish(false);
+  }, [tracking.cameraLostAt]);
+
   if (resuming) {
     return (
       <div className="min-h-screen w-full bg-cream font-sans text-[#1a1a2e]" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1514,9 +1547,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    * condition's reading screen — creating a condition row, and a spurious attempt 2, for a passage
    * that was never shown.
    */
-  const canPause = (isInLoop(machine.stage) || machine.stage === 'BREAK_SCREEN')
-    && (machine.stage !== 'REACTION_TIME' || rtBlockFinished)
-    && !!session;
+  const canPause = pausable;
 
   /**
    * A pause during ADAPTATION or a BREAK comes AFTER the condition is finished — the grey field is a
@@ -1543,7 +1574,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    * the camera may be gone for good — and every row from then on records camera_inactive_reason =
    * 'lost', so the decision is visible in the data.
    */
-  const showCameraLost = tracking.cameraLostAt != null && !cameraLossAccepted && canPause;
+  const showCameraLost = cameraNoticeUp;
 
   return (
     <div data-stage={machine.stage} style={{ height: '100%' }}>
@@ -1625,7 +1656,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           </p>
           <p className="font-lab" style={{ fontSize: 14, color: '#c8d8f0', maxWidth: 520, marginTop: 10, lineHeight: 1.6 }}>
             <strong>Researcher:</strong> pause and resume from the session manager. The camera is set up and
-            calibrated again, and {pauseAfterFinished ? 'the session continues at the next condition' : 'this condition starts again'}.
+            calibrated again, and {pauseAfterFinished
+              ? 'the session continues at the next condition'
+              : machine.stage === 'REACTION_TIME'
+                ? 'the session continues at the next condition once this one\'s results have saved (if they do not, this condition starts again)'
+                : 'this condition starts again'}.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 22, flexWrap: 'wrap', justifyContent: 'center' }}>
             <button onClick={pauseAndExit} className="font-lab text-sm"

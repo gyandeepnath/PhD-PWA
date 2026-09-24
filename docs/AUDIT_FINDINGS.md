@@ -3282,3 +3282,49 @@ and d-prime is computed by the task's own scoring over the excerpt's own word co
 checks that early-stopped blocks are counted.
 
 1044 tests, verify green, stress 1256/1256.
+
+## Round 52 — an adversarial review of Rounds 46–50, and what it found
+
+A separate reviewer was asked to break the five preceding commits. Eleven findings; each was checked
+against the code before acting, and all were real. Fixed at the root:
+
+**The camera-lost notice reintroduced the portrait defect.** The notice is a full-screen panel over a
+task that keeps running, exactly like the portrait overlay, and nothing measured its time: 30 s spent
+reading it was counted as grey field delivered, as reading time, and against the search limit, and the
+condition exported clean. There is now one app-level "blocking notice" signal (`setBlockingNotice` in
+`lib/hiddenTime.ts`). The grey field subtracts it, so it extends as it does for portrait; each condition
+records `condition_notice_ms` / `condition_notice_events` (02_conditions.csv), and more than the hidden-time
+limit marks the condition interrupted, on the same rule as portrait.
+
+**The stall watchdog could declare a lost camera over a dialog.** `window.confirm` behind Pause blocks all
+script; the first tick after it could see a gap of however long the dialog was read and stop a working
+camera. A tick that itself arrives late now restarts the clock (the page stalled, not the camera), and a
+stall must persist across two consecutive ticks.
+
+**Withdrawal was recorded on a sitting, but it is the participant's.** A split participant who withdrew
+in sitting 2 left sitting 1 listed as Completed, exported `withdrawn = FALSE`, and averaged into the cohort
+view — while the join check and both templates excluded the participant. Recording a withdrawal now marks
+every sitting of that participant on the device (the recycle bin included, since a restore would bring
+one back unmarked) and destroys the media of each; the pooled `withdrawn` column is participant-level; and
+a new sitting cannot be started under a withdrawn participant's ID — the form refuses it and so does the
+session creator. Reproduced through the real pooled export and cohort summary, as the reviewer did.
+
+**A tracker leak.** The adaptation screen re-renders every animation frame and built its tracker with
+`useRef(trackFieldBlockedTime())`, whose argument runs on every render: a media query and listeners per
+frame, never detached. The same pattern had leaked one listener per frame before Round 47. Now created once.
+
+**Smaller, all fixed:** a calibration routine replaced mid-run (camera lost) could still call `onDone` and
+advance the stage a second time — it now reports nothing once unmounted; a lost camera now discards the
+annotation clip of the run it was filming; two concurrent camera starts (a double tap) are serialised; a
+start that fails after acquiring the camera releases it, so its later `ended` is not reported as a loss;
+the notice's wording in the reaction-time save phase matches the Pause dialog; `not_running` is defined
+accurately (a camera not restarted on a resume reads not_running).
+
+**Tests that only read the source.** The reviewer noted that several camera tests pattern-matched the code,
+which a reordering would pass. `tests/useTrackingLost.test.tsx` now renders the real `useTracking` hook in
+jsdom with a fake camera, face model and frame pump, fires `ended`, and checks the state, the released
+track, and the row written (`camera_inactive_reason = 'lost'`); and that concurrent starts share one camera
+and a failed start is not later reported lost. Removing the release, the `lost` reason, or the
+serialisation each fails it.
+
+1061 tests, verify green, stress 1266/1266; camera-lost, edge, full-run and split end-to-end specs pass.

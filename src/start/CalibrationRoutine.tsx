@@ -19,7 +19,7 @@
  * because a participant who is already in the room and cannot be calibrated still yields every
  * non-ocular measure — but it has to be a deliberate choice, so it is a separate button.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { calibrationSequence, STEP_SETTLE_MS, type CalibrationStep } from '@/tracking/calibrationSequence';
 import type { CalibrationOutcome } from '@/tracking/useTracking';
 
@@ -42,6 +42,16 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
   const [thinFit, setThinFit] = useState<CalibrationOutcome | null>(null);
   /** Calibration threw. Null while there is no error. */
   const [failure, setFailure] = useState<string | null>(null);
+
+  /*
+   * The routine is async and outlives its screen if the screen is replaced mid-run — the camera being
+   * lost swaps this component for the plain calibration screen. It then went on to call onDone when
+   * its interrupted fit finished, and if the operator had already continued from the replacement
+   * screen, that was a SECOND advance: a fresh sitting skipped the baseline CVS-Q, and a resume
+   * jumped past the grey field. An unmounted routine reports nothing.
+   */
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
 
   const start = async () => {
     setPoorFit(null);
@@ -68,14 +78,17 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
      * A rejection was worse: the promise never resolved, onDone never fired, and the operator was
      * stranded on a 9/9 target screen with no control at all.
      */
+    if (!mounted.current) return;
     let outcome: CalibrationOutcome;
     try {
       outcome = await endGazeCalibration(sessionId);
     } catch (err) {
+      if (!mounted.current) return;
       setFailure(err instanceof Error ? err.message : String(err));
       setBusy(false);
       return;
     }
+    if (!mounted.current) return;
     setBusy(false);
     /*
      * BOTH halves must succeed, and the missing one must be named.

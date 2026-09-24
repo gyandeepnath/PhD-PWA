@@ -377,6 +377,14 @@ export interface ConditionRecord {
   condition_portrait_ms?: number;
   condition_portrait_events?: number;
   /**
+   * Milliseconds a blocking app notice ("The camera has stopped") covered this condition, and how
+   * many times one went up. The task kept running underneath, as it does behind the portrait
+   * overlay; an operator who reads the notice for half a minute has taken that half-minute out of the
+   * reading clock, the search limit, or the grey field.
+   */
+  condition_notice_ms?: number;
+  condition_notice_events?: number;
+  /**
    * The grey-field duration the protocol asked for, beside `adaptation_ms_before`, which is what
    * the participant actually saw. They differ when the device sleeps or the app is backgrounded
    * mid-field: the countdown is frame-driven and stops, and on waking the screen advances at once.
@@ -630,9 +638,10 @@ export interface EyeMetricsRecord {
   session_id: string;
   camera_active: boolean;
   /**
-   * Why the camera was not active for this row: 'lost' when it had been running in this sitting and
-   * stopped (the track ended, or frames stopped arriving), 'not_running' otherwise (declined, denied,
-   * never started). Null when camera_active is true; absent on rows written before it existed.
+   * Why the camera was not active for this row: 'lost' when it had been running since this stretch of
+   * the sitting began (the app's last mount — a resume remounts) and stopped (the track ended, or
+   * frames stopped arriving); 'not_running' otherwise (declined, denied, never started, not restarted
+   * on a resume). Null when camera_active is true; absent on rows written before it existed.
    * Without it a camera lost at condition 3 left conditions 3-10 indistinguishable from a
    * participant who declined the camera.
    */

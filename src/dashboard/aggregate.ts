@@ -272,6 +272,8 @@ export function conditionEngagement(args: {
   condition_hidden_ms?: number | null;
   /** Time the tablet spent in portrait during the condition, behind the blocking overlay. */
   condition_portrait_ms?: number | null;
+  /** Time a blocking app notice (camera lost) covered the condition. */
+  condition_notice_ms?: number | null;
   word_count: number | null;
   fatigue?: FatigueRecord;
   perception?: DisplayPerceptionRecord;
@@ -281,7 +283,7 @@ export function conditionEngagement(args: {
 }): EngagementResult {
   const {
     reading_time_ms, reading_min_page_dwell_ms, reading_hidden_ms, condition_hidden_ms,
-    condition_portrait_ms, word_count, fatigue, perception, comprehension, rt, eye,
+    condition_portrait_ms, condition_notice_ms, word_count, fatigue, perception, comprehension, rt, eye,
   } = args;
   const reasons: string[] = [];
   let score = 1;
@@ -343,12 +345,18 @@ export function conditionEngagement(args: {
    */
   const rotatedTooLong = condition_portrait_ms != null
     && condition_portrait_ms > ENGAGEMENT.CONDITION_HIDDEN_MAX_MS;
-  const condition_interrupted = hiddenTooLong || rotatedTooLong;
+  // The camera-lost notice blocks the task exactly as the portrait overlay does; same rule.
+  const noticeTooLong = condition_notice_ms != null
+    && condition_notice_ms > ENGAGEMENT.CONDITION_HIDDEN_MAX_MS;
+  const condition_interrupted = hiddenTooLong || rotatedTooLong || noticeTooLong;
   if (hiddenTooLong && !reading_interrupted) {
     penalise(0.25, `app was hidden for ${Math.round(condition_hidden_ms! / 1000)}s during this condition, outside the passage`);
   }
   if (rotatedTooLong) {
     penalise(0.25, `tablet was in portrait for ${Math.round(condition_portrait_ms! / 1000)}s during this condition — the task could not be answered while the overlay was up`);
+  }
+  if (noticeTooLong) {
+    penalise(0.25, `the camera-lost notice covered the task for ${Math.round(condition_notice_ms! / 1000)}s during this condition`);
   }
 
   // RT block disengagement: COMMISSION errors only — see ENGAGEMENT.RT_FALSE_ALARM_MAX for why
@@ -536,6 +544,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       reading_hidden_ms: c.reading_hidden_ms ?? null,
       condition_hidden_ms: c.condition_hidden_ms ?? null,
       condition_portrait_ms: c.condition_portrait_ms ?? null,
+      condition_notice_ms: c.condition_notice_ms ?? null,
       word_count: PASSAGES[c.passage_id]?.wordCount ?? null,
       fatigue: fat, perception: perc, comprehension: comp, rt, eye,
     });

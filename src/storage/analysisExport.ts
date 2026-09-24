@@ -101,6 +101,8 @@ interface RowContext {
   participantKey: string;
   analysable: boolean;
   exclusion: string;
+  /** The PARTICIPANT withdrew — in any of their sittings, not necessarily this one. */
+  participantWithdrawn: boolean;
 }
 
 const numOrNull = (v: unknown): number | null =>
@@ -443,7 +445,10 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         session_status: s.status ?? (s.session_end_time ? 'complete' : 'in_progress'),
         // A withdrawal is not a data-quality flag, it is a standing instruction. Present so the
         // exclusion is auditable; the row must never be modelled.
-        withdrawn: s.withdrawn_at != null,
+        // PARTICIPANT-level: any sitting of theirs. Per-sitting, a split participant who withdrew in
+        // sitting 2 left sitting 1's rows reading FALSE — and the cohort view averaged them in,
+        // while the join check excluded the participant.
+        withdrawn: ctx.participantWithdrawn,
         /*
          * The three facts that say whether this ROW is a measurement of its condition, which the
          * pooled file — the one people model from — carried none of. condition_complete: the run
@@ -522,6 +527,9 @@ export function buildAnalysisDataset(
   const integrity = checkJoin(bundles, resolved);
   const verdict = new Map(integrity.participants.map((p) => [p.participant_id, p]));
 
+  const withdrawnParticipants = new Set(bundles
+    .filter((b) => b.session.withdrawn_at != null)
+    .map((b) => b.session.participant_id || unresolvedParticipantKey(b.session.session_id)));
   const contexts: RowContext[] = bundles.map((b) => {
     // The same stand-in key checkJoin used, so a session with no participant id resolves to its own
     // join verdict instead of falling through to the generic fallback and writing an empty group.
@@ -532,6 +540,7 @@ export function buildAnalysisDataset(
       participantKey: key,
       analysable: v?.analysable ?? false,
       exclusion: v?.excluded_by.join(';') ?? 'participant_not_resolved',
+      participantWithdrawn: withdrawnParticipants.has(key),
     };
   });
 

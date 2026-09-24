@@ -148,11 +148,14 @@ export function normaliseBundle(b: SessionBundle): SessionBundle {
  */
 export async function priorParticipantProgress(
   participantId: string,
-): Promise<{ enrolment: number | null; conditionsCompleted: number; sittings: number }> {
-  const sessions = (await getAllByIndex('sessions', 'by_participant', participantId) as SessionRecord[])
-    .map(normalise)
-    .filter((s) => s.deleted_at == null);
-  if (sessions.length === 0) return { enrolment: null, conditionsCompleted: 0, sittings: 0 };
+): Promise<{ enrolment: number | null; conditionsCompleted: number; sittings: number; withdrawnAt: number | null }> {
+  const every = (await getAllByIndex('sessions', 'by_participant', participantId) as SessionRecord[]).map(normalise);
+  // Withdrawal is read across EVERY sitting, the recycle bin included: a withdrawn sitting that was
+  // later binned is still a participant who withdrew.
+  const withdrawnAt = every.reduce<number | null>(
+    (w, s) => (s.withdrawn_at != null && (w == null || s.withdrawn_at < w) ? s.withdrawn_at : w), null);
+  const sessions = every.filter((s) => s.deleted_at == null);
+  if (sessions.length === 0) return { enrolment: null, conditionsCompleted: 0, sittings: 0, withdrawnAt };
   // Reuse the earliest-assigned enrolment number for stability.
   const enrolment = sessions.reduce((min, s) => Math.min(min, s.enrolment_number), Infinity);
   let conditionsCompleted = 0;
@@ -160,7 +163,7 @@ export async function priorParticipantProgress(
     const conds = await getAllByIndex('conditions', 'by_session', s.session_id) as { completed_at: number | null }[];
     conditionsCompleted += conds.filter((c) => c.completed_at != null).length;
   }
-  return { enrolment: Number.isFinite(enrolment) ? enrolment : null, conditionsCompleted, sittings: sessions.length };
+  return { enrolment: Number.isFinite(enrolment) ? enrolment : null, conditionsCompleted, sittings: sessions.length, withdrawnAt };
 }
 
 export const BIN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -366,42 +369,58 @@ export async function revokeMediaGrant(
  * Media is destroyed either way. A recording of someone's face is the one thing that cannot be
  * defensibly retained past a withdrawal, and unlike the numbers it is still only on this device.
  */
-export async function recordWithdrawal(sessionId: string): Promise<{ mediaDestroyed: number }> {
-  const session = await get('sessions', sessionId) as SessionRecord | undefined;
-  if (!session) return { mediaDestroyed: 0 };
+export async function recordWithdrawal(sessionId: string): Promise<{ mediaDestroyed: number; sittings: number }> {
+  const named = await get('sessions', sessionId) as SessionRecord | undefined;
+  if (!named) return { mediaDestroyed: 0, sittings: 0 };
 
-  // The tombstone first, for the same reason revokeMediaGrant withdraws consent before deleting:
-  // if the loop below fails part-way, what survives is already covered by a recorded withdrawal.
   /*
-   * A withdrawal ends the sitting for COLLECTION, not only for analysis.
+   * THE PARTICIPANT withdraws, not one sitting of theirs.
    *
-   * It used to set the tombstone, revoke photo and video consent, and leave the sitting otherwise as
-   * it was: in progress, with its resume pointer. The Session Manager kept offering Resume, and
-   * resuming wrote further condition rows and camera-active eye metrics AFTER the participant had
-   * withdrawn. The block is in listResumable, keyed on this tombstone; the pointer is dropped here
-   * as well so no copy of it survives to be picked up by a later route.
-   *
-   * The camera-metrics grant is deliberately NOT revoked. It records what the participant agreed to
-   * while the measurements already taken were being collected, and the integrity audit reads it as
-   * exactly that: revoking it would make every lawfully collected ocular row read as "measured
-   * without consent". Nothing further can be collected, because the sitting cannot be resumed.
+   * This marked only the sitting the button was pressed on. In a split protocol the participant's
+   * other sitting stayed unmarked: listed as Completed, exported with withdrawn = FALSE, offered to
+   * the cohort view's averages — while the pooled join check and both analysis templates exclude the
+   * whole participant. A researcher who exported the Completed sittings handed the templates a folder
+   * without the flag and the participant was modelled. Every sitting of theirs on this device is now
+   * marked, the recycle bin included (a restore would otherwise bring one back unmarked), and the
+   * media of every sitting is destroyed.
    */
-  const { resume_next_index: _dropPointer, ...rest } = session;
-  await put('sessions', {
-    ...rest,
-    withdrawn_at: session.withdrawn_at ?? Date.now(),
-    media_consent: session.media_consent
-      ? { ...session.media_consent, setup_photos: false, annotation_video: false }
-      : session.media_consent,
-    media_consent_revoked_at: Date.now(),
-  });
-
+  const sittings = named.participant_id
+    ? (await getAllByIndex('sessions', 'by_participant', named.participant_id) as SessionRecord[])
+    : [named];
+  const at = named.withdrawn_at ?? Date.now();
   let mediaDestroyed = 0;
-  for (const m of (await getAllByIndex('media_captures', 'by_session', sessionId)) as MediaRecord[]) {
-    await remove('media_captures', m.media_id);
-    mediaDestroyed++;
+  for (const session of sittings) {
+    // The tombstone first, for the same reason revokeMediaGrant withdraws consent before deleting:
+    // if the loop below fails part-way, what survives is already covered by a recorded withdrawal.
+    /*
+     * A withdrawal ends the sitting for COLLECTION, not only for analysis.
+     *
+     * It used to set the tombstone, revoke photo and video consent, and leave the sitting otherwise as
+     * it was: in progress, with its resume pointer. The Session Manager kept offering Resume, and
+     * resuming wrote further condition rows and camera-active eye metrics AFTER the participant had
+     * withdrawn. The block is in listResumable, keyed on this tombstone; the pointer is dropped here
+     * as well so no copy of it survives to be picked up by a later route.
+     *
+     * The camera-metrics grant is deliberately NOT revoked. It records what the participant agreed to
+     * while the measurements already taken were being collected, and the integrity audit reads it as
+     * exactly that: revoking it would make every lawfully collected ocular row read as "measured
+     * without consent". Nothing further can be collected, because the sitting cannot be resumed.
+     */
+    const { resume_next_index: _dropPointer, ...rest } = session;
+    await put('sessions', {
+      ...rest,
+      withdrawn_at: session.withdrawn_at ?? at,
+      media_consent: session.media_consent
+        ? { ...session.media_consent, setup_photos: false, annotation_video: false }
+        : session.media_consent,
+      media_consent_revoked_at: Date.now(),
+    });
+    for (const m of (await getAllByIndex('media_captures', 'by_session', session.session_id)) as MediaRecord[]) {
+      await remove('media_captures', m.media_id);
+      mediaDestroyed++;
+    }
   }
-  return { mediaDestroyed };
+  return { mediaDestroyed, sittings: sittings.length };
 }
 
 /** Permanently delete a session and ALL of its child records across every store. */

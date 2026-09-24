@@ -213,8 +213,12 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
       window.alert(`${label} is already recorded as withdrawn (${new Date(s.withdrawn_at).toLocaleString()}).`);
       return;
     }
+    const siblings = [...active, ...bin].filter((x) => x.participant_id === s.participant_id);
     if (!window.confirm(
-      `Record that the participant in ${label} WITHDREW from the study?\n\n`
+      `Record that participant ${s.participant_id} WITHDREW from the study?\n\n`
+      + (siblings.length > 1
+        ? `This applies to the PARTICIPANT: all ${siblings.length} of their sittings on this tablet are marked, not only ${label}.\n\n`
+        : '')
       + 'Use this when they have withdrawn but have NOT asked for their data to be deleted. Ask '
       + 'them; the consent form offers both.\n\n'
       + 'The measurements are kept and exported, marked so the analysis excludes them. The '
@@ -223,12 +227,12 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
       + 'If they asked for deletion instead, cancel this and use Delete, then Purge from the '
       + 'recycle bin.',
     )) return;
-    const { mediaDestroyed } = await recordWithdrawal(s.session_id);
-    // The localStorage copy of the resume pointer too; recordWithdrawal drops the durable one.
-    clearResume(s.session_id);
+    const { mediaDestroyed, sittings } = await recordWithdrawal(s.session_id);
+    // The localStorage copies of the resume pointers too; recordWithdrawal drops the durable ones.
+    for (const x of siblings) clearResume(x.session_id);
     await refresh();
     window.alert(
-      `${label} is recorded as withdrawn.\n\n`
+      `Participant ${s.participant_id} is recorded as withdrawn (${sittings} sitting${sittings === 1 ? '' : 's'}).\n\n`
       + `${mediaDestroyed} media file(s) destroyed.\n\n`
       + 'Export it now, from the Withdrawn list. An export taken BEFORE this carries withdrawn = FALSE '
       + 'and reads like an ordinary paused sitting — discard it. The withdrawal travels with the data and survives a '

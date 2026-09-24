@@ -148,8 +148,36 @@ export function trackPortraitTime(opts: Options = {}): HiddenTimeTracker {
 }
 
 /**
- * Time a full-screen field was NOT in front of the participant: the document hidden OR the tablet in
- * portrait, counted once where the two overlap.
+ * A full-screen notice the APP has put over the task — today, "The camera has stopped".
+ *
+ * Like the portrait overlay it is a sibling of the task, which keeps running underneath: the grey
+ * field's clock, the reading page's clock, the search limit. Time it spends up is therefore time the
+ * task was not in front of the participant, and it has to be measured the way portrait time is, or a
+ * condition during which the operator read the notice for half a minute exports as clean.
+ */
+const noticeTarget: EventTarget | null = typeof EventTarget !== 'undefined' ? new EventTarget() : null;
+let noticeShown = false;
+export function setBlockingNotice(shown: boolean): void {
+  if (shown === noticeShown) return;
+  noticeShown = shown;
+  noticeTarget?.dispatchEvent(new Event('change'));
+}
+export function isBlockingNoticeShown(): boolean {
+  return noticeShown;
+}
+/** Time a blocking notice covered the task, and how many times one went up. */
+export function trackBlockingNoticeTime(opts: Options = {}): HiddenTimeTracker {
+  return trackHiddenTime({
+    clock: opts.clock,
+    target: opts.target ?? noticeTarget ?? undefined,
+    isHidden: opts.isHidden ?? isBlockingNoticeShown,
+    eventName: opts.eventName ?? 'change',
+  });
+}
+
+/**
+ * Time a full-screen field was NOT in front of the participant: the document hidden, the tablet in
+ * portrait, or a blocking notice up — counted once where they overlap.
  *
  * For the grey adaptation field. It subtracted hidden time only, so a tablet rotated to portrait
  * mid-field — which puts the blocking overlay, a dark navy panel, over the grey — counted the whole
@@ -160,8 +188,10 @@ export function trackPortraitTime(opts: Options = {}): HiddenTimeTracker {
 export function trackFieldBlockedTime(opts: {
   documentTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;
   orientationTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'> | null;
+  noticeTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'> | null;
   isDocumentHidden?: () => boolean;
   isPortrait?: () => boolean;
+  isNoticeShown?: () => boolean;
   clock?: () => number;
 } = {}): HiddenTimeTracker {
   const mq = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
@@ -172,21 +202,25 @@ export function trackFieldBlockedTime(opts: {
   const docHidden = opts.isDocumentHidden
     ?? (() => typeof document !== 'undefined' && document.visibilityState === 'hidden');
   const portrait = opts.isPortrait ?? (() => mq?.matches === true);
+  const notice = opts.isNoticeShown ?? isBlockingNoticeShown;
+  const noticeSrc = opts.noticeTarget !== undefined ? opts.noticeTarget : noticeTarget;
 
   // One relay, so the shared implementation sees a single blocked/unblocked signal.
   const relay = new EventTarget();
   const fire = () => { relay.dispatchEvent(new Event('blocked')); };
   docTarget?.addEventListener('visibilitychange', fire);
   orientTarget?.addEventListener('change', fire);
+  noticeSrc?.addEventListener('change', fire);
   const inner = trackHiddenTime({
     target: relay, eventName: 'blocked', clock: opts.clock,
-    isHidden: () => docHidden() || portrait(),
+    isHidden: () => docHidden() || portrait() || notice(),
   });
   return {
     read: inner.read,
     stop: () => {
       docTarget?.removeEventListener('visibilitychange', fire);
       orientTarget?.removeEventListener('change', fire);
+      noticeSrc?.removeEventListener('change', fire);
       return inner.stop();
     },
   };

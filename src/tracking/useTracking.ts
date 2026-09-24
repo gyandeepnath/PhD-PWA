@@ -423,7 +423,10 @@ export function useTracking(): TrackingApi {
     setCameraLostAt(Date.now());
   }, []);
 
-  const start = useCallback(async (): Promise<CameraStatus> => {
+  /** The start in progress, so a second call (a double tap on "continue") joins it. */
+  const startingRef = useRef<Promise<CameraStatus> | null>(null);
+
+  const startCamera = useCallback(async (): Promise<CameraStatus> => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       setStatus('unavailable');
       return 'unavailable';
@@ -431,8 +434,9 @@ export function useTracking(): TrackingApi {
     // A second start() in one mount must not leave the first one's watchdog running.
     watchdogStopRef.current?.();
     watchdogStopRef.current = null;
+    let stream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         video: { width: CONFIG.CAMERA_WIDTH, height: CONFIG.CAMERA_HEIGHT, frameRate: CONFIG.CAMERA_FPS },
       });
       const video = document.createElement('video');
@@ -530,6 +534,21 @@ export function useTracking(): TrackingApi {
       setStatus('active');
       return 'active';
     } catch (err) {
+      /*
+       * Release whatever was acquired. A start that failed AFTER getUserMedia — the face model would
+       * not load, say — used to leave the stream running with its `ended` listener attached: the
+       * camera light stayed on, and when the OS later ended that track the sitting was told its
+       * camera had been LOST, although it never produced a frame.
+       */
+      watchdogStopRef.current?.();
+      watchdogStopRef.current = null;
+      pumpRef.current?.stop();
+      pumpRef.current = null;
+      for (const t of stream?.getTracks() ?? []) {
+        t.removeEventListener('ended', markLost);
+        t.stop();
+      }
+      videoRef.current = null;
       const name = (err as { name?: string })?.name ?? '';
       const denied = name === 'NotAllowedError' || name === 'PermissionDeniedError';
       const s: CameraStatus = denied ? 'denied' : 'failed';
@@ -537,6 +556,14 @@ export function useTracking(): TrackingApi {
       return s;
     }
   }, [ingestResult, markLost]);
+
+  // One camera at a time: two concurrent starts orphaned the first one's pump and watchdog.
+  const start = useCallback((): Promise<CameraStatus> => {
+    if (!startingRef.current) {
+      startingRef.current = startCamera().finally(() => { startingRef.current = null; });
+    }
+    return startingRef.current;
+  }, [startCamera]);
 
   const stop = useCallback(() => {
     watchdogStopRef.current?.();

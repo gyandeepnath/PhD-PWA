@@ -27,6 +27,8 @@ export function startLivenessCheck(d: LivenessDeps): () => void {
   const target = d.visibilityTarget !== undefined ? d.visibilityTarget
     : (typeof document !== 'undefined' ? document : null);
   let fired = false;
+  let lastTick = d.now();
+  let staleTicks = 0;
 
   const onVisibility = () => {
     if (!d.isVisible()) return;
@@ -38,8 +40,27 @@ export function startLivenessCheck(d: LivenessDeps): () => void {
 
   const cancel = every(() => {
     if (fired) return;
+    const t = d.now();
+    /*
+     * A LATE TICK MEANS THE PAGE STALLED, NOT THE CAMERA. A blocking dialog — window.confirm behind
+     * the Pause button — stops every script, so no result arrives while the clock keeps running. The
+     * first tick after it closes can run before the next frame's result does, and saw a gap of
+     * however long the operator read the dialog: a lost camera, declared over a camera that was fine.
+     * When this tick itself arrives well past its interval, the gap is the page's, and the clock is
+     * restarted instead.
+     */
+    const late = t - lastTick > 2500;
+    lastTick = t;
+    if (late) {
+      if (d.lastResultAt.current != null) d.lastResultAt.current = t;
+      staleTicks = 0;
+      return;
+    }
     const last = d.lastResultAt.current;
-    if (last != null && d.isVisible() && d.now() - last > d.stallMs) {
+    const stale = last != null && d.isVisible() && t - last > d.stallMs;
+    // Two consecutive stale ticks, a second apart: one late result is not a lost camera.
+    staleTicks = stale ? staleTicks + 1 : 0;
+    if (staleTicks >= 2) {
       fired = true;
       d.onStall();
     }
