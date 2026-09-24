@@ -120,18 +120,22 @@ export function IshiharaTest({ onComplete, onDone, seed }: Props) {
           <PlateSvg plate={plate} />
         </div>
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+        {/* The ten digits as ONE row that always fits, and "Can't tell" on its own line. Ten 52 px
+            buttons and their gaps are wider than this 560 px column, so the flex row wrapped a lone
+            "9" onto the next line beside "Can't tell" — a keypad whose last digit reads as an
+            afterthought. A 10-column grid sizes the buttons to the column instead. */}
+        <div data-testid="cv-digits" style={{ display: 'grid', gridTemplateColumns: 'repeat(10, minmax(0, 1fr))', gap: 6 }}>
           {['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
             <button key={d} onClick={() => answer(d)} className="font-lab"
-              style={{ width: 52, height: 52, borderRadius: 12, border: '1px solid #d8d4cc', background: '#fff', fontSize: 18, cursor: 'pointer' }}>
+              style={{ height: 52, borderRadius: 12, border: '1px solid #d8d4cc', background: '#fff', fontSize: 18, cursor: 'pointer' }}>
               {d}
             </button>
           ))}
-          <button onClick={() => answer('')} className="font-lab text-sm"
-            style={{ padding: '0 18px', height: 52, borderRadius: 12, border: '1px solid #d8d4cc', background: '#fff', color: '#5a5a7a', cursor: 'pointer' }}>
-            Can't tell
-          </button>
         </div>
+        <button onClick={() => answer('')} className="font-lab text-sm"
+          style={{ marginTop: 10, padding: '0 22px', height: 48, borderRadius: 12, border: '1px solid #d8d4cc', background: '#fff', color: '#5a5a7a', cursor: 'pointer' }}>
+          Can't tell
+        </button>
       </div>
     </div>
   );

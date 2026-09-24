@@ -69,6 +69,36 @@ interface ExperimentProps {
   onExit: () => void;
 }
 
+/**
+ * What the progress bar calls each stage. It used to print the internal stage name with the
+ * underscores removed — "cvsq baseline", "baseline fatigue", "nasa tlx" — in front of a participant.
+ * A Record over the whole Stage union, so a new stage cannot ship without a name.
+ */
+const STAGE_LABEL: Record<Stage, string> = {
+  SESSION_INIT: 'session set-up',
+  CONSENT: 'consent',
+  PARTICIPANT_PROFILE: 'about you',
+  PREFLIGHT: 'room and device checks',
+  COLOR_VISION: 'colour-vision check',
+  CAMERA_SETUP: 'camera set-up',
+  CALIBRATION: 'eye calibration',
+  CVSQ_BASELINE: 'eye-symptom questionnaire',
+  BASELINE_FATIGUE: 'how your eyes feel',
+  INSTRUCTIONS: 'instructions',
+  READING_TASK: 'reading',
+  COMPREHENSION: 'questions',
+  DISPLAY_PERCEPTION: 'display rating',
+  POST_FATIGUE: 'how your eyes feel',
+  VISUAL_SEARCH: 'word search',
+  REACTION_TIME: 'reaction task',
+  ADAPTATION: 'rest',
+  BREAK_SCREEN: 'break',
+  CVSQ_END: 'eye-symptom questionnaire',
+  NASA_TLX: 'workload questionnaire',
+  SESSION_COMPLETE: 'finished',
+  EXPORT_DASHBOARD: 'export',
+};
+
 export default function Experiment({ resume, onExit }: ExperimentProps) {
   const tracking = useTracking();
   const [machine, setMachine] = useState<MachineState>(initialState());
@@ -1617,7 +1647,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       {showProgress && (
         <ExperimentProgress
           percent={percent}
-          label={machine.stage.replace(/_/g, ' ').toLowerCase()}
+          label={STAGE_LABEL[machine.stage]}
           conditionCurrent={conditionCurrent}
           conditionTotal={conditionTotal}
           timeRemainingMin={timeRemainingMin}

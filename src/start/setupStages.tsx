@@ -14,6 +14,7 @@ import { repeatRunAcknowledged, REPEAT_NOTE_MIN_CHARS, SPLIT_REASON_MIN_CHARS } 
 import { ILLUMINATION, luxInRange, type IlluminationLevel, N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 import type { MediaConsent } from '@/storage/media';
 import { WavyBackground } from '@/components/WavyBackground';
+import { ScrollCue } from '@/components/ScrollCue';
 import { now } from '@/lib/timing';
 import { trackFieldBlockedTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { stimulusFontLoaded } from '@/lib/fonts';
@@ -233,9 +234,9 @@ export function SessionInit({
             set={(v) => setSitting(v as 'single' | 'split')}
             opts={['single', 'split']}
           />
-          <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: -6 }}>
+          <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: 8 }}>
             {sitting === 'single'
-              ? `Single sitting: all ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT} conditions (about 90 min to 2 h).`
+              ? `Single sitting: all ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT} conditions (${CONFIG.SINGLE_SITTING_DURATION}).`
               : `Split: ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2} conditions now, the remaining ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2} in a later sitting (re-enter the same Participant ID; the condition order is preserved). Both halves export as ONE participant.`}
           </p>
           {sitting === 'split' && (
@@ -346,7 +347,7 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
         <Pick label="Device familiarity" value={fam} set={(v) => setFam(v as ProfileData['deviceFamiliarity'])} opts={['low', 'moderate', 'high']} />
         <Pick label="Typical lighting" value={light} set={(v) => setLight(v as ProfileData['lightingHabit'])} opts={['bright', 'moderate', 'dim']} />
         <Pick label="Vision correction" value={corr} set={(v) => setCorr(v as ProfileData['correctionType'])} opts={['none', 'glasses', 'contacts']} />
-        <Pick label="Any colour-vision deficiency? (self-report; full screening added later)" value={cvd == null ? '' : cvd ? 'yes' : 'no'} set={(v) => setCvd(v === 'yes')} opts={['no', 'yes']} />
+        <Pick label="Any colour-vision deficiency? (self-report; the colour-vision plates follow)" value={cvd == null ? '' : cvd ? 'yes' : 'no'} set={(v) => setCvd(v === 'yes')} opts={['no', 'yes']} />
         <Pick
           label="Formal colour-vision plates (operator's clinical screening)"
           value={clinicalCvd}
@@ -375,6 +376,7 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
       </button>
       </div>
       <style>{`.vl-input{width:100%;padding:12px 14px;border:1px solid #d8d4cc;border-radius:10px;font-family:'DM Mono',monospace;font-size:15px;background:#fff;color:#1a1a2e}`}</style>
+      <ScrollCue />
     </div>
   );
 }
@@ -740,16 +742,21 @@ export function SessionComplete({ onExport, luxPanel }: { onExport: () => void; 
   return (
     <div className={shell} style={{ position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
       <WavyBackground opacity={0.05} />
-      <div style={{ position: 'relative', zIndex: 1 }}>
+      {/* Centred, and in reading order: the participant's message first, then — set apart — what
+          the researcher does next. The end-of-session lux panel used to sit between the heading and
+          the thank-you, on a left-aligned column with the right half of the screen empty. */}
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 600, margin: '0 auto' }}>
         <h1 className="font-serif text-5xl font-light">Thank you</h1>
-        {luxPanel}
-        <p className="mt-3 font-lab text-sm text-[#5a5a7a]" style={{ maxWidth: 560 }}>
+        <p className="mt-3 font-lab text-sm text-[#5a5a7a]">
           Your responses have been recorded and will contribute to research on visual ergonomics.
           Please inform the researcher that you have finished.
         </p>
-        <button className={btn} style={{ marginTop: 24, background: '#1a1a2e' }} onClick={onExport}>
-          Researcher: view export dashboard →
-        </button>
+        <div style={{ marginTop: 28, paddingTop: 18, borderTop: '1px solid #e5e2dc' }}>
+          {luxPanel}
+          <button className={btn} style={{ marginTop: 18, background: '#1a1a2e' }} onClick={onExport}>
+            Researcher: view export dashboard →
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -931,6 +938,9 @@ export function Preflight({ onDone }: { onDone: (fontOk: boolean | null) => void
   const tone = { ok: '#22c97a', warn: '#c98a22', blocked: '#e64c4c', unknown: '#5a5a7a' } as const;
   return (
     <div className={shell}>
+      {/* Centred column, as every other setup screen: this one sat against the left edge with the
+          right half of the screen empty. */}
+      <div style={{ width: '100%', maxWidth: 640, margin: '0 auto' }}>
       <h1 className="font-serif text-4xl font-light">Pre-flight checklist</h1>
       <p className="mt-1 font-lab text-xs text-[#5a5a7a]">Researcher: confirm each item before starting.</p>
 
@@ -986,6 +996,7 @@ export function Preflight({ onDone }: { onDone: (fontOk: boolean | null) => void
         onClick={() => all && onDone(fontOk ?? null)}>
         {storageBlocks ? 'Storage problem — cannot start' : 'All checks pass — continue →'}
       </button>
+      </div>
     </div>
   );
 }

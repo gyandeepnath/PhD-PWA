@@ -3328,3 +3328,30 @@ and a failed start is not later reported lost. Removing the release, the `lost` 
 serialisation each fails it.
 
 1061 tests, verify green, stress 1266/1266; camera-lost, edge, full-run and split end-to-end specs pass.
+
+## Round 53 — screen walk-through: labels, alignment, and a keypad
+
+From re-photographing every screen at 1280x800.
+
+- **The progress bar showed internal stage names** — "cvsq baseline", "baseline fatigue", "nasa tlx" —
+  to the participant. It now uses a label table over the whole `Stage` union, so a new stage cannot ship
+  without a name.
+- **Pre-flight sat against the left edge** with the right half of the screen empty; it is now a centred
+  column like every other setup screen.
+- **The thank-you screen** put the operator's end-of-session lux panel between the heading and the
+  participant's message, on a left-aligned column. It is centred, the participant's message comes first,
+  and the operator block follows below a rule.
+- **The colour-vision keypad wrapped a lone "9"** onto a second line beside "Can't tell": ten 52 px
+  buttons and their gaps are wider than the 560 px column. The digits are a ten-column grid that always
+  fits; "Can't tell" has its own line.
+- **Session Init's structure note overlapped its buttons** (a negative margin); fixed. The landing page
+  said a sitting takes "~60–90 min" and the session form "about 90 min to 2 h". One string now serves
+  both (`CONFIG.SINGLE_SITTING_DURATION`), based on the timing model's ~93-minute single sitting against
+  the 120-minute feasibility ceiling.
+- **Long forms gave no sign they continued.** The participant profile runs past the bottom edge with its
+  Continue button out of sight and no scrollbar on a tablet. A "More below ↓" cue (`ScrollCue`) now shows
+  on the profile and consent screens while there is more content below.
+- The profile's colour-vision question still said "full screening added later"; the plates now follow it,
+  and it says so.
+
+Full-run, split, screen-fit, reachability and edge end-to-end specs pass; 1061 tests, verify green.

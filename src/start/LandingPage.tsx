@@ -4,6 +4,7 @@
  */
 import { WavyBackground } from '@/components/WavyBackground';
 import { CONDITIONS } from '@/experiment/conditions';
+import { CONFIG } from '@/experiment/config';
 
 export function LandingPage({ onEnter }: { onEnter: () => void }) {
   return (
@@ -45,7 +46,7 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
              */
             ['Conditions', `${CONDITIONS.length} (${new Set(CONDITIONS.map((c) => c.polarity)).size} polarity × ${new Set(CONDITIONS.map((c) => c.colorName)).size} colour)`],
             ['Design', 'Within-subjects, Williams Latin square'],
-            ['Duration', '~60–90 min'],
+            ['Duration', `${CONFIG.SINGLE_SITTING_DURATION} per sitting`],
             ['Tasks', 'Reading · Search · Go/No-Go'],
           ].map(([k, v]) => (
             <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #e5e2dc' }}>

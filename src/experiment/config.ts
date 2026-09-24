@@ -243,6 +243,13 @@ const BASE_CONFIG = {
    * never fired `ended`. Time the page spends hidden does not count.
    */
   CAMERA_STALL_MS: 5000,
+  /**
+   * What an operator is told a single sitting takes. One string, used by the landing page and the
+   * session form, which used to disagree ("~60-90 min" against "about 90 min to 2 h"). The basis is
+   * docs/TIMING_MODEL.md: a modelled single sitting of about 93 minutes of contact, against the
+   * feasibility gate's 120-minute ceiling. It is an estimate, and says so.
+   */
+  SINGLE_SITTING_DURATION: 'about 90 min to 2 h',
 };
 
 /**
