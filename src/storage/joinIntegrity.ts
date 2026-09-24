@@ -17,6 +17,7 @@
  * which are not, and why.
  */
 import type { SessionBundle } from './gather';
+import { auditBundle } from './integrity';
 import { isConditionComplete } from './conditionStatus';
 import type { Provenance } from './types';
 import { N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
@@ -138,17 +139,50 @@ export function groupByProvenance(bundles: SessionBundle[]): ProvenanceGroup[] {
   return [...groups.values()];
 }
 
+/*
+ * The per-bundle integrity audit's errors that make a participant's rows unfit to model.
+ *
+ * The pooled export never ran that audit. So a sitting whose own export reported broken joins —
+ * two eye rows for one condition, orphan rows, a summary that disagrees with its trials — or one run
+ * under the test harness's collapsed timings, or ocular data with no camera consent, entered the
+ * pooled file analysable = TRUE, with no issue raised. These are the checks that describe the rows
+ * themselves; the rest of the audit's errors (coverage gaps, a missing baseline, media retention) are
+ * carried as warnings, because they describe missing or peripheral data the row-level columns
+ * already mark.
+ */
+const BLOCKING_AUDIT_CHECKS = new Set([
+  'e2e_timing', 'condition_id_unique', 'session_position_unique', 'condition_label_unique',
+  'no_orphan_records', 'one_child_row_per_condition', 'comprehension_item_count',
+  'comprehension_item_unique', 'comprehension_item_range', 'one_cvsq_per_stage', 'one_tlx_per_session',
+  'trial_id_unique', 'trial_number_unique', 'trial_sequence_complete', 'trial_internally_consistent',
+  'trial_rt_finite', 'trial_category_consistent', 'summary_has_trials', 'summary_matches_trials',
+  'calibration_reference', 'ocular_requires_consent',
+]);
+
 export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): JoinIntegrity {
   const issues: JoinIssue[] = [];
   const byParticipant = new Map<string, SessionBundle[]>();
   /** Grouping keys that stand in for a missing participant id; seeded as blocking below. */
   const unattributable = new Set<string>();
+  /** Blocking per-bundle audit findings, by participant key; seeded into excluded_by below. */
+  const auditBlocked = new Map<string, Set<string>>();
 
   for (const b of bundles) {
     const realPid = b.session.participant_id;
     // Never dropped, and never merged: an unattributable session gets a key of its own so it
     // reaches the participant loop, the join report and the long rows like any other.
     const pid = realPid || unresolvedParticipantKey(b.session.session_id);
+    for (const f of auditBundle(b).findings) {
+      if (f.severity !== 'error') continue;
+      const blocking = BLOCKING_AUDIT_CHECKS.has(f.check);
+      const code = `audit_${f.check}`;
+      issues.push({
+        severity: blocking ? 'blocking' : 'warning', code,
+        participant_id: pid, session_id: b.session.session_id,
+        detail: `Per-sitting integrity audit: ${f.detail}`,
+      });
+      if (blocking) (auditBlocked.get(pid) ?? auditBlocked.set(pid, new Set()).get(pid)!).add(code);
+    }
     if (!realPid) {
       unattributable.add(pid);
       issues.push({
@@ -193,6 +227,7 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
     // this carries its code onto the participant row so `excluded_by` names the real reason instead
     // of the exporter's generic "not resolved" fallback.
     const excluded: string[] = unattributable.has(pid) ? ['session_without_participant'] : [];
+    excluded.push(...(auditBlocked.get(pid) ?? []));
     const add = (severity: JoinIssue['severity'], code: string, detail: string, sid: string | null = null) => {
       issues.push({ severity, code, participant_id: pid, session_id: sid, detail });
       if (severity === 'blocking') excluded.push(code);

@@ -87,7 +87,10 @@ describe('a correct dataset passes cleanly', () => {
   it('marks a complete crossover analysable with no issues', () => {
     const r = checkJoin(complete('P01'), EXPECT);
     expect(r.clean).toBe(true);
-    expect(r.issues).toHaveLength(0);
+    // These bundles carry only what the join reads, so the per-sitting audit notes their empty
+    // stores (no baseline fatigue row, say) as warnings. No join issue, and nothing blocking.
+    expect(r.issues.filter((i) => !i.code.startsWith('audit_'))).toHaveLength(0);
+    expect(r.issues.filter((i) => i.severity === 'blocking')).toHaveLength(0);
     expect(r.analysable_participants).toBe(1);
     expect(r.participants[0].condition_runs).toBe(20);
   });
@@ -483,5 +486,43 @@ describe('which build measured these rows', () => {
     const one = bundle({ pid: 'P1', sid: 's1', start: 1, illumination: 'moderate', conditions: tenA });
     one.session.additional_builds = [];
     expect(checkJoin([one], NOW).issues.map((i) => i.code)).not.toContain('build_changed_mid_sitting');
+  });
+});
+
+
+/*
+ * The per-sitting integrity audit now runs inside the pooled join check. It never did, so a sitting
+ * whose own export reported broken joins, test-harness timing, or ocular data without camera consent
+ * entered the pooled file analysable.
+ */
+describe('the pooled join check runs the per-sitting audit', () => {
+  const real = async () => {
+    const { buildFixtureBundle } = await import('@/sim/bundleFixture');
+    return buildFixtureBundle();
+  };
+  const verdict = (b: unknown) => checkJoin([b as never], { conditionsPerParticipant: 10, sittingsPerParticipant: 1, illuminationLevels: 1 });
+
+  it('a sound sitting is not blocked by it', async () => {
+    const r = verdict(await real());
+    expect(r.issues.filter((i) => i.severity === 'blocking').map((i) => i.code)).toEqual([]);
+  });
+
+  it('a sitting run under the test harness timing is not analysable', async () => {
+    const b = await real();
+    const r = verdict({ ...b, session: { ...b.session, e2e_timing: true } });
+    expect(r.participants[0].analysable).toBe(false);
+    expect(r.participants[0].excluded_by).toContain('audit_e2e_timing');
+  });
+
+  it('two eye rows for one condition block the participant', async () => {
+    const b = await real();
+    const r = verdict({ ...b, eyeMetrics: [...b.eyeMetrics, { ...b.eyeMetrics[0] }] });
+    expect(r.participants[0].excluded_by).toContain('audit_one_child_row_per_condition');
+  });
+
+  it('ocular data without the camera grant blocks the participant', async () => {
+    const b = await real();
+    const r = verdict({ ...b, session: { ...b.session, media_consent: { ...b.session.media_consent, camera_metrics: false } } });
+    expect(r.participants[0].excluded_by).toContain('audit_ocular_requires_consent');
   });
 });

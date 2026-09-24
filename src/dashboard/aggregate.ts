@@ -796,6 +796,14 @@ export function cohortSummary(
       continue;
     }
     if (isTrue(r.analysable)) c.n_analysable++;
+    /*
+     * Only ANALYSABLE rows reach the outcome mean and the position balance. This tab reads the pooled
+     * file so that the numbers shown are the ones the analysis will see, and the analysis models
+     * analysable rows only: a test-harness sitting, one with broken joins, or one whose ocular data
+     * has no consent behind it (see BLOCKING_AUDIT_CHECKS in joinIntegrity.ts) was averaged in here
+     * all the same. Such rows still count in n, so a condition falling behind is still visible.
+     */
+    if (!isTrue(r.analysable)) continue;
     // fps_adequate_for_ratio is only meaningful where the camera ran at all; a blank is "unknown",
     // which is not the same as inadequate and must not be counted as either.
     if (r.fps_adequate_for_ratio !== '' && !isTrue(r.fps_adequate_for_ratio)) c.n_fps_inadequate++;

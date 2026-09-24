@@ -105,6 +105,21 @@ interface RowContext {
   participantWithdrawn: boolean;
 }
 
+/**
+ * One child record per condition, the FIRST where there are several — the same record
+ * buildConditionSummaries reads with `.find()`.
+ *
+ * These were `new Map(rows.map(...))`, where the LAST duplicate wins. With two eye rows for one
+ * condition, a pooled row took its blink counts from the second record and its incomplete-blink
+ * ratio (via the summary) from the first: one row, two exposures. A duplicate now blocks the
+ * participant (audit_one_child_row_per_condition); this keeps the row internally consistent anyway.
+ */
+function firstByCondition<T extends { condition_id: string }>(rows: readonly T[]): Map<string, T> {
+  const m = new Map<string, T>();
+  for (const r of rows) if (!m.has(r.condition_id)) m.set(r.condition_id, r);
+  return m;
+}
+
 const numOrNull = (v: unknown): number | null =>
   typeof v === 'number' && Number.isFinite(v) ? v : null;
 
@@ -141,7 +156,7 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
 
     const summaries = buildConditionSummaries(b);
     const byId = new Map(b.conditions.map((c) => [c.condition_id, c]));
-    const eyeById = new Map(b.eyeMetrics.map((r) => [r.condition_id, r]));
+    const eyeById = firstByCondition(b.eyeMetrics);
     /*
      * The gaze trust verdict for THIS sitting.
      *
@@ -158,8 +173,8 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
      * the link, and none at all when that cannot be decided or the camera was not running.
      */
     const calibrations = b.calibration ?? [];
-    const rtById = new Map(b.rtSummaries.map((r) => [r.condition_id, r]));
-    const searchById = new Map(b.visualSearch.map((r) => [r.condition_id, r]));
+    const rtById = firstByCondition(b.rtSummaries);
+    const searchById = firstByCondition(b.visualSearch);
     const compById = new Map<string, typeof b.comprehension>();
     for (const item of b.comprehension) {
       (compById.get(item.condition_id) ?? compById.set(item.condition_id, []).get(item.condition_id)!).push(item);
@@ -197,9 +212,12 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
        * looks entirely real, which would overstate the precision of exactly the measurement the
        * study rests on — and in the direction that makes a result look stronger.
        */
-      const nInc = numOrNull(e?.blink_count_incomplete);
-      const nFull = numOrNull(e?.blink_count_full);
-      const nMicro = numOrNull(e?.blink_count_micro);
+      // Camera-gated, as buildConditionSummaries already was: records from earlier builds carry
+      // blink counts of 0 on camera-off rows, which exported "0 of 0 blinks" as if measured.
+      const camOn = e?.camera_active === true;
+      const nInc = camOn ? numOrNull(e?.blink_count_incomplete) : null;
+      const nFull = camOn ? numOrNull(e?.blink_count_full) : null;
+      const nMicro = camOn ? numOrNull(e?.blink_count_micro) : null;
       const nTotal = nInc != null && nFull != null && nMicro != null ? nInc + nFull + nMicro : null;
 
       const prev = ordered.find((x) => x.session_position === sum.session_position - 1);
@@ -416,9 +434,11 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         camera_active: e ? sum.camera_active : null,
         camera_inactive_reason: e?.camera_inactive_reason ?? null,
         effective_fps: round(sum.effective_fps),
-        fps_adequate_for_ratio: e?.fps_adequate_for_ratio ?? null,
+        // Blank, not FALSE, without a camera: FALSE claims the frame rate was measured and found
+        // wanting, and the cohort view counted camera-off rows as frame-rate failures on that basis.
+        fps_adequate_for_ratio: camOn ? (e?.fps_adequate_for_ratio ?? null) : null,
         face_presence_ratio: round(sum.face_presence_ratio),
-        gaze_calibrated: e?.gaze_calibrated ?? null,
+        gaze_calibrated: camOn ? (e?.gaze_calibrated ?? null) : null,
         // Per ROW: the calibration this condition was measured under, not the sitting's last one.
         gaze_trust: rowCalibration?.gaze_trust ?? null,
         gaze_targets_well_covered: rowCalibration?.gaze_targets_well_covered ?? null,

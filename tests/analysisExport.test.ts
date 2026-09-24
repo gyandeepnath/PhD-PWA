@@ -698,3 +698,29 @@ describe('gaze_trust is the calibration each row was measured under, not the sit
     expect(trust(rows, 0)).toBe('');
   });
 });
+
+describe('camera-dependent columns are blank, not FALSE or zero, without a camera', () => {
+  it('a legacy camera-off row with zero counts exports blanks', () => {
+    const b = sitting('P1', { sid: 'S1', start: 1000, illumination: 'moderate', block: 0, eyeAt: {
+      0: { camera_active: false, blink_count_incomplete: 0, blink_count_full: 0, blink_count_micro: 0,
+           fps_adequate_for_ratio: false, gaze_calibrated: false },
+    } });
+    const row = long([b]).rows.find((r) => r.session_position === '0')!;
+    expect(row.n_blinks_total).toBe('');
+    expect(row.n_incomplete).toBe('');
+    expect(row.fps_adequate_for_ratio).toBe('');
+    expect(row.gaze_calibrated).toBe('');
+  });
+});
+
+describe('one pooled row reads one eye record', () => {
+  it('with two eye rows for a condition, counts and ratio come from the same (first) record', () => {
+    const b = sitting('P1', { sid: 'S1', start: 1000, illumination: 'moderate', block: 0, eyeAt: {
+      0: { camera_active: true, blink_count_incomplete: 2, blink_count_full: 30, blink_count_micro: 3, incomplete_blink_ratio: 2 / 35 },
+    } });
+    b.eyeMetrics.push({ ...b.eyeMetrics[0], blink_count_incomplete: 30, blink_count_full: 10, blink_count_micro: 0, incomplete_blink_ratio: 0.75 } as never);
+    const row = long([b]).rows.find((r) => r.session_position === '0')!;
+    expect(row.n_incomplete).toBe('2');
+    expect(Number(row.incomplete_blink_ratio)).toBeCloseTo(2 / 35, 4);
+  });
+});

@@ -211,7 +211,24 @@ export class EyeMetricsAggregator {
     // summariseBlinks() then reports a null ratio rather than a clean-looking zero.
     const baseline = args.baselineEarValue;
     const events = classifyBlinks(this.ear, baseline);
-    const blink = summariseBlinks(events, durationMs);
+    /*
+     * NO BASELINE, NO BLINK MEASURE — not a count of zero.
+     *
+     * classifyBlinks returns no events without a baseline, and the summary then reported that as
+     * zero blinks: blink_count_* = 0 and blink_rate = 0 per minute over a normal-looking observed
+     * duration. The camera was on (the operator chose "continue without ocular measures" at
+     * calibration, which promised these would be EMPTY), so camera_active is TRUE and nothing marked
+     * the row — and a reduced blink rate is this protocol's own marker of visual fatigue. Every
+     * measure that rests on classifying blinks is blank instead.
+     */
+    const blinkMeasurable = baseline != null && Number.isFinite(baseline) && baseline > 0;
+    const summary = summariseBlinks(events, durationMs);
+    const blink = blinkMeasurable ? summary : {
+      ...summary,
+      blink_rate: null, blink_rate_full: null, blink_rate_micro: null,
+      blink_count_full: null, blink_count_micro: null, blink_count_incomplete: null,
+      incomplete_blink_ratio: null, blink_duration_mean_ms: null,
+    };
     /**
      * Measured on the EAR SERIES, not on the frame loop.
      *
@@ -224,8 +241,13 @@ export class EyeMetricsAggregator {
     const fps = effectiveFps(this.ear.map((s) => s.t_ms));
     // The origin of the condition's own clock, not zero: see binnedBlinkRates.
     const originMs = this.ear.length ? this.ear[0].t_ms : 0;
-    const bins = this.binnedBlinkRates(events, spanMs, originMs, samplingGapThreshold(this.ear));
-    const closure = computeClosureMetrics(this.ear, baseline, events);
+    const bins = blinkMeasurable
+      ? this.binnedBlinkRates(events, spanMs, originMs, samplingGapThreshold(this.ear))
+      : { first_half_blink_rate: null, second_half_blink_rate: null };
+    const closureRaw = computeClosureMetrics(this.ear, baseline, events);
+    // The same for the long-closure counts, which reported 0 without a baseline to measure against.
+    const closure = blinkMeasurable ? closureRaw
+      : { ...closureRaw, long_closure_count: null, long_closure_total_ms: null };
     const ibi = interBlinkInterval(events);
 
     const sPitch = smooth(this.pitch);

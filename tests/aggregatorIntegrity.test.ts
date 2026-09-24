@@ -64,3 +64,44 @@ describe('every numeric channel is filtered at ingest', () => {
     expect(rec.incomplete_blink_ratio).toBeNull();
   });
 });
+
+describe('without an open-eye baseline there is no blink measure — not a count of zero', () => {
+  /*
+   * The operator can continue past calibration "without ocular measures", which promises they will be
+   * empty. With the camera on and no baseline, classifyBlinks finds no events and the row reported 0
+   * blinks at 0 per minute over a normal observed duration — a fabricated fatigue marker.
+   */
+  const feedBlinks = (a: EyeMetricsAggregator) => {
+    let t = 0;
+    for (let b = 0; b < 20; b++) {
+      for (let k = 0; k < 60; k++) a.ingest(frame((t += 33), 0.3));
+      for (let k = 0; k < 5; k++) a.ingest(frame((t += 33), 0.05));
+    }
+  };
+  const run = (baseline: number | null) => {
+    const a = new EyeMetricsAggregator();
+    feedBlinks(a);
+    return a.finalize({
+      conditionId: 'c', sessionId: 's', cameraActive: true,
+      baselineEarValue: baseline, earThresholdUsed: null,
+      gazeCalibrated: false, headPitchCalibrated: false, calibrationId: null,
+    });
+  };
+
+  it('with a baseline, the same frames are measured', () => {
+    const r = run(0.3);
+    expect(r.blink_count_full! + r.blink_count_incomplete! + r.blink_count_micro!).toBeGreaterThan(0);
+    expect(r.blink_rate).toBeGreaterThan(0);
+  });
+
+  it('without one, every blink-derived value is blank', () => {
+    const r = run(null);
+    for (const k of ['blink_rate', 'blink_rate_full', 'blink_rate_micro', 'blink_count_full', 'blink_count_micro',
+      'blink_count_incomplete', 'incomplete_blink_ratio', 'long_closure_count', 'long_closure_total_ms'] as const) {
+      expect(r[k], k).toBeNull();
+    }
+    expect(r.bins).toEqual({ first_half_blink_rate: null, second_half_blink_rate: null });
+    expect(r.camera_active).toBe(true);            // the camera DID run; the frames are real
+    expect(r.ear_sample_count).toBeGreaterThan(0);
+  });
+});

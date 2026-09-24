@@ -3355,3 +3355,40 @@ From re-photographing every screen at 1280x800.
   and it says so.
 
 Full-run, split, screen-fit, reachability and edge end-to-end specs pass; 1061 tests, verify green.
+
+## Round 54 — the pooled file admitted what the per-sitting audit rejected
+
+A second reviewer re-checked seventeen suspected pooled-export defects against the code, with probes
+through the real exporters; twelve were real. This round fixes the ones that change which rows are
+analysed or what value they carry. (The rest, mostly codebook wording, follow in Round 55.)
+
+**The per-sitting integrity audit never ran on the pooled file.** `auditBundle` — duplicate or orphan
+child rows, summaries that disagree with their trials, test-harness timing, ocular data without the
+camera grant — ran only inside the per-sitting export. A sitting its own export reported as broken entered
+`analysis_long.csv` with `analysable = TRUE` and no issue raised; the reviewer's probe did exactly that
+with a test-harness sitting holding a duplicate eye row and no camera consent. `checkJoin` now runs the
+audit on every bundle: the checks that describe the rows themselves block the participant
+(`audit_<check>` in `excluded_by`), and the rest — coverage gaps, a missing baseline, media retention —
+are carried as warnings.
+
+**One pooled row could mix two records.** Its lookups kept the LAST duplicate child row while the
+summaries kept the FIRST, so a condition with two eye rows exported the blink counts of one and the
+ratio of the other. Both now take the first (`firstByCondition`); the duplicate itself now blocks.
+
+**"Zero blinks" without a baseline.** With the camera on and no open-eye baseline — the operator can
+continue past calibration "without ocular measures", which promises they will be empty — every blink
+measure was reported as zero: 0 per minute over a normal-looking duration, on a row saying the camera
+was active, in a protocol whose fatigue marker is a falling blink rate. The aggregator now leaves every
+blink-derived value blank when there is no baseline. The pooled file also camera-gates the blink counts
+for rows from earlier builds, which carried 0 on camera-off rows.
+
+**Camera-off rows read FALSE for camera-dependent flags.** `fps_adequate_for_ratio` and `gaze_calibrated`
+were FALSE with no camera — a claim that the frame rate was measured and found wanting — and the cohort
+view counted those rows as frame-rate failures. Both are blank now.
+
+**The cohort view averaged rows the analysis will not use.** Its header says it reads the pooled file
+"so that the numbers shown are the ones the analysis will actually see"; it averaged every row. The
+outcome mean and position balance now use analysable rows only; `n` still counts them all.
+
+Each fix is pinned by a test that fails when the fix is reverted. 1069 tests, verify green, stress
+29/29 structural scenarios and 1266/1266 checks.
