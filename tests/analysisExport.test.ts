@@ -651,3 +651,50 @@ describe('an unfinished condition is kept, flagged, and never analysable', () =>
     expect(ds.integrity.participants[0].analysable).toBe(true);
   });
 });
+
+describe('gaze_trust is the calibration each row was measured under, not the sitting\'s last', () => {
+  /*
+   * A thin fit at the start, a resume, a good fit afterwards. The pooled file stamped the LATEST
+   * calibration onto every row, so the rows measured under the thin fit were exported as "good" —
+   * and gaze_trust is the column the codebook tells an analyst to filter gaze measures on.
+   */
+  const withCalibrations = (eyeAt: Record<number, Record<string, unknown>>, startedAt?: Record<number, number>) => {
+    const b = sitting('P1', { sid: 'S1', start: 1000, illumination: 'moderate', block: 0, eyeAt });
+    b.calibration = [
+      { calibration_id: 'cal-thin', gaze_trust: 'thin', gaze_targets_well_covered: 3, calibrated_at: 1500 },
+      { calibration_id: 'cal-good', gaze_trust: 'good', gaze_targets_well_covered: 8, calibrated_at: 5000 },
+    ] as never;
+    for (const [p, t] of Object.entries(startedAt ?? {})) (b.conditions[Number(p)] as { started_at: number }).started_at = t;
+    return long([b]).rows;
+  };
+  const trust = (rows: Record<string, string>[], p: number) => rows.find((r) => r.session_position === String(p))!.gaze_trust;
+
+  it('by the id the row records', () => {
+    const rows = withCalibrations({
+      0: { camera_active: true, calibration_id: 'cal-thin' },
+      6: { camera_active: true, calibration_id: 'cal-good' },
+    });
+    expect(trust(rows, 0)).toBe('thin');
+    expect(trust(rows, 6)).toBe('good');
+  });
+
+  it('by time, for a row written before the link existed', () => {
+    const rows = withCalibrations(
+      { 0: { camera_active: true }, 6: { camera_active: true } },
+      { 0: 2000, 6: 6000 },
+    );
+    expect(trust(rows, 0)).toBe('thin');
+    expect(trust(rows, 6)).toBe('good');
+  });
+
+  it('none at all when the camera was not running', () => {
+    const rows = withCalibrations({ 0: { camera_active: false, calibration_id: null } });
+    expect(trust(rows, 0)).toBe('');
+  });
+
+  it('none, rather than a guess, when an old row cannot be matched', () => {
+    // Started before either calibration was taken: no calibration was in force.
+    const rows = withCalibrations({ 0: { camera_active: true } }, { 0: 1200 });
+    expect(trust(rows, 0)).toBe('');
+  });
+});

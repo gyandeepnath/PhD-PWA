@@ -22,7 +22,7 @@ const finalize = (feed: (a: EyeMetricsAggregator) => void) => {
   return a.finalize({
     conditionId: 'c', sessionId: 's', cameraActive: true,
     baselineEarValue: 0.3, earThresholdUsed: 0.18,
-    gazeCalibrated: false, headPitchCalibrated: false,
+    gazeCalibrated: false, headPitchCalibrated: false, calibrationId: null,
   });
 };
 const nonFinite = (rec: Record<string, unknown>) =>

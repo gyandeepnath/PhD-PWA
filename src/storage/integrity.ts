@@ -432,6 +432,22 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
     }
   }
 
+  // ---- every eye-metrics row that names a calibration must name one this bundle holds
+  //
+  // calibration_id is how a row's gaze_trust is resolved (storage/calibrationLookup.ts). An id with
+  // no record behind it resolves to nothing, silently blanking the row's trust verdict, so it is
+  // reported as a broken join rather than left to look like a camera-off row.
+  {
+    const known = new Set((bundle.calibration ?? []).map((c) => c.calibration_id));
+    const dangling = (bundle.eyeMetrics ?? []).filter((e) => e.calibration_id != null && !known.has(e.calibration_id));
+    if (dangling.length) {
+      add('error', 'calibration_reference',
+        `${dangling.length} eye-metrics row(s) name a calibration that is not in this bundle, so their ` +
+        `gaze_trust cannot be resolved.`,
+        dangling.slice(0, 5).map((e) => e.condition_id));
+    }
+  }
+
   // ---- ocular data must never exist without the grant that authorises it
   //
   // The camera_metrics grant was recorded and exported but enforced nowhere, so a session could

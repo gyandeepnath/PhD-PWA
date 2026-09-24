@@ -3164,3 +3164,30 @@ pages (the words are unchanged: 571–601, mean 585).
 
 1010 tests, verify green, stress 1256/1256; edge, full-run, split-session and screen-fit end-to-end
 specs pass.
+
+## Round 48 — every eye-metrics row now names the calibration it was measured under
+
+From the interruption audit, checked against the code before acting. The suspected defect was that a
+recalibration after a resume overwrote the first; it does not — calibration records are only ever
+appended, and each row's blink thresholds were always the ones in force when it was measured. What was
+missing was the link between a row and its calibration.
+
+So the pooled file took the sitting's LATEST calibration and stamped its `gaze_trust` and
+`gaze_targets_well_covered` on every row. A sitting calibrated thinly, resumed, and recalibrated well
+exported its pre-resume rows as "good" — and `gaze_trust` is the column both codebooks tell an analyst
+to filter gaze measures on. The reverse order dropped good rows. The two exports also chose "latest"
+differently for records without a timestamp (the per-session file took the last in document order, the
+pooled file the first), so they could name different calibrations for one sitting. And the
+`calibration_runs` codebook said a count above one meant the sitting was interrupted; a retry inside the
+calibration routine adds a record too.
+
+The tracker now records the id of the calibration it wrote and puts it on every row it finalizes
+(`calibration_id`; explicitly null when the camera was not running). `07_eye_metrics.csv` exports it. One
+module, `storage/calibrationLookup.ts`, answers "which calibration" for both exports: by id where the row
+has one; for rows written before the link, the last calibration taken at or before the condition started;
+and nothing — not a guess — when that cannot be decided. `analysis_long.csv` resolves `gaze_trust` per row
+and leaves it blank for camera-off rows. The integrity audit reports a row naming a calibration the bundle
+does not hold, since that would otherwise blank its verdict silently; the pipeline stress suite has a
+damaged-bundle scenario for it. Replacing the per-row lookup with "the last calibration" fails four tests.
+
+1026 tests, verify green, stress 29/29 structural scenarios; full-run end-to-end passes.

@@ -11,6 +11,7 @@ import type { MediaRecord } from './media';
 import { summariseLux, LUX_CHECKPOINTS } from '@/experiment/illumination';
 import { buildConditionSummaries, ENGAGEMENT } from '@/dashboard/aggregate';
 import { isConditionComplete } from './conditionStatus';
+import { latestCalibration as lastCalibrationTaken } from './calibrationLookup';
 import { isWithdrawn } from './gather';
 import { SCREEN_TEST_PLATES, SCREEN_ALLOWED_SLIPS } from '@/screening/ishihara';
 import { PASSAGES, SEARCH_EXCERPT_MAX_WORDS } from '@/experiment/passages';
@@ -479,11 +480,11 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '01_session_info.csv', column: 'stimulus_font_ok', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the vendored stimulus typeface (Roboto 400) was available when pre-flight ran. Empty where the browser gave no answer. False means the reading passage was rendered in a fallback face, which changes letter shape and stroke weight and so changes the display condition.' },
   { file: '01_session_info.csv', column: 'caffeine_today_session', type: 'boolean', unit: '-', role: 'covariate', description: "Caffeine in roughly the four hours before THIS sitting. Recorded per sitting because it varies between them; the participant record's copy is the first sitting's and must not be used as a per-session covariate." },
   { file: '01_session_info.csv', column: 'hours_since_sleep_session', type: 'float', unit: 'hours', role: 'covariate', description: 'Hours since waking, at THIS sitting. Per-sitting for the same reason as caffeine_today_session. Bears on blink rate and on the drowsiness covariates.' },
-  { file: '01_session_info.csv', column: 'calibration_runs', type: 'integer', unit: 'count', role: 'qc', description: 'How many calibrations this sitting recorded. More than one means the session was interrupted and re-calibrated; the calibration_* columns describe the most recent, and per-condition ear_baseline in 07_eye_metrics.csv is what each condition actually used.' },
+  { file: '01_session_info.csv', column: 'calibration_runs', type: 'integer', unit: 'count', role: 'qc', description: 'How many calibration records this sitting holds. More than one means calibration was retried within the routine or re-run on a resume; it does not by itself mean the sitting was interrupted. The calibration_* and gaze_* columns of this file describe the LAST one only. Which one governed each condition is calibration_id in 07_eye_metrics.csv, and per-condition ear_baseline there is what each condition actually used.' },
   { file: '01_session_info.csv', column: 'gaze_calibration_valid', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the nine-point gaze mapping met its acceptance criterion. When false, gaze columns are coarse-zone only and should not be treated as calibrated.' },
   { file: '01_session_info.csv', column: 'calibration_ear_baseline', type: 'number', unit: 'ratio', role: 'qc', description: 'Open-eye eye-aspect-ratio baseline for this participant, measured at centre fixation before the gaze targets, in the posture the reading task is performed in. Every blink threshold is expressed as a fraction of this, so it is referenced to the individual rather than a population default. Compare against open_ear_measured in 07_eye_metrics.csv for within-sitting drift.' },
   { file: '01_session_info.csv', column: 'calibration_pitch_baseline_frac', type: 'number', unit: 'ratio', role: 'qc', description: 'Frontal head-pose reference captured at calibration. Head-pose columns are relative to this when head_pitch_calibrated is true.' },
-  { file: '01_session_info.csv', column: 'gaze_trust', type: 'factor(3)', unit: '-', role: 'qc', description: "How much evidence the gaze fit rests on: good (two thirds of targets tracked through at least half their dwell), thin (it met the acceptance rule but on very little data), unusable (the fit was rejected). gaze_calibration_valid is TRUE for both good and thin, so THIS is the column to filter gaze measures on. A thin calibration produces thresholds that are closer to noise than to measurement." },
+  { file: '01_session_info.csv', column: 'gaze_trust', type: 'factor(3)', unit: '-', role: 'qc', description: "How much evidence the gaze fit rests on: good (two thirds of targets tracked through at least half their dwell), thin (it met the acceptance rule but on very little data), unusable (the fit was rejected). gaze_calibration_valid is TRUE for both good and thin, so THIS is the column to filter gaze measures on. A thin calibration produces thresholds that are closer to noise than to measurement. Describes the sitting's LAST calibration: when calibration_runs > 1, filter per condition on the calibration named by calibration_id in 07_eye_metrics.csv, or on gaze_trust in analysis_long.csv, which is resolved per row." },
   { file: '01_session_info.csv', column: 'gaze_targets_well_covered', type: 'integer', unit: 'targets', role: 'qc', description: "How many of the nine targets were tracked through at least half their dwell, as opposed to merely registering at all. Read beside calibration_targets_detected: a large gap between them means most targets were caught only in passing." },
   { file: '01_session_info.csv', column: 'gaze_threshold_floored', type: 'boolean', unit: '-', role: 'qc', description: "TRUE when the fitted gaze threshold hit its minimum on either axis, so the threshold used is partly a floor rather than a measurement of this participant. It binds for a participant with limited gaze excursion or a distant camera, and when it does, classifications use a wider threshold than their eyes earned — which biases gaze_deviation_ratio DOWNWARD. Filter or model these sittings; before this column existed they could not be found." },
   { file: '01_session_info.csv', column: 'calibration_targets_detected', type: 'integer', unit: 'targets', role: 'qc', description: "How many of the nine calibration targets produced at least one usable sample. Counted on the same finite-filtered pool the calibration fit is judged on, so it cannot disagree with gaze_calibration_valid. Low values mean a poor camera setup for that sitting." },
@@ -558,6 +559,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '07_eye_metrics.csv', column: 'head_stability_score', type: 'number', unit: '0-1', role: 'qc', description: 'How steadily the head was held. Low values degrade the reliability of every camera-derived measure in the row.' },
   { file: '07_eye_metrics.csv', column: 'off_axis_ratio', type: 'number', unit: '0-1', role: 'qc', description: 'Proportion of processed frames in which the head was turned away from the display.' },
   { file: '07_eye_metrics.csv', column: 'gaze_calibrated', type: 'boolean', unit: '-', role: 'qc', description: 'Whether gaze columns rest on a valid nine-point calibration. When false, gaze is coarse-zone only.' },
+  { file: '07_eye_metrics.csv', column: 'calibration_id', type: 'string', unit: 'uuid', role: 'id', description: 'The calibration this condition was measured under, as calibration_id in the calibration records. A sitting holds more than one when calibration was retried or the sitting was resumed; the calibration_* and gaze_trust columns of 01_session_info.csv describe only the LAST, so join on this to get the fit that governed THIS row. Blank when the camera was not running, and on rows recorded before this column existed.' },
   { file: '07_eye_metrics.csv', column: 'gaze_deviation_ratio', type: 'number', unit: '0-1', role: 'dv', description: 'Proportion of frames with gaze away from the reading region. Interpretable only when gaze_calibrated is true.' },
   { file: '07_eye_metrics.csv', column: 'zone_center_ratio', type: 'number', unit: '0-1', role: 'dv', description: 'Proportion of frames with gaze in the central reading zone.' },
   { file: '07_eye_metrics.csv', column: 'zone_transition_count', type: 'integer', unit: 'count', role: 'dv', description: 'Number of transitions between gaze zones. A coarse scanning-activity index.' },
@@ -707,9 +709,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
   const summaries = buildConditionSummaries(bundle);
   // Most recent calibration by the time it was taken, falling back to document order for records
   // written before calibrated_at existed. Never an arbitrary uuid sort — see 01_session_info.
-  const latestCalibration = [...bundle.calibration].sort(
-    (a, b) => (a.calibrated_at ?? 0) - (b.calibrated_at ?? 0),
-  ).at(-1);
+  const latestCalibration = lastCalibrationTaken(bundle.calibration);
   const files: ExportFile[] = [];
   const csv = (filename: string, headers: string[], rows: Record<string, unknown>[]) =>
     files.push({ filename, content: toCsv(headers, rows), mime: 'text/csv' });
@@ -872,7 +872,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 07 — eye metrics
   csv('07_eye_metrics.csv',
-    ['participant_id', 'condition_id', 'camera_active', 'effective_fps', 'fps_adequate_for_tiers', 'fps_adequate_for_ratio', 'observed_duration_ms', 'ear_sample_count', 'open_ear_measured', 'blink_rate', 'blink_rate_full', 'incomplete_blink_ratio', 'blink_count_incomplete', 'blink_count_full', 'blink_count_micro', 'mean_inter_blink_interval_ms', 'inter_blink_interval_cv', 'perclos_p80', 'perclos_p70', 'long_closure_count', 'long_closure_total_ms', 'blink_duration_mean_ms', 'first_half_blink_rate', 'second_half_blink_rate', 'ear_baseline', 'ear_threshold_used', 'ear_complete_threshold', 'head_pitch_mean', 'head_pitch_calibrated', 'head_yaw_mean', 'head_roll_mean', 'head_movement_std', 'postural_load', 'head_stability_score', 'off_axis_ratio', 'gaze_calibrated', 'gaze_deviation_ratio', 'zone_center_ratio', 'zone_transition_count', 'face_presence_ratio', 'face_size_ratio', 'mean_face_luma', 'lighting_quality'],
+    ['participant_id', 'condition_id', 'camera_active', 'effective_fps', 'fps_adequate_for_tiers', 'fps_adequate_for_ratio', 'observed_duration_ms', 'ear_sample_count', 'open_ear_measured', 'blink_rate', 'blink_rate_full', 'incomplete_blink_ratio', 'blink_count_incomplete', 'blink_count_full', 'blink_count_micro', 'mean_inter_blink_interval_ms', 'inter_blink_interval_cv', 'perclos_p80', 'perclos_p70', 'long_closure_count', 'long_closure_total_ms', 'blink_duration_mean_ms', 'first_half_blink_rate', 'second_half_blink_rate', 'ear_baseline', 'ear_threshold_used', 'ear_complete_threshold', 'head_pitch_mean', 'head_pitch_calibrated', 'head_yaw_mean', 'head_roll_mean', 'head_movement_std', 'postural_load', 'head_stability_score', 'off_axis_ratio', 'gaze_calibrated', 'calibration_id', 'gaze_deviation_ratio', 'zone_center_ratio', 'zone_transition_count', 'face_presence_ratio', 'face_size_ratio', 'mean_face_luma', 'lighting_quality'],
     bundle.eyeMetrics.map((e) => ({
       participant_id: pid, condition_id: e.condition_id, camera_active: e.camera_active,
       effective_fps: e.effective_fps, fps_adequate_for_tiers: e.fps_adequate_for_tiers,
@@ -890,7 +890,12 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       head_pitch_mean: e.head_pitch_mean, head_pitch_calibrated: e.head_pitch_calibrated, head_yaw_mean: e.head_yaw_mean, head_roll_mean: e.head_roll_mean,
       head_movement_std: e.head_movement_std,
       postural_load: e.postural_load, head_stability_score: e.head_stability_score, off_axis_ratio: e.off_axis_ratio,
-      gaze_calibrated: e.gaze_calibrated, gaze_deviation_ratio: e.gaze_deviation_ratio,
+      gaze_calibrated: e.gaze_calibrated,
+      // Which calibration this row was measured under; see storage/calibrationLookup.ts. Blank when
+      // the camera was not running, and on rows written before the link existed — the time-based
+      // resolution for those is done where the value is USED (analysis_long.csv), not faked here.
+      calibration_id: e.calibration_id ?? '',
+      gaze_deviation_ratio: e.gaze_deviation_ratio,
       zone_center_ratio: e.zone_center_ratio, zone_transition_count: e.zone_transition_count,
       face_presence_ratio: e.face_presence_ratio, face_size_ratio: e.face_size_ratio, mean_face_luma: e.mean_face_luma, lighting_quality: e.lighting_quality,
     })));

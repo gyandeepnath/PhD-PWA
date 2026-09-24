@@ -152,7 +152,12 @@ scenario('conditions present but every child store empty (stores written out of 
 }, { damaged: true });
 
 scenario('no participant record (profile never saved)', (b) => { b.participant = undefined; });
-scenario('no calibration record', (b) => { b.calibration = []; });
+// A calibration that was never saved cannot be named by any eye row: the tracker records the id only
+// after the write succeeds. So "no calibration" means rows without the link, as a legacy sitting has.
+scenario('no calibration record', (b) => {
+  b.calibration = [];
+  b.eyeMetrics = b.eyeMetrics.map(({ calibration_id: _drop, ...e }) => e);
+});
 scenario('no CVS-Q at all', (b) => { b.cvsq = []; });
 scenario('no NASA-TLX', (b) => { b.tlx = []; });
 scenario('no lux readings whatsoever', (b) => { b.session.lux_readings = []; });
@@ -160,6 +165,9 @@ scenario('no lux readings whatsoever', (b) => { b.session.lux_readings = []; });
 // ---- referential damage
 scenario('orphan eye metrics (condition_id points nowhere)', (b) => {
   b.eyeMetrics = b.eyeMetrics.map((e) => ({ ...e, condition_id: 'ghost-' + e.condition_id }));
+}, { damaged: true });
+scenario('eye metrics name a calibration the bundle does not hold', (b) => {
+  b.calibration = [];
 }, { damaged: true });
 scenario('duplicate condition_id across two conditions', (b) => {
   if (b.conditions.length > 1) b.conditions[1] = { ...b.conditions[1], condition_id: b.conditions[0].condition_id };

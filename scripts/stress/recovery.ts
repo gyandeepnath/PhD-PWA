@@ -134,7 +134,7 @@ console.log('\n5. AGGREGATOR SOAK (a two-hour session at 30 fps)');
 
   const rec = agg.finalize({
     conditionId: 'soak', sessionId: 's', cameraActive: true, baselineEarValue: 0.31, earThresholdUsed: 0.186,
-    gazeCalibrated: false, headPitchCalibrated: false,
+    gazeCalibrated: false, headPitchCalibrated: false, calibrationId: null,
   });
   const numeric = Object.entries(rec).filter(([, v]) => typeof v === 'number') as [string, number][];
   const bad = numeric.filter(([, v]) => !Number.isFinite(v));
@@ -163,7 +163,7 @@ for (const [label, feed] of [
     feed(a);
     const rec = a.finalize({
       conditionId: 'c', sessionId: 's', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18,
-      gazeCalibrated: false, headPitchCalibrated: false,
+      gazeCalibrated: false, headPitchCalibrated: false, calibrationId: null,
     });
     const bad = (Object.entries(rec).filter(([, v]) => typeof v === 'number' && !Number.isFinite(v)) as [string, number][]);
     check(`aggregator: ${label} produces no non-finite metric`, bad.length === 0, bad.map(([k, v]) => `${k}=${v}`).join(', '));

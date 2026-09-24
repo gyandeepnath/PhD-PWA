@@ -187,6 +187,8 @@ export class EyeMetricsAggregator {
     gazeCalibrated: boolean;
     /** True when head pitch was measured against the participant's calibrated frontal baseline. */
     headPitchCalibrated: boolean;
+    /** The calibration record in force while this exposure was measured. See EyeMetricsRecord. */
+    calibrationId: string | null;
   }): EyeMetricsRecord {
     /**
      * Two different durations, because they answer two different questions.
@@ -316,6 +318,7 @@ export class EyeMetricsAggregator {
       off_axis_ratio: this.facesDetected > 0 ? this.offAxisCount / this.facesDetected : null,
 
       gaze_calibrated: args.gazeCalibrated,
+      calibration_id: args.calibrationId,
       /**
        * Null when no face was ever found. These three were 0, and 0 is not "unknown" for any of
        * them — it is the BEST possible value. gaze_deviation_ratio 0 reads as "gaze never left the
@@ -392,6 +395,9 @@ export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeM
     head_stability_score: null,
     off_axis_ratio: null,
     gaze_calibrated: false,
+    // No camera, no calibration in force: explicitly null, which is not the same as a legacy row's
+    // absent field.
+    calibration_id: null,
     gaze_deviation_ratio: null,
     zone_center_ratio: null,
     zone_transition_count: 0,

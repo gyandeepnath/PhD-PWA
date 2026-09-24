@@ -192,6 +192,8 @@ export function useTracking(): TrackingApi {
   const pitchBaselineFracRef = useRef<number | null>(null);
   // Gaze calibration state.
   const gazeCalRef = useRef<GazeCalibration | null>(null);
+  /** The calibration record written by the last completed calibration of THIS mount; null before one. */
+  const calibrationIdRef = useRef<string | null>(null);
   const gazeSamplesRef = useRef<Record<string, GazeSample[]>>({});
   const gazeCollectingTarget = useRef<string | null>(null);
 
@@ -568,8 +570,9 @@ export function useTracking(): TrackingApi {
      */
     const targetsDetected = cal.targetsWithSamples;
     const quality = gradeGaze(cal);
+    const calibrationId = uuidv4();
     await put('calibration_data', {
-      calibration_id: uuidv4(),
+      calibration_id: calibrationId,
       session_id: sessionId,
       is_real_calibration: cal.valid,
       targets_detected: targetsDetected,
@@ -585,6 +588,8 @@ export function useTracking(): TrackingApi {
       ear_samples_usable: earSamplesUsable,
       calibrated_at: Date.now(),
     });
+    // Every exposure measured from here on is measured under THIS record; see EyeMetricsRecord.
+    calibrationIdRef.current = calibrationId;
     return { gazeValid: cal.valid, earBaseline, earSamplesUsable, gazeQuality: quality };
   }, []);
 
@@ -620,6 +625,7 @@ export function useTracking(): TrackingApi {
         earCompleteThreshold: baselineEarRef.current != null ? baselineEarRef.current * EAR_TIERS.full : null,
         gazeCalibrated: gazeCalRef.current?.valid ?? false,
         headPitchCalibrated: pitchBaselineFracRef.current != null,
+        calibrationId: calibrationIdRef.current,
       });
       aggRef.current = null;
 

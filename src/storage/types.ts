@@ -708,6 +708,16 @@ export interface EyeMetricsRecord {
 
   // Gaze (only meaningful if real calibration ran)
   gaze_calibrated: boolean;
+  /**
+   * The calibration record this row was measured under; null when the camera was not running.
+   *
+   * A sitting can hold several calibrations — a retry adds one, every resume adds another — and the
+   * thresholds on this row were always the ones in force at the time. What was missing was the link,
+   * so the pooled file stamped the LATEST calibration's gaze_trust onto every row, including rows
+   * measured under an earlier, thinner fit. Absent (not null) on rows written before it existed; see
+   * storage/calibrationLookup.ts for how those are resolved.
+   */
+  calibration_id?: string | null;
   gaze_deviation_ratio: number | null;
   zone_center_ratio: number | null;
   zone_transition_count: number;

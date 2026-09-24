@@ -357,7 +357,7 @@ describe('within-condition half rates exclude dropouts', () => {
     return a.finalize({
       conditionId: 'c', sessionId: 's', cameraActive: true,
       baselineEarValue: OPEN, earThresholdUsed: OPEN * 0.75,
-      gazeCalibrated: false, headPitchCalibrated: false,
+      gazeCalibrated: false, headPitchCalibrated: false, calibrationId: null,
     });
   };
 

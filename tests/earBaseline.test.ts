@@ -161,7 +161,7 @@ describe('within-sitting drift is visible in the export', () => {
     return a.finalize({
       conditionId: 'c', sessionId: 's', cameraActive: true,
       baselineEarValue: 0.30, earThresholdUsed: 0.30 * EAR_TIERS.partial,
-      gazeCalibrated: false, headPitchCalibrated: false,
+      gazeCalibrated: false, headPitchCalibrated: false, calibrationId: null,
     });
   };
 

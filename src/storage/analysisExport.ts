@@ -32,6 +32,7 @@
 import type { SessionBundle } from './gather';
 import type { ExportFile } from './export';
 import { toCsv, round, fnv1a, beginNonFiniteCount, nonFiniteCellCount, countOutOfDeclaredRange } from './export';
+import { calibrationForRow } from './calibrationLookup';
 import {
   checkJoin, groupByProvenance, unresolvedParticipantKey,
   type JoinIntegrity, type JoinExpectation,
@@ -148,11 +149,13 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
      * and gaze_trust was not in THIS file, the one that file calls the modelling unit. The advice
      * pointed at a column the analysis could not see.
      *
-     * Calibration records are sorted by a random uuid, so the LAST one is not meaningfully "latest";
-     * calibrated_at is. A resumed sitting re-runs calibration, so there can be more than one.
+     * A sitting can hold several calibrations — a retry adds one, every resume adds another — and
+     * this used to take the latest and stamp it on every row, so conditions measured under an
+     * earlier, thinner fit were exported as "good". Each row now takes the calibration it was
+     * measured under (calibrationForRow): by id where the row records one, by time where it predates
+     * the link, and none at all when that cannot be decided or the camera was not running.
      */
-    const calibration = [...(b.calibration ?? [])]
-      .sort((x, y) => (y.calibrated_at ?? 0) - (x.calibrated_at ?? 0))[0];
+    const calibrations = b.calibration ?? [];
     const rtById = new Map(b.rtSummaries.map((r) => [r.condition_id, r]));
     const searchById = new Map(b.visualSearch.map((r) => [r.condition_id, r]));
     const compById = new Map<string, typeof b.comprehension>();
@@ -182,6 +185,8 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
       const c = byId.get(sum.condition_id);
       const e = eyeById.get(sum.condition_id);
       const r = rtById.get(sum.condition_id);
+      // No camera, no gaze to trust: a camera-off row takes no calibration's verdict.
+      const rowCalibration = e?.camera_active ? calibrationForRow(calibrations, e, c?.started_at) : undefined;
 
       /*
        * Denominator of the primary outcome.
@@ -410,10 +415,9 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         fps_adequate_for_ratio: e?.fps_adequate_for_ratio ?? null,
         face_presence_ratio: round(sum.face_presence_ratio),
         gaze_calibrated: e?.gaze_calibrated ?? null,
-        // Session-level, repeated on each of the sitting's rows: the calibration is per sitting, and
-        // a row cannot be filtered on a value held somewhere the row cannot reach.
-        gaze_trust: calibration?.gaze_trust ?? null,
-        gaze_targets_well_covered: calibration?.gaze_targets_well_covered ?? null,
+        // Per ROW: the calibration this condition was measured under, not the sitting's last one.
+        gaze_trust: rowCalibration?.gaze_trust ?? null,
+        gaze_targets_well_covered: rowCalibration?.gaze_targets_well_covered ?? null,
         qc_overall: e ? sum.qc.overall : null,
         /*
          * Why this sitting was split, repeated on its rows. Session-level, and here for the same

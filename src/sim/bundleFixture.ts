@@ -564,6 +564,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       head_stability_score: 0.9,
       off_axis_ratio: 0.04,
       gaze_calibrated: true,
+      calibration_id: 'cal-1',
       gaze_deviation_ratio: 0.05,
       zone_center_ratio: 0.95,
       zone_transition_count: 12,

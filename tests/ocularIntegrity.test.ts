@@ -198,7 +198,7 @@ describe('within-condition bins are computed on the condition clock, not the pag
     }
     return agg.finalize({
       conditionId: 'c', sessionId: 's', cameraActive: true, baselineEarValue: BASE,
-      earThresholdUsed: BASE * 0.6, gazeCalibrated: true, headPitchCalibrated: true,
+      earThresholdUsed: BASE * 0.6, gazeCalibrated: true, headPitchCalibrated: true, calibrationId: null,
     });
   };
 

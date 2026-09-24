@@ -173,7 +173,7 @@ describe('eye metrics aggregator', () => {
     }
     const rec = agg.finalize({
       conditionId: 'C', sessionId: 'S', cameraActive: true,
-      baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, headPitchCalibrated: false,
+      baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, headPitchCalibrated: false, calibrationId: null,
     });
     expect(rec.face_presence_ratio).toBeCloseTo(1, 2);
     expect(rec.zone_center_ratio).toBeCloseTo(1, 2);
@@ -190,13 +190,13 @@ describe('eye metrics aggregator', () => {
     for (let t = 0; t <= 1000; t += 33) {
       dim.ingest({ t_ms: t, ear: 0.3, pose: { pitch: 0, yaw: 0, roll: 0 }, zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.2, luma: 30 });
     }
-    expect(dim.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, headPitchCalibrated: false }).lighting_quality).toBe('low');
+    expect(dim.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, headPitchCalibrated: false, calibrationId: null }).lighting_quality).toBe('low');
 
     const noLuma = new EyeMetricsAggregator();
     for (let t = 0; t <= 1000; t += 33) {
       noLuma.ingest({ t_ms: t, ear: 0.3, pose: { pitch: 0, yaw: 0, roll: 0 }, zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.2, luma: null });
     }
-    const rec = noLuma.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, headPitchCalibrated: false });
+    const rec = noLuma.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, headPitchCalibrated: false, calibrationId: null });
     expect(rec.mean_face_luma).toBeNull();
     expect(rec.lighting_quality).toBeNull();
   });
@@ -211,8 +211,22 @@ describe('eye metrics aggregator', () => {
     }
     const rec = agg.finalize({
       conditionId: 'C', sessionId: 'S', cameraActive: true,
-      baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, headPitchCalibrated: false,
+      baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, headPitchCalibrated: false, calibrationId: null,
     });
     expect(rec.face_presence_ratio).toBeCloseTo(0.5, 2);
+  });
+});
+
+describe('each eye-metrics row names the calibration it was measured under', () => {
+  it('the tracker records the id it wrote and passes it into every finalized row', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('src/tracking/useTracking.ts', 'utf8');
+    expect(src).toMatch(/calibration_id: calibrationId,/);
+    expect(src).toMatch(/calibrationIdRef\.current = calibrationId;/);
+    expect(src).toMatch(/calibrationId: calibrationIdRef\.current,/);
+  });
+  it('a camera-off row says no calibration was in force, explicitly', async () => {
+    const { disabledEyeMetrics } = await import('@/tracking/aggregator');
+    expect(disabledEyeMetrics('C', 'S').calibration_id).toBeNull();
   });
 });
