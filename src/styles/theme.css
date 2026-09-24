@@ -157,6 +157,24 @@ input[type='range']::-moz-range-thumb {
   border: none;
 }
 
+/*
+ * A rating slider the participant has NOT yet touched shows no thumb.
+ *
+ * Every rating scale started with a visible thumb at a default — display perception at 50 with the
+ * track filled to the middle, NASA-TLX at 50, the fatigue items at 0 — while the label beside it
+ * read "not set". A visible pre-set position is an anchor: ratings drift toward it, and the three
+ * scales anchored at different places. The thumb appears where the participant first taps, and the
+ * scales set `touched` on pointer-down, so a tap that lands exactly on the hidden default still
+ * registers as an answer.
+ */
+input[type='range'].vl-untouched::-webkit-slider-thumb {
+  opacity: 0;
+  box-shadow: none;
+}
+input[type='range'].vl-untouched::-moz-range-thumb {
+  opacity: 0;
+}
+
 /* Scrollable containers within the app. */
 .scrollable {
   overflow-y: auto;

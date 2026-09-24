@@ -78,6 +78,9 @@ export function NasaTlx({
                   max={TLX_MAX}
                   step={TLX_STEP}
                   value={values[d.key]}
+                  aria-label={d.key}
+                  className={touched[d.key] ? undefined : 'vl-untouched'}
+                  onPointerDown={() => setTouched((t) => ({ ...t, [d.key]: true }))}
                   style={{
                     flex: 1,
                     color: accent,

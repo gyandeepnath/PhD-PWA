@@ -114,13 +114,20 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
   const optionStyle = (i: number) => (
     i === selected
       ? { borderColor: text, background: text + '15' }
-      : { borderColor: text + '30', background: 'transparent' }
+      // Full-ink outline: at 30% alpha the unselected options' borders were ~1.1:1 on the dark
+      // backgrounds — four answers with no visible edges.
+      : { borderColor: text, background: 'transparent' }
   );
 
   return (
-    <div className="screen w-full p-[6%] font-sans" style={{ background, color: text }}>
-      <div style={{ width: '100%', maxWidth: 760, margin: '0 auto' }}>
-      <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.55, marginBottom: 14 }}>
+    <div className="screen w-full p-[6%] font-sans" style={{ background, color: text, display: 'flex', flexDirection: 'column' }}>
+      {/*
+        Centred in the screen, not top-aligned: this block used to sit at the top with half the screen
+        empty below it, which is the layout the investigator asked to be rid of. Auto margins, so a
+        taller block collapses to the top instead of being clipped.
+      */}
+      <div style={{ width: '100%', maxWidth: 760, margin: 'auto' }}>
+      <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>
         Task 2 of 4 · Comprehension {index + 1} of {questions.length} — choose the best answer, then submit
       </p>
       <h2 data-testid="mcq-question" style={{ fontSize: 22, fontFamily: STIMULUS_FONT_STACK, lineHeight: 1.4 }}>{q.text}</h2>
@@ -159,8 +166,7 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
         style={{
           background: selected != null && !submitted ? text : 'transparent',
           color: selected != null && !submitted ? background : text,
-          border: `2px solid ${text}`,
-          opacity: selected != null && !submitted ? 1 : 0.5,
+          border: selected != null && !submitted ? `2px solid ${text}` : `2px dashed ${text}`,
         }}
       >
         {isLast ? 'Submit answer' : 'Submit and continue'}

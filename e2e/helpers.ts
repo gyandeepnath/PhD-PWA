@@ -73,6 +73,15 @@ export async function startNewExperiment(page: Page) {
 export async function handleStage(page: Page, stage: string, opts: { split?: boolean; participantId?: string } = {}): Promise<boolean> {
   if (stage === 'EXPORT_DASHBOARD') return true;
   await page.waitForTimeout(120);
+  /*
+   * NO SOURCE COMMENT MAY EVER REACH THE SCREEN. A block comment written as a JSX child without its
+   * braces renders as literal text — and one did, on three condition screens, telling participants
+   * "/* Centred in the screen, not top-aligned ... *\/" above the question. The type-checker, the
+   * linter and every unit test passed it. Checked on every stage the driver visits, so a full run
+   * reads every screen a participant sees.
+   */
+  const visible = await page.locator('#root').innerText().catch(() => '');
+  expect(visible, `source comment rendered as text on ${stage}`).not.toMatch(/\/\*|\*\//);
   // Re-read the stage after settling. The caller sampled it before this await, and a stage whose
   // handler advances asynchronously can move on in between - leaving the driver acting on a screen
   // that is no longer rendered. Bailing out lets the loop re-dispatch against the current stage

@@ -478,7 +478,7 @@ export function ReactionTimeTask({
               width: CONFIG.RT_DOT_PX, height: CONFIG.RT_DOT_PX, borderRadius: '50%',
               background: targetColor, border: `1px solid ${fixationInk}`,
             }} />
-            <span style={{ fontSize: 14, opacity: 0.85, textAlign: 'left' }}>
+            <span style={{ fontSize: 14, textAlign: 'left' }}>
               this dot → tap<br />any other colour → do not tap
             </span>
           </div>
@@ -560,14 +560,14 @@ export function ReactionTimeTask({
       {phase === 'done' && (
         <div style={{ textAlign: 'center', color: text, fontFamily: '"DM Mono", monospace', maxWidth: 480, padding: 24 }}>
           <p style={{ fontSize: 18 }}>Block complete.</p>
-          <p style={{ fontSize: 14, opacity: 0.7, marginTop: 8 }}>Saving — this takes a moment.</p>
+          <p style={{ fontSize: 14, marginTop: 8 }}>Saving — this takes a moment.</p>
         </div>
       )}
 
       {phase === 'practice_done' && (
         <div style={{ textAlign: 'center', color: text, fontFamily: '"DM Mono", monospace', maxWidth: 480, padding: 24 }}>
           <p style={{ fontSize: 18 }}>Practice complete.</p>
-          <p style={{ fontSize: 14, opacity: 0.7, marginTop: 8 }}>The real task begins now — go as fast and accurately as you can.</p>
+          <p style={{ fontSize: 14, marginTop: 8 }}>The real task begins now — go as fast and accurately as you can.</p>
         </div>
       )}
 

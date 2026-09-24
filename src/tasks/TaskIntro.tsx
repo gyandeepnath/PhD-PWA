@@ -30,12 +30,12 @@ export function TaskIntro({
       style={{ background, color: text, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8%' }}
     >
       <div style={{ maxWidth: 620, textAlign: 'center' }}>
-        <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6 }}>
+        <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
           {eyebrow}
         </p>
         <h1 style={{ fontFamily: 'Georgia, serif', fontWeight: 300, fontSize: 36, margin: '12px 0 18px' }}>{title}</h1>
         {lines.map((l, i) => (
-          <p key={i} style={{ fontFamily: STIMULUS_FONT_STACK, fontSize: 17, lineHeight: 1.6, opacity: 0.9, marginBottom: 10 }}>
+          <p key={i} style={{ fontFamily: STIMULUS_FONT_STACK, fontSize: 17, lineHeight: 1.6, marginBottom: 10 }}>
             {l}
           </p>
         ))}

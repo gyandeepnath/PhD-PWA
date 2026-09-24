@@ -8,6 +8,7 @@
 import { useRef, useState } from 'react';
 import { mean } from '@/lib/stats';
 import { now } from '@/lib/timing';
+import { ratingTrack } from './trackStyle';
 
 export interface FatigueResult {
   items: { eye_strain: number; dryness: number; blur: number; burning: number; headache: number };
@@ -37,8 +38,15 @@ interface Props {
 }
 
 export function FatigueScale({ prompt, accent = '#4f8ef7', background = '#F8F7F5', text = '#1a1a2e', onComplete }: Props) {
-  const muted = text + '99';
-  const trackEmpty = text + '22';
+  /*
+   * FULL INK for anything the participant must read. This was the ink at 60% alpha, and translucency
+   * multiplies the condition's own contrast: in P4 (yellow on white, 2.39:1) the instruction line
+   * fell to about 1.67:1, so the participant got the least legible instructions in exactly the
+   * low-contrast conditions — a legibility effect on whether the instructions were understood,
+   * correlated with the factor under test. Hierarchy is carried by size and weight instead.
+   * Decoration (the empty track) may still be translucent.
+   */
+  const muted = text;
   const [values, setValues] = useState<Record<Key, number>>({
     eye_strain: 0, dryness: 0, blur: 0, burning: 0, headache: 0,
   });
@@ -52,10 +60,15 @@ export function FatigueScale({ prompt, accent = '#4f8ef7', background = '#F8F7F5
   const composite = mean(ITEMS.map((it) => values[it.key]));
 
   return (
-    <div className="screen w-full p-[5%] font-sans" style={{ background, color: text }}>
-      <div style={{ width: '100%', maxWidth: 720, margin: '0 auto' }}>
+    <div className="screen w-full p-[5%] font-sans" style={{ background, color: text, display: 'flex', flexDirection: 'column' }}>
+      {/*
+        Centred in the screen, not top-aligned: this block used to sit at the top with half the screen
+        empty below it, which is the layout the investigator asked to be rid of. Auto margins, so a
+        taller block collapses to the top instead of being clipped.
+      */}
+      <div style={{ width: '100%', maxWidth: 720, margin: 'auto' }}>
       <h2 className="font-serif text-3xl font-light">{prompt}</h2>
-      <p className="mt-1 font-lab text-xs" style={{ color: muted }}>Drag each slider. 0 = none, 10 = severe.</p>
+      <p className="mt-1 font-lab text-xs" style={{ color: muted }}>Tap or drag each slider. 0 = none, 10 = severe.</p>
 
       <div className="mt-6 space-y-6">
         {ITEMS.map((it) => (
@@ -74,11 +87,14 @@ export function FatigueScale({ prompt, accent = '#4f8ef7', background = '#F8F7F5
                 max={10}
                 step={1}
                 value={values[it.key]}
+                aria-label={it.key}
+                className={touched[it.key] ? undefined : 'vl-untouched'}
+                onPointerDown={() => setTouched((t) => ({ ...t, [it.key]: true }))}
                 style={{
                   flex: 1,
                   color: accent,
-                  // Visible filled track up to the thumb (works on Android Chrome).
-                  background: `linear-gradient(to right, ${touched[it.key] ? accent : trackEmpty} ${values[it.key] * 10}%, ${trackEmpty} ${values[it.key] * 10}%)`,
+                  // Full-ink dashed track, solid up to the answer once touched. See ratingTrack.
+                  background: ratingTrack(accent, touched[it.key], values[it.key] * 10),
                 }}
                 onChange={(e) => {
                   setValues((v) => ({ ...v, [it.key]: Number(e.target.value) }));
@@ -110,7 +126,9 @@ export function FatigueScale({ prompt, accent = '#4f8ef7', background = '#F8F7F5
         baseline rating to the screen that must not show it, needing only one line to become live
         again. A comment saying "no longer used" does not stop that; not having the value here does.
       */}
-      <div className="mt-6 font-lab text-sm text-[#5a5a7a]">
+      {/* The condition's ink, not a fixed slate (#5a5a7a was 3.18:1 on black and the only text on
+          this screen not in the condition's colours). */}
+      <div className="mt-6 font-lab text-sm" style={{ color: text }}>
         {allTouched ? 'Thank you — tap Continue.' : 'Set all sliders to continue.'}
       </div>
 
@@ -122,7 +140,8 @@ export function FatigueScale({ prompt, accent = '#4f8ef7', background = '#F8F7F5
           onComplete({ items: { ...values }, mean: composite, touched: { ...touched }, responseTimeMs: now() - mountedAt.current });
         }}
         className="mt-6 rounded-xl px-8 py-3 font-lab text-sm transition active:scale-95"
-        style={{ background: allTouched ? accent : trackEmpty, color: allTouched ? background : muted, cursor: allTouched ? 'pointer' : 'not-allowed' }}
+        // Not-yet-available is shown by a dashed outline, not by fading the label into illegibility.
+        style={{ background: allTouched ? accent : 'transparent', color: allTouched ? background : text, border: allTouched ? `2px solid ${accent}` : `2px dashed ${text}`, cursor: allTouched ? 'pointer' : 'not-allowed' }}
       >
         Continue →
       </button>

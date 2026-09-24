@@ -210,8 +210,10 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
       style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', padding: '36px 0 20px', display: 'flex', flexDirection: 'column', height: '100%' }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={{ fontFamily: STIMULUS_FONT_STACK, fontSize: 13, textTransform: 'uppercase', opacity: 0.5 }}>{passage.title}</span>
-        <span style={{ fontFamily: '"DM Mono", monospace', fontSize: 12, opacity: 0.6 }}>
+        {/* Full ink, like every line on a condition screen that is meant to be read: at 50-60% these
+            fell to about 1.5:1 in the low-contrast conditions. */}
+        <span style={{ fontFamily: STIMULUS_FONT_STACK, fontSize: 13, textTransform: 'uppercase' }}>{passage.title}</span>
+        <span style={{ fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
           Page {page + 1} of {totalPages}
         </span>
       </div>
@@ -270,7 +272,7 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
       <div style={{ flexShrink: 0, paddingTop: 12, borderTop: `1px solid ${text}20` }}>
         {!unlocked ? (
           <div>
-            <div style={{ fontFamily: '"DM Mono", monospace', fontSize: 14, opacity: 0.8, marginBottom: 6 }}>
+            <div style={{ fontFamily: '"DM Mono", monospace', fontSize: 14, marginBottom: 6 }}>
               Please keep reading — you can continue in {secsLeft}s
             </div>
             <div style={{ height: 6, background: text + '20', borderRadius: 3 }}>

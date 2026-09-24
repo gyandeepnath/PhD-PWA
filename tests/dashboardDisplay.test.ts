@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { buildFixtureBundle } from '@/sim/bundleFixture';
+import { ratingTrack } from '@/scales/trackStyle';
 
 const dashboardSource = () => readFileSync(resolve(__dirname, '..', 'src/dashboard/Dashboard.tsx'), 'utf8');
 
@@ -154,5 +155,57 @@ describe('a paused condition is left out of every figure and named instead', () 
     expect(src).toMatch(/const summaries = useMemo\(\(\) => allSummaries\.filter\(\(s\) => s\.condition_complete\)/);
     // And the unfinished ones are shown by name, not silently dropped.
     expect(src).toMatch(/data-testid="unfinished-conditions"/);
+  });
+});
+
+/**
+ * On a condition screen, text the participant must read is drawn in FULL INK.
+ *
+ * Translucency multiplies the condition's own contrast. In P4 (yellow on white, 2.39:1) a 60% line
+ * falls to about 1.67:1 and a disabled button label to 1.5:1 — so instructions were least legible in
+ * exactly the low-contrast conditions, which makes whether they were understood a function of the
+ * factor under test. Found by photographing every screen in every condition.
+ */
+describe('instruction text on condition screens is never faded', () => {
+  const read = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8');
+  const SCREENS = [
+    'src/tasks/ReadingTask.tsx', 'src/tasks/TaskIntro.tsx', 'src/tasks/ComprehensionTask.tsx',
+    'src/tasks/VisualSearchTask.tsx', 'src/scales/FatigueScale.tsx', 'src/scales/DisplayPerceptionRating.tsx',
+  ];
+
+  it('uses no opacity on text, and no fixed slate colour, on any condition screen', () => {
+    for (const f of SCREENS) {
+      const src = read(f);
+      expect(src, f).not.toMatch(/opacity: 0\.\d/);
+      expect(src, f).not.toMatch(/text-\[#5a5a7a\]/i);
+    }
+    // The one exception, documented: the RT trial counter is not instructional text.
+    expect(read('src/tasks/ReactionTimeTask.tsx').match(/opacity: 0\.\d/g) ?? []).toHaveLength(1);
+  });
+
+  it('opens every rating slider with no visible anchor, and counts a tap as an answer', () => {
+    // A visible default thumb (50 on perception and NASA-TLX, 0 on fatigue) is an anchor that pulls
+    // ratings toward it. `vl-untouched` hides it; pointer-down marks the answer, so a tap landing
+    // exactly on the hidden default still registers.
+    for (const f of ['src/scales/DisplayPerceptionRating.tsx', 'src/scales/FatigueScale.tsx', 'src/scales/NasaTlx.tsx']) {
+      const src = read(f);
+      expect(src, f).toMatch(/'vl-untouched'/);
+      expect(src, f).toMatch(/onPointerDown=/);
+    }
+    expect(read('src/styles/theme.css')).toMatch(/\.vl-untouched::-webkit-slider-thumb \{\s*opacity: 0;/);
+    // And neither condition-coloured scale paints its track before it is touched.
+    expect(read('src/scales/DisplayPerceptionRating.tsx')).toMatch(/ratingTrack\(text, comfortTouched, comfort\)/);
+    expect(read('src/scales/FatigueScale.tsx')).toMatch(/ratingTrack\(accent, touched\[it\.key\]/);
+  });
+
+  it('draws the empty track visibly, in full ink, and fills only what was answered', () => {
+    // The empty track was ink at 13-19% alpha: ~1.1:1 in P4, a line the participant could barely see
+    // and had to tap. It is full ink, dashed, so it carries the condition's own contrast.
+    const untouched = ratingTrack('#C9A400', false, 50);
+    expect(untouched).toMatch(/repeating-linear-gradient/);
+    expect(untouched).not.toMatch(/#C9A400[0-9a-f]{2}\b/i);   // no alpha suffix on the ink
+    expect(untouched).not.toMatch(/ 50%/);                      // no fill before an answer
+    const touched = ratingTrack('#C9A400', true, 73);
+    expect(touched).toMatch(/#C9A400 73%, transparent 73%/);
   });
 });

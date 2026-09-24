@@ -3028,3 +3028,43 @@ your document and has been left for you to update.
 
 978 tests, 1256 stress checks, verify green; full, split, fit, geometry and reachability end-to-end
 specs pass.
+
+## Round 45 — the rating screens: an anchor, faded instructions, and a bug of my own
+
+From the screen walk-through, re-photographed in P4 (yellow on white, 2.39:1) — the condition in
+which every one of these problems is worst — before and after.
+
+**An anchor on every rating scale.** Display comfort and clarity opened with the thumb at 50 and the
+track filled to the midpoint, while the label beside it read "not set". NASA-TLX opened at 50, the
+fatigue items at 0. A visible pre-set position is an anchor: ratings drift toward it, and here the
+three scales anchored at three different places. Now no scale shows a thumb or a fill until the
+participant touches it (`.vl-untouched`), and the first tap places the thumb where they tapped.
+`touched` is now set on pointer-down, not only on a value change — otherwise a participant who tapped
+exactly on the hidden default could not register an answer.
+
+**Instructions least legible exactly where contrast was lowest.** Text the participant must read —
+"Tap or drag each slider", the task eyebrow, the page count, the reading countdown, the RT
+instruction, disabled button labels — was drawn at 50-90% opacity. Translucency multiplies the
+condition's own contrast, so in P4 a 60% line fell to about 1.67:1 and a disabled label to 1.5:1. Whether
+the instructions were understood thereby became a function of the factor under test. Every such line is
+now full ink; a not-yet-available button is shown by a dashed outline rather than by fading its label;
+the comprehension options' borders, which were ~1.1:1 on the dark backgrounds, are full ink; the one
+hard-coded slate line on the post-fatigue screen is now in the condition's ink. The empty slider track,
+which was ink at 13-19% alpha — a line the participant could barely see and had to tap — is now a
+full-ink dashed line (`ratingTrack`), solid up to the answer once given. The only translucent text left
+on a condition screen is the reaction-time trial counter, which is not instructional, and a test pins
+that as the single exception.
+
+**Centred, not top-heavy.** The comprehension, perception and fatigue screens sat at the top with about
+half the screen empty below, the layout the investigator asked to be rid of. They are centred with auto
+margins, so a taller block collapses to the top rather than being clipped.
+
+**A bug introduced in this round, caught by looking.** The explanatory comment added to those three
+screens was written as a JSX child without its braces, so it rendered as literal text: participants
+would have seen "/* Centred in the screen, not top-aligned: ... */" above the question. The type-checker,
+the linter and all 978 unit tests passed it; it was visible in the first screenshot. Fixed, and the
+end-to-end driver now fails if any screen it visits shows `/*` or `*/` — a full run reads every screen a
+participant sees. Restoring the bug on one screen fails the run with "source comment rendered as text on
+COMPREHENSION".
+
+981 tests, verify green; full, split, fit and reachability end-to-end specs pass.
