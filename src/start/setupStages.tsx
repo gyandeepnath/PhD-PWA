@@ -9,12 +9,13 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { assessStorageHealth, type StorageHealth } from '@/storage/storageHealth';
 import { CONFIG } from '@/experiment/config';
 import { N_CONDITIONS } from '@/experiment/conditions';
+import { PASSAGES, QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
 import { repeatRunAcknowledged, REPEAT_NOTE_MIN_CHARS, SPLIT_REASON_MIN_CHARS } from '@/experiment/participantProgress';
 import { ILLUMINATION, luxInRange, type IlluminationLevel, N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 import type { MediaConsent } from '@/storage/media';
 import { WavyBackground } from '@/components/WavyBackground';
 import { now } from '@/lib/timing';
-import { trackHiddenTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
+import { trackFieldBlockedTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { stimulusFontLoaded } from '@/lib/fonts';
 import { isBelowMinimum } from '@/lib/viewportScale';
 import { startFaceProbe, type FaceProbeResult, type FaceProbeStatus } from '@/screening/faceProbe';
@@ -622,8 +623,9 @@ export function AdaptationScreen({ durationMs, nextLabel, onDone }: {
   const [progress, setProgress] = useState(0);
   const start = useRef(now());
   // Shared implementation — this screen's copy was the correct one and the reading task's was not,
-  // which is the reason there is now only one. See lib/hiddenTime.ts.
-  const hidden = useRef<HiddenTimeTracker>(trackHiddenTime());
+  // which is the reason there is now only one. Hidden OR portrait: either way the grey field is not
+  // what the participant is looking at. See lib/hiddenTime.ts.
+  const hidden = useRef<HiddenTimeTracker>(trackFieldBlockedTime());
 
   useEffect(() => {
     const t = hidden.current;
@@ -666,31 +668,42 @@ export function AdaptationScreen({ durationMs, nextLabel, onDone }: {
 }
 
 // ---- INSTRUCTIONS (participant overview, shown once before the conditions) ----
-export function Instructions({ onContinue }: { onContinue: () => void }) {
+/*
+ * Every count on this screen is derived, not written in. It said "10 different screen displays" to
+ * a participant in a five-condition split sitting, "about four short pages" after passages became
+ * three, and "tap when a plain black or white dot appears, and not when it is coloured" after the
+ * reaction task changed to the opposite rule — tap the dot in the colour of the text just read. A
+ * participant who remembered this overview would have started every reaction block with the wrong
+ * rule. It also quoted "90 minutes to two hours", a figure this screen cannot know (it depends on the
+ * sitting's size and reading rate); the researcher states the expected duration at consent.
+ */
+export function Instructions({ conditions, onContinue }: { conditions: number; onContinue: () => void }) {
+  const pages = Math.max(...PASSAGES.map((p) => p.pages.length));
+  const breakEvery = CONFIG.BREAK_EVERY_N_CONDITIONS;
   return (
     <div className={shell} style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <WavyBackground opacity={0.05} />
       <div style={{ position: 'relative', zIndex: 1, width: '100%', margin: '0 auto', maxWidth: 640 }}>
         <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">Before you begin</p>
         <h1 className="mt-2 font-serif text-4xl font-light">What you’ll be doing</h1>
-        <p className="mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]">
-          You’ll see <strong>10 different screen displays</strong> (different background and text
-          colours). For <strong>each</strong> display you’ll complete the same short tasks in the
-          same order:
+        <p className="mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]" data-testid="instructions-count">
+          In this sitting you’ll see <strong>{conditions} different screen displays</strong> (different
+          background and text colours). For <strong>each</strong> display you’ll complete the same short
+          tasks in the same order:
         </p>
         <ol className="mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]" style={{ paddingLeft: 18, listStyle: 'decimal' }}>
-          <li><strong>Read</strong> a passage of about four short pages.</li>
-          <li>Answer <strong>three questions</strong> about it.</li>
+          <li><strong>Read</strong> a passage of {pages} short pages.</li>
+          <li>Answer <strong>{QUESTIONS_PER_PASSAGE} questions</strong> about it.</li>
           <li>Rate the display’s <strong>comfort &amp; clarity</strong>, and how your <strong>eyes feel</strong>.</li>
           <li><strong>Find &amp; tap</strong> every occurrence of a target word, as fast as you can.</li>
-          <li><strong>Tap</strong> when a plain black or white dot appears, and not when it is
-            coloured (a quick reaction game).</li>
+          <li><strong>Tap</strong> when a dot appears in the <strong>same colour as the text you have
+            just read</strong>, and not when it is any other colour (a quick reaction game).</li>
         </ol>
         <p className="mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]">
-          Between displays there’s a short rest with a grey screen. Each task shows its own
-          instructions and a “Begin” button, so just follow the prompts. The whole session usually
-          takes about <strong>90 minutes to two hours</strong>, and there is a rest break after every
-          two displays. You may tell the researcher if you need to stop, at any point.
+          Between displays there’s a short rest with a grey screen, and a longer break after
+          every {breakEvery === 1 ? 'display' : `${breakEvery} displays`}. Each task shows its own
+          instructions and a “Begin” button, so just follow the prompts. You may tell the researcher
+          if you need to stop, at any point.
         </p>
         <button className={btn} style={{ marginTop: 22, background: '#1a1a2e' }} onClick={onContinue}>
           I understand — start the first display →

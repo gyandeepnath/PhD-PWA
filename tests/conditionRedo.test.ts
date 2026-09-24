@@ -268,3 +268,14 @@ describe('an adaptation field that was not delivered is reported', () => {
     expect(auditOf(cond({ adaptation_ms_planned: undefined }))).toHaveLength(0);
   });
 });
+
+describe('the Pause dialog says what the resume will actually do', () => {
+  it('in the reaction-time save phase it does not promise a restart that usually will not happen', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('src/experiment/Experiment.tsx', 'utf8');
+    const handler = src.slice(src.indexOf("aria-label=\"Pause\"") - 3000, src.indexOf("aria-label=\"Pause\""));
+    expect(handler).toMatch(/const saving = machine\.stage === 'REACTION_TIME'/);
+    expect(handler).toMatch(/results are being saved/);
+    expect(handler).toMatch(/resumes at the next condition/);
+  });
+});

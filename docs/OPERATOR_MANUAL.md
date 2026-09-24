@@ -199,7 +199,7 @@ Each condition runs the same six measured stages, in this order:
 
 | Stage | What happens | Your job |
 |---|---|---|
-| `READING_TASK` | Four pages, about 600 words, in the active condition | **Silence.** This is the measurement window. |
+| `READING_TASK` | Three pages, about 585 words, in the active condition | **Silence.** This is the measurement window. |
 | `COMPREHENSION` | Three questions: gist, inference, detail | Do not hint. Do not confirm answers. |
 | `DISPLAY_PERCEPTION` | Comfort and clarity ratings | Do not comment on the display. |
 | `POST_FATIGUE` | Five visual-fatigue items, 0 to 10 | Let them answer at their own pace. |

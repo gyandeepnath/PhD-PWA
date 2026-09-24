@@ -4,6 +4,9 @@ import {
   nextState,
   progressPercent,
   shouldBreakAfter,
+  loopEntry,
+  nextStateSkipping,
+  baselineStagesHeld,
   TOTAL_TRACKED_STEPS,
   type MachineState,
 } from '@/experiment/stateMachine';
@@ -198,5 +201,80 @@ describe('resuming re-enters the loop through the grey field, at the right condi
       expect(arrived.stage).toBe('READING_TASK');
       expect(arrived.stepIndex).toBe(loopTarget);
     }
+  });
+});
+
+describe('every route into a condition passes through the grey field', () => {
+  /*
+   * A resume that re-ran camera setup and calibration used to jump straight to READING_TASK: no grey
+   * field, and on a break boundary no break. loopEntry is now the one rule for entering the loop, and
+   * this pins it to exactly what an uninterrupted sitting does before the same condition.
+   */
+  for (const n of [N_CONDITIONS, 5]) {
+    it(`matches the uninterrupted path for every condition (${n} per sitting)`, () => {
+      const seq = walk(n);
+      for (let target = 0; target < n; target++) {
+        const at = seq.findIndex((s) => s.stage === 'READING_TASK' && s.stepIndex === target);
+        // What an uninterrupted sitting shows between the previous condition and this one.
+        let k = at - 1;
+        while (k > 0 && (seq[k - 1].stage === 'ADAPTATION' || seq[k - 1].stage === 'BREAK_SCREEN')) k--;
+        expect(loopEntry(target, n), `entry to condition ${target}`).toEqual(seq[k]);
+      }
+    });
+  }
+
+  it('walks from the entry to the condition without passing any measured stage', () => {
+    for (let target = 0; target < N_CONDITIONS; target++) {
+      let s = loopEntry(target);
+      const seen: string[] = [s.stage];
+      while (s.stage !== 'READING_TASK') { s = nextState(s); seen.push(s.stage); }
+      expect(s.stepIndex).toBe(target);
+      expect(seen).toContain('ADAPTATION');
+      expect(seen.every((x) => ['BREAK_SCREEN', 'ADAPTATION', 'READING_TASK'].includes(x))).toBe(true);
+    }
+  });
+
+  it('the resume path uses it, and nothing sets READING_TASK directly', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('src/experiment/Experiment.tsx', 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    expect(src).not.toMatch(/setMachine\(\{\s*stage:\s*'READING_TASK'/);
+    expect(src.match(/loopEntry\(/g) ?? []).toHaveLength(2);
+  });
+});
+
+describe('a resume walk does not re-administer a baseline the sitting already holds', () => {
+  const base = {
+    consentGiven: true, hasParticipantRecord: true, preflightComplete: true, colourVisionScreened: true,
+    wantsCamera: true,
+  };
+
+  it('interrupted after the baseline CVS-Q: the walk goes calibration -> fatigue, not -> CVS-Q again', () => {
+    const held = baselineStagesHeld({ ...base, hasBaselineCvsq: true, hasBaselineFatigue: false });
+    expect(nextStateSkipping({ stage: 'CALIBRATION', stepIndex: 0 }, N_CONDITIONS, held).stage).toBe('BASELINE_FATIGUE');
+  });
+
+  it('owing both, it walks both', () => {
+    const held = baselineStagesHeld({ ...base, hasBaselineCvsq: false, hasBaselineFatigue: false });
+    const s1 = nextStateSkipping({ stage: 'CALIBRATION', stepIndex: 0 }, N_CONDITIONS, held);
+    expect(s1.stage).toBe('CVSQ_BASELINE');
+    expect(nextStateSkipping(s1, N_CONDITIONS, held).stage).toBe('BASELINE_FATIGUE');
+  });
+
+  it('with nothing held it is exactly nextState, everywhere', () => {
+    const empty = new Set<Stage>();
+    const seq = walk();
+    for (const s of seq) {
+      if (s.stage === 'EXPORT_DASHBOARD') continue;
+      expect(nextStateSkipping(s, N_CONDITIONS, empty)).toEqual(nextState(s));
+    }
+  });
+
+  it('the app writes each baseline as a replacement, so no route can leave two', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('src/experiment/Experiment.tsx', 'utf8');
+    expect(src).toMatch(/clearSessionStageRows\('cvsq_scores', session\.session_id, 'baseline'\)/);
+    expect(src).toMatch(/clearSessionStageRows\('fatigue_scores', session\.session_id, 'baseline'\)/);
+    expect(src).toMatch(/nextStateSkipping\(m, nConditionsRef\.current, resumeHeld\.current\)/);
   });
 });

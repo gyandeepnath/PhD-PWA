@@ -146,3 +146,48 @@ export function trackPortraitTime(opts: Options = {}): HiddenTimeTracker {
     eventName: opts.eventName ?? 'change',
   });
 }
+
+/**
+ * Time a full-screen field was NOT in front of the participant: the document hidden OR the tablet in
+ * portrait, counted once where the two overlap.
+ *
+ * For the grey adaptation field. It subtracted hidden time only, so a tablet rotated to portrait
+ * mid-field — which puts the blocking overlay, a dark navy panel, over the grey — counted the whole
+ * rotation as adaptation delivered. The eye was adapting to the overlay, and `adaptation_delivered_ms`
+ * certified a grey field that was not there. The two sources are merged into one "blocked" signal so
+ * an interval that is both hidden and portrait is not subtracted twice.
+ */
+export function trackFieldBlockedTime(opts: {
+  documentTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;
+  orientationTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'> | null;
+  isDocumentHidden?: () => boolean;
+  isPortrait?: () => boolean;
+  clock?: () => number;
+} = {}): HiddenTimeTracker {
+  const mq = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(orientation: portrait)')
+    : null;
+  const docTarget = opts.documentTarget ?? (typeof document !== 'undefined' ? document : undefined);
+  const orientTarget = opts.orientationTarget !== undefined ? opts.orientationTarget : mq;
+  const docHidden = opts.isDocumentHidden
+    ?? (() => typeof document !== 'undefined' && document.visibilityState === 'hidden');
+  const portrait = opts.isPortrait ?? (() => mq?.matches === true);
+
+  // One relay, so the shared implementation sees a single blocked/unblocked signal.
+  const relay = new EventTarget();
+  const fire = () => { relay.dispatchEvent(new Event('blocked')); };
+  docTarget?.addEventListener('visibilitychange', fire);
+  orientTarget?.addEventListener('change', fire);
+  const inner = trackHiddenTime({
+    target: relay, eventName: 'blocked', clock: opts.clock,
+    isHidden: () => docHidden() || portrait(),
+  });
+  return {
+    read: inner.read,
+    stop: () => {
+      docTarget?.removeEventListener('visibilitychange', fire);
+      orientTarget?.removeEventListener('change', fire);
+      return inner.stop();
+    },
+  };
+}

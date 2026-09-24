@@ -103,7 +103,7 @@ with an explanation if you try.
   condition-runs, so each is read once per sitting. Because illumination is confounded with session
   order within a participant, the practice effect would otherwise load onto the illumination main
   effect, so `passage_repeat_number` is exported and must be modelled.
-- **Passage length is load-bearing.** Each passage is four pages and about 600 words, which buys a
+- **Passage length is load-bearing.** Each passage is about 585 words (571–601), laid out as three pages, which buys a
   ~180 s reading exposure. At the earlier ~240 words the exposure was 73 s, about 16 blinks, and the
   polarity × colour interaction had 27% power. `npm run verify:corpus` guards this.
 - **Three comprehension items per passage** — gist, inference and detail — tagged by kind so

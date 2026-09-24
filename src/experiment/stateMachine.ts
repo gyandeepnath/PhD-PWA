@@ -95,6 +95,29 @@ export function initialState(): MachineState {
 }
 
 /**
+ * Where a sitting enters the condition loop to run condition `target` (0-based, in this sitting).
+ *
+ * The ONE rule for every route into the loop: the break first when one is due before `target`, then
+ * the grey adaptation field, then the condition. A fresh sitting (INSTRUCTIONS, target 0), a resume
+ * with nothing owed, and a resume that had to re-run camera setup and calibration all enter here.
+ *
+ * The last of those used to jump from calibration straight to READING_TASK. So a resumed condition
+ * began from whatever the participant had been looking at — the cream calibration screen, which is
+ * light — with no grey field and, on a break boundary, no break and so no mid-sitting illuminance
+ * check. A negative-polarity condition resumed that way started light-adapted, and a positive one did
+ * not: the polarity-by-adaptation confound the pre-first-condition field exists to remove, reached by
+ * the resume route that is taken exactly when the camera was in use.
+ *
+ * stepIndex is target - 1 because ADAPTATION and BREAK_SCREEN name the condition they FOLLOW.
+ */
+export function loopEntry(target: number, nConditionsRaw: number = N_CONDITIONS): MachineState {
+  const nConditions = sittingSize(nConditionsRaw);
+  return target > 0 && shouldBreakAfter(target, nConditions)
+    ? { stage: 'BREAK_SCREEN', stepIndex: target - 1 }
+    : { stage: 'ADAPTATION', stepIndex: target - 1 };
+}
+
+/**
  * Compute the next state. `nConditions` is the number of conditions in THIS sitting (8 for a
  * single session, 4 for a split sitting); it defaults to the full set so existing callers/tests
  * are unaffected. A self-paced BREAK_SCREEN is inserted after every N completed conditions.
@@ -121,7 +144,7 @@ export function nextState(state: MachineState, nConditionsRaw: number = N_CONDIT
      *
      * The grey field costs 60 s once per sitting, which the feasibility simulation absorbs.
      */
-    return { stage: 'ADAPTATION', stepIndex: -1 };
+    return loopEntry(0, nConditions);
   }
 
   // Condition loop.
@@ -254,6 +277,34 @@ export function firstUnsatisfiedSetupStage(p: ResumePrerequisites): Stage | null
   if (!p.hasBaselineCvsq) return 'CVSQ_BASELINE';
   if (!p.hasBaselineFatigue) return 'BASELINE_FATIGUE';
   return null;
+}
+
+/**
+ * The next state, stepping over stages whose product the sitting already holds.
+ *
+ * A resume that has to re-run camera setup and calibration AND still owes a baseline walks the
+ * setup chain from CAMERA_SETUP. It used to walk every stage of it — so a sitting interrupted after
+ * the baseline CVS-Q was saved and before the baseline fatigue scale re-administered the CVS-Q and
+ * stored a second baseline row. Two baselines with different totals make the CVS-Q change score
+ * ambiguous for that participant, and the second was answered by someone who had just seen the
+ * questionnaire. `satisfied` names the stages already done (see baselineStagesHeld); it is empty
+ * outside a resume walk, where this is exactly nextState.
+ */
+export function nextStateSkipping(
+  state: MachineState, nConditions: number, satisfied: ReadonlySet<Stage>,
+): MachineState {
+  let n = nextState(state, nConditions);
+  // Bounded by the setup chain's length; the loop and closing stages are never in `satisfied`.
+  for (let i = 0; i < SETUP_ORDER.length && satisfied.has(n.stage); i++) n = nextState(n, nConditions);
+  return n;
+}
+
+/** The baseline stages whose rows a resumed sitting already holds, and so must not re-run. */
+export function baselineStagesHeld(p: ResumePrerequisites): ReadonlySet<Stage> {
+  const held = new Set<Stage>();
+  if (p.hasBaselineCvsq) held.add('CVSQ_BASELINE');
+  if (p.hasBaselineFatigue) held.add('BASELINE_FATIGUE');
+  return held;
 }
 
 /**

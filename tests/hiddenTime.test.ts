@@ -17,7 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { trackHiddenTime } from '@/lib/hiddenTime';
+import { trackHiddenTime, trackFieldBlockedTime } from '@/lib/hiddenTime';
 
 const readFileSyncSync = (p: string) => readFileSync(p, 'utf8');
 
@@ -150,7 +150,8 @@ describe('the two screens that grew their own copies now share this one', () => 
     for (const file of ['src/tasks/ReadingTask.tsx', 'src/start/setupStages.tsx']) {
       const src = readFileSync(file, 'utf8');
       expect(src, `${file} still tracks visibility itself`).not.toMatch(/addEventListener\('visibilitychange'/);
-      expect(src, `${file} does not use the shared tracker`).toMatch(/trackHiddenTime\(/);
+      // The adaptation field uses the hidden-OR-portrait variant, which is built on the same tracker.
+      expect(src, `${file} does not use the shared tracker`).toMatch(/track(Hidden|FieldBlocked)Time\(/);
     }
   });
 
@@ -297,5 +298,65 @@ describe('the reading page advance cannot fire twice for one page', () => {
     expect(relock).toBeGreaterThan(release);
     expect(restamp).toBeGreaterThan(release);
     expect(restamp - release).toBeLessThan(200); // same effect body, not a distant one
+  });
+});
+
+describe('the grey field counts only time it was actually in front of the participant', () => {
+  /*
+   * It subtracted hidden time only, so a rotation to portrait — the navy blocking overlay drawn over
+   * the grey — counted as adaptation delivered.
+   */
+  const rig = () => {
+    const doc = fakePage();
+    const orient = fakePage();
+    let t = 1000;
+    const tracker = trackFieldBlockedTime({
+      documentTarget: doc.opts.target, orientationTarget: orient.opts.target,
+      isDocumentHidden: doc.opts.isHidden, isPortrait: orient.opts.isHidden, clock: () => t,
+    });
+    return { doc, orient, tracker, advance: (ms: number) => { t += ms; } };
+  };
+
+  it('subtracts portrait time', () => {
+    const r = rig();
+    r.advance(10_000);
+    r.orient.hide();            // rotated to portrait
+    r.advance(15_000);
+    r.orient.show();            // back to landscape
+    r.advance(5_000);
+    expect(r.tracker.stop()).toEqual({ hiddenMs: 15_000, events: 1 });
+  });
+
+  it('still subtracts hidden time', () => {
+    const r = rig();
+    r.doc.hide(); r.advance(8_000); r.doc.show();
+    expect(r.tracker.stop().hiddenMs).toBe(8_000);
+  });
+
+  it('counts an interval that is both hidden and portrait once, not twice', () => {
+    const r = rig();
+    r.orient.hide();            // portrait from t=0
+    r.advance(4_000);
+    r.doc.hide();               // then backgrounded as well
+    r.advance(6_000);
+    r.orient.show();            // landscape again while still hidden
+    r.advance(3_000);
+    r.doc.show();
+    r.advance(2_000);
+    expect(r.tracker.stop()).toEqual({ hiddenMs: 13_000, events: 1 });
+  });
+
+  it('detaches from both sources on stop', () => {
+    const r = rig();
+    r.tracker.stop();
+    expect(r.doc.listenerCount()).toBe(0);
+    expect(r.orient.listenerCount()).toBe(0);
+  });
+
+  it('is what the adaptation screen uses', () => {
+    const src = readFileSyncSync(resolve(__dirname, '..', 'src/start/setupStages.tsx'));
+    const screen = src.slice(src.indexOf('export function AdaptationScreen'), src.indexOf('// ---- INSTRUCTIONS'));
+    expect(screen).toMatch(/trackFieldBlockedTime\(\)/);
+    expect(screen).not.toMatch(/trackHiddenTime\(/);
   });
 });

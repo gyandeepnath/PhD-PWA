@@ -20,7 +20,7 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
         <div style={{ height: 2, width: 64, background: '#1a1a2e', opacity: 0.5, margin: '18px 0' }} />
         <p className="font-lab" style={{ fontSize: 13, lineHeight: 1.85, color: '#5a5a7a', maxWidth: 460 }}>
           A tablet platform for visual-ergonomics experiments. Each session measures reading,
-          attention and reaction performance across eight display conditions, with webcam-based
+          attention and reaction performance across {CONDITIONS.length} display conditions, with webcam-based
           blink/gaze estimation and validated fatigue questionnaires.
         </p>
         <p className="font-lab" style={{ fontSize: 11, color: '#9a968e', marginTop: 28 }}>

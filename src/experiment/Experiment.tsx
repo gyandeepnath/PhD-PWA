@@ -17,8 +17,8 @@ import { PASSAGES } from './passages';
 import { annotationSegmentSteps, blockPlan, isAnnotationSubsample, type PlannedStep } from './counterbalance';
 import { CONFIG, isE2ETimingActive } from './config';
 import {
-  initialState, nextState, progressPercent, firstUnsatisfiedSetupStage, resumeOwesBaselines,
-  shouldBreakAfter, type MachineState,
+  initialState, nextStateSkipping, progressPercent, firstUnsatisfiedSetupStage, resumeOwesBaselines,
+  loopEntry, baselineStagesHeld, type MachineState,
 } from './stateMachine';
 import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
 import { put, get, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows, clearSessionStageRows, storageIsFull } from '@/storage/db';
@@ -30,7 +30,7 @@ import { saveResume, clearResume } from '@/storage/sessionPersistence';
 import { isInLoop } from './stateMachine';
 import { BreakScreen } from '@/start/BreakScreen';
 import { DB_VERSION } from '@/storage/schemaEnums';
-import type { Provenance, SessionRecord } from '@/storage/types';
+import type { Provenance, SessionRecord, Stage } from '@/storage/types';
 import { useTracking } from '@/tracking/useTracking';
 import { LazyDashboard as Dashboard } from '@/dashboard/LazyDashboard';
 import { ExperimentProgress } from '@/components/ExperimentProgress';
@@ -91,10 +91,16 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   // until the machine actually changes — prevents skipping a stage. Reset on every stage change.
   const transitioning = useRef(false);
 
+  /**
+   * Baseline stages a resumed sitting already holds, stepped over by advance() while the resume walks
+   * the setup chain. Empty otherwise, and emptied when the resume re-enters the loop.
+   */
+  const resumeHeld = useRef<ReadonlySet<Stage>>(new Set());
+
   const advance = useCallback(() => {
     if (transitioning.current) return;
     transitioning.current = true;
-    setMachine((m) => nextState(m, nConditionsRef.current));
+    setMachine((m) => nextStateSkipping(m, nConditionsRef.current, resumeHeld.current));
   }, []);
 
   /**
@@ -109,8 +115,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
 
   /**
    * Milliseconds of grey-field adaptation actually delivered before the NEXT condition. Written by
-   * the ADAPTATION screen, consumed by ensureCondition. Zero on a cold entry — the first condition
-   * of a sitting, or one reached through the resume path, which shows no adaptation screen.
+   * the ADAPTATION screen, consumed by ensureCondition. Every route into a condition now passes
+   * through that screen (see loopEntry), so zero means the screen was cut short, not skipped.
    */
   const adaptationDelivered = useRef(0);
   /** What the protocol asked for, kept beside what was delivered so the two can be compared. */
@@ -131,13 +137,18 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    */
   const resumeConsumeAt = useRef<'CALIBRATION' | 'INSTRUCTIONS'>('CALIBRATION');
 
-  /** advance(), unless a resume is waiting to re-enter the loop at a specific condition. */
+  /**
+   * advance(), unless a resume is waiting to re-enter the loop at a specific condition — in which
+   * case it enters the way every route into the loop does: break if due, grey field, condition. It
+   * used to land directly on READING_TASK; see loopEntry.
+   */
   const advanceOrResume = useCallback((from: 'CALIBRATION' | 'INSTRUCTIONS' = 'CALIBRATION') => {
     const target = resumeJumpTo.current;
     if (target == null || from !== resumeConsumeAt.current) { advance(); return; }
     resumeJumpTo.current = null;
+    resumeHeld.current = new Set();
     transitioning.current = true;
-    setMachine({ stage: 'READING_TASK', stepIndex: target });
+    setMachine(loopEntry(target, nConditionsRef.current));
   }, [advance]);
 
   useEffect(() => {
@@ -274,7 +285,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       const participantRow = await get('participants', s.participant_id);
       const cvsqRows = await getAllByIndex('cvsq_scores', 'by_session', s.session_id);
       const wantsCamera = s.media_consent?.camera_metrics === true;
-      const owed = firstUnsatisfiedSetupStage({
+      const prereqs = {
         consentGiven: s.consent_given === true,
         hasParticipantRecord: !!participantRow,
         preflightComplete: s.preflight_complete === true,
@@ -282,7 +293,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         hasBaselineCvsq: cvsqRows.some((c) => c.stage === 'baseline'),
         hasBaselineFatigue: !!baseline,
         wantsCamera,
-      });
+      };
+      const owed = firstUnsatisfiedSetupStage(prereqs);
 
       // Where the loop should pick up once setup is satisfied. reachedLoop distinguishes a genuine
       // condition pointer from the default 0 given to a session that never got that far.
@@ -318,15 +330,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         resumeJumpTo.current = loopTarget;
         // A missing baseline means the whole remaining setup chain has to run, so the jump is
         // consumed at INSTRUCTIONS rather than at calibration.
-        resumeConsumeAt.current = resumeOwesBaselines({
-          consentGiven: s.consent_given === true,
-          hasParticipantRecord: !!participantRow,
-          preflightComplete: s.preflight_complete === true,
-          colourVisionScreened: participantRow?.cvd_screen_total != null,
-          hasBaselineCvsq: cvsqRows.some((c) => c.stage === 'baseline'),
-          hasBaselineFatigue: !!baseline,
-          wantsCamera,
-        }) ? 'INSTRUCTIONS' : 'CALIBRATION';
+        resumeConsumeAt.current = resumeOwesBaselines(prereqs) ? 'INSTRUCTIONS' : 'CALIBRATION';
+        // Whatever the walk passes that this sitting already holds is stepped over, not re-administered.
+        resumeHeld.current = baselineStagesHeld(prereqs);
         setMachine({ stage: owed, stepIndex: loopTarget });
       } else {
         resumeJumpTo.current = null;
@@ -358,9 +364,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
          * not hold — the room is. Whether a resume should always take the longer switch field is a
          * methods decision, not one to make here.
          */
-        setMachine(loopTarget > 0 && shouldBreakAfter(loopTarget, sittingPlan.length)
-          ? { stage: 'BREAK_SCREEN', stepIndex: loopTarget - 1 }
-          : { stage: 'ADAPTATION', stepIndex: loopTarget - 1 });
+        setMachine(loopEntry(loopTarget, sittingPlan.length));
       }
       setResuming(false);
     })();
@@ -1011,12 +1015,17 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     case 'CVSQ_BASELINE':
       view = (
         <Cvsq stage="baseline" onComplete={async (r) => {
-          if (session) await put('cvsq_scores', {
-            cvsq_id: uuidv4(), session_id: session.session_id, stage: 'baseline',
-            frequency: r.frequency, intensity: r.intensity, total_score: r.total, symptomatic: r.symptomatic,
+          if (session) {
+            // One baseline per sitting. A resume steps over this stage when the row exists (see
+            // nextStateSkipping); replacing here as well means no route can leave two.
+            await clearSessionStageRows('cvsq_scores', session.session_id, 'baseline');
+            await put('cvsq_scores', {
+              cvsq_id: uuidv4(), session_id: session.session_id, stage: 'baseline',
+              frequency: r.frequency, intensity: r.intensity, total_score: r.total, symptomatic: r.symptomatic,
               frame: r.frame,
-            response_time_ms: r.responseTimeMs,
-          });
+              response_time_ms: r.responseTimeMs,
+            });
+          }
           advance();
         }} />
       );
@@ -1123,6 +1132,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           prompt="How are your eyes feeling right now, before we begin?"
           onComplete={async (r) => {
             if (session) {
+              // One baseline per sitting, for the reason given at CVSQ_BASELINE: every fatigue_delta
+              // is computed against it, so two would make every delta ambiguous.
+              await clearSessionStageRows('fatigue_scores', session.session_id, 'baseline');
               await put('fatigue_scores', {
                 fatigue_id: uuidv4(), session_id: session.session_id, condition_id: null,
                 stage: 'baseline', ...r.items, fatigue_mean: r.mean, touched: r.touched, all_touched: true,
@@ -1151,7 +1163,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       break;
     case 'INSTRUCTIONS':
       // The resume's jump is consumed HERE when a pre-exposure baseline had to be re-taken.
-      view = <Instructions onContinue={() => advanceOrResume('INSTRUCTIONS')} />;
+      view = <Instructions conditions={plan.length || N_CONDITIONS} onContinue={() => advanceOrResume('INSTRUCTIONS')} />;
       break;
     case 'READING_TASK':
       if (cond && passage) {
@@ -1571,9 +1583,21 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             // Both the break and the grey field come after condition k has finished.
             const done = machine.stage === 'ADAPTATION' || machine.stage === 'BREAK_SCREEN';
             const target = done ? machine.stepIndex + 1 : machine.stepIndex;
+            /*
+             * Pause is offered in REACTION_TIME only after the trials have ended, while the results
+             * are being written. It used to say the condition "will be restarted", which is usually
+             * false: the write carries on after the exit, stamps the condition complete, and the resume
+             * counts completed conditions (listResumable), so it resumes at the NEXT one. It is
+             * restarted only if the write does not finish. The operator is told both, and where to look.
+             */
+            const saving = machine.stage === 'REACTION_TIME';
             const msg = done
               ? 'Pause and exit to the session manager? This condition is complete; the session will resume at the next one.'
-              : 'Pause and exit to the session manager? This condition will be restarted on resume.';
+              : saving
+                ? 'Pause and exit to the session manager? This condition\'s tasks are finished and its results are being saved. '
+                  + 'If the save completes, the session resumes at the next condition; if it does not, this condition is '
+                  + 'restarted. The Resume line in the session manager shows which condition is next.'
+                : 'Pause and exit to the session manager? This condition will be restarted on resume.';
             if (window.confirm(msg)) {
               saveResume(session.session_id, target);
               tracking.stop();

@@ -3115,3 +3115,52 @@ reaching the exporter a bypass of the recycle bin — it reaches the exporter by
 993 tests, verify green (including the R and Python analysis gate), stress 1256/1256; split, reachability
 and edge end-to-end specs pass, the last with a new test that withdraws a paused sitting and checks
 Resume disappears and the dashboard banner appears.
+
+## Round 47 — the resume route, the grey field, and the participant's overview
+
+**A camera-path resume skipped the grey field.** A resume that re-runs camera setup and calibration —
+every resume where the camera is consented — jumped from calibration straight to READING_TASK. The
+resumed condition began from the cream calibration screen: light-adapted, with no grey field, and on a
+break boundary with no break and so no mid-sitting illuminance check. A negative-polarity condition
+resumed that way started light-adapted and a positive one did not — the polarity-by-adaptation confound
+the pre-first-condition field exists to remove. The resume with nothing owed already went through the
+field; this route did not. There is now one rule for entering the loop, `loopEntry` in
+`stateMachine.ts` (break if due, grey field, condition), used by the fresh sitting, both resume routes,
+and nothing else; a test pins it to what an uninterrupted sitting does before every condition. The
+end-to-end resume test used to accept READING_TASK as a landing stage, which is why this survived; it
+now records every stage the resume passes and requires ADAPTATION immediately before the condition.
+Restoring the old jump fails it with "CAMERA_SETUP > READING_TASK".
+
+**A resume between the two baselines re-administered the CVS-Q.** A sitting interrupted after the
+baseline CVS-Q was saved and before the baseline fatigue scale walked the whole setup chain on resume,
+CVS-Q included, and appended a second baseline row: two baselines with different totals make the CVS-Q
+change score — the key secondary outcome — ambiguous, and the second was answered straight after seeing
+the questionnaire. The resume walk now steps over stages whose rows the sitting already holds
+(`nextStateSkipping`, `baselineStagesHeld`), and both baseline writes replace any earlier row of their
+stage, as the end-of-session CVS-Q already did. Reproduced end to end: without the fix the resume runs
+"CAMERA_SETUP > CALIBRATION > CVSQ_BASELINE > BASELINE_FATIGUE"; with it, the CVS-Q is not shown again
+and the store holds one baseline of each.
+
+**Portrait time counted as adaptation.** The grey field subtracted time the document was hidden, not
+time the tablet was in portrait — when the blocking overlay, a dark navy panel, covers the grey. That
+rotation was certified as adaptation delivered. The field now counts only time it was actually in
+front of the participant (`trackFieldBlockedTime`: hidden OR portrait, an overlap counted once), so a
+rotation extends the field instead of shortening it.
+
+**The Pause dialog in the reaction-time save phase.** Pause returns once the trials end, while results
+are written. It said the condition "will be restarted", which is usually false — the write finishes
+after the exit and the resume counts completed conditions, so it resumes at the next one. It now says
+both outcomes and where to see which.
+
+**The participant's overview described a different study.** The Instructions screen, shown once before
+the first condition, told the participant to "tap when a plain black or white dot appears, and not when
+it is coloured" — the reverse of the rule the reaction task now uses (tap the dot in the colour of the
+text just read). It said ten displays to a participant in a five-condition sitting, passages of "about
+four short pages" after they became three, and "90 minutes to two hours", which this screen cannot know.
+Every count is now derived (sitting size, pages, questions, break cadence), the rule is the task's own,
+and the duration is left to the consent conversation. A rendered test pins each. The landing page's
+"eight display conditions" is derived too, and README, PROTOCOL and the operator manual now say three
+pages (the words are unchanged: 571–601, mean 585).
+
+1010 tests, verify green, stress 1256/1256; edge, full-run, split-session and screen-fit end-to-end
+specs pass.

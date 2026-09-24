@@ -78,3 +78,38 @@ describe('codebook prose naming a design count still matches that count', () => 
     expect(matched.length).toBeGreaterThanOrEqual(3);
   });
 });
+
+/*
+ * The participant's overview, rendered. It told a five-condition split sitting it would see ten
+ * displays, described four-page passages after they became three, and gave the reaction task's rule
+ * backwards ("tap a plain black or white dot, not a coloured one") after the go-target became the
+ * condition's own text colour.
+ */
+describe('the Instructions screen states the design the participant will actually run', () => {
+  const render = async (n: number) => {
+    const { renderToStaticMarkup } = await import('react-dom/server');
+    const { createElement } = await import('react');
+    const { Instructions } = await import('@/start/setupStages');
+    return renderToStaticMarkup(createElement(Instructions, { conditions: n, onContinue: () => {} }))
+      .replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
+  };
+
+  it('counts the displays in THIS sitting', async () => {
+    expect(await render(N_CONDITIONS)).toContain(`${N_CONDITIONS} different screen displays`);
+    expect(await render(5)).toContain('5 different screen displays');
+  });
+
+  it('gives the page and question counts from the corpus', async () => {
+    const { PASSAGES, QUESTIONS_PER_PASSAGE } = await import('@/experiment/passages');
+    const text = await render(N_CONDITIONS);
+    expect(text).toContain(`a passage of ${PASSAGES[0].pages.length} short pages`);
+    expect(text).toContain(`${QUESTIONS_PER_PASSAGE} questions`);
+  });
+
+  it('gives the reaction rule the task enforces, not its opposite', async () => {
+    const text = await render(N_CONDITIONS);
+    expect(text).toMatch(/same colour as the text you have just read/);
+    expect(text).not.toMatch(/black or white/i);
+    expect(text).not.toMatch(/\d+ minutes/);
+  });
+});

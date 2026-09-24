@@ -279,7 +279,7 @@ precision.
 **Resolved — reading exposure and the precision of the primary outcome.** The corpus previously ran
 ~245 words, giving ~73 s of reading per condition and only ~16 blinks, so a condition-level
 incomplete-blink ratio carried a standard error near 0.09 (±18 percentage points at 95%) and the
-polarity × colour interaction had 27% power. Passages are now four pages and ~584 words, which
+polarity × colour interaction had 27% power. Passages are now ~585 words, laid out as three justified pages (the text was re-paginated from four pages to three without changing a word; fingerprints pinned in `tests/passages.test.ts`), which
 `npm run verify:corpus` measures at a **178 s mean exposure** (range 174–183 s), roughly 39 blinks,
 and about half the standard error. That is the segment length the validation sub-study already
 assumed. `12_quality_flags.csv` still carries `blink_count_total` and `insufficient_blinks`, so a
