@@ -199,7 +199,15 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
       style={{ background, color: text, display: 'flex', justifyContent: 'center' }}
     >
     <div
-      style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', padding: '56px 0 3%', display: 'flex', flexDirection: 'column', height: '100%' }}
+      /*
+       * Fixed pixel padding. The bottom was `3%`, and a percentage padding is a percentage of the
+       * containing block's WIDTH — so the reading area was shorter on a wider device, by 2.6 px per
+       * 100 px of width, at the same glyph size. The top was 56 px, sized to clear chrome that no
+       * longer sits over the column: the progress bar is gone from the condition-run and the Pause
+       * chip is at the far left, outside the column's 119 px margin. The space returned goes to the
+       * text, which is what lets a third of a passage fit with headroom rather than exactly.
+       */
+      style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', padding: '36px 0 20px', display: 'flex', flexDirection: 'column', height: '100%' }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <span style={{ fontFamily: STIMULUS_FONT_STACK, fontSize: 13, textTransform: 'uppercase', opacity: 0.5 }}>{passage.title}</span>
@@ -211,12 +219,52 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
         <div style={{ height: '100%', width: `${((page + 1) / totalPages) * 100}%`, background: text + '60', borderRadius: 2 }} />
       </div>
 
-      <p
+      {/*
+        JUSTIFIED, paragraph by paragraph, at the protocol's font size and line height.
+
+        The page used to be one pre-wrapped block, ragged-right, with each paragraph break costing a
+        full blank line. With four pages of unequal length that left page 1 of one passage 40% full
+        and page 4 of the same passage 98% full under the same 20 s unlock — the per-page dwell and
+        skim checks then meant different things on different pages. The investigator asked for three
+        pages, the screen properly used, and justified text; passages.ts now carries three pages of
+        near-equal word count, and this renders them.
+
+        No hyphenation (`hyphens: manual`): a word split across two lines is a different reading
+        event from an unbroken one, and would vary with the condition only by accident of line
+        length. Paragraphs are separated by a fraction of a line rather than a whole blank line,
+        which is what lets a third of a ~600-word passage fit one screen at 22 px.
+
+        `scrollable` is kept as a last-resort guard only: a page that overflowed would otherwise be
+        CLIPPED, and unreadable text is worse than scrolled text. tests/passages.test.ts and the
+        stimulus-fill end-to-end check hold every page to fitting without it.
+      */}
+      <div
         className="scrollable"
-        style={{ flex: 1, minHeight: 0, fontSize: CONFIG.READING_FONT_SIZE_PX, lineHeight: CONFIG.READING_LINE_HEIGHT, fontFamily: STIMULUS_FONT_STACK, whiteSpace: 'pre-wrap' }}
+        data-testid="reading-text"
+        style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', fontSize: CONFIG.READING_FONT_SIZE_PX, lineHeight: CONFIG.READING_LINE_HEIGHT, fontFamily: STIMULUS_FONT_STACK }}
       >
-        {passage.pages[page]}
-      </p>
+        {/*
+          Centred vertically in the page. A ~600-word passage in three pages cannot fill every page
+          identically — measured, pages run 71-91% of the text area on the design canvas — and
+          top-aligned, a short page left the text bunched at the top over an empty band, which is
+          what the investigator objected to. Centred, the shortfall becomes even margins. AUTO
+          MARGINS rather than justify-content:center, because flex centring pushes the top of
+          anything that overflows out of reach; auto margins collapse to zero instead.
+        */}
+        <div data-testid="reading-block" style={{ margin: 'auto 0' }}>
+          {passage.pages[page].split(/\n{2,}/).map((para, i, all) => (
+            <p
+              key={i}
+              style={{
+                textAlign: 'justify', hyphens: 'manual', WebkitHyphens: 'manual',
+                margin: 0, marginBottom: i < all.length - 1 ? `${CONFIG.READING_PARAGRAPH_GAP_EM}em` : 0,
+              }}
+            >
+              {para.trim()}
+            </p>
+          ))}
+        </div>
+      </div>
 
       {/* Always-visible footer so the control is never off-screen. */}
       <div style={{ flexShrink: 0, paddingTop: 12, borderTop: `1px solid ${text}20` }}>

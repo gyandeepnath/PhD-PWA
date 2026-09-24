@@ -19,6 +19,13 @@ const BASE_CONFIG = {
   READING_PAGE_MIN_MS: 20000,
   READING_FONT_SIZE_PX: 22,
   READING_LINE_HEIGHT: 1.6,
+  /**
+   * Space between paragraphs on a reading page, in em. A fraction of a line rather than a whole
+   * blank line (which pre-wrap text gave, at 1.6 em each), so that a third of a ~600-word passage
+   * fits one screen at the protocol's 22 px without shrinking the text. Layout only: it changes no
+   * glyph size and no line length.
+   */
+  READING_PARAGRAPH_GAP_EM: 0.7,
   READING_MARGIN_PERCENT: 10,
 
   // Comprehension: post-answer feedback dwell.

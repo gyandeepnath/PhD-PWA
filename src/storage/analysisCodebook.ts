@@ -13,6 +13,7 @@
  * genuinely differs — an empty `n_incomplete` means the camera was not running, an empty
  * `search_termination` means the block was never reached.
  */
+import { PASSAGES } from '@/experiment/passages';
 import { RATE_CORRECTION_NOTE } from '@/lib/signalDetection';
 import { CONFIG } from '@/experiment/config';
 
@@ -146,7 +147,7 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
   { column: 'search_time_ms', role: 'secondary', unit: 'ms', missing: 'not completed',
     description: 'Visual-search duration. CENSORED when search_termination is the time cap: such rows are a lower bound, not a measurement, and pooling them untreated biases the mean downward.' },
   { column: 'search_accuracy', role: 'secondary', unit: '0-1', missing: 'not completed',
-    description: 'Targets found over targets present.' },
+    description: `Targets found over targets present ON THE SEARCH SCREEN — a one-screen excerpt of the passage, at the reading font size, where its target is densest. Target counts differ by passage (${Math.min(...PASSAGES.map((p) => p.searchTargetCount))} to ${Math.max(...PASSAGES.map((p) => p.searchTargetCount))}), by investigator decision, so this is not directly comparable across passages: carry passage_id as a random effect rather than treating rows as equally difficult.` },
   { column: 'search_d_prime', role: 'secondary', unit: "d'", missing: 'not completed',
     description: `PREFER THIS TO search_accuracy as the search outcome. Sensitivity over words-as-trials: hits are target words tapped, false alarms are non-target words tapped, and the correct-rejection pool is the rest of the passage. search_accuracy ignores false detections entirely, so a participant who taps indiscriminately finds every target in seconds and scores 1.0 on it with no quality flag raised; d-prime does not reward that. ${RATE_CORRECTION_NOTE}` },
   { column: 'search_false_detections', role: 'secondary', unit: 'count', missing: 'not completed',

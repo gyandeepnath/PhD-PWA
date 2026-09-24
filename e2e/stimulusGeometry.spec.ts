@@ -29,7 +29,7 @@ async function columnWidthInRootPx(page: import('@playwright/test').Page) {
       getComputedStyle(document.documentElement).getPropertyValue('--vl-scale')) || 1;
     const root = document.getElementById('root')!;
     // The passage itself: the element whose width decides how many characters fit on a line.
-    const para = root.querySelector('p.scrollable') as HTMLElement | null;
+    const para = root.querySelector('[data-testid=reading-text]') as HTMLElement | null;
     return {
       scale,
       rootW: root.clientHeight > 0 ? root.clientWidth : -1,
@@ -48,7 +48,7 @@ test('the reading column is the same width in root pixels on differently-shaped 
     // READING_TASK opens on its intro card; the passage itself is behind "Begin reading".
     const begin = page.getByRole('button', { name: /Begin reading/ });
     if (await begin.count()) await begin.first().click({ force: true });
-    await page.locator('#root p.scrollable').first().waitFor({ state: 'visible' });
+    await page.locator('#root [data-testid=reading-text]').first().waitFor({ state: 'visible' });
     const m = await columnWidthInRootPx(page);
     expect(m.columnW, `no reading passage found at ${vp.name}`).toBeGreaterThan(0);
     measured.push({ name: vp.name, ...m });

@@ -201,6 +201,10 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
         await begin.first().click({ force: true });
         await page.waitForTimeout(60);
       } else {
+        // Every page the driver turns, it first checks fits: a full run visits all three pages of
+        // all ten passages, so this is the standing guard on the stimulus layout. See
+        // assertStimulusFits.
+        await assertStimulusFits(page, 'reading-text');
         await click(page, /Next page|finished reading/i);
         await page.waitForTimeout(80);
       }
@@ -239,6 +243,7 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
         await beginSearch.first().click({ force: true });
         await page.waitForTimeout(60);
       } else {
+        await assertStimulusFits(page, 'search-text');
         await click(page, /Done searching/);
         await waitStageChange(page, stage);
       }
@@ -266,6 +271,30 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
 }
 
 /** Drive the run until a target stage is reached (or completion). */
+/**
+ * The stimulus text must sit wholly inside its box: nothing clipped, nothing to scroll.
+ *
+ * Reading is three justified pages per passage and search is a one-screen excerpt, both at the
+ * protocol's 22 px, and both were sized by measuring the rendered text rather than by counting
+ * words. A later edit to a passage, the font, the line height or the page chrome could push one
+ * page over, and on the search screen an overflow is simply CLIPPED — targets the participant can
+ * never see, recorded as misses. Asserted wherever the driver meets a stimulus page, so every run
+ * of the suite re-measures every page it visits.
+ */
+export async function assertStimulusFits(page: Page, testId: 'reading-text' | 'search-text'): Promise<void> {
+  const m = await page.evaluate((id) => {
+    const el = document.querySelector(`[data-testid=${id}]`) as HTMLElement | null;
+    const block = el?.firstElementChild as HTMLElement | null;
+    if (!el || !block) return null;
+    const a = el.getBoundingClientRect(); const b = block.getBoundingClientRect();
+    return { top: b.top - a.top, over: b.bottom - a.bottom, scroll: el.scrollHeight - el.clientHeight };
+  }, testId);
+  if (!m) return; // not on a stimulus page yet (an intro card), nothing to measure
+  expect(m.top, `${testId}: stimulus starts above its box`).toBeGreaterThanOrEqual(-0.5);
+  expect(m.over, `${testId}: stimulus runs ${m.over.toFixed(1)} px past its box`).toBeLessThanOrEqual(0.5);
+  expect(m.scroll, `${testId}: stimulus box would scroll`).toBeLessThanOrEqual(1);
+}
+
 export async function driveUntil(page: Page, target: string, maxSteps = 500): Promise<void> {
   for (let i = 0; i < maxSteps; i++) {
     const stage = await stageNow(page);

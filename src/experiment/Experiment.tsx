@@ -786,7 +786,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
      * Watch the whole condition, not just the tasks that happen to track it themselves.
      *
      * Reading and the adaptation field each measure their own hidden time. Nothing else in a
-     * condition did, and every task in one has a clock: visual search runs against a 40-second
+     * condition did, and every task in one has a clock: visual search runs against its time
      * limit, the questionnaires record response times, and the reaction-time block is a sequence of
      * one-second trials with one-second response windows. A hidden tab has its timers and animation
      * frames throttled, so an RT block run while the tablet is backgrounded produces misses and

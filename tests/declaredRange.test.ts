@@ -201,6 +201,10 @@ describe('codebook prose derives durations rather than restating them', () => {
     for (const rel of [
       'src/storage/export.ts', 'src/storage/analysisCodebook.ts',
       'src/storage/analysisExport.ts', 'src/storage/types.ts', 'src/sim/participant.ts',
+      // The files that actually still carried it when this list held only the five above — the
+      // guard named the storage layer and not the task that arms the timer, the analysis template
+      // that MISQUOTED the plan as saying 40 s, or the corpus verifier's error message.
+      'src/tasks/VisualSearchTask.tsx', 'src/analysis/analysis_template.R', 'scripts/verifyCorpus.ts',
     ]) {
       const src = sourceOf(rel);
       expect(src).not.toMatch(/\b40[ -]s(?:econd)?\b/);

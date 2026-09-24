@@ -47,7 +47,14 @@ for (const vp of LANDSCAPE) {
     await expect(btn).toBeInViewport();
   });
 
-  test(`the visual-search passage scrolls and its end control is on screen at ${vp.name}`, async ({ page }) => {
+  test(`the visual-search screen fits WITHOUT scrolling and its end control is on screen at ${vp.name}`, async ({ page }) => {
+    /*
+     * This asserted the opposite until the investigator's decision: that the passage SCROLLED,
+     * "longer than the viewport by design". It was 2.5-2.7 screens with no scroll cue, and the share
+     * of targets visible without scrolling ranged from 1 in 10 to 12 in 12 by passage. The search is
+     * now a one-screen excerpt at the reading font size; the whole of it — every target — must be on
+     * screen, with nothing clipped and nothing to scroll.
+     */
     await page.setViewportSize({ width: vp.width, height: vp.height });
     await startNewExperiment(page);
     await driveUntil(page, 'VISUAL_SEARCH');
@@ -55,16 +62,17 @@ for (const vp of LANDSCAPE) {
     await page.waitForTimeout(300);
 
     const box = await page.evaluate(() => {
-      const el = document.querySelector('.scrollable') as HTMLElement | null;
-      return el ? { scrollH: el.scrollHeight, clientH: el.clientHeight } : null;
+      const el = document.querySelector('[data-testid=search-text]') as HTMLElement | null;
+      const block = el?.firstElementChild as HTMLElement | null;
+      if (!el || !block) return null;
+      const a = el.getBoundingClientRect(); const b = block.getBoundingClientRect();
+      return { fits: b.top >= a.top - 0.5 && b.bottom <= a.bottom + 0.5, scrollH: el.scrollHeight, clientH: el.clientHeight };
     });
     expect(box).not.toBeNull();
-    // The passage is longer than the viewport by design; what matters is that it SCROLLS rather
-    // than pushing the rest of the screen outside the clipped root.
-    expect(box!.clientH).toBeLessThan(box!.scrollH);
+    expect(box!.fits, 'the search excerpt runs past its box').toBe(true);
+    expect(box!.scrollH).toBeLessThanOrEqual(box!.clientH + 1);
 
-    // Without this, the block could only ever end on the 40 s cap: termination_mode could never be
-    // voluntary_early, and every search score came from whatever fraction was above the fold.
+    // And the participant can end the block early, so termination_mode can be voluntary_early.
     await expect(page.getByRole('button', { name: /Done searching/ })).toBeInViewport();
   });
 

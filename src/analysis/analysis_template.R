@@ -798,7 +798,7 @@ if ("d_prime" %in% names(rt) && sum(is.finite(rt$d_prime)) > 0) {
 }
 
 # --- Visual search (§4: LMM, censored) ----------------------------------------------------
-# §4: "`search_termination` says whether the block ended by completion or by the 40 s cap. Capped
+# §4: "`search_termination` says whether the block ended by completion or by the 60 s cap. Capped
 # rows are a lower bound; treating them as measurements biases the mean downward. Either model them
 # as censored or report the completion rate alongside."
 #

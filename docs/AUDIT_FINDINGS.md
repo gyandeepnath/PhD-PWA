@@ -2948,3 +2948,83 @@ twelve-participant dataset and asserts the template reports removing exactly one
 not 120 (switching the filter off fails both); the reverted join check fails its test; and in the
 browser, a sitting paused on condition 2's display-perception screen opens a dashboard that names P2
 as unfinished and reads "Conditions completed 1/10". 974 tests, 1256 stress checks, verify green.
+
+## Round 44 — reading in three justified pages, search on one screen
+
+Both changes are investigator decisions, taken after the screen walk-through, and both were sized by
+**measuring rendered text**, not by counting words.
+
+### Reading: three pages, justified, the screen actually used
+
+The passages were four pages broken at paragraph boundaries, so their lengths were very uneven:
+page 1 of one passage filled 40% of the screen and page 4 of the same passage 98%, under the same
+20-second unlock — the per-page dwell and skim checks then meant different things on different pages.
+The investigator asked for at most three pages, the screen properly used, and justified text.
+
+- Each passage is re-split into **three pages of near-equal word count** (181–212), breaking only at
+  sentence ends. **Not one word changed**: a fingerprint of every passage's word sequence was taken
+  before the re-split and a test holds the passages to it. The texts are the validated reading
+  material, length- and difficulty-matched, with comprehension items written against them.
+- Pages are **justified**, paragraph by paragraph, with **no hyphenation** — a word broken across two
+  lines is a different reading event, and would vary with the condition only by accident of line
+  length. Paragraphs are separated by 0.7 em rather than a whole blank line.
+- Each page's text block is **centred vertically**: a fixed ~600-word passage cannot fill three pages
+  identically (measured 71–91% of the text area on the design canvas), and top-aligned, a short page
+  left text bunched over an empty band, which is what the investigator objected to. Auto margins,
+  not flex centring, so an overflow could never push the top out of reach.
+- The column's bottom padding was `3%` — and a percentage padding is a percentage of the *width*, so
+  the reading area was shorter on a wider tablet at the same glyph size. It is now fixed pixels.
+
+Font size (22 px) and line height (1.6) are unchanged: they are protocol stimulus parameters.
+
+Rendered in the real component with the app's own viewport scaling, all 30 pages fit on four tablet
+sizes (1194×834, 1280×800, 1024×768, 1368×912) with no overflow; the tightest keeps about 1.6 lines
+of headroom.
+
+### Search: one screen, reading size, no scrolling
+
+The search task showed the whole passage at 19 px in a scroll box 2.5–2.7 screens tall with no scroll
+cue, so the share of targets visible without scrolling ranged from 1 in 10 to 12 in 12 by passage.
+Search time and misses therefore partly measured whether the participant discovered they could
+scroll, which differed by passage — and passage is not balanced against condition.
+
+The recommended fix was a one-screen excerpt holding the same eight targets in every passage. **That
+turned out not to exist**, and it was measured before anything was built: the most any one-screen
+window holds of the passage's own target is carbon 12, sleep 11, light 8, ocean 7, magma 7, immune 6,
+forest 5, plate 5, sound 4, birds 4 — and no other content word does better in the sparse passages.
+Equalising would have meant editing the passages. The investigator was shown the measurement and
+chose the densest one-screen excerpt, with counts that differ by passage.
+
+- `selectSearchExcerpt` picks, deterministically, the run of whole sentences of at most 190 words
+  holding the most occurrences of the target. At 200 words one excerpt overflowed the tightest
+  tablet by 3%; 190 fits all ten on all four sizes and costs one target (carbon 12 → 11).
+- The search screen is now the reading page: same column, font, line height, justification and
+  centring, with the target and a found counter above and Done below.
+- `searchTargetCount` is the excerpt's count (4–11); the passage's own count is kept as
+  `passageTargetCount`. A test pins the counts and a fingerprint of each excerpt, so a change to the
+  selection rule cannot alter the stimulus silently.
+
+One codebook claim became false and was corrected: `accuracy_rate` said it was "comparable across
+passages only because target counts are held in a narrow band". Counts are now 4–11; the entry says
+so, derives the range rather than typing it, and tells the analyst to carry passage as a random
+effect.
+
+### Guards
+
+The end-to-end driver now asserts, on every reading page and every search screen it meets, that the
+stimulus sits wholly inside its box — a full run visits all 30 pages and all 10 search screens, so
+every run of the suite re-measures them. On the search screen an overflow is simply clipped: targets
+the participant could never see, recorded as misses. Shrinking the text area makes the full run fail
+with "stimulus runs 152.9 px past its box".
+
+The reachability spec asserted the old design outright — that the search passage *scrolled*, "longer
+than the viewport by design". It now asserts the opposite. The corpus verifier's rules were updated
+to match, and its error message, the task header and the R template carried a stale "40 s" cap; the R
+template was *quoting the analysis plan* as saying 40 s when the plan says 60. The stale-literal guard
+listed five files and not these three; it lists them now.
+
+**For the investigator:** the synopsis (§3.5) still says "Passages of four pages". That sentence is in
+your document and has been left for you to update.
+
+978 tests, 1256 stress checks, verify green; full, split, fit, geometry and reachability end-to-end
+specs pass.

@@ -1,5 +1,6 @@
 /**
- * Visual search: tap every occurrence of the target word within the passage. Hard 40 s limit.
+ * Visual search: tap every occurrence of the target word on ONE screen — an excerpt of the passage at
+ * the reading font size (see selectSearchExcerpt in passages.ts). Time limit CONFIG.VS_TIME_LIMIT_MS.
  * Uses refs for found/false-detection state so the timeout reads live values (the original had a
  * stale-closure bug capturing zeros at mount). Denominator is the AUTHORITATIVE occurrence count.
  */
@@ -56,14 +57,20 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
   const target = passage.searchTarget.toLowerCase();
   const totalTargets = passage.searchTargetCount;
 
-  const tokens = useMemo<Token[]>(() => {
-    const raw = passage.pages.join('\n\n').split(/(\s+)/);
-    return raw.map((t, i) => {
+  /*
+   * The EXCERPT, not the whole passage, paragraph by paragraph. See selectSearchExcerpt in
+   * passages.ts: one screen, at the reading font size, no scrolling. Token indices run across the
+   * paragraphs so every word keeps a unique index for the found/false-alarm sets.
+   */
+  const paragraphs = useMemo<Token[][]>(() => {
+    let i = 0;
+    return passage.searchExcerpt.split(/\n{2,}/).map((para) => para.trim().split(/(\s+)/).map((t) => {
       const isWord = t.trim().length > 0;
       const stripped = t.replace(/[^a-zA-Z]/g, '').toLowerCase();
-      return { i, text: t, isWord, isTarget: isWord && stripped === target };
-    });
+      return { i: i++, text: t, isWord, isTarget: isWord && stripped === target };
+    }));
   }, [passage, target]);
+  const tokens = useMemo(() => paragraphs.flat(), [paragraphs]);
 
   /**
    * WORDS, not tokens. The split above is CAPTURING — `split(/(\s+)/)` — because rendering needs the
@@ -179,55 +186,81 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
       With only min-h-screen the column is unbounded, so the flex:1 passage div grows to its full
       content height instead of scrolling, and everything below it is pushed outside #root, which
       is overflow:hidden with touch-action:none on the body. The end-of-block button then sits
-      beyond the bottom edge with no way to reach it, so the block can only ever end on the 40 s
+      beyond the bottom edge with no way to reach it, so the block can only ever end on the time
       cap and termination_mode can never be voluntary_early.
     */
     /* Fixed-width centred column, for the reason given in ReadingTask: a percentage column reflows
        with the device's aspect ratio, and this passage is the same stimulus material read under the
        same conditions. See STIMULUS_COLUMN_PX. */
     <div className="screen w-full" style={{ background, color: text, display: 'flex', justifyContent: 'center' }}>
-    <div style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', padding: '4% 0', display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 15 }}>
-        <strong>Find and tap every occurrence of:</strong>{' '}
-        <span style={{ padding: '2px 10px', borderRadius: 4, border: `1.5px solid ${text}80`, fontWeight: 700 }}>
-          {passage.searchTarget}
-        </span>{' '}
-        <span style={{ opacity: 0.6 }}>({foundIdx.size}/{totalTargets})</span>
-      </p>
-      <div className="scrollable" style={{ flex: 1, minHeight: 0, marginTop: 16, fontSize: 19, lineHeight: 1.9, fontFamily: STIMULUS_FONT_STACK, whiteSpace: 'pre-wrap' }}>
-        {tokens.map((tok) =>
-          tok.isWord ? (
-            <span
-              key={tok.i}
-              onClick={() => tap(tok)}
+    {/*
+      THE SAME PAGE AS READING: same column, same padding, same font size and line height, justified,
+      the block centred vertically. The search screen used to set the passage at 19 px / 1.9 in a
+      scroll box — a different visual angle from the reading it followed — and required scrolling
+      through 2.5 screens with no cue. Now it is one screen at the reading geometry, and every
+      occurrence of the target is on it from the first moment.
+    */}
+    <div style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', padding: '36px 0 20px', display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16 }}>
+        <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 15, margin: 0 }}>
+          <strong>Find and tap every:</strong>{' '}
+          <span style={{ padding: '2px 10px', borderRadius: 4, border: `1.5px solid ${text}`, fontWeight: 700 }}>
+            {passage.searchTarget}
+          </span>
+        </p>
+        <span data-testid="search-count" style={{ fontFamily: '"DM Mono", monospace', fontSize: 15 }}>
+          {foundIdx.size} / {totalTargets} found
+        </span>
+      </div>
+      <div style={{ height: 1, background: text + '40', margin: '10px 0 0' }} />
+      <div
+        data-testid="search-text"
+        style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', fontSize: CONFIG.READING_FONT_SIZE_PX, lineHeight: CONFIG.READING_LINE_HEIGHT, fontFamily: STIMULUS_FONT_STACK }}
+      >
+        {/* Auto margins centre the block without clipping its top; see ReadingTask. */}
+        <div style={{ margin: 'auto 0' }}>
+          {paragraphs.map((para, pi) => (
+            <p
+              key={pi}
               style={{
-                cursor: 'pointer',
-                /* The condition's own ink, not a fixed green. #22c97a measured 2.16:1 against the
-                   light backgrounds and 9.70:1 against the dark ones — 4.5x more visible in one
-                   polarity — and 1.48:1 against the green ink, invisible in exactly the condition
-                   it was marking. This marker is the participant's only record of which occurrences
-                   they have already tapped, and a re-tap is silently ignored, so a lost marker costs
-                   search time without leaving any trace: a display-legibility artefact recorded as a
-                   search-performance deficit, aligned with polarity across all five colours. */
-                backgroundColor: foundIdx.has(tok.i) ? text + '30' : 'transparent',
-                borderBottom: foundIdx.has(tok.i) ? `2px solid ${text}` : '2px solid transparent',
-                transition: 'background-color 0.1s, border-color 0.1s',
+                textAlign: 'justify', hyphens: 'manual', WebkitHyphens: 'manual',
+                margin: 0, marginBottom: pi < paragraphs.length - 1 ? `${CONFIG.READING_PARAGRAPH_GAP_EM}em` : 0,
               }}
             >
-              {tok.text}
-            </span>
-          ) : (
-            <span key={tok.i}>{tok.text}</span>
-          ),
-        )}
+              {para.map((tok) =>
+                tok.isWord ? (
+                  <span
+                    key={tok.i}
+                    onClick={() => tap(tok)}
+                    style={{
+                      cursor: 'pointer',
+                      /* The condition's own ink, not a fixed green: #22c97a measured 2.16:1 on the
+                         light backgrounds and 9.70:1 on the dark ones, and 1.48:1 against the green
+                         ink — invisible in exactly the condition it was marking. A lost marker costs
+                         search time without leaving any trace. */
+                      backgroundColor: foundIdx.has(tok.i) ? text + '30' : 'transparent',
+                      borderBottom: foundIdx.has(tok.i) ? `2px solid ${text}` : '2px solid transparent',
+                      transition: 'background-color 0.1s, border-color 0.1s',
+                    }}
+                  >
+                    {tok.text}
+                  </span>
+                ) : (
+                  <span key={tok.i}>{' '}</span>
+                ),
+              )}
+            </p>
+          ))}
+        </div>
       </div>
-      <button
-        onClick={() => finish(foundIdx.size >= totalTargets ? 'voluntary_full' : 'voluntary_early')}
-        className="mt-4 self-end rounded-xl px-8 py-3 font-lab text-sm transition active:scale-95"
-        style={{ background: text, color: background, border: 'none' }}
-      >
-        Done searching →
-      </button>
+      <div style={{ flexShrink: 0, paddingTop: 12, borderTop: `1px solid ${text}20`, display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={() => finish(foundIdx.size >= totalTargets ? 'voluntary_full' : 'voluntary_early')}
+          style={{ background: text, color: background, border: 'none', borderRadius: 12, padding: '16px 32px', fontFamily: '"DM Mono", monospace', fontSize: 16, cursor: 'pointer' }}
+        >
+          Done searching →
+        </button>
+      </div>
     </div>
     </div>
   );

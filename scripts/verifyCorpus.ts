@@ -19,6 +19,7 @@
  * the test cannot, and is the thing to run after any edit to the corpus.
  */
 import { PASSAGES, countWords, countTargetOccurrences } from '../src/experiment/passages';
+import { CONFIG } from '../src/experiment/config';
 
 /** Reading rate implied by the pilot timing simulation: 240 words measured at 73 s. */
 const WPM = 240 / (73 / 60);
@@ -105,8 +106,13 @@ console.log('3. DERIVED COUNTS — must be computed from the text, never declare
 console.log('='.repeat(100));
 for (const { p } of rows) {
   if (p.wordCount !== countWords(p.pages)) fail(`passage ${p.id} wordCount is stale`);
-  if (p.searchTargetCount !== countTargetOccurrences(p.pages, p.searchTarget)) fail(`passage ${p.id} searchTargetCount is stale`);
-  if (p.searchTargetCount < 6) fail(`passage ${p.id} target "${p.searchTarget}" occurs only ${p.searchTargetCount}x — too few for a 40 s search task`);
+  // The search task shows a one-screen EXCERPT (passages.ts, selectSearchExcerpt), so its count is
+  // the excerpt's. The floor of 4 is the investigator-accepted minimum for that design: no content
+  // word exceeds 4-5 occurrences in one screen of the sparsest passages.
+  if (p.searchTargetCount !== countTargetOccurrences([p.searchExcerpt], p.searchTarget)) fail(`passage ${p.id} searchTargetCount is stale`);
+  if (p.passageTargetCount !== countTargetOccurrences(p.pages, p.searchTarget)) fail(`passage ${p.id} passageTargetCount is stale`);
+  if (p.searchTargetCount < 4) fail(`passage ${p.id} target "${p.searchTarget}" occurs only ${p.searchTargetCount}x on the search screen — too few for a ${CONFIG.VS_TIME_LIMIT_MS / 1000} s search task`);
+  if (p.pages.length !== 3) fail(`passage ${p.id} has ${p.pages.length} pages; the protocol specifies three`);
 }
 const targets = PASSAGES.map((p) => p.searchTarget.toLowerCase());
 if (new Set(targets).size !== targets.length) fail('search targets are not unique across passages');

@@ -58,12 +58,18 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
   → BASELINE_FATIGUE    5-item VAS baseline
   → INSTRUCTIONS        participant overview of the per-condition tasks
   → [×10 conditions per illumination block]
-        READING_TASK        intro → passage (self-paced beyond a per-page floor); exposure +
+        READING_TASK        intro → passage in THREE pages of near-equal length, justified, at the
+                            protocol font size, each page centred on the screen (self-paced beyond a
+                            per-page floor); exposure +
                             eye-tracking window; reading time → words/min recorded
         → COMPREHENSION     3×4-option MCQ per passage — gist, inference, detail — one row per item (accuracy + RT)
         → DISPLAY_PERCEPTION comfort + clarity, rated IMMEDIATELY after reading (perception fresh)
         → POST_FATIGUE       5-item VAS, immediately after the strongest fatigue inducer (reading)
-        → VISUAL_SEARCH     intro → tap every target word, 60 s limit (selective attention)
+        → VISUAL_SEARCH     intro → tap every target word, 60 s limit (selective attention), on ONE
+                            screen with no scrolling: an excerpt of the passage (whole sentences,
+                            ≤190 words) at the reading font size, where the target is densest; 4–11
+                            targets by passage, recorded as targets_in_set (investigator decision —
+                            no equal count is available from these texts in one screen)
         → REACTION_TIME     colour go/no-go IN the condition's display: one dot at a RANDOM screen
                             location each trial, on the condition's background; tap only when the dot
                             is the condition's own TEXT colour (the colour just read); the no-go dots

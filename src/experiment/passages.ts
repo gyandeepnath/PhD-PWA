@@ -9,7 +9,7 @@
  * that window captures. The original corpus ran ~240 words, which the timing simulation measured
  * at a 73 s exposure: about 16 blinks, a standard error near 0.09, and only 27% power on the
  * polarity x colour interaction that is the design's binding contrast. Each passage is therefore
- * four pages and about 600 words, which buys roughly 180 s of reading, some 39 blinks, and
+ * three pages and about 600 words, which buys roughly 180 s of reading, some 39 blinks, and
  * halves that error. Run `npm run verify:corpus` after any edit here.
  *
  * DERIVED COUNTS. Neither the word count nor the search-target count is declared. The original
@@ -49,8 +49,16 @@ interface PassageDef {
 export interface Passage extends PassageDef {
   /** Words in the passage, derived from the text. Drives reading_speed_wpm and skim detection. */
   wordCount: number;
-  /** Target occurrences, derived from the text with the search task's own tokenisation rule. */
+  /**
+   * The stretch of the passage the visual-search task shows: whole sentences, fitting ONE screen at
+   * the reading font size, chosen to hold the most occurrences of the target. See
+   * selectSearchExcerpt for why and how.
+   */
+  searchExcerpt: string;
+  /** Target occurrences IN THE EXCERPT, with the search task's own tokenisation rule. */
   searchTargetCount: number;
+  /** Target occurrences in the whole passage, kept for reference; the task no longer searches it. */
+  passageTargetCount: number;
 }
 
 const PASSAGE_DEFS: PassageDef[] = [
@@ -60,14 +68,19 @@ const PASSAGE_DEFS: PassageDef[] = [
     pages: [
       `Carbon is one of the most fundamental elements in nature, cycling continuously between living organisms, the atmosphere, oceans, and rocks. This process, known as the carbon cycle, regulates Earth's climate and supports all life on the planet.
 
-In the atmosphere, carbon exists primarily as carbon dioxide. Plants absorb this gas during photosynthesis, converting it into organic compounds that form their leaves, stems, and roots. Animals then consume plants, incorporating that carbon into their own tissues. When organisms die, decomposers break down organic matter and release carbon dioxide back into the atmosphere.`,
-      `Oceans play a critical role in the carbon cycle. Seawater absorbs large quantities of atmospheric carbon dioxide, where it dissolves and reacts with water to form carbonic acid. Marine organisms use dissolved carbon to build shells and skeletons. When these creatures die, their remains sink to the ocean floor, gradually forming limestone and chalk deposits over millions of years.
+In the atmosphere, carbon exists primarily as carbon dioxide. Plants absorb this gas during photosynthesis, converting it into organic compounds that form their leaves, stems, and roots. Animals then consume plants, incorporating that carbon into their own tissues. When organisms die, decomposers break down organic matter and release carbon dioxide back into the atmosphere.
 
-Human activities have significantly altered the carbon cycle. Burning fossil fuels releases carbon that was stored underground for millions of years, adding it to the atmosphere far faster than natural processes can absorb it. Deforestation reduces the number of trees available to absorb carbon dioxide, compounding the imbalance. Scientists continue to study these disruptions to develop strategies for restoring equilibrium.`,
-      `A second exchange operates on a geological timescale, and it is the slower of the two that ultimately governs atmospheric composition over long intervals. Rainwater, made faintly acidic by the gas it has dissolved, chemically weathers silicate rock across the continents, and the products of that reaction are carried by rivers to the sea. There the dissolved material is precipitated as calcium carbonate, either inorganically or through the shell-building activity of marine organisms, and accumulates as sediment on the ocean floor.
+Oceans play a critical role in the carbon cycle. Seawater absorbs large quantities of atmospheric carbon dioxide, where it dissolves and reacts with water to form carbonic acid. Marine organisms use dissolved carbon to build shells and skeletons. When these creatures die, their remains sink to the ocean floor, gradually forming limestone and chalk deposits over millions of years.
 
-Where that sediment eventually reaches a subduction zone it is drawn down into the mantle, and a portion of what it contains is returned to the atmosphere through volcanic outgassing. The complete circuit takes on the order of hundreds of millions of years. This is precisely why the geological pathway cannot buffer a disturbance that has been delivered over the course of a single century, and why the distinction between the rapid biological exchange and the slow mineral one is essential to interpreting the present imbalance correctly.`,
-      `Quantifying that imbalance requires establishing where the additional material actually goes. Roughly half of what fossil-fuel combustion and land clearance release remains in the atmosphere, and the remainder is taken up in approximately equal measure by the oceans and by terrestrial vegetation and soils. Neither of those sinks is guaranteed to persist indefinitely. Oceanic uptake acidifies surface water, which reduces the capacity of the sea to absorb further quantities of the gas while simultaneously impairing the organisms that construct calcium carbonate structures.
+Human activities have significantly altered the carbon cycle. Burning fossil fuels releases carbon that was stored underground for millions of years, adding it to the atmosphere far faster than natural processes can absorb it. Deforestation reduces the number of trees available to absorb carbon dioxide, compounding the imbalance.`,
+      `Scientists continue to study these disruptions to develop strategies for restoring equilibrium.
+
+A second exchange operates on a geological timescale, and it is the slower of the two that ultimately governs atmospheric composition over long intervals. Rainwater, made faintly acidic by the gas it has dissolved, chemically weathers silicate rock across the continents, and the products of that reaction are carried by rivers to the sea. There the dissolved material is precipitated as calcium carbonate, either inorganically or through the shell-building activity of marine organisms, and accumulates as sediment on the ocean floor.
+
+Where that sediment eventually reaches a subduction zone it is drawn down into the mantle, and a portion of what it contains is returned to the atmosphere through volcanic outgassing. The complete circuit takes on the order of hundreds of millions of years. This is precisely why the geological pathway cannot buffer a disturbance that has been delivered over the course of a single century, and why the distinction between the rapid biological exchange and the slow mineral one is essential to interpreting the present imbalance correctly.
+
+Quantifying that imbalance requires establishing where the additional material actually goes.`,
+      `Roughly half of what fossil-fuel combustion and land clearance release remains in the atmosphere, and the remainder is taken up in approximately equal measure by the oceans and by terrestrial vegetation and soils. Neither of those sinks is guaranteed to persist indefinitely. Oceanic uptake acidifies surface water, which reduces the capacity of the sea to absorb further quantities of the gas while simultaneously impairing the organisms that construct calcium carbonate structures.
 
 Terrestrial uptake depends on the continued health of forests, which drought, fire and clearance can convert from a sink into a source within a few decades. Isotopic analysis allows the origin of the atmospheric increase to be identified, because material derived from ancient plant remains carries a distinctive signature that separates it from anything released by volcanic or oceanic processes. That evidence is what permits the recent rise to be attributed rather than merely inferred by association. The policy relevance of that attribution is direct. Were the increase natural in origin, mitigation would be pointless; because it is not, the quantity of fossil fuel burned translates into a predictable rise in atmospheric concentration, and the arithmetic of stabilisation follows from it. Estimates of how much may still be released before a given temperature threshold is crossed rest on exactly this accounting.`,
     ],
@@ -114,14 +127,19 @@ Terrestrial uptake depends on the continued health of forests, which drought, fi
     pages: [
       `Ocean currents are continuous, directed movements of water flowing through the world's seas. These currents are driven by a combination of wind, differences in water density, Earth's rotation, and the shape of ocean basins. Together they form a global circulation system that distributes heat, nutrients, and dissolved gases around the planet.
 
-Surface currents are primarily driven by wind patterns. The trade winds near the equator push warm tropical water westward, while westerly winds at higher latitudes drive water in the opposite direction. These movements create large rotating systems called gyres, which dominate the major ocean basins.`,
-      `Deep ocean currents operate through a different mechanism known as thermohaline circulation. When surface water in polar regions becomes cold and dense, it sinks and spreads slowly along the ocean floor. This cold, deep water gradually warms as it travels toward the equator, eventually rising back to the surface in a process called upwelling. This vertical movement brings nutrients from the deep ocean to the surface, supporting productive marine ecosystems.
+Surface currents are primarily driven by wind patterns. The trade winds near the equator push warm tropical water westward, while westerly winds at higher latitudes drive water in the opposite direction. These movements create large rotating systems called gyres, which dominate the major ocean basins.
 
-Ocean currents have a profound influence on climate. The Gulf Stream carries warm water from the Gulf of Mexico northward along the eastern coast of North America and across to western Europe, moderating temperatures significantly. Without this current, northwestern Europe would experience far colder winters. Disruption of these circulation patterns due to climate change could have serious consequences for regional climates worldwide.`,
-      `The rotation of the planet imposes a systematic deflection on any moving mass of water, turning it clockwise in the northern hemisphere and anticlockwise in the southern. Because that deflection acts on each successive layer of the ocean slightly later than on the one above it, the direction of flow rotates progressively with increasing depth, and the net transport of the wind-driven layer ends up running at a substantial angle to the wind that produced it. Where this net transport carries surface water away from a coastline, deeper water rises to replace it.
+Deep ocean currents operate through a different mechanism known as thermohaline circulation. When surface water in polar regions becomes cold and dense, it sinks and spreads slowly along the ocean floor. This cold, deep water gradually warms as it travels toward the equator, eventually rising back to the surface in a process called upwelling. This vertical movement brings nutrients from the deep ocean to the surface, supporting productive marine ecosystems.
 
-The most productive fisheries in the world sit above precisely such zones, along the western margins of continents, because the water arriving from below is rich in the nitrate and phosphate that surface waters have long since exhausted. Comparatively small shifts in the prevailing winds can weaken or displace that supply, and the biological consequences propagate rapidly through the entire local food web.`,
-      `Measuring the deep circulation of the ocean is considerably harder than measuring its surface. Satellites can map surface height and temperature continuously across the globe, but they cannot see beneath the first few metres. Autonomous profiling floats now address that limitation by drifting at depth for several days, ascending while recording temperature and salinity, transmitting the profile by satellite, and then sinking again to repeat the cycle. Several thousand such instruments maintain a permanent census of the upper two kilometres of the world ocean.
+Ocean currents have a profound influence on climate. The Gulf Stream carries warm water from the Gulf of Mexico northward along the eastern coast of North America and across to western Europe, moderating temperatures significantly.`,
+      `Without this current, northwestern Europe would experience far colder winters. Disruption of these circulation patterns due to climate change could have serious consequences for regional climates worldwide.
+
+The rotation of the planet imposes a systematic deflection on any moving mass of water, turning it clockwise in the northern hemisphere and anticlockwise in the southern. Because that deflection acts on each successive layer of the ocean slightly later than on the one above it, the direction of flow rotates progressively with increasing depth, and the net transport of the wind-driven layer ends up running at a substantial angle to the wind that produced it. Where this net transport carries surface water away from a coastline, deeper water rises to replace it.
+
+The most productive fisheries in the world sit above precisely such zones, along the western margins of continents, because the water arriving from below is rich in the nitrate and phosphate that surface waters have long since exhausted. Comparatively small shifts in the prevailing winds can weaken or displace that supply, and the biological consequences propagate rapidly through the entire local food web.
+
+Measuring the deep circulation of the ocean is considerably harder than measuring its surface.`,
+      `Satellites can map surface height and temperature continuously across the globe, but they cannot see beneath the first few metres. Autonomous profiling floats now address that limitation by drifting at depth for several days, ascending while recording temperature and salinity, transmitting the profile by satellite, and then sinking again to repeat the cycle. Several thousand such instruments maintain a permanent census of the upper two kilometres of the world ocean.
 
 That record has established how much of the additional heat retained by the atmosphere is ultimately stored in seawater, a quantity that governs both thermal expansion and the pace of sea-level rise. It has also shown that the overturning circulation varies considerably from year to year, which makes any claim about a long-term trend dependent on a record long enough to distinguish the two. Such a record is now being assembled, and the instruments have been extended to greater depths and into the polar seas that were formerly inaccessible for much of the year. What emerges is a system that stores the great majority of the extra heat the climate system retains, and whose slow adjustment to a warmer atmosphere will continue long after the atmosphere itself has stabilised.`,
     ],
@@ -163,11 +181,14 @@ That record has established how much of the additional heat retained by the atmo
     pages: [
       `The immune system is the body's defence network, protecting against bacteria, viruses, fungi, and other harmful substances. It operates through a complex series of biological processes involving specialised cells, tissues, and organs working in coordination to identify and eliminate threats.
 
-The first line of defence consists of physical and chemical barriers. Skin forms a protective outer layer that prevents most pathogens from entering the body. Mucous membranes lining the respiratory and digestive tracts trap particles and contain antimicrobial substances. Stomach acid destroys many bacteria that enter through food or drink.`,
-      `When pathogens breach these initial barriers, the innate immune system responds rapidly. White blood cells called neutrophils and macrophages engulf and destroy foreign invaders through a process called phagocytosis. Inflammation is triggered at the site of infection, increasing blood flow and attracting more immune cells to the area.
+The first line of defence consists of physical and chemical barriers. Skin forms a protective outer layer that prevents most pathogens from entering the body. Mucous membranes lining the respiratory and digestive tracts trap particles and contain antimicrobial substances. Stomach acid destroys many bacteria that enter through food or drink.
 
-The adaptive immune system provides a more precise and targeted defence. Specialised cells called lymphocytes recognise specific molecules on the surface of pathogens, known as antigens. B lymphocytes produce proteins called antibodies that bind to these antigens, neutralising the pathogen or marking it for destruction. T lymphocytes coordinate the immune response and directly kill infected cells. Crucially, the adaptive immune system retains a memory of previous infections, allowing faster and more effective responses upon re-exposure. This principle underlies vaccination, where a harmless form of a pathogen is introduced to generate protective immunity without causing disease.`,
-      `Telling a real threat from the body's own tissue is the hardest task the immune system has to solve, and most of that work is done early. Lymphocytes are made with receptors of random shape, so some are bound to match the body's own molecules. Those cells are tested against self material while they are still young, and any that bind strongly are killed or switched off before they are ever released into the blood.
+When pathogens breach these initial barriers, the innate immune system responds rapidly. White blood cells called neutrophils and macrophages engulf and destroy foreign invaders through a process called phagocytosis. Inflammation is triggered at the site of infection, increasing blood flow and attracting more immune cells to the area.
+
+The adaptive immune system provides a more precise and targeted defence. Specialised cells called lymphocytes recognise specific molecules on the surface of pathogens, known as antigens. B lymphocytes produce proteins called antibodies that bind to these antigens, neutralising the pathogen or marking it for destruction. T lymphocytes coordinate the immune response and directly kill infected cells.`,
+      `Crucially, the adaptive immune system retains a memory of previous infections, allowing faster and more effective responses upon re-exposure. This principle underlies vaccination, where a harmless form of a pathogen is introduced to generate protective immunity without causing disease.
+
+Telling a real threat from the body's own tissue is the hardest task the immune system has to solve, and most of that work is done early. Lymphocytes are made with receptors of random shape, so some are bound to match the body's own molecules. Those cells are tested against self material while they are still young, and any that bind strongly are killed or switched off before they are ever released into the blood.
 
 The screening is not perfect. When it fails, self-reactive cells reach the blood and may attack healthy tissue, which is what happens in type 1 diabetes and in rheumatoid arthritis. A second layer of control works all the time in the rest of the body, where regulatory cells hold back responses that would otherwise run against harmless material such as food or gut bacteria. Tolerance is therefore something the body keeps up, not something it settles once and then forgets.`,
       `Several features of this design have direct effects in the clinic. Because protection rests on memory rather than on any fixed barrier, immunity fades at a rate that differs a great deal between diseases, which is why some vaccines last a lifetime while others must be repeated. Because the response is aimed at particular molecular shapes, a virus that changes those shapes quickly can slip past recognition, and that is why influenza vaccines are rebuilt each year.
@@ -214,11 +235,14 @@ No single setting of that system is best. Tuned for maximum vigilance it would d
     pages: [
       `Volcanoes are openings in Earth's crust through which molten rock, gases, and ash can escape from the interior of the planet. They occur along tectonic plate boundaries and above areas known as hotspots, where plumes of hot mantle material rise toward the surface. Volcanic eruptions range from gentle lava flows to catastrophic explosions with global consequences.
 
-The behaviour of a volcano depends largely on the composition of its magma. Magma with low silica content is relatively fluid and allows gases to escape easily, resulting in effusive eruptions where lava flows steadily across the landscape. Hawaiian volcanoes typically behave this way, producing rivers of lava that cool slowly as they spread.`,
-      `High-silica magma is far more viscous, trapping gases under pressure. When this pressure becomes sufficient, the result is an explosive eruption that can launch ash and rock fragments high into the atmosphere. The 1980 eruption of Mount St Helens in the United States and the 1883 eruption of Krakatoa in Indonesia are examples of such violent events. Large explosive eruptions can inject enough material into the upper atmosphere to temporarily lower global temperatures.
+The behaviour of a volcano depends largely on the composition of its magma. Magma with low silica content is relatively fluid and allows gases to escape easily, resulting in effusive eruptions where lava flows steadily across the landscape. Hawaiian volcanoes typically behave this way, producing rivers of lava that cool slowly as they spread.
 
-Despite their destructive power, volcanoes have played a vital role in shaping Earth. They release gases that contributed to the formation of the early atmosphere and oceans. Volcanic soils are exceptionally fertile, supporting productive agriculture. Geothermal energy from volcanic regions provides renewable electricity in countries such as Iceland and New Zealand. Scientists monitor active volcanoes continuously to improve understanding and provide advance warning of eruptions.`,
-      `The dissolved gas held within magma governs the violence of what follows, and its behaviour is closely analogous to that of a sealed carbonated drink. At depth the confining pressure keeps water and carbon dioxide in solution. As magma ascends, that pressure falls, the dissolved gas comes out of solution as bubbles, and the bubbles expand. Fluid magma allows them to escape continuously and the ascent remains comparatively gentle.
+High-silica magma is far more viscous, trapping gases under pressure. When this pressure becomes sufficient, the result is an explosive eruption that can launch ash and rock fragments high into the atmosphere. The 1980 eruption of Mount St Helens in the United States and the 1883 eruption of Krakatoa in Indonesia are examples of such violent events. Large explosive eruptions can inject enough material into the upper atmosphere to temporarily lower global temperatures.
+
+Despite their destructive power, volcanoes have played a vital role in shaping Earth.`,
+      `They release gases that contributed to the formation of the early atmosphere and oceans. Volcanic soils are exceptionally fertile, supporting productive agriculture. Geothermal energy from volcanic regions provides renewable electricity in countries such as Iceland and New Zealand. Scientists monitor active volcanoes continuously to improve understanding and provide advance warning of eruptions.
+
+The dissolved gas held within magma governs the violence of what follows, and its behaviour is closely analogous to that of a sealed carbonated drink. At depth the confining pressure keeps water and carbon dioxide in solution. As magma ascends, that pressure falls, the dissolved gas comes out of solution as bubbles, and the bubbles expand. Fluid magma allows them to escape continuously and the ascent remains comparatively gentle.
 
 Viscous magma does not. The bubbles cannot separate from it, so they expand in place until the surrounding material fails as a brittle solid rather than flowing as a liquid, and the magma is torn apart into fragments propelled by its own expanding gas. The distinction between a lava flow and an explosive column is therefore not a difference in the amount of energy available but a difference in how readily the gas can leave.`,
       `Forecasting rests on detecting the arrival of new magma beneath a volcano rather than on predicting an eruption date. Rising magma fractures the rock it displaces, generating characteristic swarms of small earthquakes that migrate upward over days or weeks. It also inflates the edifice measurably, and satellite radar can now resolve ground deformation of a few centimetres across an entire mountain. The composition of emitted gas shifts as well, with sulphur dioxide typically increasing as fresh magma approaches the surface.
@@ -263,11 +287,14 @@ None of these signals specifies timing reliably, and unrest frequently subsides 
     pages: [
       `Sleep is a fundamental biological process that is essential for physical health, cognitive function, and emotional regulation. During sleep, the brain and body perform critical maintenance tasks that cannot occur during waking hours. Despite spending approximately one third of our lives asleep, the precise functions of sleep are still being investigated by scientists.
 
-Sleep is not a uniform state but consists of distinct cycles that repeat throughout the night. Each cycle lasts approximately ninety minutes and includes stages of non-rapid eye movement sleep and rapid eye movement sleep. During the deeper stages of non-rapid eye movement sleep, the body repairs tissues, synthesises proteins, and releases growth hormones.`,
-      `Rapid eye movement sleep is associated with vivid dreaming and plays a central role in memory consolidation and emotional processing. During this stage, the brain replays and reorganises experiences from the preceding day, transferring information from short-term to long-term memory. Research has shown that people who sleep well after learning a new skill perform significantly better than those who are sleep deprived.
+Sleep is not a uniform state but consists of distinct cycles that repeat throughout the night. Each cycle lasts approximately ninety minutes and includes stages of non-rapid eye movement sleep and rapid eye movement sleep. During the deeper stages of non-rapid eye movement sleep, the body repairs tissues, synthesises proteins, and releases growth hormones.
 
-Chronic sleep deprivation has serious health consequences. It impairs concentration, reaction time, and decision-making, and has been linked to increased risk of cardiovascular disease, diabetes, and obesity. The brain's glymphatic system, which clears metabolic waste products, functions primarily during sleep. Disruption of this cleaning process has been associated with the accumulation of proteins linked to Alzheimer's disease. Public health authorities increasingly recognise adequate sleep as essential to overall wellbeing, alongside diet and physical activity.`,
-      `Two largely independent regulators determine when a person becomes drowsy. The first is a homeostatic pressure that accumulates throughout waking and dissipates once unconsciousness begins, which explains why a longer period awake produces a deeper and more consolidated recovery. The second is a circadian rhythm generated by a small cluster of hypothalamic neurons that maintains a cycle of close to twenty-four hours even in the complete absence of external cues.
+Rapid eye movement sleep is associated with vivid dreaming and plays a central role in memory consolidation and emotional processing. During this stage, the brain replays and reorganises experiences from the preceding day, transferring information from short-term to long-term memory. Research has shown that people who sleep well after learning a new skill perform significantly better than those who are sleep deprived.
+
+Chronic sleep deprivation has serious health consequences. It impairs concentration, reaction time, and decision-making, and has been linked to increased risk of cardiovascular disease, diabetes, and obesity.`,
+      `The brain's glymphatic system, which clears metabolic waste products, functions primarily during sleep. Disruption of this cleaning process has been associated with the accumulation of proteins linked to Alzheimer's disease. Public health authorities increasingly recognise adequate sleep as essential to overall wellbeing, alongside diet and physical activity.
+
+Two largely independent regulators determine when a person becomes drowsy. The first is a homeostatic pressure that accumulates throughout waking and dissipates once unconsciousness begins, which explains why a longer period awake produces a deeper and more consolidated recovery. The second is a circadian rhythm generated by a small cluster of hypothalamic neurons that maintains a cycle of close to twenty-four hours even in the complete absence of external cues.
 
 Because the internal period is not exactly twenty-four hours, it must be corrected daily, and light striking the retina is the dominant signal that performs the correction. Light in the early morning advances the rhythm while light in the late evening delays it. The two regulators normally reinforce one another, and the misery of shift work and long-distance travel follows directly from forcing them out of alignment.`,
       `The practical consequences of that architecture are considerable. Adolescents undergo a physiological delay in circadian timing, so early school start times require them to wake near the trough of their internal cycle, and trials of later starts have reported measurable gains in attendance and attainment. Evening exposure to illuminated screens delays the rhythm further, which is one reason display use before bed is associated with a later sleep onset.
@@ -317,11 +344,14 @@ Self-assessment is unreliable in this domain. People restricted to a curtailed s
     pages: [
       `Tropical rainforests are among the most biologically diverse ecosystems on Earth, covering approximately six percent of the planet's land surface yet harbouring more than half of all known plant and animal species. These dense forests are found near the equator, where warm temperatures and high rainfall create ideal conditions for extraordinary biodiversity.
 
-The structure of a rainforest is organised into distinct vertical layers. The emergent layer consists of the tallest trees, reaching heights of fifty metres or more, their canopies exposed to full sunlight and wind. Below lies the main canopy, a dense continuous layer of treetops where most photosynthesis occurs and where the majority of animal species live.`,
-      `The understorey is a shaded zone beneath the canopy where smaller trees and shrubs are adapted to low light conditions. At ground level, the forest floor receives very little sunlight and is dominated by fungi, insects, and decomposers that rapidly break down fallen leaves and dead organisms. This decomposition releases nutrients that are quickly absorbed by the shallow root systems of rainforest trees.
+The structure of a rainforest is organised into distinct vertical layers. The emergent layer consists of the tallest trees, reaching heights of fifty metres or more, their canopies exposed to full sunlight and wind. Below lies the main canopy, a dense continuous layer of treetops where most photosynthesis occurs and where the majority of animal species live.
 
-Rainforests play an indispensable role in regulating Earth's climate. They absorb vast quantities of carbon dioxide and release oxygen, acting as critical carbon sinks. The transpiration of water vapour from tree leaves contributes to regional rainfall patterns, sustaining agriculture across wide areas. Despite their importance, tropical rainforests are being lost at an alarming rate due to deforestation for agriculture, logging, and infrastructure. Conservation efforts focus on protecting remaining forest and restoring degraded land.`,
-      `A persistent misconception holds that such luxuriant vegetation must stand on exceptionally rich ground. The opposite is generally true. Heavy rainfall leaches soluble minerals downward beyond the reach of roots, and the soil of a mature forest retains comparatively little of the nutrient stock. Almost the entire reserve is held instead within the living vegetation itself, and it is recycled with remarkable efficiency: material falling to the ground is decomposed within weeks by an abundant community of fungi and invertebrates, and dense mats of shallow roots, assisted by fungal partners, intercept the released nutrients before rain can wash them away.
+The understorey is a shaded zone beneath the canopy where smaller trees and shrubs are adapted to low light conditions. At ground level, the forest floor receives very little sunlight and is dominated by fungi, insects, and decomposers that rapidly break down fallen leaves and dead organisms. This decomposition releases nutrients that are quickly absorbed by the shallow root systems of rainforest trees.
+
+Rainforests play an indispensable role in regulating Earth's climate. They absorb vast quantities of carbon dioxide and release oxygen, acting as critical carbon sinks.`,
+      `The transpiration of water vapour from tree leaves contributes to regional rainfall patterns, sustaining agriculture across wide areas. Despite their importance, tropical rainforests are being lost at an alarming rate due to deforestation for agriculture, logging, and infrastructure. Conservation efforts focus on protecting remaining forest and restoring degraded land.
+
+A persistent misconception holds that such luxuriant vegetation must stand on exceptionally rich ground. The opposite is generally true. Heavy rainfall leaches soluble minerals downward beyond the reach of roots, and the soil of a mature forest retains comparatively little of the nutrient stock. Almost the entire reserve is held instead within the living vegetation itself, and it is recycled with remarkable efficiency: material falling to the ground is decomposed within weeks by an abundant community of fungi and invertebrates, and dense mats of shallow roots, assisted by fungal partners, intercept the released nutrients before rain can wash them away.
 
 The vulnerability this creates is severe. Clearing and burning a stand of forest transfers its nutrient capital to the ash, where a few seasons of cultivation exhaust it, after which the land supports neither crops nor a straightforward return of the original forest.`,
       `Diversity on this scale demands an explanation, and no single mechanism accounts for it. Specialised natural enemies appear to suppress any seedling growing near an adult of its own species, which prevents any one tree from dominating and leaves openings for others. The vertical structure of the forest multiplies the number of distinct habitats available, and the absence of a severe season permits narrow specialisation that a variable climate would penalise.
@@ -366,11 +396,14 @@ Measuring the resulting biodiversity remains difficult, because much of it occup
     pages: [
       `Plate tectonics is the scientific theory that describes the movement of large sections of Earth's outer shell, called tectonic plates, and explains many geological features including mountains, earthquakes, and volcanoes. The theory revolutionised Earth science when it was established in the 1960s, providing a unifying framework that connected previously separate observations.
 
-Earth's outermost layer, the lithosphere, is divided into approximately fifteen major plates and several smaller ones. These plates float on the partially molten rock of the asthenosphere and move at rates of a few centimetres per year, driven by forces that arise both within the mantle and at the plates' own margins.`,
-      `Plates interact at their boundaries in three primary ways. At convergent boundaries, plates move toward each other. When an oceanic plate meets a continental plate, the denser oceanic plate is forced beneath the continental plate in a process called subduction, creating deep ocean trenches and volcanic mountain chains. When two continental plates collide, neither subducts, and the collision produces vast mountain ranges such as the Himalayas.
+Earth's outermost layer, the lithosphere, is divided into approximately fifteen major plates and several smaller ones. These plates float on the partially molten rock of the asthenosphere and move at rates of a few centimetres per year, driven by forces that arise both within the mantle and at the plates' own margins.
 
-At divergent boundaries, plates move apart and new oceanic crust is created as magma rises from below to fill the gap. The Mid-Atlantic Ridge is a prominent example of this process, where the North American and Eurasian plates are separating at roughly two centimetres per year. At transform boundaries, plates slide horizontally past each other, generating earthquakes along major fault lines such as the San Andreas Fault in California. The slow but relentless movement of tectonic plates has shaped the continents and oceans over hundreds of millions of years.`,
-      `The evidence that persuaded a sceptical discipline came largely from the sea floor. Surveying after the Second World War revealed a continuous volcanic ridge running through the major ocean basins, and rock recovered from either flank proved younger the closer it lay to the ridge crest. Iron-bearing minerals record the orientation of the magnetic field at the moment they cool, and because that field has reversed repeatedly, the sea floor carries a symmetrical pattern of magnetic stripes on both sides of the ridge.
+Plates interact at their boundaries in three primary ways. At convergent boundaries, plates move toward each other. When an oceanic plate meets a continental plate, the denser oceanic plate is forced beneath the continental plate in a process called subduction, creating deep ocean trenches and volcanic mountain chains. When two continental plates collide, neither subducts, and the collision produces vast mountain ranges such as the Himalayas.
+
+At divergent boundaries, plates move apart and new oceanic crust is created as magma rises from below to fill the gap.`,
+      `The Mid-Atlantic Ridge is a prominent example of this process, where the North American and Eurasian plates are separating at roughly two centimetres per year. At transform boundaries, plates slide horizontally past each other, generating earthquakes along major fault lines such as the San Andreas Fault in California. The slow but relentless movement of tectonic plates has shaped the continents and oceans over hundreds of millions of years.
+
+The evidence that persuaded a sceptical discipline came largely from the sea floor. Surveying after the Second World War revealed a continuous volcanic ridge running through the major ocean basins, and rock recovered from either flank proved younger the closer it lay to the ridge crest. Iron-bearing minerals record the orientation of the magnetic field at the moment they cool, and because that field has reversed repeatedly, the sea floor carries a symmetrical pattern of magnetic stripes on both sides of the ridge.
 
 That pattern is difficult to interpret in any way other than the continuous creation of new crust at the ridge and its outward transport in both directions. A related observation settled the mechanism: earthquakes near a trench are shallow at the trench itself and progressively deeper inland, tracing the descending slab of the subducting plate to several hundred kilometres.`,
       `The force that drives the system is now understood to lie mostly at the edges of each plate rather than beneath it. A slab descending at a subduction zone is colder and denser than the mantle surrounding it, and its weight pulls the trailing plate along behind it. This accounts for the observation that plates with long subducting margins move several times faster than those without any.
@@ -420,11 +453,14 @@ Because the motion is steady while the boundaries between plates are locked by f
     pages: [
       `Light is a form of electromagnetic radiation, a type of energy that travels as waves through space. What we perceive as visible light is only a small portion of a much broader electromagnetic spectrum that includes radio waves, microwaves, infrared radiation, ultraviolet light, X-rays, and gamma rays. These different forms of radiation share the same fundamental nature but differ in wavelength and frequency.
 
-The electromagnetic spectrum is arranged by wavelength, which is the distance between successive wave peaks. Radio waves have the longest wavelengths, stretching from millimetres to hundreds of kilometres. Gamma rays have the shortest wavelengths, smaller than the diameter of an atomic nucleus.`,
-      `Visible light occupies a narrow band of wavelengths between approximately 380 and 700 nanometres. Within this range, different wavelengths correspond to different colours. Violet light has the shortest wavelength and highest frequency, while red light has the longest wavelength and lowest frequency. White light contains all visible wavelengths, which is why passing it through a prism produces a rainbow of colours.
+The electromagnetic spectrum is arranged by wavelength, which is the distance between successive wave peaks. Radio waves have the longest wavelengths, stretching from millimetres to hundreds of kilometres. Gamma rays have the shortest wavelengths, smaller than the diameter of an atomic nucleus.
 
-The speed of light in a vacuum is approximately 300,000 kilometres per second, one of the most important constants in physics. When light passes through different materials, it slows down and can bend, a phenomenon called refraction. This bending of light by the atmosphere causes mirages in hot conditions and makes stars appear to twinkle near the horizon. The study of light and optics has led to transformative technologies including photography, fibre optic communications, lasers, and medical imaging devices.`,
-      `Treating radiation purely as a wave accounts for interference and diffraction but fails to explain how it exchanges energy with matter. Illuminating a metal surface releases electrons only when the frequency exceeds a threshold characteristic of that metal, and increasing the intensity below the threshold releases none at all, however long the exposure continues. The resolution is that energy arrives in discrete quanta whose size is set by frequency rather than by brightness.
+Visible light occupies a narrow band of wavelengths between approximately 380 and 700 nanometres. Within this range, different wavelengths correspond to different colours. Violet light has the shortest wavelength and highest frequency, while red light has the longest wavelength and lowest frequency. White light contains all visible wavelengths, which is why passing it through a prism produces a rainbow of colours.
+
+The speed of light in a vacuum is approximately 300,000 kilometres per second, one of the most important constants in physics.`,
+      `When light passes through different materials, it slows down and can bend, a phenomenon called refraction. This bending of light by the atmosphere causes mirages in hot conditions and makes stars appear to twinkle near the horizon. The study of light and optics has led to transformative technologies including photography, fibre optic communications, lasers, and medical imaging devices.
+
+Treating radiation purely as a wave accounts for interference and diffraction but fails to explain how it exchanges energy with matter. Illuminating a metal surface releases electrons only when the frequency exceeds a threshold characteristic of that metal, and increasing the intensity below the threshold releases none at all, however long the exposure continues. The resolution is that energy arrives in discrete quanta whose size is set by frequency rather than by brightness.
 
 Radiation therefore behaves as a wave in propagation and as a stream of particles in absorption and emission, and neither description alone is sufficient. This duality also explains why the biological hazard of the spectrum is governed by frequency: ultraviolet, X-ray and gamma quanta each carry enough energy to break chemical bonds, whereas the far more numerous quanta of visible or infrared radiation do not, no matter how intense the source.`,
       `Only a narrow set of wavelengths reaches the ground, and that constraint has shaped both biology and astronomy. The atmosphere is transparent across the visible band and across parts of the radio band, while ozone absorbs most of the ultraviolet and water vapour and carbon dioxide absorb strongly through the infrared. It is not a coincidence that eyes evolved sensitive to the band that penetrates most freely and that also happens to coincide with the peak emission of the Sun.
@@ -469,16 +505,17 @@ Astronomy remained confined to that same band until instruments could be flown a
     pages: [
       `Sound is a mechanical wave, a travelling disturbance in the pressure of a material medium. Unlike light, sound cannot cross a vacuum, because it depends on particles displacing one another. When an object vibrates, it compresses and then rarefies the adjacent air. That alternation passes outward as a chain of pressure fluctuations that eventually reaches the ear.
 
-Two independent properties characterise any sound. Frequency, measured in hertz, is the number of pressure cycles arriving each second, and the auditory system interprets it as pitch. Amplitude is the magnitude of the fluctuation, which the auditory system interprets as loudness. Because the range of audible amplitudes is enormous, loudness is expressed on the logarithmic decibel scale rather than in absolute units.`,
-      `The external ear collects sound and channels it along the canal to the tympanic membrane. That membrane vibrates in synchrony with the arriving pressure fluctuations. Three articulated bones in the middle ear amplify the motion and transmit it to the cochlea, a fluid-filled spiral within the inner ear. A membrane runs the length of the cochlea, and its stiffness varies from one end to the other, so different regions resonate at different frequencies.
+Two independent properties characterise any sound. Frequency, measured in hertz, is the number of pressure cycles arriving each second, and the auditory system interprets it as pitch. Amplitude is the magnitude of the fluctuation, which the auditory system interprets as loudness. Because the range of audible amplitudes is enormous, loudness is expressed on the logarithmic decibel scale rather than in absolute units.
 
-Specialised hair cells positioned on that membrane convert mechanical displacement into neural impulses. Higher frequencies excite cells near the entrance of the spiral, whereas lower frequencies excite cells situated deeper within it. The cochlea therefore accomplishes a frequency analysis before the signal reaches the brain. Because mammalian hair cells do not regenerate once destroyed, hearing loss caused by noise exposure is irreversible.`,
-      `Locating a source in space is a separate computation, and it depends on comparing the two ears. A sound arriving from one side reaches the nearer ear slightly earlier, and for low frequencies the auditory system resolves differences in arrival time of a few tens of microseconds. At high frequencies the head casts an acoustic shadow, so the far ear receives a quieter signal, and intensity rather than timing carries the information.
+The external ear collects sound and channels it along the canal to the tympanic membrane. That membrane vibrates in synchrony with the arriving pressure fluctuations. Three articulated bones in the middle ear amplify the motion and transmit it to the cochlea, a fluid-filled spiral within the inner ear. A membrane runs the length of the cochlea, and its stiffness varies from one end to the other, so different regions resonate at different frequencies.`,
+      `Specialised hair cells positioned on that membrane convert mechanical displacement into neural impulses. Higher frequencies excite cells near the entrance of the spiral, whereas lower frequencies excite cells situated deeper within it. The cochlea therefore accomplishes a frequency analysis before the signal reaches the brain. Because mammalian hair cells do not regenerate once destroyed, hearing loss caused by noise exposure is irreversible.
 
-Neither cue distinguishes a source directly in front from one directly behind, since both give identical values at the two ears. That ambiguity is resolved by the external ear, whose folds filter arriving sound differently depending on elevation and on whether it originates in front or behind. The resulting spectral colouring is learned, which is why altering the shape of the outer ear disrupts vertical localisation until the listener adapts.
+Locating a source in space is a separate computation, and it depends on comparing the two ears. A sound arriving from one side reaches the nearer ear slightly earlier, and for low frequencies the auditory system resolves differences in arrival time of a few tens of microseconds. At high frequencies the head casts an acoustic shadow, so the far ear receives a quieter signal, and intensity rather than timing carries the information.
 
-The middle ear performs a further essential function that is easy to overlook.`,
-      `Because the inner ear is filled with fluid while the outer ear contains air, sound arriving at a fluid boundary would be almost entirely reflected without some means of matching the two. The three bones of the middle ear supply exactly that, concentrating force from the relatively large tympanic membrane onto the much smaller window of the cochlea and recovering most of the energy that would otherwise be lost.
+Neither cue distinguishes a source directly in front from one directly behind, since both give identical values at the two ears. That ambiguity is resolved by the external ear, whose folds filter arriving sound differently depending on elevation and on whether it originates in front or behind. The resulting spectral colouring is learned, which is why altering the shape of the outer ear disrupts vertical localisation until the listener adapts.`,
+      `The middle ear performs a further essential function that is easy to overlook.
+
+Because the inner ear is filled with fluid while the outer ear contains air, sound arriving at a fluid boundary would be almost entirely reflected without some means of matching the two. The three bones of the middle ear supply exactly that, concentrating force from the relatively large tympanic membrane onto the much smaller window of the cochlea and recovering most of the energy that would otherwise be lost.
 
 The clinical consequence is that hearing loss separates into two categories with different implications. Damage to the conducting apparatus attenuates everything arriving at the cochlea and can often be bypassed or repaired. Damage to the hair cells distorts the frequency analysis itself, so amplification alone restores audibility without restoring clarity, which is why people with such loss commonly report that speech is loud enough yet remains difficult to follow in a noisy room. Prevention is accordingly more effective than treatment. Sustained exposure above roughly eighty-five decibels damages hair cells progressively, and that damage accumulates across a working life without any sound seeming painful at the time. Occupational limits are written in terms of both level and duration for precisely that reason.`,
     ],
@@ -525,14 +562,19 @@ The clinical consequence is that hearing loss separates into two categories with
     pages: [
       `Each year billions of birds undertake migration, a regular seasonal movement between a breeding range and a wintering range. The pattern is driven less by temperature than by the seasonal supply of food. Insect-eating birds cannot survive a northern winter, yet the northern summer offers long daylight and abundant prey. The breeding advantage of the round trip therefore outweighs its considerable energetic cost.
 
-Departure is timed internally rather than by immediate weather. Birds kept under constant laboratory lighting still become restless in the period when they would normally leave, which shows that an internal annual rhythm sets the schedule. Changing day length is the environmental cue that keeps that rhythm aligned with the calendar.`,
-      `Navigation depends on several partly independent mechanisms working together. Many species orient by the position of the sun, correcting for its apparent movement across the sky by reference to an internal clock. Night migrants instead orient by the pattern of stars around the celestial pole, which they appear to learn during their first summer. A magnetic sense supplies a further reference that remains available beneath complete cloud cover.
+Departure is timed internally rather than by immediate weather. Birds kept under constant laboratory lighting still become restless in the period when they would normally leave, which shows that an internal annual rhythm sets the schedule. Changing day length is the environmental cue that keeps that rhythm aligned with the calendar.
 
-Experienced birds do considerably more than hold a constant compass heading. Adults displaced to unfamiliar territory can compute a corrected course and still reach the intended destination. Juveniles on a first migration typically continue along their original bearing and arrive somewhere entirely different. This difference suggests that determining position, as distinct from holding direction, is learned through experience rather than inherited.`,
-      `The physiological preparation for departure is as remarkable as the navigation. In the weeks beforehand birds feed intensively and deposit fat that may approach half of their total mass, and several species additionally enlarge the flight muscles while allowing the digestive organs to shrink, since tissue that will not be used in flight is dead weight. Long-distance migrants exploit predictable winds and adjust their altitude to find a favourable layer.
+Navigation depends on several partly independent mechanisms working together. Many species orient by the position of the sun, correcting for its apparent movement across the sky by reference to an internal clock. Night migrants instead orient by the pattern of stars around the celestial pole, which they appear to learn during their first summer. A magnetic sense supplies a further reference that remains available beneath complete cloud cover.
 
-Some crossings permit no interruption whatever. Birds that traverse an ocean or a desert must complete the passage on reserves carried from the last staging site, and the survival of those populations depends on a small number of such sites remaining intact. The loss of a single wetland can therefore affect birds breeding thousands of kilometres away, which is why protection organised country by country is generally insufficient.`,
-      `Tracking technology has transformed what can be established about these journeys. Ringing recovers only the small fraction of birds found again, whereas miniature loggers and satellite tags now record complete routes, and the resulting data have overturned several confident assumptions about where particular populations spend the winter and which paths they follow.
+Experienced birds do considerably more than hold a constant compass heading.`,
+      `Adults displaced to unfamiliar territory can compute a corrected course and still reach the intended destination. Juveniles on a first migration typically continue along their original bearing and arrive somewhere entirely different. This difference suggests that determining position, as distinct from holding direction, is learned through experience rather than inherited.
+
+The physiological preparation for departure is as remarkable as the navigation. In the weeks beforehand birds feed intensively and deposit fat that may approach half of their total mass, and several species additionally enlarge the flight muscles while allowing the digestive organs to shrink, since tissue that will not be used in flight is dead weight. Long-distance migrants exploit predictable winds and adjust their altitude to find a favourable layer.
+
+Some crossings permit no interruption whatever. Birds that traverse an ocean or a desert must complete the passage on reserves carried from the last staging site, and the survival of those populations depends on a small number of such sites remaining intact. The loss of a single wetland can therefore affect birds breeding thousands of kilometres away, which is why protection organised country by country is generally insufficient.
+
+Tracking technology has transformed what can be established about these journeys.`,
+      `Ringing recovers only the small fraction of birds found again, whereas miniature loggers and satellite tags now record complete routes, and the resulting data have overturned several confident assumptions about where particular populations spend the winter and which paths they follow.
 
 Climate change introduces a difficulty that the internal calendar is poorly equipped to handle. Day length at the wintering ground is unaffected by warming, yet the insect peak at the breeding ground is arriving progressively earlier. Species that cannot advance their departure sufficiently arrive to find the food supply already past its maximum, and long-distance migrants that rely most heavily on a fixed internal schedule appear to be declining faster than short-distance migrants able to respond to local conditions. Conservation has begun to reflect this. International agreements now treat a migratory route as a single unit rather than as a series of national responsibilities, and monitoring at staging sites gives early warning of trouble for birds that breed thousands of kilometres away. Whether such coordination can keep pace with the shifting timing of the seasons is unresolved, and it is the question most current work on migratory birds is designed to answer.`,
     ],
@@ -594,11 +636,73 @@ export function countTargetOccurrences(pages: string[], target: string): number 
     .filter((w) => w.replace(/[^a-zA-Z]/g, '').toLowerCase() === t).length;
 }
 
-export const PASSAGES: Passage[] = PASSAGE_DEFS.map((p) => ({
-  ...p,
-  wordCount: countWords(p.pages),
-  searchTargetCount: countTargetOccurrences(p.pages, p.searchTarget),
-}));
+/**
+ * Words a search excerpt may hold. The excerpt is shown on one screen at the READING font size and
+ * line height, in the reading column; every reading page (181-212 words) was measured to fit that
+ * area on four tablet viewports with headroom, so a budget inside that range fits too.
+ * tests/passages.test.ts holds every excerpt to it.
+ */
+export const SEARCH_EXCERPT_MAX_WORDS = 190;
+
+/**
+ * Choose the visual-search excerpt: the contiguous run of WHOLE SENTENCES, at most
+ * SEARCH_EXCERPT_MAX_WORDS long, that holds the MOST occurrences of the target word. Ties go to the
+ * longer run, which uses the screen better, then to the earlier one. Paragraph breaks inside the run
+ * are kept.
+ *
+ * WHY AN EXCERPT. The search task used to show the whole passage — 570-600 words at 19 px — in a
+ * scroll box 2.5-2.7 screens tall with no scroll cue. The share of targets visible without scrolling
+ * then ranged by passage from 1 of 10 to 12 of 12, so search time and misses partly measured whether
+ * the participant discovered they could scroll, and that differed by passage, which is not balanced
+ * against condition. The investigator chose one screen, at the reading font size, no scrolling.
+ *
+ * WHY THE DENSEST, AND WHY COUNTS STILL DIFFER. An equal number of targets in every passage was
+ * checked first and is not available from these texts: the most any one-screen window holds is
+ * carbon 12, sleep 11, light 8, ocean 7, magma 7, immune 6, forest 5, plate 5, sound 4, birds 4, and
+ * no other content word does better in the sparse passages. Equalising would mean editing the
+ * validated passages. So each passage keeps its own target word, shows the stretch where it is
+ * densest, and the count is recorded per row as targets_in_set — an investigator decision, with the
+ * alternatives (equal at 4; paginated whole passage) set aside.
+ *
+ * Deterministic and pure, so the stimulus is reproducible from the source alone; a fingerprint test
+ * fails if a change to this function changes any excerpt.
+ */
+export function selectSearchExcerpt(pages: string[], target: string, maxWords = SEARCH_EXCERPT_MAX_WORDS): string {
+  const t = target.toLowerCase();
+  const norm = (w: string) => w.replace(/[^a-zA-Z]/g, '').toLowerCase();
+  const units: { text: string; paraStart: boolean; words: number; hits: number }[] = [];
+  for (const para of pages.join('\n\n').split(/\n{2,}/).map((x) => x.trim()).filter(Boolean)) {
+    para.split(/(?<=[.!?])\s+(?=[A-Z"'(])/).filter(Boolean).forEach((text, i) => {
+      const ws = text.split(/\s+/).filter(Boolean);
+      units.push({ text, paraStart: i === 0, words: ws.length, hits: ws.filter((w) => norm(w) === t).length });
+    });
+  }
+  let best = { a: 0, b: 0, hits: -1, words: 0 };
+  for (let a = 0; a < units.length; a++) {
+    let words = 0;
+    let hits = 0;
+    for (let b = a; b < units.length; b++) {
+      words += units[b].words;
+      if (words > maxWords) break;
+      hits += units[b].hits;
+      if (hits > best.hits || (hits === best.hits && words > best.words)) best = { a, b, hits, words };
+    }
+  }
+  return units.slice(best.a, best.b + 1)
+    .map((u, i) => (i === 0 ? u.text : (u.paraStart ? '\n\n' : ' ') + u.text))
+    .join('');
+}
+
+export const PASSAGES: Passage[] = PASSAGE_DEFS.map((p) => {
+  const searchExcerpt = selectSearchExcerpt(p.pages, p.searchTarget);
+  return {
+    ...p,
+    wordCount: countWords(p.pages),
+    searchExcerpt,
+    searchTargetCount: countTargetOccurrences([searchExcerpt], p.searchTarget),
+    passageTargetCount: countTargetOccurrences(p.pages, p.searchTarget),
+  };
+});
 
 export const N_PASSAGES = PASSAGES.length;
 
