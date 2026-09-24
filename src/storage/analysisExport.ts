@@ -79,7 +79,7 @@ export const ANALYSIS_LONG_COLUMNS = [
   // --- session covariates -----------------------------------------------------------------
   'ambient_lux_measured', 'lux_all_in_range', 'screen_luminance_cd_m2', 'stimulus_scale',
   // --- quality, for sensitivity analyses ---------------------------------------------------
-  'camera_active', 'effective_fps', 'fps_adequate_for_ratio', 'face_presence_ratio',
+  'camera_active', 'camera_inactive_reason', 'effective_fps', 'fps_adequate_for_ratio', 'face_presence_ratio',
   'gaze_calibrated', 'gaze_trust', 'gaze_targets_well_covered',
   'qc_overall', 'e2e_timing', 'session_status', 'withdrawn',
   'sitting_split_reason',
@@ -411,6 +411,7 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
          * still means the record exists and says tracking did not run.
          */
         camera_active: e ? sum.camera_active : null,
+        camera_inactive_reason: e?.camera_inactive_reason ?? null,
         effective_fps: round(sum.effective_fps),
         fps_adequate_for_ratio: e?.fps_adequate_for_ratio ?? null,
         face_presence_ratio: round(sum.face_presence_ratio),

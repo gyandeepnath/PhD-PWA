@@ -3212,3 +3212,37 @@ record `condition_id`, exported in `15_media_inventory.csv`, so a segment joins 
 is coded against. Tested with a stub recorder; always keeping the clip fails the abandoned-run test. Not
 covered end to end: the e2e driver declines the camera, so the annotation path is exercised by unit tests
 only.
+
+## Round 50 — a camera lost mid-sitting failed silently for the rest of it
+
+From the interruption audit, confirmed in the code and then in the browser. When the camera's track
+ended mid-sitting — an incoming call, another app taking the camera, the OS dropping it — the listener
+set status 'failed' and a flag that nothing read. The only visible sign was the tracking monitor
+disappearing. The condition in progress and every condition after it were written as camera-off rows:
+the primary outcome missing for the rest of the sitting, no notice to the operator, no attempt at
+recovery, and nothing in the data to tell it from a participant who declined the camera. A camera that
+is muted or paused rather than ended (backgrounding does this on some tablets) did not even do that:
+status stayed 'active' and rows were written with camera_active TRUE over no frames.
+
+Both routes now end in one place, `markLost` in `useTracking.ts`: an `ended` event, or no tracker result
+for `CAMERA_STALL_MS` (5 s) while the page is visible (`tracking/cameraLiveness.ts` — armed only after the
+first result, hidden time not counted, the video nudged when the page returns). The stream is released,
+so no frozen frame can be captured as a setup photo, and `cameraLostAt` is exposed. The experiment then
+stops the sitting with a blocking notice wherever a pause is allowed (never over reaction-time trials):
+"Pause and restart the camera" runs the same pause path as the Pause button, and a resume re-runs camera
+setup and calibration and restarts the condition; "Continue without the camera" is allowed, since the
+camera may be gone for good. Camera-off rows now carry `camera_inactive_reason` — `lost` or
+`not_running` — in `07_eye_metrics.csv` and `analysis_long.csv`.
+
+The 5 s bound is an engineering liveness limit, not a methodological threshold: the tracker yields a
+result per processed frame whether or not a face is present, so a gap of seconds means frames stopped.
+
+Tested at three levels: the liveness check with an injected clock (quiet while results arrive, fires
+once on a stall, not before the first result, hidden time excluded); source wiring; and a new end-to-end
+spec (`e2e/cameraLost.spec.ts`) that runs the real camera path on Chromium's fake camera, fires the track's
+`ended` event during reading, and checks both choices — Pause returns to the Session Manager with the
+sitting resumable, and continuing writes the condition's row as `camera_active = FALSE`,
+`camera_inactive_reason = 'lost'`. Restoring the old listener fails the spec.
+
+1041 tests, verify green, stress 1256/1256; edge, full-run, split, reachability and camera-lost end-to-end
+specs pass.

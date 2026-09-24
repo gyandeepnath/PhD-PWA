@@ -235,6 +235,14 @@ const BASE_CONFIG = {
    * at all — it deduplicated by accident, and differently on every device. See tracking/framePump.ts.
    */
   PROCESS_EVERY_N_FRAMES: 1,
+  /**
+   * How long the face tracker may go without producing ANY result, while the page is visible, before
+   * the camera is treated as lost. An engineering liveness bound, not a methodological threshold:
+   * the tracker yields a result per processed frame whether or not a face is in it, so at any usable
+   * frame rate a gap of seconds means frames have stopped arriving — a muted or paused camera that
+   * never fired `ended`. Time the page spends hidden does not count.
+   */
+  CAMERA_STALL_MS: 5000,
 };
 
 /**

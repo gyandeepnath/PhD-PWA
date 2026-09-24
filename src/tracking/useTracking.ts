@@ -39,6 +39,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { EyeMetricsAggregator, disabledEyeMetrics } from './aggregator';
 import { put } from '@/storage/db';
 import { now } from '@/lib/timing';
+import { startLivenessCheck } from './cameraLiveness';
 import type { CameraStatus } from '@/storage/types';
 import { loadFaceMesh, faceMeshAssetPath } from './faceMeshLoader';
 
@@ -149,6 +150,12 @@ interface TrackingApi {
   beginCondition: () => void;
   /** Finalise the current condition and persist an EyeMetricsRecord. */
   endCondition: (conditionId: string, sessionId: string) => Promise<void>;
+  /**
+   * When the camera was LOST after it had started — the track ended, or frames stopped arriving while
+   * the page was visible. Null while it is running or was never started. The experiment must act on
+   * this: see the camera-lost notice in Experiment.tsx.
+   */
+  cameraLostAt: number | null;
 }
 
 /**
@@ -177,6 +184,13 @@ export interface CalibrationOutcome {
 
 export function useTracking(): TrackingApi {
   const [status, setStatus] = useState<CameraStatus>('unavailable');
+  const [cameraLostAt, setCameraLostAt] = useState<number | null>(null);
+  /** Set when the camera stopped after starting; read synchronously by endCondition. */
+  const lostRef = useRef(false);
+  /** When the tracker last produced a result (face or not). The liveness signal for the stall check. */
+  const lastResultAtRef = useRef<number | null>(null);
+  /** Teardown for the stall watchdog and its visibility listener, while the camera runs. */
+  const watchdogStopRef = useRef<(() => void) | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // Tiny offscreen canvas for cheap per-frame luminance sampling (lighting QC).
   const lumaCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -296,6 +310,7 @@ export function useTracking(): TrackingApi {
 
   const ingestResult = useCallback((lm: Point[] | null) => {
     const t = now();
+    lastResultAtRef.current = t;
     const luma = sampleLuma();
     if (lm && lm.length > 0) {
       const ear = faceEar(lm);
@@ -379,11 +394,43 @@ export function useTracking(): TrackingApi {
     }
   }, [emitLive]);
 
+  /*
+   * THE CAMERA STOPPED, AND SOMETHING MUST SAY SO.
+   *
+   * The `ended` listener used to set a flag that nothing read, and status 'failed', which only made
+   * the tracking monitor disappear. Every later condition then wrote a camera-off row — the primary
+   * outcome missing for the rest of the sitting — with no notice to the operator, no attempt at
+   * recovery, and nothing in the data to tell it from a participant who declined the camera. And a
+   * camera that is muted or paused rather than ended (backgrounding does this on some tablets) did not
+   * even do that: status stayed 'active' and rows were written with camera_active TRUE over no frames.
+   *
+   * Now either route lands here: the pump and the stream are released (so no frozen frame can be
+   * captured as a setup photo), status becomes 'failed', and cameraLostAt tells the experiment, which
+   * stops the sitting to offer a pause — a resume re-runs camera setup and calibration and redoes the
+   * condition. Rows written while it is lost say camera_inactive_reason = 'lost'.
+   */
+  const markLost = useCallback(() => {
+    if (lostRef.current) return;
+    lostRef.current = true;
+    watchdogStopRef.current?.();
+    watchdogStopRef.current = null;
+    pumpRef.current?.stop();
+    pumpRef.current = null;
+    const v = videoRef.current;
+    if (v?.srcObject) (v.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
+    videoRef.current = null;
+    setStatus('failed');
+    setCameraLostAt(Date.now());
+  }, []);
+
   const start = useCallback(async (): Promise<CameraStatus> => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       setStatus('unavailable');
       return 'unavailable';
     }
+    // A second start() in one mount must not leave the first one's watchdog running.
+    watchdogStopRef.current?.();
+    watchdogStopRef.current = null;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: CONFIG.CAMERA_WIDTH, height: CONFIG.CAMERA_HEIGHT, frameRate: CONFIG.CAMERA_FPS },
@@ -416,13 +463,11 @@ export function useTracking(): TrackingApi {
        * of the exposure it saw. Indistinguishable from a good row — and the operator manual tells
        * the operator to check exactly those two fields.
        */
+      lostRef.current = false;
+      setCameraLostAt(null);
       for (const track of stream.getVideoTracks()) {
-        track.addEventListener('ended', () => {
-          setStatus('failed');
-          trackEndedRef.current = true;
-        });
+        track.addEventListener('ended', markLost);
       }
-      trackEndedRef.current = false;
       // Small canvas for downsampled luminance sampling (lighting QC) — cheap to read each frame.
       const lumaCanvas = document.createElement('canvas');
       lumaCanvas.width = 32;
@@ -465,6 +510,23 @@ export function useTracking(): TrackingApi {
         { everyN: CONFIG.PROCESS_EVERY_N_FRAMES },
       );
 
+      /*
+       * Liveness: a muted or paused camera never fires `ended`. The tracker yields a result per
+       * processed frame, face or no face, so no result for CAMERA_STALL_MS while the page is visible
+       * means frames have stopped. Armed only after the first result (the model loads first), and the
+       * clock restarts when the page becomes visible again — hidden time is not a stall — after
+       * nudging the video, which some browsers pause while the page is in the background.
+       */
+      lastResultAtRef.current = null;
+      watchdogStopRef.current = startLivenessCheck({
+        lastResultAt: lastResultAtRef,
+        isVisible: () => typeof document === 'undefined' || document.visibilityState === 'visible',
+        now,
+        stallMs: CONFIG.CAMERA_STALL_MS,
+        onStall: markLost,
+        onVisible: () => { void videoRef.current?.play().catch(() => { /* the stall check decides */ }); },
+      });
+
       setStatus('active');
       return 'active';
     } catch (err) {
@@ -474,12 +536,11 @@ export function useTracking(): TrackingApi {
       setStatus(s);
       return s;
     }
-  }, [ingestResult]);
-
-  /** Set when a video track ended after the camera had started. See start(). */
-  const trackEndedRef = useRef(false);
+  }, [ingestResult, markLost]);
 
   const stop = useCallback(() => {
+    watchdogStopRef.current?.();
+    watchdogStopRef.current = null;
     pumpRef.current?.stop();
     pumpRef.current = null;
     const v = videoRef.current;
@@ -599,8 +660,8 @@ export function useTracking(): TrackingApi {
 
   const endCondition = useCallback(
     async (conditionId: string, sessionId: string) => {
-      if (status !== 'active' || !aggRef.current) {
-        await put('eye_metrics', disabledEyeMetrics(conditionId, sessionId));
+      if (lostRef.current || status !== 'active' || !aggRef.current) {
+        await put('eye_metrics', disabledEyeMetrics(conditionId, sessionId, lostRef.current ? 'lost' : 'not_running'));
         return;
       }
       /*
@@ -655,5 +716,6 @@ export function useTracking(): TrackingApi {
     subscribeLive, start, stop, measureEarBaseline, mediaSource,
     beginGazeCalibration, sampleGazeTarget, endGazeCalibration,
     beginCondition, endCondition,
+    cameraLostAt,
   };
 }

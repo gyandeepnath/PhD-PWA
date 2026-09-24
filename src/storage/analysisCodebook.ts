@@ -202,6 +202,8 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
   // ---------------------------------------------------------------- quality
   { column: 'camera_active', role: 'qc', unit: 'boolean', missing: 'no eye record',
     description: 'Whether tracking ran for this condition. False means every ocular column in the row is empty by cause, not by chance.' },
+  { column: 'camera_inactive_reason', role: 'qc', unit: 'lost|not_running', missing: 'camera running, no eye record, or recorded before the column existed',
+    description: 'Why camera_active is FALSE: lost = the camera had been running in this sitting and stopped (track ended or frames stopped); not_running = it never ran (declined, denied, unavailable). A camera lost part-way through a sitting leaves the remaining rows missing for a known cause; this is what tells them apart from a participant who declined.' },
   { column: 'effective_fps', role: 'qc', unit: 'fps', missing: 'camera not running',
     description: 'Achieved sampling rate of the EAR series — face-solved frames per second, not the camera frame rate. This is what fps_adequate_for_ratio gates on.' },
   { column: 'fps_adequate_for_ratio', role: 'qc', unit: 'boolean', missing: 'camera not running',

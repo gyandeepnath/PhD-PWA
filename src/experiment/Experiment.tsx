@@ -204,6 +204,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const [sessionCreateError, setSessionCreateError] = useState<string | null>(null);
   /** True once the RT block has stopped presenting trials and is only persisting them. */
   const [rtBlockFinished, setRtBlockFinished] = useState(false);
+  /** The operator chose to continue after the camera was lost. See the camera-lost notice. */
+  const [cameraLossAccepted, setCameraLossAccepted] = useState(false);
   useEffect(() => {
     const lock = acquireScreenWakeLock();
     setWakeLockUnsupported(!lock.supported);
@@ -1516,6 +1518,33 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     && (machine.stage !== 'REACTION_TIME' || rtBlockFinished)
     && !!session;
 
+  /**
+   * A pause during ADAPTATION or a BREAK comes AFTER the condition is finished — the grey field is a
+   * rest, not part of the run. Saving machine.stepIndex there rewound the pointer over a completed
+   * condition, so the resume replayed a passage the participant had just read (inflating
+   * comprehension and reading speed through prior exposure) and appended a second set of reaction
+   * trials under the same condition_id.
+   */
+  const pauseAfterFinished = machine.stage === 'ADAPTATION' || machine.stage === 'BREAK_SCREEN';
+  const pauseAndExit = () => {
+    if (!session) return;
+    saveResume(session.session_id, pauseAfterFinished ? machine.stepIndex + 1 : machine.stepIndex);
+    // An abandoned reading run's clip is discarded, not stored. Before tracking.stop(), which ends
+    // the recorder by ending its tracks.
+    annotationRecording.current?.finish(false);
+    tracking.stop();
+    onExit();
+  };
+
+  /*
+   * The camera was lost mid-sitting. Blocking, like the portrait notice, and shown only where a pause
+   * is allowed (never over reaction-time trials, which it would disturb). Pausing is the recovery: a
+   * resume re-runs camera setup and calibration and restarts the condition. Continuing is allowed —
+   * the camera may be gone for good — and every row from then on records camera_inactive_reason =
+   * 'lost', so the decision is visible in the data.
+   */
+  const showCameraLost = tracking.cameraLostAt != null && !cameraLossAccepted && canPause;
+
   return (
     <div data-stage={machine.stage} style={{ height: '100%' }}>
       {/*
@@ -1584,6 +1613,36 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           </p>
         </div>
       )}
+      {showCameraLost && (
+        <div
+          data-testid="camera-lost"
+          style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#1a1a2e', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32 }}
+        >
+          <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 300 }}>The camera has stopped</h1>
+          <p className="font-lab" style={{ fontSize: 15, color: '#c8d8f0', maxWidth: 520, marginTop: 14, lineHeight: 1.6 }}>
+            Eye measurements are not being recorded. This happens when a call or another app takes the
+            camera, or when the tablet sleeps or is put in the background.
+          </p>
+          <p className="font-lab" style={{ fontSize: 14, color: '#c8d8f0', maxWidth: 520, marginTop: 10, lineHeight: 1.6 }}>
+            <strong>Researcher:</strong> pause and resume from the session manager. The camera is set up and
+            calibrated again, and {pauseAfterFinished ? 'the session continues at the next condition' : 'this condition starts again'}.
+          </p>
+          <div style={{ display: 'flex', gap: 12, marginTop: 22, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button onClick={pauseAndExit} className="font-lab text-sm"
+              style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid #fff', background: '#fff', color: '#1a1a2e', cursor: 'pointer' }}>
+              Pause and restart the camera
+            </button>
+            <button onClick={() => setCameraLossAccepted(true)} className="font-lab text-sm"
+              style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid #c8d8f0', background: 'transparent', color: '#c8d8f0', cursor: 'pointer' }}>
+              Continue without the camera
+            </button>
+          </div>
+          <p className="font-lab" style={{ fontSize: 12, color: '#8fa0c0', maxWidth: 520, marginTop: 14, lineHeight: 1.6 }}>
+            If you continue, every remaining condition is recorded with no eye measurements, marked as
+            camera lost.
+          </p>
+        </div>
+      )}
       {sessionCreateError && (
         <div
           data-testid="session-create-error"
@@ -1607,16 +1666,6 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         <button
           onClick={() => {
             if (!session) return;
-            /**
-             * A pause during ADAPTATION comes AFTER the condition is finished — the grey field is a
-             * rest, not part of the run. Saving machine.stepIndex there rewound the pointer over a
-             * completed condition, so the resume replayed a passage the participant had just read
-             * (inflating comprehension and reading speed through prior exposure) and appended a
-             * second set of reaction trials under the same condition_id.
-             */
-            // Both the break and the grey field come after condition k has finished.
-            const done = machine.stage === 'ADAPTATION' || machine.stage === 'BREAK_SCREEN';
-            const target = done ? machine.stepIndex + 1 : machine.stepIndex;
             /*
              * Pause is offered in REACTION_TIME only after the trials have ended, while the results
              * are being written. It used to say the condition "will be restarted", which is usually
@@ -1625,21 +1674,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
              * restarted only if the write does not finish. The operator is told both, and where to look.
              */
             const saving = machine.stage === 'REACTION_TIME';
-            const msg = done
+            const msg = pauseAfterFinished
               ? 'Pause and exit to the session manager? This condition is complete; the session will resume at the next one.'
               : saving
                 ? 'Pause and exit to the session manager? This condition\'s tasks are finished and its results are being saved. '
                   + 'If the save completes, the session resumes at the next condition; if it does not, this condition is '
                   + 'restarted. The Resume line in the session manager shows which condition is next.'
                 : 'Pause and exit to the session manager? This condition will be restarted on resume.';
-            if (window.confirm(msg)) {
-              saveResume(session.session_id, target);
-              // An abandoned reading run's clip is discarded, not stored. Before tracking.stop(),
-              // which ends the recorder by ending its tracks.
-              annotationRecording.current?.finish(false);
-              tracking.stop();
-              onExit();
-            }
+            if (window.confirm(msg)) pauseAndExit();
           }}
           className="font-lab text-xs"
           aria-label="Pause"

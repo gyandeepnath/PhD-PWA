@@ -61,7 +61,8 @@ describe('the experiment wires it', () => {
   const src = readFileSync('src/experiment/Experiment.tsx', 'utf8');
   it('reading completion keeps it; Pause and unmount discard it', () => {
     expect(src).toMatch(/annotationRecording\.current\?\.finish\(true\)/);
-    const pause = src.slice(src.indexOf("aria-label=\"Pause\"") - 3000, src.indexOf("aria-label=\"Pause\""));
+    // The one pause path, used by the Pause button and the camera-lost notice alike.
+    const pause = src.slice(src.indexOf('const pauseAndExit = () =>'), src.indexOf('const pauseAndExit = () =>') + 600);
     expect(pause).toMatch(/annotationRecording\.current\?\.finish\(false\);\s*tracking\.stop\(\)/);
     expect(src).toMatch(/useEffect\(\(\) => \(\) => \{ annotationRecording\.current\?\.finish\(false\); \}, \[\]\)/);
   });

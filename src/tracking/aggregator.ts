@@ -319,6 +319,7 @@ export class EyeMetricsAggregator {
 
       gaze_calibrated: args.gazeCalibrated,
       calibration_id: args.calibrationId,
+      camera_inactive_reason: args.cameraActive ? null : 'not_running',
       /**
        * Null when no face was ever found. These three were 0, and 0 is not "unknown" for any of
        * them — it is the BEST possible value. gaze_deviation_ratio 0 reads as "gaze never left the
@@ -357,11 +358,16 @@ export class EyeMetricsAggregator {
  * camera_active=false is not a sufficient guard on its own: it puts the burden on every downstream
  * consumer to remember to filter, and the app's own dashboard did not.
  */
-export function disabledEyeMetrics(conditionId: string, sessionId: string): EyeMetricsRecord {
+export function disabledEyeMetrics(
+  conditionId: string,
+  sessionId: string,
+  reason: 'lost' | 'not_running' = 'not_running',
+): EyeMetricsRecord {
   return {
     condition_id: conditionId,
     session_id: sessionId,
     camera_active: false,
+    camera_inactive_reason: reason,
     effective_fps: null,
     fps_adequate_for_tiers: false,
     fps_adequate_for_ratio: false,

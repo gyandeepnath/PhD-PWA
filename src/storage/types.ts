@@ -627,6 +627,14 @@ export interface EyeMetricsRecord {
   condition_id: string;
   session_id: string;
   camera_active: boolean;
+  /**
+   * Why the camera was not active for this row: 'lost' when it had been running in this sitting and
+   * stopped (the track ended, or frames stopped arriving), 'not_running' otherwise (declined, denied,
+   * never started). Null when camera_active is true; absent on rows written before it existed.
+   * Without it a camera lost at condition 3 left conditions 3-10 indistinguishable from a
+   * participant who declined the camera.
+   */
+  camera_inactive_reason?: 'lost' | 'not_running' | null;
   /** Effective achieved sampling rate (frames actually processed/sec). */
   effective_fps: number | null;
   /** True when effective_fps >= 25; gates the micro/partial blink tiers. */
