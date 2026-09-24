@@ -837,11 +837,19 @@ if (!is.null(search) && "search_time_ms" %in% names(search)) {
   vs <- search %>% left_join(cond, by = c("participant_id", "condition_id")) %>%
     filter(is.finite(search_time_ms))
   cat("\n=== Visual search (secondary, §4) ===\n")
+  # CENSORED MEANS "DID NOT FIND EVERY TARGET", NOT ONLY "RAN OUT OF TIME". A participant who taps
+  # Done before finding them all (voluntary_early) has a search_time_ms that is a time to QUIT: the
+  # time to find every target was not observed, exactly as at the cap. Counting only time_limit as
+  # censored treated those quit times as completions and understated the censoring — and giving up
+  # early is plausibly commoner in the hardest conditions, so the understatement is not uniform.
   if ("termination_mode" %in% names(vs)) {
     tm <- table(vs$termination_mode, useNA = "ifany")
     cat("termination_mode: ", paste(names(tm), as.integer(tm), sep = "=", collapse = ", "), "\n")
     capped <- sum(vs$termination_mode == "time_limit", na.rm = TRUE)
-    cat("blocks ending at the time limit (right-censored): ", qc_pct(capped, nrow(vs)), "\n")
+    quit_early <- sum(vs$termination_mode == "voluntary_early", na.rm = TRUE)
+    cat("blocks ending before every target was found (right-censored): ",
+        qc_pct(capped + quit_early, nrow(vs)), "\n")
+    cat("  of which at the time limit:", capped, "; stopped early by the participant:", quit_early, "\n")
     cat("the model below is UNCENSORED, so its mean is biased DOWNWARD by that fraction.\n")
   } else {
     cat("termination_mode absent — the censoring rate cannot be reported for this export.\n")
@@ -859,6 +867,8 @@ if (!is.null(search) && "search_time_ms" %in% names(search)) {
   # -----------------------------------------------------------------------------------------
   if ("termination_mode" %in% names(vs)) {
     vs$capped <- vs$termination_mode == "time_limit"
+    vs$quit_early <- vs$termination_mode == "voluntary_early"
+    vs$censored <- vs$termination_mode != "voluntary_full"
     vs$completed <- vs$termination_mode == "voluntary_full"
     cat("\ncensoring rate by condition (the number that decides whether the time model is usable):\n")
     by_cond <- vs %>%
@@ -869,13 +879,16 @@ if (!is.null(search) && "search_time_ms" %in% names(search)) {
       summarise(n = dplyr::n(),
                 n_capped = sum(capped, na.rm = TRUE),
                 pct_capped = round(100 * mean(capped, na.rm = TRUE), 1),
+                pct_quit_early = round(100 * mean(quit_early, na.rm = TRUE), 1),
+                pct_censored = round(100 * mean(censored, na.rm = TRUE), 1),
                 pct_completed = round(100 * mean(completed, na.rm = TRUE), 1),
                 .groups = "drop")
     print(as.data.frame(by_cond))
-    spread_pct <- diff(range(by_cond$pct_capped))
+    # On everything censored, not only the cap: see above.
+    spread_pct <- diff(range(by_cond$pct_censored))
     cat("\nspread in censoring across conditions:", round(spread_pct, 1), "percentage points\n")
     if (is.finite(spread_pct) && spread_pct > CENSOR_SPREAD_WARN_PP) {
-      cat("*** The censoring rate differs by more than 10 points between conditions. The mean search\n")
+      cat("*** The censoring rate differs by more than", CENSOR_SPREAD_WARN_PP, "points between conditions. The mean search\n")
       cat("*** time is then partly a measure of how often the clock ran out, and that bias runs WITH\n")
       cat("*** the hypothesis. Use the completion model below as the primary search outcome, or fit\n")
       cat("*** a properly censored model, before drawing any conclusion from the times.\n")

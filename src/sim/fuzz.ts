@@ -113,7 +113,11 @@ export function runFuzz(iterations: number, seed = 1): FuzzFailure[] {
       // d' is null by contract when either response pool is empty - there is no signal-versus-
       // noise separation to estimate. Only an ESTIMABLE block is required to produce a number.
       if (r.estimable && !Number.isFinite(r.d_prime)) fail('sdt', i, `d' not finite (${hits}/${misses}/${fa}/${cr})`);
-      if (!r.estimable && (hits + misses > 0 && fa + cr > 0)) fail('sdt', i, `marked unestimable despite both pools having trials (${hits}/${misses}/${fa}/${cr})`);
+      // Unestimable exactly when a pool is empty OR responding did not vary (no "yes" at all, or
+      // nothing but "yes") — then the value would be the extreme-rate correction and nothing else.
+      const shouldEstimate = hits + misses > 0 && fa + cr > 0 && hits + fa > 0 && misses + cr > 0;
+      if (!r.estimable && shouldEstimate) fail('sdt', i, `marked unestimable despite both pools having trials and responses varying (${hits}/${misses}/${fa}/${cr})`);
+      if (r.estimable && !shouldEstimate) fail('sdt', i, `estimated d' with no response variation (${hits}/${misses}/${fa}/${cr})`);
       // A null SE is the correct answer for an unestimable block; only a present-but-broken
       // value is a failure.
       if (r.estimable && (!Number.isFinite(r.d_prime_se) || (r.d_prime_se ?? -1) < 0)) fail('sdt', i, `SE bad: ${r.d_prime_se}`);

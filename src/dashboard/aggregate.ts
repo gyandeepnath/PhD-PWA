@@ -172,6 +172,8 @@ export interface ConditionSummary {
 
   // Visual search
   search_time_ms: number | null;
+  /** How the search ended. time_limit and voluntary_early both mean search_time_ms is censored. */
+  search_termination: string | null;
   search_accuracy: number | null;
   search_efficiency: number | null;
   false_detections: number | null;
@@ -592,6 +594,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       low_face_presence: eng.low_face_presence,
 
       search_time_ms: vs?.search_time_ms ?? null,
+      search_termination: vs?.termination_mode ?? null,
       search_accuracy: vs?.accuracy_rate ?? null,
       search_efficiency: vs?.search_efficiency ?? null,
       false_detections: vs?.false_detections ?? null,

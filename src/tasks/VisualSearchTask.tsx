@@ -19,8 +19,10 @@ export interface SearchResult {
   targetsFound: number;
   targetsMissed: number;
   falseDetections: number;
-  accuracyRate: number;
-  searchEfficiency: number;
+  /** Null when the excerpt held no target — never 0, which would claim none were found. */
+  accuracyRate: number | null;
+  /** Targets per minute; null when no time elapsed. */
+  searchEfficiency: number | null;
   meanInterTargetIntervalMs: number | null;
   /**
    * Sensitivity over WORDS as trials: hits = targets found, false alarms = non-target words tapped,
@@ -34,6 +36,8 @@ export interface SearchResult {
    * fast as the hit rate.
    */
   dPrime: number | null;
+  /** Standard error of dPrime. With 4-11 target words per excerpt it is large; export it so it can weight. */
+  dPrimeSe: number | null;
   /** Non-target words available to be wrongly tapped: the correct-rejection pool. */
   distractorWords: number;
   terminationMode: 'time_limit' | 'voluntary_full' | 'voluntary_early';
@@ -116,22 +120,25 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
     const found = foundRef.current.size;
     const times = clickTimes.current;
     const intervals = times.slice(1).map((t, k) => t - times[k]);
+    // Words as trials. Uses the same signal-detection machinery as the reaction-time block, so a
+    // tap-everything strategy cannot produce a good score — and, since that machinery declines to
+    // estimate without variation in responding, neither can tapping nothing.
+    const sdt = computeSdt({
+      hits: found,
+      misses: Math.max(0, totalTargets - found),
+      falseAlarms: falseDet.current.size,
+      correctRejections: Math.max(0, wordCount - totalTargets - falseDet.current.size),
+    });
     onComplete({
       searchTimeMs: elapsed,
       timeToFirstTargetMs: times.length ? times[0] - start.current : null,
       targetsFound: found,
       targetsMissed: Math.max(0, totalTargets - found),
       falseDetections: falseDet.current.size,
-      accuracyRate: totalTargets > 0 ? found / totalTargets : 0,
-      searchEfficiency: elapsed > 0 ? found / (elapsed / 60000) : 0,
-      // Words as trials. Uses the same signal-detection machinery as the reaction-time block, so a
-      // tap-everything strategy cannot produce a good score.
-      dPrime: computeSdt({
-        hits: found,
-        misses: Math.max(0, totalTargets - found),
-        falseAlarms: falseDet.current.size,
-        correctRejections: Math.max(0, wordCount - totalTargets - falseDet.current.size),
-      }).d_prime,
+      accuracyRate: totalTargets > 0 ? found / totalTargets : null,
+      searchEfficiency: elapsed > 0 ? found / (elapsed / 60000) : null,
+      dPrime: sdt.d_prime,
+      dPrimeSe: sdt.d_prime_se,
       distractorWords: Math.max(0, wordCount - totalTargets),
       meanInterTargetIntervalMs: intervals.length
         ? intervals.reduce((s, v) => s + v, 0) / intervals.length

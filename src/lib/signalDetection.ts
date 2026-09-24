@@ -29,7 +29,9 @@ export interface SdtInput {
 export const RATE_CORRECTION_NOTE =
   'Rates of exactly 0 or 1 are bounded to 1/(2N) and 1 - 1/(2N) before the z-transform, where N is '
   + 'that pool\'s trial count; every other rate passes through unchanged. hit_rate and '
-  + 'false_alarm_rate are exported UNCORRECTED, so the adjustment is reconstructable.';
+  + 'false_alarm_rate are exported UNCORRECTED, so the adjustment is reconstructable. d-prime is '
+  + 'left blank when the participant responded to no trial or to every trial: both rates are then at '
+  + 'the same extreme and the value would be produced by the correction and the pool sizes alone.';
 
 export interface SdtResult {
   /** Hits / signal trials. Null when the block held no signal trials — never 0, which is a claim. */
@@ -111,6 +113,31 @@ export function computeSdt(input: SdtInput): SdtResult {
 
   const rawH = nSignal > 0 ? hits / nSignal : 0;
   const rawF = nNoise > 0 ? falseAlarms / nNoise : 0;
+
+  /*
+   * NO VARIATION IN RESPONDING, NO SENSITIVITY TO ESTIMATE.
+   *
+   * A participant who never responded — no hits and no false alarms — or who responded to every
+   * trial has given no evidence about discrimination at all: both rates sit at the same extreme, and
+   * the criterion lies beyond every trial. The z-transform still returns a number, but it is made
+   * entirely of the extreme-rate correction, and because that correction is 1/(2N) of EACH pool, it is
+   * made of the two pool sizes. In the visual search, with ~6 target words against ~180 others, a
+   * participant who tapped nothing scored d' = z(1/12) - z(1/360) = +1.39: a respectable sensitivity
+   * for doing nothing, entering the analysis as a measurement. In the reaction-time block the same
+   * non-response gives -0.23. Neither is a measurement of the participant.
+   *
+   * The rates are still returned — "responded to nothing" is itself a finding, and hit_rate 0 and
+   * false_alarm_rate 0 say it exactly.
+   */
+  const yes = hits + falseAlarms;
+  const no = misses + correctRejections;
+  if (yes === 0 || no === 0) {
+    return {
+      hit_rate: rawH, false_alarm_rate: rawF,
+      d_prime: null, criterion: null, d_prime_se: null,
+      d_prime_unstable: true, estimable: false,
+    };
+  }
 
   /*
    * The 1/(2N) rule, NOT the log-linear correction — an earlier comment here called it

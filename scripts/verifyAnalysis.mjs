@@ -330,6 +330,9 @@ for (let i = 0; i < 12; i++) {
         // time becomes partly a difference in how often the clock ran out, biased WITH the
         // hypothesis. So the breakdown matters more than the overall rate.
         ['censoring is broken down by condition, not just overall', 'censoring rate by condition'],
+        // Quitting before every target is found is censoring too; the fixture carries such blocks.
+        ['stopping early is counted as censoring, not as a completion', 'stopped early by the participant'],
+        ['the censoring table carries the combined rate', 'pct_censored'],
         // Every threshold this file applies must say where it came from. Three were labelled and
         // four were bare literals, which is an inconsistency in the file's own standard: a number
         // that decides how a result is read has to be defensible and reproducible.
@@ -340,6 +343,9 @@ for (let i = 0; i < 12; i++) {
       ]) ok(`R: ${label}`, rOut.includes(needle), `"${needle}" not in the output`);
 
       // A threshold that is not in the protocol must say so where it is read, not only in a comment.
+      const quitLine = /stopped early by the participant:\s*(\d+)/.exec(rOut);
+      ok('R: the fixture\'s early-stopped searches are counted',
+        quitLine != null && Number(quitLine[1]) > 0, quitLine ? `counted ${quitLine[1]}` : 'no count printed');
       ok('R: analyst-chosen QC thresholds are labelled as such',
         rOut.includes('ANALYST DEFAULT'), 'no threshold was marked as an analyst default');
 

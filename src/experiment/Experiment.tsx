@@ -1344,7 +1344,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               search_time_ms: r.searchTimeMs, time_to_first_target_ms: r.timeToFirstTargetMs,
               targets_found: r.targetsFound, targets_missed: r.targetsMissed,
               false_detections: r.falseDetections, accuracy_rate: r.accuracyRate,
-              search_d_prime: r.dPrime, distractor_words: r.distractorWords,
+              search_d_prime: r.dPrime, search_d_prime_se: r.dPrimeSe, distractor_words: r.distractorWords,
               search_efficiency: r.searchEfficiency, mean_inter_target_interval_ms: r.meanInterTargetIntervalMs,
               termination_mode: r.terminationMode,
             });

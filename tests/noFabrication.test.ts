@@ -263,3 +263,28 @@ describe('an unmeasured detection rate is reported as absent, not as zero', () =
     expect(rows.find((r) => r.d_prime_estimable === 'false')!.d_prime).toBe('');
   });
 });
+
+describe('d-prime without variation in responding is not a measurement', () => {
+  /*
+   * A participant who tapped nothing in the visual search scored d' = +1.39: z(1/12) - z(1/360), the
+   * extreme-rate correction applied to a 6-target pool and a 180-word pool. Nothing of the participant
+   * is in that number.
+   */
+  it('no responses at all: rates reported, d-prime blank', async () => {
+    const { computeSdt } = await import('@/lib/signalDetection');
+    const r = computeSdt({ hits: 0, misses: 6, falseAlarms: 0, correctRejections: 180 });
+    expect(r.d_prime).toBeNull();
+    expect(r.estimable).toBe(false);
+    expect(r.hit_rate).toBe(0);
+    expect(r.false_alarm_rate).toBe(0);
+  });
+  it('responding to everything: d-prime blank', async () => {
+    const { computeSdt } = await import('@/lib/signalDetection');
+    expect(computeSdt({ hits: 20, misses: 0, falseAlarms: 12, correctRejections: 0 }).d_prime).toBeNull();
+  });
+  it('one response is enough to estimate', async () => {
+    const { computeSdt } = await import('@/lib/signalDetection');
+    expect(computeSdt({ hits: 1, misses: 5, falseAlarms: 0, correctRejections: 180 }).d_prime).not.toBeNull();
+    expect(computeSdt({ hits: 0, misses: 6, falseAlarms: 1, correctRejections: 179 }).d_prime).not.toBeNull();
+  });
+});

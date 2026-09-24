@@ -19,7 +19,7 @@
 import type { SessionBundle } from '@/storage/gather';
 import { SCREEN_TEST_PLATES } from '@/screening/ishihara';
 import { CONDITIONS } from '@/experiment/conditions';
-import { PASSAGES } from '@/experiment/passages';
+import { PASSAGES, countWords } from '@/experiment/passages';
 import { blockPlan } from '@/experiment/counterbalance';
 import { illuminationForBlock, illuminationOrderFor, summariseLux, specFor } from '@/experiment/illumination';
 import { DB_VERSION } from '@/storage/schemaEnums';
@@ -490,21 +490,36 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
     visualSearch: conditions.map((c, i) => {
       const inSet = PASSAGES[c.passage_id].searchTargetCount;
       const found = Math.max(0, inSet - (i % 3));
+      /*
+       * All three ways a search ends, each with the time it would really have. A block that did not
+       * find every target either hit the cap — so its time IS the cap — or was stopped by the
+       * participant. The fixture used to call every such block time_limit at about 30 s, a time the
+       * app cannot produce at the cap, and carried no voluntary_early row, so the analysis gate never
+       * exercised the censoring branch that has to count it.
+       */
+      const mode = found === inSet ? 'voluntary_full' as const : i % 3 === 1 ? 'time_limit' as const : 'voluntary_early' as const;
+      const time = mode === 'time_limit' ? CONFIG.VS_TIME_LIMIT_MS : 30_000 + i * 200;
+      const fa = i % 2;
+      // The same scoring the task uses, over the excerpt's own word count, so d-prime and its pools
+      // agree with what the app would have written.
+      const distractors = countWords([PASSAGES[c.passage_id].searchExcerpt]) - inSet;
+      const sdtSearch = computeSdt({ hits: found, misses: inSet - found, falseAlarms: fa, correctRejections: distractors - fa });
       return {
         condition_id: c.condition_id,
         session_id: sid,
         passage_id: c.passage_id,
         search_target: PASSAGES[c.passage_id].searchTarget,
         targets_in_set: inSet,
-        search_time_ms: 30_000 + i * 200,
+        search_time_ms: time,
         time_to_first_target_ms: 2500 + i * 10,
         targets_found: found,
         targets_missed: inSet - found,
-        false_detections: i % 2, search_d_prime: 2.1, distractor_words: 560,
-        accuracy_rate: inSet > 0 ? found / inSet : 0,
-        search_efficiency: found / ((30_000 + i * 200) / 60_000),
+        false_detections: fa, search_d_prime: sdtSearch.d_prime, search_d_prime_se: sdtSearch.d_prime_se,
+        distractor_words: distractors,
+        accuracy_rate: inSet > 0 ? found / inSet : null,
+        search_efficiency: found / (time / 60_000),
         mean_inter_target_interval_ms: found > 1 ? 4000 : null,
-        termination_mode: found === inSet ? 'voluntary_full' : 'time_limit',
+        termination_mode: mode,
       };
     }),
     perception: conditions.map((c, i) => ({

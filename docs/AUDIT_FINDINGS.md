@@ -3246,3 +3246,39 @@ sitting resumable, and continuing writes the condition's row as `camera_active =
 
 1041 tests, verify green, stress 1256/1256; edge, full-run, split, reachability and camera-lost end-to-end
 specs pass.
+
+## Round 51 — the visual-search outcome: d-prime for doing nothing, censoring, and invented zeros
+
+**A participant who tapped nothing scored d' = +1.39.** Search d-prime treats words as trials. With no
+taps, hits and false alarms are both zero, and the 1/(2N) floor makes the hit rate 1/12 on a six-target
+excerpt and the false-alarm rate 1/360 on 180 other words: z(1/12) - z(1/360) = +1.39, a respectable
+sensitivity made entirely of the correction and the two pool sizes. The reaction-time block has the same
+property (-0.23 for a block with no taps). `computeSdt` now declines to estimate when responding did not
+vary — no "yes" at all, or nothing but "yes" — and returns the rates, which say exactly what happened.
+The rule is in `RATE_CORRECTION_NOTE`, so both codebooks state it; the fuzz invariant now requires it.
+
+**Its standard error was computed and thrown away.** With four to eleven target words per excerpt it is
+large and passage-dependent. It is now kept (`search_d_prime_se`, in `05_visual_search.csv` and
+`analysis_long.csv`) so the outcome can be weighted, as the reaction-time d-prime already is.
+
+**Undefined values written as zero.** `accuracy_rate` was 0 when the excerpt held no target and
+`search_efficiency` 0 when no time elapsed; both are now blank in those cases.
+
+**Censoring counted only the clock.** The R template treated a block ending at the time limit as censored
+and a block the participant ended early (`voluntary_early`) as a completed time — but a time to quit is no
+more a time to find every target than the cap is, and giving up is plausibly commoner in the hardest
+conditions. Censoring is now "did not find every target"; the by-condition table carries capped, quit
+early, censored and completed rates, and the spread check runs on the combined rate. The warning printed
+its threshold as a literal "10" beside the constant that defines it; it now prints the constant.
+
+**The wide summary had no search time.** `10_wide_summary.csv` offered `search_efficiency` as its only
+search timing. It now carries `search_time_ms` and `search_termination`, and says the time is censored
+unless the search ended with every target found.
+
+**The fixture could not exercise any of this.** Its "time_limit" rows claimed about 30 s — a time the app
+cannot produce at the cap — it had no early-stopped rows, and its d-prime was a constant 2.1 over a
+560-word pool the excerpt does not have. Its rows now end all three ways with the times each would have,
+and d-prime is computed by the task's own scoring over the excerpt's own word count. The analysis gate
+checks that early-stopped blocks are counted.
+
+1044 tests, verify green, stress 1256/1256.

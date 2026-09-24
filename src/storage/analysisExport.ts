@@ -69,7 +69,7 @@ export const ANALYSIS_LONG_COLUMNS = [
   // --- subjective and performance ---------------------------------------------------------
   'fatigue_mean', 'fatigue_delta', 'comfort_score', 'clarity_score',
   'comprehension_correct', 'comprehension_items',
-  'search_time_ms', 'search_accuracy', 'search_d_prime', 'search_false_detections', 'search_termination',
+  'search_time_ms', 'search_accuracy', 'search_d_prime', 'search_d_prime_se', 'search_false_detections', 'search_termination',
   'rt_mean_hits_ms', 'rt_median_hits_ms', 'd_prime', 'criterion', 'rt_lapses',
   // --- stimulus properties, as continuous predictors ---------------------------------------
   'wcag_contrast_ratio', 'michelson_contrast', 'below_wcag_aa',
@@ -351,6 +351,7 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
          * block arrived as search_accuracy 1.0, search_time_ms 9400, qc_overall good.
          */
         search_d_prime: round(searchById.get(sum.condition_id)?.search_d_prime ?? null),
+        search_d_prime_se: round(searchById.get(sum.condition_id)?.search_d_prime_se ?? null),
         search_false_detections: searchById.get(sum.condition_id)?.false_detections ?? null,
         // Whether the block ended by the participant finishing or by the time cap (the value lives in
         // CONFIG.VS_TIME_LIMIT_MS; restating it here is how the previous value outlived its raise). A time-capped

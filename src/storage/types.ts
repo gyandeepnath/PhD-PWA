@@ -522,10 +522,12 @@ export interface VisualSearchRecord {
   false_detections: number;
   /** Sensitivity over words as trials. Immune to a tap-everything strategy, which accuracy_rate is not. */
   search_d_prime: number | null;
+  /** Standard error of search_d_prime; null wherever it is. Absent on records written before it existed. */
+  search_d_prime_se?: number | null;
   /** Non-target words available to be wrongly tapped. */
   distractor_words: number;
-  accuracy_rate: number;
-  search_efficiency: number; // hits per minute
+  accuracy_rate: number | null;
+  search_efficiency: number | null; // hits per minute
   mean_inter_target_interval_ms: number | null;
   termination_mode: SearchTermination;
 }
