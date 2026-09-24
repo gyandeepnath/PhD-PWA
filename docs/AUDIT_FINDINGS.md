@@ -2763,3 +2763,65 @@ and still be the wrong measurement, and the way that surfaces is by looking at t
 than at the numbers describing it. The luminance tests were all passing while the plates were
 becoming unreadable; the contrast ratio was correctly computed while the conclusion drawn from it was
 false. `scripts/platePreview.ts` exists so the next person can look too.
+
+## Round 41 — the reaction-time block now runs in the condition's own colours
+
+**Found by the investigator, by using the app** — which is the point worth recording first. In a
+blue-text-on-white condition the participant read blue text, and the reaction-time block that
+followed asked them to tap for a **black** dot. Forty rounds of code audit had not flagged it,
+because the code did exactly what its header said: an achromatic go-target — black on every light
+field, white on every dark one — chosen so that go-signal salience was constant (21:1) and RT would
+be a pure carry-over probe of attentional fatigue.
+
+That was a defensible design, and it was never a recorded decision. The header attributed it to
+synopsis §3.6, which says only "Go/no-go reaction time — 32 trials on the active background". And it
+was only half-standardised: the five conditions of a polarity showed a literally identical RT
+screen, yet the background still flipped with polarity, so RT was neither a display measure nor a
+display-independent one.
+
+The investigator was shown both designs, with the synopsis's own argument for the standardised one
+(§2: attentional and visual-fatigue outcomes "must be measured together if they are to be
+distinguished"), and chose to run RT **in** the condition's display, as reading, comprehension and
+visual search already are.
+
+**What changed.**
+
+- The go-target is the condition's own text colour on its own background; the no-go dots are the
+  other four text colours of the same polarity (`rtStimulusColours` in `conditions.ts`). The rule is
+  constant — tap the dot that matches the text you just read — while the colour it picks out changes.
+  The instruction card names the colour and shows the dot at full size.
+- The fixation cross stays achromatic at 21:1 (`fixationInkFor`). It is not the stimulus, and a
+  cross in yellow on white would be one the participant cannot hold.
+- Each trial's dot colour is exported (`stimulus_color`, `08_reaction_trials.csv`), because what was
+  on screen can no longer be reconstructed from a constant, and a no-go error on a faint distractor is
+  a different event from one on a vivid one.
+- `RT_TARGET_LIGHT_BG`/`DARK_BG` were renamed `RT_FIXATION_*`: a constant called "target" that no
+  longer names the target gets acted on wrongly. The luminance-matched distractor palette, built for
+  the achromatic design, is retired with a note saying why.
+- A stale dashboard caveat claiming the go-target was green "and unused by any condition" — false
+  twice over — is replaced.
+
+**The consequence that had to be handled, not just documented.** The RT disengagement flag fired on
+any of false-alarm rate, error rate or lapse rate above 0.3. Error and lapse rates are made of
+**omissions**, and with the go-target now the condition's colour, omissions are legitimately driven
+by visibility: yellow on white is 2.39:1 against 21:1 for black. A participant trying hard in P4 can
+miss half the go-dots. Left alone, the flag would have fired more often in the hardest conditions,
+and the pre-registered sensitivity analysis drops flagged rows — **differential attrition on the
+manipulated factor**. The flag now counts **commission** errors only (tapping no-go dots, which are
+mostly highly visible whatever the target), plus the existing anticipation-only rule. Omissions stay
+in the export as outcomes, where their dependence on the display is the point. The thresholds were
+not pre-registered; this is a pre-collection change.
+
+**And one the narrowing exposed.** The interruption audit running alongside this round showed that a
+tablet held in **portrait** during the RT block — behind the blocking overlay, where no tap reaches
+the task — turns every go-trial into a miss while hidden time stays at 0. Under the old rule that
+blamed the participant; under the commission-only rule it would have read as engagement **good**,
+its induced misses entering d-prime as a colour effect. Portrait time was measured and then ignored.
+`condition_interrupted` now fires on portrait time as well as hidden time, at the same threshold,
+and names the cause; the verdict about the participant is withheld, as it already was for
+backgrounding.
+
+**Checked on screen, not only in tests.** The instruction card and a live stimulus were rendered for
+P2 (blue on white), P4 (yellow on white) and N3 (red on black) at the tablet's layout viewport: each
+names and shows its own colour, and the stimuli are drawn in it. 964 tests, 1236 stress checks,
+verify green.

@@ -64,10 +64,20 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
         → DISPLAY_PERCEPTION comfort + clarity, rated IMMEDIATELY after reading (perception fresh)
         → POST_FATIGUE       5-item VAS, immediately after the strongest fatigue inducer (reading)
         → VISUAL_SEARCH     intro → tap every target word, 60 s limit (selective attention)
-        → REACTION_TIME     pure colour go/no-go (one dot at a RANDOM screen location each trial;
-                            respond only to the target colour) — reports RT mean/median/SD/CV,
-                            omission & commission errors, d′. (Pure go/no-go by design — no flanker
-                            congruency manipulation; the simulation models the same go/no-go task.)
+        → REACTION_TIME     colour go/no-go IN the condition's display: one dot at a RANDOM screen
+                            location each trial, on the condition's background; tap only when the dot
+                            is the condition's own TEXT colour (the colour just read); the no-go dots
+                            are the other four text colours of that polarity. Reports RT mean/median/
+                            SD/CV, omission & commission errors, d′; each trial's dot colour is
+                            exported. The fixation cross stays achromatic (21:1). (Pure go/no-go — no
+                            flanker congruency manipulation.)
+                            DESIGN DECISION (investigator, before data collection): this replaced an
+                            achromatic go-target (black on light, white on dark) that kept go-signal
+                            salience constant. RT therefore now partly reflects the VISIBILITY of the
+                            condition's colour — yellow on white is 2.39:1 against 21:1 for black —
+                            and is not a display-independent attention probe. For the same reason the
+                            RT disengagement flag counts commission errors only; omissions are
+                            outcomes, not evidence of disengagement.
         → ADAPTATION         60 s neutral grey (120 s when polarity switches)
         → BREAK_SCREEN       self-paced rest after every 2 conditions (CONFIG.BREAK_EVERY_N_CONDITIONS);
                              neutral "X of N done", no performance feedback; never after the last

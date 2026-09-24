@@ -365,7 +365,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           <BarPanel title="Mean RT per condition" unit="ms" data={bar(summaries, 'mean_rt_hits_ms')} />
           <BarPanel title="d′ (sensitivity)" data={bar(summaries, 'd_prime')} color="#22c97a" />
           <BarPanel title="Hit rate" data={bar(summaries, 'hit_rate')} color="#4f8ef7" />
-          <Caveat text="Pure colour go/no-go (~20 go trials per condition). Per-condition d′ is small-N (SE often > 0.3), so for inference aggregate d′ across conditions per participant (see the R/Python templates). RT stimuli use the condition's own background; the go-target colour (green) is unused by any condition so its salience is constant." />
+          <Caveat text="Pure colour go/no-go (~20 go trials per condition). Per-condition d′ is small-N (SE often > 0.3), so for inference aggregate d′ across conditions per participant (see the R/Python templates). RT runs in the condition's own display: the go-dot is the condition's text colour on its background, so go-target visibility varies with condition by design (yellow on white is 2.39:1). Misses therefore partly reflect the display; only commission errors (tapping no-go dots) count toward the disengagement flag." />
         </Grid>
       )}
 

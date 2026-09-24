@@ -60,11 +60,54 @@ describe('conditionEngagement', () => {
   it('drops to bad when several strong signals fire together', () => {
     const e = conditionEngagement({
       reading_time_ms: 1000, word_count: 280, // skim (0.3)
-      rt: rt({ error_rate: 0.5 }),             // disengaged (0.3)
+      rt: rt({ false_alarm_rate: 0.5 }),       // disengaged: taps half the no-go dots (0.3)
       fatigue: fatigue({ response_time_ms: 500 }), // rushed (0.2)
     });
     expect(e.quality_score).toBeLessThan(ENGAGEMENT.QUALITY_WARN);
     expect(e.engagement).toBe('bad');
+  });
+
+  it('does not call a participant disengaged for MISSING a hard-to-see go-dot', () => {
+    /*
+     * The go-target is the condition's own text colour, so in yellow-on-white (2.39:1) a participant
+     * who is trying hard can still miss half the go-dots. That is the display, not disengagement.
+     * Counting omissions here would flag the hardest conditions more often than the easy ones, and
+     * the sensitivity analysis drops flagged rows — differential attrition on the manipulated factor.
+     */
+    const e = conditionEngagement({
+      reading_time_ms: 180000, word_count: 580,
+      rt: rt({ error_rate: 0.5, lapse_rate: 0.5, false_alarm_rate: 0.05 }),
+    });
+    expect(e.rt_disengaged).toBe(false);
+  });
+
+  it('treats time in portrait as an interruption, not as good data and not as disengagement', () => {
+    /*
+     * The portrait overlay blocks every tap, so a rotated RT block is all misses while the page stays
+     * visible and hidden time stays 0. Under the old rule that blamed the participant; under the
+     * commission-only rule it would have passed as engagement GOOD, its misses entering d-prime as a
+     * colour effect. Either way the interruption was measured and then ignored.
+     */
+    const e = conditionEngagement({
+      reading_time_ms: 180000, word_count: 580,
+      condition_hidden_ms: 0,
+      condition_portrait_ms: 12000,
+      rt: rt({ false_alarm_rate: 0.0, error_rate: 0.9, lapse_rate: 0.9 }),
+    });
+    expect(e.condition_interrupted).toBe(true);
+    expect(e.rt_disengaged).toBe(false);          // not the participant's doing
+    expect(e.engagement).not.toBe('good');        // and not clean data either
+    expect(e.reasons.join(' ')).toMatch(/portrait/);
+  });
+
+  it('still calls it disengaged when they tap the no-go dots', () => {
+    // Commission errors are impulsive responding whatever the target colour: the no-go dots are
+    // the polarity's other text colours, most of them highly visible.
+    const e = conditionEngagement({
+      reading_time_ms: 180000, word_count: 580,
+      rt: rt({ false_alarm_rate: 0.5, error_rate: 0.2, lapse_rate: 0.0 }),
+    });
+    expect(e.rt_disengaged).toBe(true);
   });
 
   it('a single weak signal (one wrong MCQ) only warns at worst, not bad', () => {

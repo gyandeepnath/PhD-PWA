@@ -104,53 +104,32 @@ const BASE_CONFIG = {
   /** Valid hits slower than this (ms) count as attention lapses (PVT-style). */
   RT_LAPSE_THRESHOLD_MS: 600,
   /**
-   * Go-target: ACHROMATIC, defined relative to the active background — black on light fields,
-   * white on dark ones (synopsis §3.6). Target contrast is therefore maximal (21:1) and
-   * IDENTICAL in both polarities, so target salience does not vary with display condition and
-   * no target hue coincides with the text-colour manipulation.
+   * Fixation-cross ink: ACHROMATIC, relative to the active background — black on light fields,
+   * white on dark ones, so the cross is at 21:1 in every condition.
    *
-   * This replaced a fixed green target, which was justified as "the only colour not used by any
-   * display condition" — a justification that expired the moment green was added as a fifth text
-   * colour. Leaving it would have made the go-target collide with conditions P5/N5, confounding
-   * go-signal detectability with the colour factor.
-   *
-   * The discrimination becomes achromatic-against-chromatic rather than hue-against-hue. That is
-   * an easier discrimination, but it preserves the two fatigue-sensitive indices the task exists
-   * to measure: reaction-time variability and lapse rate.
+   * These were the GO-TARGET colours until the investigator chose to run the reaction-time block in
+   * the condition's own colours (see `rtStimulusColours` in conditions.ts). They were renamed rather
+   * than left as RT_TARGET_*: a constant called "target" that no longer names the target is the
+   * kind of thing that gets acted on wrongly. The cross is not the stimulus and has to stay
+   * maximally visible whatever the condition, or the dot arrives further into the periphery and the
+   * slower RT is attributed to the display.
    */
-  RT_TARGET_LIGHT_BG: '#000000',
-  RT_TARGET_DARK_BG: '#FFFFFF',
-  /**
-   * Distractors: LUMINANCE-MATCHED, for the same reason the target is background-relative.
+  RT_FIXATION_LIGHT_BG: '#000000',
+  RT_FIXATION_DARK_BG: '#FFFFFF',
+  /*
+   * RETIRED: RT_DISTRACTOR_COLORS ['#E42222', '#2869FF', '#8D7300', '#008742'].
    *
-   * The target was contrast-matched and the distractors were not, which fixed the wrong half of the
-   * problem: what the participant actually performs is a DISCRIMINATION, and its difficulty is set
-   * by the distractor-to-target separation, not by the target alone. With the old set — the four
-   * chromatic text colours — that separation was, measured against the achromatic target:
+   * A luminance-matched palette, built so that with an ACHROMATIC target every no-go hue was equally
+   * discriminable in both polarities (each sat at relative luminance ~0.178, where contrast against
+   * black and against white agree). That design made no-go difficulty independent of the display.
    *
-   *     on white (target black)   red 3.66  blue 3.14  yellow 8.79  green 6.57   mean 5.54
-   *     on black (target white)   red 5.74  blue 6.70  yellow 2.39  green 3.19   mean 4.50
-   *
-   * The ordering is exactly reversed between polarities and the mean separation is ~23% larger in
-   * positive polarity — so no-go discriminability was a function of the study's primary factor. On
-   * a black field the yellow distractor sat 2.39:1 from the white target, which is a hue judgement
-   * on a small peripheral dot. (An earlier version rested this on the 10 lux condition; that level
-   * has been withdrawn, and the rank-reversal arithmetic above holds at any illuminance.) That
-   * inflates false alarms in negative polarity, lowers
-   * d-prime there, and — because false_alarm_rate and error_rate drive the disengagement flag —
-   * ALSO gets negative-polarity conditions preferentially dropped by the quality filter. A
-   * manufactured polarity effect plus differential attrition on the same factor.
-   *
-   * conditions.ts already sets out the arithmetic that makes this unavoidable for any fixed set:
-   * contrast against white is 1.05/(L+0.05) while contrast against black is (L+0.05)/0.05, so the
-   * rank correlation between the two polarities is exactly -1 for ANY palette.
-   *
-   * The escape is a palette whose members sit at the luminance where BOTH expressions give the
-   * same value. At relative luminance 0.178 every hue separates ~4.55:1 from black and ~4.6:1 from
-   * white, so one set serves both polarities and every hue is equally discriminable from the
-   * target. These are those colours, keeping the original red/blue/yellow/green hue directions.
+   * With the go-target now the condition's own text colour, the distractors are the other text
+   * colours of the same polarity, so every dot the participant sees is a colour they have read text
+   * in, and the rule is constant: tap the dot that matches the text. The price is that
+   * discriminability now DOES vary with condition — deliberately, since that is what running the
+   * task in the display means — and the RT-based disengagement flag had to be adjusted for it; see
+   * ENGAGEMENT in dashboard/aggregate.ts.
    */
-  RT_DISTRACTOR_COLORS: ['#E42222', '#2869FF', '#8D7300', '#008742'],
 
   // Adaptation: longer than the original 20 s; doubled on a polarity switch.
   ADAPTATION_SAME_POLARITY_MS: 60000,

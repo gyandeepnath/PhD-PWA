@@ -1,11 +1,13 @@
 /**
- * Colour go/no-go reaction-time task — customised for the fatigue / attention-stability hypothesis.
+ * Colour go/no-go reaction-time task, run IN the condition's display.
  *
  * A single dot appears at a RANDOM location, on the active condition's own background; the
- * participant taps ONLY when it is the ACHROMATIC target — black on a light background, white on
- * a dark one — ignoring the four chromatic distractors. Target contrast is 21:1 in both
- * polarities, so go-signal salience is constant across display conditions (synopsis §3.6). Design
- * choices for accuracy & reliability:
+ * participant taps ONLY when it is the same colour as the text they have just been reading — the
+ * condition's own text colour — and ignores dots in the other four text colours of that polarity.
+ * So in the blue-text condition the go-dot is blue, in the yellow one it is yellow, and RT measures
+ * speeded detection of the condition's own colour on its own background (see `rtStimulusColours`
+ * in experiment/conditions.ts for why this replaced an achromatic target, and what it costs).
+ * Design choices for accuracy & reliability:
  *  - onset is timestamped at the actual painted frame (rAF), not one frame early;
  *  - the response time comes from the hardware pointer-event timestamp (low jitter);
  *  - responses < RT_MIN_VALID_RT are anticipations — excluded from RT means, counted separately;
@@ -28,6 +30,13 @@ export interface RawTrial {
   trial_number: number;
   trial_category: 'signal' | 'noise';
   is_signal: boolean;
+  /**
+   * The dot's colour on this trial. Recorded because the go-target is now the condition's own text
+   * colour and the no-go dots are the rest of that polarity's palette, so what was on screen can no
+   * longer be reconstructed from a constant — and a no-go error on a hard-to-see distractor means
+   * something different from one on an easy one.
+   */
+  stimulus_color: string;
   stimulus_onset_time: number;
   response_time_ms: number | null;
   accuracy: RtAccuracy;
@@ -75,12 +84,17 @@ interface Trial {
 }
 
 /**
- * Achromatic go-target for the active background: black on a light field, white on a dark one.
- * Chosen by the background's WCAG relative luminance rather than by the condition's polarity
- * label, so the rule stays correct for any background the task is ever handed.
+ * Achromatic ink for the FIXATION CROSS: black on a light field, white on a dark one.
+ *
+ * This used to be the go-target colour as well. The go-target is now the condition's own text
+ * colour, but the cross is not the stimulus and must stay maximally visible in every condition: a
+ * cross drawn in yellow on white (2.39:1) is one a participant cannot hold, so the dot would arrive
+ * further into the periphery and the slower RT would be attributed to the display. Chosen by the
+ * background's WCAG relative luminance rather than by the polarity label, so it stays correct for
+ * any background the task is ever handed.
  */
-export function goTargetColor(background: string): string {
-  return relativeLuminance(background) > 0.5 ? CONFIG.RT_TARGET_LIGHT_BG : CONFIG.RT_TARGET_DARK_BG;
+export function fixationInkFor(background: string): string {
+  return relativeLuminance(background) > 0.5 ? CONFIG.RT_FIXATION_LIGHT_BG : CONFIG.RT_FIXATION_DARK_BG;
 }
 
 /**
@@ -120,8 +134,8 @@ export function setRtTargetMemory(color: string): void {
   lastTargetColor = color;
 }
 
-function buildTrials(n: number, goRate: number, background: string): Trial[] {
-  const TARGET = goTargetColor(background);
+function buildTrials(n: number, goRate: number, target: string, distractorPalette: readonly string[]): Trial[] {
+  const TARGET = target;
   const nGo = Math.round(n * goRate);
   const nNoGo = n - nGo;
   const { order, capRespected } = planRuns(nGo, nNoGo, CONFIG.RT_MAX_RUN);
@@ -137,7 +151,7 @@ function buildTrials(n: number, goRate: number, background: string): Trial[] {
     console.error('[visulab] go/no-go run cap could not be honoured: trial predictability is not as configured.');
   }
   // Balanced by construction rather than sampled with replacement; see balancedDistractors.
-  const distractors = balancedDistractors(nNoGo, CONFIG.RT_DISTRACTOR_COLORS);
+  const distractors = balancedDistractors(nNoGo, distractorPalette);
   let d = 0;
   return order.map((isGo) => (isGo ? { signal: true, color: TARGET } : { signal: false, color: distractors[d++] }));
 }
@@ -147,17 +161,25 @@ const avg = (xs: number[]): number | null => (xs.length ? xs.reduce((s, x) => s 
 interface Props {
   background: string;
   text: string;
+  /** The go-target colour: this condition's text colour. */
+  target: string;
+  /** Its ink name, shown on the instruction card. */
+  targetName: string;
+  /** No-go colours: the other text colours of this polarity. */
+  distractors: readonly string[];
   /** Unscored practice trials to run before the scored block (0 = none). */
   practiceTrials?: number;
   onComplete: (r: RtResult) => void;
 }
 
-export function ReactionTimeTask({ background, text, practiceTrials = 0, onComplete }: Props) {
+export function ReactionTimeTask({
+  background, text, target, targetName, distractors, practiceTrials = 0, onComplete,
+}: Props) {
   const [phase, setPhase] = useState<Phase>('instruction');
   const [trialNum, setTrialNum] = useState(0);
   const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null);
-  const scored = useRef<Trial[]>(buildTrials(CONFIG.RT_TRIALS_PER_CONDITION, CONFIG.RT_GO_RATE, background));
-  const practice = useRef<Trial[]>(buildTrials(practiceTrials, CONFIG.RT_GO_RATE, background));
+  const scored = useRef<Trial[]>(buildTrials(CONFIG.RT_TRIALS_PER_CONDITION, CONFIG.RT_GO_RATE, target, distractors));
+  const practice = useRef<Trial[]>(buildTrials(practiceTrials, CONFIG.RT_GO_RATE, target, distractors));
   const records = useRef<RawTrial[]>([]);
   const phaseRef = useRef<Phase>('instruction');
   const onsetRef = useRef(0);
@@ -165,9 +187,9 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
   const falseStartRef = useRef(false);
   const current = useRef<Trial | null>(null);
   const clusterPos = useRef<{ x: number; y: number }>({ x: 50, y: 50 });
-  // Achromatic go-target, resolved from the active background (black on light, white on dark).
-  const targetColor = goTargetColor(background);
-  const targetName = targetColor === CONFIG.RT_TARGET_LIGHT_BG ? 'black' : 'white';
+  const targetColor = target;
+  // The fixation cross is NOT the stimulus; it stays achromatic. See fixationInkFor.
+  const fixationInk = fixationInkFor(background);
   /*
    * Whether the go rule inverted since the previous block of this sitting.
    *
@@ -290,6 +312,7 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
         trial_number: index + 1,
         trial_category: t.signal ? 'signal' : 'noise',
         is_signal: t.signal,
+        stimulus_color: t.color,
         stimulus_onset_time: onsetRef.current,
         response_time_ms: rt,
         accuracy,
@@ -436,25 +459,24 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
           <h2 style={{ fontSize: 24, marginBottom: 16 }}>Task 4 of 4 · Reaction</h2>
           <p style={{ fontSize: 16, lineHeight: 1.6, marginBottom: 20 }}>
             A dot will appear at a random spot. Tap the screen as fast as you can ONLY when it is{' '}
-            <span style={{ color: targetColor, fontWeight: 700, textShadow: `0 0 1px ${text}` }}>{targetName}</span>.
-            Do not tap for any coloured dot.{practiceTrials > 0 ? ' A short practice comes first.' : ''}
+            <span style={{ color: targetColor, fontWeight: 700 }}>{targetName}</span> — the same
+            colour as the text you have just read. Do not tap for a dot of any other colour.
+            {practiceTrials > 0 ? ' A short practice comes first.' : ''}
           </p>
 
           {/*
-            Show the actual target, at the size it will appear.
+            Show the actual target, at the size it will appear, and name it.
 
-            The target is achromatic and follows the BACKGROUND, so it is black in every
-            positive-polarity condition and white in every negative one. The Williams order groups
-            those: for some enrolment numbers all five positive conditions run before all five
-            negative, so a participant can spend five blocks tapping for black and then have the
-            rule invert with nothing but one word changing on a screen they have already read four
-            times. A missed switch does not look like an error in the data — it looks like a
-            polarity effect on d-prime, which is precisely the comparison this study makes.
+            The target is this condition's text colour, so it changes from block to block. A missed
+            switch does not look like an error in the data — it looks like a colour or polarity
+            effect on d-prime, which is precisely the comparison this study makes — so the dot is
+            drawn here at full size and the change banner below fires whenever it differs from the
+            previous block's.
           */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginBottom: 22 }}>
             <div aria-hidden style={{
               width: CONFIG.RT_DOT_PX, height: CONFIG.RT_DOT_PX, borderRadius: '50%',
-              background: targetColor, border: `1px solid ${text}`, opacity: 0.95,
+              background: targetColor, border: `1px solid ${fixationInk}`,
             }} />
             <span style={{ fontSize: 14, opacity: 0.85, textAlign: 'left' }}>
               this dot → tap<br />any other colour → do not tap
@@ -462,11 +484,12 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
           </div>
 
           {targetChanged && (
-            /* Only when the rule has actually inverted since the previous block. Shown every time
-               would train the operator to skip it, which is how the switch got missed. */
+            /* Only when the target colour actually differs from the previous block's. Two
+               consecutive conditions can share a text colour across polarities (P2 then N2), and
+               a banner shown when nothing changed trains the participant to ignore it. */
             <p role="alert" style={{
               fontSize: 15, lineHeight: 1.5, marginBottom: 22, padding: '10px 14px',
-              border: `2px solid ${targetColor}`, borderRadius: 10, fontWeight: 700,
+              border: `2px solid ${fixationInk}`, borderRadius: 10, fontWeight: 700,
             }}>
               The target colour has CHANGED for this block — it is now {targetName}.
             </p>
@@ -482,14 +505,13 @@ export function ReactionTimeTask({ background, text, practiceTrials = 0, onCompl
 
       {(phase === 'fixation' || phase === 'delay') && (
         <div style={{ width: 24, height: 24, position: 'relative' }}>
-          {/* Achromatic and full-opacity, chosen by background luminance exactly as the go-target is.
-              Drawn in the condition ink at 50% opacity it ranged from 1.52:1 (P4) to 5.32:1 (N1)
-              across conditions - so the marker that holds fixation immediately BEFORE every stimulus
-              varied with both experimental factors, while the stimulus itself was carefully
-              contrast-matched. A cross the participant cannot hold means the dot arrives further into
-              the periphery, which shows up as a slower RT attributed to the display. */}
-          <div style={{ position: 'absolute', top: 11, left: 0, width: 24, height: 2, background: targetColor }} />
-          <div style={{ position: 'absolute', left: 11, top: 0, width: 2, height: 24, background: targetColor }} />
+          {/* Achromatic and full-opacity, chosen by background luminance — NOT the go-target colour.
+              Drawn in the condition ink it would range from 2.39:1 (P4, yellow on white) upward, so
+              the marker that holds fixation immediately BEFORE every stimulus would vary with both
+              experimental factors. A cross the participant cannot hold means the dot arrives further
+              into the periphery, which shows up as a slower RT attributed to the display. */}
+          <div style={{ position: 'absolute', top: 11, left: 0, width: 24, height: 2, background: fixationInk }} />
+          <div style={{ position: 'absolute', left: 11, top: 0, width: 2, height: 24, background: fixationInk }} />
         </div>
       )}
 

@@ -45,10 +45,27 @@ export const ENGAGEMENT = {
    * stopped, not because the participant did.
    */
   CONDITION_HIDDEN_MAX_MS: 2000,
-  /** RT block is disengaged if any of these existing rates exceed their cutoff. */
+  /**
+   * RT block reads as disengaged when the participant taps more than this share of the NO-GO dots.
+   *
+   * COMMISSION ERRORS ONLY. This used to fire on any of false-alarm rate, error rate or lapse rate
+   * above 0.3. The latter two are made of OMISSIONS — go-dots not tapped, or tapped late — and since
+   * the go-target became the condition's own text colour (see `rtStimulusColours`), omissions are
+   * legitimately driven by how visible that colour is: yellow on white is 2.39:1, and a participant
+   * who is trying hard and genuinely cannot see the dot misses it. Firing on omissions would have
+   * marked the hardest conditions as "disengaged" at a higher rate than the easy ones, and the
+   * pre-registered sensitivity analysis drops flagged rows — differential attrition on the very
+   * factor the study manipulates.
+   *
+   * A commission error is different. The no-go dots are the other text colours of the polarity,
+   * most of them highly visible, and tapping them is impulsive responding whatever the target's
+   * colour. So that signal is kept, and the omission signals stay in the export (error_rate,
+   * lapse_rate) as outcomes to model, where their dependence on the display is the point.
+   *
+   * Same principle as the interruption rule below: rates that a non-participant cause can explain
+   * are not evidence about the participant. Not pre-registered; changed before any data collection.
+   */
   RT_FALSE_ALARM_MAX: 0.3,
-  RT_ERROR_MAX: 0.3,
-  RT_LAPSE_MAX: 0.3,
   /** Camera face presence below this (when camera active) flags the participant turning away. */
   FACE_PRESENCE_MIN: 0.5,
   /**
@@ -242,6 +259,8 @@ export function conditionEngagement(args: {
   reading_hidden_ms?: number | null;
   /** Time the app was hidden anywhere in the condition, which covers the timed tasks reading does not. */
   condition_hidden_ms?: number | null;
+  /** Time the tablet spent in portrait during the condition, behind the blocking overlay. */
+  condition_portrait_ms?: number | null;
   word_count: number | null;
   fatigue?: FatigueRecord;
   perception?: DisplayPerceptionRecord;
@@ -251,7 +270,7 @@ export function conditionEngagement(args: {
 }): EngagementResult {
   const {
     reading_time_ms, reading_min_page_dwell_ms, reading_hidden_ms, condition_hidden_ms,
-    word_count, fatigue, perception, comprehension, rt, eye,
+    condition_portrait_ms, word_count, fatigue, perception, comprehension, rt, eye,
   } = args;
   const reasons: string[] = [];
   let score = 1;
@@ -296,21 +315,37 @@ export function conditionEngagement(args: {
    * one that cannot survive being backgrounded at all: one-second trials, one-second response
    * windows, and a browser that throttles timers in a hidden tab.
    */
-  const condition_interrupted = condition_hidden_ms != null
+  const hiddenTooLong = condition_hidden_ms != null
     && condition_hidden_ms > ENGAGEMENT.CONDITION_HIDDEN_MAX_MS;
-  if (condition_interrupted && !reading_interrupted) {
+  /*
+   * PORTRAIT IS AN INTERRUPTION TOO, and it was measured and then ignored here.
+   *
+   * Rotating the tablet raises a blocking overlay over the running task: taps never reach it, so
+   * every go-trial in a reaction-time block becomes a miss, while the page stays visible and
+   * condition_hidden_ms stays at 0. Before the disengagement rule was narrowed to commission errors
+   * this produced "reaction-time block shows disengagement", blaming the participant for what the
+   * tablet did; after it, the block read as engagement GOOD and its induced misses flowed into
+   * hit_rate and d-prime as though they were a display-colour effect. Both are wrong the same way
+   * hidden time was once wrong, and the answer is the same: name the interruption, withhold the
+   * verdict about the participant. Same threshold as hidden time — the overlay blocks input exactly
+   * as backgrounding throttles it.
+   */
+  const rotatedTooLong = condition_portrait_ms != null
+    && condition_portrait_ms > ENGAGEMENT.CONDITION_HIDDEN_MAX_MS;
+  const condition_interrupted = hiddenTooLong || rotatedTooLong;
+  if (hiddenTooLong && !reading_interrupted) {
     penalise(0.25, `app was hidden for ${Math.round(condition_hidden_ms! / 1000)}s during this condition, outside the passage`);
   }
+  if (rotatedTooLong) {
+    penalise(0.25, `tablet was in portrait for ${Math.round(condition_portrait_ms! / 1000)}s during this condition — the task could not be answered while the overlay was up`);
+  }
 
-  // RT block disengagement — reuse existing rates.
-  // An unmeasured false-alarm rate is not evidence of engagement OR of disengagement, so it must
-  // not satisfy the comparison. `null > x` is false in JS, which happens to be right here, but
-  // relying on that coercion would be an accident; the guard says so explicitly.
-  const rtRatesHigh = !!rt && (
-    (rt.false_alarm_rate != null && rt.false_alarm_rate > ENGAGEMENT.RT_FALSE_ALARM_MAX) ||
-    (rt.error_rate != null && rt.error_rate > ENGAGEMENT.RT_ERROR_MAX) ||
-    (rt.lapse_rate != null && rt.lapse_rate > ENGAGEMENT.RT_LAPSE_MAX)
-  );
+  // RT block disengagement: COMMISSION errors only — see ENGAGEMENT.RT_FALSE_ALARM_MAX for why
+  // omissions (error_rate, lapse_rate) no longer count, now that the go-target's visibility varies
+  // with the condition. An unmeasured false-alarm rate is not evidence either way, so the guard is
+  // explicit rather than relying on `null > x` being false.
+  const rtRatesHigh = !!rt
+    && rt.false_alarm_rate != null && rt.false_alarm_rate > ENGAGEMENT.RT_FALSE_ALARM_MAX;
 
   /*
    * A BLOCK THAT RAN AND SCORED NOTHING IS THE DISENGAGEMENT THIS TASK EXISTS TO DETECT.
@@ -351,7 +386,8 @@ export function conditionEngagement(args: {
       rtRanButScoredNothing
         ? `reaction-time block ran ${rt!.total_trials} trials and scored none of them — every `
           + 'response fell inside the anticipation cutoff, which is what rhythmic tapping produces'
-        : 'reaction-time block shows disengagement (high FA/error/lapse rate)',
+        // Reached only via rtRatesHigh, which requires a non-null false_alarm_rate.
+        : `reaction-time block shows disengagement — tapped ${Math.round(Number(rt!.false_alarm_rate) * 100)}% of the no-go dots`,
     );
   } else if (rtDisengagementSignal) {
     reasons.push(
@@ -488,6 +524,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       reading_min_page_dwell_ms: c.reading_min_page_dwell_ms ?? null,
       reading_hidden_ms: c.reading_hidden_ms ?? null,
       condition_hidden_ms: c.condition_hidden_ms ?? null,
+      condition_portrait_ms: c.condition_portrait_ms ?? null,
       word_count: PASSAGES[c.passage_id]?.wordCount ?? null,
       fatigue: fat, perception: perc, comprehension: comp, rt, eye,
     });

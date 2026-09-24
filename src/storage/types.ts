@@ -547,6 +547,11 @@ export interface ReactionTrialRecord {
   /** Go/no-go trial type. (This task has no flanker/congruency manipulation.) */
   trial_category: 'signal' | 'noise';
   is_signal: boolean;
+  /**
+   * The dot's colour on this trial (hex). Optional in the type only because rows written before it
+   * existed lack it; every row this build writes carries it.
+   */
+  stimulus_color?: string;
   stimulus_onset_time: number;
   response_time_ms: number | null;
   accuracy: RtAccuracy;

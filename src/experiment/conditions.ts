@@ -99,6 +99,50 @@ export const CONDITIONS: Condition[] = BASE_CONDITIONS.map((c) => {
 
 export const N_CONDITIONS = CONDITIONS.length;
 
+export interface RtStimulusColours {
+  /** The go-target: this condition's own text colour. */
+  target: string;
+  /** Its ink name, for the instruction card ("blue", "white", ...). */
+  targetName: string;
+  /** No-go dots: the text colours of the other four conditions of the SAME polarity. */
+  distractors: string[];
+}
+
+/**
+ * The reaction-time block's stimulus colours for a condition: the go-target is drawn in THIS
+ * condition's text colour, on this condition's background, and the no-go dots are the other four
+ * text colours of the same polarity.
+ *
+ * AN INVESTIGATOR DECISION, recorded as one. The block previously used an ACHROMATIC go-target —
+ * black on every light field, white on every dark one — so that go-signal salience was constant
+ * and RT would be a pure carry-over probe of attentional fatigue. That left the five conditions of
+ * a polarity with a literally identical reaction-time screen: in the blue-text condition the
+ * participant read blue text and then tapped for a black dot. The investigator chose instead to
+ * have every task of a condition-run performed IN that condition's display, as reading,
+ * comprehension and visual search already are, so RT measures speeded detection of the condition's
+ * own colour on its own background.
+ *
+ * What that buys and what it costs, both stated so neither is discovered later:
+ *   - RT now varies with text colour, not only with polarity, and is consistent in construct with
+ *     the other three performance measures.
+ *   - RT now partly reflects how VISIBLE the colour is. Yellow on white is 2.39:1 against 21:1 for
+ *     black on white, so a slower RT there is in part a detectability effect — which is the
+ *     manipulation, but it means RT can no longer be read as a display-independent attention probe.
+ *   - Error and false-alarm rates are now legitimately condition-dependent, which matters for the
+ *     RT-based disengagement flag; see `ENGAGEMENT` in dashboard/aggregate.ts.
+ *
+ * The RULE stays constant across blocks — "tap only the dot that is the same colour as the text" —
+ * even though the colour it picks out changes, which is why the distractors are drawn from the
+ * study's own palette rather than from a separate one: every dot the participant sees is a colour
+ * they have read text in.
+ */
+export function rtStimulusColours(def: ConditionDef): RtStimulusColours {
+  const distractors = BASE_CONDITIONS
+    .filter((c) => c.polarity === def.polarity && c.label !== def.label)
+    .map((c) => c.text);
+  return { target: def.text, targetName: def.inkName, distractors };
+}
+
 // Load-time integrity assertion over the locked table. A malformed hex would otherwise surface far
 // downstream as a NaN contrast covariate; here it fails on the first import, naming the condition.
 for (const c of CONDITIONS) {

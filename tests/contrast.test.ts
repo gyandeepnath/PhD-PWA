@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { CONFIG } from '@/experiment/config';
-import { goTargetColor } from '@/tasks/ReactionTimeTask';
+import { fixationInkFor } from '@/tasks/ReactionTimeTask';
+import { readFileSync } from 'node:fs';
 import { wcagContrastRatio, michelsonContrast, relativeLuminance, wcagLevel } from '@/lib/contrast';
-import { CONDITIONS, conditionDefinitionHash } from '@/experiment/conditions';
+import { CONDITIONS, conditionDefinitionHash, rtStimulusColours } from '@/experiment/conditions';
 
 describe('WCAG relative luminance', () => {
   it('is 0 for black and 1 for white', () => {
@@ -116,57 +116,67 @@ describe('condition definition hash', () => {
   });
 });
 
-describe('reaction-time go-target (synopsis §3.6)', () => {
-  it('is achromatic and background-relative: black on light fields, white on dark', () => {
+/**
+ * The reaction-time block runs IN the condition's display: the go-target is the condition's own
+ * text colour, and the no-go dots are the other text colours of the same polarity.
+ *
+ * This replaced an achromatic target (black on light, white on dark) after the investigator saw a
+ * blue-text condition followed by a reaction block tapping for a BLACK dot, and chose to have every
+ * task of a condition-run performed in that condition's colours. The earlier tests here pinned the
+ * achromatic design; these pin the one chosen, so a well-meant "fix" back to constant salience fails
+ * loudly instead of silently undoing an investigator decision.
+ */
+describe('reaction-time stimulus colours are the condition\'s own', () => {
+  it('draws the go-target in the condition\'s text colour, for every condition', () => {
     for (const c of CONDITIONS) {
-      const expected = c.polarity === 'positive' ? '#000000' : '#FFFFFF';
-      expect(goTargetColor(c.background)).toBe(expected);
+      const s = rtStimulusColours(c);
+      expect(s.target, c.label).toBe(c.text);
+      expect(s.targetName, c.label).toBe(c.inkName);
     }
   });
 
-  it('gives the target identical maximal contrast in BOTH polarities', () => {
-    const ratios = CONDITIONS.map((c) => wcagContrastRatio(c.background, goTargetColor(c.background)));
-    for (const r of ratios) expect(r).toBeCloseTo(21.0, 1);
-  });
-
-  it('never lets the go-target collide with a text-colour condition', () => {
-    const stimulusInks = new Set(CONDITIONS.map((c) => c.text.toUpperCase()));
-    const targets = new Set(CONDITIONS.map((c) => goTargetColor(c.background).toUpperCase()));
-    // The achromatic inks are #000000/#FFFFFF, which ARE used as text in P1/N1 — but never in the
-    // same polarity as the target that shares their value, so no condition shows a distractor
-    // in the go-target colour. Distractors are the four chromatic hues only.
-    for (const d of CONFIG.RT_DISTRACTOR_COLORS) expect(targets.has(d.toUpperCase())).toBe(false);
-    expect(stimulusInks.has('#00A651')).toBe(true); // green is now a stimulus, not the target
-  });
-
-  it('separates every distractor from the go-target EQUALLY in both polarities', () => {
-    // The defect this replaces: the distractors were the four chromatic text colours, which are
-    // not luminance-matched. Measured against the achromatic target their separation was
-    //   on white  red 3.66  blue 3.14  yellow 8.79  green 6.57   (mean 5.54)
-    //   on black  red 5.74  blue 6.70  yellow 2.39  green 3.19   (mean 4.50)
-    // — the ordering exactly reversed, and yellow at 2.39:1 from the target on black. So no-go
-    // DISCRIMINABILITY, which is what the participant actually performs, was a function of the
-    // study's primary factor: inflated false alarms and depressed d-prime under negative polarity,
-    // and — because those drive the disengagement flag — differential dropping of those conditions
-    // by the pre-registered quality filter too.
-    //
-    // conditions.ts sets out why no fixed palette can avoid this: contrast against white is
-    // 1.05/(L+0.05) and against black is (L+0.05)/0.05, so the rank correlation between polarities
-    // is exactly -1. The escape is to sit every distractor at the luminance where the two
-    // expressions agree.
-    for (const d of CONFIG.RT_DISTRACTOR_COLORS) {
-      const onLight = wcagContrastRatio(d, CONFIG.RT_TARGET_LIGHT_BG);
-      const onDark = wcagContrastRatio(d, CONFIG.RT_TARGET_DARK_BG);
-      expect(Math.abs(onLight - onDark)).toBeLessThan(0.25);
-      // And far enough from the target that the discrimination is a real one in both polarities.
-      expect(Math.min(onLight, onDark)).toBeGreaterThan(3);
+  it('uses the other four text colours of the SAME polarity as the no-go dots', () => {
+    for (const c of CONDITIONS) {
+      const s = rtStimulusColours(c);
+      const samePolarity = CONDITIONS.filter((x) => x.polarity === c.polarity);
+      expect(s.distractors, c.label).toHaveLength(samePolarity.length - 1);
+      // Never the target itself — a no-go dot in the go colour would make the rule unanswerable.
+      expect(s.distractors.map((d) => d.toUpperCase()), c.label).not.toContain(c.text.toUpperCase());
+      // Distinct, and together with the target exactly the palette of that polarity.
+      expect(new Set(s.distractors).size, c.label).toBe(s.distractors.length);
+      expect(new Set([s.target, ...s.distractors]), c.label)
+        .toEqual(new Set(samePolarity.map((x) => x.text)));
     }
   });
 
-  it('keeps every distractor equally discriminable from the target as every other', () => {
-    // Otherwise one no-go hue is systematically harder than the rest, and since the hues are drawn
-    // at random per trial that is noise in the RT block rather than a clean discrimination.
-    const seps = CONFIG.RT_DISTRACTOR_COLORS.map((d) => wcagContrastRatio(d, CONFIG.RT_TARGET_LIGHT_BG));
-    expect(Math.max(...seps) - Math.min(...seps)).toBeLessThan(0.25);
+  it('keeps the RULE constant while the colour changes', () => {
+    // Every block asks the same question — does the dot match the text? — so the task does not
+    // turn into a new rule to learn in every condition. The instruction card has to say so.
+    const src = readFileSync('src/tasks/ReactionTimeTask.tsx', 'utf8');
+    expect(src).toMatch(/the same\s+colour as the text you have just read/);
+  });
+
+  it('keeps the fixation cross achromatic and at 21:1, since it is not the stimulus', () => {
+    // A cross in the condition ink would be 2.39:1 in P4 (yellow on white): one the participant
+    // cannot hold, so the dot arrives further into the periphery and the delay is blamed on the
+    // display.
+    for (const c of CONDITIONS) {
+      const ink = fixationInkFor(c.background);
+      expect(ink, c.label).toBe(c.polarity === 'positive' ? '#000000' : '#FFFFFF');
+      expect(wcagContrastRatio(c.background, ink), c.label).toBeCloseTo(21.0, 1);
+    }
+  });
+
+  it('makes the target visibility vary with condition — the stated cost, measured', () => {
+    // Recorded, not hidden: this is what "RT partly reflects how visible the colour is" means in
+    // numbers. If a future palette change moves these, the protocol text describing the cost is
+    // out of date and this test is where that is noticed.
+    const ratio = (label: string) => {
+      const c = CONDITIONS.find((x) => x.label === label)!;
+      return wcagContrastRatio(c.background, rtStimulusColours(c).target);
+    };
+    expect(ratio('P1')).toBeCloseTo(21.0, 1);
+    expect(ratio('P4')).toBeLessThan(2.5);   // yellow on white: the hardest go-target to see
+    expect(ratio('N1')).toBeCloseTo(21.0, 1);
   });
 });

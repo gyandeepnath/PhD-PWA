@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { nonAgingDelay, hazardProfile, planRuns, longestRun, balancedDistractors } from '@/lib/foreperiod';
 import { CONFIG } from '@/experiment/config';
+import { CONDITIONS, rtStimulusColours } from '@/experiment/conditions';
 
 /** A deterministic uniform stream, so these tests never flake on an unlucky draw. */
 function lcg(seed: number): () => number {
@@ -171,7 +172,8 @@ describe('trial order carries no long runs', () => {
 describe('no-go distractors are balanced within a block, not sampled with replacement', () => {
   const N = CONFIG.RT_TRIALS_PER_CONDITION;
   const nNoGo = N - Math.round(N * CONFIG.RT_GO_RATE);
-  const PALETTE = CONFIG.RT_DISTRACTOR_COLORS;
+  // A real block's no-go palette: the other four text colours of a condition's polarity.
+  const PALETTE = rtStimulusColours(CONDITIONS[1]).distractors;
 
   const counts = (xs: string[]) => {
     const m = new Map<string, number>();
@@ -180,10 +182,10 @@ describe('no-go distractors are balanced within a block, not sampled with replac
   };
 
   it('gives the shipped block exactly equal numbers of each distractor', () => {
-    // 12 no-go trials over 4 luminance-matched distractors is three of each, every time. Sampled
+    // 12 no-go trials over 4 distractor colours is three of each, every time. Sampled
     // i.i.d. it was three of each only by luck: 6/3/2/1 is an ordinary draw, and so is a colour
-    // that never appears. The composition is not recorded anywhere in the export, so it cannot be
-    // adjusted for afterwards — it has to be right at construction or not at all.
+    // that never appears. Each trial's colour is now exported (stimulus_color on 08_reaction_trials.csv),
+    // but balance still has to be right at construction: an unbalanced block cannot be re-run.
     const r = lcg(17);
     for (let i = 0; i < 500; i++) {
       const c = counts(balancedDistractors(nNoGo, PALETTE, r));

@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { acquireScreenWakeLock } from '@/lib/wakeLock';
 import { v4 as uuidv4 } from 'uuid';
-import { CONDITIONS, conditionDefinitionHash, N_CONDITIONS } from './conditions';
+import { CONDITIONS, conditionDefinitionHash, N_CONDITIONS, rtStimulusColours } from './conditions';
 import {
   illuminationForBlock, illuminationOrderFor, luxInRange, summariseLux,
 } from '@/experiment/illumination';
@@ -39,7 +39,7 @@ import { DisplayPerceptionRating } from '@/scales/DisplayPerceptionRating';
 import { ReadingTask } from '@/tasks/ReadingTask';
 import { ComprehensionTask } from '@/tasks/ComprehensionTask';
 import { VisualSearchTask } from '@/tasks/VisualSearchTask';
-import { ReactionTimeTask, resetRtTargetMemory, setRtTargetMemory, goTargetColor } from '@/tasks/ReactionTimeTask';
+import { ReactionTimeTask, resetRtTargetMemory, setRtTargetMemory } from '@/tasks/ReactionTimeTask';
 import { IshiharaTest } from '@/screening/IshiharaTest';
 import { resolveCvdStatus, countsComeFromPriorAdministration } from '@/screening/ishihara';
 import { Cvsq } from '@/scales/Cvsq';
@@ -304,7 +304,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
        */
       if (loopTarget > 0 && sittingPlan[loopTarget - 1]) {
         const prevCond = CONDITIONS[sittingPlan[loopTarget - 1].conditionIndex];
-        setRtTargetMemory(goTargetColor(prevCond.background));
+        // The previous block's go-target was its own text colour; see rtStimulusColours.
+        setRtTargetMemory(rtStimulusColours(prevCond).target);
       } else {
         resetRtTargetMemory();
       }
@@ -1269,6 +1270,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         <ReactionTimeTask
           background={cond?.background ?? '#F8F7F5'}
           text={cond?.text ?? '#1a1a2e'}
+          /*
+           * Drawn IN the condition's colours: the go-dot is this condition's text colour and the
+           * no-go dots are the other text colours of its polarity. See rtStimulusColours for the
+           * decision and its cost. `cond` is always set on this stage; the fallback exists only to
+           * satisfy the type, and uses the first condition rather than inventing a colour.
+           */
+          {...rtStimulusColours(cond ?? CONDITIONS[0])}
           practiceTrials={machine.stepIndex === 0 && (session?.condition_offset ?? 0) === 0 ? CONFIG.RT_PRACTICE_TRIALS : 0}
           onComplete={async (res) => {
             // Trials are over; only writes remain, so Pause becomes available again.
