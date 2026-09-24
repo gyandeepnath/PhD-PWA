@@ -55,6 +55,12 @@ export interface MediaRecord {
   checkpoint: MediaCheckpoint;
   /** Condition label when the capture belongs to a specific condition; null for session-level. */
   condition_label: string | null;
+  /**
+   * The condition this capture belongs to, for a reading segment; null for session-level stills.
+   * Absent on clips stored before it was recorded. Joins a segment to its row in 07_eye_metrics.csv,
+   * which is what the segment is coded against.
+   */
+  condition_id?: string | null;
   captured_at: number;
   mime: string;
   bytes: number;
@@ -201,6 +207,37 @@ export function recordSegment(stream: MediaStream, maxDurationMs: number): Segme
   const timer = setTimeout(stop, maxDurationMs);
   rec.start();
   return { done, stop };
+}
+
+/**
+ * A reading segment that is kept only if the run it filmed COMPLETES.
+ *
+ * `finish(true)` when the reading run ends normally, `finish(false)` when it is abandoned — a Pause,
+ * the experiment unmounting. `kept` resolves to the clip only after BOTH the recorder has stopped and
+ * the decision is in, so a clip the length cap ended early is still kept if its run then completes,
+ * and one the Pause ended is never kept however complete its bytes look. The first decision wins.
+ *
+ * It exists because the clip used to be stored whenever the recorder stopped: a Pause mid-reading
+ * ends the camera tracks, which ends the recorder, and the partial clip was stored as the condition's
+ * annotation segment. See captureMedia in Experiment.tsx.
+ */
+export function recordDecidedSegment(stream: MediaStream, maxDurationMs: number): {
+  finish: (keep: boolean) => void;
+  kept: Promise<{ blob: Blob; mime: string; duration_ms: number } | null>;
+} {
+  const rec = recordSegment(stream, maxDurationMs);
+  let settle!: (keep: boolean) => void;
+  const decided = new Promise<boolean>((r) => { settle = r; });
+  let finished = false;
+  return {
+    finish: (keep) => {
+      if (finished) return;
+      finished = true;
+      settle(keep);
+      rec.stop();
+    },
+    kept: Promise.all([rec.done, decided]).then(([seg, keep]) => (keep ? seg : null)),
+  };
 }
 
 /** Human-readable size, for the researcher-facing media list. */

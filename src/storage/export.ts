@@ -330,6 +330,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '15_media_inventory.csv', column: 'media_id', type: 'string', unit: '-', role: 'id', description: 'Identifier of one retained photo or video file.' },
   { file: '15_media_inventory.csv', column: 'kind', type: 'factor(2)', unit: '-', role: 'id', description: 'photo (a setup-proof still) or video (a reading segment for manual annotation).' },
   { file: '15_media_inventory.csv', column: 'checkpoint', type: 'factor(3)', unit: '-', role: 'id', description: 'session_start / session_end (setup-proof stills) or reading_segment (annotation video).' },
+  { file: '15_media_inventory.csv', column: 'condition_id', type: 'string', unit: 'uuid', role: 'id', description: 'For a reading segment, the condition it filmed: join to 07_eye_metrics.csv on this to compare the manual coding with the automated measure of the SAME exposure. A segment is kept only when its reading run completed, and replaces any earlier segment of the same condition, so there is at most one per condition. Blank for setup stills, and for segments stored before this column existed (use condition_label, which occurs once per sitting).' },
   { file: '15_media_inventory.csv', column: 'checksum_fnv1a', type: 'string', unit: '-', role: 'provenance', description: 'FNV-1a over the file bytes. Confirms a given file is the one this session recorded and has not been altered or swapped.' },
   { file: '15_media_inventory.csv', column: 'blob_present', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the media file itself is still on this device. False after a session is restored from a backup, which carries the inventory row but not the binary. A false here means the checksum and byte count describe a file you no longer hold.' },
   { file: '15_media_inventory.csv', column: 'consent_annotation_video', type: 'boolean', unit: '-', role: 'qc', description: 'The consent state in force when this item was captured, snapshotted onto the record so a file can never be separated from its permission.' },
@@ -1018,7 +1019,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
   // separate files, and embedding them here would make the CSV bundle unusable. The checksum lets
   // a reader confirm a given file is the one this session recorded.
   csv('15_media_inventory.csv',
-    ['participant_id', 'session_index', 'media_id', 'kind', 'checkpoint', 'condition_label',
+    ['participant_id', 'session_index', 'media_id', 'kind', 'checkpoint', 'condition_label', 'condition_id',
      'captured_at', 'mime', 'bytes', 'width', 'height', 'duration_ms', 'checksum_fnv1a',
      'blob_present', 'filename', 'consent_setup_photos', 'consent_annotation_video'],
     (bundle.media ?? []).map((m) => ({
@@ -1031,7 +1032,8 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       // longer exists. Without the column the inventory asserts the file is present.
       blob_present: (m as unknown as { blob?: unknown; blob_present?: boolean }).blob != null
         || (m as unknown as { blob_present?: boolean }).blob_present === true,
-      condition_label: m.condition_label ?? '', captured_at: new Date(m.captured_at).toISOString(),
+      condition_label: m.condition_label ?? '', condition_id: m.condition_id ?? '',
+      captured_at: new Date(m.captured_at).toISOString(),
       mime: m.mime, bytes: m.bytes, width: m.width ?? '', height: m.height ?? '',
       duration_ms: m.duration_ms ?? '', checksum_fnv1a: m.checksum_fnv1a,
       consent_setup_photos: m.consent_snapshot.setup_photos,

@@ -21,9 +21,10 @@ import {
   loopEntry, baselineStagesHeld, type MachineState,
 } from './stateMachine';
 import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
-import { put, get, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows, clearSessionStageRows, storageIsFull } from '@/storage/db';
+import { put, get, remove, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows, clearSessionStageRows, storageIsFull } from '@/storage/db';
 import {
-  noMediaConsent, mayCapture, capturePhoto, recordSegment, checksumOfBlob,
+  noMediaConsent, mayCapture, capturePhoto, recordDecidedSegment, checksumOfBlob,
+  type MediaRecord,
 } from '@/storage/media';
 import { priorParticipantProgress } from '@/storage/gather';
 import { saveResume, clearResume } from '@/storage/sessionPersistence';
@@ -122,8 +123,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   /** What the protocol asked for, kept beside what was delivered so the two can be compared. */
   const adaptationPlanned = useRef(0);
 
-  /** The annotation clip in progress, so the reading task can close it at the right moment. */
-  const annotationRecording = useRef<{ stop: () => void } | null>(null);
+  /**
+   * The annotation clip in progress. `finish(true)` when its reading run completes, `finish(false)`
+   * when the run is abandoned (Pause, unmount): only a clip whose run completed is kept.
+   */
+  const annotationRecording = useRef<{ finish: (keep: boolean) => void } | null>(null);
+  // A clip must never outlive the screen that was recording it undecided.
+  useEffect(() => () => { annotationRecording.current?.finish(false); }, []);
 
   /**
    * Which stage is allowed to consume the resume jump.
@@ -444,6 +450,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const captureMedia = useCallback(async (
     checkpoint: 'session_start' | 'session_end' | 'reading_segment',
     conditionLabel: string | null = null,
+    conditionId: string | null = null,
   ) => {
     if (!session) return;
     const fresh = await get('sessions', session.session_id);
@@ -459,10 +466,22 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       if (checkpoint === 'reading_segment') {
         // Stoppable: the clip must end when the reading exposure ends, so it covers the same window
         // the automated blink measure does. The timer is only an upper bound now.
-        const rec = recordSegment(src.stream, CONFIG.ANNOTATION_SEGMENT_MS);
-        annotationRecording.current = rec;
-        const seg = await rec.done;
-        annotationRecording.current = null;
+        /*
+         * KEPT ONLY IF THE READING RUN IT FILMED COMPLETED (recordDecidedSegment).
+         *
+         * The clip used to be stored whenever the recorder stopped. A Pause mid-reading stops every
+         * camera track, which ends the recorder, and this function — still running after the
+         * experiment had unmounted — stored the partial clip, labelled with the condition, as an
+         * annotation segment. The condition was then redone and filmed again, so the inventory held
+         * two segments for one condition and nothing said which came from the abandoned run. The
+         * annotator codes footage to compare against the automated blink measure; the abandoned
+         * run's measure had been replaced by the redo, so coding that clip compares two different
+         * exposures. It was also video retained of a run whose data had been thrown away.
+         */
+        const clip = recordDecidedSegment(src.stream, CONFIG.ANNOTATION_SEGMENT_MS);
+        annotationRecording.current = clip;
+        const seg = await clip.kept;
+        if (annotationRecording.current === clip) annotationRecording.current = null;
         if (!seg) return;
         blob = seg.blob; mime = seg.mime; duration = seg.duration_ms;
       } else {
@@ -489,6 +508,20 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
        */
       const atWrite = await get('sessions', session.session_id);
       if (!mayCapture(atWrite?.media_consent, checkpoint)) return;
+      if (checkpoint === 'reading_segment') {
+        /*
+         * One segment per condition: this one REPLACES any earlier clip of the same condition in this
+         * sitting. An earlier one can only come from a run that was redone after it — its reading
+         * completed, the condition did not — and the redo has already replaced that run's eye
+         * metrics, which are what a segment is coded against. Matched on condition_id, and on the
+         * label for clips stored before the id was recorded (a label occurs once per sitting).
+         */
+        for (const m of (await getAllByIndex('media_captures', 'by_session', session.session_id)) as MediaRecord[]) {
+          if (m.checkpoint !== 'reading_segment') continue;
+          const same = m.condition_id != null ? m.condition_id === conditionId : m.condition_label === conditionLabel;
+          if (same) await remove('media_captures', m.media_id);
+        }
+      }
       await put('media_captures', {
         media_id: uuidv4(),
         session_id: session.session_id,
@@ -496,6 +529,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         kind: checkpoint === 'reading_segment' ? 'video' : 'photo',
         checkpoint,
         condition_label: conditionLabel,
+        condition_id: conditionId,
         captured_at: Date.now(),
         mime,
         bytes: blob.size,
@@ -1207,12 +1241,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                * One segment per POLARITY, which is what the protocol asks for — not one per
                * sitting, which is what `stepIndex === 0` gave. See annotationSegmentSteps().
                */
-              if (annotationSteps.includes(machine.stepIndex)) void captureMedia('reading_segment', cond?.label ?? null);
+              if (annotationSteps.includes(machine.stepIndex)) void captureMedia('reading_segment', cond?.label ?? null, conditionId);
             }}
             onComplete={async (r) => {
               // Close the annotation clip at the SAME instant the automated measurement window
               // closes, so a human coder and the classifier see the same footage.
-              annotationRecording.current?.stop();
+              annotationRecording.current?.finish(true);
               if (session) {
                 await tracking.endCondition(conditionId, session.session_id);
                 const existing = await get('conditions', conditionId);
@@ -1600,6 +1634,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 : 'Pause and exit to the session manager? This condition will be restarted on resume.';
             if (window.confirm(msg)) {
               saveResume(session.session_id, target);
+              // An abandoned reading run's clip is discarded, not stored. Before tracking.stop(),
+              // which ends the recorder by ending its tracks.
+              annotationRecording.current?.finish(false);
               tracking.stop();
               onExit();
             }

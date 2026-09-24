@@ -3191,3 +3191,24 @@ does not hold, since that would otherwise blank its verdict silently; the pipeli
 damaged-bundle scenario for it. Replacing the per-row lookup with "the last calibration" fails four tests.
 
 1026 tests, verify green, stress 29/29 structural scenarios; full-run end-to-end passes.
+
+## Round 49 — an annotation clip of an abandoned run was stored
+
+From the interruption audit, confirmed in the code. An annotation segment starts when reading begins on
+an annotation step and was stored whenever its recorder stopped. A Pause mid-reading stops every camera
+track, which ends the recorder, and `captureMedia` — still running after the experiment had unmounted —
+stored the partial clip under the condition's label. The condition was then redone and filmed again. The
+inventory held two segments for one condition with nothing to say which came from the abandoned run; the
+automated measure of that run had already been replaced by the redo, so coding the first clip compares
+two different exposures, which defeats Objective 4. It was also video of a run whose data had been
+discarded.
+
+A segment is now kept only if its reading run completes (`recordDecidedSegment`: the clip resolves only
+once the recorder has stopped AND the run has been decided, so a clip the length cap ended early is still
+kept if its run completes, and one a Pause ended is never kept). Pause and unmount discard; reading
+completion keeps. A new segment replaces any earlier one of the same condition in the sitting — the only
+way one can exist is a run whose reading finished and whose condition was then redone — and segments now
+record `condition_id`, exported in `15_media_inventory.csv`, so a segment joins to the eye-metrics row it
+is coded against. Tested with a stub recorder; always keeping the clip fails the abandoned-run test. Not
+covered end to end: the e2e driver declines the camera, so the annotation path is exercised by unit tests
+only.
