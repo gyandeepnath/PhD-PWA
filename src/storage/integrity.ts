@@ -16,6 +16,7 @@
  */
 import { QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
 import type { SessionBundle } from './gather';
+import { MIN_SCALE } from '@/lib/viewportScale';
 
 export type IntegritySeverity = 'error' | 'warning' | 'info';
 
@@ -146,6 +147,32 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
    * difference in the stimulus with nothing in the design to account for it, so it is reported: the
    * per-condition column says which rows differ, and this says the sitting is not homogeneous.
    */
+  /*
+   * ---- the stimulus was presented at the scale FLOOR
+   *
+   * MIN_SCALE is a clamp, so a condition at exactly that scale either did not fit the screen or —
+   * before refitScale existed — had LOCKED small on a screen that could show it larger (the Xiaomi
+   * Pad 6 pilot). Either way the reading text was about half its design size, below the critical
+   * print size for fluent reading, and those rows are not comparable with rows at a normal scale.
+   * Nothing flagged a sitting that stayed at the floor throughout: the check below only notices a
+   * scale that CHANGES.
+   */
+  const atFloor = conditions.filter((c) => c.stimulus_scale === MIN_SCALE);
+  if (atFloor.length) {
+    add('error', 'stimulus_at_min_scale',
+      `${atFloor.length} condition(s) were presented at the minimum display scale (${MIN_SCALE}): the `
+      + 'reading text was half its design size, below the print size at which reading is fluent. '
+      + 'Check layout_viewport on 02_conditions.csv: a full-size value there means the scale had locked.',
+      atFloor.map((c) => c.condition_id));
+  }
+  const rescaled = conditions.filter((c) => (c.stimulus_scale_changes ?? 0) > 0);
+  if (rescaled.length) {
+    add('warning', 'stimulus_rescaled_mid_condition',
+      `${rescaled.length} condition(s) had the screen shrink while they were on screen, so the text got `
+      + 'smaller part-way through; see stimulus_scale_changes on 02_conditions.csv.',
+      rescaled.map((c) => c.condition_id));
+  }
+
   const scales = [...new Set(conditions.map((c) => c.stimulus_scale).filter((v): v is number => typeof v === 'number'))];
   if (scales.length > 1) {
     const lo = Math.min(...scales);

@@ -11,6 +11,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import {
   computeScale, isBelowMinimum, foldViewportFloor, resetViewportFloor,
@@ -248,5 +249,86 @@ describe('the scale is accountable in the data, not just applied to the screen',
     // lets the scale rise. The staleness it was meant to fix belongs on the condition record.
     const code = vs.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     expect(code).not.toMatch(/visibilitychange/);
+  });
+});
+
+/*
+ * A scale that locked small used to last until the app was killed. On the investigator's Xiaomi Pad 6
+ * it sat at exactly MIN_SCALE — the consent column filled 28% of the screen — which also halved the
+ * reading text. Now: re-measured at every screen outside a condition, frozen (never growing) inside
+ * one, and blind to the keyboard.
+ */
+describe('the scale recovers from a lock, and never grows under a reader', () => {
+  const setViewport = (w: number, h: number) => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: w });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: h });
+  };
+  const reset = async () => {
+    const m = await import('@/lib/viewportScale');
+    m.setScaleFrozen(false);
+    m.resetViewportFloor();
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    return m;
+  };
+
+  it('a startup lock (floating window, then maximised) clears at the next screen', async () => {
+    const m = await reset();
+    setViewport(700, 420);
+    m.refitScale();
+    expect(m.currentScale()).toBe(0.5);
+    setViewport(1152, 720);
+    m.remeasureScale();                    // same screen: the running minimum holds, as before
+    expect(m.currentScale()).toBe(0.5);
+    m.refitScale();                         // the next screen boundary
+    expect(m.currentScale()).toBeCloseTo(0.86, 2);
+  });
+
+  it('frozen: the scale never grows, and a genuine shrink is counted', async () => {
+    const m = await reset();
+    setViewport(1152, 720);
+    m.refitScale();
+    const start = m.currentScale();
+    m.setScaleFrozen(true);
+    m.refitScale();                         // refused while frozen
+    setViewport(1400, 900);
+    m.remeasureScale();
+    expect(m.currentScale()).toBe(start);   // did not grow
+    // A genuine shrink (not an occlusion: above 70% of the largest height seen).
+    setViewport(1152, 680);
+    m.remeasureScale();
+    expect(m.currentScale()).toBeLessThan(start);
+    expect(m.rescalesWhileFrozen()).toBe(1);
+    m.setScaleFrozen(false);                // unfreezing re-measures
+    expect(m.currentScale()).toBeCloseTo(m.freshScale(), 5);
+  });
+
+  it('ignores measurements while a text field has focus (the soft keyboard)', async () => {
+    const m = await reset();
+    setViewport(1152, 720);
+    m.refitScale();
+    const before = m.currentScale();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    setViewport(1152, 300);
+    m.remeasureScale();
+    m.refitScale();
+    expect(m.currentScale()).toBe(before);
+    input.blur();
+    input.remove();
+  });
+
+  it('the app freezes on condition screens and re-fits on every other screen', () => {
+    const exp = readFileSync('src/experiment/Experiment.tsx', 'utf8');
+    expect(exp).toMatch(/setScaleFrozen\(isInLoop\(machine\.stage\) \|\| machine\.stage === 'CALIBRATION'\)/);
+    const app = readFileSync('src/App.tsx', 'utf8');
+    expect(app).toMatch(/if \(view\.mode !== 'experiment'\) refitScale\(\)/);
+  });
+});
+
+describe('no raw viewport units in layouts', () => {
+  it('no vh/vw in .tsx: they measure the raw screen, not the scaled canvas', () => {
+    const hits = execSync("grep -rnE \"['\\\"(, ][0-9.]+(vh|vw)['\\\")]\" src --include=*.tsx || true", { encoding: 'utf8' }).trim();
+    expect(hits, hits).toBe('');
   });
 });

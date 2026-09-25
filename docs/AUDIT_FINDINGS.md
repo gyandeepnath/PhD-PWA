@@ -3423,3 +3423,45 @@ The remaining verified items from Round 54's review, all in `analysis_long.csv` 
   branch in the search task is removed.
 
 1073 tests, verify green, stress clean; full-run and split end-to-end specs pass.
+
+## Round 56 — the display scale locked at half size, and nothing could undo it
+
+Reported by the investigator from the tablet: text far too small, content "concentrated" in a small part
+of the screen. Measured, the consent column filled 28% of the Xiaomi Pad 6's width, which is exactly a
+640 design-px column at the scale FLOOR of 0.5 (640 × 0.5 / 1152); at the correct scale for that screen
+(0.86) it fills 48%.
+
+**Cause.** The scale was sized from the smallest viewport seen since start-up in the current orientation,
+and could only fall; it reset only on a rotation or a full reload. A code audit reproduced several ways
+to reach the floor on this device — opening the app in a floating window and then maximising it, a
+start-up frame that briefly reports a short viewport, rotating with the keyboard up, a split screen —
+and once there it stayed for the rest of the sitting and every sitting after it. Nothing warned anyone:
+the pre-flight check read the live screen, not the applied scale, and the audit flagged only a scale
+that CHANGED within a sitting, not one that sat at the floor throughout.
+
+**Why it matters to the data.** At 0.5 the reading text's x-height is about 7.5 arcmin at 55 cm, below
+the ~12 arcmin critical print size for fluent reading (Legge & Bigelow 2011, *J Vis* 11(5):8,
+doi:10.1167/11.5.8, full text read), so reading-rate and ocular data from such a sitting were collected
+on a different stimulus.
+
+**Fix.** Frozen during a condition, re-measured between screens outside one (`setScaleFrozen`,
+`refitScale` in `viewportScale.ts`). Every screen change that is not a condition screen forgets the
+running minimum and measures afresh, so a lock clears at the next setup screen, break or manager view.
+While a condition is on screen the scale can never grow (text never enlarges under a reader); it may
+still shrink if the screen genuinely shrinks, so content stays reachable, and each such change is
+recorded per condition (`stimulus_scale_changes`, 02_conditions.csv). Measurements taken while a text
+field has focus — the soft keyboard — are ignored. The pre-flight screen now shows the display size
+against what the screen supports, with a "Re-fit screen" button when they differ. The integrity audit
+reports conditions presented at the floor (`stimulus_at_min_scale`, error) and mid-condition rescales
+(warning). The last raw-viewport units in layouts (`38vh` consent box, `70vw`, `5.5vw`) are replaced
+by scaled units, with a test banning `vh`/`vw` in `.tsx`.
+
+**Also:** the "✓ Within the accepted range" line on Session Init sat on the lux box's border (a −6 px
+margin that cancelled the form's spacing); fixed.
+
+A browser test opens the app at 700×420, maximises it to 1152×720 and requires 0.86 at the next screen;
+removing the re-fit wiring fails it. 1078 tests, verify green; screen-fit, reachability, stimulus
+geometry, full-run and edge end-to-end specs pass.
+
+**To check an existing pilot export:** `stimulus_scale` in 02_conditions.csv. 0.5 with a full-size
+`layout_viewport` means that sitting ran locked at half size.

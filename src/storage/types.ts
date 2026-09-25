@@ -385,6 +385,12 @@ export interface ConditionRecord {
   condition_notice_ms?: number;
   condition_notice_events?: number;
   /**
+   * How many times the display scale changed WHILE this condition was on screen. The scale is frozen
+   * during a condition and may only shrink (to keep content reachable if the screen genuinely got
+   * smaller), so this is 0 in a normal run; above 0, stimulus_scale describes only the start.
+   */
+  stimulus_scale_changes?: number;
+  /**
    * The grey-field duration the protocol asked for, beside `adaptation_ms_before`, which is what
    * the participant actually saw. They differ when the device sleeps or the app is backgrounded
    * mid-field: the countdown is frame-driven and stops, and on waking the screen advances at once.

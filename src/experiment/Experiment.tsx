@@ -51,7 +51,7 @@ import {
   Consent, Preflight, Instructions, type SessionInitData, type ProfileData,
 } from '@/start/setupStages';
 import { CalibrationRoutine } from '@/start/CalibrationRoutine';
-import { currentScale, layoutViewport } from '@/lib/viewportScale';
+import { currentScale, layoutViewport, setScaleFrozen, rescalesWhileFrozen } from '@/lib/viewportScale';
 import { TrackingMonitor } from '@/components/TrackingMonitor';
 import { FPS_RATIO_THRESHOLD } from '@/tracking/blink';
 
@@ -194,6 +194,19 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     // Entering a new reaction-time block means trials are running again.
     if (machine.stage === 'REACTION_TIME') setRtBlockFinished(false);
   }, [machine]);
+
+  /*
+   * The display scale is FROZEN on every condition screen (and during calibration, whose targets are
+   * placed on the scaled canvas) and re-measured at every other screen. See viewportScale.ts: a scale
+   * that locked small used to last the whole sitting; now it clears at the next setup screen or
+   * break, and it can never grow under a reader.
+   */
+  useEffect(() => {
+    setScaleFrozen(isInLoop(machine.stage) || machine.stage === 'CALIBRATION');
+  }, [machine.stage]);
+  useEffect(() => () => setScaleFrozen(false), []);
+  /** rescalesWhileFrozen() when the current condition started; the difference is recorded. */
+  const conditionRescalesAtStart = useRef(0);
 
   /**
    * A rotation to portrait invalidates the calibration for the rest of the sitting.
@@ -861,6 +874,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       layout_viewport: layoutViewport(),
     });
     conditionStarted.current[machine.stepIndex] = Date.now();
+    conditionRescalesAtStart.current = rescalesWhileFrozen();
     /*
      * Watch the whole condition, not just the tasks that happen to track it themselves.
      *
@@ -1445,6 +1459,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                   condition_portrait_events: rotated?.events,
                   condition_notice_ms: noticed?.hiddenMs,
                   condition_notice_events: noticed?.events,
+                  // The screen shrank mid-condition this many times (content kept reachable; the
+                  // scale never grows mid-condition). 0 in a normal run.
+                  stimulus_scale_changes: Math.max(0, rescalesWhileFrozen() - conditionRescalesAtStart.current),
                 });
               }
               saveResume(session.session_id, machine.stepIndex + 1);

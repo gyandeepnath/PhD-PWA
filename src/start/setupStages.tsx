@@ -18,7 +18,7 @@ import { ScrollCue } from '@/components/ScrollCue';
 import { now } from '@/lib/timing';
 import { trackFieldBlockedTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { stimulusFontLoaded } from '@/lib/fonts';
-import { isBelowMinimum } from '@/lib/viewportScale';
+import { isBelowMinimum, currentScale, freshScale, refitScale } from '@/lib/viewportScale';
 import { startFaceProbe, type FaceProbeResult, type FaceProbeStatus } from '@/screening/faceProbe';
 import type { CameraStatus } from '@/storage/types';
 
@@ -220,7 +220,9 @@ export function SessionInit({
             </Field>
           )}
           {luxEntered && inRange && (
-            <p className="font-lab text-xs" style={{ color: '#2e7d46', marginTop: -6 }}>✓ Within the accepted range for {spec!.label}.</p>
+            // Was marginTop -6, which cancelled the form's spacing and pulled this line up onto the
+            // lux box's border on the tablet. A small positive gap keeps it attached to the field.
+            <p className="font-lab text-sm" style={{ color: '#1d7a4a', marginTop: 6 }}>✓ Within the accepted range for {spec!.label}.</p>
           )}
           <Field label="Measured white-screen luminance (cd/m², optional)">
             <input className="vl-input" inputMode="numeric" value={lum} onChange={(e) => setLum(e.target.value)} placeholder="120" />
@@ -501,7 +503,7 @@ export function CameraSetup({ onAllow, onSkip, retains }: {
               otherwise loaded until after the preview closes, so a device whose model files did not
               precache passed every documented check and then collected a study with no ocular data.
             */}
-            <div style={{ marginTop: 12, borderRadius: 16, overflow: 'hidden', background: '#000', width: 'min(480px, 70vw)', aspectRatio: '4 / 3', position: 'relative' }}>
+            <div style={{ marginTop: 12, borderRadius: 16, overflow: 'hidden', background: '#000', width: 480, maxWidth: '100%', aspectRatio: '4 / 3', position: 'relative' }}>
               <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
               {face.box && (
                 <div
@@ -807,7 +809,7 @@ export function Consent({
       <WavyBackground opacity={0.05} />
       <div style={{ position: 'relative', zIndex: 1, width: '100%', margin: '0 auto', maxWidth: 640 }}>
         <h1 className="font-serif text-4xl font-light">Informed consent</h1>
-        <div className="scrollable mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]" style={{ maxHeight: '38vh', paddingRight: 8 }}>
+        <div className="scrollable mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]" style={{ maxHeight: 340, paddingRight: 8 }}>
           {/*
             * PARTICIPANT-FACING CONSENT TEXT. Two statements here became FALSE when the dim
             * illumination level was withdrawn, and both were material:
@@ -926,12 +928,27 @@ export function Preflight({ onDone }: { onDone: (fontOk: boolean | null) => void
    * tablet or dismiss the address bar in response to being told.
    */
   const [clipped, setClipped] = useState(false);
+  /*
+   * The scale actually applied, beside the one this screen supports if measured fresh. A lock (see
+   * viewportScale.ts) was invisible: the check above reads the live screen, so a tablet stuck at half
+   * size on a full-size screen passed silently. Now it is shown, and one tap re-fits it.
+   */
+  const [scale, setScale] = useState(() => ({ applied: currentScale(), fresh: freshScale() }));
   useEffect(() => {
-    const check = () => setClipped(isBelowMinimum());
+    const check = () => {
+      setClipped(isBelowMinimum());
+      setScale({ applied: currentScale(), fresh: freshScale() });
+    };
     check();
+    const late = window.setTimeout(check, 400);
     window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
+    return () => { window.clearTimeout(late); window.removeEventListener('resize', check); };
   }, []);
+  const scaleLocked = scale.applied < scale.fresh - 0.02;
+  const refit = () => {
+    refitScale();
+    window.setTimeout(() => setScale({ applied: currentScale(), fresh: freshScale() }), 100);
+  };
 
   const storageBlocks = storage?.verdict === 'blocked';
   const all = checked.every(Boolean) && !!storage && !storageBlocks && fontOk !== undefined;
@@ -958,6 +975,26 @@ export function Preflight({ onDone }: { onDone: (fontOk: boolean | null) => void
         {storage?.messages.map((m, i) => (
           <p key={i} className="font-lab text-sm" style={{ marginTop: 6, color: '#3a3a4a' }}>{m}</p>
         ))}
+      </div>
+      <div data-testid="scale-check"
+        style={{ marginTop: 12, padding: '12px 14px', borderRadius: 10, border: `1px solid ${scaleLocked ? '#b3261e' : '#d8d4cc'}`, background: scaleLocked ? '#fdeeee' : '#fff' }}>
+        <p className="font-lab text-sm" style={{ color: scaleLocked ? '#8a1c14' : '#3a3a4a' }}>
+          <strong>Display size:</strong> {Math.round(scale.applied * 100)}% of design size
+          {scaleLocked ? ` — this screen supports ${Math.round(scale.fresh * 100)}%.` : ' — correct for this screen.'}
+        </p>
+        {scaleLocked && (
+          <>
+            <p className="font-lab text-sm" style={{ marginTop: 6, color: '#3a3a4a' }}>
+              The app is drawing everything smaller than it should, so the reading text would be too
+              small. This happens after the app was opened in a floating or split window. Tap Re-fit;
+              if it does not change, close the app from recent apps and reopen it full-screen.
+            </p>
+            <button type="button" data-testid="scale-refit" onClick={refit} className="font-lab text-sm"
+              style={{ marginTop: 10, padding: '10px 16px', borderRadius: 10, border: '1px solid #1a1a2e', background: '#1a1a2e', color: '#fff', cursor: 'pointer' }}>
+              Re-fit screen
+            </button>
+          </>
+        )}
       </div>
       {clipped && (
         <div data-testid="layout-warning" style={{ marginTop: 12, maxWidth: 640, padding: '12px 14px', borderRadius: 10, border: '1px solid #c98a22', background: '#c98a2212' }}>

@@ -15,7 +15,7 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
       <WavyBackground opacity={0.055} />
       <div style={{ position: 'relative', zIndex: 1, flex: 1 }}>
         <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">VisuLab · Research Platform</p>
-        <h1 className="font-serif font-light" style={{ fontSize: 'clamp(48px, 5.5vw, 88px)', lineHeight: 1.05, marginTop: 10 }}>
+        <h1 className="font-serif font-light" style={{ fontSize: 72, lineHeight: 1.05, marginTop: 10 }}>
           VisuLab
         </h1>
         <div style={{ height: 2, width: 64, background: '#1a1a2e', opacity: 0.5, margin: '18px 0' }} />

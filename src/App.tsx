@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { refitScale } from '@/lib/viewportScale';
 import Experiment from '@/experiment/Experiment';
 import { LandingPage } from '@/start/LandingPage';
 import { SessionManager } from '@/start/SessionManager';
@@ -19,6 +20,9 @@ type View =
 export default function App() {
   const [view, setView] = useState<View>({ mode: 'landing' });
   const toManager = () => setView({ mode: 'manager' });
+  // Every change of view is a screen boundary outside any stimulus: re-measure the screen, so a
+  // scale that locked small (see viewportScale.ts) comes back instead of lasting the whole day.
+  useEffect(() => { if (view.mode !== 'experiment') refitScale(); }, [view]);
 
   // Rendered on EVERY view, not just the between-sessions ones: the whole point is that a tablet
   // left on a bookmarked ?e2e URL looks exactly like a real one from the first screen to the last.

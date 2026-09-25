@@ -31,11 +31,28 @@
  * current orientation, not the current one.
  *
  * That choice has three properties worth stating. The layout always fits, because it is sized for
- * the worst case rather than the moment. The scale within an orientation can only ever decrease, so
- * it converges after the first address-bar cycle instead of oscillating. And when it does decrease
- * it is because the viewport genuinely shrank, which is precisely when NOT rescaling would push
- * content back into the unreachable region. The running minimum resets on an orientation change,
- * where the previous minimum carries no information about the new shape.
+ * the worst case rather than the moment. The scale can only decrease between resets, so it converges
+ * after the first address-bar cycle instead of oscillating. And when it does decrease it is because
+ * the viewport genuinely shrank, which is precisely when NOT rescaling would push content back into
+ * the unreachable region.
+ *
+ * WHEN THE MINIMUM RESETS — and why it has to. It used to reset only on an orientation change or a
+ * full reload, so a single small reading lasted the whole sitting and every sitting after it. On the
+ * investigator's Xiaomi Pad 6 the app ran at exactly MIN_SCALE (the consent column filled 28% of the
+ * screen, which is 640 x 0.5 / 1152): measured, opening the app in a floating window and then
+ * maximising it, a startup frame that briefly reports a short viewport, rotating with the keyboard up,
+ * or a split screen each lock the scale at or near 0.5, and nothing let it rise again. At 0.5 the
+ * reading text's x-height is about 7.5 arcmin at 55 cm, below the critical print size for fluent
+ * reading (about 12 arcmin; Legge & Bigelow 2011, J Vis 11(5):8), so those sessions presented a
+ * different stimulus.
+ *
+ * The rule now is FROZEN DURING A CONDITION, RE-MEASURED BETWEEN SCREENS OUTSIDE ONE. Every screen
+ * change that is not a condition screen calls `refitScale()`, which forgets the minimum and measures
+ * afresh — so a lock clears at the next setup screen, break or manager view instead of never. While a
+ * condition runs (`setScaleFrozen(true)`) the scale can never GROW, so text never enlarges under a
+ * reader; it may still shrink if the screen genuinely shrinks, so content stays reachable, and each
+ * such change is counted (`rescalesWhileFrozen`) and recorded on the condition. Measurements taken
+ * while a text field has focus are ignored outright: the soft keyboard is the commonest transient.
  */
 
 /**
@@ -56,6 +73,13 @@ export const MIN_SCALE = 0.5;
 const STEP = 0.02;
 
 let applied = 1;
+
+/** True while a condition is on screen. See the header: the scale may shrink but never grow. */
+let frozen = false;
+/** How many times the scale changed while frozen, since the last freeze. */
+let frozenRescales = 0;
+/** Set by installViewportScale so refitScale can re-apply outside a resize event. */
+let scheduleApply: (() => void) | null = null;
 
 /**
  * The smallest viewport seen in the current orientation, and the orientation it belongs to.
@@ -217,17 +241,84 @@ export function foldViewportFloor(w: number, h: number): { w: number; h: number 
  * the typeface check follows.
  *
  * In the exported data the signature is `stimulus_scale == MIN_SCALE`: the scale is clamped there,
- * so a row at exactly 0.5 is a row that did not fit.
+ * so a row at exactly 0.5 did not fit — or, in builds before refitScale existed, had locked small on a
+ * screen that could have shown it larger.
  */
 export function isBelowMinimum(w = measure().w, h = measure().h): boolean {
   return Math.min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT) < MIN_SCALE;
 }
 
+/**
+ * True while an editable element has focus: the soft keyboard is up, or about to be. A measurement
+ * taken now describes the keyboard, not the screen, and is ignored rather than folded into the floor.
+ */
+function editableFocused(): boolean {
+  if (typeof document === 'undefined') return false;
+  const el = document.activeElement as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable === true;
+}
+
+/**
+ * Freeze (a condition is on screen) or unfreeze the scale. Unfreezing is a screen boundary outside
+ * any stimulus, so it also re-measures from scratch; see refitScale.
+ */
+export function setScaleFrozen(next: boolean): void {
+  if (next === frozen) {
+    if (!next) refitScale();
+    return;
+  }
+  frozen = next;
+  if (next) {
+    frozenRescales = 0;
+    return;
+  }
+  refitScale();
+}
+
+/** Scale changes since the last freeze — recorded on the condition as stimulus_scale_changes. */
+export function rescalesWhileFrozen(): number {
+  return frozenRescales;
+}
+
+/**
+ * Forget the running minimum and measure again — at a screen boundary outside any condition, or when
+ * the operator taps "Re-fit screen". Ignored while frozen: a stimulus must not resize because someone
+ * navigated. This is what lets a scale that locked small (a floating window, a bad startup frame, a
+ * rotation with the keyboard up) come back at the next screen instead of never.
+ */
+export function refitScale(): void {
+  if (frozen) return;
+  resetViewportFloor();
+  if (scheduleApply) scheduleApply();
+  else if (typeof window !== 'undefined' && typeof document !== 'undefined') apply();
+}
+
+/**
+ * The scale this screen would get if measured fresh, ignoring the running minimum. The pre-flight
+ * check compares it with the applied scale to catch a lock the operator cannot otherwise see.
+ */
+export function freshScale(): number {
+  const m = measure();
+  return computeScale(m.w, m.h);
+}
+
+/** Measure and apply now, outside a resize event. Exported for tests and for one-off callers. */
+export function remeasureScale(): void {
+  apply();
+}
+
 function apply(): void {
+  if (editableFocused()) return;
   const seen = measure();
   const { w, h } = foldViewportFloor(seen.w, seen.h);
   const next = computeScale(w, h);
   if (next === applied) return;
+  // Never GROW under a reader. The floor only falls between resets, and resets are refused while
+  // frozen, so this is belt and braces.
+  if (frozen && next > applied) return;
+  if (frozen) frozenRescales += 1;
   applied = next;
   document.documentElement.style.setProperty('--vl-scale', String(next));
   /*
@@ -261,6 +352,11 @@ export function installViewportScale(): () => void {
       apply();
     });
   };
+  scheduleApply = schedule;
+  // A keyboard closing is a blur, not always a resize: re-measure when focus leaves a field, so a
+  // measurement skipped while typing is taken once the field is done with.
+  const onFocusOut = () => { schedule(); };
+  document.addEventListener('focusout', onFocusOut);
 
   const onOrientation = () => {
     resetViewportFloor();
@@ -295,6 +391,8 @@ export function installViewportScale(): () => void {
 
   return () => {
     if (frame) cancelAnimationFrame(frame);
+    scheduleApply = null;
+    document.removeEventListener('focusout', onFocusOut);
     window.removeEventListener('resize', schedule);
     window.removeEventListener('orientationchange', onOrientation);
     screen.orientation?.removeEventListener?.('change', onOrientation);
