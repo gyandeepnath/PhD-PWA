@@ -225,3 +225,28 @@ export function trackFieldBlockedTime(opts: {
     },
   };
 }
+
+/**
+ * Whether the researcher panel is EXPANDED on screen — the same kind of signal as the blocking notice,
+ * for the same reason: a live-updating readout in the corner of a stimulus screen is something the
+ * participant can see, and its effect on the measurement has to be modelable, so its time is
+ * recorded per condition (condition_monitor_open_ms) and per reading exposure (reading_monitor_open_ms).
+ */
+const monitorTarget: EventTarget | null = typeof EventTarget !== 'undefined' ? new EventTarget() : null;
+let monitorOpen = false;
+export function setMonitorOpen(open: boolean): void {
+  if (open === monitorOpen) return;
+  monitorOpen = open;
+  monitorTarget?.dispatchEvent(new Event('change'));
+}
+export function isMonitorOpen(): boolean {
+  return monitorOpen;
+}
+export function trackMonitorOpenTime(opts: Options = {}): HiddenTimeTracker {
+  return trackHiddenTime({
+    clock: opts.clock,
+    target: opts.target ?? monitorTarget ?? undefined,
+    isHidden: opts.isHidden ?? isMonitorOpen,
+    eventName: opts.eventName ?? 'change',
+  });
+}

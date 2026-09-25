@@ -391,6 +391,14 @@ export interface ConditionRecord {
    */
   stimulus_scale_changes?: number;
   /**
+   * Time the researcher panel was OPEN on screen during this condition, how many times it was opened,
+   * and the part of that inside the reading exposure. A live readout in the corner is visible to the
+   * participant, so its presence is recorded rather than assumed harmless. 0 in a normal run.
+   */
+  condition_monitor_open_ms?: number;
+  condition_monitor_open_events?: number;
+  reading_monitor_open_ms?: number;
+  /**
    * The grey-field duration the protocol asked for, beside `adaptation_ms_before`, which is what
    * the participant actually saw. They differ when the device sleeps or the app is backgrounded
    * mid-field: the countdown is frame-driven and stops, and on waking the screen advances at once.

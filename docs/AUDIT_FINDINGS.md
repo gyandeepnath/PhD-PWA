@@ -3531,3 +3531,38 @@ longest stretch are counted); source wiring; and a new end-to-end spec that feed
 an all-black video and requires the notice to appear during reading — the investigator's exact scenario.
 Disabling the detector fails it; the normal fake camera does not trigger it. 1089 tests, verify green,
 stress clean.
+
+## Round 59 — a researcher panel: live camera data and the session clock, collapsible
+
+Requested by the investigator: a camera module with live data (blink count, face presence, gaze…) that
+collapses out of the way but can be kept open and live at any time, and a toggleable clock for how long
+the session has been running.
+
+`ResearcherPanel` replaces `TrackingMonitor`, which was a fixed chip hidden during reading, the grey
+field and both speeded tasks — exactly when the camera matters — and had no clock.
+
+- **Collapsed:** a status dot and the sitting's elapsed time; a problem ("No face for 9 s", "Picture
+  black — covered or switched off?", "Camera stopped") is written beside the dot in colour.
+- **Open:** the camera's state in words; blinks this condition (incomplete) and this sitting; eye openness
+  against the participant's baseline; gaze zone; frame rate (live and last reading); picture brightness;
+  time this sitting, since the session began (includes pauses), on this screen; conditions done; and
+  time left, now estimated from how long this sitting's conditions actually took (it assumed 9 min each).
+
+**Protecting the measurement.** A live readout in the corner of a stimulus screen is visible to the
+participant, so on condition screens the panel closes by itself unless "keep open during tasks" is on;
+it is drawn in the screen's own ink on no background, so it adds no patch of a different luminance; it
+updates once a second; on reading it opens as a two-line strip in the empty left of the footer, below
+the passage, never over it; and during word search and the reaction task it stays collapsed and cannot
+be tapped (an open panel could cover a target). Every moment it is open on a condition screen is
+recorded: `condition_monitor_open_ms`, `condition_monitor_open_events` and `reading_monitor_open_ms`
+(02_conditions.csv) — 0 in a normal run, and a sensitivity analysis can drop rows where the reading
+figure is above 0.
+
+The tracker gained the live fields the panel needs: gaze zone, blinks across the sitting, how long the
+face has been missing, picture brightness, and the blocked state from Round 58.
+
+Rendered tests: it starts collapsed with the clock and opens on tap; it closes when a condition screen
+starts and reports open time only on condition screens; reading gets the strip, not the card; it cannot
+be opened during the speeded tasks; the camera state is named for each problem. Checked on screen with a
+live fake camera at 1152×720. 1095 tests, verify green; full-run, edge, screen-fit, reachability and
+camera-lost end-to-end specs pass.

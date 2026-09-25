@@ -12,7 +12,7 @@ import {
 } from '@/experiment/illumination';
 import { participantProgress, passageRepeatNumber } from './participantProgress';
 import { mergeExclusionReasons } from './eligibility';
-import { trackHiddenTime, trackPortraitTime, trackBlockingNoticeTime, setBlockingNotice, type HiddenTimeTracker } from '@/lib/hiddenTime';
+import { trackHiddenTime, trackPortraitTime, trackBlockingNoticeTime, setBlockingNotice, trackMonitorOpenTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { PASSAGES } from './passages';
 import { annotationSegmentSteps, blockPlan, isAnnotationSubsample, type PlannedStep } from './counterbalance';
 import { CONFIG, isE2ETimingActive } from './config';
@@ -52,7 +52,7 @@ import {
 } from '@/start/setupStages';
 import { CalibrationRoutine } from '@/start/CalibrationRoutine';
 import { currentScale, layoutViewport, setScaleFrozen, rescalesWhileFrozen } from '@/lib/viewportScale';
-import { TrackingMonitor } from '@/components/TrackingMonitor';
+import { ResearcherPanel } from '@/components/ResearcherPanel';
 import { FPS_RATIO_THRESHOLD } from '@/tracking/blink';
 
 function provenance(): Provenance {
@@ -120,6 +120,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const conditionPortrait = useRef<HiddenTimeTracker | null>(null);
   /** Time the camera-lost notice covered the current condition. See ConditionRecord. */
   const conditionNotice = useRef<HiddenTimeTracker | null>(null);
+  /** Time the researcher panel was open during the current condition, and during its reading. */
+  const conditionMonitor = useRef<HiddenTimeTracker | null>(null);
+  const readingMonitor = useRef<HiddenTimeTracker | null>(null);
+  /** When this sitting's screens started, and when the current screen started — the panel's clock. */
+  const sittingStartedAt = useRef(Date.now());
+  const [stageStartedAt, setStageStartedAt] = useState(() => Date.now());
+  /** Minutes each finished condition took in this sitting, for an honest time-left estimate. */
+  const conditionMinutes = useRef<number[]>([]);
   // Transition lock: ignore re-entrant advance() calls (e.g. accidental double-taps on a tablet)
   // until the machine actually changes — prevents skipping a stage. Reset on every stage change.
   const transitioning = useRef(false);
@@ -206,6 +214,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    */
   useEffect(() => {
     setScaleFrozen(isInLoop(machine.stage) || machine.stage === 'CALIBRATION');
+    setStageStartedAt(Date.now());
   }, [machine.stage]);
   useEffect(() => () => setScaleFrozen(false), []);
   /** rescalesWhileFrozen() when the current condition started; the difference is recorded. */
@@ -903,6 +912,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     conditionPortrait.current = trackPortraitTime();
     conditionNotice.current?.stop();
     conditionNotice.current = trackBlockingNoticeTime();
+    conditionMonitor.current?.stop();
+    conditionMonitor.current = trackMonitorOpenTime();
     // Coarse resume pointer: an interruption during this condition resumes by redoing it.
     saveResume(session.session_id, machine.stepIndex);
     // NOTE: tracking.beginCondition() is deliberately NOT called here. See the ReadingTask
@@ -955,7 +966,15 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const inLoopish = isInLoop(machine.stage) || machine.stage === 'BREAK_SCREEN';
   const conditionCurrent = inLoopish ? machine.stepIndex + 1 : undefined;
   const conditionTotal = inLoopish ? nConditions : undefined;
-  const timeRemainingMin = inLoopish ? Math.max(0, Math.round((nConditions - machine.stepIndex) * 9)) : null;
+  // Conditions finished in this sitting, and an estimate of the time left from how long they took
+  // (it used to assume 9 min each). Before any finishes, 9 min is still the working guess.
+  const conditionsDone = inLoopish
+    ? Math.max(0, machine.stage === 'ADAPTATION' || machine.stage === 'BREAK_SCREEN' ? machine.stepIndex + 1 : machine.stepIndex)
+    : null;
+  const perCondition = conditionMinutes.current.length
+    ? conditionMinutes.current.reduce((a, b) => a + b, 0) / conditionMinutes.current.length
+    : 9;
+  const timeRemainingMin = inLoopish ? Math.max(0, Math.round((nConditions - (conditionsDone ?? 0)) * perCondition)) : null;
 
   let view: React.ReactNode = null;
   switch (machine.stage) {
@@ -1291,6 +1310,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
              */
             onBegin={() => {
               tracking.beginCondition();
+              readingMonitor.current?.stop();
+              readingMonitor.current = trackMonitorOpenTime();
               /**
                * The annotation clip has to cover the SAME window the automated measure does.
                *
@@ -1329,6 +1350,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                     // The per-page dwells make a skim locatable rather than merely suspected.
                     reading_page_dwells_ms: r.pageDwellsMs,
                     reading_min_page_dwell_ms: r.pageDwellsMs.length ? Math.min(...r.pageDwellsMs) : null,
+                    // Panel-open time within the reading exposure itself, where the blink data comes from.
+                    reading_monitor_open_ms: readingMonitor.current?.stop().hiddenMs,
                   });
                 }
               }
@@ -1459,6 +1482,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 const rotated = conditionPortrait.current?.stop() ?? null;
                 conditionPortrait.current = null;
                 const noticed = conditionNotice.current?.stop() ?? null;
+                const panelOpen = conditionMonitor.current?.stop() ?? null;
+                conditionMonitor.current = null;
+                conditionMinutes.current.push((Date.now() - started) / 60000);
                 conditionNotice.current = null;
                 await put('conditions', {
                   ...existing,
@@ -1473,6 +1499,10 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                   // The screen shrank mid-condition this many times (content kept reachable; the
                   // scale never grows mid-condition). 0 in a normal run.
                   stimulus_scale_changes: Math.max(0, rescalesWhileFrozen() - conditionRescalesAtStart.current),
+                  // The researcher panel was OPEN on screen during this condition (recorded because a
+                  // live readout in the corner is visible to the participant). 0 in a normal run.
+                  condition_monitor_open_ms: panelOpen?.hiddenMs,
+                  condition_monitor_open_events: panelOpen?.events,
                 });
               }
               saveResume(session.session_id, machine.stepIndex + 1);
@@ -1649,41 +1679,31 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   return (
     <div data-stage={machine.stage} style={{ height: '100%' }}>
       {/*
-        Live tracking readout, corner-pinned and pointer-transparent.
-
-        Deliberately hidden during READING and ADAPTATION. Reading is where the blink data actually
-        comes from, and a number changing in peripheral vision is a competing stimulus — an operator
-        aid that altered reading behaviour would corrupt the measurement it exists to protect.
-        Adaptation is a controlled grey field and must stay uniform.
+        The researcher panel: live camera readout and the session clock, collapsible. See
+        ResearcherPanel.tsx for how it protects the measurement on condition screens (closes by
+        default, drawn in the screen's own ink, compact strip under the passage, locked during the
+        speeded tasks, and every moment it is open recorded).
       */}
-      <TrackingMonitor
-        subscribe={tracking.subscribeLive}
-        visible={
-          tracking.status === 'active'
-          && isInLoop(machine.stage)
-          && machine.stage !== 'READING_TASK'
-          && machine.stage !== 'ADAPTATION'
-          /*
-           * Also hidden through the two SPEEDED tasks, for two reasons stronger than distraction.
-           *
-           * The chip's background is a fixed dark translucent panel while the page behind it is the
-           * condition background, which alternates polarity — so it is a high-contrast blob on a
-           * light condition and nearly invisible on a dark one. Whatever perturbation it causes is
-           * therefore CORRELATED WITH THE INDEPENDENT VARIABLE rather than spread randomly.
-           *
-           * And in visual search it puts legible words — "face", "blinks", "inc", "fps", "open" —
-           * about twelve pixels above a text field the participant is scanning for a target word,
-           * in a task that records false detections.
-           *
-           * Nothing is lost: comprehension, display perception and post-fatigue are self-paced,
-           * immediately follow the exposure, and are exactly where "did the exposure that just ran
-           * record blinks?" is asked.
-           */
-          && machine.stage !== 'VISUAL_SEARCH'
-          && machine.stage !== 'REACTION_TIME'
-        }
-        fpsFloor={FPS_RATIO_THRESHOLD}
-      />
+      {machine.stage !== 'SESSION_INIT' && machine.stage !== 'EXPORT_DASHBOARD' && (
+        <ResearcherPanel
+          subscribe={tracking.subscribeLive}
+          cameraStatus={tracking.status}
+          cameraBlocked={tracking.cameraBlocked}
+          cameraLost={tracking.cameraLostAt != null}
+          fpsFloor={FPS_RATIO_THRESHOLD}
+          stageLabel={STAGE_LABEL[machine.stage]}
+          onStimulus={isInLoop(machine.stage)}
+          onReading={machine.stage === 'READING_TASK'}
+          locked={machine.stage === 'VISUAL_SEARCH' || machine.stage === 'REACTION_TIME'}
+          ink={stageInk}
+          sittingStartedAt={sittingStartedAt.current}
+          sessionStartedAt={session?.session_start_time ?? null}
+          stageStartedAt={stageStartedAt}
+          conditionsDone={conditionsDone}
+          conditionsTotal={inLoopish ? nConditions : null}
+          minutesLeft={timeRemainingMin}
+        />
+      )}
       {showProgress && (
         <ExperimentProgress
           percent={percent}

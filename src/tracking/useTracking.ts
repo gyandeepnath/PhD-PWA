@@ -119,6 +119,8 @@ export interface LiveTrackingStats {
   faceSize: number | null;
   /** Whether gaze is currently in the central zone. */
   onScreen: boolean;
+  /** Blinks counted across the sitting so far: every finished exposure plus the live one. */
+  sessionBlinks: number | null;
   /** The 3x3 gaze zone this frame ('cc' is centre); null with no face. */
   gazeZone: string | null;
   /** How long the face has been missing right now, ms (0 with a face, or when the feed is blocked). */
@@ -201,6 +203,8 @@ export function useTracking(): TrackingApi {
   const [status, setStatus] = useState<CameraStatus>('unavailable');
   const [cameraLostAt, setCameraLostAt] = useState<number | null>(null);
   const [cameraBlocked, setCameraBlocked] = useState(false);
+  /** Blinks counted in the sitting's FINISHED exposures, for the researcher panel's running total. */
+  const sessionBlinksDone = useRef(0);
   const healthRef = useRef(new CameraHealth());
   /** Muted time of the camera track in the current condition; see the mute listeners in start(). */
   const mutedSinceRef = useRef<number | null>(null);
@@ -383,6 +387,7 @@ export function useTracking(): TrackingApi {
           faceSize: Number.isFinite(size) ? size : null,
           onScreen: gazeNow.isCenter,
           gazeZone: gazeNow.zone ?? null,
+          sessionBlinks: sessionBlinksDone.current + (live?.blinks ?? 0),
           noFaceForMs: 0,
           luma: luma != null ? Math.round(luma) : null,
           blocked: health.isBlocked(),
@@ -407,6 +412,7 @@ export function useTracking(): TrackingApi {
           exposureFps: lastConditionFps.current,
           faceSize: null, onScreen: false,
           gazeZone: null,
+          sessionBlinks: sessionBlinksDone.current + (live?.blinks ?? 0),
           noFaceForMs: health.noFaceForMs(t),
           luma: luma != null ? Math.round(luma) : null,
           blocked: health.isBlocked(),
@@ -761,6 +767,7 @@ export function useTracking(): TrackingApi {
        */
       const finished = aggRef.current.liveCounts(baselineEarRef.current);
       lastConditionCounts.current = { blinks: finished.blinks, incomplete: finished.incomplete };
+      if (typeof finished.blinks === 'number') sessionBlinksDone.current += finished.blinks;
 
       const record = aggRef.current.finalize({
         conditionId,
