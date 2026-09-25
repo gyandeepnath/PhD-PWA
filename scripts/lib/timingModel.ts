@@ -215,6 +215,8 @@ export function simulateSitting(
     // polarity switch. The pre-first field was added because without it condition 0 began from the
     // light cream setup UI, so adaptation state at onset was a function of the condition's own
     // polarity — an asymmetry confounded with the study's primary factor. It costs 60 s once.
+    // The MAXIMUM field. Since the field became participant-paced (Continue from ADAPTATION_MIN_MS)
+    // this is an upper bound: the model stays conservative rather than guessing when people continue.
     add('adaptation', (switched ? cfg.ADAPTATION_SWITCH_POLARITY_MS : cfg.ADAPTATION_SAME_POLARITY_MS) / S);
 
     // Reading: self-paced above a per-page floor.

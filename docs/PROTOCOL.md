@@ -86,7 +86,9 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                             outcomes, not evidence of disengagement.
         → BREAK_SCREEN       self-paced rest after every 2 conditions (CONFIG.BREAK_EVERY_N_CONDITIONS);
                              neutral "X of N done", no performance feedback; never after the last
-        → ADAPTATION         60 s neutral grey (120 s when polarity switches), ALWAYS immediately
+        → ADAPTATION         neutral grey: Continue offered after 30 s, ends by itself at 60 s
+                             (120 s when polarity switches) — participant-paced since the
+                             amendment in AUDIT_FINDINGS Round 57; ALWAYS immediately
                              before the next condition — after the break, never before it. (The
                              break is a light screen; placed after the grey field it left every
                              post-break condition light-adapted, at 4 of 9 transitions.)

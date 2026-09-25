@@ -57,7 +57,7 @@ export const ANALYSIS_LONG_COLUMNS = [
   'polarity_c', 'illumination_c',
   // --- position and order, which carry fatigue and practice -------------------------------
   'session_position', 'global_position', 'position_c',
-  'illumination_block', 'illumination_order_first', 'adaptation_ms_before', 'polarity_switched',
+  'illumination_block', 'illumination_order_first', 'adaptation_ms_before', 'adaptation_ended_by', 'polarity_switched',
   'predecessor_condition_label',
   'passage_id', 'passage_repeat_number',
   // --- primary outcome, as counts and as a proportion -------------------------------------
@@ -280,6 +280,7 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         illumination_block: s.illumination_block,
         illumination_order_first: s.illumination_order_first,
         adaptation_ms_before: c?.adaptation_ms_before ?? null,
+        adaptation_ended_by: c?.adaptation_ended_by ?? null,
         /*
          * Adaptation was doubled on a polarity switch, so this is a covariate for any ocular
          * outcome. Derived once here rather than re-derived differently in each analysis.

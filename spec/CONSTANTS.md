@@ -78,7 +78,7 @@ passages. They were unequal across passages (2–13), which made accuracy_rate i
 `npm run verify:corpus` enforcing the band.
 | RT (go/no-go) | implemented: 32 trials, go-rate 0.625, target GREEN `#00A651`, distractors red/blue/yellow | (no flanker manipulation) | **target is ACHROMATIC and background-relative** (black on light fields, white on dark), since green became a text colour and would otherwise collide with conditions P5/N5; render on the condition background; report d-prime + SE + criterion |
 | RT windows | resp ~1500, fix ~400–600, delay ~800–1500, ITI ~400–700 ms ⚠️ | resp 3000, fix 500–1000, delay 1000–3000, ITI 800–1200 ⚠️ | confirm from bundle, make configurable |
-| Adaptation | 20 000 ms `#808080` | same | 60 s same-polarity / 120 s on polarity switch |
+| Adaptation | 20 000 ms `#808080` | same | participant-paced: Continue after 30 s (`ADAPTATION_MIN_MS`); maximum 60 s same-polarity / 120 s on polarity switch |
 | Camera | 1280×720 @30fps, process every 2nd frame (~15fps) ⚠️ | 640×480 @30fps ⚠️ | record effective FPS; gate blink tiers ≥25fps |
 | EAR | thr 0.22; adaptive baseline = 90th pct of 150 samples; tiers 0.60/0.75/0.88×baseline ⚠️ | thr 0.20, 2 consec frames, valid 50–500 ms ⚠️ | full-blink + incomplete-ratio primary |
 | Gaze | center threshold 0.15–0.18; 9-zone grid | calibration stores hardcoded zeros (fake) | real calibration OR drop gaze-zone analysis |

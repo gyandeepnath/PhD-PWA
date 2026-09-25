@@ -637,12 +637,30 @@ export function Calibration({ cameraStatus, onDone }: { cameraStatus: CameraStat
  * Time while the document was hidden is not adaptation, so it is measured and subtracted, the same
  * treatment the reading task already gives `reading_hidden_ms`.
  */
-export function AdaptationScreen({ durationMs, nextLabel, onDone }: {
-  durationMs: number;
+export interface AdaptationResult {
+  /** Grey field actually in front of the participant (hidden, portrait and notice time excluded). */
+  visibleMs: number;
+  hiddenMs: number;
+  /** Who ended it: the participant tapping Continue after the minimum, or the timer at the maximum. */
+  endedBy: 'participant' | 'timer';
+}
+
+/*
+ * The grey field: at least `minMs`, then the participant may tap Continue; it moves on by itself at
+ * `maxMs`. Both are VISIBLE time — a tablet that sleeps or is rotated does not count towards either.
+ *
+ * Text is black on the grey (5.3:1): white at 90% and 60% opacity was 3.5:1 and 2.5:1, below the
+ * contrast floor for small text. The Continue button is grey-on-grey with a black outline, identical
+ * in every condition, so it cannot differ by polarity; it is a small area, so it barely moves the
+ * field's luminance.
+ */
+export function AdaptationScreen({ minMs, maxMs, nextLabel, onDone }: {
+  minMs: number;
+  maxMs: number;
   nextLabel: string;
-  onDone: (delivered: { visibleMs: number; hiddenMs: number }) => void;
+  onDone: (result: AdaptationResult) => void;
 }) {
-  const [progress, setProgress] = useState(0);
+  const [visible, setVisible] = useState(0);
   const start = useRef(now());
   // Shared implementation — this screen's copy was the correct one and the reading task's was not,
   // which is the reason there is now only one. Hidden OR portrait: either way the grey field is not
@@ -652,43 +670,61 @@ export function AdaptationScreen({ durationMs, nextLabel, onDone }: {
   // query and listeners on the document — that nothing ever detached, tens of thousands per sitting.
   const [hiddenTracker] = useState<HiddenTimeTracker>(() => trackFieldBlockedTime());
   const hidden = useRef<HiddenTimeTracker>(hiddenTracker);
+  const done = useRef(false);
 
   useEffect(() => {
     const t = hidden.current;
     return () => { t.stop(); };
   }, []);
 
+  const finish = (endedBy: AdaptationResult['endedBy']) => {
+    if (done.current) return;
+    done.current = true;
+    const hiddenNow = hidden.current.read().hiddenMs;
+    const v = Math.max(0, now() - start.current - hiddenNow);
+    onDone({ visibleMs: Math.round(v), hiddenMs: Math.round(hiddenNow), endedBy });
+  };
+
   useEffect(() => {
     let raf = 0;
-    let done = false;
     const tick = () => {
+      if (done.current) return;
       const hiddenNow = hidden.current.read().hiddenMs;
-      const visible = Math.max(0, now() - start.current - hiddenNow);
-      const p = Math.min(1, visible / durationMs);
-      setProgress(p);
-      if (p >= 1) {
-        if (done) return;
-        done = true;
-        onDone({ visibleMs: Math.round(visible), hiddenMs: Math.round(hiddenNow) });
-      } else raf = requestAnimationFrame(tick);
+      const v = Math.max(0, now() - start.current - hiddenNow);
+      setVisible(v);
+      if (v >= maxMs) finish('timer');
+      else raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [durationMs, onDone]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minMs, maxMs]);
 
+  const canContinue = visible >= minMs;
   const r = 34;
   const circ = 2 * Math.PI * r;
+  // The ring fills over the MINIMUM: it says "not yet", then gives way to the Continue button.
+  const progress = Math.min(1, visible / Math.max(1, minMs));
   return (
-    <div style={{ position: 'fixed', inset: 0, background: CONFIG.ADAPTATION_COLOR, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-      <svg width={88} height={88} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={44} cy={44} r={r} fill="none" stroke="#ffffff40" strokeWidth={6} />
-        <circle cx={44} cy={44} r={r} fill="none" stroke="#fff" strokeWidth={6}
-          strokeDasharray={circ} strokeDashoffset={circ * (1 - progress)} style={{ transition: 'stroke-dashoffset 0.1s linear' }} />
-      </svg>
-      <p style={{ marginTop: 18, fontFamily: '"DM Mono", monospace', fontSize: 14, opacity: 0.9 }}>
-        Rest your eyes · {Math.ceil((durationMs * (1 - progress)) / 1000)}s
+    <div data-testid="adaptation" style={{ position: 'fixed', inset: 0, background: CONFIG.ADAPTATION_COLOR, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#000' }}>
+      {!canContinue ? (
+        <svg width={88} height={88} style={{ transform: 'rotate(-90deg)' }}>
+          <circle cx={44} cy={44} r={r} fill="none" stroke="#00000030" strokeWidth={6} />
+          <circle cx={44} cy={44} r={r} fill="none" stroke="#000" strokeWidth={6}
+            strokeDasharray={circ} strokeDashoffset={circ * (1 - progress)} style={{ transition: 'stroke-dashoffset 0.1s linear' }} />
+        </svg>
+      ) : (
+        <button type="button" data-testid="adaptation-continue" onClick={() => finish('participant')}
+          style={{ fontFamily: '"DM Mono", monospace', fontSize: 20, padding: '14px 34px', borderRadius: 14, border: '2px solid #000', background: 'transparent', color: '#000', cursor: 'pointer' }}>
+          Continue →
+        </button>
+      )}
+      <p style={{ marginTop: 18, fontFamily: '"DM Mono", monospace', fontSize: 18 }}>
+        {canContinue
+          ? `Continue when you are ready · moves on by itself in ${Math.max(0, Math.ceil((maxMs - visible) / 1000))}s`
+          : `Rest your eyes · you can continue in ${Math.max(0, Math.ceil((minMs - visible) / 1000))}s`}
       </p>
-      <p style={{ marginTop: 6, fontFamily: '"DM Mono", monospace', fontSize: 12, opacity: 0.6 }}>{nextLabel}</p>
+      <p style={{ marginTop: 6, fontFamily: '"DM Mono", monospace', fontSize: 16 }}>{nextLabel}</p>
     </div>
   );
 }

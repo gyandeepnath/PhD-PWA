@@ -154,6 +154,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const adaptationDelivered = useRef(0);
   /** What the protocol asked for, kept beside what was delivered so the two can be compared. */
   const adaptationPlanned = useRef(0);
+  /** The minimum before Continue was offered, and who ended the field. See AdaptationScreen. */
+  const adaptationMin = useRef(0);
+  const adaptationEndedBy = useRef<'participant' | 'timer' | null>(null);
 
   /**
    * The annotation clip in progress. `finish(true)` when its reading run completes, `finish(false)`
@@ -829,8 +832,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
      */
     const adaptationBefore = adaptationDelivered.current;
     const adaptationPlan = adaptationPlanned.current;
+    const adaptationMinimum = adaptationMin.current;
+    const adaptationEnd = adaptationEndedBy.current;
     adaptationDelivered.current = 0;
     adaptationPlanned.current = 0;
+    adaptationMin.current = 0;
+    adaptationEndedBy.current = null;
     /*
      * A redo must leave a trace.
      *
@@ -852,6 +859,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       michelson_contrast: cond.michelson_contrast, below_wcag_aa: cond.below_wcag_aa,
       started_at: Date.now(), completed_at: null, condition_duration_sec: null,
       adaptation_ms_before: adaptationBefore, adaptation_ms_planned: adaptationPlan,
+      adaptation_ms_min: adaptationMinimum, adaptation_ended_by: adaptationEnd,
       reading_time_ms: null,
       /*
        * Counted from the PASS, not the illumination block.
@@ -1477,14 +1485,18 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       const prev = machine.stepIndex >= 0 ? plan[machine.stepIndex] : undefined;
       const nextStep = plan[machine.stepIndex + 1];
       const switched = prev && nextStep && CONDITIONS[prev.conditionIndex].polarity !== CONDITIONS[nextStep.conditionIndex].polarity;
+      // The MAXIMUM; from CONFIG.ADAPTATION_MIN_MS the participant may continue. See config.ts.
       const dur = switched ? CONFIG.ADAPTATION_SWITCH_POLARITY_MS : CONFIG.ADAPTATION_SAME_POLARITY_MS;
+      const minDur = Math.min(CONFIG.ADAPTATION_MIN_MS, dur);
       const label = nextStep ? `Next: ${CONDITIONS[nextStep.conditionIndex].polarity === 'positive' ? 'Light' : 'Dark'} background` : '';
-      view = <AdaptationScreen durationMs={dur} nextLabel={label} onDone={(delivered) => {
+      view = <AdaptationScreen minMs={minDur} maxMs={dur} nextLabel={label} onDone={(delivered) => {
         // What the participant actually saw, not what was scheduled. The screen subtracts any time
         // the document was hidden, so a tablet that auto-locks mid-field cannot certify a
         // polarity-switch control that did not happen.
         adaptationDelivered.current = delivered.visibleMs;
         adaptationPlanned.current = dur;
+        adaptationMin.current = minDur;
+        adaptationEndedBy.current = delivered.endedBy;
         advance();
       }} />;
       break;

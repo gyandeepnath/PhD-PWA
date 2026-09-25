@@ -205,7 +205,7 @@ Each condition runs the same six measured stages, in this order:
 | `POST_FATIGUE` | Five visual-fatigue items, 0 to 10 | Let them answer at their own pace. |
 | `VISUAL_SEARCH` | Tap every occurrence of a target word, fixed time limit | Do not point. |
 | `REACTION_TIME` | Go/no-go, 32 trials | Nothing. |
-| `ADAPTATION` | Neutral grey field, 60 s (120 s when polarity switches) | Nothing. Let it run. |
+| `ADAPTATION` | Neutral grey field. A **Continue** button appears after 30 s; the field moves on by itself at 60 s (120 s when polarity switches) | Let the participant decide when to continue after 30 s. Do not prompt them to hurry: how long they rest is recorded (`adaptation_ms_before`, `adaptation_ended_by`) and analysed. |
 
 `ADAPTATION` runs a grey field **before the first condition** and then after every condition except
 the last, so it appears ten times across the ten conditions. The one before the first exists because

@@ -20,8 +20,9 @@ tiers, and only the third can be argued down:
 | **Corpus arithmetic** | Words in the reading corpus divided by a reading rate. The word count is exact. | 29.6 | 30% |
 | **Estimated** | Per-item guesses for a motivated young adult. | 42.5 | 43% |
 
-Enforced is `adaptation` (15.0 min: five 120 s polarity switches and five 60 s same-polarity
-fields) plus `rt_block` (10.9 min: 32 trials × 10 conditions, where each trial's fixation, delay,
+Enforced is `adaptation` (15.0 min at the MAXIMA: five 120 s polarity switches and five 60 s
+same-polarity fields; since the field became participant-paced the participant may continue from
+30 s, so the floor is 5.0 min and the model deliberately charges the maximum) plus `rt_block` (10.9 min: 32 trials × 10 conditions, where each trial's fixation, delay,
 response window and ITI all come from CONFIG). Corpus arithmetic is `reading`: the ten passages
 hold **5,851 words** (585.1 mean, verified by `countWords` over `PASSAGES`), so at 215 wpm that is
 27.2 minutes and there is no rate at which it becomes small — 300 wpm still costs 19.5 minutes.
@@ -85,8 +86,9 @@ where the non-negotiable minutes live:
    incomplete block design that runs a subset per sitting cuts the sitting proportionally, at the
    price of more sittings or more participants — total condition-runs is conserved at
    `n × runs-per-participant`.
-2. **Adaptation.** 15.0 minutes of enforced grey field, of which 6.0 minutes is the cost of the
-   five polarity switches the Williams order produces. Ordering conditions to group polarity would
+2. **Adaptation.** Up to 15.0 minutes of grey field, of which up to 6.0 minutes is the cost of the
+   five polarity switches the Williams order produces. Participant-paced since Round 57 of
+   AUDIT_FINDINGS: Continue appears at 30 s, so the real cost lies between 5.0 and 15.0 minutes. Ordering conditions to group polarity would
    recover those 6 minutes but reintroduces the carryover confound the Williams order removes.
 
 Reading exposure is the third lever and the most expensive one to pull, because it trades directly
@@ -274,6 +276,18 @@ exists is the general chromatic and light-adaptation literature: chromatic adapt
 at approximately 60 s, 60–100 s found suitable for repeated pupillary measures, and light
 adaptation (as opposed to dark) too fast to time at 30-second resolution. The current 120 s is
 defensible by analogy but not by direct citation, and nothing retrieved requires it.
+
+**Amendment (AUDIT_FINDINGS Round 57): the field is now participant-paced.** Continue appears after
+30 s; the field still ends by itself at 60 s, or 120 s across a switch. The 30 s floor rests on the
+pupil's redilation after a step down taking "many seconds" (Mathôt 2018, full text) and foveal light
+adaptation settling in 10–15 s (Hayhoe, Levin & Koshel 1992, abstract) — both entered in
+CITATION_VERIFICATION.md (entries 45–46). It is BELOW the ~60 s chromatic-adaptation figure in the
+paragraph above, so on a polarity switch a participant who continues at the minimum has had less than
+that literature suggests. That is the cost of the investigator's decision and it is recorded rather than
+hidden: every condition carries the grey actually delivered (`adaptation_ms_before`), the minimum
+(`adaptation_ms_min`) and who ended it (`adaptation_ended_by`). The analysis should report the
+distribution by condition and run the pre-specified sensitivity analysis on switch transitions shorter
+than 60 s.
 
 ## The go/no-go block is not free to halve
 

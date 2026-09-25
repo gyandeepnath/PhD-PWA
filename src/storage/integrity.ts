@@ -67,7 +67,12 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
    * shortfall is not discarded wholesale.
    */
   for (const c of conditions) {
-    const planned = c.adaptation_ms_planned;
+    /*
+     * Measured against the MINIMUM where one was recorded. Since the field became participant-paced,
+     * a participant who continues at 30 s of a 120 s maximum has had the whole field the protocol
+     * requires; judging that against the maximum reported it as an error.
+     */
+    const planned = c.adaptation_ms_min != null && c.adaptation_ms_min > 0 ? c.adaptation_ms_min : c.adaptation_ms_planned;
     const delivered = c.adaptation_ms_before;
     if (planned == null || delivered == null || planned <= 0) continue;
     // A cold entry — the first condition of a sitting, or one reached by resume — shows no field at

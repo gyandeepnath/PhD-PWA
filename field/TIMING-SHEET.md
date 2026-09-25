@@ -41,7 +41,7 @@ complete condition, predicted at **7.1 min** each.
 | 10 | 81.5 | | |
 | — | last condition ends | 88.4 | | |
 
-Within one condition, predicted: adaptation 1.5 (60 s, or 120 s if polarity switched) · reading 3.0 ·
+Within one condition, predicted: adaptation 1.5 (at most 60 s, or 120 s if polarity switched; the participant may continue from 30 s) · reading 3.0 ·
 comprehension 0.7 (3 items) · display perception 0.14 · fatigue sliders 0.27 · visual search 0.48 ·
 RT instructions 0.15 · RT block 1.09. Breaks fall after every 2nd condition, predicted 0.8 each.
 

@@ -142,7 +142,8 @@ export function nextState(state: MachineState, nConditionsRaw: number = N_CONDIT
      * across participants: an asymmetry confounded with the study's primary factor, in a design
      * whose whole purpose is to separate them.
      *
-     * The grey field costs 60 s once per sitting, which the feasibility simulation absorbs.
+     * The grey field costs at most 60 s once per sitting (30 s if the participant continues at the
+     * minimum), which the feasibility simulation absorbs.
      */
     return loopEntry(0, nConditions);
   }
@@ -157,7 +158,7 @@ export function nextState(state: MachineState, nConditionsRaw: number = N_CONDIT
      *
      * The order used to be REACTION_TIME -> ADAPTATION -> BREAK_SCREEN -> READING_TASK. The break is
      * a cream screen, self-paced, often minutes long, so every condition that followed a break began
-     * light-adapted from it and the 60/120 s polarity-switch control ran BEFORE the break instead of
+     * light-adapted from it and the polarity-switch grey field ran BEFORE the break instead of
      * before the condition: defeated at four of the nine transitions in a ten-condition sitting. A
      * negative-polarity condition after a break started from a bright field, a positive one from a
      * field matched to its own — adaptation state at onset a function of polarity, which is the

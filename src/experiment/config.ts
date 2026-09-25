@@ -138,7 +138,24 @@ const BASE_CONFIG = {
    * ENGAGEMENT in dashboard/aggregate.ts.
    */
 
-  // Adaptation: longer than the original 20 s; doubled on a polarity switch.
+  /*
+   * Adaptation (the grey field between conditions). The two values below are now MAXIMA: the field
+   * advances on its own when they are reached. From ADAPTATION_MIN_MS the participant may tap
+   * Continue. Investigator decision (after reviewing the evidence), before any data collection:
+   *
+   *   - pupil: after light onset it constricts to minimum size by ~1.5 s; after light offset it
+   *     "gradually recovers… It can take many seconds for the pupil to fully recover", shown over
+   *     the 20 s dark phase of a one-observer demonstration (Mathôt 2018, J Cogn 1(1):16,
+   *     doi:10.5334/joc.18, full text read);
+   *   - foveal light adaptation within the low-to-mid photopic range reaches steady state in
+   *     10-15 s (Hayhoe, Levin & Koshel 1992, Vision Res 32(2):323-33, abstract read).
+   *
+   * 30 s sits above both. It is a judgement on modest evidence, not a measured threshold, and the
+   * length is now chosen by the participant, so it is recorded per condition (adaptation_ms_before,
+   * adaptation_ended_by, adaptation_ms_min) and must be treated as a covariate, not a control.
+   * No retrieved display-polarity study reports a washout interval to compare with.
+   */
+  ADAPTATION_MIN_MS: 30000,
   ADAPTATION_SAME_POLARITY_MS: 60000,
   ADAPTATION_SWITCH_POLARITY_MS: 120000,
   ADAPTATION_COLOR: '#808080',
@@ -288,6 +305,7 @@ const E2E_OVERRIDES: Partial<typeof BASE_CONFIG> = {
   RT_DELAY_MEAN_MS: 30,
   RT_ITI_MIN_MS: 20,
   RT_ITI_MAX_MS: 30,
+  ADAPTATION_MIN_MS: 100,
   ADAPTATION_SAME_POLARITY_MS: 200,
   ADAPTATION_SWITCH_POLARITY_MS: 300,
   ANNOTATION_SEGMENT_MS: 400,

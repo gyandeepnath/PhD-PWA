@@ -397,6 +397,13 @@ export interface ConditionRecord {
    * Optional: rows written before this existed have no value for it.
    */
   adaptation_ms_planned?: number;
+  /**
+   * The minimum grey field before the participant was offered Continue, and who ended it. Since the
+   * field became participant-paced (30 s minimum, the old durations as maxima), its length is chosen
+   * by the participant and must be treated as a covariate. adaptation_ms_planned is the MAXIMUM.
+   */
+  adaptation_ms_min?: number;
+  adaptation_ended_by?: 'participant' | 'timer' | null;
   /** Total time spent on the reading task (ms), self-paced; null until reading completes. */
   /** Reading exposure, with any time the app spent hidden already subtracted. */
   reading_time_ms: number | null;

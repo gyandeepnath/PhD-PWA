@@ -924,6 +924,59 @@ frames the argument rather than measuring it.
 
 ---
 
+### 45. Mathôt (2018) — the grey-field minimum
+**Status: CONFIRMED.** PMID 31517190 · PMC6634360 · DOI [10.5334/joc.18](https://doi.org/10.5334/joc.18)
+
+> Mathôt, S. (2018). Pupillometry: Psychology, physiology, and function. *Journal of Cognition, 1*(1), 16.
+
+Metadata matches PubMed. The substantive claim was checked against the PMC full text, verbatim:
+*"[Light on] 0.2–1.5s: The pupil constricts strongly and rapidly until it reaches its minimum size."*
+and *"[Light off] 10 s–30s: The pupil gradually recovers to its original size. Dilation due to light
+offset occurs much more slowly than constriction due to light onset. It can take many seconds for the
+pupil to fully recover"*. Cited for: the time course that informs the 30 s grey-field minimum
+(`ADAPTATION_MIN_MS`). Limitation stated wherever it is used: a one-observer demonstration with
+full-screen coloured light, not a measurement of white-to-grey or black-to-grey display steps.
+
+### 46. Hayhoe, Levin & Koshel (1992) — photopic light adaptation time course
+**Status: CONFIRMED.** PMID 1574848 · DOI [10.1016/0042-6989(92)90142-6](https://doi.org/10.1016/0042-6989(92)90142-6)
+
+> Hayhoe, M. M., Levin, M. E., & Koshel, R. J. (1992). Subtractive processes in light adaptation.
+> *Vision Research, 32*(2), 323–333.
+
+Metadata matches PubMed. Claim checked against the abstract, verbatim: *"We measured the time course of
+light adaptation in foveal vision following the onset of an adapting background. Several adaptational
+steps in the low to mid photopic range were examined… the process took 10-15 sec to reach steady
+state."* Cited for the grey-field minimum. It covers a step UP in luminance only; no source was found
+for the time to steady state after a moderate photopic step down.
+
+### 47. Legge & Bigelow (2011) — critical print size
+**Status: CONFIRMED.** PMID 21828237 · PMC3428264 · DOI [10.1167/11.5.8](https://doi.org/10.1167/11.5.8)
+
+> Legge, G. E., & Bigelow, C. A. (2011). Does print size matter for reading? A review of findings from
+> vision science and typography. *Journal of Vision, 11*(5), 8.
+
+Metadata matches PubMed. Claims checked against the PMC full text, verbatim: *"Across studies, a
+consensus value for the critical print size for normally sighted readers is 0.2° x-height"* and
+*"The angular height of `x' at the eye is 0.2° (equals 12 min-arc)"*; the abstract: *"The fluent range
+extends over a factor of 10 in angular print size (x-height) from approximately 0.2° to 2°."* Cited for:
+why a display scale locked at 0.5 (x-height about 7.5′ at 55 cm) presented a non-comparable stimulus,
+and for the reading-text size decision.
+
+### 48. Kolbe, Müller, Degle & Anders (2023) — character size against ISO 9241-303
+**Status: CONFIRMED.** PMID 37278397 · DOI [10.1111/opo.13170](https://doi.org/10.1111/opo.13170)
+
+> Kolbe, O., Müller, J., Degle, S., & Anders, C. (2023). Analysis of real-world visual ergonomics at the
+> visual display unit. *Ophthalmic and Physiological Optics, 43*(5), 1169–1178.
+
+Metadata matches PubMed. Claim checked against the abstract, verbatim: *"Habitually used character size
+for an uppercase E was recorded and compared to the ISO 9241-303:2011, national standards (e.g.,
+ANSI/HFES 100-2007)… In case of failure to comply with these standards, character size was increased
+to 22 angular minutes to reach the recommended ranges"* and *"The mean (SD) habitually set character
+size was 14.29 angular minutes (3.53) and therefore… significantly too small compared with ISO
+9241-303:2011."* Cited only for: 22′ (uppercase height) lies within the ISO/ANSI recommended range
+and 14.3′ is below it. The standards' exact minimum and preferred values were NOT read at source (the
+standards are paywalled) and must not be quoted from this entry.
+
 ## NOT INDEXED IN PUBMED — verified against a secondary authority, or unverified
 
 PubMed indexes biomedical and life-sciences literature only. The five references below fall outside

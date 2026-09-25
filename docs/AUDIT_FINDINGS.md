@@ -3465,3 +3465,38 @@ geometry, full-run and edge end-to-end specs pass.
 
 **To check an existing pilot export:** `stimulus_scale` in 02_conditions.csv. 0.5 with a full-size
 `layout_viewport` means that sitting ran locked at half size.
+
+## Round 57 — the grey field becomes participant-paced (protocol amendment, before data collection)
+
+The investigator found the 120 s grey field between conditions unnecessary and asked for the
+participant to be allowed to continue after about 30 s, with 120 s as the maximum. Evidence was sought
+first (verified in CITATION_VERIFICATION.md, entries 45–46):
+
+- the pupil constricts to minimum within ~1.5 s of a step up; after a step down it "gradually recovers…
+  It can take many seconds", shown over a 20 s dark phase in a one-observer demonstration (Mathôt 2018,
+  *J Cogn* 1(1):16, full text);
+- foveal light adaptation within the low-to-mid photopic range reaches steady state in 10–15 s after a
+  step up (Hayhoe, Levin & Koshel 1992, *Vision Res* 32(2):323–33, abstract);
+- no display-polarity study retrieved reports a washout interval; the project's own TIMING_MODEL cites
+  chromatic adaptation at ~90% by ~60 s, which a 30 s minimum on a polarity switch is below.
+
+**Implemented:** `ADAPTATION_MIN_MS` = 30 s; the existing 60 s / 120 s are now maxima at which the field
+ends by itself. A Continue button replaces the ring at the minimum; both limits count only VISIBLE grey
+(hidden, portrait and notice time excluded). Text on the grey is black (5.3:1); the white text at 90%
+and 60% opacity was 3.5:1 and 2.5:1. Every condition records `adaptation_ms_min` and
+`adaptation_ended_by` beside the delivered `adaptation_ms_before` (02_conditions.csv; the pooled file
+carries `adaptation_ended_by`). The integrity audit judges delivered time against the minimum, so
+continuing at 30 s is no longer reported as a shortfall. The codebooks now say the length is chosen by
+the participant and is a covariate, no longer collinear with `polarity_switched`; the operator manual
+tells the operator not to hurry the participant.
+
+**Residual risk, stated rather than hidden:** a self-paced length can correlate with condition (people
+may continue sooner after an easy condition), and on a polarity switch the minimum is below the ~60 s
+chromatic-adaptation figure. Mitigation is analytic: report the distribution by condition and run a
+sensitivity analysis on switch transitions under 60 s. The timing model keeps charging the maxima, as a
+conservative upper bound.
+
+Rendered tests (fake clocks) check that Continue is absent before the minimum, present after it, ends
+the field as `participant`, and that the timer ends it once at the maximum; forcing Continue on from the
+start fails them. 1083 tests, verify green; full-run, split and edge end-to-end specs pass. The synopsis
+still describes a fixed 60/120 s field and is left for the investigator to update.
