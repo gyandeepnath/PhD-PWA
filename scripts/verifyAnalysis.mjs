@@ -115,9 +115,15 @@ for (let i = 0; i < 12; i++) {
   // held to removing them — ANALYSIS_PLAN.md 5b requires the toolchains to model the same rows.
   if (i === 11) b.conditions[b.conditions.length - 1].completed_at = null;
   if (i === 5) b.session.withdrawn_at = b.session.session_start_time + 3_600_000;
-  // Between-participant variation, so the random/cluster structure has something to estimate.
+  // Between-participant variation, so the random/cluster structure has something to estimate —
+  // the SAME deterministic variation the R tree uses. This tree used to vary one count by +/-2,
+  // which left the GEE barely identified: adding the withdrawn and paused exclusions tipped the
+  // polarity standard error to NaN on the CI runner (Python 3.12) while it still fitted locally.
+  // A gate that passes or fails by platform numerics checks nothing.
   (b.eyeMetrics ?? []).forEach((m, k) => {
-    m.blink_count_incomplete = Math.max(1, m.blink_count_incomplete + ((i * 3 + k) % 5) - 2);
+    m.blink_count_full = 26 + ((i * 5 + k * 3) % 11);
+    m.blink_count_micro = (i + k) % 3;
+    m.blink_count_incomplete = 4 + ((i * 7 + k * 5) % 9);
   });
   const out = root + '/' + pid;
   mkdirSync(out, { recursive: true });
@@ -150,6 +156,7 @@ for (let i = 0; i < 12; i++) {
       Number.isFinite(coef) && Math.abs(coef) > 1e-6, `coefficient was ${polarityRow[1]}`);
     ok('the polarity coefficient has a usable standard error',
       Number.isFinite(se) && se > 1e-6, `standard error was ${polarityRow[2]} — a saturated or constant fit`);
+    console.log(`         (polarity_c: coefficient ${polarityRow[1]}, standard error ${polarityRow[2]})`);
   }
 
   const out = `${r.stdout}\n${r.stderr}`;
