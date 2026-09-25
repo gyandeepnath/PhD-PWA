@@ -89,7 +89,10 @@ describe('a correct dataset passes cleanly', () => {
     expect(r.clean).toBe(true);
     // These bundles carry only what the join reads, so the per-sitting audit notes their empty
     // stores (no baseline fatigue row, say) as warnings. No join issue, and nothing blocking.
-    expect(r.issues.filter((i) => !i.code.startsWith('audit_'))).toHaveLength(0);
+    // And, since these are archived two-level (dim + moderate) sittings checked against a two-level
+    // expectation, the two notices that say so: a level outside the current protocol, and a mixture.
+    expect(r.issues.filter((i) => !i.code.startsWith('audit_')).map((i) => i.code).sort())
+      .toEqual(['illumination_level_outside_protocol', 'mixed_illumination_levels']);
     expect(r.issues.filter((i) => i.severity === 'blocking')).toHaveLength(0);
     expect(r.analysable_participants).toBe(1);
     expect(r.participants[0].condition_runs).toBe(20);

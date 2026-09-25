@@ -262,7 +262,7 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
       </div>
       <div style={{ flexShrink: 0, paddingTop: 12, borderTop: `1px solid ${text}20`, display: 'flex', justifyContent: 'flex-end' }}>
         <button
-          onClick={() => finish(foundIdx.size >= totalTargets ? 'voluntary_full' : 'voluntary_early')}
+          onClick={() => finish('voluntary_early')}
           style={{ background: text, color: background, border: 'none', borderRadius: 12, padding: '16px 32px', fontFamily: '"DM Mono", monospace', fontSize: 16, cursor: 'pointer' }}
         >
           Done searching →

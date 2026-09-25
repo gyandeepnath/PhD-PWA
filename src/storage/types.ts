@@ -513,8 +513,8 @@ export interface ComprehensionRecord {
 export type SearchTermination =
   | 'time_limit'
   | 'voluntary_full'
-  | 'voluntary_early'
-  | 'session_terminated';
+  | 'voluntary_early';
+// 'session_terminated' was listed here and nothing ever produced it: an abandoned search writes no row.
 
 export interface VisualSearchRecord {
   condition_id: string;

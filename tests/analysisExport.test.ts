@@ -270,6 +270,10 @@ describe('the sitting expectation follows the protocol that was run', () => {
     ];
     const { ds } = long(legacy);
     expect(ds.integrity.participants[0].excluded_by.length).toBeGreaterThan(0);
+    // And the dataset says why, in its own terms.
+    const codes = ds.integrity.issues.map((i) => i.code);
+    expect(codes).toContain('mixed_illumination_levels');
+    expect(codes).toContain('illumination_level_outside_protocol');
   });
 });
 
@@ -722,5 +726,44 @@ describe('one pooled row reads one eye record', () => {
     const row = long([b]).rows.find((r) => r.session_position === '0')!;
     expect(row.n_incomplete).toBe('2');
     expect(Number(row.incomplete_blink_ratio)).toBeCloseTo(2 / 35, 4);
+  });
+});
+
+describe('pooled columns that described the sitting instead of the row, or said the wrong thing', () => {
+  it('stimulus_scale is the value read when the condition started, not the session stamp', () => {
+    const b = sitting('P1', { sid: 'S1', start: 1000, illumination: 'moderate', block: 0 });
+    (b.session as { stimulus_scale?: number }).stimulus_scale = 1;
+    (b.conditions[3] as { stimulus_scale?: number }).stimulus_scale = 0.8;
+    const rows = long([b]).rows;
+    expect(rows.find((r) => r.session_position === '3')!.stimulus_scale).toBe('0.8');
+    expect(rows.find((r) => r.session_position === '4')!.stimulus_scale).toBe('');   // no fallback
+  });
+
+  it('lux is reported as logged-in-range plus completeness, blank where it could not be checked', () => {
+    const b = sitting('P1', { sid: 'S1', start: 1000, illumination: 'moderate', block: 0 });
+    const s = b.session as { lux_readings?: unknown[]; lux_all_in_range?: boolean };
+    s.lux_readings = [{ checkpoint: 'start', lux: 300, at: 1 }];
+    s.lux_all_in_range = true;
+    let r = long([b]).rows[0];
+    expect(r.lux_logged_all_in_range).toBe('true');
+    expect(r.lux_complete).toBe('false');
+    s.lux_readings = []; s.lux_all_in_range = false;
+    r = long([b]).rows[0];
+    expect(r.lux_logged_all_in_range).toBe('');
+  });
+
+  it('an authorised re-run carries protocol_pass and its reason', () => {
+    const b = sitting('P1', { sid: 'S1', start: 1000, illumination: 'moderate', block: 0 });
+    Object.assign(b.session, { protocol_pass: 1, repeat_run_note: 'first pass voided — camera failed' });
+    const r = long([b]).rows[0];
+    expect(r.protocol_pass).toBe('1');
+    expect(r.repeat_run_note).toBe('first pass voided — camera failed');
+  });
+
+  it('a negative fatigue_delta is not reported as out of range', async () => {
+    const { ANALYSIS_CODEBOOK } = await import('@/storage/analysisCodebook');
+    const { CODEBOOK } = await import('@/storage/export');
+    expect(ANALYSIS_CODEBOOK.find((c) => c.column === 'fatigue_delta')!.unit).toBe('-10-10');
+    expect(CODEBOOK.find((c) => c.column === 'fatigue_delta')!.unit).toBe('-10-10');
   });
 });

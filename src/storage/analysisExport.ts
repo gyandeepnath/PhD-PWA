@@ -41,7 +41,7 @@ import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { N_CONDITIONS } from '@/experiment/conditions';
 import { PASSAGES } from '@/experiment/passages';
 import { ANALYSIS_CODEBOOK } from './analysisCodebook';
-import { N_ILLUMINATION_BLOCKS, specFor } from '@/experiment/illumination';
+import { N_ILLUMINATION_BLOCKS, specFor, LUX_CHECKPOINTS } from '@/experiment/illumination';
 
 /** Illumination blocks a participant completes — ONE under the current protocol. Runs = N x this. */
 // Derived, never a literal: this used to be a hard-coded 2, which would have silently survived the
@@ -77,11 +77,11 @@ export const ANALYSIS_LONG_COLUMNS = [
   'age', 'gender', 'daily_screen_hours', 'correction_type', 'cvd_status',
   'cvsq_baseline_total', 'caffeine_today', 'hours_since_sleep',
   // --- session covariates -----------------------------------------------------------------
-  'ambient_lux_measured', 'lux_all_in_range', 'screen_luminance_cd_m2', 'stimulus_scale',
+  'ambient_lux_measured', 'lux_logged_all_in_range', 'lux_complete', 'screen_luminance_cd_m2', 'stimulus_scale',
   // --- quality, for sensitivity analyses ---------------------------------------------------
   'camera_active', 'camera_inactive_reason', 'effective_fps', 'fps_adequate_for_ratio', 'face_presence_ratio',
   'gaze_calibrated', 'gaze_trust', 'gaze_targets_well_covered',
-  'qc_overall', 'e2e_timing', 'session_status', 'withdrawn',
+  'qc_overall', 'e2e_timing', 'session_status', 'withdrawn', 'protocol_pass', 'repeat_run_note',
   'sitting_split_reason',
   // --- was this row a finished, first-attempt, uninterrupted run? -------------------------------
   'condition_complete', 'attempt_number', 'condition_interrupted',
@@ -114,6 +114,10 @@ interface RowContext {
  * ratio (via the summary) from the first: one row, two exposures. A duplicate now blocks the
  * participant (audit_one_child_row_per_condition); this keeps the row internally consistent anyway.
  */
+function missingVerdict(key: string): never {
+  throw new Error(`analysis export: no join verdict for participant key ${key}`);
+}
+
 function firstByCondition<T extends { condition_id: string }>(rows: readonly T[]): Map<string, T> {
   const m = new Map<string, T>();
   for (const r of rows) if (!m.has(r.condition_id)) m.set(r.condition_id, r);
@@ -409,9 +413,22 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         hours_since_sleep: s.hours_since_sleep ?? null,
 
         ambient_lux_measured: round(s.ambient_lux),
-        lux_all_in_range: s.lux_all_in_range,
+        /*
+         * Named for what it checks — the readings that were LOGGED — as 01_session_info.csv already
+         * is, with lux_complete beside it. A sitting with only the start reading logged read
+         * lux_all_in_range = TRUE here, which reads as "verified throughout". Blank when nothing was
+         * logged or the level is unknown, where the check could not be made (the stored flag is
+         * FALSE then, which would read as a deviation).
+         */
+        lux_logged_all_in_range: (s.lux_readings ?? []).length > 0 && specFor(s.ambient_illumination_level) != null
+          ? s.lux_all_in_range : null,
+        lux_complete: LUX_CHECKPOINTS.every((cp) => (s.lux_readings ?? []).some((r) => r.checkpoint === cp)),
         screen_luminance_cd_m2: round(s.screen_white_luminance_cd_m2),
-        stimulus_scale: round(s.stimulus_scale),
+        // The value read when THIS condition started, not the session's stamp from before the
+        // participant touched the tablet: the scale can change within a sitting (the audit warns when
+        // it does), and it multiplies the stimulus text, so the stamp stated the wrong visual angle
+        // for exactly the rows where it changed. No fallback to the stamp: blank on older rows.
+        stimulus_scale: round(c?.stimulus_scale ?? null),
 
         /*
          * NO EYE RECORD IS NOT THE SAME AS "THE CAMERA DID NOT RUN".
@@ -469,6 +486,13 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         // sitting 2 left sitting 1's rows reading FALSE — and the cohort view averaged them in,
         // while the join check excluded the participant.
         withdrawn: ctx.participantWithdrawn,
+        /*
+         * An authorised re-run of the protocol, and why. 01_session_info.csv carried both; this file,
+         * the one that is modelled, carried neither, so a re-run participant appeared as two sittings
+         * of identical labels and the analyst could not tell which pass was authoritative.
+         */
+        protocol_pass: s.protocol_pass ?? null,
+        repeat_run_note: s.repeat_run_note ?? null,
         /*
          * The three facts that say whether this ROW is a measurement of its condition, which the
          * pooled file — the one people model from — carried none of. condition_complete: the run
@@ -536,6 +560,14 @@ export function buildAnalysisDataset(
       .map((b) => b.session.conditions_per_session)
       .filter((n): n is number => Number.isFinite(n) && n > 0);
     const cps = perSitting.length > 0 ? Math.min(...perSitting) : N_CONDITIONS;
+    /*
+     * The CURRENT protocol's levels, deliberately — not the levels found in the data. A file that
+     * mixes a current sitting with an archived two-level participant must check each against the
+     * protocol the analysis is for; reading the level count off the data would call the current
+     * participants incomplete. The mixture itself is reported by checkJoin
+     * (mixed_illumination_levels, illumination_level_outside_protocol). To check an archived
+     * two-level dataset on its own terms, pass `expect` explicitly.
+     */
     const total = N_CONDITIONS * ILLUMINATION_LEVELS;
     return {
       conditionsPerParticipant: total,
@@ -558,8 +590,14 @@ export function buildAnalysisDataset(
     return {
       bundle: b,
       participantKey: key,
-      analysable: v?.analysable ?? false,
-      exclusion: v?.excluded_by.join(';') ?? 'participant_not_resolved',
+      /*
+       * checkJoin returns a verdict for every key it was given, and this key is built the same
+       * way, so a missing verdict is a bug, not a data state. It used to fall back silently to
+       * "not analysable, participant_not_resolved" — a code the codebook does not define — which
+       * would hide a future divergence in how the two build their keys. Fail loudly instead.
+       */
+      analysable: (v ?? missingVerdict(key)).analysable,
+      exclusion: (v ?? missingVerdict(key)).excluded_by.join(';'),
       participantWithdrawn: withdrawnParticipants.has(key),
     };
   });

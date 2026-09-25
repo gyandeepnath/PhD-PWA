@@ -20,7 +20,7 @@ import type { SessionBundle } from './gather';
 import { auditBundle } from './integrity';
 import { isConditionComplete } from './conditionStatus';
 import type { Provenance } from './types';
-import { N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
+import { N_ILLUMINATION_BLOCKS, ILLUMINATION_LEVELS } from '@/experiment/illumination';
 import type { IlluminationLevel } from '@/experiment/illumination';
 
 /** One problem found while checking whether the sessions can be pooled. */
@@ -166,6 +166,34 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
   const unattributable = new Set<string>();
   /** Blocking per-bundle audit findings, by participant key; seeded into excluded_by below. */
   const auditBlocked = new Map<string, Set<string>>();
+
+  /*
+   * WHICH ILLUMINATION LEVELS ARE IN THIS FILE. The codebook calls illumination a constant, and
+   * under the current protocol it is — but nothing checked that the data agreed. A file pooling a
+   * current sitting with an archived dim-light one exported both analysable, with illumination_c at
+   * -0.5 on some rows beside a codebook saying it is +0.5 everywhere and must not be modelled.
+   */
+  const levels = new Set(bundles.map((b) => b.session.ambient_illumination_level ?? null));
+  for (const b of bundles) {
+    const lvl = b.session.ambient_illumination_level ?? null;
+    if (lvl != null && !(ILLUMINATION_LEVELS as readonly string[]).includes(lvl)) {
+      issues.push({
+        severity: 'warning', code: 'illumination_level_outside_protocol',
+        participant_id: b.session.participant_id || null, session_id: b.session.session_id,
+        detail: `This sitting ran at illumination level "${lvl}", which is not a level of the current `
+          + `protocol (${ILLUMINATION_LEVELS.join(', ')}). It was collected under an earlier protocol.`,
+      });
+    }
+  }
+  if (levels.size > 1) {
+    issues.push({
+      severity: 'warning', code: 'mixed_illumination_levels',
+      participant_id: null, session_id: null,
+      detail: `This dataset mixes illumination levels (${[...levels].map(String).join(', ')}). The `
+        + 'illumination columns are therefore NOT constant here, whatever the codebook says of the '
+        + 'current protocol: model or stratify by illumination, or separate the data by protocol first.',
+    });
+  }
 
   for (const b of bundles) {
     const realPid = b.session.participant_id;

@@ -396,7 +396,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '09_rt_summary.csv', column: 'd_prime_unstable', type: 'boolean', unit: '-', role: 'qc', description: "Set when the standard error of d-prime exceeds 0.3, i.e. the per-condition estimate is too imprecise to compare directly. With 20 signal and 12 noise trials the smallest achievable SE is about 0.46, so this is TRUE for every possible block: per-condition d-prime must be modelled hierarchically, not read row by row. It does NOT mean a rate hit a bound and was corrected — an earlier version of this line said so, and it does not describe the code." },
 
   // ---- 10_wide_summary.csv
-  { file: '10_wide_summary.csv', column: 'fatigue_delta', type: 'number', unit: '0-10', role: 'dv', description: 'post_condition fatigue_mean minus the session baseline. Rounded to 4 dp for presentation.' },
+  { file: '10_wide_summary.csv', column: 'fatigue_delta', type: 'number', unit: '-10-10', role: 'dv', description: 'post_condition fatigue_mean minus the session baseline: SIGNED, positive = worse than baseline, negative = better. It was declared 0-10, which made every improvement count as out of range in the manifest. Rounded to 4 dp for presentation.' },
   { file: '12_quality_flags.csv', column: 'blink_count_total', type: 'integer', unit: 'count', role: 'qc', description: 'Blinks captured during the condition. The incomplete-blink ratio is a binomial proportion, so its precision depends entirely on this.' },
   { file: '12_quality_flags.csv', column: 'insufficient_blinks', type: 'boolean', unit: '-', role: 'qc', description: 'TRUE when fewer than 20 blinks were captured, at which point the incomplete-blink ratio for that condition is too imprecise to interpret (SE >= 0.082 at p=0.16). Flagged, not dropped — down-weight or exclude in a sensitivity analysis.' },
   { file: '10_wide_summary.csv', column: 'engagement_flag', type: 'factor(3)', unit: '-', role: 'qc', description: 'good | warn | bad. Sensitivity analyses should be run with and without "bad".' },
@@ -530,7 +530,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '05_visual_search.csv', column: 'search_efficiency', type: 'number', unit: 'hits/min', role: 'dv', description: 'Correct taps per minute. Combines speed and accuracy into one rate.' },
   { file: '05_visual_search.csv', column: 'mean_inter_target_interval_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Mean interval between successive correct taps. Rising within a block indicates slowing.' },
   { file: '05_visual_search.csv', column: 'termination_mode', type: 'factor(3)', unit: '-', role: 'qc', description: 'How the task ended: time_limit, voluntary_full (all targets '
-      + 'found), or voluntary_early. Rows ending voluntary_early warrant inspection. This entry previously '
+      + 'found), or voluntary_early. Only voluntary_full makes search_time_ms a measurement: at time_limit and at voluntary_early the time to find every target was not observed, so both are right-censored. This entry previously '
       + 'documented a fourth level, session_terminated, that nothing can produce — a search abandoned part-way '
       + 'writes NO row at all, because the visual_search record is written from the completion handler, so an '
       + 'abandoned block is an ABSENT row rather than a marked one. Check for missing condition_ids, not for a '

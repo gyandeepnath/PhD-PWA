@@ -3392,3 +3392,34 @@ outcome mean and position balance now use analysable rows only; `n` still counts
 
 Each fix is pinned by a test that fails when the fix is reverted. 1069 tests, verify green, stress
 29/29 structural scenarios and 1266/1266 checks.
+
+## Round 55 — the rest of the pooled-export review: columns and codebook
+
+The remaining verified items from Round 54's review, all in `analysis_long.csv` and its codebook.
+
+- **Mixed illumination was undetected.** The codebook calls illumination constant, and under the current
+  protocol it is, but nothing checked the data. The join check now raises `mixed_illumination_levels`
+  when a file holds more than one level, and `illumination_level_outside_protocol` for a sitting run at a
+  level the current protocol does not have. The illumination prose is built from the protocol constants
+  and says what to do if the mixture warning is present. (The completeness expectation stays with the
+  current protocol, deliberately: reading it off the data would call current participants incomplete in
+  a mixed file. An archived dataset can be checked on its own terms by passing the expectation.)
+- **`stimulus_scale`** repeated the session's stamp, taken before the participant touched the tablet; it is
+  now the value read when each condition started, blank on older rows rather than falling back.
+- **`lux_all_in_range`** read TRUE for a sitting with only the start reading logged. It is now
+  `lux_logged_all_in_range` beside `lux_complete`, as in 01_session_info.csv, and blank where the check
+  could not be made.
+- **`protocol_pass` and `repeat_run_note`** were in 01_session_info.csv but not in the modelled file, so a
+  re-run participant was two identical-looking passes. Both are now carried.
+- **`fatigue_delta`** is signed but was declared 0-10 in both codebooks, so every improvement over
+  baseline counted as an out-of-range cell in the manifest. Declared -10 to 10, and described as signed.
+- **Search termination.** The pooled codebook described the column as finished-or-capped and called only
+  the cap censored; since Round 51 `voluntary_early` is censored too. Levels and censoring are now stated
+  in both codebooks, and the never-produced `session_terminated` level is gone from the type.
+- **Prose corrected:** `session_index` (not unique; can exceed 2), `global_position` (restarts on a re-run),
+  `position_c` (aligned with sitting under a split), `cvsq_baseline_total` (two values under a split that
+  can differ), and missing-value texts that named a state the exporter cannot produce.
+- A silent fallback to an undocumented exclusion code is now a thrown invariant, and an unreachable
+  branch in the search task is removed.
+
+1073 tests, verify green, stress clean; full-run and split end-to-end specs pass.
