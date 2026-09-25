@@ -119,9 +119,12 @@ describe('the tracker and the experiment act on it', () => {
     expect(tracker).toMatch(/disabledEyeMetrics\(conditionId, sessionId, lostRef\.current \? 'lost' : 'not_running'\)/);
   });
   it('the experiment stops the sitting with a notice whose recovery is the pause path', () => {
-    expect(experiment).toMatch(/const cameraNoticeUp = tracking\.cameraLostAt != null && !cameraLossAccepted && pausable;/);
+    expect(experiment).toMatch(/const cameraLostNotice = tracking\.cameraLostAt != null && !cameraLossAccepted && pausable;/);
+    // A blank (covered / switched-off) picture raises the same notice; see cameraHealth.ts.
+    expect(experiment).toMatch(/const cameraBlockedNotice = !cameraLostNotice && tracking\.cameraBlocked && !cameraBlockAccepted && pausable;/);
+    expect(experiment).toMatch(/const cameraNoticeUp = cameraLostNotice \|\| cameraBlockedNotice;/);
     expect(experiment).toMatch(/setBlockingNotice\(cameraNoticeUp\)/);
-    const notice = experiment.slice(experiment.indexOf('data-testid="camera-lost"'), experiment.indexOf('data-testid="camera-lost"') + 2500);
+    const notice = experiment.slice(experiment.indexOf('data-testid="camera-lost"'), experiment.indexOf('data-testid="camera-lost"') + 3500);
     expect(notice).toMatch(/onClick=\{pauseAndExit\}/);
     expect(notice).toMatch(/setCameraLossAccepted\(true\)/);
   });

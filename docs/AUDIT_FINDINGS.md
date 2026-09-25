@@ -3500,3 +3500,34 @@ Rendered tests (fake clocks) check that Continue is absent before the minimum, p
 the field as `participant`, and that the timer ends it once at the maximum; forcing Continue on from the
 start fails them. 1083 tests, verify green; full-run, split and edge end-to-end specs pass. The synopsis
 still describes a fixed 60/120 s field and is left for the investigator to update.
+
+## Round 58 — a covered or switched-off camera passed as a working one
+
+Reported by the investigator: "Even if I close the camera during a few tasks, everything keeps going on,
+no information or alert to the researcher." Part of that was the stale live site (the Sep-22 build had
+no camera-loss detection at all), but the audit confirmed a real gap in the current build too. Covering
+the lens, or the Android camera-privacy switch — which, per Android's documentation, gives apps a blank
+feed rather than ending the stream — keeps frames arriving, just black. The face tracker returns a result
+for every one, with no face, so the stall watchdog (which fires only when results STOP) never fired, and
+the exposure was saved as `camera_active = TRUE` over a black image.
+
+**Fix.** `tracking/cameraHealth.ts` judges every frame from pixels already read for lighting QC, now
+with their spread (`lumaStatsFromRGBA`). BLOCKED = mean luminance below 15 and spread below 6 (0–255)
+for 3 s — both, because a dim room is dark but not flat; it clears after 1 s of normal picture. While
+blocked on any screen where a pause is allowed, the sitting stops with the camera notice ("The camera
+cannot see anything… closes by itself as soon as the picture returns"), whose time is recorded as
+`condition_notice_ms` and counts toward `condition_interrupted`. Separately, stretches of a working
+picture with no face are tracked live (`noFaceForMs`, for the researcher panel) and recorded per exposure
+(`no_face_longest_ms`, `no_face_episodes` ≥ 2 s); they do not interrupt reading, which would disturb the
+measurement they describe. A muted track's time is recorded (`camera_muted_ms`); if it persists while
+the page is visible, the existing stall watchdog declares the camera lost. All four are new columns in
+`07_eye_metrics.csv`, with `camera_blocked_ms`.
+
+The thresholds are engineering bounds for "the sensor sees nothing", not methodological ones.
+
+**Tested at three levels:** the detector with synthetic frames (black-and-flat blocks at 3 s, a dim face
+never does, uncovering clears it after 1 s, a blocked feed is not a missing face, episodes and the
+longest stretch are counted); source wiring; and a new end-to-end spec that feeds Chromium's fake camera
+an all-black video and requires the notice to appear during reading — the investigator's exact scenario.
+Disabling the detector fails it; the normal fake camera does not trigger it. 1089 tests, verify green,
+stress clean.

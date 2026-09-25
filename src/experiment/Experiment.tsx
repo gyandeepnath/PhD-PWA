@@ -254,6 +254,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const [rtBlockFinished, setRtBlockFinished] = useState(false);
   /** The operator chose to continue after the camera was lost. See the camera-lost notice. */
   const [cameraLossAccepted, setCameraLossAccepted] = useState(false);
+  /** The operator chose to continue while the camera image was blocked; re-armed when it clears. */
+  const [cameraBlockAccepted, setCameraBlockAccepted] = useState(false);
+  useEffect(() => { if (!tracking.cameraBlocked) setCameraBlockAccepted(false); }, [tracking.cameraBlocked]);
   useEffect(() => {
     const lock = acquireScreenWakeLock();
     setWakeLockUnsupported(!lock.supported);
@@ -1574,7 +1577,15 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const pausable = (isInLoop(machine.stage) || machine.stage === 'BREAK_SCREEN')
     && (machine.stage !== 'REACTION_TIME' || rtBlockFinished)
     && !!session;
-  const cameraNoticeUp = tracking.cameraLostAt != null && !cameraLossAccepted && pausable;
+  const cameraLostNotice = tracking.cameraLostAt != null && !cameraLossAccepted && pausable;
+  /*
+   * The camera runs but sees nothing: covered, or camera access switched off in quick settings,
+   * which gives a black picture rather than stopping the camera — the case that used to pass
+   * silently. Same blocking notice, so its time is recorded as condition_notice_ms; it closes by
+   * itself when the picture returns.
+   */
+  const cameraBlockedNotice = !cameraLostNotice && tracking.cameraBlocked && !cameraBlockAccepted && pausable;
+  const cameraNoticeUp = cameraLostNotice || cameraBlockedNotice;
   // Tell the timers the notice is over the task (see setBlockingNotice), and clear it on unmount.
   useEffect(() => {
     setBlockingNotice(cameraNoticeUp);
@@ -1708,11 +1719,21 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           data-testid="camera-lost"
           style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#1a1a2e', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32 }}
         >
-          <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 300 }}>The camera has stopped</h1>
-          <p className="font-lab" style={{ fontSize: 15, color: '#c8d8f0', maxWidth: 520, marginTop: 14, lineHeight: 1.6 }}>
-            Eye measurements are not being recorded. This happens when a call or another app takes the
-            camera, or when the tablet sleeps or is put in the background.
-          </p>
+          <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 300 }}>
+            {cameraBlockedNotice ? 'The camera cannot see anything' : 'The camera has stopped'}
+          </h1>
+          {cameraBlockedNotice ? (
+            <p data-testid="camera-blocked" className="font-lab" style={{ fontSize: 16, color: '#dbe6f7', maxWidth: 560, marginTop: 14, lineHeight: 1.6 }}>
+              The picture is black. The camera may be covered, or camera access may be switched off in
+              the tablet&apos;s quick settings. Uncover it or switch camera access back on — this message
+              closes by itself as soon as the picture returns.
+            </p>
+          ) : (
+            <p className="font-lab" style={{ fontSize: 16, color: '#dbe6f7', maxWidth: 560, marginTop: 14, lineHeight: 1.6 }}>
+              Eye measurements are not being recorded. This happens when a call or another app takes the
+              camera, or when the tablet sleeps or is put in the background.
+            </p>
+          )}
           <p className="font-lab" style={{ fontSize: 14, color: '#c8d8f0', maxWidth: 520, marginTop: 10, lineHeight: 1.6 }}>
             <strong>Researcher:</strong> pause and resume from the session manager. The camera is set up and
             calibrated again, and {pauseAfterFinished
@@ -1726,14 +1747,15 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid #fff', background: '#fff', color: '#1a1a2e', cursor: 'pointer' }}>
               Pause and restart the camera
             </button>
-            <button onClick={() => setCameraLossAccepted(true)} className="font-lab text-sm"
+            <button onClick={() => (cameraBlockedNotice ? setCameraBlockAccepted(true) : setCameraLossAccepted(true))} className="font-lab text-sm"
               style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid #c8d8f0', background: 'transparent', color: '#c8d8f0', cursor: 'pointer' }}>
               Continue without the camera
             </button>
           </div>
           <p className="font-lab" style={{ fontSize: 12, color: '#8fa0c0', maxWidth: 520, marginTop: 14, lineHeight: 1.6 }}>
-            If you continue, every remaining condition is recorded with no eye measurements, marked as
-            camera lost.
+            {cameraBlockedNotice
+              ? 'If you continue, the time the picture stays black is recorded against this condition (camera_blocked_ms).'
+              : 'If you continue, every remaining condition is recorded with no eye measurements, marked as camera lost.'}
           </p>
         </div>
       )}

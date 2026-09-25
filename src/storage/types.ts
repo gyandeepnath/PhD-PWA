@@ -659,6 +659,17 @@ export interface EyeMetricsRecord {
    * participant who declined the camera.
    */
   camera_inactive_reason?: 'lost' | 'not_running' | null;
+  /**
+   * What the camera-health monitor saw during a camera-ACTIVE exposure (tracking/cameraHealth.ts).
+   * camera_blocked_ms: time the feed was black and flat (lens covered, or the Android camera-privacy
+   * switch), which used to pass as an active camera. no_face_longest_ms / no_face_episodes: stretches
+   * of an unblocked feed with no face (episodes of 2 s or more). camera_muted_ms: time the track was
+   * muted. Absent on camera-off rows and on rows written before they existed.
+   */
+  camera_blocked_ms?: number;
+  no_face_longest_ms?: number;
+  no_face_episodes?: number;
+  camera_muted_ms?: number;
   /** Effective achieved sampling rate (frames actually processed/sec). */
   effective_fps: number | null;
   /** True when effective_fps >= 25; gates the micro/partial blink tiers. */

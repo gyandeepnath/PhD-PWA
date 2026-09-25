@@ -33,7 +33,8 @@ import { startFramePump, type FramePump, type PumpVideo } from './framePump';
 const LIVE_HZ = 4;
 import { estimateHeadPose, isOffAxis, noseVerticalFraction } from './headPose';
 import { estimateGaze } from './gaze';
-import { meanLumaFromRGBA } from './lighting';
+import { lumaStatsFromRGBA } from './lighting';
+import { CameraHealth } from './cameraHealth';
 import { fitGazeCalibration, gazeQuality as gradeGaze, GAZE_TARGETS, type GazeCalibration, type GazeQuality, type GazeSample } from './gazeCalibration';
 import { v4 as uuidv4 } from 'uuid';
 import { EyeMetricsAggregator, disabledEyeMetrics } from './aggregator';
@@ -118,6 +119,14 @@ export interface LiveTrackingStats {
   faceSize: number | null;
   /** Whether gaze is currently in the central zone. */
   onScreen: boolean;
+  /** The 3x3 gaze zone this frame ('cc' is centre); null with no face. */
+  gazeZone: string | null;
+  /** How long the face has been missing right now, ms (0 with a face, or when the feed is blocked). */
+  noFaceForMs: number;
+  /** Mean frame luminance 0-255; near 0 means the camera sees nothing. */
+  luma: number | null;
+  /** True while the feed is judged covered or switched off. See cameraHealth.ts. */
+  blocked: boolean;
 }
 
 interface TrackingApi {
@@ -156,6 +165,12 @@ interface TrackingApi {
    * this: see the camera-lost notice in Experiment.tsx.
    */
   cameraLostAt: number | null;
+  /**
+   * The camera is running but sees nothing — covered, or switched off by the Android camera-privacy
+   * toggle, which delivers black frames instead of ending the stream. Clears by itself when the
+   * picture returns. See cameraHealth.ts.
+   */
+  cameraBlocked: boolean;
 }
 
 /**
@@ -185,6 +200,11 @@ export interface CalibrationOutcome {
 export function useTracking(): TrackingApi {
   const [status, setStatus] = useState<CameraStatus>('unavailable');
   const [cameraLostAt, setCameraLostAt] = useState<number | null>(null);
+  const [cameraBlocked, setCameraBlocked] = useState(false);
+  const healthRef = useRef(new CameraHealth());
+  /** Muted time of the camera track in the current condition; see the mute listeners in start(). */
+  const mutedSinceRef = useRef<number | null>(null);
+  const mutedMsRef = useRef(0);
   /** Set when the camera stopped after starting; read synchronously by endCondition. */
   const lostRef = useRef(false);
   /** When the tracker last produced a result (face or not). The liveness signal for the stall check. */
@@ -218,8 +238,8 @@ export function useTracking(): TrackingApi {
       : estimateGaze(lm);
   };
 
-  /** Mean luminance of the current video frame (0-255), null if unavailable. */
-  const sampleLuma = (): number | null => {
+  /** Mean and spread of luminance of the current video frame (0-255), null if unavailable. */
+  const sampleLuma = (): { mean: number; std: number } | null => {
     const v = videoRef.current;
     const cv = lumaCanvasRef.current;
     if (!v || !cv || v.readyState < 2) return null;
@@ -227,7 +247,7 @@ export function useTracking(): TrackingApi {
     if (!ctx) return null;
     try {
       ctx.drawImage(v, 0, 0, cv.width, cv.height);
-      return meanLumaFromRGBA(ctx.getImageData(0, 0, cv.width, cv.height).data);
+      return lumaStatsFromRGBA(ctx.getImageData(0, 0, cv.width, cv.height).data);
     } catch {
       return null; // e.g. tainted canvas — skip lighting for this frame
     }
@@ -311,7 +331,13 @@ export function useTracking(): TrackingApi {
   const ingestResult = useCallback((lm: Point[] | null) => {
     const t = now();
     lastResultAtRef.current = t;
-    const luma = sampleLuma();
+    const lumaStats = sampleLuma();
+    const luma = lumaStats ? lumaStats.mean : null;
+    // Is the camera seeing anything, and is it seeing the participant? See cameraHealth.ts.
+    const health = healthRef.current;
+    if (health.observe({ t, luma, lumaStd: lumaStats ? lumaStats.std : null, face: !!(lm && lm.length > 0) })) {
+      setCameraBlocked(health.isBlocked());
+    }
     if (lm && lm.length > 0) {
       const ear = faceEar(lm);
       if (calibrating.current) {
@@ -356,6 +382,10 @@ export function useTracking(): TrackingApi {
           // but that call is on a path that runs regardless and is not worth threading through.
           faceSize: Number.isFinite(size) ? size : null,
           onScreen: gazeNow.isCenter,
+          gazeZone: gazeNow.zone ?? null,
+          noFaceForMs: 0,
+          luma: luma != null ? Math.round(luma) : null,
+          blocked: health.isBlocked(),
         };
       });
     } else {
@@ -376,6 +406,10 @@ export function useTracking(): TrackingApi {
           blinksLive: live != null,
           exposureFps: lastConditionFps.current,
           faceSize: null, onScreen: false,
+          gazeZone: null,
+          noFaceForMs: health.noFaceForMs(t),
+          luma: luma != null ? Math.round(luma) : null,
+          blocked: health.isBlocked(),
         };
       });
     }
@@ -471,6 +505,18 @@ export function useTracking(): TrackingApi {
       setCameraLostAt(null);
       for (const track of stream.getVideoTracks()) {
         track.addEventListener('ended', markLost);
+        /*
+         * A MUTED track delivers no frames without ending: backgrounding does this on some tablets.
+         * The time is recorded per condition (camera_muted_ms); if it lasts while the page is visible,
+         * the stall watchdog declares the camera lost.
+         */
+        track.addEventListener('mute', () => { if (mutedSinceRef.current == null) mutedSinceRef.current = now(); });
+        track.addEventListener('unmute', () => {
+          if (mutedSinceRef.current != null) {
+            mutedMsRef.current += now() - mutedSinceRef.current;
+            mutedSinceRef.current = null;
+          }
+        });
       }
       // Small canvas for downsampled luminance sampling (lighting QC) — cheap to read each frame.
       const lumaCanvas = document.createElement('canvas');
@@ -683,11 +729,28 @@ export function useTracking(): TrackingApi {
 
   const beginCondition = useCallback(() => {
     aggRef.current = new EyeMetricsAggregator();
+    healthRef.current.resetCounts(now());
+    mutedMsRef.current = 0;
+    if (mutedSinceRef.current != null) mutedSinceRef.current = now();
   }, []);
+
+  /** What the camera-health monitor saw during the exposure now ending, for the eye record. */
+  const healthFields = () => {
+    const t = now();
+    const c = healthRef.current.read(t);
+    const muted = mutedMsRef.current + (mutedSinceRef.current != null ? t - mutedSinceRef.current : 0);
+    return {
+      camera_blocked_ms: Math.round(c.blockedMs),
+      no_face_longest_ms: Math.round(c.noFaceLongestMs),
+      no_face_episodes: c.noFaceEpisodes,
+      camera_muted_ms: Math.round(muted),
+    };
+  };
 
   const endCondition = useCallback(
     async (conditionId: string, sessionId: string) => {
       if (lostRef.current || status !== 'active' || !aggRef.current) {
+        // Camera-health fields stay blank here: they describe frames, and none were being measured.
         await put('eye_metrics', disabledEyeMetrics(conditionId, sessionId, lostRef.current ? 'lost' : 'not_running'));
         return;
       }
@@ -720,7 +783,7 @@ export function useTracking(): TrackingApi {
       // The rate the exposure ACTUALLY achieved, taken from the record that was written, not
       // recomputed — so the monitor and the export cannot disagree about it.
       lastConditionFps.current = typeof record.effective_fps === 'number' ? record.effective_fps : null;
-      await put('eye_metrics', record);
+      await put('eye_metrics', { ...record, ...healthFields() });
     },
     [status],
   );
@@ -744,5 +807,6 @@ export function useTracking(): TrackingApi {
     beginGazeCalibration, sampleGazeTarget, endGazeCalibration,
     beginCondition, endCondition,
     cameraLostAt,
+    cameraBlocked,
   };
 }
