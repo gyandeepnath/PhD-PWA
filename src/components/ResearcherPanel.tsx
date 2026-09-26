@@ -136,6 +136,15 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
   // A problem is always shown in colour, even in ink mode: it is the alert the researcher asked for.
   const dotColour = cam.level === 'ok' ? (ink ?? '#22c97a') : cam.level === 'off' ? (ink ?? '#9aa0b4') : cam.level === 'warn' ? '#e0a33c' : '#e5484d';
 
+  /*
+   * Type sizes. On a condition screen the panel keeps its compact sizes (the strip under the passage
+   * and the open panel are part of what the participant can see there, and are not changed). On
+   * setup screens it is operator UI and follows the setup screens' floor: 15 px text, 14 px labels.
+   */
+  const fsText = p.onStimulus ? 13 : 15;
+  const fsBody = p.onStimulus ? 13.5 : 15;
+  const fsLabel = p.onStimulus ? 13 : 14;
+
   const base: React.CSSProperties = {
     position: 'fixed', left: 10, bottom: 10, zIndex: 45,
     fontFamily: '"DM Mono", ui-monospace, monospace', borderRadius: 12,
@@ -153,7 +162,7 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
       >
         <span style={{ width: 11, height: 11, borderRadius: '50%', background: dotColour, flex: '0 0 auto' }} />
         <span>{clock(sittingMs, !p.onStimulus)}</span>
-        {cam.level === 'bad' && <span style={{ fontSize: 13 }}>{cam.text}</span>}
+        {cam.level === 'bad' && <span style={{ fontSize: fsText }}>{cam.text}</span>}
       </button>
     );
   }
@@ -178,11 +187,11 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
     </div>
   );
   return (
-    <div data-testid="researcher-panel" style={{ ...base, ...card, padding: '10px 12px', fontSize: 13.5, lineHeight: 1.5, width: 290 }}>
+    <div data-testid="researcher-panel" style={{ ...base, ...card, padding: '10px 12px', fontSize: fsBody, lineHeight: 1.5, width: p.onStimulus ? 290 : 320 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <strong style={{ fontSize: 13, letterSpacing: 0.5 }}>RESEARCHER</strong>
+        <strong style={{ fontSize: fsLabel, letterSpacing: 0.5 }}>RESEARCHER</strong>
         <button type="button" data-testid="researcher-panel-close" onClick={() => setOpen(false)}
-          style={{ background: 'transparent', color: fg, border: `1px solid ${fg}`, borderRadius: 8, padding: '4px 10px', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+          style={{ background: 'transparent', color: fg, border: `1px solid ${fg}`, borderRadius: 8, padding: '4px 10px', fontSize: fsLabel, cursor: 'pointer', fontFamily: 'inherit' }}>
           Hide
         </button>
       </div>
@@ -204,7 +213,7 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
         {row('Conditions', p.conditionsTotal != null ? `${p.conditionsDone ?? 0} of ${p.conditionsTotal}` : '—')}
         {row('Time left', p.minutesLeft != null ? `about ${p.minutesLeft} min` : '—')}
       </div>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 13, cursor: 'pointer' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: fsText, cursor: 'pointer' }}>
         <input type="checkbox" checked={keepOpen} onChange={(e) => { setKeepOpen(e.target.checked); writeKeepOpen(e.target.checked); }} style={{ width: 18, height: 18 }} />
         Keep open during tasks (recorded)
       </label>

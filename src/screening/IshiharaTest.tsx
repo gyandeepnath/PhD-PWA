@@ -112,9 +112,9 @@ export function IshiharaTest({ onComplete, onDone, seed }: Props) {
   return (
     <div className="min-h-screen w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div style={{ maxWidth: 560, width: '100%', textAlign: 'center' }}>
-        <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">Colour-vision screening · {idx + 1}/{plates.length}</p>
+        <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]">Colour-vision screening · {idx + 1}/{plates.length}</p>
         <h1 className="mt-2 font-serif text-3xl font-light">Which number do you see?</h1>
-        <p className="mt-1 font-lab text-xs text-[#5a5a7a]">Screening aid only — not a clinical diagnosis.</p>
+        <p className="mt-1 font-sans text-[15px] text-[#4a4a60]">Screening aid only — not a clinical diagnosis.</p>
 
         <div style={{ display: 'flex', justifyContent: 'center', margin: '20px 0' }}>
           <PlateSvg plate={plate} />
@@ -132,8 +132,8 @@ export function IshiharaTest({ onComplete, onDone, seed }: Props) {
             </button>
           ))}
         </div>
-        <button onClick={() => answer('')} className="font-lab text-sm"
-          style={{ marginTop: 10, padding: '0 22px', height: 48, borderRadius: 12, border: '1px solid #d8d4cc', background: '#fff', color: '#5a5a7a', cursor: 'pointer' }}>
+        <button onClick={() => answer('')} className="font-sans text-base"
+          style={{ marginTop: 10, padding: '0 22px', height: 48, borderRadius: 12, border: '1px solid #d8d4cc', background: '#fff', color: '#3a3a4a', cursor: 'pointer' }}>
           Can't tell
         </button>
       </div>
@@ -162,25 +162,25 @@ function OperatorNotice({ status, onDone }: { status: IshiharaResult['status']; 
   const failed = status === 'screen_failed';
   return (
     <div className="min-h-screen w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ maxWidth: 560, width: '100%' }}>
-        <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">For the researcher</p>
+      <div style={{ maxWidth: 760, width: '100%' }}>
+        <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]">For the researcher</p>
         <h1 className="mt-2 font-serif text-3xl font-light">
           {failed ? 'The app’s colour screen did not pass' : 'The app’s colour screen gave no result'}
         </h1>
-        <p className="mt-4 text-[15px] leading-relaxed">
+        <p className="mt-4 text-[17px] leading-relaxed">
           {failed
             ? 'This participant did not reach the pass mark on the app’s own colour-vision screen.'
             : 'The greyscale control plate was missed, so this attempt measured nothing. It is not a pass and not a failure.'}
           {' '}It has been recorded. <strong>It does not exclude anyone and it is not a diagnosis</strong> —
           the screen is a home-made aid with no published sensitivity or specificity.
         </p>
-        <p className="mt-3 text-[15px] leading-relaxed">
+        <p className="mt-3 text-[17px] leading-relaxed">
           <strong>Administer the formal plates</strong> (Ishihara or Farnsworth) now, while the
           participant is here, and record the result on the profile form as normal or deficient. That
           result is what the analysis uses, and it is the only thing that can settle this. If you
           cannot do it now, record <em>not done</em> honestly — it is not a pass.
         </p>
-        <p className="mt-3 text-[13px] leading-relaxed text-[#5a5a7a]">
+        <p className="mt-3 text-[15px] leading-relaxed text-[#4a4a60]">
           Do not tell the participant they have a colour-vision deficiency. If the formal plates show
           one, follow the incidental-findings steps in the operator manual.
         </p>

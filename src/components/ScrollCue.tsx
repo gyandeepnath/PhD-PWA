@@ -9,7 +9,13 @@ import { useEffect, useRef, useState } from 'react';
  * scroll container and shows only while there is more content below. Operator- and participant-facing
  * setup screens only; never on a stimulus screen, which must not scroll.
  */
-export function ScrollCue() {
+export function ScrollCue({ gutter = false }: {
+  /**
+   * Sit in the right-hand margin instead of bottom-centre. For a screen whose text runs in a centred
+   * column (consent): centred, the pill covered a line of the text under it at any scroll position.
+   */
+  gutter?: boolean;
+} = {}) {
   const ref = useRef<HTMLDivElement>(null);
   const [more, setMore] = useState(false);
   useEffect(() => {
@@ -33,9 +39,10 @@ export function ScrollCue() {
       {more && (
         <div
           data-testid="scroll-cue"
-          className="font-lab text-xs"
+          className="font-sans text-sm"
           style={{
-            position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)',
+            position: 'absolute', bottom: 10,
+            ...(gutter ? { right: -48 } : { left: '50%', transform: 'translateX(-50%)' }),
             padding: '6px 14px', borderRadius: 999, background: '#1a1a2e', color: '#fff',
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)', whiteSpace: 'nowrap',
           }}

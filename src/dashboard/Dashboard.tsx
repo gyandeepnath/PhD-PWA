@@ -13,6 +13,7 @@ import { buildAnalysisDataset } from '@/storage/analysisExport';
 import { BarPanel, LinePanel, type Datum } from './charts';
 import type { SessionRecord } from '@/storage/types';
 import { N_CONDITIONS } from '@/experiment/conditions';
+import { UI_TEXT } from '@/lib/uiPalette';
 
 type Tab = 'overview' | 'cohort' | 'reaction' | 'fatigue' | 'search' | 'eye' | 'export';
 const TABS: { id: Tab; label: string }[] = [
@@ -212,7 +213,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
         <select
           value={sessionId ?? ''}
           onChange={(e) => setSessionId(e.target.value)}
-          style={{ fontFamily: '"DM Mono", monospace', fontSize: 13, padding: '6px 10px', borderRadius: 8, border: '1px solid #d8d4cc' }}
+          style={{ fontFamily: '"DM Mono", monospace', fontSize: 15, padding: '8px 12px', borderRadius: 8, border: '1px solid #bdb8ae', background: '#fff', color: '#1a1a2e' }}
         >
           {sessions.map((s) => (
             <option key={s.session_id} value={s.session_id}>
@@ -225,26 +226,26 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '14px 0' }}>
         {TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className="font-lab text-sm"
-            style={{ padding: '8px 14px', borderRadius: 10, border: '1px solid #d8d4cc', cursor: 'pointer',
-              background: tab === t.id ? '#1a1a2e' : '#fff', color: tab === t.id ? '#fff' : '#5a5a7a' }}>
+            className="font-sans text-base"
+            style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #bdb8ae', cursor: 'pointer',
+              background: tab === t.id ? '#1a1a2e' : '#fff', color: tab === t.id ? '#fff' : '#3a3a4a' }}>
             {t.label}
           </button>
         ))}
       </div>
 
-      {!bundle && <p className="font-lab text-sm text-[#5a5a7a]">No session data found.</p>}
+      {!bundle && <p className="font-sans text-base leading-relaxed text-[#4a4a60]">No session data found.</p>}
 
       {tab === 'cohort' && (
         <div style={{ display: 'grid', gap: 14 }}>
-          <p className="font-lab text-xs text-[#5a5a7a]">
+          <p className="font-sans text-[15px] leading-relaxed text-[#4a4a60]">
             Every participant on this device, pooled the way the analysis pools them — read from
             analysis_long.csv, so these are the numbers the models will see rather than a parallel
             calculation that can drift from them. The per-sitting tabs answer “did this sitting work”.
             This one answers “is the study working”, and those fail in different ways.
           </p>
-          {cohortBusy && <p className="font-lab text-sm text-[#5a5a7a]">Pooling every session…</p>}
-          {!cohortBusy && cohort == null && <p className="font-lab text-sm text-[#5a5a7a]">No sessions on this device yet.</p>}
+          {cohortBusy && <p className="font-sans text-base leading-relaxed text-[#4a4a60]">Pooling every session…</p>}
+          {!cohortBusy && cohort == null && <p className="font-sans text-base leading-relaxed text-[#4a4a60]">No sessions on this device yet.</p>}
           {cohort != null && (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
@@ -259,7 +260,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
 
               {cohort.maxConditionN - cohort.minConditionN > 1 && (
                 <div style={{ border: '1px solid #f5a623', borderRadius: 10, padding: '12px 14px', background: '#fffaf0' }}>
-                  <p className="font-lab text-xs" style={{ color: '#8a5a00' }}>
+                  <p className="font-sans text-[15px] leading-relaxed" style={{ color: '#8a5a00' }}>
                     One condition is running behind the others by more than one participant
                     ({cohort.minConditionN} vs {cohort.maxConditionN}). With a counterbalanced design every
                     condition should accrue at the same rate, so a gap usually means that condition is
@@ -269,13 +270,13 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
               )}
 
               <div>
-                <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]" style={{ marginBottom: 6 }}>
+                <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]" style={{ marginBottom: 6 }}>
                   Primary outcome by condition
                 </p>
                 <div style={{ overflowX: 'auto' }}>
-                  <table className="font-lab" style={{ fontSize: 12, borderCollapse: 'collapse', width: '100%' }}>
+                  <table className="font-lab" style={{ fontSize: 13, borderCollapse: 'collapse', width: '100%' }}>
                     <thead>
-                      <tr style={{ textAlign: 'left', color: '#5a5a7a' }}>
+                      <tr style={{ textAlign: 'left', color: UI_TEXT.muted }}>
                         <th style={cohortHead}>Condition</th>
                         <th style={cohortHead}>Polarity</th>
                         <th style={cohortHead}>Colour</th>
@@ -295,16 +296,16 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                           <td style={cohortCell}>{c.text_colour}</td>
                           <td style={cohortCell}>{c.n}</td>
                           <td style={cohortCell}>{c.n_analysable}</td>
-                          <td style={{ ...cohortCell, color: c.n_with_outcome < c.n ? '#e64c4c' : undefined }}>{c.n_with_outcome}</td>
+                          <td style={{ ...cohortCell, color: c.n_with_outcome < c.n ? UI_TEXT.red : undefined }}>{c.n_with_outcome}</td>
                           <td style={cohortCell}>{c.mean_ibr == null ? '—' : c.mean_ibr.toFixed(3)}</td>
                           <td style={cohortCell}>{c.blinks_total}</td>
-                          <td style={{ ...cohortCell, color: c.n_fps_inadequate > 0 ? '#f5a623' : undefined }}>{c.n_fps_inadequate}</td>
+                          <td style={{ ...cohortCell, color: c.n_fps_inadequate > 0 ? UI_TEXT.amber : undefined }}>{c.n_fps_inadequate}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: 6 }}>
+                <p className="font-sans text-[15px] leading-relaxed text-[#4a4a60]" style={{ marginTop: 6 }}>
                   “Blinks” is the denominator the ratio actually rests on — ten rows of four blinks is
                   not ten measurements. “With outcome” below n means rows where no blink was counted at
                   all; a condition where that is common is broken, not merely noisy.
@@ -313,11 +314,11 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
 
               {cohort.exclusions.length > 0 && (
                 <div>
-                  <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]" style={{ marginBottom: 6 }}>
+                  <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]" style={{ marginBottom: 6 }}>
                     Why rows were excluded
                   </p>
                   {cohort.exclusions.map((e) => (
-                    <p key={e.reason} className="font-lab text-xs" style={{ color: '#5a5a7a' }}>
+                    <p key={e.reason} className="font-sans text-[15px]" style={{ color: UI_TEXT.muted }}>
                       {e.n}x — {e.reason}
                     </p>
                   ))}
@@ -326,11 +327,11 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
 
               {cohort.issues.length > 0 && (
                 <div>
-                  <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]" style={{ marginBottom: 6 }}>
+                  <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]" style={{ marginBottom: 6 }}>
                     Join and provenance checks
                   </p>
                   {cohort.issues.map((i, k) => (
-                    <p key={`${i.code}-${k}`} className="font-lab text-xs" style={{ color: i.severity === 'error' ? '#e64c4c' : '#8a5a00', lineHeight: 1.5 }}>
+                    <p key={`${i.code}-${k}`} className="font-sans text-[15px]" style={{ color: i.severity === 'error' ? UI_TEXT.red : '#8a5a00', lineHeight: 1.5 }}>
                       [{i.severity}] {i.code} — {i.detail}
                     </p>
                   ))}
@@ -344,7 +345,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       {bundle && bundle.session.withdrawn_at != null && (
         <div
           data-testid="withdrawn-banner"
-          className="font-lab text-sm"
+          className="font-sans text-base"
           style={{ margin: '0 0 14px', padding: '12px 14px', borderRadius: 10, border: '1px solid #b83a3a', background: '#fdeeee', color: '#5a1414', lineHeight: 1.55 }}
         >
           <strong>The participant withdrew</strong> — recorded {new Date(bundle.session.withdrawn_at).toLocaleString()}.
@@ -357,7 +358,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       {bundle && unfinished.length > 0 && (
         <div
           data-testid="unfinished-conditions"
-          className="font-lab text-sm"
+          className="font-sans text-base"
           style={{ margin: '0 0 14px', padding: '12px 14px', borderRadius: 10, border: '1px solid #c98a22', background: '#fff6e5', color: '#5a3a00', lineHeight: 1.55 }}
         >
           <strong>
@@ -460,7 +461,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
 
       {bundle && tab === 'export' && (
         <div style={{ background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 20, maxWidth: 720 }}>
-          <p className="font-lab text-sm text-[#5a5a7a]">
+          <p className="font-sans text-base leading-relaxed text-[#4a4a60]">
             Exports 18 CSVs, an analysis JSON, a complete session backup, a master codebook
             documenting every column, and a provenance manifest (app version, git hash,
             condition-definition hash, per-file checksums). Analyse with the R / Python mixed-model
@@ -468,7 +469,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
             restores this session if the tablet is lost.
           </p>
           <button onClick={onExport} disabled={exporting}
-            className="mt-4 rounded-xl px-8 py-3 font-lab text-sm text-white transition active:scale-95"
+            className="mt-4 rounded-xl px-8 py-3 font-sans text-base font-medium text-white transition active:scale-95"
             style={{ background: '#1a1a2e', cursor: exporting ? 'wait' : 'pointer' }}>
             {exporting ? 'Exporting…' : 'Download data bundle ↓'}
           </button>
@@ -476,37 +477,37 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           {/* The analysis dataset pools every session on the device, so it is offered separately
               from the single-session bundle above and says plainly what it covers. */}
           <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid #e5e2dc' }}>
-            <p className="font-lab text-sm text-[#5a5a7a]">
+            <p className="font-sans text-base leading-relaxed text-[#4a4a60]">
               The analysis dataset pools <strong>every session on this device</strong> into one long
               file, one row per participant × condition, with the join checked and its verdict on
               every row.
             </p>
             <button onClick={onExportAnalysis} disabled={exporting}
-              className="mt-3 rounded-xl px-8 py-3 font-lab text-sm transition active:scale-95"
+              className="mt-3 rounded-xl px-8 py-3 font-sans text-base font-medium transition active:scale-95"
               style={{ background: '#fff', color: '#1a1a2e', border: '1px solid #1a1a2e', cursor: exporting ? 'wait' : 'pointer' }}>
               {exporting ? 'Building…' : 'Download analysis dataset ↓'}
             </button>
             {analysisSummary && (
-              <p className="font-lab text-xs" style={{ marginTop: 10, color: '#5a5a7a' }}>{analysisSummary}</p>
+              <p className="font-sans text-[15px]" style={{ marginTop: 10, color: UI_TEXT.muted }}>{analysisSummary}</p>
             )}
           </div>
           {mediaCount > 0 && (
             <>
-              <p className="font-lab text-sm text-[#5a5a7a]" style={{ marginTop: 18 }}>
+              <p className="font-sans text-base leading-relaxed text-[#4a4a60]" style={{ marginTop: 18 }}>
                 This session holds <strong>{mediaCount}</strong> consented photo/video file(s). They
                 are not part of the data bundle. Each is written under the name given in{' '}
                 <code>15_media_inventory.csv</code>. They contain identifiable images of the
                 participant — store them under the terms of the grant that was given.
               </p>
               <button onClick={onExportMedia} disabled={exporting}
-                className="mt-2 rounded-xl px-8 py-3 font-lab text-sm transition active:scale-95"
+                className="mt-2 rounded-xl px-8 py-3 font-sans text-base font-medium transition active:scale-95"
                 style={{ background: '#fff', border: '1px solid #d8d4cc', cursor: exporting ? 'wait' : 'pointer' }}>
                 Download media files ↓
               </button>
             </>
           )}
           {bundle.session.status !== 'complete' && (
-            <p className="font-lab text-sm" style={{ marginTop: 18, background: '#fff6e5', border: '1px solid #f0d8a8', borderRadius: 10, padding: 12 }}>
+            <p className="font-sans text-base leading-relaxed" style={{ marginTop: 18, background: '#fff6e5', border: '1px solid #f0d8a8', borderRadius: 10, padding: 12 }}>
               This sitting has not finished. Exporting is allowed — a withdrawn or interrupted
               session is still a record of what happened — but the export carries
               <code> session_complete=false</code>, and {summaries.length} of the{' '}
@@ -527,7 +528,7 @@ function Grid({ children }: { children: React.ReactNode }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 16 }}>
-      <div className="font-lab text-xs text-[#5a5a7a]">{label}</div>
+      <div className="font-sans text-[15px] leading-relaxed text-[#4a4a60]">{label}</div>
       <div className="font-serif" style={{ fontSize: 28, marginTop: 4 }}>{value}</div>
     </div>
   );
@@ -535,15 +536,15 @@ function Stat({ label, value }: { label: string; value: string }) {
 function Caveat({ text }: { text: string }) {
   return (
     <div style={{ gridColumn: '1 / -1', background: '#fff8ec', border: '1px solid #f5a62340', borderRadius: 12, padding: 14 }}>
-      <p className="font-lab text-xs leading-relaxed" style={{ color: '#8a6d2f' }}>⚠ {text}</p>
+      <p className="font-sans text-[15px] leading-relaxed" style={{ color: UI_TEXT.amber }}>⚠ {text}</p>
     </div>
   );
 }
 function SummaryTable({ headers, rows }: { headers: string[]; rows: (string | number)[][] }) {
   return (
     <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
-        <thead><tr>{headers.map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: '#5a5a7a', borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 13 }}>
+        <thead><tr>{headers.map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
         <tbody>{rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} style={{ padding: '6px 10px', borderBottom: '1px solid #f3f1ec' }}>{c}</td>)}</tr>)}</tbody>
       </table>
     </div>
@@ -552,8 +553,8 @@ function SummaryTable({ headers, rows }: { headers: string[]; rows: (string | nu
 function OcularTable({ summaries }: { summaries: ConditionSummary[] }) {
   return (
     <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
-        <thead><tr>{['Cond', 'Blinks', 'Min seen', 'Blink/min', 'Incomplete', 'IBI ms', 'PERCLOS80', 'PERCLOS70', 'Long-closures', 'Eff FPS'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: '#5a5a7a', borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 13 }}>
+        <thead><tr>{['Cond', 'Blinks', 'Min seen', 'Blink/min', 'Incomplete', 'IBI ms', 'PERCLOS80', 'PERCLOS70', 'Long-closures', 'Eff FPS'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
         <tbody>
           {summaries.map((s) => (
             <tr key={s.condition_id}>
@@ -585,13 +586,13 @@ function CameraVerdictPanel({ summaries }: { summaries: ConditionSummary[] }) {
   summaries.forEach((s) => { counts[s.camera_verdict.level]++; });
   return (
     <div data-testid="camera-verdicts" style={{ gridColumn: '1 / -1', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 16 }}>
-      <h3 className="font-lab" style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Is the camera working?</h3>
-      <p className="font-lab" style={{ fontSize: 14, color: '#3d3d5c', marginTop: 4 }}>
+      <h3 className="font-sans" style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>Is the camera working?</h3>
+      <p className="font-sans" style={{ fontSize: 16, color: '#3d3d5c', marginTop: 4 }}>
         {counts.good} condition{counts.good === 1 ? '' : 's'} measured well · {counts.warn} usable with care · {counts.bad} not trustworthy
       </p>
       <ul style={{ marginTop: 10, display: 'grid', gap: 8 }}>
         {summaries.map((s) => (
-          <li key={s.condition_id} data-testid="camera-verdict" data-level={s.camera_verdict.level} style={{ fontFamily: '"DM Sans", system-ui, sans-serif', fontSize: 14, color: '#1a1a2e', lineHeight: 1.5 }}>
+          <li key={s.condition_id} data-testid="camera-verdict" data-level={s.camera_verdict.level} style={{ fontFamily: 'Roboto, system-ui, sans-serif', fontSize: 16, color: '#1a1a2e', lineHeight: 1.5 }}>
             <span style={{ display: 'inline-block', minWidth: 64, fontWeight: 700, color: FLAG_COLOR[s.camera_verdict.level] }}>
               {s.camera_verdict.level === 'good' ? '✓' : s.camera_verdict.level === 'warn' ? '!' : '✕'} {s.condition_label}
             </span>{' '}
@@ -602,7 +603,7 @@ function CameraVerdictPanel({ summaries }: { summaries: ConditionSummary[] }) {
           </li>
         ))}
       </ul>
-      <p className="font-lab" style={{ fontSize: 13, color: '#3d3d5c', marginTop: 12, lineHeight: 1.6 }}>
+      <p className="font-sans" style={{ fontSize: 15, color: '#3d3d5c', marginTop: 12, lineHeight: 1.6 }}>
         For comparison: 21 adults reading on a computer for 15 minutes blinked 11.6 times a minute on
         average (SD 7.84), and 16.1% of their blinks were incomplete (SD 15.7; individuals ranged from
         0.9% to 56.5%) — Portello, Rosenfield &amp; Chu 2013. People differ a lot, so one participant
@@ -616,8 +617,8 @@ function CameraVerdictPanel({ summaries }: { summaries: ConditionSummary[] }) {
 function EngagementTable({ summaries }: { summaries: ConditionSummary[] }) {
   return (
     <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
-        <thead><tr>{['Cond', 'Engagement', 'Quality', 'Read ms', 'Fatigue ms', 'Flags'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: '#5a5a7a', borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 13 }}>
+        <thead><tr>{['Cond', 'Engagement', 'Quality', 'Read ms', 'Fatigue ms', 'Flags'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
         <tbody>
           {summaries.map((s) => (
             <tr key={s.condition_id}>
@@ -637,8 +638,8 @@ function EngagementTable({ summaries }: { summaries: ConditionSummary[] }) {
 function QcTable({ summaries }: { summaries: ConditionSummary[] }) {
   return (
     <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
-        <thead><tr>{['Cond', 'Camera', 'Eff FPS', 'Face presence', 'Off-axis', 'Lighting', 'Overall'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: '#5a5a7a', borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 13 }}>
+        <thead><tr>{['Cond', 'Camera', 'Eff FPS', 'Face presence', 'Off-axis', 'Lighting', 'Overall'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
         <tbody>
           {summaries.map((s) => (
             <tr key={s.condition_id}>

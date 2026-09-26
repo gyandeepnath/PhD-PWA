@@ -22,6 +22,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { calibrationSequence, STEP_SETTLE_MS, type CalibrationStep } from '@/tracking/calibrationSequence';
 import type { CalibrationOutcome } from '@/tracking/useTracking';
+import { InfoTip } from '@/components/InfoTip';
 
 interface Props {
   sessionId: string;
@@ -125,7 +126,7 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
       {thinFit != null && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', textAlign: 'center', padding: 24 }}>
           <h1 className="font-serif" style={{ fontSize: 28, fontWeight: 300 }}>Gaze calibration is not trustworthy</h1>
-          <p className="font-lab" style={{ fontSize: 14, color: '#f0d8c8', maxWidth: 560, marginTop: 12, lineHeight: 1.6 }}>
+          <p className="font-lab" style={{ fontSize: 17, color: '#f0d8c8', maxWidth: 680, marginTop: 12, lineHeight: 1.6 }}>
             It passed the acceptance rule, but only just. {thinFit.gazeQuality.covered} of{' '}
             {thinFit.gazeQuality.total} targets registered at all, and only{' '}
             {thinFit.gazeQuality.wellCovered} of {thinFit.gazeQuality.total} were tracked through
@@ -133,21 +134,21 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
             {thinFit.gazeQuality.medianSamples} usable readings where a fully tracked dwell would
             give about {thinFit.gazeQuality.expectedSamples}.
           </p>
-          <p className="font-lab" style={{ fontSize: 14, color: '#c8d8f0', maxWidth: 560, marginTop: 12, lineHeight: 1.6 }}>
+          <p className="font-lab" style={{ fontSize: 17, color: '#c8d8f0', maxWidth: 680, marginTop: 12, lineHeight: 1.6 }}>
             A fit from that little evidence is a guess with a threshold attached. Gaze zones for this
             sitting would be reported as calibrated measurements when they are closer to noise.
             Usually it is the camera: the face too far away or off to one side, the eyes in shadow,
             or spectacle glare across the lid margin. Re-running it costs about fifteen seconds.
           </p>
-          <p className="font-lab" style={{ fontSize: 13, color: '#9aa8c4', maxWidth: 560, marginTop: 12, lineHeight: 1.6 }}>
+          <p className="font-lab" style={{ fontSize: 15, color: '#b8c4dc', maxWidth: 680, marginTop: 12, lineHeight: 1.6 }}>
             This does NOT affect the primary outcome. Blink thresholds come from the open-eye
             baseline, which was measured successfully. Only the gaze measures are at stake.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button onClick={() => { setThinFit(null); start(); }} className="font-lab" data-testid="calibration-retry-thin" style={{ background: '#4f8ef7', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 28px', fontSize: 14, cursor: 'pointer' }}>
+            <button onClick={() => { setThinFit(null); start(); }} className="font-lab" data-testid="calibration-retry-thin" style={{ background: '#1f5fbf', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 28px', fontSize: 16, cursor: 'pointer' }}>
               Re-run calibration →
             </button>
-            <button onClick={() => { setThinFit(null); onDone(); }} className="font-lab" data-testid="calibration-accept-thin" style={{ background: 'transparent', color: '#c8d8f0', border: '1px solid #46506a', borderRadius: 12, padding: '14px 28px', fontSize: 14, cursor: 'pointer' }}>
+            <button onClick={() => { setThinFit(null); onDone(); }} className="font-lab" data-testid="calibration-accept-thin" style={{ background: 'transparent', color: '#c8d8f0', border: '1px solid #6a7490', borderRadius: 12, padding: '14px 28px', fontSize: 16, cursor: 'pointer' }}>
               Accept and continue
             </button>
           </div>
@@ -156,7 +157,7 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
       {(poorFit != null || failure != null) && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', textAlign: 'center', padding: 24 }}>
           <h1 className="font-serif" style={{ fontSize: 28, fontWeight: 300 }}>Calibration did not succeed</h1>
-          <p className="font-lab" style={{ fontSize: 14, color: '#f0d8c8', maxWidth: 520, marginTop: 12, lineHeight: 1.6 }}>
+          <p className="font-lab" style={{ fontSize: 17, color: '#f0d8c8', maxWidth: 680, marginTop: 12, lineHeight: 1.6 }}>
             {failure != null
               ? `Calibration failed: ${failure}`
               : poorFit != null && poorFit.earBaseline == null && poorFit.gazeValid
@@ -168,7 +169,7 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
                     + 'this participant\u2019s gaze.'
                   : 'Not enough targets were detected to fit this participant\u2019s gaze and open-eye baseline.'}
           </p>
-          <p className="font-lab" style={{ fontSize: 14, color: '#c8d8f0', maxWidth: 520, marginTop: 12, lineHeight: 1.6 }}>
+          <p className="font-lab" style={{ fontSize: 17, color: '#c8d8f0', maxWidth: 680, marginTop: 12, lineHeight: 1.6 }}>
             Every blink threshold is a fraction of this participant’s own open-eye baseline, so
             continuing without one means the ocular measures — including the primary outcome — will
             be empty for this whole sitting. Check the lighting, the distance and that the face is
@@ -176,10 +177,10 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
             one.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button onClick={start} className="font-lab" data-testid="calibration-retry" style={{ background: '#4f8ef7', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 28px', fontSize: 14, cursor: 'pointer' }}>
+            <button onClick={start} className="font-lab" data-testid="calibration-retry" style={{ background: '#1f5fbf', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 28px', fontSize: 16, cursor: 'pointer' }}>
               Try calibration again →
             </button>
-            <button onClick={onDone} className="font-lab" data-testid="calibration-continue-anyway" style={{ background: 'transparent', color: '#c8d8f0', border: '1px solid #46506a', borderRadius: 12, padding: '14px 28px', fontSize: 14, cursor: 'pointer' }}>
+            <button onClick={onDone} className="font-lab" data-testid="calibration-continue-anyway" style={{ background: 'transparent', color: '#c8d8f0', border: '1px solid #6a7490', borderRadius: 12, padding: '14px 28px', fontSize: 16, cursor: 'pointer' }}>
               Continue without ocular measures
             </button>
           </div>
@@ -187,13 +188,21 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
       )}
       {idx === -1 && poorFit == null && failure == null && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', textAlign: 'center', padding: 24 }}>
-          <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 300 }}>Eye calibration</h1>
-          <p className="font-lab" style={{ fontSize: 14, color: '#c8d8f0', maxWidth: 460, marginTop: 12, lineHeight: 1.6 }}>
+          <h1 className="font-serif" style={{ fontSize: 34, fontWeight: 300, display: 'flex', alignItems: 'center', gap: 10 }}>
+            Eye calibration
+            <InfoTip label="eye calibration" tone="dark">
+              Two steps. The centre dot measures how open this participant&apos;s eyes are at rest;
+              every blink threshold is a fraction of that. The nine dots then fit a mapping from eye
+              position to screen areas, used for the gaze-zone measures. If too few targets are
+              detected, this screen says which part failed and offers a retry.
+            </InfoTip>
+          </h1>
+          <p className="font-lab" style={{ fontSize: 17, color: '#c8d8f0', maxWidth: 600, marginTop: 12, lineHeight: 1.6 }}>
             First, a dot in the centre of the screen: look straight at it and blink as you normally
             would. Then the dot will appear at nine positions in turn — look directly at each one
             and tap it. Keep your head still throughout and move only your eyes.
           </p>
-          <button onClick={start} disabled={busy} className="font-lab" style={{ marginTop: 24, background: '#4f8ef7', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 28px', fontSize: 14, cursor: 'pointer' }}>
+          <button onClick={start} disabled={busy} className="font-lab" style={{ marginTop: 24, background: '#1f5fbf', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 28px', fontSize: 16, cursor: 'pointer' }}>
             Begin calibration →
           </button>
         </div>
@@ -225,6 +234,8 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
           }}
         />
       )}
+      {/* Drawn while the participant fixates the targets, so it is part of the procedure and keeps its
+          original size; the setup-screen type floor does not apply to it. */}
       {idx >= 0 && step != null && (
         <div style={{ position: 'absolute', bottom: 16, left: 0, right: 0, textAlign: 'center', color: '#c8d8f0', fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
           {idx + 1} / {STEPS.length}

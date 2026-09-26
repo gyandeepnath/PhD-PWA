@@ -12,7 +12,7 @@ export function LazyDashboard(props: { initialSessionId?: string }) {
     <Suspense
       fallback={
         <div className="min-h-screen w-full bg-cream font-sans text-[#1a1a2e]" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <p className="font-lab text-sm text-[#5a5a7a]">Loading dashboard…</p>
+          <p className="font-sans text-[15px] text-[#4a4a60]">Loading dashboard…</p>
         </div>
       }
     >

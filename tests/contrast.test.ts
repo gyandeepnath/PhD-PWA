@@ -3,6 +3,7 @@ import { fixationInkFor } from '@/tasks/ReactionTimeTask';
 import { readFileSync } from 'node:fs';
 import { wcagContrastRatio, michelsonContrast, relativeLuminance, wcagLevel } from '@/lib/contrast';
 import { CONDITIONS, conditionDefinitionHash, rtStimulusColours } from '@/experiment/conditions';
+import { UI_TEXT, UI_GROUNDS, UI_FILLS_WITH_WHITE_TEXT, RETIRED_TEXT_COLOURS } from '@/lib/uiPalette';
 
 describe('WCAG relative luminance', () => {
   it('is 0 for black and 1 for white', () => {
@@ -178,5 +179,129 @@ describe('reaction-time stimulus colours are the condition\'s own', () => {
     expect(ratio('P1')).toBeCloseTo(21.0, 1);
     expect(ratio('P4')).toBeLessThan(2.5);   // yellow on white: the hardest go-target to see
     expect(ratio('N1')).toBeCloseTo(21.0, 1);
+  });
+});
+
+/*
+ * OPERATOR AND SETUP SCREENS. Nothing above constrains them — they are not conditions — and they
+ * drifted: help text in #9a968e (2.8:1 on cream), empty-list notes in #b8b4ac (2.0:1), warnings in
+ * the bright status hues, most of it at 11-12 px on a canvas the tablet draws at 86%. The palette in
+ * lib/uiPalette.ts is the fix; these hold it, and hold the screens to it.
+ */
+describe('operator-screen text colours meet WCAG AA', () => {
+  it('every operator text colour is at least 4.5:1 on every operator ground', () => {
+    for (const [fgName, fg] of Object.entries(UI_TEXT)) {
+      for (const [bgName, bg] of Object.entries(UI_GROUNDS)) {
+        expect(wcagContrastRatio(fg, bg), `${fgName} ${fg} on ${bgName} ${bg}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it('white button text is at least 4.5:1 on every filled button colour', () => {
+    for (const [name, fill] of Object.entries(UI_FILLS_WITH_WHITE_TEXT)) {
+      expect(wcagContrastRatio('#FFFFFF', fill), name).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('the progress label is legible on the dark calibration and camera self-test screens too', () => {
+    // It sits above both overlays; in #4a4a60 it was about 2:1 there. It takes #c8d8f0 on them.
+    expect(wcagContrastRatio('#c8d8f0', '#0a0a12')).toBeGreaterThanOrEqual(4.5);
+    expect(wcagContrastRatio('#c8d8f0', '#1a1a2e')).toBeGreaterThanOrEqual(4.5);
+    expect(readFileSync('src/components/ExperimentProgress.tsx', 'utf8')).toMatch(/onDark \? '#c8d8f0' : '#4a4a60'/);
+  });
+
+  it('a disabled button is still legible (muted text on the disabled grey)', () => {
+    // Disabled was white on #cfcbc3: 1.6:1.
+    expect(wcagContrastRatio(UI_TEXT.muted, '#E8E6E1')).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('the retired colours really were below AA as text on cream, which is why they are retired', () => {
+    for (const c of RETIRED_TEXT_COLOURS) {
+      expect(wcagContrastRatio(c, UI_GROUNDS.cream), c).toBeLessThan(4.5);
+    }
+  });
+
+  /*
+   * The retired hues are still fine as FILLS — status dots, chart bars, borders, tints — so they are
+   * not banned outright. What is checked is their use as a text colour: a Tailwind text-[#…] class,
+   * or a `color` property / prop whose value is one of them. charts.tsx is left out: every colour in
+   * it is a bar, line or dot fill.
+   */
+  const OPERATOR_FILES = [
+    'src/App.tsx',
+    'src/start/SessionManager.tsx', 'src/start/LandingPage.tsx', 'src/start/setupStages.tsx',
+    'src/start/LuxCheckpoint.tsx', 'src/start/CalibrationRoutine.tsx', 'src/start/BreakScreen.tsx',
+    'src/start/CameraSelfTest.tsx',
+    'src/components/ResearcherPanel.tsx', 'src/components/UpdateBanner.tsx',
+    'src/components/ErrorBoundary.tsx', 'src/components/ScrollCue.tsx', 'src/components/InfoTip.tsx',
+    'src/components/VisuLabLogo.tsx', 'src/components/ExperimentProgress.tsx',
+    'src/screening/IshiharaTest.tsx', 'src/dashboard/Dashboard.tsx', 'src/dashboard/LazyDashboard.tsx',
+  ];
+
+  it('no operator screen sets a retired colour as a text colour', () => {
+    const hits: string[] = [];
+    for (const f of OPERATOR_FILES) {
+      readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
+        // A chart's `color` prop is its bar or line fill, not text.
+        if (/<(?:BarPanel|LinePanel)\b/.test(line)) return;
+        for (const c of RETIRED_TEXT_COLOURS) {
+          let at = line.toLowerCase().indexOf(c);
+          while (at !== -1) {
+            // The property this value belongs to: the text since the last `{` or `,` before it.
+            const prop = line.slice(0, at).split(/[{,]/).pop() ?? '';
+            if (/text-\[$/.test(line.slice(0, at)) || /\bcolor\b/.test(prop)) hits.push(`${f}:${i + 1} ${c}`);
+            at = line.toLowerCase().indexOf(c, at + 1);
+          }
+        }
+      });
+    }
+    expect(hits).toEqual([]);
+  });
+
+  /*
+   * The type floor: 14 px for any text on these screens (running text is 15-17 px), 13 px for a
+   * dashboard table. Caught: text-xs, a Tailwind text-[Npx], and a literal fontSize (number or
+   * string). A size chosen by a variable is not seen here; ResearcherPanel picks its setup-screen
+   * sizes that way, keeping its compact in-loop sizes on condition screens.
+   *
+   * Exempt, because they are drawn during a condition or the measurement procedure and keep their
+   * original size: the researcher strip under the reading passage and the calibration step counter.
+   */
+  const SIZE_EXEMPT: Array<[string, RegExp]> = [
+    ['src/components/ResearcherPanel.tsx', /researcher-panel-strip/],
+    ['src/start/CalibrationRoutine.tsx', /\{idx \+ 1\} \/ \{STEPS\.length\}|textAlign: 'center', color: '#c8d8f0', fontFamily: '"DM Mono", monospace', fontSize: 12 \}/],
+  ];
+  const sizesOn = (line: string): number[] => {
+    const out: number[] = [];
+    if (/\btext-xs\b/.test(line)) out.push(12);
+    for (const m of line.matchAll(/\btext-\[(\d+(?:\.\d+)?)px\]/g)) out.push(Number(m[1]));
+    for (const m of line.matchAll(/fontSize:\s*['"]?(\d+(?:\.\d+)?)(?:px)?['"]?/g)) out.push(Number(m[1]));
+    return out;
+  };
+
+  it('no operator screen sets text below 14 px (13 px in a dashboard table)', () => {
+    const hits: string[] = [];
+    for (const f of OPERATOR_FILES) {
+      readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
+        if (SIZE_EXEMPT.some(([file, re]) => file === f && re.test(line))) return;
+        const floor = f === 'src/dashboard/Dashboard.tsx' && /<table\b/.test(line) ? 13 : 14;
+        for (const px of sizesOn(line)) if (px < floor) hits.push(`${f}:${i + 1} ${px}px`);
+      });
+    }
+    expect(hits).toEqual([]);
+  });
+
+  it('the size scan sees the forms it is meant to catch', () => {
+    expect(sizesOn('className="text-xs"')).toEqual([12]);
+    expect(sizesOn('className="text-[13px] font-sans"')).toEqual([13]);
+    expect(sizesOn("style={{ fontSize: '12px' }}")).toEqual([12]);
+    expect(sizesOn('style={{ fontSize: 13.5 }}')).toEqual([13.5]);
+    expect(sizesOn('style={{ fontSize: fsText }}')).toEqual([]);
+  });
+
+  it('no text-heavy screen draws the wave backdrop behind its words', () => {
+    // It crossed the consent text, the session form and the session list. The component is kept.
+    const users = OPERATOR_FILES.filter((f) => /<WavyBackground\b/.test(readFileSync(f, 'utf8')));
+    expect(users).toEqual([]);
   });
 });

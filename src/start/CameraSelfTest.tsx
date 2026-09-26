@@ -37,14 +37,18 @@ export function CameraSelfTest({ begin, end, onDone }: {
     const tick = () => {
       const el = now() - t0;
       const k = Math.floor((el - first) / every);
-      if (el >= first && k < SELF_TEST.CUES && k > shown) {
-        shown = k;
+      // Advance one cue at a time: a late frame (a busy tablet) must delay a cue, never skip it, or
+      // the test would score fewer cues than it announced.
+      if (el >= first && shown + 1 < SELF_TEST.CUES && k > shown) {
+        shown += 1;
         cues.current.push(now());
-        setCueCount(k + 1);
+        setCueCount(shown + 1);
         setFlash(true);
         window.setTimeout(() => setFlash(false), 350);
       }
-      if (el >= first + SELF_TEST.CUES * every + (fast ? 150 : 1500)) {
+      // End only after the last cue has been shown AND its blink has had the full matching window.
+      if (shown === SELF_TEST.CUES - 1 && el >= first + SELF_TEST.CUES * every + (fast ? 150 : 1500)
+        && (fast || now() - cues.current[shown] >= SELF_TEST.WINDOW_MS)) {
         const seen = end();
         setResult(scoreSelfTest(cues.current, seen.blinkOnsets, seen));
         setPhase('result');
@@ -105,7 +109,7 @@ export function CameraSelfTest({ begin, end, onDone }: {
           {r.reasons.map((x) => <li key={x}>• {x}</li>)}
         </ul>
       )}
-      <p className="font-lab" style={{ fontSize: 13, color: '#aab6d0', maxWidth: 560, marginTop: 10, lineHeight: 1.6 }}>
+      <p className="font-lab" style={{ fontSize: 15, color: '#aab6d0', maxWidth: 560, marginTop: 10, lineHeight: 1.6 }}>
         Researcher: this checks the camera sees this person&apos;s blinks. It is recorded with the session.
       </p>
       <div style={{ display: 'flex', gap: 12, marginTop: 22, flexWrap: 'wrap', justifyContent: 'center' }}>

@@ -11,7 +11,8 @@ import {
 } from '@/storage/gather';
 import { listResumable, clearResume, type ResumePointer } from '@/storage/sessionPersistence';
 import { parseSessionBackup, importSessionBackup } from '@/storage/backup';
-import { WavyBackground } from '@/components/WavyBackground';
+import { VisuLabLogo } from '@/components/VisuLabLogo';
+import { UI_TEXT } from '@/lib/uiPalette';
 import type { SessionRecord } from '@/storage/types';
 
 interface Props {
@@ -266,18 +267,23 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
   };
 
   return (
-    <div className="min-h-screen w-full bg-cream font-sans text-[#1a1a2e] animate-fade-in" style={{ position: 'relative', padding: '3% 4%' }}>
-      <WavyBackground opacity={0.05} />
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <div>
-            <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">VisuLab · Research Platform</p>
-            <h1 className="font-serif text-3xl font-light" style={{ marginTop: 4 }}>Session Manager</h1>
+    <div className="min-h-screen w-full bg-cream font-sans text-[#1a1a2e] animate-fade-in" style={{ padding: '3% 4%' }}>
+      {/* No wave backdrop (its lines ran through the session rows), and a type floor of 14-16 px:
+          this screen is drawn at about 86% on the tablet, so its old 11-12 px grey captions arrived
+          at 9-10 px, in colours at 2-2.8:1. */}
+      <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            <VisuLabLogo size={34} />
+            <div style={{ borderLeft: '1px solid #d8d4cc', paddingLeft: 20 }}>
+              <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]">Research Platform</p>
+              <h1 className="font-serif text-3xl font-light" style={{ marginTop: 2 }}>Session Manager</h1>
+            </div>
           </div>
-          <button onClick={onHome} className="font-lab text-sm" style={{ padding: '8px 14px', borderRadius: 10, border: '1px solid #d8d4cc', background: '#fff', cursor: 'pointer' }}>← Home</button>
+          <button onClick={onHome} className="font-sans text-base" style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #bdb8ae', background: '#fff', cursor: 'pointer' }}>← Home</button>
         </div>
 
-        <button onClick={onNew} className="mt-5 w-full rounded-xl py-4 font-lab text-sm uppercase tracking-wide text-white transition active:scale-95" style={{ background: '#1a1a2e' }}>
+        <button onClick={onNew} className="mt-5 w-full rounded-xl py-4 font-sans text-base font-medium uppercase tracking-wide text-white transition active:scale-95" style={{ background: '#1a1a2e' }}>
           + New Session
         </button>
 
@@ -296,15 +302,15 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
           onClick={() => fileInput.current?.click()}
           disabled={importing}
           data-testid="import-backup"
-          className="mt-2 w-full rounded-xl py-3 font-lab text-sm transition active:scale-95"
-          style={{ background: '#fff', border: '1px solid #d8d4cc', cursor: importing ? 'default' : 'pointer', opacity: importing ? 0.6 : 1 }}
+          className="mt-2 w-full rounded-xl py-3 font-sans text-base transition active:scale-95"
+          style={{ background: '#fff', border: '1px solid #bdb8ae', cursor: importing ? 'default' : 'pointer', opacity: importing ? 0.6 : 1 }}
         >
           {importing ? 'Restoring…' : 'Restore session from backup file'}
         </button>
 
         {mostRecent && (
-          <div style={{ marginTop: 14, background: '#eef3ff', border: '1px solid #cdd8f0', borderRadius: 12, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span className="font-lab text-sm">
+          <div style={{ marginTop: 14, background: '#eef3ff', border: '1px solid #cdd8f0', borderRadius: 12, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <span className="font-sans text-base">
               {/* A session interrupted during setup has no condition pointer; saying "next
                   condition 1/10" for it implied progress that had not happened, and the resume
                   dropped the participant straight into the reading task. */}
@@ -314,7 +320,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
                 : '(interrupted during setup — setup will be completed first)'}
               {Object.keys(resumable).length > 1 && ` · ${Object.keys(resumable).length} sessions in progress`}
             </span>
-            <button onClick={() => onResume(mostRecent.pointer.sessionId, mostRecent.pointer.nextStepIndex, mostRecent.pointer.reachedLoop === true)} className="font-lab text-sm text-white" style={{ background: '#4f8ef7', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer' }}>Resume →</button>
+            <button onClick={() => onResume(mostRecent.pointer.sessionId, mostRecent.pointer.nextStepIndex, mostRecent.pointer.reachedLoop === true)} className="font-sans text-base font-medium text-white" style={{ background: UI_TEXT.blue, border: 'none', borderRadius: 10, padding: '10px 18px', cursor: 'pointer', flex: '0 0 auto' }}>Resume →</button>
           </div>
         )}
 
@@ -322,7 +328,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
           {inProgress.map((s) => (
             <Row key={s.session_id} s={s}>
               {resumable[s.session_id] && (
-                <Btn onClick={() => onResume(s.session_id, resumable[s.session_id].nextStepIndex, resumable[s.session_id].reachedLoop === true)} color="#4f8ef7">Resume</Btn>
+                <Btn onClick={() => onResume(s.session_id, resumable[s.session_id].nextStepIndex, resumable[s.session_id].reachedLoop === true)} color={UI_TEXT.blue}>Resume</Btn>
               )}
               {/* A participant may withdraw at any point, and the operator manual tells the
                   operator to export what exists when they do. Without this the dashboard — and so
@@ -331,10 +337,10 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
                   incompleteness, so allowing it here cannot silently contaminate the analysis. */}
               <Btn onClick={() => onOpen(s.session_id)} color="#1a1a2e" outline>Export</Btn>
               <MediaControls s={s} onRevoke={revokeMedia} />
-              <Btn onClick={() => withdraw(s)} color="#c98a22" outline>
+              <Btn onClick={() => withdraw(s)} color={UI_TEXT.amber} outline>
                 Withdrew
               </Btn>
-              <Btn onClick={() => del(s)} color="#e64c4c" outline>Delete</Btn>
+              <Btn onClick={() => del(s)} color={UI_TEXT.red} outline>Delete</Btn>
             </Row>
           ))}
           {inProgress.length === 0 && <Empty>No sessions in progress.</Empty>}
@@ -344,12 +350,12 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
           {completed.map((s) => (
             <Row key={s.session_id} s={s}>
               <Btn onClick={() => onOpen(s.session_id)} color="#1a1a2e">Open</Btn>
-              <Btn onClick={() => rename(s)} color="#5a5a7a" outline>Rename</Btn>
+              <Btn onClick={() => rename(s)} color={UI_TEXT.muted} outline>Rename</Btn>
               <MediaControls s={s} onRevoke={revokeMedia} />
-              <Btn onClick={() => withdraw(s)} color="#c98a22" outline>
+              <Btn onClick={() => withdraw(s)} color={UI_TEXT.amber} outline>
                 Withdrew
               </Btn>
-              <Btn onClick={() => del(s)} color="#e64c4c" outline>Delete</Btn>
+              <Btn onClick={() => del(s)} color={UI_TEXT.red} outline>Delete</Btn>
             </Row>
           ))}
           {completed.length === 0 && <Empty>No completed sessions yet.</Empty>}
@@ -365,7 +371,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
                     Rename, no media controls — the media was destroyed when this was recorded.
                     Delete remains for a participant who later asks for deletion as well. */}
                 <Btn onClick={() => onOpen(s.session_id)} color="#1a1a2e" outline>Export</Btn>
-                <Btn onClick={() => del(s)} color="#e64c4c" outline>Delete</Btn>
+                <Btn onClick={() => del(s)} color={UI_TEXT.red} outline>Delete</Btn>
               </Row>
             ))}
           </Section>
@@ -373,11 +379,11 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
 
         <div style={{ marginTop: 18 }}>
           {binNotice && (
-            <p className="font-lab text-sm" style={{ marginBottom: 8, background: '#fff6e5', border: '1px solid #f0d8a8', borderRadius: 10, padding: 12, whiteSpace: 'pre-wrap' }}>
+            <p className="font-sans text-[15px] leading-relaxed" style={{ marginBottom: 8, background: '#fff6e5', border: '1px solid #f0d8a8', borderRadius: 10, padding: 12, whiteSpace: 'pre-wrap' }}>
               {binNotice}
             </p>
           )}
-          <button onClick={() => setShowBin((b) => !b)} className="font-lab text-sm text-[#5a5a7a]" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+          <button onClick={() => setShowBin((b) => !b)} className="font-sans text-[15px] text-[#4a4a60]" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 0' }}>
             {showBin ? '▾' : '▸'} Recycle bin ({bin.length}) · auto-purged after 30 days
           </button>
           {showBin && (
@@ -386,8 +392,8 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
                 const daysLeft = Math.ceil((BIN_RETENTION_MS - (Date.now() - (s.deleted_at ?? 0))) / 86400000);
                 return (
                   <Row key={s.session_id} s={s} note={`${daysLeft}d left`}>
-                    <Btn onClick={() => restore(s)} color="#22c97a" outline>Restore</Btn>
-                    <Btn onClick={() => purge(s)} color="#e64c4c">Purge</Btn>
+                    <Btn onClick={() => restore(s)} color={UI_TEXT.green} outline>Restore</Btn>
+                    <Btn onClick={() => purge(s)} color={UI_TEXT.red}>Purge</Btn>
                   </Row>
                 );
               })}
@@ -403,7 +409,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ marginTop: 20 }}>
-      <p className="font-lab text-xs uppercase tracking-wide text-[#9a968e]" style={{ marginBottom: 8 }}>{title}</p>
+      <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]" style={{ marginBottom: 8 }}>{title}</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{children}</div>
     </div>
   );
@@ -423,10 +429,10 @@ function MediaControls({ s, onRevoke }: {
   return (
     <>
       {c?.setup_photos === true && (
-        <Btn onClick={() => onRevoke(s, 'setup_photos')} color="#b8860b" outline>Delete photos</Btn>
+        <Btn onClick={() => onRevoke(s, 'setup_photos')} color={UI_TEXT.amber} outline>Delete photos</Btn>
       )}
       {c?.annotation_video === true && (
-        <Btn onClick={() => onRevoke(s, 'annotation_video')} color="#b8860b" outline>Delete video</Btn>
+        <Btn onClick={() => onRevoke(s, 'annotation_video')} color={UI_TEXT.amber} outline>Delete video</Btn>
       )}
     </>
   );
@@ -434,24 +440,25 @@ function MediaControls({ s, onRevoke }: {
 
 function Row({ s, children, note }: { s: SessionRecord; children: React.ReactNode; note?: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 12, padding: '12px 14px' }}>
-      <div>
-        <div className="font-lab text-sm">{sessionLabel(s)}</div>
-        <div className="font-lab" style={{ fontSize: 11, color: '#9a968e' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, background: '#fff', border: '1px solid #e5e2dc', borderRadius: 12, padding: '12px 16px' }}>
+      <div style={{ minWidth: 0 }}>
+        {/* The participant code stays in DM Mono — it is a code; the date line under it is not. */}
+        <div className="font-lab" style={{ fontSize: 17 }}>{sessionLabel(s)}</div>
+        <div className="font-sans" style={{ fontSize: 14, color: UI_TEXT.muted, marginTop: 2 }}>
           {new Date(s.session_start_time).toLocaleString()}{note ? ` · ${note}` : ''}
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>{children}</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{children}</div>
     </div>
   );
 }
 function Btn({ onClick, color, outline, children }: { onClick: () => void; color: string; outline?: boolean; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className="font-lab text-sm" style={{ padding: '7px 14px', borderRadius: 10, cursor: 'pointer', border: `1px solid ${color}`, background: outline ? '#fff' : color, color: outline ? color : '#fff' }}>
+    <button onClick={onClick} className="font-sans text-[15px] font-medium" style={{ padding: '9px 16px', minHeight: 42, borderRadius: 10, cursor: 'pointer', border: `1px solid ${color}`, background: outline ? '#fff' : color, color: outline ? color : '#fff' }}>
       {children}
     </button>
   );
 }
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="font-lab" style={{ fontSize: 12, color: '#b8b4ac' }}>{children}</p>;
+  return <p className="font-sans" style={{ fontSize: 15, color: UI_TEXT.muted }}>{children}</p>;
 }

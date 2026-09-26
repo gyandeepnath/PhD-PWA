@@ -134,10 +134,10 @@ export function UpdateBanner() {
       }}
     >
       <div style={{ flex: '1 1 320px', minWidth: 0 }}>
-        <div className="font-lab text-sm" style={{ fontWeight: 600 }}>
+        <div className="font-sans text-base" style={{ fontWeight: 600 }}>
           A newer version of VisuLab is ready
         </div>
-        <div className="font-lab text-xs" style={{ opacity: 0.8, marginTop: 2 }}>
+        <div className="font-sans text-[15px]" style={{ color: '#dcdcea', marginTop: 2 }}>
           {openSittings == null
             ? 'Checking whether a sitting is open…'
             : blocked
@@ -147,7 +147,7 @@ export function UpdateBanner() {
               : 'Apply it now, between sessions. Never during a sitting — it reloads the app.'}
         </div>
         {failure && (
-          <div className="font-lab text-xs" style={{ marginTop: 6, color: '#ffb4b4' }}>
+          <div className="font-sans text-[15px]" style={{ marginTop: 6, color: '#ffb4b4' }}>
             The update did not apply: {failure}
           </div>
         )}
@@ -156,7 +156,7 @@ export function UpdateBanner() {
         <button
           onClick={apply}
           disabled={applying}
-          className="font-lab text-sm"
+          className="font-sans text-base"
           style={{
             flex: '0 0 auto', background: '#fff', color: '#1a1a2e',
             border: 'none', borderRadius: 10, padding: '10px 18px',
@@ -180,8 +180,8 @@ export function UpdateBanner() {
 export function BuildStamp() {
   return (
     <div
-      className="font-lab text-xs"
-      style={{ position: 'fixed', right: 12, bottom: 10, zIndex: 30, opacity: 0.45, pointerEvents: 'none' }}
+      className="font-lab text-sm"
+      style={{ position: 'fixed', right: 12, bottom: 10, zIndex: 30, color: '#4a4a60', pointerEvents: 'none' }}
     >
       v{APP_VERSION} · {GIT_HASH}
     </div>
@@ -216,7 +216,7 @@ export function E2EBanner() {
       style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 60,
         background: '#b3261e', color: '#fff', textAlign: 'center',
-        padding: '4px 10px', fontSize: 12, letterSpacing: '0.04em',
+        padding: '4px 10px', fontSize: 14, letterSpacing: '0.04em',
         pointerEvents: 'none',
       }}
     >

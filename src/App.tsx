@@ -77,8 +77,8 @@ function renderView(
           <Dashboard initialSessionId={view.sessionId} />
           <button
             onClick={toManager}
-            className="font-lab text-sm"
-            style={{ position: 'fixed', top: 10, left: 12, zIndex: 50, padding: '6px 12px', borderRadius: 8, border: '1px solid #d8d4cc', background: '#fff', cursor: 'pointer' }}
+            className="font-sans text-base"
+            style={{ position: 'fixed', top: 10, left: 12, zIndex: 50, padding: '8px 14px', borderRadius: 8, border: '1px solid #bdb8ae', background: '#fff', cursor: 'pointer' }}
           >
             ← Sessions
           </button>

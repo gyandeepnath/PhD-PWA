@@ -2,7 +2,7 @@
  * Intro / landing screen (researcher entry point). Two-column landscape layout in the cream theme,
  * a frosted "Study Overview" card, and an entry button into the session console.
  */
-import { WavyBackground } from '@/components/WavyBackground';
+import { VisuLabLogo } from '@/components/VisuLabLogo';
 import { CONDITIONS } from '@/experiment/conditions';
 import { CONFIG } from '@/experiment/config';
 
@@ -12,30 +12,30 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
       className="min-h-screen w-full bg-cream font-sans text-[#1a1a2e] animate-fade-in"
       style={{ position: 'relative', display: 'flex', alignItems: 'center', padding: '0 7% 0 8%', gap: '6%' }}
     >
-      <WavyBackground opacity={0.055} />
-      <div style={{ position: 'relative', zIndex: 1, flex: 1 }}>
-        <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">VisuLab · Research Platform</p>
-        <h1 className="font-serif font-light" style={{ fontSize: 72, lineHeight: 1.05, marginTop: 10 }}>
-          VisuLab
+      {/* Type on the scaled canvas: 13 px and 11 px here arrived at about 11 and 9 px on the tablet,
+          the credit line in #9a968e at 2.8:1. Now 17 / 15 px and ≥4.5:1. */}
+      <div style={{ flex: 1 }}>
+        <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]">Research Platform</p>
+        <h1 style={{ marginTop: 14, lineHeight: 1 }}>
+          <VisuLabLogo size={72} />
         </h1>
-        <div style={{ height: 2, width: 64, background: '#1a1a2e', opacity: 0.5, margin: '18px 0' }} />
-        <p className="font-lab" style={{ fontSize: 13, lineHeight: 1.85, color: '#5a5a7a', maxWidth: 460 }}>
+        <div style={{ height: 2, width: 64, background: '#1a1a2e', opacity: 0.5, margin: '22px 0' }} />
+        <p className="font-sans" style={{ fontSize: 18, lineHeight: 1.65, color: '#3a3a4a', maxWidth: 520 }}>
           A tablet platform for visual-ergonomics experiments. Each session measures reading,
           attention and reaction performance across {CONDITIONS.length} display conditions, with webcam-based
           blink/gaze estimation and validated fatigue questionnaires.
         </p>
-        <p className="font-lab" style={{ fontSize: 11, color: '#9a968e', marginTop: 28 }}>
+        <p className="font-sans" style={{ fontSize: 15, color: '#4a4a60', marginTop: 28 }}>
           Experimental logic by Gyandeep Nath
         </p>
       </div>
 
       <div
         style={{
-          position: 'relative', zIndex: 1, flexBasis: 360, background: 'rgba(255,255,255,0.55)',
-          backdropFilter: 'blur(8px)', border: '1px solid #e5e2dc', borderRadius: 20, padding: 28,
+          flexBasis: 420, background: '#ffffff', border: '1px solid #e5e2dc', borderRadius: 20, padding: 28,
         }}
       >
-        <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">Study Overview</p>
+        <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]">Study Overview</p>
         <div style={{ marginTop: 16 }}>
           {[
             /*
@@ -49,15 +49,15 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
             ['Duration', `${CONFIG.SINGLE_SITTING_DURATION} per sitting`],
             ['Tasks', 'Reading · Search · Go/No-Go'],
           ].map(([k, v]) => (
-            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #e5e2dc' }}>
-              <span className="font-lab" style={{ fontSize: 12, color: '#5a5a7a' }}>{k}</span>
-              <span className="font-lab" style={{ fontSize: 12, textAlign: 'right' }}>{v}</span>
+            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '12px 0', borderBottom: '1px solid #e5e2dc' }}>
+              <span className="font-sans" style={{ fontSize: 15, color: '#4a4a60' }}>{k}</span>
+              <span className="font-sans" style={{ fontSize: 15, textAlign: 'right', color: '#1a1a2e' }}>{v}</span>
             </div>
           ))}
         </div>
         <button
           onClick={onEnter}
-          className="mt-6 w-full rounded-xl py-3 font-lab text-sm text-white transition active:scale-95"
+          className="mt-6 w-full rounded-xl py-4 font-sans text-base font-medium text-white transition active:scale-95"
           style={{ background: '#1a1a2e' }}
         >
           Enter Research Console →

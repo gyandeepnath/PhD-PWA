@@ -18,15 +18,15 @@ export function BarPanel({
   const clean = data.filter((d) => d.value != null) as { label: string; value: number; flag?: keyof typeof FLAG_COLORS }[];
   return (
     <div style={{ background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 16 }}>
-      <h3 style={{ fontFamily: '"DM Mono", monospace', fontSize: 13, color: '#5a5a7a', marginBottom: 8 }}>
+      <h3 style={{ fontFamily: 'Roboto, ui-sans-serif, sans-serif', fontSize: 16, fontWeight: 500, color: '#3a3a4a', marginBottom: 8 }}>
         {title}{unit ? ` (${unit})` : ''}
       </h3>
       <ResponsiveContainer width="100%" height={200}>
-        <BarChart data={clean} margin={{ top: 4, right: 8, bottom: 4, left: -16 }}>
+        <BarChart data={clean} margin={{ top: 4, right: 8, bottom: 4, left: -6 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-          <XAxis dataKey="label" tick={{ fontSize: 11, fontFamily: 'DM Mono' }} />
-          <YAxis tick={{ fontSize: 11, fontFamily: 'DM Mono' }} />
-          <Tooltip contentStyle={{ fontFamily: 'DM Mono', fontSize: 12 }} />
+          <XAxis dataKey="label" tick={{ fontSize: 13, fontFamily: 'DM Mono', fill: '#4a4a60' }} />
+          <YAxis tick={{ fontSize: 13, fontFamily: 'DM Mono', fill: '#4a4a60' }} />
+          <Tooltip contentStyle={{ fontFamily: 'DM Mono', fontSize: 14 }} />
           {baseline != null && <ReferenceLine y={baseline} stroke="#e64c4c" strokeDasharray="4 4" />}
           <Bar dataKey="value" fill={color} radius={[4, 4, 0, 0]}>
             {clean.map((d, i) => (
@@ -36,7 +36,7 @@ export function BarPanel({
         </BarChart>
       </ResponsiveContainer>
       {clean.length < data.length && (
-        <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 12, color: '#5a5a7a', marginTop: 4 }}>
+        <p style={{ fontFamily: 'Roboto, ui-sans-serif, sans-serif', fontSize: 14, color: '#4a4a60', marginTop: 4 }}>
           No data: {data.filter((d) => d.value == null).map((d) => d.label).join(', ')}
         </p>
       )}
@@ -50,16 +50,16 @@ export function LinePanel({
   const clean = data.filter((d) => d.value != null);
   return (
     <div style={{ background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 16 }}>
-      <h3 style={{ fontFamily: '"DM Mono", monospace', fontSize: 13, color: '#5a5a7a', marginBottom: 8 }}>
+      <h3 style={{ fontFamily: 'Roboto, ui-sans-serif, sans-serif', fontSize: 16, fontWeight: 500, color: '#3a3a4a', marginBottom: 8 }}>
         {title}{unit ? ` (${unit})` : ''}
       </h3>
       <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={clean} margin={{ top: 4, right: 8, bottom: 4, left: -16 }}>
+        <LineChart data={clean} margin={{ top: 4, right: 8, bottom: 4, left: -6 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-          <XAxis dataKey="label" tick={{ fontSize: 11, fontFamily: 'DM Mono' }} />
-          <YAxis tick={{ fontSize: 11, fontFamily: 'DM Mono' }} />
-          <Tooltip contentStyle={{ fontFamily: 'DM Mono', fontSize: 12 }} />
-          {baseline != null && <ReferenceLine y={baseline} stroke="#e64c4c" strokeDasharray="4 4" label={{ value: 'baseline', fontSize: 10 }} />}
+          <XAxis dataKey="label" tick={{ fontSize: 13, fontFamily: 'DM Mono', fill: '#4a4a60' }} />
+          <YAxis tick={{ fontSize: 13, fontFamily: 'DM Mono', fill: '#4a4a60' }} />
+          <Tooltip contentStyle={{ fontFamily: 'DM Mono', fontSize: 14 }} />
+          {baseline != null && <ReferenceLine y={baseline} stroke="#e64c4c" strokeDasharray="4 4" label={{ value: 'baseline', fontSize: 13, fill: '#4a4a60' }} />}
           <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2} dot={{ r: 3 }} />
         </LineChart>
       </ResponsiveContainer>

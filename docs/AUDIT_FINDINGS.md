@@ -3609,3 +3609,32 @@ The comment now says the bias has no fixed sign; the 30 fps gate is unchanged.
 Dashboard flag text colours were also darkened (green #22c97a, amber #f5a623 and red #e64c4c are below
 4.5:1 on white). Tests: selfTest.test.ts, cameraVerdict.test.ts; camera end-to-end specs pass through the
 self-test. 1105 tests, verify green.
+
+## Round 61 — legible operator screens
+
+The investigator's tablet photos showed consent text in a narrow column with decorative wavy lines
+across it, a lux hint nearly overlapping the next line, and small, faint text throughout. On the
+Xiaomi Pad 6 the canvas scales by ~0.86, so a 12 px design font rendered at about 10 CSS px.
+
+Operator and setup screens only (nothing inside the condition loop changes: reading, search, RT,
+comprehension, grey field, scales and slider tracks all have empty diffs):
+- **Type floor** of 14 design px for help text, 15–18 for body, 13 only in dashboard tables; sentences
+  in Roboto, monospace kept for inputs, codes and numbers.
+- **Contrast.** Shared colours in `src/lib/uiPalette.ts`, each ≥4.5:1 on its background. Retired as
+  text colours: #9a968e, #b8b4ac, #c98a22, #22c97a, #e64c4c, #c9701e, #cfcbc3, #4f8ef7, #f5a623.
+  Disabled buttons were 1.6:1. The progress label over the dark calibration/self-test screens gets a
+  light colour there.
+- **WavyBackground** removed from all ten screens (it drew lines through text).
+- **Layout.** Consent is an 880 px column with 17 px text; session init, profile and preflight are two
+  columns; the lux result line sits under its input as one block.
+- **VisuLab logo** (inline SVG) on the landing page and Session Manager; no institutional logo without
+  the investigator's permission.
+- **InfoTip**: a tap-to-open "i" on five operator fields (lux, screen luminance, brightness, preflight
+  display size, eye calibration). Consent InfoTips were drafted and removed: consent wording is
+  ethics-approved text and must not gain new statements.
+- `tests/contrast.test.ts` enforces the palette ratios, the retired colours, the size floor and the
+  absence of WavyBackground on these screens.
+
+Found during e2e: the camera self-test could skip a cue when a frame ran late (the cue index was
+computed from elapsed time and jumped). Cues now advance one at a time, and the test ends only after the
+last cue's blink has had its full matching window.

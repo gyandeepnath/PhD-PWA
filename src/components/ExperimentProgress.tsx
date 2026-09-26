@@ -8,9 +8,14 @@ interface Props {
   conditionTotal?: number;
   /** Rough minutes remaining in the sitting (neutral; no performance information). */
   timeRemainingMin?: number | null;
+  /**
+   * The screen under the label is dark (the gaze calibration and camera self-test overlays, which
+   * sit below this bar). The label then takes a light ink: the usual #4a4a60 is ~2:1 on those.
+   */
+  onDark?: boolean;
 }
 
-export function ExperimentProgress({ percent, label, conditionCurrent, conditionTotal, timeRemainingMin }: Props) {
+export function ExperimentProgress({ percent, label, conditionCurrent, conditionTotal, timeRemainingMin, onDark = false }: Props) {
   const parts: string[] = [];
   if (conditionCurrent != null && conditionTotal != null) parts.push(`Condition ${conditionCurrent} of ${conditionTotal}`);
   if (label) parts.push(label);
@@ -35,9 +40,9 @@ export function ExperimentProgress({ percent, label, conditionCurrent, condition
             position: 'absolute',
             top: 8,
             right: 12,
-            fontFamily: '"DM Mono", monospace',
-            fontSize: 11,
-            color: '#5a5a7a',
+            fontFamily: 'Roboto, ui-sans-serif, sans-serif',
+            fontSize: 14,
+            color: onDark ? '#c8d8f0' : '#4a4a60',
           }}
         >
           {text}

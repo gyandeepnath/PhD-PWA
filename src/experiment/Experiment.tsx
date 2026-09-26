@@ -1735,6 +1735,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           conditionCurrent={conditionCurrent}
           conditionTotal={conditionTotal}
           timeRemainingMin={timeRemainingMin}
+          onDark={machine.stage === 'CALIBRATION' && tracking.status === 'active' && !!session}
         />
       )}
       {/* If the device has no wake-lock API, the operator has to know: the manual's fallback

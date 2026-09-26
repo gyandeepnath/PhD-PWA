@@ -13,8 +13,9 @@ import { PASSAGES, QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
 import { repeatRunAcknowledged, REPEAT_NOTE_MIN_CHARS, SPLIT_REASON_MIN_CHARS } from '@/experiment/participantProgress';
 import { ILLUMINATION, luxInRange, type IlluminationLevel, N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 import type { MediaConsent } from '@/storage/media';
-import { WavyBackground } from '@/components/WavyBackground';
 import { ScrollCue } from '@/components/ScrollCue';
+import { InfoTip } from '@/components/InfoTip';
+import { UI_TEXT } from '@/lib/uiPalette';
 import { now } from '@/lib/timing';
 import { trackFieldBlockedTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { stimulusFontLoaded } from '@/lib/fonts';
@@ -39,8 +40,25 @@ import type { CameraStatus } from '@/storage/types';
  *
  * min-h-0 is what lets the flex child actually shrink to its container instead of growing.
  */
-const shell = 'h-full w-full bg-cream p-[6%] font-sans text-[#1a1a2e] animate-fade-in overflow-y-auto';
-const btn = 'rounded-xl px-8 py-3 font-lab text-sm text-white transition active:scale-95';
+const shell = 'h-full w-full bg-cream px-[5%] py-10 font-sans text-[#1a1a2e] animate-fade-in overflow-y-auto';
+const btn = 'rounded-xl px-8 py-3 font-sans text-base font-medium text-white transition active:scale-95';
+/*
+ * TYPE SCALE for these screens. The whole app is drawn on the 1194x834 design canvas and shrunk to
+ * fit (viewportScale.ts): about 0.86 on a Xiaomi Pad 6, so a 12 px label arrived at the eye as about
+ * 10 px — in DM Mono, a typewriter face that reads poorly as running text. The floor is now 15 px for
+ * anything read as a sentence and 14 px for the small uppercase headings, in Roboto; DM Mono is kept
+ * for what it is good at, the input fields where codes and numbers are typed. Colours are from
+ * lib/uiPalette.ts, each at least 4.5:1 on these grounds (tests/contrast.test.ts).
+ */
+const eyebrow = 'font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]';
+const help = 'font-sans text-[15px] leading-relaxed text-[#4a4a60]';
+const body = 'font-sans text-base leading-relaxed text-[#3a3a4a]';
+/** A primary button's colours, enabled or not. Disabled was white on #cfcbc3, 1.6:1. */
+const btnState = (ok: boolean) => ok
+  ? { background: '#1a1a2e', cursor: 'pointer' }
+  : { background: '#e8e6e1', color: UI_TEXT.muted, cursor: 'not-allowed' };
+/** Inputs stay in DM Mono — codes and numbers are what is typed — at 17 px rather than 15. */
+const VL_INPUT_CSS = `.vl-input{width:100%;padding:12px 14px;border:1px solid #bdb8ae;border-radius:10px;font-family:'DM Mono',monospace;font-size:17px;background:#fff;color:#1a1a2e}.vl-input::placeholder{color:#76747f}`;
 
 // ---- SESSION INIT ----
 export interface SessionInitData {
@@ -145,17 +163,20 @@ export function SessionInit({
     && repeatAcknowledged && splitAcknowledged && !withdrawn;
 
   return (
-    <div className={shell} style={{ position: 'relative' }}>
-      <WavyBackground opacity={0.06} />
-      <div style={{ position: 'relative', zIndex: 1, width: '100%', margin: '0 auto', maxWidth: 560 }}>
-        <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">VisuLab · Research Console</p>
+    <div className={shell}>
+      {/* Two columns: who and where on the left, the display and the sitting on the right. As one
+          560 px column the form ran well past the bottom of a tablet screen with most of the width
+          empty, and the operator had to scroll to find what they had just typed. */}
+      <div style={{ width: '100%', margin: '0 auto', maxWidth: 1040 }}>
+        <p className={eyebrow}>VisuLab · Research Console</p>
         <h1 className="mt-2 font-serif text-5xl font-light">New Session</h1>
-        <div className="mt-8 space-y-4">
+        <div className="mt-8" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '20px 40px', alignItems: 'start' }}>
+        <div className="space-y-5">
           <Field label="Participant ID — a CODE, not a name (letters, digits, - or _, ≤20)">
             <input data-testid="pid" className="vl-input" value={pid} onChange={(e) => setPid(e.target.value)} placeholder="P001" />
           </Field>
           {withdrawn && (
-            <div data-testid="participant-withdrawn" className="font-lab text-sm"
+            <div data-testid="participant-withdrawn" className="font-sans text-base"
               style={{ border: '1px solid #b83a3a', background: '#fdeeee', color: '#5a1414', borderRadius: 10, padding: 12 }}>
               <strong>Participant {pid} withdrew from the study</strong> on{' '}
               {new Date(assigned!.withdrawnAt as number).toLocaleDateString()}. A new sitting cannot be
@@ -171,13 +192,13 @@ export function SessionInit({
                 background: completedProtocol ? '#fdf6e8' : '#fbf9f5',
               }}
             >
-              <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">Existing record for this ID</p>
+              <p className={eyebrow}>Existing record for this ID</p>
               <p className="mt-1 font-serif text-xl">
                 {assigned.conditionsCompleted} of {N_CONDITIONS} conditions completed
                 {' · '}{assigned.sittings} sitting{assigned.sittings === 1 ? '' : 's'}
                 {' · '}enrolment {assigned.enrolment}
               </p>
-              <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: 6 }}>
+              <p className={help} style={{ marginTop: 6 }}>
                 {completedProtocol
                   ? 'This participant has already been through the whole protocol. Starting now runs '
                     + 'all ten conditions AGAIN: they will re-read every passage, repeat every search '
@@ -196,14 +217,14 @@ export function SessionInit({
           )}
           {assigned && spec && (
             <div style={{ border: '1px solid #d8d4cc', borderRadius: 10, padding: '14px 16px', background: '#fbf9f5' }}>
-              <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">
+              <p className={eyebrow}>
                 {N_ILLUMINATION_BLOCKS > 1
                   ? `Assigned illumination — block ${assigned.block + 1} of ${N_ILLUMINATION_BLOCKS}`
                   : 'Room illumination — single level for the whole study'}
               </p>
               <p className="mt-1 font-serif text-2xl">{spec.label}</p>
-              <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: 4 }}>{spec.description}</p>
-              <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: 6 }}>
+              <p className={help} style={{ marginTop: 4 }}>{spec.description}</p>
+              <p className={help} style={{ marginTop: 6 }}>
                 Set the room to <strong>{spec.target} lux</strong> (accept {spec.min}–{spec.max}) before measuring.
                 {N_ILLUMINATION_BLOCKS > 1
                   ? ` Order for this participant: ${ILLUMINATION[assigned.orderFirst].label} first — assigned by counterbalancing, not chosen.`
@@ -211,36 +232,71 @@ export function SessionInit({
               </p>
             </div>
           )}
-          <Field label={`Measured illuminance at the eye (lux) — ${spec ? `target ${spec.target}, accept ${spec.min}–${spec.max}` : 'measure with a lux meter'}`}>
-            <input data-testid="lux" className="vl-input" inputMode="numeric" value={lux} onChange={(e) => setLux(e.target.value)} placeholder={spec ? String(spec.target) : String(ILLUMINATION.moderate.target)} />
-          </Field>
-          {luxEntered && spec && !inRange && (
-            <Field label={`⚠ ${luxNum} lux is outside ${spec.min}–${spec.max}. Adjust the room, or record why you are proceeding (≥3 chars).`}>
-              <input data-testid="lux-deviation" className="vl-input" value={deviation} onChange={(e) => setDeviation(e.target.value)} placeholder="Reason for protocol deviation" />
+        </div>
+        <div className="space-y-5">
+          {/* The lux field, its verdict and any deviation note are one block, so the verdict line
+              sits under the box with its own clear gap. It used to be a separate item in the form's
+              spacing with a hand-set margin, and on the tablet it rode up against the input. */}
+          <div data-testid="lux-block">
+            <Field
+              label={`Measured illuminance at the eye (lux) — ${spec ? `target ${spec.target}, accept ${spec.min}–${spec.max}` : 'measure with a lux meter'}`}
+              info={<>
+                Hold the lux meter at the participant&apos;s eye position, facing the screen, and type
+                the reading. The app compares it with the accepted range for this study&apos;s
+                illumination level. Outside the range you can still continue, but only with a written
+                reason, which is saved with the session. The room is measured again at the
+                mid-session break and at the end.
+              </>}
+            >
+              <input data-testid="lux" className="vl-input" inputMode="numeric" value={lux} onChange={(e) => setLux(e.target.value)} placeholder={spec ? String(spec.target) : String(ILLUMINATION.moderate.target)} />
             </Field>
-          )}
-          {luxEntered && inRange && (
-            // Was marginTop -6, which cancelled the form's spacing and pulled this line up onto the
-            // lux box's border on the tablet. A small positive gap keeps it attached to the field.
-            <p className="font-lab text-sm" style={{ color: '#1d7a4a', marginTop: 6 }}>✓ Within the accepted range for {spec!.label}.</p>
-          )}
-          <Field label="Measured white-screen luminance (cd/m², optional)">
+            {luxEntered && inRange && (
+              <p data-testid="lux-in-range" role="status" className="font-sans text-[15px] font-medium"
+                style={{ color: UI_TEXT.green, marginTop: 12, lineHeight: 1.45 }}>
+                ✓ Within the accepted range for {spec!.label}.
+              </p>
+            )}
+            {luxEntered && spec && !inRange && (
+              <div style={{ marginTop: 14 }}>
+                <Field label={`⚠ ${luxNum} lux is outside ${spec.min}–${spec.max}. Adjust the room, or record why you are proceeding (≥3 chars).`}>
+                  <input data-testid="lux-deviation" className="vl-input" value={deviation} onChange={(e) => setDeviation(e.target.value)} placeholder="Reason for protocol deviation" />
+                </Field>
+              </div>
+            )}
+          </div>
+          <Field
+            label="Measured white-screen luminance (cd/m², optional)"
+            info={<>
+              Optional. Show a full white screen at the brightness used for the session and measure it
+              with a luminance meter. The number is saved with the session as a record of how bright
+              the display actually was; the app does not change anything because of it.
+            </>}
+          >
             <input className="vl-input" inputMode="numeric" value={lum} onChange={(e) => setLum(e.target.value)} placeholder="120" />
           </Field>
-          <Field label="Locked display brightness (%, optional)">
+          <Field
+            label="Locked display brightness (%, optional)"
+            info={<>
+              Optional. The brightness setting the tablet is fixed at for the session, with
+              auto-brightness off. A web app cannot read or set the brightness itself, so it is typed
+              here and saved with the session, which makes a change between sittings visible later.
+            </>}
+          >
             <input className="vl-input" inputMode="numeric" value={bright} onChange={(e) => setBright(e.target.value)} placeholder="80" />
           </Field>
+          <div>
           <Pick
             label="Session structure (split shortens each sitting to reduce fatigue/boredom)"
             value={sitting}
             set={(v) => setSitting(v as 'single' | 'split')}
             opts={['single', 'split']}
           />
-          <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: 8 }}>
+          <p className={help} style={{ marginTop: 10 }}>
             {sitting === 'single'
               ? `Single sitting: all ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT} conditions (${CONFIG.SINGLE_SITTING_DURATION}).`
               : `Split: ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2} conditions now, the remaining ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2} in a later sitting (re-enter the same Participant ID; the condition order is preserved). Both halves export as ONE participant.`}
           </p>
+          </div>
           {sitting === 'split' && (
             <div style={{ marginTop: 12 }}>
               <Field label={`⚠ Why is this sitting being split? (≥${SPLIT_REASON_MIN_CHARS} chars — recorded with the session)`}>
@@ -252,7 +308,7 @@ export function SessionInit({
                   placeholder="e.g. room booked for 1 h only — scheduling, not participant state"
                 />
               </Field>
-              <p className="font-lab text-xs text-[#5a5a7a]" style={{ marginTop: 6 }}>
+              <p className={help} style={{ marginTop: 8 }}>
                 Say whether the reason is logistical or about this participant. A scheduling reason is
                 harmless; splitting because someone looks tired makes fatigue exposure depend on how
                 they presented, which is a covariate the analysis has to know about.
@@ -260,10 +316,11 @@ export function SessionInit({
             </div>
           )}
         </div>
-        {err && <p className="mt-3 font-lab text-xs text-[#e64c4c]">{err}</p>}
+        </div>
+        {err && <p className="mt-3 font-sans text-[15px]" style={{ color: UI_TEXT.red }}>{err}</p>}
         <button
           className={btn}
-          style={{ marginTop: 24, background: valid ? '#1a1a2e' : '#cfcbc3', cursor: valid ? 'pointer' : 'not-allowed' }}
+          style={{ marginTop: 28, ...btnState(valid) }}
           disabled={!valid}
           onClick={() => {
             if (!valid) {
@@ -294,7 +351,7 @@ export function SessionInit({
           Begin setup →
         </button>
       </div>
-      <style>{`.vl-input{width:100%;padding:12px 14px;border:1px solid #d8d4cc;border-radius:10px;font-family:'DM Mono',monospace;font-size:15px;background:#fff;color:#1a1a2e}`}</style>
+      <style>{VL_INPUT_CSS}</style>
     </div>
   );
 }
@@ -339,15 +396,20 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
 
   return (
     <div className={shell}>
-      <div style={{ width: '100%', maxWidth: 640, margin: '0 auto' }}>
+      {/* Two columns: ten questions in one 640 px column ran far below the fold. The no/yes groups
+          stay in the same document order (colour-vision self-report, then caffeine). */}
+      <div style={{ width: '100%', maxWidth: 1040, margin: '0 auto' }}>
       <h1 className="font-serif text-4xl font-light">Participant profile</h1>
-      <p className="mt-1 font-lab text-xs text-[#5a5a7a]">Eligibility: ages {CONFIG.MIN_AGE}–{CONFIG.MAX_AGE}. Contact-lens wear on a test day and colour-vision deficiency are exclusions.</p>
-      <div className="mt-6 space-y-4" style={{ maxWidth: 640 }}>
+      <p className={`mt-2 ${help}`}>Eligibility: ages {CONFIG.MIN_AGE}–{CONFIG.MAX_AGE}. Contact-lens wear on a test day and colour-vision deficiency are exclusions.</p>
+      <div className="mt-6" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '20px 40px', alignItems: 'start' }}>
+      <div className="space-y-5">
         <Field label={`Age (${CONFIG.MIN_AGE}–${CONFIG.MAX_AGE})`}><input data-testid="age" className="vl-input" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} /></Field>
         <Pick label="Gender" value={gender} set={setGender} opts={['male', 'female', 'non-binary', 'prefer not to say']} />
         <Field label="Daily screen hours"><input data-testid="hours" className="vl-input" inputMode="numeric" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="6" /></Field>
         <Pick label="Device familiarity" value={fam} set={(v) => setFam(v as ProfileData['deviceFamiliarity'])} opts={['low', 'moderate', 'high']} />
         <Pick label="Typical lighting" value={light} set={(v) => setLight(v as ProfileData['lightingHabit'])} opts={['bright', 'moderate', 'dim']} />
+      </div>
+      <div className="space-y-5">
         <Pick label="Vision correction" value={corr} set={(v) => setCorr(v as ProfileData['correctionType'])} opts={['none', 'glasses', 'contacts']} />
         <Pick label="Any colour-vision deficiency? (self-report; the colour-vision plates follow)" value={cvd == null ? '' : cvd ? 'yes' : 'no'} set={(v) => setCvd(v === 'yes')} opts={['no', 'yes']} />
         <Pick
@@ -359,9 +421,10 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
         <Pick label="Caffeine in the last ~4 hours?" value={caffeine == null ? '' : caffeine ? 'yes' : 'no'} set={(v) => setCaffeine(v === 'yes')} opts={['no', 'yes']} />
         <Field label="Hours since you woke up today"><input data-testid="since-sleep" className="vl-input" inputMode="numeric" value={sinceSleep} onChange={(e) => setSinceSleep(e.target.value)} placeholder="3" /></Field>
       </div>
+      </div>
       <button
         className={btn}
-        style={{ marginTop: 24, background: valid ? '#1a1a2e' : '#cfcbc3', cursor: valid ? 'pointer' : 'not-allowed' }}
+        style={{ marginTop: 28, ...btnState(!!valid) }}
         disabled={!valid}
         onClick={() => valid && onSubmit({
           age: ageN, gender, dailyScreenHours: Number(hours),
@@ -377,7 +440,7 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
         Continue →
       </button>
       </div>
-      <style>{`.vl-input{width:100%;padding:12px 14px;border:1px solid #d8d4cc;border-radius:10px;font-family:'DM Mono',monospace;font-size:15px;background:#fff;color:#1a1a2e}`}</style>
+      <style>{VL_INPUT_CSS}</style>
       <ScrollCue />
     </div>
   );
@@ -449,9 +512,8 @@ export function CameraSetup({ onAllow, onSkip, retains }: {
   };
 
   return (
-    <div className={shell} style={{ position: 'relative' }}>
-      <WavyBackground opacity={0.05} />
-      <div style={{ position: 'relative', zIndex: 1, width: '100%', margin: '0 auto', maxWidth: 620 }}>
+    <div className={shell}>
+      <div style={{ width: '100%', margin: '0 auto', maxWidth: 760 }}>
         <h1 className="font-serif text-4xl font-light">Camera setup</h1>
 
         {step === 'notice' && (
@@ -460,7 +522,7 @@ export function CameraSetup({ onAllow, onSkip, retains }: {
                 a retention grant on the immediately preceding screen: they were told in writing
                 that nothing was kept, while two photographs of them were written to storage. In a
                 consent record for an ethics-approved protocol that is not a wording problem. */}
-            <div className="mt-4 rounded-xl border border-[#cdd8f0] bg-[#eef3ff] p-4 font-lab text-sm">
+            <div className="mt-4 rounded-xl border border-[#cdd8f0] bg-[#eef3ff] p-4 font-sans text-base leading-relaxed">
               {!retains?.setupPhotos && !retains?.annotationVideo ? (
                 <>
                   <strong>Privacy:</strong> no video or images are recorded or stored. The camera only
@@ -477,14 +539,14 @@ export function CameraSetup({ onAllow, onSkip, retains }: {
                 </>
               )}
             </div>
-            <p className="mt-4 font-lab text-sm text-[#5a5a7a]">
+            <p className={`mt-4 ${help}`}>
               Sit directly facing the screen, ~50–60 cm away, with your face clearly visible and
               well-lit. Avoid strong light behind you. The browser will ask for camera permission —
               please tap “Allow”.
             </p>
             <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <button className={btn} style={{ background: '#1a1a2e' }} onClick={requestCamera}>Enable camera →</button>
-              <button className="rounded-xl border border-[#d8d4cc] px-8 py-3 font-lab text-sm text-[#5a5a7a]" onClick={onSkip}>
+              <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" onClick={onSkip}>
                 Continue without camera
               </button>
             </div>
@@ -493,7 +555,7 @@ export function CameraSetup({ onAllow, onSkip, retains }: {
 
         {step === 'preview' && (
           <>
-            <p className="mt-3 font-lab text-sm text-[#5a5a7a]">
+            <p className={`mt-3 ${help}`}>
               Check the preview: your whole face should be centred, in frame, and well-lit.
             </p>
             {/*
@@ -523,13 +585,13 @@ export function CameraSetup({ onAllow, onSkip, retains }: {
               )}
               <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.55)', borderRadius: 20, padding: '4px 10px' }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: FACE_TONE[face.status] }} />
-                <span data-testid="face-status" style={{ color: '#fff', fontFamily: '"DM Mono", monospace', fontSize: 11 }}>
+                <span data-testid="face-status" style={{ color: '#fff', fontFamily: 'Roboto, ui-sans-serif, sans-serif', fontSize: 15 }}>
                   {FACE_LABEL[face.status]}
                 </span>
               </div>
             </div>
             {face.status === 'unavailable' && (
-              <div className="mt-3 rounded-xl border border-[#e64c4c] bg-[#fff0f0] p-3 font-lab text-sm" style={{ color: '#7a1010' }}>
+              <div className="mt-3 rounded-xl border border-[#e64c4c] bg-[#fff0f0] p-3 font-sans text-base leading-relaxed" style={{ color: '#7a1010' }}>
                 The face-tracking model could not be loaded on this device, so no blink, gaze or
                 head-position data can be collected in this session — the primary outcome would be
                 empty for every condition. Check the device is fully set up (see DEPLOYMENT.md
@@ -540,7 +602,7 @@ export function CameraSetup({ onAllow, onSkip, retains }: {
               <button className={btn} style={{ background: '#1a1a2e' }} onClick={() => { stopPreview(); onAllow(); }}>
                 My face is centred — continue →
               </button>
-              <button className="rounded-xl border border-[#d8d4cc] px-8 py-3 font-lab text-sm text-[#5a5a7a]" onClick={() => { stopPreview(); onSkip(); }}>
+              <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" onClick={() => { stopPreview(); onSkip(); }}>
                 Continue without camera
               </button>
             </div>
@@ -549,12 +611,12 @@ export function CameraSetup({ onAllow, onSkip, retains }: {
 
         {step === 'denied' && (
           <>
-            <div className="mt-4 rounded-xl border border-[#f5a62366] bg-[#fff8ec] p-4 font-lab text-sm" style={{ color: '#8a6d2f' }}>
+            <div className="mt-4 rounded-xl border border-[#f5a62366] bg-[#fff8ec] p-4 font-sans text-base leading-relaxed" style={{ color: UI_TEXT.amber }}>
               {errMsg}
             </div>
             <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <button className={btn} style={{ background: '#1a1a2e' }} onClick={() => { setErrMsg(''); setStep('notice'); }}>Retry</button>
-              <button className="rounded-xl border border-[#d8d4cc] px-8 py-3 font-lab text-sm text-[#5a5a7a]" onClick={onSkip}>
+              <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" onClick={onSkip}>
                 Continue without camera
               </button>
             </div>
@@ -576,15 +638,14 @@ export function CameraSetup({ onAllow, onSkip, retains }: {
  */
 export function CameraDeclined({ onContinue }: { onContinue: () => void }) {
   return (
-    <div className={shell} style={{ position: 'relative' }}>
-      <WavyBackground opacity={0.05} />
-      <div style={{ position: 'relative', zIndex: 1, width: '100%', margin: '0 auto', maxWidth: 620 }}>
+    <div className={shell}>
+      <div style={{ width: '100%', margin: '0 auto', maxWidth: 760 }}>
         <h1 className="font-serif text-4xl font-light">Camera measurement declined</h1>
-        <div className="mt-4 rounded-xl border border-[#cdd8f0] bg-[#eef3ff] p-4 font-lab text-sm">
+        <div className="mt-4 rounded-xl border border-[#cdd8f0] bg-[#eef3ff] p-4 font-sans text-base leading-relaxed">
           This participant did not consent to camera measurement, so the camera will not be used at
           any point in this session and no blink, gaze or head-position data will be collected.
         </div>
-        <p className="mt-4 font-lab text-sm text-[#5a5a7a]">
+        <p className={`mt-4 ${help}`}>
           Everything else runs exactly as normal: every questionnaire, the reading and comprehension
           tasks, visual search and the reaction-time blocks. The session is complete and fully
           usable without the ocular measures — do not try to persuade the participant otherwise.
@@ -603,9 +664,9 @@ export function Calibration({ cameraStatus, onDone }: { cameraStatus: CameraStat
   const [counting, setCounting] = useState(false);
   return (
     <div className={shell}>
-      <div style={{ width: '100%', maxWidth: 560, margin: '0 auto' }}>
+      <div style={{ width: '100%', maxWidth: 760, margin: '0 auto' }}>
       <h1 className="font-serif text-4xl font-light">Positioning check</h1>
-      <p className="mt-2 font-lab text-sm text-[#5a5a7a]">
+      <p className={`mt-2 ${help}`}>
         {cameraStatus === 'active'
           ? 'Keep your eyes open and look at the centre of the screen for a few seconds while we record a baseline.'
           : 'Camera not active — this step is skipped. The experiment continues without eye tracking.'}
@@ -743,17 +804,16 @@ export function Instructions({ conditions, onContinue }: { conditions: number; o
   const pages = Math.max(...PASSAGES.map((p) => p.pages.length));
   const breakEvery = CONFIG.BREAK_EVERY_N_CONDITIONS;
   return (
-    <div className={shell} style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <WavyBackground opacity={0.05} />
-      <div style={{ position: 'relative', zIndex: 1, width: '100%', margin: '0 auto', maxWidth: 640 }}>
-        <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">Before you begin</p>
+    <div className={shell} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: '100%', margin: '0 auto', maxWidth: 800 }}>
+        <p className={eyebrow}>Before you begin</p>
         <h1 className="mt-2 font-serif text-4xl font-light">What you’ll be doing</h1>
-        <p className="mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]" data-testid="instructions-count">
+        <p className="mt-4 font-sans text-[17px] leading-relaxed text-[#3a3a4a]" data-testid="instructions-count">
           In this sitting you’ll see <strong>{conditions} different screen displays</strong> (different
           background and text colours). For <strong>each</strong> display you’ll complete the same short
           tasks in the same order:
         </p>
-        <ol className="mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]" style={{ paddingLeft: 18, listStyle: 'decimal' }}>
+        <ol className="mt-4 font-sans text-[17px] leading-relaxed text-[#3a3a4a]" style={{ paddingLeft: 18, listStyle: 'decimal' }}>
           <li><strong>Read</strong> a passage of {pages} short pages.</li>
           <li>Answer <strong>{QUESTIONS_PER_PASSAGE} questions</strong> about it.</li>
           <li>Rate the display’s <strong>comfort &amp; clarity</strong>, and how your <strong>eyes feel</strong>.</li>
@@ -761,7 +821,7 @@ export function Instructions({ conditions, onContinue }: { conditions: number; o
           <li><strong>Tap</strong> when a dot appears in the <strong>same colour as the text you have
             just read</strong>, and not when it is any other colour (a quick reaction game).</li>
         </ol>
-        <p className="mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]">
+        <p className="mt-4 font-sans text-[17px] leading-relaxed text-[#3a3a4a]">
           Between displays there’s a short rest with a grey screen, and a longer break after
           every {breakEvery === 1 ? 'display' : `${breakEvery} displays`}. Each task shows its own
           instructions and a “Begin” button, so just follow the prompts. You may tell the researcher
@@ -778,14 +838,13 @@ export function Instructions({ conditions, onContinue }: { conditions: number; o
 // ---- SESSION COMPLETE ----
 export function SessionComplete({ onExport, luxPanel }: { onExport: () => void; luxPanel?: ReactNode }) {
   return (
-    <div className={shell} style={{ position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-      <WavyBackground opacity={0.05} />
+    <div className={shell} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
       {/* Centred, and in reading order: the participant's message first, then — set apart — what
           the researcher does next. The end-of-session lux panel used to sit between the heading and
           the thank-you, on a left-aligned column with the right half of the screen empty. */}
-      <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 600, margin: '0 auto' }}>
+      <div style={{ width: '100%', maxWidth: 720, margin: '0 auto' }}>
         <h1 className="font-serif text-5xl font-light">Thank you</h1>
-        <p className="mt-3 font-lab text-sm text-[#5a5a7a]">
+        <p className={`mt-3 ${body}`} style={{ fontSize: 17 }}>
           Your responses have been recorded and will contribute to research on visual ergonomics.
           Please inform the researcher that you have finished.
         </p>
@@ -824,28 +883,38 @@ export function Consent({
   const [setupPhotos, setSetupPhotos] = useState(false);
   const [annotationVideo, setAnnotationVideo] = useState(false);
 
-  const Opt = ({ checked, set, title, body, testid }: {
-    checked: boolean; set: (v: boolean) => void; title: string; body: string; testid: string;
+  /*
+   * Each option is a checkbox row with its explanation beside it. No "i" notes here: anything shown
+   * to the participant on this screen is consent wording, and the approved wording is the text
+   * below and the option notes. Plain-language detail on what each option does belongs in the
+   * operator manual, not in an extra sentence the ethics committee has not seen.
+   */
+  const Opt = ({ checked, set, title, note, testid }: {
+    checked: boolean; set: (v: boolean) => void; title: string; note: string; testid: string;
   }) => (
-    <label style={{ display: 'flex', gap: 10, marginTop: 12, cursor: 'pointer', alignItems: 'flex-start' }}>
+    <label style={{ display: 'flex', gap: 12, cursor: 'pointer', alignItems: 'flex-start', marginTop: 12, padding: '12px 14px', borderRadius: 12, border: '1px solid #e5e2dc', background: '#fff' }}>
       <input
         type="checkbox" data-testid={testid} checked={checked}
         onChange={(e) => set(e.target.checked)}
-        style={{ width: 20, height: 20, marginTop: 2, flexShrink: 0 }}
+        style={{ width: 24, height: 24, marginTop: 2, flexShrink: 0 }}
       />
       <span>
-        <span className="font-lab text-sm" style={{ fontWeight: 650 }}>{title}</span>
-        <span className="font-lab text-xs" style={{ display: 'block', color: '#5a5a7a', marginTop: 2 }}>{body}</span>
+        <span className="font-sans text-[17px]" style={{ fontWeight: 500, color: UI_TEXT.ink }}>{title}</span>
+        <span className={help} style={{ display: 'block', marginTop: 4 }}>{note}</span>
       </span>
     </label>
   );
 
   return (
-    <div className={shell} style={{ position: 'relative' }}>
-      <WavyBackground opacity={0.05} />
-      <div style={{ position: 'relative', zIndex: 1, width: '100%', margin: '0 auto', maxWidth: 640 }}>
+    <div className={shell}>
+      {/* A readable column across the screen, not a strip down its middle. The consent text is set at
+          17 px with generous leading and scrolls inside its own box, so the choices and the button
+          stay on screen. The decorative wave lines that used to run behind it are gone: they crossed
+          the words. */}
+      <div style={{ width: '100%', margin: '0 auto', maxWidth: 880 }}>
         <h1 className="font-serif text-4xl font-light">Informed consent</h1>
-        <div className="scrollable mt-4 font-lab text-sm leading-relaxed text-[#3a3a4a]" style={{ maxHeight: 340, paddingRight: 8 }}>
+        <div data-testid="consent-text" className="scrollable mt-4 font-sans text-[#2a2a3a]"
+          style={{ fontSize: 17, lineHeight: 1.6, maxHeight: 360, padding: '16px 20px', borderRadius: 12, border: '1px solid #e5e2dc', background: '#fff' }}>
           {/*
             * PARTICIPANT-FACING CONSENT TEXT. Two statements here became FALSE when the dim
             * illumination level was withdrawn, and both were material:
@@ -878,34 +947,34 @@ export function Consent({
             affect your participation or anything else about the session.</p>
         </div>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 18, cursor: 'pointer' }}>
-          <input type="checkbox" data-testid="consent-core" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ width: 20, height: 20 }} />
-          <span className="font-lab text-sm" style={{ fontWeight: 650 }}>I have read the above and consent to participate.</span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 18, cursor: 'pointer' }}>
+          <input type="checkbox" data-testid="consent-core" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ width: 24, height: 24 }} />
+          <span className="font-sans text-[17px]" style={{ fontWeight: 500 }}>I have read the above and consent to participate.</span>
         </label>
 
-        <p className="font-lab text-xs uppercase tracking-wide" style={{ color: '#5a5a7a', marginTop: 20 }}>
+        <p className={eyebrow} style={{ marginTop: 22 }}>
           Optional — each is a separate choice
         </p>
         <Opt
           testid="consent-camera" checked={cameraMetrics} set={setCameraMetrics}
           title="Use the camera for blink and head-position measures"
-          body="Numbers only. No image or video is saved. Declining means the eye measures are not collected for you; everything else runs as normal."
+          note="Numbers only. No image or video is saved. Declining means the eye measures are not collected for you; everything else runs as normal."
         />
         <Opt
           testid="consent-photos" checked={setupPhotos} set={setSetupPhotos}
           title="Keep two photographs of me at the device"
-          body="One at the start and one at the end, to document seating distance and room lighting. Stored on this device with your participant code, used only as a record that the setup was correct."
+          note="One at the start and one at the end, to document seating distance and room lighting. Stored on this device with your participant code, used only as a record that the setup was correct."
         />
         {askAnnotationVideo && (
           <Opt
             testid="consent-video" checked={annotationVideo} set={setAnnotationVideo}
             title="Keep short video clips of my eyes while I read"
-            body="A few minutes in total. A trained assessor watches them frame by frame to check the automatic blink measurement is accurate. This is what allows the method to be validated; it is optional and you can take part fully without it."
+            note="A few minutes in total. A trained assessor watches them frame by frame to check the automatic blink measurement is accurate. This is what allows the method to be validated; it is optional and you can take part fully without it."
           />
         )}
 
         <button className={btn} disabled={!agreed}
-          style={{ marginTop: 22, background: agreed ? '#1a1a2e' : '#cfcbc3', cursor: agreed ? 'pointer' : 'not-allowed' }}
+          style={{ marginTop: 22, ...btnState(agreed) }}
           onClick={() => agreed && onConsent({
             camera_metrics: cameraMetrics,
             setup_photos: setupPhotos,
@@ -914,10 +983,11 @@ export function Consent({
           })}>
           I consent — continue →
         </button>
-        <p className="font-lab text-xs" style={{ color: '#5a5a7a', marginTop: 10 }}>
+        <p className={help} style={{ marginTop: 10 }}>
           Unticked boxes are recorded as a refusal, not left blank.
         </p>
       </div>
+      <ScrollCue gutter />
     </div>
   );
 }
@@ -988,44 +1058,56 @@ export function Preflight({ onDone }: { onDone: (fontOk: boolean | null) => void
 
   const storageBlocks = storage?.verdict === 'blocked';
   const all = checked.every(Boolean) && !!storage && !storageBlocks && fontOk !== undefined;
+  // Bright hues for borders and tints; the dark ones, each ≥4.5:1, for the words.
   const tone = { ok: '#22c97a', warn: '#c98a22', blocked: '#e64c4c', unknown: '#5a5a7a' } as const;
+  const toneText = { ok: UI_TEXT.green, warn: UI_TEXT.amber, blocked: UI_TEXT.red, unknown: UI_TEXT.muted } as const;
+  const boxText = 'font-sans text-[15px] leading-relaxed text-[#3a3a4a]';
   return (
     <div className={shell}>
-      {/* Centred column, as every other setup screen: this one sat against the left edge with the
-          right half of the screen empty. */}
-      <div style={{ width: '100%', maxWidth: 640, margin: '0 auto' }}>
+      {/* Two columns: what the app checked on the left, what the researcher confirms on the right.
+          One 640 px column put the checklist and the Continue button below the fold. */}
+      <div style={{ width: '100%', maxWidth: 1040, margin: '0 auto' }}>
       <h1 className="font-serif text-4xl font-light">Pre-flight checklist</h1>
-      <p className="mt-1 font-lab text-xs text-[#5a5a7a]">Researcher: confirm each item before starting.</p>
+      <p className={`mt-2 ${help}`}>Researcher: confirm each item before starting.</p>
 
+      <div className="mt-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '12px 32px', alignItems: 'start' }}>
+      <div>
       <div
         data-testid="storage-health"
         style={{
-          marginTop: 16, maxWidth: 640, padding: '12px 14px', borderRadius: 10,
+          padding: '12px 14px', borderRadius: 10,
           border: `1px solid ${storage ? tone[storage.verdict] : '#e5e2dc'}`,
           background: storage && storage.verdict !== 'ok' ? `${tone[storage.verdict]}12` : '#fff',
         }}
       >
-        <p className="font-lab text-xs uppercase tracking-wide" style={{ color: storage ? tone[storage.verdict] : '#5a5a7a' }}>
+        <p className={eyebrow} style={{ color: storage ? toneText[storage.verdict] : UI_TEXT.muted }}>
           Device storage {storage ? `— ${storage.verdict}` : '— checking…'}
         </p>
         {storage?.messages.map((m, i) => (
-          <p key={i} className="font-lab text-sm" style={{ marginTop: 6, color: '#3a3a4a' }}>{m}</p>
+          <p key={i} className={boxText} style={{ marginTop: 6 }}>{m}</p>
         ))}
       </div>
       <div data-testid="scale-check"
         style={{ marginTop: 12, padding: '12px 14px', borderRadius: 10, border: `1px solid ${scaleLocked ? '#b3261e' : '#d8d4cc'}`, background: scaleLocked ? '#fdeeee' : '#fff' }}>
-        <p className="font-lab text-sm" style={{ color: scaleLocked ? '#8a1c14' : '#3a3a4a' }}>
+        <p className={boxText} style={{ color: scaleLocked ? '#8a1c14' : '#3a3a4a' }}>
           <strong>Display size:</strong> {Math.round(scale.applied * 100)}% of design size
           {scaleLocked ? ` — this screen supports ${Math.round(scale.fresh * 100)}%.` : ' — correct for this screen.'}
+          {' '}
+          <InfoTip label="display size">
+            Every screen is drawn at a fixed design size (1194 × 834) and shrunk to fit this tablet.
+            The percentage is how much it is shrunk. It shrinks the reading text too, so it is saved
+            with every condition. It should match what this screen supports; if it is lower, tap
+            Re-fit.
+          </InfoTip>
         </p>
         {scaleLocked && (
           <>
-            <p className="font-lab text-sm" style={{ marginTop: 6, color: '#3a3a4a' }}>
+            <p className={boxText} style={{ marginTop: 6 }}>
               The app is drawing everything smaller than it should, so the reading text would be too
               small. This happens after the app was opened in a floating or split window. Tap Re-fit;
               if it does not change, close the app from recent apps and reopen it full-screen.
             </p>
-            <button type="button" data-testid="scale-refit" onClick={refit} className="font-lab text-sm"
+            <button type="button" data-testid="scale-refit" onClick={refit} className="font-sans text-base"
               style={{ marginTop: 10, padding: '10px 16px', borderRadius: 10, border: '1px solid #1a1a2e', background: '#1a1a2e', color: '#fff', cursor: 'pointer' }}>
               Re-fit screen
             </button>
@@ -1033,9 +1115,9 @@ export function Preflight({ onDone }: { onDone: (fontOk: boolean | null) => void
         )}
       </div>
       {clipped && (
-        <div data-testid="layout-warning" style={{ marginTop: 12, maxWidth: 640, padding: '12px 14px', borderRadius: 10, border: '1px solid #c98a22', background: '#c98a2212' }}>
-          <p className="font-lab text-xs uppercase tracking-wide" style={{ color: '#c98a22' }}>Screen too small — content is being clipped</p>
-          <p className="font-lab text-sm" style={{ marginTop: 6, color: '#3a3a4a' }}>
+        <div data-testid="layout-warning" style={{ marginTop: 12, padding: '12px 14px', borderRadius: 10, border: '1px solid #c98a22', background: '#c98a2212' }}>
+          <p className={eyebrow} style={{ color: UI_TEXT.amber }}>Screen too small — content is being clipped</p>
+          <p className={boxText} style={{ marginTop: 6 }}>
             This viewport is smaller than the app can scale down to, so parts of some screens are
             past the edge — and they cannot be scrolled to, because a stimulus screen must not
             scroll mid-exposure. Buttons may simply be absent. Rotate to landscape, launch from the
@@ -1046,9 +1128,9 @@ export function Preflight({ onDone }: { onDone: (fontOk: boolean | null) => void
         </div>
       )}
       {fontOk === false && (
-        <div data-testid="font-warning" style={{ marginTop: 12, maxWidth: 640, padding: '12px 14px', borderRadius: 10, border: '1px solid #c98a22', background: '#c98a2212' }}>
-          <p className="font-lab text-xs uppercase tracking-wide" style={{ color: '#c98a22' }}>Stimulus typeface — not loaded</p>
-          <p className="font-lab text-sm" style={{ marginTop: 6, color: '#3a3a4a' }}>
+        <div data-testid="font-warning" style={{ marginTop: 12, padding: '12px 14px', borderRadius: 10, border: '1px solid #c98a22', background: '#c98a2212' }}>
+          <p className={eyebrow} style={{ color: UI_TEXT.amber }}>Stimulus typeface — not loaded</p>
+          <p className={boxText} style={{ marginTop: 6 }}>
             The reading passage will be rendered in a fallback face. The session can still be run
             and this is recorded in the export as <code>stimulus_font_ok=false</code>, but the
             stimulus will not match the other sessions. Reload the app from the home-screen icon
@@ -1056,48 +1138,63 @@ export function Preflight({ onDone }: { onDone: (fontOk: boolean | null) => void
           </p>
         </div>
       )}
-      <div className="mt-5 space-y-2" style={{ maxWidth: 640 }}>
+      </div>
+      <div className="space-y-2">
         {PREFLIGHT_ITEMS.map((item, i) => (
-          <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e2dc', background: '#fff', cursor: 'pointer' }}>
-            <input type="checkbox" checked={checked[i]} onChange={(e) => { const n = [...checked]; n[i] = e.target.checked; setChecked(n); }} style={{ width: 20, height: 20 }} />
-            <span className="font-lab text-sm">{item}</span>
+          <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', minHeight: 48, borderRadius: 10, border: '1px solid #e5e2dc', background: '#fff', cursor: 'pointer' }}>
+            <input type="checkbox" checked={checked[i]} onChange={(e) => { const n = [...checked]; n[i] = e.target.checked; setChecked(n); }} style={{ width: 22, height: 22, flexShrink: 0 }} />
+            <span className="font-sans text-base text-[#1a1a2e]">{item}</span>
           </label>
         ))}
       </div>
+      </div>
       <button className={btn} disabled={!all} data-testid="preflight-continue"
-        style={{ marginTop: 18, background: all ? '#1a1a2e' : '#cfcbc3', cursor: all ? 'pointer' : 'not-allowed' }}
+        style={{ marginTop: 20, ...btnState(all) }}
         onClick={() => all && onDone(fontOk ?? null)}>
         {storageBlocks ? 'Storage problem — cannot start' : 'All checks pass — continue →'}
       </button>
       </div>
+      <ScrollCue />
     </div>
   );
 }
 
 // ---- helpers ----
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+/**
+ * A labelled input. The "i" sits OUTSIDE the <label>, top right: a button inside a label is the
+ * label's first labelable element, so tapping the field's wording would open the note rather than
+ * focus the input.
+ */
+function Field({ label, info, children }: { label: string; info?: ReactNode; children: React.ReactNode }) {
   return (
-    <label style={{ display: 'block' }}>
-      <span className="font-lab text-xs text-[#5a5a7a]">{label}</span>
-      <div style={{ marginTop: 6 }}>{children}</div>
-    </label>
+    <div style={{ position: 'relative' }}>
+      <label style={{ display: 'block' }}>
+        <span className="font-sans text-[15px] font-medium text-[#3a3a4a]" style={{ display: 'block', lineHeight: 1.4, paddingRight: info ? 36 : 0 }}>{label}</span>
+        <div style={{ marginTop: 8 }}>{children}</div>
+      </label>
+      {info && (
+        <span style={{ position: 'absolute', top: -4, right: 0 }}>
+          <InfoTip label={label.split(' (')[0]} align="right">{info}</InfoTip>
+        </span>
+      )}
+    </div>
   );
 }
 function Pick({ label, value, set, opts }: { label: string; value: string; set: (v: string) => void; opts: string[] }) {
   return (
     <div>
-      <span className="font-lab text-xs text-[#5a5a7a]">{label}</span>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+      <span className="font-sans text-[15px] font-medium text-[#3a3a4a]" style={{ display: 'block', lineHeight: 1.4 }}>{label}</span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
         {opts.map((o) => (
           <button
             key={o}
             onClick={() => set(o)}
-            className="font-lab text-sm"
+            className="font-sans text-base"
             style={{
-              padding: '8px 14px', borderRadius: 10, textTransform: 'capitalize',
-              border: `1px solid ${value === o ? '#1a1a2e' : '#d8d4cc'}`,
+              padding: '10px 16px', borderRadius: 10, textTransform: 'capitalize', minHeight: 44,
+              border: `1px solid ${value === o ? '#1a1a2e' : '#bdb8ae'}`,
               background: value === o ? '#1a1a2e' : '#fff',
-              color: value === o ? '#fff' : '#5a5a7a', cursor: 'pointer',
+              color: value === o ? '#fff' : '#3a3a4a', cursor: 'pointer',
             }}
           >
             {o}

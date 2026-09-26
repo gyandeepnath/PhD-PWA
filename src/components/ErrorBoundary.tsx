@@ -29,11 +29,11 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="fixed inset-0 z-50 flex min-h-screen items-center justify-center bg-black/95 p-8">
           <div className="bg-lab-surface w-full max-w-md space-y-3 rounded-2xl border border-lab-warning/40 p-8 text-center">
             <h1 className="text-lab-warning font-lab text-xl font-light">VisuLab Render Error</h1>
-            <p className="text-lab-muted font-lab text-sm leading-relaxed">
+            <p className="font-sans text-base leading-relaxed text-[#c8c8dc]">
               {this.state.error.message}
             </p>
             <button
-              className="bg-lab-accent hover:bg-lab-accent/80 mt-2 w-full rounded-xl py-3 text-white font-lab text-sm transition active:scale-95"
+              className="mt-2 w-full rounded-xl bg-[#1f5fbf] py-3 font-sans text-base text-white transition active:scale-95"
               onClick={() => window.location.reload()}
             >
               Reload
