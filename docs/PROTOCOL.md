@@ -146,11 +146,12 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
   build sampled stale landmarks on a 60 fps render loop, duplicating samples and overstating fps).
   `effective_fps` records the true achieved rate and gates the duration-based tiers.
 - **Blink metrics distinguish two constructs.** For **visual/ocular fatigue (CVS — this study)** the
-  validated markers are a **reduced blink rate** and a **raised incomplete-blink ratio** (Portello &
-  Rosenfield, *Optom Vis Sci* 2013), read with the within-task first/second-half bins and inter-blink
+  markers used are a **reduced blink rate** and a **raised incomplete-blink ratio** (Portello,
+  Rosenfield & Chu, *Optom Vis Sci* 2013), read with the within-task first/second-half bins and inter-blink
   interval. For **drowsiness/sleepiness** (a confound over a session of roughly an hour and a half) **PERCLOS** (% time
-  eyes ≥70/80% closed) and **long-closure events** are the validated, frame-rate-robust covariates
-  (Dinges & Grace, FHWA 1998). Blink rate is **non-monotonic** w.r.t. fatigue (drops with
+  eyes ≥80% closed) and **long-closure events** are frame-rate-robust covariates (PERCLOS: Dinges &
+  Grace, FHWA tech brief 1998 — metadata corroborated only; the brief was not opened, see
+  CITATION_VERIFICATION #49). Blink rate is **non-monotonic** w.r.t. fatigue (drops with
   concentration/reading, rises with sleepiness) — never read "higher = more fatigued" in isolation;
   triangulate the blink markers with the subjective CVS-Q. Blink **duration** and the micro/partial
   tiers are sub-Nyquist below ~25 fps and flagged as diagnostics only. Webcam EAR is a

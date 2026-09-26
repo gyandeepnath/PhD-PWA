@@ -305,7 +305,7 @@ def main() -> None:
 
     # --- Ocular fatigue (interpret per codebook; gate duration tiers on effective_fps) ----
     # CVS markers: blink_rate (drops with screen concentration) + incomplete_blink_ratio (rises,
-    # correlates with CVS symptoms — Portello & Rosenfield 2013). Drowsiness covariate: perclos_p80.
+    # correlates with CVS symptoms — Portello, Rosenfield & Chu 2013). Drowsiness covariate: perclos_p80.
     eye_active = eye[eye["camera_active"] == 1].merge(
         cond, on=["participant_id", "condition_id"]
     )

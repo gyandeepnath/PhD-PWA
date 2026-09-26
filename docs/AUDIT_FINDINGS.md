@@ -3566,3 +3566,46 @@ starts and reports open time only on condition screens; reading gets the strip, 
 be opened during the speeded tasks; the camera state is named for each problem. Checked on screen with a
 live fake camera at 1152×720. 1095 tests, verify green; full-run, edge, screen-fit, reachability and
 camera-lost end-to-end specs pass.
+
+## Round 60 — "is the camera working?": a self-test on the day, a verdict on the dashboard
+
+The investigator ran one real participant and found the Eye tab's blink figures looked negligible, and
+asked how to know the measurement works. Nothing in the build could answer that: the numbers were only
+seen after the participant had left, and a small blink figure is what both a broken pipeline and an
+absorbed reader produce.
+
+**On the day — camera self-test.** After calibration the participant blinks once each time a dot flashes
+(5 cues, 3 s apart). Blinks found within 1.2 s of a cue are hits. Pass needs 4 of 5 hits, a face-solved
+frame rate of 25 fps or more and the face in view 90% of the time. The verdict and its reasons are shown
+in plain words, with Try again / Continue anyway, and exported as `selftest_*` in `01_session_info.csv`.
+It is an engineering check that the camera sees this person's deliberate blinks — not a validation of
+incomplete-blink classification.
+
+**Afterwards — dashboard verdict.** `cameraVerdict()` gives each condition one sentence ("Working: 38
+blinks in 3.1 min (12.3 per min)", or what went wrong: camera off and why, covered/dark time, no eye
+calibration, face in view below 90%, frame rate below 30, open eye narrower than at calibration by more
+than 15%, fewer than 20 blinks, poor light). The ocular table gains Blinks and Minutes-seen columns, and
+bar charts list conditions with no data instead of silently dropping them. A comparison line gives the
+one verified reading study's figures with their spread (Portello, Rosenfield & Chu 2013, ledger #2).
+
+**Why the pilot's figures can look flat.** Blinks are measured during reading only, about 3 minutes per
+condition, so 15–40 blinks is normal. With ~25 blinks the count's random spread is roughly ±20% and the
+ratio's about ±0.08; one participant cannot show a condition difference. PERCLOS is near zero in an
+awake participant by construction. The pilot export has not been seen; it is requested.
+
+**Citations corrected in the same pass.** "Portello & Rosenfield 2013" (dashboard, blink.ts, PROTOCOL.md,
+both analysis templates, the simulator) omitted the third author: now "Portello, Rosenfield & Chu 2013".
+"Dinges & Grace 1998" was cited in three places and was not in the ledger at all; it is now entry #49
+(tech brief FHWA-MCRT-98-006, metadata corroborated by catalogue records seen only in search results —
+every host was blocked), and the text no longer claims it is "the most validated real-time measure" or
+"best PVT-lapse predictor", or that it defines the 80% criterion.
+
+**A comment that claimed a direction.** `blink.ts` said undersampling "systematically inflates" the
+incomplete-blink ratio. A sampled minimum can only sit at or above the true one, which pushes toward
+"incomplete" — but low frame rates also miss shallow blinks entirely. The audit's simulation (8 blinks/min,
+20% incomplete, 40 × 3 min) measured 0.18 against a true 0.21 at 15 fps and 0.24 against 0.19 at 10 fps.
+The comment now says the bias has no fixed sign; the 30 fps gate is unchanged.
+
+Dashboard flag text colours were also darkened (green #22c97a, amber #f5a623 and red #e64c4c are below
+4.5:1 on white). Tests: selfTest.test.ts, cameraVerdict.test.ts; camera end-to-end specs pass through the
+self-test. 1105 tests, verify green.

@@ -979,7 +979,7 @@ standards are paywalled) and must not be quoted from this entry.
 
 ## NOT INDEXED IN PUBMED — verified against a secondary authority, or unverified
 
-PubMed indexes biomedical and life-sciences literature only. The five references below fall outside
+PubMed indexes biomedical and life-sciences literature only. The references below fall outside
 that scope by subject or by publication type, so the PubMed MCP server cannot confirm them and the
 status `NOT INDEXED IN PUBMED` is a statement about the tool, not about the source. Where a secondary
 authority was reachable it is named; where the primary document itself was blocked by this
@@ -1115,6 +1115,33 @@ read from the page as it stands today, the citation should carry the 2024 update
 in this build. Note that WCAG's thresholds are accessibility minima for readability, not visual-fatigue
 criteria; the standard makes no claim about fatigue, and the covariate should be described as a
 contrast metric taken from an accessibility standard rather than as a fatigue-relevant threshold.
+
+### 49. Dinges & Grace (1998) — PERCLOS
+**Status: NOT INDEXED IN PUBMED (government tech brief). Metadata corroborated by secondary sources;
+the document was not opened.**
+
+> Dinges, D. F., & Grace, R. (1998, October). *PERCLOS: A valid psychophysiological measure of
+> alertness as assessed by psychomotor vigilance* (Tech Brief FHWA-MCRT-98-006). Federal Highway
+> Administration, Office of Motor Carriers.
+
+**Authority used:** a web search (26 Sep 2026) returning catalogue records at Stanford SearchWorks,
+Indiana University IUCAT, the US DOT ROSA P repository and TRB's TRID, plus a Semantic Scholar record,
+all giving this title and these two authors; the search summary gave the date (October 1998) and
+publication number (FHWA-MCRT-98-006). Every one of those hosts is blocked by this environment's
+egress proxy, so no record page and not the brief itself was opened. The publisher is taken from the
+tech brief's header as reported by search ("Federal Highway Administration • Office of Motor
+Carriers"), not read at source.
+
+**What it is cited for, and the limit of that.** Only that PERCLOS — the proportion of time the eyelid
+covers the pupil, reflecting slow closures rather than blinks — was reported as the most reliable of
+the drowsiness measures that study evaluated. That wording comes from the search summary, not the
+brief. The **80% closure criterion** this build uses (`perclos_p80`) is the build's operational
+definition and is **not** attributed to this source until the brief is read. The dashboard, blink.ts
+and PROTOCOL.md were reworded on 26 Sep 2026 to say this; earlier text called PERCLOS "the most
+validated real-time measure" and "best PVT-lapse predictor", neither of which was checked.
+
+**Before the thesis cites it:** open the brief (ROSA P or the FDLP permanent copy) and confirm the date,
+number, the closure criterion and the claim.
 
 ---
 

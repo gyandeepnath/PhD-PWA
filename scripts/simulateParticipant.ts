@@ -14,7 +14,7 @@
  *    below that meta-analytic figure and the spread is wide.
  *  - Blink rate during reading. Reading suppresses spontaneous blinking on any medium; reported
  *    reading rates cluster around 11-15/min against a ~17/min conversational baseline.
- *  - Incomplete-blink proportion. Portello & Rosenfield (2013) report a mean of 16.1% over 15
+ *  - Incomplete-blink proportion. Portello, Rosenfield & Chu (2013) report a mean of 16.1% over 15
  *    minutes of reading, range 0.9-56.5%.
  *  - Questionnaire and slider times are per-item estimates for a motivated young-adult sample.
  *

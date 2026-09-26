@@ -311,7 +311,7 @@ cat("\n=== Aggregated d' per participant ===\n"); print(dprime_overall)
 
 # --- Ocular fatigue (interpret per the codebook; gate duration tiers on effective_fps) -----
 # CVS markers: blink_rate (expected to DROP with screen concentration) and incomplete_blink_ratio
-# (expected to RISE — the marker that correlates with CVS symptoms; Portello & Rosenfield 2013).
+# (expected to RISE — the marker that correlates with CVS symptoms; Portello, Rosenfield & Chu 2013).
 # Drowsiness covariate: perclos_p80. Blink rate is non-monotonic, so model the set, not rate alone.
 eye <- eye_metrics %>% left_join(cond, by = c("participant_id", "condition_id")) %>% filter(camera_active == 1)
 

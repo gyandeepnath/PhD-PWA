@@ -4,11 +4,13 @@
  *
  * Two distinct fatigue constructs are measured, with different validated markers:
  *  • Visual / ocular fatigue (CVS — this study's construct): reduced blink RATE and a raised
- *    INCOMPLETE-BLINK ratio are the validated markers (Portello & Rosenfield, Optom Vis Sci 2013).
+ *    INCOMPLETE-BLINK ratio are the markers used (Portello, Rosenfield & Chu, Optom Vis Sci 2013:
+ *    incomplete blinks correlated with symptoms; blink rate 11.6/min, SD 7.84, while reading).
  *    These are the PRIMARY metrics here, read together with the within-task first/second-half bins.
  *  • Drowsiness / sleepiness (a confound over a 60-90 min session): PERCLOS (proportion of time the
- *    eyes are ≥70/80% closed) is the most validated real-time measure (Dinges & Grace, FHWA 1998;
- *    best PVT-lapse predictor). PERCLOS + long-closure events are reported as covariates.
+ *    eyes are mostly closed; this build uses ≥80%) is the measure an FHWA tech brief reported as the
+ *    most reliable of those it evaluated (Dinges & Grace 1998 — metadata only, the brief itself was
+ *    not opened; docs/CITATION_VERIFICATION.md #49). PERCLOS + long-closure events are covariates.
  *
  * PERCLOS, blink rate, incomplete-blink ratio and inter-blink interval are PROPORTION/COUNT
  * measures, so they are robust to the webcam's frame rate. Blink DURATION and the micro tier
@@ -76,8 +78,11 @@ export const FPS_TIER_THRESHOLD = 25;
  * That is not a safe default, because classifying a blink as complete or incomplete depends on
  * catching the frame at its minimum aperture, and a blink lasts on the order of 100-150 ms. At 30
  * fps a blink spans roughly 3-5 frames; at 15 fps it may span one, and the single sampled frame is
- * unlikely to be the deepest. Undersampling therefore does not add symmetric noise — it biases the
- * measured minimum EAR upward, which systematically inflates the incomplete-blink ratio.
+ * unlikely to be the deepest. A sampled minimum can only be at or above the true one, so undersampling
+ * pushes a blink toward "incomplete". But low frame rates also miss short, shallow blinks outright,
+ * which pushes the ratio the other way; the net direction depends on the blink mix, and a simulation
+ * in this project's audit (AUDIT_FINDINGS Round 60) produced both. The point stands without a sign:
+ * below the gate the ratio is not comparable with one captured at full rate.
  *
  * Set at 30 fps on the strength of an external recommendation that is RECORDED BUT NOT YET
  * VERIFIED (see docs/LITERATURE_VALIDATION.md, claim "ear-webcam-validity"); the constant is named
@@ -339,7 +344,7 @@ export function classifyBlinks(samples: EarSample[], baseline: number | null): B
         const ratio = minEar / baseline;
         // Depth-based tier. ratio < full ⇒ the lid reached (near-)full closure: a COMPLETE blink
         // (a very brief one is a micro-blink). Otherwise the lid crossed the partial threshold but
-        // never fully closed ⇒ an INCOMPLETE blink (the validated CVS marker, Portello & Rosenfield).
+        // never fully closed ⇒ an INCOMPLETE blink (the CVS marker, Portello, Rosenfield & Chu 2013).
         const tier: BlinkTier =
           ratio < EAR_TIERS.full ? (duration < 40 ? 'micro' : 'full') : 'incomplete';
         events.push({ onset_ms: onset, duration_ms: duration, min_ear: minEar, tier });

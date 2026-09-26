@@ -25,7 +25,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'export', label: 'Export' },
 ];
 
-const FLAG_COLOR = { good: '#22c97a', warn: '#f5a623', bad: '#e64c4c' } as const;
+const FLAG_COLOR = { good: '#1d7a4a', warn: '#8a5300', bad: '#b3261e' } as const; // text colours: each ≥4.5:1 on white
 const cohortHead: React.CSSProperties = { padding: '6px 10px', fontWeight: 400, whiteSpace: 'nowrap' };
 const cohortCell: React.CSSProperties = { padding: '6px 10px', whiteSpace: 'nowrap' };
 const bar = (s: ConditionSummary[], key: keyof ConditionSummary, flagKey = false): Datum[] =>
@@ -446,6 +446,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
 
       {bundle && tab === 'eye' && (
         <Grid>
+          <CameraVerdictPanel summaries={summaries} />
           <BarPanel title="Blink rate per condition" unit="/min" data={bar(summaries, 'blink_rate')} color="#4f8ef7" />
           <BarPanel title="Incomplete-blink ratio (CVS marker)" data={bar(summaries, 'incomplete_blink_ratio')} color="#e07b39" />
           <BarPanel title="PERCLOS P80 (drowsiness)" data={bar(summaries, 'perclos_p80')} color="#e64c4c" />
@@ -453,7 +454,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           <OcularTable summaries={summaries} />
           <EngagementTable summaries={summaries} />
           <QcTable summaries={summaries} />
-          <Caveat text="Two distinct constructs, with different validated markers. VISUAL/OCULAR FATIGUE (this study, CVS): the primary markers are a REDUCED blink rate and a RAISED incomplete-blink ratio (Portello & Rosenfield 2013), read with the within-task first/second-half bins and inter-blink interval. DROWSINESS (a confound over a long session): PERCLOS (% time eyes ≥70/80% closed) + long-closure events (Dinges & Grace 1998) — frame-rate-robust covariates. Blink rate is NON-MONOTONIC w.r.t. fatigue (drops with concentration/reading, rises with sleepiness) — never read 'higher = more fatigued' in isolation. Blink DURATION and micro/partial tiers are sub-Nyquist below 25 fps (gated by effective_fps). Lighting QC flags low/over-exposed conditions that degrade EAR detection. Gaze zones are meaningful only when gaze_calibrated is true; else a gross head-movement proxy. Webcam EAR is a screening-grade proxy — an IR eye-tracker is the reference standard." />
+          <Caveat text="What these numbers mean. For visual fatigue (this study) the markers used are a LOWER blink rate and a HIGHER share of incomplete blinks (Portello, Rosenfield & Chu 2013), read with the first/second-half bins and the gap between blinks. PERCLOS counts time with the eyes mostly closed; it tracks drowsiness, so in an awake participant it is small and a value near zero is not a fault (PERCLOS: Dinges & Grace 1998, FHWA tech brief — metadata only, not yet read at source). Blink rate goes DOWN with concentrated reading and UP with sleepiness, so never read 'higher = more tired' on its own. Blink duration and the micro/partial tiers need 25 fps or more (see effective fps). Gaze zones mean something only when gaze calibration passed. A webcam is a screening-grade measure; an infrared eye-tracker is the reference standard." />
         </Grid>
       )}
 
@@ -552,11 +553,13 @@ function OcularTable({ summaries }: { summaries: ConditionSummary[] }) {
   return (
     <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
-        <thead><tr>{['Cond', 'Blink/min', 'Incomplete', 'IBI ms', 'PERCLOS80', 'PERCLOS70', 'Long-closures', 'Eff FPS'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: '#5a5a7a', borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
+        <thead><tr>{['Cond', 'Blinks', 'Min seen', 'Blink/min', 'Incomplete', 'IBI ms', 'PERCLOS80', 'PERCLOS70', 'Long-closures', 'Eff FPS'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: '#5a5a7a', borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
         <tbody>
           {summaries.map((s) => (
             <tr key={s.condition_id}>
               <td style={cohortCell}>{s.condition_label}</td>
+              <td style={cohortCell}>{n(s.blink_count_total, 0)}</td>
+              <td style={cohortCell}>{n(s.observed_minutes, 1)}</td>
               <td style={cohortCell}>{n(s.blink_rate, 1)}</td>
               <td style={cohortCell}>{n(s.incomplete_blink_ratio)}</td>
               <td style={cohortCell}>{n(s.mean_inter_blink_interval_ms, 0)}</td>
@@ -568,6 +571,45 @@ function OcularTable({ summaries }: { summaries: ConditionSummary[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+/**
+ * "Is the camera working?" — one plain sentence per condition, then what went wrong. Answers the
+ * question the numbers alone cannot: whether a small blink figure is a quiet reader or a camera that
+ * was not seeing the eyes. The comparison figures are from the one verified reading study in the
+ * citation ledger (#2), stated with their spread so a single participant is not judged against a mean.
+ */
+function CameraVerdictPanel({ summaries }: { summaries: ConditionSummary[] }) {
+  const counts = { good: 0, warn: 0, bad: 0 };
+  summaries.forEach((s) => { counts[s.camera_verdict.level]++; });
+  return (
+    <div data-testid="camera-verdicts" style={{ gridColumn: '1 / -1', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 16 }}>
+      <h3 className="font-lab" style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Is the camera working?</h3>
+      <p className="font-lab" style={{ fontSize: 14, color: '#3d3d5c', marginTop: 4 }}>
+        {counts.good} condition{counts.good === 1 ? '' : 's'} measured well · {counts.warn} usable with care · {counts.bad} not trustworthy
+      </p>
+      <ul style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+        {summaries.map((s) => (
+          <li key={s.condition_id} data-testid="camera-verdict" data-level={s.camera_verdict.level} style={{ fontFamily: '"DM Sans", system-ui, sans-serif', fontSize: 14, color: '#1a1a2e', lineHeight: 1.5 }}>
+            <span style={{ display: 'inline-block', minWidth: 64, fontWeight: 700, color: FLAG_COLOR[s.camera_verdict.level] }}>
+              {s.camera_verdict.level === 'good' ? '✓' : s.camera_verdict.level === 'warn' ? '!' : '✕'} {s.condition_label}
+            </span>{' '}
+            {s.camera_verdict.headline}
+            {s.camera_verdict.problems.length > 0 && s.camera_active && (
+              <span style={{ display: 'block', paddingLeft: 68, color: '#3d3d5c' }}>{s.camera_verdict.problems.join(' · ')}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      <p className="font-lab" style={{ fontSize: 13, color: '#3d3d5c', marginTop: 12, lineHeight: 1.6 }}>
+        For comparison: 21 adults reading on a computer for 15 minutes blinked 11.6 times a minute on
+        average (SD 7.84), and 16.1% of their blinks were incomplete (SD 15.7; individuals ranged from
+        0.9% to 56.5%) — Portello, Rosenfield &amp; Chu 2013. People differ a lot, so one participant
+        with few blinks is not by itself a sign of a fault; a ✓ above is what says the camera was
+        seeing the eyes. The camera self-test after calibration (selftest_* in the export) is the
+        direct check: the participant blinked on cue and the result was shown on the spot.
+      </p>
     </div>
   );
 }

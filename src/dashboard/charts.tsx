@@ -35,6 +35,11 @@ export function BarPanel({
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+      {clean.length < data.length && (
+        <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 12, color: '#5a5a7a', marginTop: 4 }}>
+          No data: {data.filter((d) => d.value == null).map((d) => d.label).join(', ')}
+        </p>
+      )}
     </div>
   );
 }

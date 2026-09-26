@@ -201,6 +201,75 @@ export interface ConditionSummary {
   mean_face_luma: number | null;
   lighting_quality: 'low' | 'good' | 'overexposed' | null;
   qc: { facePresence: QcFlag; fps: QcFlag; offAxis: QcFlag; lighting: QcFlag; overall: QcFlag };
+  /** Minutes of the exposure the camera actually observed (dropouts excluded); null when camera off. */
+  observed_minutes: number | null;
+  /** "Is the camera working?" for this condition, in plain words. See cameraVerdict. */
+  camera_verdict: CameraVerdict;
+}
+
+export interface CameraVerdict {
+  level: QcFlag;
+  /** One line an operator can read at a glance. */
+  headline: string;
+  /** Every problem found, most serious first; empty when working. */
+  problems: string[];
+}
+
+/**
+ * Plain-language answer to "is the camera measuring blinks?" for one condition.
+ *
+ * The investigator's question after the first real participant was whether the small blink numbers
+ * meant the camera was not working. The numbers alone cannot say: a low blink rate is both what a
+ * broken pipeline and an absorbed reader produce. What CAN be said is whether the conditions for a
+ * trustworthy count held — camera on, not covered, eye calibration present, face in view, frame rate,
+ * the open eye still near its calibrated size, enough blinks for a ratio, usable light. Each failed
+ * condition becomes one sentence. Thresholds are the ones the rest of this file and the analysis
+ * templates already use; nothing new is decided here.
+ */
+export function cameraVerdict(eye: EyeMetricsRecord | undefined, q: {
+  facePresence: number | null; fps: number | null; lighting: 'low' | 'good' | 'overexposed' | null;
+  blinks: number | null; minutes: number | null;
+}): CameraVerdict {
+  if (!eye || !eye.camera_active) {
+    const reason = eye?.camera_inactive_reason;
+    const headline = reason === 'lost' ? 'Camera stopped during this condition — no blink data'
+      : reason === 'not_running' ? 'Camera was not running — no blink data'
+      : 'Camera not used for this condition — no blink data';
+    return { level: 'bad', headline, problems: [headline] };
+  }
+  const problems: { level: QcFlag; text: string }[] = [];
+  if (eye.ear_baseline == null) problems.push({ level: 'bad', text: 'No eye calibration, so blinks could not be told apart from open eyes' });
+  const blockedS = (eye.camera_blocked_ms ?? 0) / 1000;
+  if (blockedS >= 5) problems.push({ level: blockedS >= 30 ? 'bad' : 'warn', text: `The camera was covered or dark for ${Math.round(blockedS)} s` });
+  if (q.facePresence == null || q.facePresence < ENGAGEMENT.FACE_PRESENCE_PILOT_GATE) {
+    problems.push({
+      level: q.facePresence == null || q.facePresence < 0.8 ? 'bad' : 'warn',
+      text: `The face was in view only ${q.facePresence == null ? 'an unknown share' : Math.round(q.facePresence * 100) + '%'} of the time (needs 90%)`,
+    });
+  }
+  if (q.fps == null || q.fps < FPS_RATIO_THRESHOLD) {
+    problems.push({
+      level: q.fps == null || q.fps < FPS_TIER_THRESHOLD ? 'bad' : 'warn',
+      text: `The camera ran at ${q.fps == null ? 'an unknown' : Math.round(q.fps)} frames per second (needs ${FPS_RATIO_THRESHOLD} for the incomplete-blink ratio)`,
+    });
+  }
+  if (eye.open_ear_measured != null && eye.ear_baseline != null && eye.ear_baseline > 0 && eye.open_ear_measured / eye.ear_baseline < 0.85) {
+    problems.push({ level: 'warn', text: `Open eyes looked ${Math.round(100 * (1 - eye.open_ear_measured / eye.ear_baseline))}% narrower than at calibration — some blinks may be counted as incomplete, or missed` });
+  }
+  if (q.blinks != null && q.blinks < ENGAGEMENT.MIN_BLINKS_FOR_RATIO) {
+    problems.push({ level: 'warn', text: `Only ${q.blinks} blinks were seen — too few for the incomplete-blink ratio to mean much (needs ${ENGAGEMENT.MIN_BLINKS_FOR_RATIO})` });
+  }
+  if (q.lighting && q.lighting !== 'good') problems.push({ level: 'warn', text: q.lighting === 'low' ? 'The face was too dimly lit' : 'The face was over-lit (glare)' });
+
+  const level = worst(problems.map((p) => p.level));
+  const rate = q.blinks != null && q.minutes ? q.blinks / q.minutes : null;
+  const seen = q.blinks == null ? 'no blink count' : `${q.blinks} blinks in ${q.minutes == null ? '?' : q.minutes.toFixed(1)} min${rate == null ? '' : ` (${rate.toFixed(1)} per min)`}`;
+  const ordered = [...problems.filter((p) => p.level === 'bad'), ...problems.filter((p) => p.level !== 'bad')].map((p) => p.text);
+  return {
+    level,
+    headline: level === 'good' ? `Working: ${seen}` : `${level === 'bad' ? 'Not trustworthy' : 'Usable with care'}: ${seen}`,
+    problems: ordered,
+  };
 }
 
 function flag(value: number | null, good: number, warn: number, higherIsBetter = true): QcFlag {
@@ -538,6 +607,8 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
     const lightingQuality = cameraActive ? (eye?.lighting_quality ?? null) : null;
     const lightingFlag: QcFlag = !cameraActive ? 'warn' : lightingQuality == null ? 'warn' : lightingQuality === 'good' ? 'good' : 'warn';
 
+    const observedMinutes = cameraActive && eye?.observed_duration_ms != null ? eye.observed_duration_ms / 60000 : null;
+
     const eng = conditionEngagement({
       reading_time_ms: c.reading_time_ms,
       reading_min_page_dwell_ms: c.reading_min_page_dwell_ms ?? null,
@@ -649,6 +720,8 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
         lighting: lightingFlag,
         overall: worst([facePresenceFlag, fpsFlag, offAxisFlag, lightingFlag]),
       },
+      observed_minutes: observedMinutes,
+      camera_verdict: cameraVerdict(eye, { facePresence, fps, lighting: lightingQuality, blinks: eng.blink_count_total, minutes: observedMinutes }),
     };
   });
 }
