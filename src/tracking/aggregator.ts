@@ -163,6 +163,20 @@ export class EyeMetricsAggregator {
    * `classifyBlinks` cannot identify a blink at all and a zero would read as "no blinks occurred"
    * rather than "blinks are not being counted".
    */
+  /** The blink events so far, for the camera self-test; empty without a baseline. */
+  blinkEvents(baseline: number | null): BlinkEvent[] {
+    if (baseline == null || !Number.isFinite(baseline) || baseline <= 0) return [];
+    return classifyBlinks(this.ear, baseline);
+  }
+
+  /** Frames with a face / frames seen, and the achieved rate of face-solved frames. */
+  coverage(): { facePresence: number | null; fps: number | null } {
+    return {
+      facePresence: this.framesTotal > 0 ? this.facesDetected / this.framesTotal : null,
+      fps: effectiveFps(this.ear.map((e) => e.t_ms)),
+    };
+  }
+
   liveCounts(baseline: number | null): { blinks: number | null; incomplete: number | null } {
     if (baseline == null || !Number.isFinite(baseline) || baseline <= 0) {
       return { blinks: null, incomplete: null };

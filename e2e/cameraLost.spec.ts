@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { startNewExperiment, driveUntil, stageNow, handleStage } from './helpers';
+import { startNewExperiment, driveUntil, stageNow, handleStage, throughCameraAndCalibration } from './helpers';
 
 /*
  * A camera lost mid-sitting must stop the sitting, not fail silently.
@@ -13,20 +13,7 @@ import { startNewExperiment, driveUntil, stageNow, handleStage } from './helpers
 async function intoReadingWithCamera(page: Page) {
   await startNewExperiment(page);
   await driveUntil(page, 'CAMERA_SETUP');
-  await page.getByRole('button', { name: /Enable camera/ }).click();
-  await page.getByRole('button', { name: /My face is centred/ }).click({ timeout: 60_000 });
-  await page.waitForFunction(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') === 'CALIBRATION', null, { timeout: 30_000 });
-  await page.getByRole('button', { name: /Begin calibration/ }).click();
-  // The fake camera shows no face, so the routine ends on a thin or failed fit; accept it.
-  await page.waitForFunction(() =>
-    document.querySelector('[data-stage]')?.getAttribute('data-stage') !== 'CALIBRATION'
-    || !!document.querySelector('[data-testid="calibration-accept-thin"], [data-testid="calibration-continue-anyway"]'),
-  null, { timeout: 120_000 });
-  for (const id of ['calibration-accept-thin', 'calibration-continue-anyway']) {
-    const b = page.getByTestId(id);
-    if (await b.isVisible().catch(() => false)) await b.click();
-  }
-  await page.waitForFunction(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') !== 'CALIBRATION', null, { timeout: 30_000 });
+  await throughCameraAndCalibration(page);
   for (let i = 0; i < 200 && (await stageNow(page)) !== 'READING_TASK'; i++) await handleStage(page, await stageNow(page));
   expect(await stageNow(page)).toBe('READING_TASK');
 }
@@ -69,4 +56,19 @@ test('continuing without the camera records the rows as camera lost', async ({ p
     return row ? { active: row.camera_active, reason: row.camera_inactive_reason } : null;
   }, conditionId);
   expect(reason).toEqual({ active: false, reason: 'lost' });
+});
+
+test('the camera self-test runs after calibration and its result is saved with the session', async ({ page }) => {
+  test.setTimeout(240_000);
+  await startNewExperiment(page);
+  await driveUntil(page, 'CAMERA_SETUP');
+  await throughCameraAndCalibration(page);
+  const st = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((res, rej) => { const r = indexedDB.open('VisualErgonomicsDB'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    const rows = await new Promise<{ camera_selftest?: { cued: number; pass: boolean } }[]>((res) => { const q = db.transaction('sessions').objectStore('sessions').getAll(); q.onsuccess = () => res(q.result); });
+    return rows[0]?.camera_selftest ?? null;
+  });
+  expect(st?.cued).toBe(5);
+  // The fake camera shows no face, so the test must NOT pass — a pass here would mean it checks nothing.
+  expect(st?.pass).toBe(false);
 });

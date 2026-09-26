@@ -53,6 +53,7 @@ import {
 import { CalibrationRoutine } from '@/start/CalibrationRoutine';
 import { currentScale, layoutViewport, setScaleFrozen, rescalesWhileFrozen } from '@/lib/viewportScale';
 import { ResearcherPanel } from '@/components/ResearcherPanel';
+import { CameraSelfTest } from '@/start/CameraSelfTest';
 import { FPS_RATIO_THRESHOLD } from '@/tracking/blink';
 
 function provenance(): Provenance {
@@ -263,6 +264,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const [rtBlockFinished, setRtBlockFinished] = useState(false);
   /** The operator chose to continue after the camera was lost. See the camera-lost notice. */
   const [cameraLossAccepted, setCameraLossAccepted] = useState(false);
+  /** The camera self-test is showing, after a completed calibration routine. */
+  const [selfTesting, setSelfTesting] = useState(false);
   /** The operator chose to continue while the camera image was blocked; re-armed when it clears. */
   const [cameraBlockAccepted, setCameraBlockAccepted] = useState(false);
   useEffect(() => { if (!tracking.cameraBlocked) setCameraBlockAccepted(false); }, [tracking.cameraBlocked]);
@@ -1234,6 +1237,27 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       );
       break;
     case 'CALIBRATION':
+      /*
+       * After a successful calibration, the camera self-test: the participant blinks when a dot
+       * flashes and the operator sees whether the camera saw it. The result is kept on the session
+       * (camera_selftest → selftest_* in 01_session_info.csv) whichever way the operator continues.
+       */
+      if (selfTesting && tracking.status === 'active' && session) {
+        view = (
+          <CameraSelfTest
+            begin={tracking.beginSelfTest}
+            end={tracking.endSelfTest}
+            onDone={async (r) => {
+              const fresh = { ...(await get('sessions', session.session_id) ?? session), camera_selftest: { ...r, at: Date.now() } } as SessionRecord;
+              await put('sessions', fresh);
+              setSession(fresh);
+              setSelfTesting(false);
+              void captureMedia('session_start').finally(() => advanceOrResume('CALIBRATION'));
+            }}
+          />
+        );
+        break;
+      }
       view = tracking.status === 'active' && session ? (
         <CalibrationRoutine
           sessionId={session.session_id}
@@ -1241,7 +1265,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           beginGazeCalibration={tracking.beginGazeCalibration}
           sampleGazeTarget={tracking.sampleGazeTarget}
           endGazeCalibration={tracking.endGazeCalibration}
-          onDone={() => { void captureMedia('session_start').finally(() => advanceOrResume('CALIBRATION')); }}
+          onDone={() => setSelfTesting(true)}
         />
       ) : (
         <Calibration cameraStatus={tracking.status} onDone={() => advanceOrResume('CALIBRATION')} />

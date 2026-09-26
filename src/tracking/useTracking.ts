@@ -159,6 +159,9 @@ interface TrackingApi {
    */
   endGazeCalibration: (sessionId: string) => Promise<CalibrationOutcome>;
   beginCondition: () => void;
+  /** Start and finish the camera self-test (see tracking/selfTest.ts); endSelfTest returns what it saw. */
+  beginSelfTest: () => void;
+  endSelfTest: () => { blinkOnsets: number[]; fps: number | null; facePresence: number | null };
   /** Finalise the current condition and persist an EyeMetricsRecord. */
   endCondition: (conditionId: string, sessionId: string) => Promise<void>;
   /**
@@ -356,7 +359,7 @@ export function useTracking(): TrackingApi {
         const id = gazeCollectingTarget.current;
         (gazeSamplesRef.current[id] ??= []).push({ h: gazeNow.h, v: gazeNow.v });
       }
-      const agg = aggRef.current;
+      const agg = aggRef.current ?? selfTestAggRef.current;
       if (agg) {
         const pose = estimateHeadPose(lm, pitchBaselineFracRef.current);
         agg.ingest({
@@ -419,8 +422,9 @@ export function useTracking(): TrackingApi {
         };
       });
     }
-    if (!(lm && lm.length > 0) && aggRef.current) {
-      aggRef.current.ingest({
+    const idleAgg = aggRef.current ?? selfTestAggRef.current;
+    if (!(lm && lm.length > 0) && idleAgg) {
+      idleAgg.ingest({
         t_ms: t,
         ear: 0,
         pose: { pitch: 0, yaw: 0, roll: 0 },
@@ -733,6 +737,19 @@ export function useTracking(): TrackingApi {
     return { gazeValid: cal.valid, earBaseline, earSamplesUsable, gazeQuality: quality };
   }, []);
 
+  /** A separate aggregator for the self-test, so it never mixes with a condition's exposure. */
+  const selfTestAggRef = useRef<EyeMetricsAggregator | null>(null);
+  const beginSelfTest = useCallback(() => {
+    selfTestAggRef.current = new EyeMetricsAggregator();
+  }, []);
+  const endSelfTest = useCallback(() => {
+    const agg = selfTestAggRef.current;
+    selfTestAggRef.current = null;
+    if (!agg) return { blinkOnsets: [], fps: null, facePresence: null };
+    const cov = agg.coverage();
+    return { blinkOnsets: agg.blinkEvents(baselineEarRef.current).map((e) => e.onset_ms), fps: cov.fps, facePresence: cov.facePresence };
+  }, []);
+
   const beginCondition = useCallback(() => {
     aggRef.current = new EyeMetricsAggregator();
     healthRef.current.resetCounts(now());
@@ -813,6 +830,7 @@ export function useTracking(): TrackingApi {
     subscribeLive, start, stop, measureEarBaseline, mediaSource,
     beginGazeCalibration, sampleGazeTarget, endGazeCalibration,
     beginCondition, endCondition,
+    beginSelfTest, endSelfTest,
     cameraLostAt,
     cameraBlocked,
   };

@@ -332,3 +332,32 @@ export async function dbCounts(page: Page, stores: string[]): Promise<Record<str
     return out;
   }, stores);
 }
+
+/**
+ * With a (fake) camera enabled: camera setup → calibration routine → camera self-test, accepting a
+ * thin or failed fit and a failed self-test (the fake camera shows no face). Ends when the stage has
+ * left CALIBRATION.
+ */
+export async function throughCameraAndCalibration(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /Enable camera/ }).click();
+  await page.getByRole('button', { name: /My face is centred/ }).click({ timeout: 60_000 });
+  await page.waitForFunction(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') === 'CALIBRATION', null, { timeout: 30_000 });
+  await page.getByRole('button', { name: /Begin calibration/ }).click();
+  await page.waitForFunction(() =>
+    !!document.querySelector('[data-testid="calibration-accept-thin"], [data-testid="calibration-continue-anyway"], [data-testid="selftest-start"]')
+    || document.querySelector('[data-stage]')?.getAttribute('data-stage') !== 'CALIBRATION',
+  null, { timeout: 120_000 });
+  for (const id of ['calibration-accept-thin', 'calibration-continue-anyway']) {
+    const b = page.getByTestId(id);
+    if (await b.isVisible().catch(() => false)) await b.click();
+  }
+  const start = page.getByTestId('selftest-start');
+  if (await start.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await start.click();
+    await page.waitForSelector('[data-testid="selftest-continue"], [data-testid="selftest-continue-anyway"]', { timeout: 60_000 });
+    const pass = page.getByTestId('selftest-continue');
+    if (await pass.isVisible().catch(() => false)) await pass.click();
+    else await page.getByTestId('selftest-continue-anyway').click();
+  }
+  await page.waitForFunction(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') !== 'CALIBRATION', null, { timeout: 30_000 });
+}

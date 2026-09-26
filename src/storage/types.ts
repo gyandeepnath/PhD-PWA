@@ -223,6 +223,15 @@ export interface SessionRecord {
    * rendered the passage in a fallback face is a session whose stimulus differed from the others.
    */
   stimulus_font_ok?: boolean | null;
+  /**
+   * The camera self-test run after calibration (tracking/selfTest.ts): cued blinks, how many the
+   * tracker saw, extras, face-solved frame rate, face presence and the verdict. The LAST attempt is
+   * kept. Absent when the camera was not used or the sitting predates the test.
+   */
+  camera_selftest?: {
+    cued: number; detected: number; extra: number; fps: number | null; facePresence: number | null;
+    pass: boolean; reasons: string[]; at: number;
+  } | null;
   /** Informed consent recorded. */
   consent_given: boolean;
   consent_time: number | null;
