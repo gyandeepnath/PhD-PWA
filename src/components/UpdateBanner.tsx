@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { onUpdateWaiting, applyUpdate } from '@/lib/swUpdate';
 import { sittingsInProgress, sessionLabel } from '@/storage/gather';
 import { APP_VERSION, GIT_HASH } from '@/lib/env';
@@ -54,6 +54,26 @@ export function UpdateBanner() {
   const [openSittings, setOpenSittings] = useState<string[] | null>(null);
 
   useEffect(() => onUpdateWaiting(setWaiting), []);
+
+  /*
+   * THE BANNER RESERVES ITS OWN SPACE. It is fixed to the bottom of the screen, and it used to sit
+   * over whatever was there: the build stamp on the landing page, and the last two session rows —
+   * with their Resume, Export and Withdrew buttons — in the manager. Its height, plus its offset and
+   * a gap, is published as --vl-banner-h while it shows, and those two screens pad their bottom by
+   * it, so the content scrolls clear of it instead of hiding under it. It stays fixed and prominent:
+   * a stale build on a study tablet is exactly the thing the operator must not miss.
+   */
+  const bannerRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = bannerRef.current;
+    const root = document.documentElement;
+    if (!waiting || !el) { root.style.removeProperty('--vl-banner-h'); return undefined; }
+    const publish = () => root.style.setProperty('--vl-banner-h', `${el.offsetHeight + 16 + 12}px`);
+    publish();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(publish) : null;
+    ro?.observe(el);
+    return () => { ro?.disconnect(); root.style.removeProperty('--vl-banner-h'); };
+  }, [waiting]);
 
   const recheck = useCallback(() => {
     let live = true;
@@ -125,7 +145,9 @@ export function UpdateBanner() {
 
   return (
     <div
+      ref={bannerRef}
       role="status"
+      data-testid="update-banner"
       style={{
         position: 'fixed', left: 16, right: 16, bottom: 16, zIndex: 40,
         display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
@@ -181,7 +203,9 @@ export function BuildStamp() {
   return (
     <div
       className="font-lab text-sm"
-      style={{ position: 'fixed', right: 12, bottom: 10, zIndex: 30, color: '#4a4a60', pointerEvents: 'none' }}
+      data-testid="build-stamp"
+      // Above the update banner while it shows (see --vl-banner-h), not under it.
+      style={{ position: 'fixed', right: 12, bottom: 'calc(10px + var(--vl-banner-h))', zIndex: 30, color: '#4a4a60', pointerEvents: 'none' }}
     >
       v{APP_VERSION} · {GIT_HASH}
     </div>

@@ -236,6 +236,10 @@ describe('operator-screen text colours meet WCAG AA', () => {
     'src/components/ErrorBoundary.tsx', 'src/components/ScrollCue.tsx', 'src/components/InfoTip.tsx',
     'src/components/VisuLabLogo.tsx', 'src/components/ExperimentProgress.tsx',
     'src/screening/IshiharaTest.tsx', 'src/dashboard/Dashboard.tsx', 'src/dashboard/LazyDashboard.tsx',
+    // Round 62: the shared navigation chip and dialog, and the two session-level questionnaires,
+    // whose instrument text was 11-12 design px (9.5-10 px on the tablet) in faded mono.
+    'src/components/NavChip.tsx', 'src/components/ConfirmDialog.tsx',
+    'src/scales/Cvsq.tsx', 'src/scales/NasaTlx.tsx',
   ];
 
   it('no operator screen sets a retired colour as a text colour', () => {

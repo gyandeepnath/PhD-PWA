@@ -4,6 +4,7 @@
  * completion. EXPORT_DASHBOARD renders the full researcher dashboard + CSV/JSON export.
  */
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { acquireScreenWakeLock } from '@/lib/wakeLock';
 import { v4 as uuidv4 } from 'uuid';
 import { CONDITIONS, conditionDefinitionHash, N_CONDITIONS, rtStimulusColours } from './conditions';
@@ -31,7 +32,7 @@ import { saveResume, clearResume } from '@/storage/sessionPersistence';
 import { isInLoop } from './stateMachine';
 import { BreakScreen } from '@/start/BreakScreen';
 import { DB_VERSION } from '@/storage/schemaEnums';
-import type { Provenance, SessionRecord, Stage } from '@/storage/types';
+import type { ParticipantRecord, Provenance, SessionRecord, Stage } from '@/storage/types';
 import { useTracking } from '@/tracking/useTracking';
 import { LazyDashboard as Dashboard } from '@/dashboard/LazyDashboard';
 import { ExperimentProgress } from '@/components/ExperimentProgress';
@@ -53,8 +54,11 @@ import {
 import { CalibrationRoutine } from '@/start/CalibrationRoutine';
 import { currentScale, layoutViewport, setScaleFrozen, rescalesWhileFrozen } from '@/lib/viewportScale';
 import { ResearcherPanel } from '@/components/ResearcherPanel';
+import { NavChip } from '@/components/NavChip';
+import { useDialog } from '@/components/ConfirmDialog';
 import { CameraSelfTest } from '@/start/CameraSelfTest';
 import { FPS_RATIO_THRESHOLD } from '@/tracking/blink';
+import { backTarget, operatorExitFor, EXIT_LABEL } from './navigation';
 
 function provenance(): Provenance {
   return {
@@ -73,31 +77,32 @@ interface ExperimentProps {
 /**
  * What the progress bar calls each stage. It used to print the internal stage name with the
  * underscores removed — "cvsq baseline", "baseline fatigue", "nasa tlx" — in front of a participant.
- * A Record over the whole Stage union, so a new stage cannot ship without a name.
+ * A Record over the whole Stage union, so a new stage cannot ship without a name. Title Case, as a
+ * label rather than a fragment of a sentence (it was lowercase, at about 12 px on the tablet).
  */
 const STAGE_LABEL: Record<Stage, string> = {
-  SESSION_INIT: 'session set-up',
-  CONSENT: 'consent',
-  PARTICIPANT_PROFILE: 'about you',
-  PREFLIGHT: 'room and device checks',
-  COLOR_VISION: 'colour-vision check',
-  CAMERA_SETUP: 'camera set-up',
-  CALIBRATION: 'eye calibration',
-  CVSQ_BASELINE: 'eye-symptom questionnaire',
-  BASELINE_FATIGUE: 'how your eyes feel',
-  INSTRUCTIONS: 'instructions',
-  READING_TASK: 'reading',
-  COMPREHENSION: 'questions',
-  DISPLAY_PERCEPTION: 'display rating',
-  POST_FATIGUE: 'how your eyes feel',
-  VISUAL_SEARCH: 'word search',
-  REACTION_TIME: 'reaction task',
-  ADAPTATION: 'rest',
-  BREAK_SCREEN: 'break',
-  CVSQ_END: 'eye-symptom questionnaire',
-  NASA_TLX: 'workload questionnaire',
-  SESSION_COMPLETE: 'finished',
-  EXPORT_DASHBOARD: 'export',
+  SESSION_INIT: 'Session Set-up',
+  CONSENT: 'Consent',
+  PARTICIPANT_PROFILE: 'About You',
+  PREFLIGHT: 'Room and Device Checks',
+  COLOR_VISION: 'Colour-Vision Check',
+  CAMERA_SETUP: 'Camera Set-up',
+  CALIBRATION: 'Eye Calibration',
+  CVSQ_BASELINE: 'Eye-Symptom Questionnaire',
+  BASELINE_FATIGUE: 'How Your Eyes Feel',
+  INSTRUCTIONS: 'Instructions',
+  READING_TASK: 'Reading',
+  COMPREHENSION: 'Questions',
+  DISPLAY_PERCEPTION: 'Display Rating',
+  POST_FATIGUE: 'How Your Eyes Feel',
+  VISUAL_SEARCH: 'Word Search',
+  REACTION_TIME: 'Reaction Task',
+  ADAPTATION: 'Rest',
+  BREAK_SCREEN: 'Break',
+  CVSQ_END: 'Eye-Symptom Questionnaire',
+  NASA_TLX: 'Workload Questionnaire',
+  SESSION_COMPLETE: 'Finished',
+  EXPORT_DASHBOARD: 'Export',
 };
 
 export default function Experiment({ resume, onExit }: ExperimentProps) {
@@ -139,9 +144,22 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    */
   const resumeHeld = useRef<ReadonlySet<Stage>>(new Set());
 
+  /**
+   * The screens a Back control stepped over, most recent last. See goBack.
+   *
+   * Back is only ever offered in setup (experiment/navigation.ts). Completing the screen Back led to
+   * returns to the screen Back was pressed on, rather than walking the setup chain forward from
+   * there: Back from camera set-up to consent must come straight back to camera set-up, not repeat
+   * the profile and pre-flight and — above all — re-show the colour-vision plates, which a second
+   * look turns into a memory test.
+   */
+  const backStack = useRef<Stage[]>([]);
+
   const advance = useCallback(() => {
     if (transitioning.current) return;
     transitioning.current = true;
+    const returnTo = backStack.current.pop();
+    if (returnTo) { setMachine((m) => ({ stage: returnTo, stepIndex: m.stepIndex })); return; }
     setMachine((m) => nextStateSkipping(m, nConditionsRef.current, resumeHeld.current));
   }, []);
 
@@ -205,6 +223,80 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     transitioning.current = false;
     // Entering a new reaction-time block means trials are running again.
     if (machine.stage === 'REACTION_TIME') setRtBlockFinished(false);
+  }, [machine]);
+
+  /**
+   * A measured procedure is running on a setup screen — the colour-vision plates, the calibration
+   * dots, the self-test's flashing dot — and the operator's Exit is withheld until it ends. Reported
+   * by the component itself (onRunning) and keyed by the stage that reported it, so it lapses with
+   * that stage. (Not reset by an effect on the stage: a child's effects run before its parent's, so
+   * such a reset would erase the report the new screen had just made.)
+   */
+  const [runningOn, setRunningOn] = useState<Stage | null>(null);
+  const setProcedureRunning = useCallback(
+    (running: boolean) => setRunningOn(running ? machine.stage : null),
+    [machine.stage],
+  );
+  const procedureRunning = runningOn === machine.stage;
+
+  /** Every confirmation on these screens (Cancel, Exit, Pause). See ConfirmDialog.tsx. */
+  const dialog = useDialog();
+
+  /** SESSION_INIT has something typed in it, so Cancel asks before discarding it. */
+  const [initDirty, setInitDirty] = useState(false);
+  /** "Begin setup" is writing the session record; Cancel is withheld until it lands or fails. */
+  const [beginning, setBeginning] = useState(false);
+
+  /**
+   * The participant row as it stood BEFORE this sitting's profile stage first wrote it.
+   *
+   * Back from pre-flight re-opens the profile to correct a mistyped answer, and the correction has to
+   * REPLACE this sitting's first answer. saveProfile merges against the stored row, and several of
+   * its fields are deliberately sticky across sittings — a self-reported colour-vision deficiency, a
+   * 'deficient' formal-plate result, the first sitting's caffeine and sleep — so merging a correction
+   * against the row this sitting had just written would keep the very answer being corrected. Merging
+   * against the row as it was before this sitting touched it gives exactly the record the operator
+   * would have produced by typing it right the first time.
+   *
+   * Held in memory, so Back to the profile is offered only when this mount wrote it: after a resume
+   * the pre-sitting row is no longer known, and a correction could not be applied faithfully.
+   */
+  const profileBase = useRef<{ row: ParticipantRecord | undefined } | null>(null);
+  /** The answers submitted, so the form re-opens filled in rather than blank. */
+  const lastProfile = useRef<ProfileData | null>(null);
+
+  /**
+   * Whether consent may still be revisited: nothing has yet been captured or measured under the
+   * grants — no calibration, no photograph or clip, no condition. null while it is being checked.
+   *
+   * Changing a grant after something was collected under it is a different act: a withdrawal, handled
+   * in the session manager (media revocation keeps the measurements and destroys the recordings; see
+   * gather.ts). Re-consenting here instead would leave data collected under one grant on a record that
+   * states another — the integrity audit reads camera-active eye rows against the grant in force.
+   * So Back to consent appears only while the answer is "nothing yet", which in a fresh sitting is
+   * every screen from the profile to camera set-up.
+   */
+  const [consentRevisitable, setConsentRevisitable] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!session || backTarget(machine.stage) !== 'CONSENT') { setConsentRevisitable(null); return undefined; }
+    let live = true;
+    void (async () => {
+      const [cal, media, conds] = await Promise.all([
+        getAllByIndex('calibration_data', 'by_session', session.session_id),
+        getAllByIndex('media_captures', 'by_session', session.session_id),
+        getAllByIndex('conditions', 'by_session', session.session_id),
+      ]);
+      if (live) setConsentRevisitable(cal.length === 0 && media.length === 0 && conds.length === 0);
+    })().catch(() => { if (live) setConsentRevisitable(false); });
+    return () => { live = false; };
+  }, [machine.stage, session]);
+
+  /** Go back to `to`, remembering where to return to. Setup only; see backStack and navigation.ts. */
+  const goBack = useCallback((to: Stage) => {
+    if (transitioning.current) return;
+    transitioning.current = true;
+    backStack.current.push(machine.stage);
+    setMachine({ stage: to, stepIndex: machine.stepIndex });
   }, [machine]);
 
   /*
@@ -393,18 +485,38 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         resetRtTargetMemory();
       }
 
+      /*
+       * A sitting that never reached the first condition has not been shown the INSTRUCTIONS either,
+       * whatever else it holds. The jump used to be consumed at calibration, or the loop entered
+       * directly when nothing was owed, so a sitting exited on the instructions screen — "Exit —
+       * resume later" makes that an ordinary route now — resumed straight into the grey field and the
+       * first reading page with the overview never read. It walks through INSTRUCTIONS instead.
+       */
+      const neverReachedLoop = !resume.reachedLoop;
       if (idx >= sittingPlan.length && resume.reachedLoop) {
-        // Every condition ran; only the closing instruments remain.
+        /*
+         * Every condition ran; only the closing instruments remain — and only the ones not yet
+         * answered. This always went to the closing CVS-Q, so a sitting stopped on the NASA-TLX asked
+         * the CVS-Q AGAIN, after the participant had submitted it once: the stored row was replaced
+         * by a second answer given with the workload questions already in view. A submitted
+         * questionnaire is not re-administered (experiment/navigation.ts).
+         */
         resumeJumpTo.current = null;
-        setMachine({ stage: 'CVSQ_END', stepIndex: sittingPlan.length - 1 });
+        const closingCvsqDone = cvsqRows.some((c) => c.stage === 'session_end');
+        setMachine({ stage: closingCvsqDone ? 'NASA_TLX' : 'CVSQ_END', stepIndex: sittingPlan.length - 1 });
       } else if (owed) {
         resumeJumpTo.current = loopTarget;
         // A missing baseline means the whole remaining setup chain has to run, so the jump is
-        // consumed at INSTRUCTIONS rather than at calibration.
-        resumeConsumeAt.current = resumeOwesBaselines(prereqs) ? 'INSTRUCTIONS' : 'CALIBRATION';
+        // consumed at INSTRUCTIONS rather than at calibration. So does a sitting that never reached
+        // the loop, which still owes the instructions (above).
+        resumeConsumeAt.current = resumeOwesBaselines(prereqs) || neverReachedLoop ? 'INSTRUCTIONS' : 'CALIBRATION';
         // Whatever the walk passes that this sitting already holds is stepped over, not re-administered.
         resumeHeld.current = baselineStagesHeld(prereqs);
         setMachine({ stage: owed, stepIndex: loopTarget });
+      } else if (neverReachedLoop) {
+        // Setup is complete but the loop was never entered: the instructions, then the first grey field.
+        resumeJumpTo.current = null;
+        setMachine({ stage: 'INSTRUCTIONS', stepIndex: 0 });
       } else {
         resumeJumpTo.current = null;
         /*
@@ -623,6 +735,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const beginSession = useCallback(async (d: SessionInitData) => {
     if (creatingSession.current) return; // guard against double-submit creating duplicate sessions
     creatingSession.current = true;
+    setBeginning(true);
     // Split-session continuity: reuse this participant's prior enrolment number (so the Williams
     // condition order is identical across sittings) and resume at the global serial position where
     // their last sitting stopped. A brand-new participant gets a fresh sequential enrolment number.
@@ -630,6 +743,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     // Refused here as well as on the form: nothing may start a sitting for a participant who withdrew.
     if (prior.withdrawnAt != null) {
       creatingSession.current = false;
+      setBeginning(false);
       setSessionCreateError(`participant ${d.participantId} withdrew from the study; no new sitting can be started under this ID`);
       return;
     }
@@ -721,6 +835,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       setSessionCreateError(err instanceof Error ? err.message : String(err));
     } finally {
       creatingSession.current = false;
+      setBeginning(false);
     }
   }, [advance]);
 
@@ -772,7 +887,16 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
      * during setup produces, and leaves eligible=TRUE with no reason, permanently.
      */
     const prior = await get('participants', session.participant_id);
-    const verdict = mergeExclusionReasons(prior?.exclusion_reason, 'profile', reasons);
+    /*
+     * A CORRECTION REPLACES THIS SITTING'S FIRST ANSWER. Everything below merges against `base`, the
+     * row as it stood before this sitting's profile stage first wrote it — which on a first submission
+     * is simply `prior`. On a resubmission after Back it is the pre-sitting row, so a corrected
+     * self-report, formal-plate result or caffeine answer is not held in place by the stickiness that
+     * exists to protect an EARLIER sitting's values. See profileBase.
+     */
+    if (profileBase.current == null) profileBase.current = { row: prior };
+    const base = profileBase.current.row;
+    const verdict = mergeExclusionReasons(base?.exclusion_reason, 'profile', reasons);
 
     /**
      * The participant record is created once and SHARED across a participant's two sittings, so
@@ -792,31 +916,32 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       participant_id: session.participant_id,
       // The enrolment number is fixed at first enrolment: it is the sole input to the Williams
       // condition order, so re-deriving it at sitting 2 would give the participant two orders.
-      enrolment_number: prior?.enrolment_number ?? enrolment,
+      enrolment_number: base?.enrolment_number ?? enrolment,
       age: d.age, gender: d.gender, daily_screen_hours: d.dailyScreenHours,
       device_familiarity: d.deviceFamiliarity, lighting_habit: d.lightingHabit,
       correction_type: d.correctionType,
       // A failed screening outranks a self-report and must not be undone by re-answering the
       // self-report question at sitting 2.
-      cvd_status: prior?.cvd_status === 'screen_failed'
+      cvd_status: base?.cvd_status === 'screen_failed'
         ? 'screen_failed'
-        : d.cvdSelfReport ? 'self_reported_deficient' : (prior?.cvd_status ?? 'normal'),
-      cvd_screen_correct: prior?.cvd_screen_correct ?? null,
-      cvd_screen_total: prior?.cvd_screen_total ?? null,
+        : d.cvdSelfReport ? 'self_reported_deficient' : (base?.cvd_status ?? 'normal'),
+      cvd_screen_correct: base?.cvd_screen_correct ?? null,
+      cvd_screen_total: base?.cvd_screen_total ?? null,
       // A 'deficient' result at either sitting stands; 'not_done' never overwrites a real result.
-      cvd_clinical: prior?.cvd_clinical === 'deficient' ? 'deficient'
-        : d.cvdClinical !== 'not_done' ? d.cvdClinical : (prior?.cvd_clinical ?? 'not_done'),
+      cvd_clinical: base?.cvd_clinical === 'deficient' ? 'deficient'
+        : d.cvdClinical !== 'not_done' ? d.cvdClinical : (base?.cvd_clinical ?? 'not_done'),
       // First-sitting values, kept for continuity; the per-sitting values go on the session below.
-      caffeine_today: prior?.caffeine_today ?? d.caffeineToday,
-      hours_since_sleep: prior?.hours_since_sleep ?? d.hoursSinceSleep,
+      caffeine_today: base?.caffeine_today ?? d.caffeineToday,
+      hours_since_sleep: base?.hours_since_sleep ?? d.hoursSinceSleep,
       eligible: verdict.eligible,
       exclusion_reason: verdict.exclusion_reason,
       // null, not 0: a baseline that was never administered is missing, and 0 is a
       // measurement — the lowest possible fatigue rating.
-      baseline_fatigue: prior?.baseline_fatigue ?? null,
+      baseline_fatigue: base?.baseline_fatigue ?? null,
       // Points at the sitting that created the record, not the most recent one to touch it.
-      session_id: prior?.session_id ?? session.session_id,
+      session_id: base?.session_id ?? session.session_id,
     });
+    lastProfile.current = d;
 
     // Caffeine and sleep are STATE, not trait: they are asked at every sitting rather than taken
     // from the participant record, which holds a sticky first-sitting copy. Recorded on the session
@@ -967,8 +1092,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   // Neutral "Condition X of N" + a rough time estimate (≈9 min/condition incl. rest), shown only
   // inside the per-condition loop and the break — never any performance information.
   const inLoopish = isInLoop(machine.stage) || machine.stage === 'BREAK_SCREEN';
-  const conditionCurrent = inLoopish ? machine.stepIndex + 1 : undefined;
-  const conditionTotal = inLoopish ? nConditions : undefined;
+  /*
+   * At the break the progress label names the display that comes NEXT. It printed "Condition 6 of 10"
+   * for the one just FINISHED — stepIndex names the condition a break follows — beside break text
+   * saying six were done, so a participant read it as being on the sixth.
+   */
+  const nextDisplay = machine.stage === 'BREAK_SCREEN' ? machine.stepIndex + 2 : undefined;
   // Conditions finished in this sitting, and an estimate of the time left from how long they took
   // (it used to assume 9 min each). Before any finishes, 9 min is still the working guess.
   const conditionsDone = inLoopish
@@ -982,7 +1111,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   let view: React.ReactNode = null;
   switch (machine.stage) {
     case 'SESSION_INIT':
-      view = <SessionInit resolveAssignment={resolveAssignment} onSubmit={beginSession} />;
+      view = <SessionInit resolveAssignment={resolveAssignment} onSubmit={beginSession} onDirty={setInitDirty} />;
       break;
     case 'CONSENT':
       /**
@@ -996,9 +1125,29 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
        */
       view = <Consent askAnnotationVideo={isAnnotationSubsample(enrolment)} onConsent={async (media) => {
         if (session) {
-          // Persist the media grants alongside the participation consent, in one write, so a
-          // capture can never find consent_given=true with the grants still unset.
-          const fresh = { ...session, consent_given: true, consent_time: Date.now(), media_consent: media };
+          /*
+           * Persist the media grants alongside the participation consent, in one write, so a
+           * capture can never find consent_given=true with the grants still unset.
+           *
+           * A SECOND consent in the same sitting — reached by Back from the profile or the camera
+           * screen — REPLACES the grants, and the record it replaces is kept, with when it was
+           * superseded, in consent_revisions (exported as a count in 01_session_info.csv, and in full
+           * in the session JSON). Back to consent is offered only while nothing has been captured or
+           * measured under the old grants (consentRevisitable), so no recording or ocular row can end
+           * up under a grant other than the one it was collected with. Read fresh, not from state,
+           * so nothing written since this sitting's first screen is spread away.
+           */
+          const current = (await get('sessions', session.session_id)) ?? session;
+          const at = Date.now();
+          const fresh: SessionRecord = {
+            ...current, consent_given: true, consent_time: at, media_consent: media,
+            ...(current.consent_given ? {
+              consent_revisions: [
+                ...(current.consent_revisions ?? []),
+                { superseded_at: at, consent_time: current.consent_time, media_consent: current.media_consent },
+              ],
+            } : {}),
+          };
           await put('sessions', fresh);
           setSession(fresh);
         }
@@ -1006,7 +1155,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       }} />;
       break;
     case 'PARTICIPANT_PROFILE':
-      view = <ParticipantProfile onSubmit={saveProfile} />;
+      view = (
+        <ParticipantProfile
+          onSubmit={saveProfile}
+          // Filled in when the operator has come back to correct it; blank on the first visit.
+          initial={lastProfile.current}
+          onBack={consentRevisitable ? () => goBack('CONSENT') : undefined}
+        />
+      );
       break;
     case 'COLOR_VISION':
       view = (
@@ -1121,19 +1277,24 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
            * participant is still here — and that notice is what calls this.
            */
           onDone={advance}
+          onRunning={setProcedureRunning}
         />
       );
       break;
     case 'PREFLIGHT':
       view = (
-        <Preflight onDone={async (fontOk) => {
-          if (session) {
-            const fresh = { ...session, preflight_complete: true, stimulus_font_ok: fontOk };
-            await put('sessions', fresh);
-            setSession(fresh);
-          }
-          advance();
-        }} />
+        <Preflight
+          onDone={async (fontOk) => {
+            if (session) {
+              const fresh = { ...session, preflight_complete: true, stimulus_font_ok: fontOk };
+              await put('sessions', fresh);
+              setSession(fresh);
+            }
+            advance();
+          }}
+          // Only when this sitting's own profile answer can be replaced faithfully; see profileBase.
+          onBack={profileBase.current && lastProfile.current ? () => goBack('PARTICIPANT_PROFILE') : undefined}
+        />
       );
       break;
     case 'CVSQ_BASELINE':
@@ -1223,6 +1384,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
        * A refusal now skips the camera path outright. It cannot be undone by an operator tapping
        * the wrong button, because the button is not there.
        */
+      /*
+       * Back to consent is how the grant is changed: CameraDeclined's refusal cannot be overridden
+       * from here, by design, but the participant may decide again on the full consent screen. Offered
+       * only while nothing has been collected under the current grants (consentRevisitable) — so not
+       * on the camera screen of a resumed sitting that already ran conditions.
+       */
       view = session?.media_consent?.camera_metrics === true ? (
         <CameraSetup
           onAllow={async () => { await tracking.start(); advance(); }}
@@ -1231,9 +1398,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             setupPhotos: session?.media_consent?.setup_photos === true,
             annotationVideo: session?.media_consent?.annotation_video === true,
           }}
+          onBack={consentRevisitable ? () => goBack('CONSENT') : undefined}
         />
       ) : (
-        <CameraDeclined onContinue={() => advanceOrResume()} />
+        <CameraDeclined
+          onContinue={() => advanceOrResume()}
+          onBack={consentRevisitable ? () => goBack('CONSENT') : undefined}
+        />
       );
       break;
     case 'CALIBRATION':
@@ -1247,6 +1418,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           <CameraSelfTest
             begin={tracking.beginSelfTest}
             end={tracking.endSelfTest}
+            onRunning={setProcedureRunning}
             onDone={async (r) => {
               const fresh = { ...(await get('sessions', session.session_id) ?? session), camera_selftest: { ...r, at: Date.now() } } as SessionRecord;
               await put('sessions', fresh);
@@ -1266,6 +1438,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           sampleGazeTarget={tracking.sampleGazeTarget}
           endGazeCalibration={tracking.endGazeCalibration}
           onDone={() => setSelfTesting(true)}
+          onRunning={setProcedureRunning}
         />
       ) : (
         <Calibration cameraStatus={tracking.status} onDone={() => advanceOrResume('CALIBRATION')} />
@@ -1609,18 +1782,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       }} />;
       break;
     case 'EXPORT_DASHBOARD':
-      view = (
-        <div style={{ height: '100%' }}>
-          <Dashboard initialSessionId={session?.session_id} />
-          <button
-            onClick={onExit}
-            className="font-lab text-sm"
-            style={{ position: 'fixed', top: 10, left: 12, zIndex: 50, padding: '6px 12px', borderRadius: 8, border: '1px solid #d8d4cc', background: '#fff', cursor: 'pointer' }}
-          >
-            ← Sessions
-          </button>
-        </div>
-      );
+      // The way back is the shared NavChip, drawn by LazyDashboard — the same control, in the same
+      // place, as when the dashboard is opened from the session manager.
+      view = <Dashboard initialSessionId={session?.session_id} onBack={onExit} />;
       break;
   }
 
@@ -1640,11 +1804,20 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    */
   const cameraBlockedNotice = !cameraLostNotice && tracking.cameraBlocked && !cameraBlockAccepted && pausable;
   const cameraNoticeUp = cameraLostNotice || cameraBlockedNotice;
+  /*
+   * The Pause confirmation, open over a condition screen or the grey field, is a blocking notice too.
+   * It used to be window.confirm, which froze the page — every clock kept running underneath it and
+   * nothing recorded the interval. The in-app dialog leaves the page running, so the task underneath
+   * carries on exactly as it does behind the camera notice, and its time is measured the same way:
+   * into condition_notice_ms, and out of the grey field's delivered adaptation. Only Pause can raise a
+   * dialog on these screens.
+   */
+  const pauseConfirmOverTask = dialog.open && stageInk != null;
   // Tell the timers the notice is over the task (see setBlockingNotice), and clear it on unmount.
   useEffect(() => {
-    setBlockingNotice(cameraNoticeUp);
+    setBlockingNotice(cameraNoticeUp || pauseConfirmOverTask);
     return () => setBlockingNotice(false);
-  }, [cameraNoticeUp]);
+  }, [cameraNoticeUp, pauseConfirmOverTask]);
   // A clip filming a run whose camera is gone cannot be compared with that run's (lost) eye data.
   useEffect(() => {
     if (tracking.cameraLostAt != null) annotationRecording.current?.finish(false);
@@ -1652,8 +1825,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
 
   if (resuming) {
     return (
-      <div className="min-h-screen w-full bg-cream font-sans text-[#1a1a2e]" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p className="font-lab text-sm text-[#5a5a7a]">Resuming session…</p>
+      // .screen, not min-h-screen: 100vh is not the scaled root's height, so this line sat off-centre.
+      <div className="screen w-full bg-cream font-sans text-[#1a1a2e]" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p className="font-sans text-base" style={{ color: '#4a4a60' }}>Resuming session…</p>
       </div>
     );
   }
@@ -1690,6 +1864,67 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     tracking.stop();
     onExit();
   };
+
+  /*
+   * THE OPERATOR CHIP outside the condition-run: Cancel on SESSION_INIT, "Exit — resume later" on
+   * every other setup screen, the break and the two closing questionnaires. experiment/navigation.ts
+   * has the policy; this is where it is carried out.
+   *
+   * Leaving from setup or the closing questionnaires writes NO resume pointer. The sitting stays in
+   * progress, and the resume re-derives where to start from what is stored (listResumable and the
+   * resume effect above): the first setup screen whose product is missing, then the instructions if
+   * the loop was never reached — or the first closing questionnaire not yet answered. A pointer
+   * written here would be a guess that could only disagree with the data. At the break the existing
+   * pause path runs, which does save one: the condition before it is finished.
+   *
+   * Withheld while a procedure is running on the screen (the colour-vision plates, the calibration
+   * dots, the self-test), and while "Begin setup" is writing the session.
+   */
+  const exitKind = operatorExitFor(machine.stage);
+  const exitSitting = () => {
+    annotationRecording.current?.finish(false);
+    tracking.stop();
+    onExit();
+  };
+  const onOperatorChip = async () => {
+    if (exitKind === 'cancel') {
+      // Nothing has been written until "Begin setup", so there is nothing to lose but what was typed.
+      if (initDirty && !(await dialog.confirm({
+        title: 'Discard this new session?',
+        body: 'Nothing has been saved yet. What you typed on this form is discarded.',
+        confirmLabel: 'Discard and go back',
+        cancelLabel: 'Keep editing',
+      }))) return;
+      onExit();
+      return;
+    }
+    if (!session) return;
+    if (machine.stage === 'BREAK_SCREEN') {
+      if (await dialog.confirm({
+        title: 'Exit this sitting for now?',
+        body: `The display just finished is saved. The sitting stays in the session manager under In progress; `
+          + `Resume there continues at the next display.${tracking.status === 'active' ? ' The camera is set up and calibrated again first — a resume always needs a fresh calibration.' : ''}`,
+        confirmLabel: 'Exit to sessions',
+        cancelLabel: 'Stay on the break',
+      })) pauseAndExit();
+      return;
+    }
+    const closing = machine.stage === 'CVSQ_END' || machine.stage === 'NASA_TLX';
+    const cameraInUse = session.media_consent?.camera_metrics === true;
+    if (await dialog.confirm({
+      title: 'Exit this sitting for now?',
+      body: closing
+        ? 'Every display is finished and saved. The sitting stays in the session manager under In progress; '
+          + 'Resume there returns to the closing questionnaire not yet answered. An answered one is not asked again.'
+        : 'Everything completed so far is saved. The sitting stays in the session manager under In progress; '
+          + 'Resume there continues at the first setup screen not yet completed.'
+          + (cameraInUse ? ' Camera set-up and calibration are done again first — a resume always needs a fresh calibration.' : ''),
+      confirmLabel: 'Exit to sessions',
+      cancelLabel: 'Stay here',
+    })) exitSitting();
+  };
+  const showOperatorChip = (exitKind === 'cancel' && !session)
+    || (exitKind === 'exit' && !!session && !procedureRunning);
 
   /*
    * The camera was lost mid-sitting. Blocking, like the portrait notice, and shown only where a pause
@@ -1732,8 +1967,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         <ExperimentProgress
           percent={percent}
           label={STAGE_LABEL[machine.stage]}
-          conditionCurrent={conditionCurrent}
-          conditionTotal={conditionTotal}
+          nextDisplay={nextDisplay}
+          displayTotal={nextDisplay != null ? nConditions : undefined}
           timeRemainingMin={timeRemainingMin}
           onDark={machine.stage === 'CALIBRATION' && tracking.status === 'active' && !!session}
         />
@@ -1743,22 +1978,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           is 30 minutes against a 90-minute sitting. */}
       {/* Blocking, not advisory: continuing in portrait silently invalidates every gaze and
           head-pose measure for the rest of the sitting. */}
-      {portrait && (
-        <div
-          data-testid="portrait-block"
-          style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#1a1a2e', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32 }}
-        >
-          <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 300 }}>Rotate the tablet back to landscape</h1>
-          <p className="font-lab" style={{ fontSize: 15, color: '#c8d8f0', maxWidth: 460, marginTop: 14, lineHeight: 1.6 }}>
-            The eye calibration was taken in landscape. Continuing in portrait would make every gaze
-            and head-position measure for the rest of this sitting meaningless.
-          </p>
-          <p className="font-lab" style={{ fontSize: 14, color: '#8fa0c0', marginTop: 12 }}>
-            Rotate back now — the task underneath is still running, and time spent in portrait is
-            recorded against this condition.
-          </p>
-        </div>
-      )}
+      {portrait && <PortraitBlock stage={machine.stage} calibrated={tracking.status === 'active'} />}
       {showCameraLost && (
         <div
           data-testid="camera-lost"
@@ -1814,18 +2034,30 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           free space and whether the app is open in another tab, then tap Begin setup again.
         </div>
       )}
+      {/*
+        Below the progress label wherever that label is drawn: both sat at the top right, and the
+        warning hid the label completely ("Condition 2 of 10 · break · ~1 min left" was invisible).
+        Outside the condition-run it is set at the operator floor (14 px Roboto, not 12 px mono).
+        Inside the condition-run, where there is no progress label, its place and size are unchanged.
+      */}
       {wakeLockUnsupported && (
         <div
           data-testid="wake-lock-warning"
-          className="font-lab text-xs"
-          style={{ position: 'fixed', top: 10, right: 12, zIndex: 46, padding: '5px 10px', borderRadius: 8, border: '1px solid #c98a22', background: 'rgba(255,246,229,0.95)', color: '#7a5a10' }}
+          className={isInLoop(machine.stage) ? 'font-lab text-xs' : 'font-sans'}
+          style={{ position: 'fixed', top: showProgress ? 44 : 10, right: 12, zIndex: 46, padding: '5px 10px', borderRadius: 8, border: '1px solid #c98a22', background: 'rgba(255,246,229,0.95)', color: '#7a5a10', ...(isInLoop(machine.stage) ? {} : { fontSize: 14 }) }}
         >
           No screen wake lock on this device — confirm the screen timeout is longer than the sitting
         </div>
       )}
-      {canPause && (
+      {/*
+        Inside the condition-run (and the grey field) the Pause chip keeps its size, place and ink: it
+        sits on the stimulus screen, where a larger chip is a change to the display. Its confirmation
+        is the in-app dialog, drawn in the same ink on the same ground, and timed as a notice (above).
+        Everywhere else the operator control is the shared NavChip.
+      */}
+      {canPause && exitKind === 'pause' && (
         <button
-          onClick={() => {
+          onClick={async () => {
             if (!session) return;
             /*
              * Pause is offered in REACTION_TIME only after the trials have ended, while the results
@@ -1836,13 +2068,20 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
              */
             const saving = machine.stage === 'REACTION_TIME';
             const msg = pauseAfterFinished
-              ? 'Pause and exit to the session manager? This condition is complete; the session will resume at the next one.'
+              ? 'This condition is complete; the session will resume at the next one.'
               : saving
-                ? 'Pause and exit to the session manager? This condition\'s tasks are finished and its results are being saved. '
+                ? 'This condition\'s tasks are finished and its results are being saved. '
                   + 'If the save completes, the session resumes at the next condition; if it does not, this condition is '
                   + 'restarted. The Resume line in the session manager shows which condition is next.'
-                : 'Pause and exit to the session manager? This condition will be restarted on resume.';
-            if (window.confirm(msg)) pauseAndExit();
+                : 'This condition will be restarted on resume.';
+            if (await dialog.confirm({
+              title: 'Pause and exit to the session manager?',
+              body: msg,
+              confirmLabel: 'Pause and exit',
+              cancelLabel: 'Keep going',
+              ink: stageInk,
+              testId: 'pause-dialog',
+            })) pauseAndExit();
           }}
           className="font-lab text-xs"
           aria-label="Pause"
@@ -1854,7 +2093,57 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           Pause
         </button>
       )}
+      {showOperatorChip && exitKind && (
+        <NavChip
+          label={EXIT_LABEL[exitKind]}
+          onClick={() => { void onOperatorChip(); }}
+          testId={exitKind === 'cancel' ? 'nav-cancel' : 'nav-exit'}
+          disabled={beginning}
+        />
+      )}
       {view}
+      {dialog.element}
     </div>
   );
 }
+
+/**
+ * The block shown while the tablet is in portrait, saying what is actually at stake on THIS screen.
+ *
+ * It used to say on every screen that "the eye calibration was taken in landscape" and that portrait
+ * time "is recorded against this condition" — on the session form, before any calibration or
+ * condition existed, and in sittings without the camera. The wording inside the condition-run is
+ * unchanged; elsewhere it says what is true there.
+ *
+ * Rendered OUTSIDE the scaled root (a portal to <body>). In portrait the root is drawn at about 0.6,
+ * so its 15 and 14 px lines arrived at 9 and 8 CSS px — the one message that has to be read from
+ * arm's length while the tablet is being turned. Out here its sizes are real CSS pixels.
+ */
+function PortraitBlock({ stage, calibrated }: { stage: Stage; calibrated: boolean }) {
+  const inCondition = isInLoop(stage);
+  const beforeCalibration = (SETUP_BEFORE_CALIBRATION as readonly Stage[]).includes(stage);
+  const why = stage === 'CALIBRATION'
+    ? 'The eye calibration is taken in landscape. Rotate back to carry on with it.'
+    : calibrated && !beforeCalibration
+      ? 'The eye calibration was taken in landscape. Continuing in portrait would make every gaze and head-position measure for the rest of this sitting meaningless.'
+      : beforeCalibration
+        ? 'The study runs in landscape: every screen is laid out for it, and the eye calibration later in set-up is taken in landscape too.'
+        : 'The study runs in landscape: every screen is laid out for it.';
+  const then = inCondition
+    ? 'Rotate back now — the task underneath is still running, and time spent in portrait is recorded against this condition.'
+    : 'Nothing is lost: this screen is still there underneath and carries on as soon as the tablet is landscape again.';
+  return createPortal(
+    <div
+      data-testid="portrait-block"
+      style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#1a1a2e', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32, touchAction: 'none' }}
+    >
+      <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 300 }}>Rotate the tablet back to landscape</h1>
+      <p className="font-sans" style={{ fontSize: 19, color: '#dbe6f7', maxWidth: 520, marginTop: 16, lineHeight: 1.55 }}>{why}</p>
+      <p className="font-sans" style={{ fontSize: 17, color: '#c8d8f0', maxWidth: 520, marginTop: 14, lineHeight: 1.55 }}>{then}</p>
+    </div>,
+    document.body,
+  );
+}
+
+/** Setup screens that come before the eye calibration: nothing has been calibrated yet. */
+const SETUP_BEFORE_CALIBRATION = ['SESSION_INIT', 'CONSENT', 'PARTICIPANT_PROFILE', 'PREFLIGHT', 'COLOR_VISION', 'CAMERA_SETUP'] as const;

@@ -38,11 +38,14 @@ export function BreakScreen({ completed, total, onContinue, children }: Props) {
   return (
     <div
       data-stage="BREAK_SCREEN"
-      className="min-h-screen w-full bg-cream p-[6%] font-sans text-[#1a1a2e] animate-fade-in"
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      className="screen scrollable nav-band w-full bg-cream p-[6%] font-sans text-[#1a1a2e] animate-fade-in"
+      style={{ display: 'flex' }}
     >
-      {/* No wave backdrop: its lines ran across the text. */}
-      <div style={{ width: '100%', maxWidth: 720, textAlign: 'center' }}>
+      {/* No wave backdrop: its lines ran across the text.
+          .screen, not min-h-screen: inside the scaled root 100vh is the wrong box, so the block
+          sat 50-80 px above the middle of the tablet and a longer lux note had nowhere to go. It is
+          centred with margin:auto and the screen scrolls if it ever grows. */}
+      <div style={{ width: '100%', maxWidth: 720, textAlign: 'center', margin: 'auto' }}>
         <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]">Rest break</p>
         <h1 className="mt-2 font-serif text-4xl font-light">Take a short rest</h1>
         <p className="mt-4 font-sans text-[17px] leading-relaxed text-[#3a3a4a]">

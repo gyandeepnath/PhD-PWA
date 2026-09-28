@@ -87,13 +87,23 @@ later ones as if they follow from the first.
 
    The app enforces the refusal itself: instead of the camera-setup screen it shows *Camera
    measurement declined* and moves on. There is no button to enable the camera anyway, by design.
-   If a participant changes their mind DURING a sitting, that decision cannot be amended: the
-   consent screen runs once per session and there is no route back to it. Their original choice
-   stands for this sitting, and the next sitting presents the consent screen afresh with every grant
-   defaulting to no. Do not start a second session for the same visit to work around this — it would
-   record one visit as two sittings and corrupt the counterbalancing. Destroying media already
-   captured IS available at any time, and does not require ending the session: see the withdrawal
-   row in §7.
+
+   **If the participant changes their mind before calibration**, press **← Back to consent** (on
+   the profile screen, the camera-setup screen or the *Camera measurement declined* screen). The
+   whole consent screen comes back with every box unticked, exactly as the first time; the
+   participant decides again, and the app returns to the screen you came from. From the camera
+   screen that means straight back to it: the profile, pre-flight and colour-vision plates are not
+   repeated. The earlier choice is kept on the session
+   record (`consent_revisions` in the export), so the change is visible later. Do not use this to
+   talk a participant round: it is for a participant who asks.
+
+   **The Back button is offered only while nothing has yet been recorded under the consent** — no
+   calibration, no photograph, no display. On a resumed sitting that already holds any of these it
+   is not there, and the choice stands for this sitting; the next sitting presents the consent
+   screen afresh with every grant defaulting to no. Do not start a second
+   session for the same visit to work around this — it would record one visit as two sittings and
+   corrupt the counterbalancing. Destroying media already captured IS available at any time, and
+   does not require ending the session: see the withdrawal row in §6.
 3. **Setup photographs.** A separate grant, defaulting to no. Two photographs, at the start and end
    of the session, showing seating distance and room lighting, so that setup compliance is evidenced
    rather than asserted.
@@ -123,6 +133,34 @@ CVSQ_BASELINE → BASELINE_FATIGUE → INSTRUCTIONS`
 
 Pre-flight comes **before** the colour-vision plates on purpose: a blue-light filter left on would
 invalidate the red-green plates.
+
+**Going back, and stopping part-way through set-up.** The white button at the **top left** of every
+set-up screen is always the way out, and it always says what it does:
+
+- On the *New Session* form it reads **← Cancel — back to sessions**. Nothing is saved until you
+  press *Begin setup*, so cancelling loses only what you typed (the app asks first if you typed
+  anything).
+- On every other set-up screen it reads **Exit — resume later**. The app asks you to confirm, then
+  returns to the Session Manager. Everything already completed is saved, and the sitting stays under
+  *In progress*. **Resume** carries on at the first screen that was not finished — and shows the
+  participant the instructions again if they had not yet started the first display. If the camera
+  is being used, camera set-up and calibration are always done again on a resume.
+- The button disappears while the colour-vision plates are on screen, while the calibration dots
+  are running and while the camera self-test dot is flashing. It comes back as soon as that step
+  ends. Leaving in the middle of those would mean repeating them, and a second look at the same
+  colour-vision plates tests memory rather than colour vision.
+
+A **← Back** button sits next to *Continue* on three screens only:
+
+- the **profile** screen (**← Back to consent**) and the **camera** screens (**← Back to consent**),
+  to change a consent choice — see §3;
+- the **pre-flight** screen (**← Back to the profile**), to correct a mistyped answer. The profile
+  comes back filled in with what you entered; change what is wrong and press *Continue*. The
+  corrected answers replace the first ones.
+
+There is deliberately **no Back** on the colour-vision plates, the calibration, a questionnaire
+that has been submitted, anything inside a display, the break or the thank-you screen: going back
+there would change what is being measured.
 
 Alongside the app, complete the clinical screening: visual acuity, non-cycloplegic refraction, cover
 test, near point of convergence.
@@ -217,11 +255,19 @@ reaction-time tasks.
 
 A self-paced rest break is offered **after every two conditions**. Let the participant take it.
 
-**Pausing.** The ⏸ Pause button exits to the Session Manager and the session resumes later. Where
-you pause matters, and the confirmation box tells you which case you are in: pausing *during* a
-condition restarts that condition on resume, so its measurements are taken again; pausing on the
-grey rest screen keeps the condition you have just finished and resumes at the next one. Prefer the
-rest screen.
+**Pausing.** During a display, the small **Pause** button at the top left exits to the Session
+Manager and the session resumes later. It asks first, in a box drawn in the display's own colours:
+**Pause and exit** leaves, **Keep going** carries on. Answer the box promptly — while it is open it
+covers part of the screen, and that time is recorded against the display (`condition_notice_ms`).
+Where you pause matters, and the box tells you which case you are in: pausing *during* a condition
+restarts that condition on resume, so its measurements are taken again; pausing on the grey rest
+screen keeps the condition you have just finished and resumes at the next one. Pause is hidden while
+the reaction-time dots are running.
+
+On the **break** screen the way out is the same white **Exit — resume later** button as in set-up;
+the display just finished is kept and the sitting resumes at the next one. The break is the best
+place to stop. The small grey line at the top right of the break names the display that comes
+**next** ("Next: Display 3 of 10").
 
 **Things you must not do, at any point:**
 
@@ -294,7 +340,9 @@ else a sitting produces put together.
 1. The app runs the closing CVS-Q and the NASA Task Load Index. Let it finish; a session closed
    early loses the key secondary outcome, which is the change in CVS-Q from baseline. The sitting is
    recorded as complete the moment the last Task Load Index slider is submitted, so closing the app
-   on the thank-you screen no longer leaves it looking unfinished.
+   on the thank-you screen no longer leaves it looking unfinished. If the participant has to stop
+   during these two questionnaires, use **Exit — resume later**: Resume returns to the questionnaire
+   that was not yet answered, and a questionnaire already answered is not asked again.
 2. Take the closing setup photograph if that grant was given.
 3. **Export.** Dashboard → Export. This writes 18 CSVs, an analysis JSON, a codebook, a provenance
    manifest and a `backup_*.json`. If the session was consented for photographs or video, a second
@@ -315,6 +363,14 @@ else a sitting produces put together.
 6. There is no second session to book. If the sitting had to be **split** for scheduling, book the
    remaining half as soon as the participant can manage — the ten conditions belong to one
    protocol, and a long gap between halves adds a period effect the design does not model.
+
+**The Session Manager.** The white **← Back to home** button is at the top left, like the way out
+on every other screen. In-progress and withdrawn sittings are always listed; **Completed** sittings
+are folded away under a heading with their count ("Completed (12) — tap to show") so that the list
+stays short as the study grows. The list scrolls: a dark **More below ↓** label at the bottom means
+there is more under it. Every button that deletes or changes something asks first in a box whose
+buttons say what they do — for example **Move to recycle bin** / **Keep it**, or **Delete
+permanently** / **Keep it in the bin**. Read the button, not just its colour.
 
 **If a tablet is lost or wiped:** the `backup_*.json` from the last export restores the session on
 any device — Session Manager → *Restore session from backup file*. The plain `session_*.json` is
@@ -379,6 +435,7 @@ Print this.
 - [ ] Annotation video offered separately, validation subsample only (default no)
 
 **Setup**
+- [ ] Need to stop? Top-left **Exit — resume later**, never closing the app; mistyped profile → **← Back to the profile** on pre-flight
 - [ ] Clinical screening complete; any abnormality recorded and referred
 - [ ] Formal colour-vision plates administered, and the result entered in the profile form
 - [ ] Camera preview shows a face box

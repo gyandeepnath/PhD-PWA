@@ -39,9 +39,18 @@ import type { CameraStatus } from '@/storage/types';
  * so the full run passes on screens no finger can reach.
  *
  * min-h-0 is what lets the flex child actually shrink to its container instead of growing.
+ *
+ * `nav-band` keeps the top band clear for the operator's navigation chip ("Exit — resume later",
+ * top left) and the progress label, so neither sits on a heading or a field (theme.css).
  */
-const shell = 'h-full w-full bg-cream px-[5%] py-10 font-sans text-[#1a1a2e] animate-fade-in overflow-y-auto';
+const shell = 'h-full w-full bg-cream px-[5%] pb-10 nav-band font-sans text-[#1a1a2e] animate-fade-in overflow-y-auto';
 const btn = 'rounded-xl px-8 py-3 font-sans text-base font-medium text-white transition active:scale-95';
+/*
+ * Back, on the few screens where going back is allowed (experiment/navigation.ts has the policy).
+ * An outline button in the row of primary actions, first in the row, saying where it goes — so it is
+ * never mistaken for the way forward, and never needs the operator to guess what it undoes.
+ */
+const btnBack = 'rounded-xl border border-[#bdb8ae] bg-white px-6 py-3 font-sans text-base text-[#3a3a4a] transition active:scale-95';
 /*
  * TYPE SCALE for these screens. The whole app is drawn on the 1194x834 design canvas and shrunk to
  * fit (viewportScale.ts): about 0.86 on a Xiaomi Pad 6, so a 12 px label arrived at the eye as about
@@ -102,10 +111,13 @@ export interface IlluminationAssignment {
 export function SessionInit({
   onSubmit,
   resolveAssignment,
+  onDirty,
 }: {
   onSubmit: (d: SessionInitData) => void;
   /** Looks up this participant's counterbalanced assignment from their enrolment history. */
   resolveAssignment: (participantId: string) => Promise<IlluminationAssignment>;
+  /** Whether anything has been typed, so Cancel asks before throwing it away (and only then). */
+  onDirty?: (dirty: boolean) => void;
 }) {
   const [pid, setPid] = useState('');
   const [lux, setLux] = useState('');
@@ -117,6 +129,8 @@ export function SessionInit({
   const [bright, setBright] = useState('');
   const [sitting, setSitting] = useState<'single' | 'split'>('single');
   const [err, setErr] = useState('');
+  const dirty = [pid, lux, deviation, repeatNote, splitReason, lum, bright].some((v) => v.trim() !== '') || sitting !== 'single';
+  useEffect(() => { onDirty?.(dirty); }, [dirty, onDirty]);
 
   // Resolve the counterbalanced assignment as soon as the id is well-formed, so the researcher
   // sets the room to the ASSIGNED level before measuring rather than measuring whatever it was.
@@ -352,6 +366,9 @@ export function SessionInit({
         </button>
       </div>
       <style>{VL_INPUT_CSS}</style>
+      {/* With the deviation and split-reason fields open the form runs about 200 px past the bottom
+          of the tablet, and nothing said so. */}
+      <ScrollCue />
     </div>
   );
 }
@@ -379,17 +396,26 @@ export interface ProfileData {
   caffeineToday: boolean;
   hoursSinceSleep: number;
 }
-export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) => void }) {
-  const [age, setAge] = useState('');
-  const [gender, setGender] = useState('');
-  const [hours, setHours] = useState('');
-  const [fam, setFam] = useState<ProfileData['deviceFamiliarity'] | ''>('');
-  const [light, setLight] = useState<ProfileData['lightingHabit'] | ''>('');
-  const [corr, setCorr] = useState<ProfileData['correctionType'] | ''>('');
-  const [cvd, setCvd] = useState<boolean | null>(null);
-  const [caffeine, setCaffeine] = useState<boolean | null>(null);
-  const [clinicalCvd, setClinicalCvd] = useState('');
-  const [sinceSleep, setSinceSleep] = useState('');
+export function ParticipantProfile({ onSubmit, initial, onBack }: {
+  onSubmit: (d: ProfileData) => void;
+  /**
+   * The answers already submitted in this sitting, when the operator has come BACK to correct one.
+   * Without them a single mistyped field meant re-entering all ten.
+   */
+  initial?: ProfileData | null;
+  /** Back to consent — offered only while nothing has been measured under the grants (see Experiment). */
+  onBack?: () => void;
+}) {
+  const [age, setAge] = useState(initial ? String(initial.age) : '');
+  const [gender, setGender] = useState(initial?.gender ?? '');
+  const [hours, setHours] = useState(initial ? String(initial.dailyScreenHours) : '');
+  const [fam, setFam] = useState<ProfileData['deviceFamiliarity'] | ''>(initial?.deviceFamiliarity ?? '');
+  const [light, setLight] = useState<ProfileData['lightingHabit'] | ''>(initial?.lightingHabit ?? '');
+  const [corr, setCorr] = useState<ProfileData['correctionType'] | ''>(initial?.correctionType ?? '');
+  const [cvd, setCvd] = useState<boolean | null>(initial ? initial.cvdSelfReport : null);
+  const [caffeine, setCaffeine] = useState<boolean | null>(initial ? initial.caffeineToday : null);
+  const [clinicalCvd, setClinicalCvd] = useState(initial ? (initial.cvdClinical === 'not_done' ? 'not done' : initial.cvdClinical) : '');
+  const [sinceSleep, setSinceSleep] = useState(initial ? String(initial.hoursSinceSleep) : '');
   const ageN = Number(age);
   const valid = ageN >= CONFIG.MIN_AGE && ageN <= CONFIG.MAX_AGE && gender && hours !== '' && fam && light && corr && cvd != null && clinicalCvd !== ''
     && caffeine != null && sinceSleep !== '' && Number.isFinite(Number(sinceSleep));
@@ -422,9 +448,11 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
         <Field label="Hours since you woke up today"><input data-testid="since-sleep" className="vl-input" inputMode="numeric" value={sinceSleep} onChange={(e) => setSinceSleep(e.target.value)} placeholder="3" /></Field>
       </div>
       </div>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 28 }}>
+      {onBack && <button type="button" className={btnBack} data-testid="back-to-consent" onClick={onBack}>← Back to consent</button>}
       <button
         className={btn}
-        style={{ marginTop: 28, ...btnState(!!valid) }}
+        style={btnState(!!valid)}
         disabled={!valid}
         onClick={() => valid && onSubmit({
           age: ageN, gender, dailyScreenHours: Number(hours),
@@ -439,6 +467,7 @@ export function ParticipantProfile({ onSubmit }: { onSubmit: (d: ProfileData) =>
       >
         Continue →
       </button>
+      </div>
       </div>
       <style>{VL_INPUT_CSS}</style>
       <ScrollCue />
@@ -460,11 +489,16 @@ const FACE_TONE: Record<FaceProbeStatus, string> = {
   unavailable: '#e64c4c',
 };
 
-export function CameraSetup({ onAllow, onSkip, retains }: {
+export function CameraSetup({ onAllow, onSkip, retains, onBack }: {
   onAllow: () => void;
   onSkip: () => void;
   /** The photo/video grants actually in force, so the privacy notice can tell the truth. */
   retains?: { setupPhotos: boolean; annotationVideo: boolean };
+  /**
+   * Back to consent, to change the camera grant. Offered only while nothing has yet been captured
+   * or measured under it (see Experiment.tsx); not while the preview is running.
+   */
+  onBack?: () => void;
 }) {
   const [step, setStep] = useState<'notice' | 'preview' | 'denied'>('notice');
   /** Live face detection in the preview — see startFaceProbe for why this is not cosmetic. */
@@ -545,6 +579,7 @@ export function CameraSetup({ onAllow, onSkip, retains }: {
               please tap “Allow”.
             </p>
             <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {onBack && <button type="button" className={btnBack} data-testid="back-to-consent" onClick={onBack}>← Back to consent</button>}
               <button className={btn} style={{ background: '#1a1a2e' }} onClick={requestCamera}>Enable camera →</button>
               <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" onClick={onSkip}>
                 Continue without camera
@@ -615,6 +650,7 @@ export function CameraSetup({ onAllow, onSkip, retains }: {
               {errMsg}
             </div>
             <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {onBack && <button type="button" className={btnBack} data-testid="back-to-consent" onClick={onBack}>← Back to consent</button>}
               <button className={btn} style={{ background: '#1a1a2e' }} onClick={() => { setErrMsg(''); setStep('notice'); }}>Retry</button>
               <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" onClick={onSkip}>
                 Continue without camera
@@ -634,9 +670,12 @@ export function CameraSetup({ onAllow, onSkip, retains }: {
  * There is deliberately no way to enable the camera from here. The grant was refused on a screen
  * that promised the refusal would be honoured, and an "are you sure?" affordance next to that
  * promise invites an operator to talk a participant round — which the manual explicitly forbids.
- * Changing it means going back to consent.
+ * Changing it means going back to consent, and that route now exists: "Back to consent" re-presents
+ * the whole consent screen with every option unticked, exactly as the first time, so the participant
+ * decides again rather than being asked to reverse one answer. The superseded consent is kept on the
+ * session record (consent_revisions).
  */
-export function CameraDeclined({ onContinue }: { onContinue: () => void }) {
+export function CameraDeclined({ onContinue, onBack }: { onContinue: () => void; onBack?: () => void }) {
   return (
     <div className={shell}>
       <div style={{ width: '100%', margin: '0 auto', maxWidth: 760 }}>
@@ -650,7 +689,8 @@ export function CameraDeclined({ onContinue }: { onContinue: () => void }) {
           tasks, visual search and the reaction-time blocks. The session is complete and fully
           usable without the ocular measures — do not try to persuade the participant otherwise.
         </p>
-        <div className="mt-6">
+        <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          {onBack && <button type="button" className={btnBack} data-testid="back-to-consent" onClick={onBack}>← Back to consent</button>}
           <button className={btn} style={{ background: '#1a1a2e' }} data-testid="camera-declined-continue" onClick={onContinue}>
             Continue →
           </button>
@@ -804,8 +844,10 @@ export function Instructions({ conditions, onContinue }: { conditions: number; o
   const pages = Math.max(...PASSAGES.map((p) => p.pages.length));
   const breakEvery = CONFIG.BREAK_EVERY_N_CONDITIONS;
   return (
-    <div className={shell} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: '100%', margin: '0 auto', maxWidth: 800 }}>
+    /* Centred with margin:auto rather than align-items:center: in a scroll container the latter
+       pushes an overflowing top edge out of reach, where no scroll can bring it back. */
+    <div className={shell} style={{ display: 'flex' }}>
+      <div style={{ width: '100%', margin: 'auto', maxWidth: 800 }}>
         <p className={eyebrow}>Before you begin</p>
         <h1 className="mt-2 font-serif text-4xl font-light">What you’ll be doing</h1>
         <p className="mt-4 font-sans text-[17px] leading-relaxed text-[#3a3a4a]" data-testid="instructions-count">
@@ -838,11 +880,12 @@ export function Instructions({ conditions, onContinue }: { conditions: number; o
 // ---- SESSION COMPLETE ----
 export function SessionComplete({ onExport, luxPanel }: { onExport: () => void; luxPanel?: ReactNode }) {
   return (
-    <div className={shell} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+    <div className={shell} style={{ display: 'flex' }}>
       {/* Centred, and in reading order: the participant's message first, then — set apart — what
           the researcher does next. The end-of-session lux panel used to sit between the heading and
-          the thank-you, on a left-aligned column with the right half of the screen empty. */}
-      <div style={{ width: '100%', maxWidth: 720, margin: '0 auto' }}>
+          the thank-you, on a left-aligned column with the right half of the screen empty. Centred by
+          margin:auto so a tall lux panel scrolls instead of losing its top edge. */}
+      <div style={{ width: '100%', maxWidth: 720, margin: 'auto' }}>
         <h1 className="font-serif text-5xl font-light">Thank you</h1>
         <p className={`mt-3 ${body}`} style={{ fontSize: 17 }}>
           Your responses have been recorded and will contribute to research on visual ergonomics.
@@ -908,13 +951,14 @@ export function Consent({
   return (
     <div className={shell}>
       {/* A readable column across the screen, not a strip down its middle. The consent text is set at
-          17 px with generous leading and scrolls inside its own box, so the choices and the button
-          stay on screen. The decorative wave lines that used to run behind it are gone: they crossed
-          the words. */}
+          17 px with generous leading. It used to scroll inside its own 360 px box, inside a screen
+          that itself scrolls: the box overflowed by 9 px, and a drag on the words moved the wrong
+          one of the two. The page is the only scroller now, with the "More below" cue. The
+          decorative wave lines that used to run behind it are gone: they crossed the words. */}
       <div style={{ width: '100%', margin: '0 auto', maxWidth: 880 }}>
         <h1 className="font-serif text-4xl font-light">Informed consent</h1>
-        <div data-testid="consent-text" className="scrollable mt-4 font-sans text-[#2a2a3a]"
-          style={{ fontSize: 17, lineHeight: 1.6, maxHeight: 360, padding: '16px 20px', borderRadius: 12, border: '1px solid #e5e2dc', background: '#fff' }}>
+        <div data-testid="consent-text" className="mt-4 font-sans text-[#2a2a3a]"
+          style={{ fontSize: 17, lineHeight: 1.6, padding: '16px 20px', borderRadius: 12, border: '1px solid #e5e2dc', background: '#fff' }}>
           {/*
             * PARTICIPANT-FACING CONSENT TEXT. Two statements here became FALSE when the dim
             * illumination level was withdrawn, and both were material:
@@ -930,10 +974,15 @@ export function Consent({
             *
             * The amendment was cleared with the supervisor and the ethics committee before any data
             * collection began, so this wording is the approved one rather than a pending change.
+            *
+            * The duration is the one string every screen uses (CONFIG.SINGLE_SITTING_DURATION), and
+            * it is THIS text's figure, "75–120 minutes", verbatim: the landing page and the session
+            * form said "about 90 min to 2 h", and where two figures disagree the approved consent
+            * wording is the one that stands. The words the participant reads are unchanged.
           */}
           <p>You are invited to take part in a study on visual ergonomics — how display polarity
             and text colour affect reading, attention and eye comfort. The session takes roughly
-            75–120 minutes and involves reading passages, short attention tasks and brief
+            {' '}{CONFIG.SINGLE_SITTING_DURATION} and involves reading passages, short attention tasks and brief
             questionnaires. It is normally a single visit; if it suits you better it can be split
             across two shorter visits, which the researcher will arrange with you.</p>
           <p style={{ marginTop: 12 }}><strong>Data:</strong> responses are stored on this device
@@ -973,8 +1022,12 @@ export function Consent({
           />
         )}
 
+        {/* Read BEFORE the choice is confirmed, not after: it used to sit under the button. */}
+        <p className={help} style={{ marginTop: 18 }}>
+          Unticked boxes are recorded as a refusal, not left blank.
+        </p>
         <button className={btn} disabled={!agreed}
-          style={{ marginTop: 22, ...btnState(agreed) }}
+          style={{ marginTop: 12, ...btnState(agreed) }}
           onClick={() => agreed && onConsent({
             camera_metrics: cameraMetrics,
             setup_photos: setupPhotos,
@@ -983,9 +1036,6 @@ export function Consent({
           })}>
           I consent — continue →
         </button>
-        <p className={help} style={{ marginTop: 10 }}>
-          Unticked boxes are recorded as a refusal, not left blank.
-        </p>
       </div>
       <ScrollCue gutter />
     </div>
@@ -1002,7 +1052,11 @@ const PREFLIGHT_ITEMS = [
   'No strong light source behind the participant (no backlight)',
   'Device on a stand at ~50–60 cm viewing distance, landscape',
 ];
-export function Preflight({ onDone }: { onDone: (fontOk: boolean | null) => void }) {
+export function Preflight({ onDone, onBack }: {
+  onDone: (fontOk: boolean | null) => void;
+  /** Back to the profile to correct an answer. Offered when this sitting's own profile can be replaced. */
+  onBack?: () => void;
+}) {
   const [checked, setChecked] = useState<boolean[]>(Array(PREFLIGHT_ITEMS.length).fill(false));
   /**
    * Storage durability is checked here rather than left to the operator's judgement, because the
@@ -1148,11 +1202,14 @@ export function Preflight({ onDone }: { onDone: (fontOk: boolean | null) => void
         ))}
       </div>
       </div>
-      <button className={btn} disabled={!all} data-testid="preflight-continue"
-        style={{ marginTop: 20, ...btnState(all) }}
-        onClick={() => all && onDone(fontOk ?? null)}>
-        {storageBlocks ? 'Storage problem — cannot start' : 'All checks pass — continue →'}
-      </button>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 20 }}>
+        {onBack && <button type="button" className={btnBack} data-testid="back-to-profile" onClick={onBack}>← Back to the profile</button>}
+        <button className={btn} disabled={!all} data-testid="preflight-continue"
+          style={btnState(all)}
+          onClick={() => all && onDone(fontOk ?? null)}>
+          {storageBlocks ? 'Storage problem — cannot start' : 'All checks pass — continue →'}
+        </button>
+      </div>
       </div>
       <ScrollCue />
     </div>

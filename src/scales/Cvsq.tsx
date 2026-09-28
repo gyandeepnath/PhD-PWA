@@ -5,6 +5,8 @@
 import { useRef, useState } from 'react';
 import { CVSQ_ITEMS, scoreCvsq } from './cvsq';
 import { now } from '@/lib/timing';
+import { ScrollCue } from '@/components/ScrollCue';
+import { UI_TEXT } from '@/lib/uiPalette';
 
 export interface CvsqResult {
   frequency: number[];
@@ -69,6 +71,25 @@ interface Props {
   onComplete: (r: CvsqResult) => void;
 }
 
+/**
+ * LAYOUT. Every word on this screen belongs to the instrument — the item names, the anchors and
+ * their definitions — and none of it was legible: the anchor definitions were 12 design px grey DM
+ * Mono (10 CSS px on the tablet, 9 with the address bar), the items and buttons 14 px mono, and the
+ * sixteen items scrolled about 940 px in a box that showed five of them with nothing saying there
+ * were more. Now:
+ *   - items, answers and anchor definitions are Roboto at 16-17 design px, in colours at least
+ *     4.5:1 on the ground (lib/uiPalette.ts);
+ *   - each item is ONE row, name on the left and answers on the right, which roughly halves the
+ *     scroll. The intensity answers have a fixed slot, so they appear in place when a frequency other
+ *     than the first is chosen instead of pushing every item below them down the screen;
+ *   - the list says when there is more below it (ScrollCue), and "Answered k of 16" sits beside
+ *     Continue, so a skipped item is found without scrolling back through the list.
+ * Two columns of eight were tried on paper and do not fit the tablet's 834 design px without
+ * shrinking the text or the tap targets, which is what this change exists to undo.
+ *
+ * The item wording, their order, the anchors and the scoring are unchanged: it is a validated
+ * instrument, and only its presentation is touched here.
+ */
 export function Cvsq({ stage, onComplete }: Props) {
   const freqOptions = FREQ_BY_STAGE[stage];
   const [freq, setFreq] = useState<(number | null)[]>(Array(16).fill(null));
@@ -76,7 +97,9 @@ export function Cvsq({ stage, onComplete }: Props) {
   const [sent, setSent] = useState(false);
   const mountedAt = useRef(now());
 
-  const ready = freq.every((f, i) => f != null && (f === 0 || inten[i] != null)) && !sent;
+  const itemDone = (i: number) => freq[i] != null && (freq[i] === 0 || inten[i] != null);
+  const answered = CVSQ_ITEMS.filter((_, i) => itemDone(i)).length;
+  const ready = answered === CVSQ_ITEMS.length && !sent;
 
   const submit = () => {
     if (!ready) return;
@@ -94,62 +117,75 @@ export function Cvsq({ stage, onComplete }: Props) {
   };
 
   return (
-    <div className="screen screen-col w-full bg-cream p-[4%] font-sans text-[#1a1a2e] animate-fade-in">
-      <div className="screen-col" style={{ width: '100%', maxWidth: 760, margin: '0 auto', flex: '1 1 auto', minHeight: 0 }}>
-      <p className="font-lab text-xs uppercase tracking-wide text-[#5a5a7a]">
+    <div className="screen screen-col nav-band w-full bg-cream px-[4%] pb-[3%] font-sans text-[#1a1a2e] animate-fade-in">
+      <div className="screen-col" style={{ width: '100%', maxWidth: 920, margin: '0 auto', flex: '1 1 auto', minHeight: 0 }}>
+      <p className="font-sans text-[15px] font-medium uppercase tracking-wide" style={{ color: UI_TEXT.muted }}>
         Computer Vision Syndrome Questionnaire · {stage === 'baseline' ? 'baseline' : 'session end'}
       </p>
-      <h1 className="mt-2 font-serif text-3xl font-light">{STEM_BY_STAGE[stage]}</h1>
+      <h1 className="mt-2 font-serif font-light" style={{ fontSize: 28, lineHeight: 1.3 }}>{STEM_BY_STAGE[stage]}</h1>
       {/* The anchors are spelled out rather than left to the one-word labels: "occasionally" means
           different things over a week and over ninety minutes, and the participant has to be told
           which is meant. */}
-      <p className="mt-2 font-lab text-xs text-[#5a5a7a]">
-        {freqOptions.map((f) => `${f.label} — ${f.hint}`).join(' · ')}
-      </p>
+      <dl data-testid="cvsq-anchors" className="mt-3 font-sans" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '4px 20px', fontSize: 16, lineHeight: 1.4, color: UI_TEXT.body }}>
+        {freqOptions.map((f) => (
+          <div key={f.value}>
+            <dt style={{ fontWeight: 600, color: UI_TEXT.ink, display: 'inline' }}>{f.label}</dt>
+            <dd style={{ display: 'inline' }}> — {f.hint}</dd>
+          </div>
+        ))}
+      </dl>
 
       {/* Flexes into whatever the header and the button leave, rather than claiming a guessed
           fraction of the viewport. The old `maxHeight: 64vh` overflowed the canvas on every device
           the study will use, and `vh` is the wrong unit inside the scaled root regardless. */}
-      <div className="scrollable screen-grow" style={{ marginTop: 16, paddingRight: 8 }}>
+      {/* The list reaches 136 px past the column on the right, and its "More below" cue sits there:
+          centred, the cue covered the answers of whichever row was last on screen. */}
+      <div data-testid="cvsq-list" className="scrollable screen-grow" style={{ marginTop: 14, marginRight: -136, paddingRight: 136 }}>
         {CVSQ_ITEMS.map((item, i) => (
-          <div key={item} style={{ padding: '12px 0', borderBottom: '1px solid #eceae4' }}>
-            <div className="font-lab text-sm" style={{ marginBottom: 8 }}>{i + 1}. {item}</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <div key={item} data-testid="cvsq-item" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0', borderBottom: '1px solid #eceae4', borderTop: i === 0 ? '1px solid #e5e2dc' : undefined }}>
+            <div className="font-sans" style={{ flex: '1 1 230px', minWidth: 0, fontSize: 17, lineHeight: 1.3, color: UI_TEXT.ink }}>
+              <span style={{ color: UI_TEXT.muted, display: 'inline-block', minWidth: 28 }}>{i + 1}.</span>{item}
+            </div>
+            <div style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
               {freqOptions.map((f) => (
-                <Chip key={f.value} label={f.label} title={f.hint} active={freq[i] === f.value}
+                <Chip key={f.value} label={f.label} active={freq[i] === f.value}
                   onClick={() => { const n = [...freq]; n[i] = f.value; setFreq(n); if (f.value === 0) { const ni = [...inten]; ni[i] = null; setInten(ni); } }} />
               ))}
-              {freq[i] != null && freq[i] !== 0 && (
-                <>
-                  <span style={{ width: 1, background: '#e5e2dc', margin: '0 6px' }} />
-                  {INTEN.map((it) => (
-                    <Chip key={it.value} label={it.label} active={inten[i] === it.value}
-                      onClick={() => { const n = [...inten]; n[i] = it.value; setInten(n); }} />
-                  ))}
-                </>
-              )}
+            </div>
+            {/* A fixed slot: intensity appears here, in place, only when the symptom occurs. */}
+            <div style={{ display: 'flex', gap: 6, flex: '0 0 auto', width: 204, paddingLeft: 12, borderLeft: '1px solid #e5e2dc', minHeight: 44 }}>
+              {freq[i] != null && freq[i] !== 0 && INTEN.map((it) => (
+                <Chip key={it.value} label={it.label} active={inten[i] === it.value}
+                  onClick={() => { const n = [...inten]; n[i] = it.value; setInten(n); }} />
+              ))}
             </div>
           </div>
         ))}
+        <ScrollCue gutter={128} />
       </div>
 
-      <button onClick={submit} disabled={!ready}
-        className="mt-4 rounded-xl px-8 py-3 font-lab text-sm text-white transition active:scale-95"
-        style={{ background: ready ? '#1a1a2e' : '#cfcbc3', cursor: ready ? 'pointer' : 'not-allowed',
-          // Never allowed to be squeezed out by the list above it.
-          flex: '0 0 auto', alignSelf: 'flex-start' }}>
-        Continue →
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 14, flex: '0 0 auto', flexWrap: 'wrap' }}>
+        <button onClick={submit} disabled={!ready}
+          className="rounded-xl px-8 py-3 font-sans text-base font-medium transition active:scale-95"
+          style={ready
+            ? { background: UI_TEXT.ink, color: '#ffffff', cursor: 'pointer' }
+            : { background: '#e8e6e1', color: UI_TEXT.muted, cursor: 'not-allowed' }}>
+          Continue →
+        </button>
+        <span data-testid="cvsq-answered" role="status" className="font-sans" style={{ fontSize: 16, color: answered === CVSQ_ITEMS.length ? UI_TEXT.green : UI_TEXT.muted }}>
+          Answered {answered} of {CVSQ_ITEMS.length}
+        </span>
+      </div>
       </div>
     </div>
   );
 }
 
-function Chip({ label, active, onClick, title }: { label: string; active: boolean; onClick: () => void; title?: string }) {
+function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} title={title} className="font-lab text-sm"
-      style={{ padding: '7px 13px', borderRadius: 10, cursor: 'pointer',
-        border: `1px solid ${active ? '#1a1a2e' : '#d8d4cc'}`, background: active ? '#1a1a2e' : '#fff', color: active ? '#fff' : '#5a5a7a' }}>
+    <button type="button" onClick={onClick} aria-pressed={active} className="font-sans"
+      style={{ minHeight: 44, padding: '0 14px', borderRadius: 10, cursor: 'pointer', fontSize: 16, whiteSpace: 'nowrap',
+        border: `1px solid ${active ? UI_TEXT.ink : '#bdb8ae'}`, background: active ? UI_TEXT.ink : '#ffffff', color: active ? '#ffffff' : UI_TEXT.body }}>
       {label}
     </button>
   );

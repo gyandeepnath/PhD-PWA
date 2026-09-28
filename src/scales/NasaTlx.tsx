@@ -7,6 +7,7 @@
  */
 import { useRef, useState } from 'react';
 import { now } from '@/lib/timing';
+import { ScrollCue } from '@/components/ScrollCue';
 import {
   TLX_DIMENSIONS,
   TLX_MAX,
@@ -33,13 +34,22 @@ interface Props {
   onComplete: (r: TlxResult) => void;
 }
 
+/*
+ * LEGIBILITY. The subscale questions are the instrument's definitions, and they were 11 design px in
+ * DM Mono at 60% opacity — 9.5 px on the tablet, 8.4 px with the address bar showing — as were the
+ * endpoint anchors; the introduction was 12 px. Now the subscale names are 18 px, the questions 16 px
+ * and the anchors 15 px, in Roboto, all in full ink (the 60% tint put the questions near 4:1 on the
+ * cream). Six items at that size do not fit one column of the 834 px canvas, so they sit in two
+ * columns of three, which do; on a screen too narrow for two the grid falls back to one column and
+ * the screen scrolls, with the "More below" cue. The wording of every question and anchor is
+ * unchanged. The value readout was in #4f8ef7, 3.2:1 on the cream; the accent is now #1f5fbf.
+ */
 export function NasaTlx({
-  accent = '#4f8ef7',
+  accent = '#1f5fbf',
   background = '#F8F7F5',
   text = '#1a1a2e',
   onComplete,
 }: Props) {
-  const muted = text + '99';
   const trackEmpty = text + '22';
   const [values, setValues] = useState<TlxRatings>(defaultTlxRatings());
   const [touched, setTouched] = useState<Record<TlxKey, boolean>>(
@@ -52,25 +62,25 @@ export function NasaTlx({
   const score = scoreTlx(values);
 
   return (
-    <div className="screen w-full p-[5%] font-sans" style={{ background, color: text }}>
-      <div style={{ width: '100%', maxWidth: 720, margin: '0 auto' }}>
+    <div className="screen scrollable nav-band w-full px-[5%] pb-[4%] font-sans" style={{ background, color: text }}>
+      <div style={{ width: '100%', maxWidth: 1060, margin: '0 auto' }}>
         <h2 className="font-serif text-3xl font-light">Workload over the whole session</h2>
-        <p className="mt-1 font-lab text-xs" style={{ color: muted }}>
+        <p className="mt-2 font-sans" style={{ fontSize: 17, lineHeight: 1.45 }}>
           Think about the session as a whole, not any single screen. Drag every slider.
         </p>
 
-        <div className="mt-6 space-y-6">
+        <div data-testid="tlx-grid" className="mt-6" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '26px 48px' }}>
           {TLX_DIMENSIONS.map((d) => (
             <div key={d.key}>
-              <div className="flex justify-between font-lab text-sm" style={{ marginBottom: 2 }}>
+              <div className="flex justify-between font-sans" style={{ marginBottom: 4, fontSize: 18, fontWeight: 600 }}>
                 <span>{d.label}</span>
-                <span style={{ fontWeight: 700, color: touched[d.key] ? accent : muted }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: touched[d.key] ? accent : text }}>
                   {touched[d.key] ? values[d.key] : 'not set'}
                 </span>
               </div>
-              <p className="font-lab" style={{ fontSize: 11, color: muted, marginBottom: 6 }}>{d.question}</p>
+              <p className="font-sans" style={{ fontSize: 16, lineHeight: 1.4, marginBottom: 8 }}>{d.question}</p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span className="font-lab" style={{ fontSize: 11, color: muted, width: 62, textAlign: 'right' }}>{d.low}</span>
+                <span className="font-sans" style={{ fontSize: 15, width: 72, textAlign: 'right' }}>{d.low}</span>
                 <input
                   type="range"
                   data-testid={`tlx-${d.key}`}
@@ -92,7 +102,7 @@ export function NasaTlx({
                     setTouched((t) => ({ ...t, [d.key]: true }));
                   }}
                 />
-                <span className="font-lab" style={{ fontSize: 11, color: muted, width: 62 }}>{d.high}</span>
+                <span className="font-sans" style={{ fontSize: 15, width: 72 }}>{d.high}</span>
               </div>
             </div>
           ))}
@@ -107,7 +117,7 @@ export function NasaTlx({
           the composite — nudging Frustration until the displayed figure looks right is one visible
           action. The score is computed and exported; it belongs in the researcher-facing dashboard.
         */}
-        <div className="mt-6 font-lab text-sm" style={{ color: muted }}>
+        <div className="mt-6 font-sans" style={{ fontSize: 16 }}>
           {allTouched ? 'Thank you — tap Continue.' : 'Set all six sliders to continue.'}
         </div>
 
@@ -125,16 +135,18 @@ export function NasaTlx({
               responseTimeMs: now() - mountedAt.current,
             });
           }}
-          className="mt-6 rounded-xl px-8 py-3 font-lab text-sm transition active:scale-95"
+          className="mt-4 rounded-xl px-8 py-3 font-sans text-base font-medium transition active:scale-95"
           style={{
-            background: allTouched ? accent : trackEmpty,
-            color: allTouched ? background : muted,
+            background: allTouched ? accent : 'transparent',
+            color: allTouched ? background : text,
+            border: allTouched ? `2px solid ${accent}` : `2px dashed ${text}`,
             cursor: allTouched ? 'pointer' : 'not-allowed',
           }}
         >
           Continue →
         </button>
       </div>
+      <ScrollCue />
     </div>
   );
 }

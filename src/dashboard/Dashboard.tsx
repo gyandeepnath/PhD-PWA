@@ -14,6 +14,8 @@ import { BarPanel, LinePanel, type Datum } from './charts';
 import type { SessionRecord } from '@/storage/types';
 import { N_CONDITIONS } from '@/experiment/conditions';
 import { UI_TEXT } from '@/lib/uiPalette';
+import { ScrollCue } from '@/components/ScrollCue';
+import { useDialog } from '@/components/ConfirmDialog';
 
 type Tab = 'overview' | 'cohort' | 'reaction' | 'fatigue' | 'search' | 'eye' | 'export';
 const TABS: { id: Tab; label: string }[] = [
@@ -41,6 +43,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   const [analysisSummary, setAnalysisSummary] = useState<string | null>(null);
   const [cohort, setCohort] = useState<CohortSummary | null>(null);
   const [cohortBusy, setCohortBusy] = useState(false);
+  const dialog = useDialog();
 
   useEffect(() => {
     listSessions().then((s) => {
@@ -139,13 +142,15 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       const fresh = await get('sessions', bundle.session.session_id);
       if (fresh) await put('sessions', { ...fresh, exported_at: now }, { evenWhenFull: true });
 
-      const confirmed = window.confirm(
-        `${files.length} files were sent to your downloads.\n\n`
-        + 'Check the receiving computer NOW and confirm they all arrived.\n\n'
-        + 'OK  — I have checked; the files are there.\n'
-        + 'Cancel — not yet, or some are missing.\n\n'
-        + 'Until you confirm, this session is protected from automatic deletion.',
-      );
+      const confirmed = await dialog.confirm({
+        title: 'Did every file arrive?',
+        body: `${files.length} files were sent to your downloads.\n\n`
+          + 'Check the receiving computer NOW and confirm they all arrived.\n\n'
+          + 'Until you confirm, this session is protected from automatic deletion.',
+        confirmLabel: 'I have checked — the files are there',
+        cancelLabel: 'Not yet, or some are missing',
+        testId: 'export-confirm-dialog',
+      });
       if (confirmed) {
         const again = await get('sessions', bundle.session.session_id);
         if (again) await put('sessions', { ...again, export_confirmed_at: Date.now() }, { evenWhenFull: true });
@@ -202,12 +207,19 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           + `They should have been destroyed at the point of withdrawal; if they are still on this device, `
           + `use the session's media revocation to remove them.\n  ${r.refused.join('\n  ')}`
         : '';
-      window.alert(`${r.written} media file(s) written.${lost}${held}`);
+      await dialog.alert({ title: 'Media files written', body: `${r.written} media file(s) written.${lost}${held}`, confirmLabel: 'Done' });
     } finally { setExporting(false); }
   };
 
+  /*
+   * The dashboard SCROLLS, in its own container. It was min-h-screen with no scroll container inside a
+   * root that is overflow:hidden, on a body that is touch-action:none — so everything below the first
+   * screen was unreachable by any gesture: on the Data Quality / QC tab about two screens of charts,
+   * the "Why rows were excluded" table and every per-condition QC row, and the lower parts of three
+   * other tabs. e2e/dashboardTabs.spec.ts visits every tab at the shortest study viewport.
+   */
   return (
-    <div className="min-h-screen w-full bg-cream font-sans text-[#1a1a2e]" style={{ padding: '60px 3% 3%' }}>
+    <div data-testid="dashboard-scroll" className="screen scrollable nav-band w-full bg-cream font-sans text-[#1a1a2e]" style={{ padding: '0 3% 3%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12 }}>
         <h1 className="font-serif text-3xl font-light">Analysis Dashboard</h1>
         <select
@@ -517,6 +529,8 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           )}
         </div>
       )}
+      {dialog.element}
+      <ScrollCue />
     </div>
   );
 }

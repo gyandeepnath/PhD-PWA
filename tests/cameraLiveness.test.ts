@@ -123,7 +123,10 @@ describe('the tracker and the experiment act on it', () => {
     // A blank (covered / switched-off) picture raises the same notice; see cameraHealth.ts.
     expect(experiment).toMatch(/const cameraBlockedNotice = !cameraLostNotice && tracking\.cameraBlocked && !cameraBlockAccepted && pausable;/);
     expect(experiment).toMatch(/const cameraNoticeUp = cameraLostNotice \|\| cameraBlockedNotice;/);
-    expect(experiment).toMatch(/setBlockingNotice\(cameraNoticeUp\)/);
+    // The Pause confirmation, open over a condition screen, is a blocking notice as well (it was
+    // window.confirm, which froze the page and was measured by nothing).
+    expect(experiment).toMatch(/const pauseConfirmOverTask = dialog\.open && stageInk != null;/);
+    expect(experiment).toMatch(/setBlockingNotice\(cameraNoticeUp \|\| pauseConfirmOverTask\)/);
     const notice = experiment.slice(experiment.indexOf('data-testid="camera-lost"'), experiment.indexOf('data-testid="camera-lost"') + 3500);
     expect(notice).toMatch(/onClick=\{pauseAndExit\}/);
     expect(notice).toMatch(/setCameraLossAccepted\(true\)/);

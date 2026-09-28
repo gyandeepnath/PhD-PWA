@@ -29,7 +29,7 @@ test('split session: two sittings of 5 cover all 10 conditions', async ({ page }
   expect(c.conditions).toBe(5);
 
   // --- Back to the manager, start sitting 2 with the SAME participant id ---
-  await page.getByRole('button', { name: /Sessions/ }).click({ force: true });
+  await page.getByTestId('nav-sessions').click();
   await page.getByRole('button', { name: /New Session/ }).click({ force: true });
   await page.waitForSelector('[data-stage]', { timeout: 20_000 });
   await drive();

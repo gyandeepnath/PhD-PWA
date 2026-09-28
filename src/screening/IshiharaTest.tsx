@@ -3,7 +3,7 @@
  * the digit via the font mask); the participant taps the digit they see. Honest framing: this is a
  * screening aid, not a clinical diagnosis.
  */
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { makeRng } from '@/sim/rng';
 import { buildScreeningPlates, isFigurePixel, scoreIshihara, type Plate, type IshiharaResult } from './ishihara';
 
@@ -74,9 +74,15 @@ interface Props {
    * the retest a memory test rather than a colour-vision one.
    */
   seed: number;
+  /**
+   * True while a plate is on screen. The operator's Exit is withheld then (experiment/navigation.ts):
+   * a sitting left mid-plates resumes with the same seed, so the same plates in the same order, and a
+   * second look turns detection into recall. It returns on the operator notice.
+   */
+  onRunning?: (running: boolean) => void;
 }
 
-export function IshiharaTest({ onComplete, onDone, seed }: Props) {
+export function IshiharaTest({ onComplete, onDone, seed, onRunning }: Props) {
   const plates = useMemo(() => buildScreeningPlates(seed), [seed]);
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -84,6 +90,8 @@ export function IshiharaTest({ onComplete, onDone, seed }: Props) {
   const busy = useRef(false); // guard against double-taps advancing or completing twice
   const plate = plates[idx];
   const isLast = idx === plates.length - 1;
+  useEffect(() => { onRunning?.(notice == null); }, [notice, onRunning]);
+  useEffect(() => () => onRunning?.(false), [onRunning]);
 
   const answer = (val: string) => {
     if (busy.current) return;
@@ -110,7 +118,10 @@ export function IshiharaTest({ onComplete, onDone, seed }: Props) {
   if (notice) return <OperatorNotice status={notice} onDone={onDone} />;
 
   return (
-    <div className="min-h-screen w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+    // .screen, not min-h-screen: 100vh is not the scaled root's height, so the plate sat off-centre
+    // and anything that grew past the bottom was clipped with no way to scroll to it.
+    // The top band is kept clear (nav-band) for the progress label and any notice under it.
+    <div className="screen scrollable nav-band w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div style={{ maxWidth: 560, width: '100%', textAlign: 'center' }}>
         <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]">Colour-vision screening · {idx + 1}/{plates.length}</p>
         <h1 className="mt-2 font-serif text-3xl font-light">Which number do you see?</h1>
@@ -161,8 +172,8 @@ export function IshiharaTest({ onComplete, onDone, seed }: Props) {
 function OperatorNotice({ status, onDone }: { status: IshiharaResult['status']; onDone: () => void }) {
   const failed = status === 'screen_failed';
   return (
-    <div className="min-h-screen w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ maxWidth: 760, width: '100%' }}>
+    <div className="screen scrollable nav-band w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in" style={{ display: 'flex' }}>
+      <div style={{ maxWidth: 760, width: '100%', margin: 'auto' }}>
         <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]">For the researcher</p>
         <h1 className="mt-2 font-serif text-3xl font-light">
           {failed ? 'The app’s colour screen did not pass' : 'The app’s colour screen gave no result'}

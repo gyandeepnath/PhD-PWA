@@ -1,11 +1,23 @@
-/** Thin top progress bar driven by the stage machine, with a neutral "Condition X of N" readout. */
+/**
+ * Thin top progress bar driven by the stage machine, with a neutral stage label.
+ *
+ * Shown on setup, break and closing screens only — never inside the condition-run (see showProgress
+ * in Experiment.tsx). The label used to be 14 design px lowercase ("condition 6 of 10 · break"),
+ * about 12 px on the tablet, over a bar 4 design px tall that read as a hairline; it is Title Case at
+ * 15 px over a 6 px bar.
+ *
+ * AT THE BREAK it names the display that comes NEXT. It used to print "Condition 6 of 10 · break"
+ * after the sixth had FINISHED, which a participant reasonably read as "I am on the sixth", while the
+ * break text beneath it said six were done.
+ */
 interface Props {
   percent: number;
+  /** The stage, in Title Case (STAGE_LABEL in Experiment.tsx). */
   label?: string;
-  /** 1-based current condition within this sitting (omitted outside the loop). */
-  conditionCurrent?: number;
-  /** Total conditions in this sitting. */
-  conditionTotal?: number;
+  /** 1-based number of the display that follows this screen (the break only). */
+  nextDisplay?: number;
+  /** Displays in this sitting. */
+  displayTotal?: number;
   /** Rough minutes remaining in the sitting (neutral; no performance information). */
   timeRemainingMin?: number | null;
   /**
@@ -15,33 +27,35 @@ interface Props {
   onDark?: boolean;
 }
 
-export function ExperimentProgress({ percent, label, conditionCurrent, conditionTotal, timeRemainingMin, onDark = false }: Props) {
+export function ExperimentProgress({ percent, label, nextDisplay, displayTotal, timeRemainingMin, onDark = false }: Props) {
   const parts: string[] = [];
-  if (conditionCurrent != null && conditionTotal != null) parts.push(`Condition ${conditionCurrent} of ${conditionTotal}`);
   if (label) parts.push(label);
-  if (timeRemainingMin != null && timeRemainingMin > 0) parts.push(`~${timeRemainingMin} min left`);
+  if (nextDisplay != null && displayTotal != null) parts.push(`Next: Display ${nextDisplay} of ${displayTotal}`);
+  if (timeRemainingMin != null && timeRemainingMin > 0) parts.push(`About ${timeRemainingMin} min left`);
   const text = parts.join(' · ');
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 40 }}>
-      <div style={{ height: 4, background: '#e5e2dc' }}>
+    <div data-testid="experiment-progress" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 40, pointerEvents: 'none' }}>
+      <div style={{ height: 6, background: onDark ? '#3a3a52' : '#e5e2dc' }}>
         <div
           style={{
             height: '100%',
             width: `${percent}%`,
-            background: '#1a1a2e',
+            background: onDark ? '#c8d8f0' : '#1a1a2e',
             transition: 'width 0.3s ease-out',
           }}
         />
       </div>
       {text && (
         <div
+          data-testid="progress-label"
           style={{
             position: 'absolute',
-            top: 8,
-            right: 12,
+            top: 14,
+            right: 16,
             fontFamily: 'Roboto, ui-sans-serif, sans-serif',
-            fontSize: 14,
+            fontSize: 15,
+            fontWeight: 500,
             color: onDark ? '#c8d8f0' : '#4a4a60',
           }}
         >

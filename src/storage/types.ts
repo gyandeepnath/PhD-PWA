@@ -250,6 +250,17 @@ export interface SessionRecord {
    * to anyone auditing what was held and for how long.
    */
   media_consent_revoked_at?: number | null;
+  /**
+   * Consent records this sitting SUPERSEDED, oldest first: each is the consent_time and media grants
+   * that were in force until the participant went back to the consent screen (Back from the profile
+   * or the camera screen) and consented again, and when that happened.
+   *
+   * Absent when consent was given once, which is the ordinary case. The route is offered only before
+   * anything is captured or measured under the grants, so every recording and ocular row is still
+   * governed by the current `media_consent`; this keeps the history so an auditor can see that a
+   * grant was changed, and from what, rather than only the final state.
+   */
+  consent_revisions?: { superseded_at: number; consent_time: number | null; media_consent: MediaConsent }[];
   provenance: Provenance;
   /**
    * Build hashes OTHER than `provenance.git_hash` that collected part of this sitting.

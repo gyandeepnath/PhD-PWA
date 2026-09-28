@@ -72,17 +72,7 @@ function renderView(
         />
       );
     case 'dashboard':
-      return (
-        <div style={{ height: '100%' }}>
-          <Dashboard initialSessionId={view.sessionId} />
-          <button
-            onClick={toManager}
-            className="font-sans text-base"
-            style={{ position: 'fixed', top: 10, left: 12, zIndex: 50, padding: '8px 14px', borderRadius: 8, border: '1px solid #bdb8ae', background: '#fff', cursor: 'pointer' }}
-          >
-            ← Sessions
-          </button>
-        </div>
-      );
+      // The way back is the shared NavChip, drawn by LazyDashboard for both routes into it.
+      return <Dashboard initialSessionId={view.sessionId} onBack={toManager} />;
   }
 }

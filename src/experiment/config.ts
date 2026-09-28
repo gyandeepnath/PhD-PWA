@@ -261,12 +261,18 @@ const BASE_CONFIG = {
    */
   CAMERA_STALL_MS: 5000,
   /**
-   * What an operator is told a single sitting takes. One string, used by the landing page and the
-   * session form, which used to disagree ("~60-90 min" against "about 90 min to 2 h"). The basis is
-   * docs/TIMING_MODEL.md: a modelled single sitting of about 93 minutes of contact, against the
-   * feasibility gate's 120-minute ceiling. It is an estimate, and says so.
+   * How long a single sitting takes, as ONE string: the consent text, the landing page and the
+   * session form all print this.
+   *
+   * It is the consent text's own figure, verbatim. The landing page and the session form said "about
+   * 90 min to 2 h" while the consent screen told the participant "roughly 75–120 minutes"; the consent
+   * wording is ethics-approved, so where the two disagreed it is the one that stands, and the operator
+   * screens now say what the participant was told. (Earlier the landing page said "~60-90 min".) The
+   * basis is docs/TIMING_MODEL.md — a modelled single sitting of about 93 minutes of contact against
+   * the feasibility gate's 120-minute ceiling — and the synopsis's simulated median of 98 minutes
+   * with a 95th percentile of 119 lies inside it. Changing this string changes the consent text.
    */
-  SINGLE_SITTING_DURATION: 'about 90 min to 2 h',
+  SINGLE_SITTING_DURATION: '75–120 minutes',
 };
 
 /**

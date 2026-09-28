@@ -8,13 +8,19 @@ import { CONFIG } from '@/experiment/config';
 
 export function LandingPage({ onEnter }: { onEnter: () => void }) {
   return (
+    /*
+     * .screen with its own scroll, not min-h-screen: 100vh is not the scaled root's height, so the page
+     * centred 50-80 px above the middle of the tablet and could not scroll. The bottom padding makes
+     * room for the update banner while it shows (--vl-banner-h, set by UpdateBanner), which used to
+     * sit over the build stamp. Centred by margin:auto on the two columns so neither can lose its top.
+     */
     <div
-      className="min-h-screen w-full bg-cream font-sans text-[#1a1a2e] animate-fade-in"
-      style={{ position: 'relative', display: 'flex', alignItems: 'center', padding: '0 7% 0 8%', gap: '6%' }}
+      className="screen scrollable w-full bg-cream font-sans text-[#1a1a2e] animate-fade-in"
+      style={{ position: 'relative', display: 'flex', padding: '24px 7% calc(24px + var(--vl-banner-h)) 8%', gap: '6%' }}
     >
       {/* Type on the scaled canvas: 13 px and 11 px here arrived at about 11 and 9 px on the tablet,
           the credit line in #9a968e at 2.8:1. Now 17 / 15 px and ≥4.5:1. */}
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: 1, margin: 'auto 0' }}>
         <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]">Research Platform</p>
         <h1 style={{ marginTop: 14, lineHeight: 1 }}>
           <VisuLabLogo size={72} />
@@ -33,6 +39,7 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
       <div
         style={{
           flexBasis: 420, background: '#ffffff', border: '1px solid #e5e2dc', borderRadius: 20, padding: 28,
+          margin: 'auto 0',
         }}
       >
         <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]">Study Overview</p>

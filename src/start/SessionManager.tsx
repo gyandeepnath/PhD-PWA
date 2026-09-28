@@ -12,6 +12,9 @@ import {
 import { listResumable, clearResume, type ResumePointer } from '@/storage/sessionPersistence';
 import { parseSessionBackup, importSessionBackup } from '@/storage/backup';
 import { VisuLabLogo } from '@/components/VisuLabLogo';
+import { NavChip } from '@/components/NavChip';
+import { ScrollCue } from '@/components/ScrollCue';
+import { useDialog } from '@/components/ConfirmDialog';
 import { UI_TEXT } from '@/lib/uiPalette';
 import type { SessionRecord } from '@/storage/types';
 
@@ -26,6 +29,15 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
   const [active, setActive] = useState<SessionRecord[]>([]);
   const [bin, setBin] = useState<SessionRecord[]>([]);
   const [showBin, setShowBin] = useState(false);
+  /*
+   * Completed sittings are folded away by default, with their count on the heading. The list grows by
+   * one with every participant and, above the in-progress rows, pushed them — and the recycle bin —
+   * off the bottom of the screen. The in-progress and withdrawn lists stay open: those are the rows
+   * that need the operator.
+   */
+  const [showCompleted, setShowCompleted] = useState(false);
+  /** Every confirmation and notice on this screen. See ConfirmDialog.tsx for why not window.confirm. */
+  const dialog = useDialog();
   /** What the auto-purge declined to destroy, and why. */
   const [binNotice, setBinNotice] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -100,19 +112,23 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
     try {
       const parsed = parseSessionBackup(await file.text());
       if (!parsed.ok || !parsed.backup) {
-        window.alert(`Could not restore this file.\n\n${parsed.error ?? 'Unknown problem.'}`);
+        await dialog.alert({ title: 'Could not restore this file', body: parsed.error ?? 'Unknown problem.', confirmLabel: 'Close' });
         return;
       }
       let result = await importSessionBackup(parsed.backup);
       if (!result.ok) {
-        const proceed = window.confirm(
-          `${result.error}\n\nOverwrite the copy on this device with the backup?`,
-        );
+        const proceed = await dialog.confirm({
+          title: 'This sitting is already on the tablet',
+          body: `${result.error}\n\nOverwrite the copy on this device with the backup?`,
+          confirmLabel: 'Overwrite with the backup',
+          cancelLabel: 'Keep the copy on this tablet',
+          danger: true,
+        });
         if (!proceed) return;
         result = await importSessionBackup(parsed.backup, 'overwrite');
       }
       if (!result.ok) {
-        window.alert(`Restore failed.\n\n${result.error ?? 'Unknown problem.'}`);
+        await dialog.alert({ title: 'Restore failed', body: result.error ?? 'Unknown problem.', confirmLabel: 'Close' });
         return;
       }
       /*
@@ -133,10 +149,10 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
       // A counterbalance collision is not a warning about the file; it is a fact about this
       // device that compromises two participants' condition orders, so it leads.
       const clash = result.collision ? `\n\nCOUNTERBALANCE PROBLEM\n  ${result.collision}` : '';
-      window.alert(`Session restored.${clash}\n\nRows written:\n${rows}${warn}`);
       await refresh();
+      await dialog.alert({ title: 'Session restored', body: `${clash ? clash.trimStart() + '\n\n' : ''}Rows written:\n${rows}${warn}`, confirmLabel: 'Done' });
     } catch (err) {
-      window.alert(`Could not read the file.\n\n${err instanceof Error ? err.message : String(err)}`);
+      await dialog.alert({ title: 'Could not read the file', body: err instanceof Error ? err.message : String(err), confirmLabel: 'Close' });
     } finally {
       setImporting(false);
     }
@@ -152,13 +168,16 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
    * is not misled into treating it as a notes field in the first place.
    */
   const rename = async (s: SessionRecord) => {
-    const label = window.prompt(
-      `A short reminder to find this sitting by, on this tablet only (max ${MAX_DISPLAY_LABEL} characters).\n\n`
-      + 'Do NOT enter the participant\'s name or any identifying detail. The label is not exported '
-      + 'and is not part of the data; the participant code is what identifies the sitting.\n\n'
-      + 'Leave empty to go back to the participant code.',
-      sessionLabel(s),
-    );
+    const label = await dialog.prompt({
+      title: 'Label this sitting',
+      body: `A short reminder to find this sitting by, on this tablet only (max ${MAX_DISPLAY_LABEL} characters).\n\n`
+        + 'Do NOT enter the participant\'s name or any identifying detail. The label is not exported '
+        + 'and is not part of the data; the participant code is what identifies the sitting.\n\n'
+        + 'Leave empty to go back to the participant code.',
+      input: { label: 'Label', initial: sessionLabel(s), maxLength: MAX_DISPLAY_LABEL },
+      confirmLabel: 'Save label',
+      cancelLabel: 'Cancel',
+    });
     if (label != null) {
       await renameSession(s.session_id, label);
       await refresh();
@@ -180,19 +199,25 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
   const revokeMedia = async (s: SessionRecord, grant: 'setup_photos' | 'annotation_video') => {
     const what = grant === 'annotation_video' ? 'reading video clips' : 'setup photographs';
     const label = sessionLabel(s);
-    if (!window.confirm(
-      `Delete the ${what} for ${label}, and record that the participant withdrew that permission?\n\n`
-      + 'The measurements from this session are KEPT — only the recordings are destroyed.\n\n'
-      + 'This cannot be undone. The recycle bin does not cover it.',
-    )) return;
+    if (!(await dialog.confirm({
+      title: `Delete the ${what} for ${label}?`,
+      body: 'This also records that the participant withdrew that permission.\n\n'
+        + 'The measurements from this session are KEPT — only the recordings are destroyed.\n\n'
+        + 'This cannot be undone. The recycle bin does not cover it.',
+      confirmLabel: `Delete the ${what}`,
+      cancelLabel: 'Keep them',
+      danger: true,
+    }))) return;
     const removed = await revokeMediaGrant(s.session_id, grant);
     await refresh();
-    window.alert(
-      removed === 0
+    await dialog.alert({
+      title: 'Permission withdrawn',
+      body: removed === 0
         ? `No ${what} were stored for ${label}. The permission is now recorded as withdrawn.`
         : `${removed} file(s) destroyed. The permission is recorded as withdrawn, so no further `
           + `${what} can be captured or exported for this session.`,
-    );
+      confirmLabel: 'Done',
+    });
   };
 
   /**
@@ -211,13 +236,13 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
   const withdraw = async (s: SessionRecord) => {
     const label = sessionLabel(s);
     if (s.withdrawn_at != null) {
-      window.alert(`${label} is already recorded as withdrawn (${new Date(s.withdrawn_at).toLocaleString()}).`);
+      await dialog.alert({ title: 'Already withdrawn', body: `${label} is already recorded as withdrawn (${new Date(s.withdrawn_at).toLocaleString()}).`, confirmLabel: 'Close' });
       return;
     }
     const siblings = [...active, ...bin].filter((x) => x.participant_id === s.participant_id);
-    if (!window.confirm(
-      `Record that participant ${s.participant_id} WITHDREW from the study?\n\n`
-      + (siblings.length > 1
+    if (!(await dialog.confirm({
+      title: `Record that participant ${s.participant_id} WITHDREW from the study?`,
+      body: (siblings.length > 1
         ? `This applies to the PARTICIPANT: all ${siblings.length} of their sittings on this tablet are marked, not only ${label}.\n\n`
         : '')
       + 'Use this when they have withdrawn but have NOT asked for their data to be deleted. Ask '
@@ -225,21 +250,25 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
       + 'The measurements are kept and exported, marked so the analysis excludes them. The '
       + 'sitting can no longer be resumed, so nothing further is collected for it. Any '
       + 'photographs or video are DESTROYED — that part cannot be undone.\n\n'
-      + 'If they asked for deletion instead, cancel this and use Delete, then Purge from the '
+      + 'If they asked for deletion instead, tap Go back and use Delete, then Purge from the '
       + 'recycle bin.',
-    )) return;
+      confirmLabel: 'Record the withdrawal',
+      cancelLabel: 'Go back',
+      danger: true,
+    }))) return;
     const { mediaDestroyed, sittings } = await recordWithdrawal(s.session_id);
     // The localStorage copies of the resume pointers too; recordWithdrawal drops the durable ones.
     for (const x of siblings) clearResume(x.session_id);
     await refresh();
-    window.alert(
-      `Participant ${s.participant_id} is recorded as withdrawn (${sittings} sitting${sittings === 1 ? '' : 's'}).\n\n`
-      + `${mediaDestroyed} media file(s) destroyed.\n\n`
-      + 'Export it now, from the Withdrawn list. An export taken BEFORE this carries withdrawn = FALSE '
-      + 'and reads like an ordinary paused sitting — discard it. The withdrawal travels with the data and survives a '
-      + 'restore from a backup, so the sitting cannot re-enter the analysis by accident. Copies of '
-      + 'media files already taken off this tablet are not covered — delete those by hand.',
-    );
+    await dialog.alert({
+      title: `Participant ${s.participant_id} is recorded as withdrawn`,
+      body: `${sittings} sitting${sittings === 1 ? '' : 's'} marked. ${mediaDestroyed} media file(s) destroyed.\n\n`
+        + 'Export it now, from the Withdrawn list. An export taken BEFORE this carries withdrawn = FALSE '
+        + 'and reads like an ordinary paused sitting — discard it. The withdrawal travels with the data and survives a '
+        + 'restore from a backup, so the sitting cannot re-enter the analysis by accident. Copies of '
+        + 'media files already taken off this tablet are not covered — delete those by hand.',
+      confirmLabel: 'Done',
+    });
   };
 
   const del = async (s: SessionRecord) => {
@@ -249,9 +278,15 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
     // make a destructive action a single unconfirmed tap.
     const label = sessionLabel(s);
     const extra = s.status === 'in_progress'
-      ? '\n\nThis session is still IN PROGRESS. Deleting it ends it; it cannot be resumed from the bin.'
+      ? 'This session is still IN PROGRESS. Deleting it ends it; it cannot be resumed from the bin.\n\n'
       : '';
-    if (!window.confirm(`Move ${label} to the recycle bin?${extra}\n\nIt is recoverable for ${BIN_RETENTION_MS / 86400000} days.`)) return;
+    if (!(await dialog.confirm({
+      title: `Move ${label} to the recycle bin?`,
+      body: `${extra}It is recoverable for ${BIN_RETENTION_MS / 86400000} days.`,
+      confirmLabel: 'Move to recycle bin',
+      cancelLabel: 'Keep it',
+      danger: true,
+    }))) return;
     await softDeleteSession(s.session_id);
     await refresh();
   };
@@ -260,27 +295,39 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
     await refresh();
   };
   const purge = async (s: SessionRecord) => {
-    if (window.confirm(`Permanently delete ${sessionLabel(s)} and all its data? This cannot be undone.`)) {
+    if (await dialog.confirm({
+      title: `Permanently delete ${sessionLabel(s)}?`,
+      body: 'All of its data is destroyed. This cannot be undone.',
+      confirmLabel: 'Delete permanently',
+      cancelLabel: 'Keep it in the bin',
+      danger: true,
+    })) {
       await purgeSession(s.session_id);
       await refresh();
     }
   };
 
+  /*
+   * The list SCROLLS, in its own container. It was min-h-screen with no scroll container inside the
+   * clipped root, so once about five sittings were listed the rest — the Completed list, the
+   * recycle bin, and their Open, Export and Withdrew buttons — ran off the bottom where no gesture
+   * could reach them. In a real study that list grows with every participant, and it is the only
+   * route to export and withdrawal. The bottom padding also makes room for the update banner while
+   * it shows (--vl-banner-h), which used to cover the last rows.
+   */
   return (
-    <div className="min-h-screen w-full bg-cream font-sans text-[#1a1a2e] animate-fade-in" style={{ padding: '3% 4%' }}>
+    <div data-testid="manager-scroll" className="screen scrollable nav-band w-full bg-cream font-sans text-[#1a1a2e] animate-fade-in" style={{ padding: '0 4% calc(3% + var(--vl-banner-h))' }}>
       {/* No wave backdrop (its lines ran through the session rows), and a type floor of 14-16 px:
           this screen is drawn at about 86% on the tablet, so its old 11-12 px grey captions arrived
           at 9-10 px, in colours at 2-2.8:1. */}
+      <NavChip label="← Back to home" onClick={onHome} testId="nav-home" />
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-            <VisuLabLogo size={34} />
-            <div style={{ borderLeft: '1px solid #d8d4cc', paddingLeft: 20 }}>
-              <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]">Research Platform</p>
-              <h1 className="font-serif text-3xl font-light" style={{ marginTop: 2 }}>Session Manager</h1>
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <VisuLabLogo size={34} />
+          <div style={{ borderLeft: '1px solid #d8d4cc', paddingLeft: 20 }}>
+            <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]">Research Platform</p>
+            <h1 className="font-serif text-3xl font-light" style={{ marginTop: 2 }}>Session Manager</h1>
           </div>
-          <button onClick={onHome} className="font-sans text-base" style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #bdb8ae', background: '#fff', cursor: 'pointer' }}>← Home</button>
         </div>
 
         <button onClick={onNew} className="mt-5 w-full rounded-xl py-4 font-sans text-base font-medium uppercase tracking-wide text-white transition active:scale-95" style={{ background: '#1a1a2e' }}>
@@ -346,8 +393,13 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
           {inProgress.length === 0 && <Empty>No sessions in progress.</Empty>}
         </Section>
 
-        <Section title={`Completed (${completed.length})`}>
-          {completed.map((s) => (
+        <Section
+          title={`Completed (${completed.length})`}
+          collapsed={!showCompleted}
+          onToggle={() => setShowCompleted((v) => !v)}
+          testId="completed-toggle"
+        >
+          {showCompleted && completed.map((s) => (
             <Row key={s.session_id} s={s}>
               <Btn onClick={() => onOpen(s.session_id)} color="#1a1a2e">Open</Btn>
               <Btn onClick={() => rename(s)} color={UI_TEXT.muted} outline>Rename</Btn>
@@ -358,7 +410,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
               <Btn onClick={() => del(s)} color={UI_TEXT.red} outline>Delete</Btn>
             </Row>
           ))}
-          {completed.length === 0 && <Empty>No completed sessions yet.</Empty>}
+          {showCompleted && completed.length === 0 && <Empty>No completed sessions yet.</Empty>}
         </Section>
 
         {withdrawn.length > 0 && (
@@ -383,7 +435,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
               {binNotice}
             </p>
           )}
-          <button onClick={() => setShowBin((b) => !b)} className="font-sans text-[15px] text-[#4a4a60]" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 0' }}>
+          <button onClick={() => setShowBin((b) => !b)} data-testid="bin-toggle" className="font-sans text-[15px] text-[#4a4a60]" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0', minHeight: 44 }}>
             {showBin ? '▾' : '▸'} Recycle bin ({bin.length}) · auto-purged after 30 days
           </button>
           {showBin && (
@@ -402,14 +454,30 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
           )}
         </div>
       </div>
+      {dialog.element}
+      <ScrollCue />
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/**
+ * A list heading. With `onToggle` it is a button that folds the list away and says so, keeping the
+ * count visible either way.
+ */
+function Section({ title, children, collapsed, onToggle, testId }: {
+  title: string; children: React.ReactNode; collapsed?: boolean; onToggle?: () => void; testId?: string;
+}) {
+  const heading = 'font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]';
   return (
     <div style={{ marginTop: 20 }}>
-      <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]" style={{ marginBottom: 8 }}>{title}</p>
+      {onToggle ? (
+        <button type="button" onClick={onToggle} data-testid={testId} aria-expanded={!collapsed} className={heading}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, minHeight: 44, marginBottom: 4, textAlign: 'left' }}>
+          {collapsed ? '▸' : '▾'} {title}{collapsed ? ' — tap to show' : ''}
+        </button>
+      ) : (
+        <p className={heading} style={{ marginBottom: 8 }}>{title}</p>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{children}</div>
     </div>
   );

@@ -31,9 +31,15 @@ interface Props {
   sampleGazeTarget: (targetId: string, ms: number) => Promise<void>;
   endGazeCalibration: (sessionId: string) => Promise<CalibrationOutcome>;
   onDone: () => void;
+  /**
+   * True from "Begin calibration" until the fit is reported. The operator's Exit chip is withheld
+   * meanwhile: it would sit in the top-left corner, where a gaze target appears, and leaving
+   * mid-calibration is a restart anyway (experiment/navigation.ts).
+   */
+  onRunning?: (running: boolean) => void;
 }
 
-export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCalibration, sampleGazeTarget, endGazeCalibration, onDone }: Props) {
+export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCalibration, sampleGazeTarget, endGazeCalibration, onDone, onRunning }: Props) {
   const STEPS = calibrationSequence();
   /** -1 = intro; otherwise the index into STEPS currently running. */
   const [idx, setIdx] = useState(-1);
@@ -53,6 +59,8 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
    */
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
+  useEffect(() => { onRunning?.(busy); }, [busy, onRunning]);
+  useEffect(() => () => onRunning?.(false), [onRunning]);
 
   const start = async () => {
     setPoorFit(null);

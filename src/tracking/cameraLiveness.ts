@@ -42,8 +42,9 @@ export function startLivenessCheck(d: LivenessDeps): () => void {
     if (fired) return;
     const t = d.now();
     /*
-     * A LATE TICK MEANS THE PAGE STALLED, NOT THE CAMERA. A blocking dialog — window.confirm behind
-     * the Pause button — stops every script, so no result arrives while the clock keeps running. The
+     * A LATE TICK MEANS THE PAGE STALLED, NOT THE CAMERA. A native blocking dialog — the Pause
+     * button's window.confirm was one, until it became an in-app dialog that leaves the page running —
+     * or any other freeze of the page stops every script, so no result arrives while the clock keeps running. The
      * first tick after it closes can run before the next frame's result does, and saw a gap of
      * however long the operator read the dialog: a lost camera, declared over a camera that was fine.
      * When this tick itself arrives well past its interval, the gap is the page's, and the clock is

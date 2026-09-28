@@ -127,9 +127,14 @@ test('a withdrawn sitting is no longer resumable and says so on the dashboard', 
   await expect(page.getByText(/In progress \(1\)/)).toBeVisible();
   await expect(page.getByRole('button', { name: /^Resume/ }).first()).toBeVisible();
 
-  // Accept the confirmation, then the report alert.
-  page.on('dialog', (d) => void d.accept());
+  // Confirm in the in-app dialog, then dismiss the report. (These were native window.confirm and
+  // window.alert, accepted by a page.on('dialog') handler; they are in-app dialogs now.)
   await page.getByRole('button', { name: 'Withdrew' }).first().click();
+  await expect(page.getByTestId('confirm-dialog')).toContainText('WITHDREW');
+  await page.getByTestId('confirm-ok').click();
+  await expect(page.getByTestId('confirm-dialog')).toContainText('recorded as withdrawn');
+  await page.getByTestId('confirm-ok').click();
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0);
 
   // Resuming a withdrawn sitting used to be offered and collected data after consent was withdrawn.
   await expect(page.getByText(/Withdrawn \(1\)/)).toBeVisible();

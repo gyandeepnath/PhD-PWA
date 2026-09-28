@@ -26,6 +26,28 @@
 
 :root {
   --vl-scale: 1;
+  /*
+   * The operator navigation chip (components/NavChip.tsx) must be a 44 CSS px touch target on the
+   * DEVICE, and everything inside #root is shrunk by --vl-scale — to 0.86 on a Xiaomi Pad 6 and 0.76
+   * with Chrome's address bar showing. A chip sized 44 design px arrives as 38 or 33 px under a finger.
+   * Dividing by the scale keeps it at 44 CSS px whatever the scale is.
+   */
+  --vl-nav-chip-h: calc(44px / var(--vl-scale));
+  /*
+   * The band at the top of a screen that the chip sits in. A screen whose content could reach the
+   * top-left corner reserves it (`.nav-band`), so the chip never covers a heading or a field.
+   */
+  --vl-nav-band: calc(12px + var(--vl-nav-chip-h) + 16px);
+  /*
+   * Height of the fixed update banner while it is showing, set by UpdateBanner; 0 otherwise. The
+   * screens it can appear on add it to their bottom padding so it never covers a row or a button.
+   */
+  --vl-banner-h: 0px;
+}
+
+/* A screen that keeps the navigation chip's band clear. See --vl-nav-band. */
+.nav-band {
+  padding-top: var(--vl-nav-band) !important;
 }
 
 html {

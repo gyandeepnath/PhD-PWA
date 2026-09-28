@@ -148,7 +148,9 @@ export function trackPortraitTime(opts: Options = {}): HiddenTimeTracker {
 }
 
 /**
- * A full-screen notice the APP has put over the task — today, "The camera has stopped".
+ * A notice the APP has put over the task: "The camera has stopped", "The camera cannot see
+ * anything", or the operator's Pause confirmation while it is open over a condition screen or the
+ * grey field (it was window.confirm, which froze the page and was measured by nothing).
  *
  * Like the portrait overlay it is a sibling of the task, which keeps running underneath: the grey
  * field's clock, the reading page's clock, the search limit. Time it spends up is therefore time the

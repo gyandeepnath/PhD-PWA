@@ -3638,3 +3638,98 @@ comprehension, grey field, scales and slider tracks all have empty diffs):
 Found during e2e: the camera self-test could skip a cue when a frame ran late (the cue index was
 computed from elapsed time and jumped). Cues now advance one at a time, and the test ends only after the
 last cue's blink has had its full matching window.
+
+## Round 62 — screens and navigation (part 1)
+
+A screen audit of every stage at the study tablet's two viewports (Xiaomi Pad 6 in Chrome: 1152x720
+installed, 1152x650 with the address bar; the 1194x834 canvas renders there at 0.86 and 0.76) found
+operator screens whose content could not be reached, instrument text at 9-10 CSS px, no way back or
+out of setup, and four different "back" controls. Part 1 covers the operator and setup screens and
+navigation. **Nothing a participant sees inside a condition changed**, with two stated exceptions
+below (the Pause confirmation and the portrait block, both drawn over the task, never part of it).
+
+**Unreachable content.**
+- *Dashboard* (F1): a `min-h-screen` box with no scroll container inside the clipped root; the Data
+  Quality / QC tab hid about 1560 CSS px (the exclusion table, the blink/PERCLOS/engagement charts,
+  every per-condition QC row) and three more tabs lost their lower parts. It is now its own scroll
+  container with the "More below" cue. `e2e/dashboardTabs.spec.ts` drives a sitting at 1152x650 and,
+  on every tab, requires the root not to overflow and the last element to come on screen by scrolling.
+- *Session manager* (F2): same defect; past about five sittings the rest of the list, Completed and
+  the recycle bin were unreachable. It scrolls, Completed is folded away with its count, and the
+  bottom padding follows the update banner. `e2e/sessionManager.spec.ts` seeds fourteen sittings.
+- *Update banner* (F23): it covered the build stamp and the last manager rows. It now publishes its
+  height (`--vl-banner-h`); the landing page and manager pad by it and the stamp sits above it.
+- `min-h-screen` removed from the break, colour-vision, landing, resuming and dashboard-loading screens
+  (F20): 100vh is not the scaled root's height, so they sat 50-80 px high and could not scroll. The
+  `ALLOWED` list in `tests/stimulusGeometry.test.ts` is down to the error overlay, and a new check
+  requires the dashboard and manager to be scroll containers with a cue.
+- `ScrollCue` re-checked only on scroll and resize, so a form that grew after mount (the session form
+  with "split" or an out-of-range lux) or a dashboard tab switched later showed no cue. It now watches
+  the scroll box's content with a ResizeObserver.
+
+**Navigation** (F11, F12) — policy in `src/experiment/navigation.ts`, held by `tests/navigation.test.ts`.
+- One `NavChip`, always top left, 17 px Roboto, a 44 CSS px target at any display scale
+  (`--vl-nav-chip-h` = 44px / scale), with action labels: "← Back to home" (manager, moved from the top
+  right), "← Back to sessions" (dashboard; the two differently styled copies in App.tsx and
+  Experiment.tsx are now one, in LazyDashboard), "← Cancel — back to sessions" (SESSION_INIT), "Exit —
+  resume later" (every other setup screen, the break and the two closing questionnaires).
+- Exit writes no resume pointer; the resume derives where to start from what is stored. Two resume
+  gaps this made ordinary were fixed at the root: a sitting that never reached the first display now
+  walks through INSTRUCTIONS (it jumped straight to the grey field, overview unread), and a sitting
+  stopped on the NASA-TLX resumes there instead of re-administering the closing CVS-Q it had already
+  submitted (the row was silently replaced).
+- Exit is withheld while the colour-vision plates show (a resume re-seeds the same plates; a second
+  look is recall), while the calibration dots run (the first target is where the chip sits) and while
+  the self-test dot flashes.
+- Back exists on three screens only. PREFLIGHT → profile: the form comes back filled in, and the
+  correction is merged against the participant row as it stood before this sitting's first profile
+  write, so a corrected self-report or formal-plate answer is not kept by the cross-sitting stickiness
+  (offered only when this mount wrote the profile). PROFILE and CAMERA_SETUP / CameraDeclined →
+  consent: the consent screen comes back unticked, the superseded record is kept on the session
+  (`consent_revisions`, a count exported in `01_session_info.csv`), and completing it returns straight
+  to the screen Back was pressed on — the colour-vision plates are never re-shown. Offered only while
+  the sitting holds no calibration, media or condition row, so nothing is ever held under a grant
+  other than the one it was collected with. This supersedes the manual statement (AUDIT_ROUND2) that
+  no route back to consent exists.
+- One in-app `ConfirmDialog` replaces every `window.confirm/alert/prompt` (Pause, Withdrew, Delete,
+  Purge, Rename, media revocation, backup restore, export check): buttons say what they do, text at
+  the operator floor. A source test forbids the native calls.
+- **In-loop Pause keeps its size and place (deferred to part 2).** A 44 CSS px chip would enlarge its
+  footprint on the stimulus screen, which the brief rules out for part 1. Its confirmation is the
+  in-app dialog drawn in the screen's own ink on its own ground with no scrim. Unlike
+  `window.confirm`, it does not freeze the page, so the time it is open over a condition or the grey
+  field is recorded as blocking-notice time (`condition_notice_ms`, and subtracted from delivered
+  adaptation); the codebook entries for `condition_notice_ms`, `condition_notice_events` and
+  `condition_interrupted` say so. Before this, the native dialog's time sat unrecorded inside the task
+  clocks. The break's Pause is now the shared chip ("Exit — resume later"): the break is not a
+  condition screen.
+
+**Instruments** (wording, order, anchors and scoring unchanged).
+- *CVS-Q* (F7): items, answers and anchor definitions in Roboto 16-17 px (were 12-14 px mono, the
+  definitions grey 12 px); one row per item with a fixed intensity slot, so 8 of 16 items are visible
+  instead of about 5 and nothing reflows when an intensity appears; "More below" in a right gutter;
+  "Answered k of 16" beside Continue. Two columns of eight were measured and do not fit 834 design px
+  without shrinking text or targets.
+- *NASA-TLX* (F8): names 18 px, questions 16 px, anchors 15 px, all full ink (questions were 11 px at
+  60% opacity); two columns of three, which fit 1152x650 (one column with scroll and cue on narrower
+  screens). Value readout accent #4f8ef7 (3.2:1) → #1f5fbf.
+
+**Smaller items.** Progress bar (F13a): 6 px, Title-case labels at 15 px, and at the break it names the
+NEXT display ("Break · Next: Display 3 of 10") — it named the one just finished; the bar is dim on the
+dark calibration screens. Wake-lock warning (F18) sits under the progress label instead of on it, at
+14 px outside the loop (unchanged inside it). SESSION_INIT (F19): scroll cue; consent text no longer
+scrolls in its own box; "Unticked boxes are recorded as a refusal" moved above the button. One sitting
+duration string, `CONFIG.SINGLE_SITTING_DURATION` = the consent's own "75–120 minutes" (the landing page
+and session form said "about 90 min to 2 h"); the consent text renders it and reads exactly as before.
+Portrait block (F22): stage- and camera-aware wording (the calibration and "recorded against this
+condition" sentences only where true; the in-loop wording with the camera on is unchanged), rendered
+outside the scaled root at 17-30 CSS px (was 8-18).
+
+Also corrected: the operator manual's §3 pointed to "the withdrawal row in §7"; it is in §6.
+
+Open for part 2: the in-loop Pause footprint and every condition-screen item (F3-F6, F9, F10, F13b/c,
+F14-F17, F21).
+
+Verification: `npm run verify` green, 1130 unit tests (new: `tests/navigation.test.ts`); 49 end-to-end
+tests pass, including the new `setupNavigation`, `sessionManager` and `dashboardTabs` specs, whose
+clicks are not forced. Every changed screen was photographed at 1152x720 and 1152x650 and inspected.

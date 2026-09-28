@@ -11,12 +11,16 @@ import { SELF_TEST, scoreSelfTest, type SelfTestResult } from '@/tracking/selfTe
  * than of any condition. The result is stated in plain words with the reasons, and the operator
  * chooses: continue, try again, or continue anyway — the result is recorded in every case.
  */
-export function CameraSelfTest({ begin, end, onDone }: {
+export function CameraSelfTest({ begin, end, onDone, onRunning }: {
   begin: () => void;
   end: () => { blinkOnsets: number[]; fps: number | null; facePresence: number | null };
   onDone: (result: SelfTestResult) => void;
+  /** True while the dot is flashing: the operator's Exit chip is withheld, as in calibration. */
+  onRunning?: (running: boolean) => void;
 }) {
   const [phase, setPhase] = useState<'intro' | 'running' | 'result'>('intro');
+  useEffect(() => { onRunning?.(phase === 'running'); }, [phase, onRunning]);
+  useEffect(() => () => onRunning?.(false), [onRunning]);
   const [flash, setFlash] = useState(false);
   const [cueCount, setCueCount] = useState(0);
   const [result, setResult] = useState<SelfTestResult | null>(null);

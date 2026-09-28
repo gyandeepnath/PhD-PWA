@@ -138,6 +138,13 @@ describe('the reaction-time target sits in a device-independent field', () => {
 /**
  * `min-h-screen` on a condition-coloured screen is a polarity confound, and it has happened.
  *
+ * ROUND 62: it was also why the operator screens could not be scrolled. The dashboard and the
+ * session manager were min-h-screen boxes with no scroll container inside a root that clips, so
+ * everything below the first screen — the QC tables, the later session rows, the recycle bin — was
+ * unreachable; the break, colour-vision, landing and resuming screens centred 50-80 px above the
+ * middle of the tablet. All of them now use `.screen` with their own scroll container, and the
+ * allowlist is down to the one full-viewport overlay.
+ *
  * `min-h-screen` is `min-height: 100vh`. `vh` measures the raw viewport, while #root's height is
  * `calc(100% / var(--vl-scale))` — inside a scaled root those are different boxes, so a screen sized
  * in vh does not fill the one it is laid out in. What shows through the shortfall is the cream page
@@ -154,14 +161,7 @@ describe('the reaction-time target sits in a device-independent field', () => {
 describe('the .screen convention has a guard, not just a comment', () => {
   /** Each entry: why this file may keep `min-h-screen`. A stimulus screen can never be on this list. */
   const ALLOWED: Record<string, string> = {
-    'src/components/ErrorBoundary.tsx': 'fixed inset-0 over the whole viewport; no condition colour',
-    'src/screening/IshiharaTest.tsx': 'cream page, before any condition is shown',
-    'src/start/SessionManager.tsx': 'operator console, cream, between sittings',
-    'src/start/BreakScreen.tsx': 'cream break screen; no stimulus is displayed',
-    'src/start/LandingPage.tsx': 'cream landing screen',
-    'src/experiment/Experiment.tsx': 'cream loading/fallback shell, not a stimulus stage',
-    'src/dashboard/Dashboard.tsx': 'operator dashboard, cream',
-    'src/dashboard/LazyDashboard.tsx': 'cream loading fallback for the dashboard',
+    'src/components/ErrorBoundary.tsx': 'fixed inset-0 over the whole viewport; no condition colour, nothing to scroll',
   };
 
   const root = resolve(__dirname, '..');
@@ -180,6 +180,19 @@ describe('the .screen convention has a guard, not just a comment', () => {
     expect(offenders, 'a new min-h-screen: if this screen ever shows a condition colour it is a '
       + 'polarity-confounded band. Use .screen, or add it to ALLOWED with the reason it is safe.')
       .toEqual([]);
+  });
+
+  it('the operator screens that grow with the study scroll internally', () => {
+    // The session list grows by a row per sitting and the QC tab by a row per condition: both have
+    // to be scroll containers of their own, or what does not fit is out of reach of any gesture.
+    for (const [rel, testid] of [
+      ['src/dashboard/Dashboard.tsx', 'dashboard-scroll'],
+      ['src/start/SessionManager.tsx', 'manager-scroll'],
+    ]) {
+      const src = readFileSync(join(root, rel), 'utf8');
+      expect(src, rel).toMatch(new RegExp(`data-testid="${testid}" className="screen scrollable`));
+      expect(src, `${rel} has no "More below" cue`).toMatch(/<ScrollCue \/>/);
+    }
   });
 
   it('the allowlist has no stale entries, so it cannot quietly become a blanket exemption', () => {

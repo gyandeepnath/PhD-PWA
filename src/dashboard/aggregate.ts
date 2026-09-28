@@ -414,7 +414,8 @@ export function conditionEngagement(args: {
    */
   const rotatedTooLong = condition_portrait_ms != null
     && condition_portrait_ms > ENGAGEMENT.CONDITION_HIDDEN_MAX_MS;
-  // The camera-lost notice blocks the task exactly as the portrait overlay does; same rule.
+  // A blocking notice — the camera lost or blocked, or the operator's Pause confirmation left open —
+  // blocks the task exactly as the portrait overlay does; same rule.
   const noticeTooLong = condition_notice_ms != null
     && condition_notice_ms > ENGAGEMENT.CONDITION_HIDDEN_MAX_MS;
   const condition_interrupted = hiddenTooLong || rotatedTooLong || noticeTooLong;
@@ -425,7 +426,7 @@ export function conditionEngagement(args: {
     penalise(0.25, `tablet was in portrait for ${Math.round(condition_portrait_ms! / 1000)}s during this condition — the task could not be answered while the overlay was up`);
   }
   if (noticeTooLong) {
-    penalise(0.25, `the camera-lost notice covered the task for ${Math.round(condition_notice_ms! / 1000)}s during this condition`);
+    penalise(0.25, `a notice (camera lost or blocked, or the Pause confirmation) covered the task for ${Math.round(condition_notice_ms! / 1000)}s during this condition`);
   }
 
   // RT block disengagement: COMMISSION errors only — see ENGAGEMENT.RT_FALSE_ALARM_MAX for why
