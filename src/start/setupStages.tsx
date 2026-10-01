@@ -1144,19 +1144,10 @@ export function Preflight({ onDone, onBack }: {
    * each other. Nothing on the screen shows it; an operator in a hurry would never notice. So it is
    * checked by machine, like storage and the typeface, and anything other than the installed launch
    * has to be acknowledged in writing before the sitting can go on — the choice is the operator's,
-   * but it is made knowingly and recorded (display_mode, display_mode_acknowledged).
-   *
-   * Re-read when the mode changes: Chrome can move a page into or out of full-screen under it.
+   * but it is made knowingly and recorded (display_mode, display_mode_acknowledged). The same check
+   * is asked again when a sitting is resumed and at a break (LaunchCheck, below; Experiment.tsx).
    */
-  const [mode, setMode] = useState<DisplayMode | null>(() => displayMode());
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return undefined;
-    const queries = (['fullscreen', 'standalone', 'minimal-ui', 'browser'] as const)
-      .map((m) => window.matchMedia(`(display-mode: ${m})`));
-    const update = () => setMode(displayMode());
-    for (const q of queries) q.addEventListener?.('change', update);
-    return () => { for (const q of queries) q.removeEventListener?.('change', update); };
-  }, []);
+  const mode = useDisplayMode();
   const installed = isInstalledDisplay(mode);
   const [modeAck, setModeAck] = useState(false);
   const modeOk = installed || modeAck;
@@ -1193,35 +1184,8 @@ export function Preflight({ onDone, onBack }: {
           <p key={i} className={boxText} style={{ marginTop: 6 }}>{m}</p>
         ))}
       </div>
-      <div data-testid="display-mode-check"
-        style={{ marginTop: 12, padding: '12px 14px', borderRadius: 10, border: `1px solid ${installed ? '#d8d4cc' : tone.warn}`, background: installed ? '#fff' : `${tone.warn}12` }}>
-        {installed ? (
-          <p className={boxText}>
-            <strong>App display:</strong> installed, full-screen — correct.
-          </p>
-        ) : (
-          <>
-            <p className={eyebrow} style={{ color: UI_TEXT.amber }}>
-              Not running as the installed app{mode ? ` (display mode: ${mode})` : ' (display mode not reported)'}
-            </p>
-            <p className={boxText} style={{ marginTop: 6 }}>
-              The app is open in a browser tab or window, not from its home-screen icon. The address
-              bar takes part of the screen, so every stimulus is drawn smaller than the protocol size,
-              and the size can change if the bar hides or reappears. To fix it: tap <strong>Exit —
-              resume later</strong>, close this tab, open VisuLab from the home-screen icon and resume
-              this sitting from the Session Manager.
-            </p>
-            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginTop: 10, cursor: 'pointer' }}>
-              <input type="checkbox" data-testid="display-mode-ack" checked={modeAck}
-                onChange={(e) => setModeAck(e.target.checked)} style={{ width: 22, height: 22, flexShrink: 0, marginTop: 2 }} />
-              <span className="font-sans text-base text-[#1a1a2e]">
-                Run it like this anyway. I understand the stimuli will not be at their protocol size,
-                and that this sitting is recorded as run outside the installed app.
-              </span>
-            </label>
-          </>
-        )}
-      </div>
+      <DisplayModeCheck mode={mode} scale={scale.applied} acknowledged={modeAck} onAcknowledge={setModeAck} />
+
       <div data-testid="scale-check"
         style={{ marginTop: 12, padding: '12px 14px', borderRadius: 10, border: `1px solid ${scaleLocked ? '#b3261e' : fullSize ? '#d8d4cc' : tone.warn}`, background: scaleLocked ? '#fdeeee' : fullSize ? '#fff' : `${tone.warn}12` }}>
         {/*
@@ -1306,6 +1270,91 @@ export function Preflight({ onDone, onBack }: {
       </div>
       </div>
       <ScrollCue />
+    </div>
+  );
+}
+
+/**
+ * The CSS display mode, kept live: Chrome can move a page into or out of full-screen under it, so it
+ * is re-read whenever the browser reports a change rather than once on mount.
+ */
+export function useDisplayMode(): DisplayMode | null {
+  const [mode, setMode] = useState<DisplayMode | null>(() => displayMode());
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined;
+    const queries = (['fullscreen', 'standalone', 'minimal-ui', 'browser'] as const)
+      .map((m) => window.matchMedia(`(display-mode: ${m})`));
+    const update = () => setMode(displayMode());
+    for (const q of queries) q.addEventListener?.('change', update);
+    return () => { for (const q of queries) q.removeEventListener?.('change', update); };
+  }, []);
+  return mode;
+}
+
+/**
+ * Is this the installed app? The verdict, and — when it is not — the acknowledgement that lets the
+ * sitting go on anyway. One component, so pre-flight, the resume check and the break say the same
+ * thing and record the same tick.
+ *
+ * WHAT IT MAY CLAIM. It used to say, whenever the mode was not fullscreen or standalone, that "every
+ * stimulus is drawn smaller than the protocol size" — directly above the scale box saying "full size
+ * (100%) — every stimulus is drawn at its protocol size", in a tab whose address bar happened to be
+ * hidden (review of Round 63). The size sentence now follows the scale actually applied. And where the
+ * browser reports no mode at all it no longer says "the app is open in a browser tab": the code does
+ * not know that, only that the installed launch cannot be confirmed. The acknowledgement is required
+ * in every case that is not confirmed installed — at 100% too, because the bar can come back — and
+ * says "may not be at their protocol size", which is true in all of them.
+ */
+export function DisplayModeCheck({ mode, scale, acknowledged, onAcknowledge }: {
+  mode: DisplayMode | null;
+  /** The display scale currently applied (viewportScale.currentScale). */
+  scale: number;
+  acknowledged: boolean;
+  onAcknowledge: (ticked: boolean) => void;
+}) {
+  const installed = isInstalledDisplay(mode);
+  const warn = '#c98a22';
+  const boxText = 'font-sans text-[15px] leading-relaxed text-[#3a3a4a]';
+  const smaller = scale < 1;
+  const pct = Math.round(scale * 100);
+  return (
+    <div data-testid="display-mode-check"
+      style={{ marginTop: 12, padding: '12px 14px', borderRadius: 10, border: `1px solid ${installed ? '#d8d4cc' : warn}`, background: installed ? '#fff' : `${warn}12` }}>
+      {installed ? (
+        <p className={boxText}>
+          <strong>App display:</strong> installed, full-screen — correct.
+        </p>
+      ) : (
+        <>
+          <p className={eyebrow} style={{ color: UI_TEXT.amber }}>
+            {mode ? `Not running as the installed app (display mode: ${mode})` : 'Display mode not reported'}
+          </p>
+          <p className={boxText} style={{ marginTop: 6 }} data-testid="display-mode-text">
+            {mode
+              ? 'The app is open in a browser tab or window, not from its home-screen icon. '
+              : 'The browser did not say how the app is being displayed, so it cannot be confirmed that '
+                + 'it was opened from its home-screen icon. '}
+            {mode
+              ? (smaller
+                ? `The address bar takes part of the screen, so every stimulus is drawn smaller than the protocol size (${pct}%), and the size can change if the bar hides or reappears. `
+                : 'Every stimulus is at its protocol size on this screen at the moment, but the address bar can appear at any time, and every stimulus is then drawn smaller. ')
+              : (smaller
+                ? `Every stimulus is drawn at ${pct}% of its protocol size on this screen. `
+                : 'Every stimulus is at its protocol size on this screen at the moment. ')}
+            {mode ? 'To fix it: tap ' : 'If it was not opened from the icon: tap '}
+            <strong>Exit — resume later</strong>, close this {mode ? 'tab' : 'tab or window'}, open
+            VisuLab from the home-screen icon and resume this sitting from the Session Manager.
+          </p>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginTop: 10, cursor: 'pointer' }}>
+            <input type="checkbox" data-testid="display-mode-ack" checked={acknowledged}
+              onChange={(e) => onAcknowledge(e.target.checked)} style={{ width: 22, height: 22, flexShrink: 0, marginTop: 2 }} />
+            <span className="font-sans text-base text-[#1a1a2e]">
+              Run it like this anyway. I understand the stimuli may not be at their protocol size, and
+              that this sitting is recorded as {mode ? 'run outside the installed app' : 'not confirmed to be the installed app'}.
+            </span>
+          </label>
+        </>
+      )}
     </div>
   );
 }
