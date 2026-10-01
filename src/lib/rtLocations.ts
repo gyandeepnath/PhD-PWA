@@ -37,6 +37,10 @@
  * assigned so that no two consecutive trials share one. A target at the location of a preceding
  * non-informative flash draws a slower response at intervals of 0.2-1.5 s (Berlucchi et al. 1989),
  * which is the scale of this task's inter-trial gap — a repeat would add a sequence effect to RT.
+ *
+ * SOURCES: docs/CITATION_VERIFICATION.md items 53 (Carrasco et al. 1995), 54 (Wall et al. 2002), 55
+ * (Mullen & Kingdom 2002) and 56 (Berlucchi et al. 1989) — each checked against its abstract only, and
+ * each with the caveat recorded there on how far it transfers to this task.
  */
 import { balancedDistractors, planRuns } from './foreperiod';
 

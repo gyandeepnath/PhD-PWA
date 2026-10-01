@@ -176,7 +176,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) whit
         → DISPLAY_PERCEPTION comfort + clarity sliders, captured immediately after reading
         → POST_FATIGUE       5-item VAS, immediately after the strongest fatigue inducer (reading)
         → VISUAL_SEARCH      tap every target word, 40 s limit (selective attention)
-        → REACTION_TIME      colour go/no-go (random-location dot; respond only to target colour)
+        → REACTION_TIME      colour go/no-go (dot at 8 fixed balanced locations; respond only to target colour)
         → ADAPTATION         60 s neutral grey (120 s when polarity switches vs the next condition)
         → BREAK_SCREEN       self-paced rest after every 2 conditions; never after the last
   → CVSQ_END              CVS-Q again (Δ from baseline = primary validated subjective fatigue outcome)
@@ -233,15 +233,20 @@ Progress bar = **8 setup steps + 8×6 measured sub-stages = 56 steps**. The stat
   correctly calibrated.
 
 ### 4.6 Reaction time — colour go/no-go (`ReactionTimeTask.tsx`)
-- A single coloured dot appears at a **random screen location** each trial, on the active condition's
-  own background. The participant taps **only** for the **achromatic target** — black `#000000` on
-  a light field, white `#FFFFFF` on a dark one — so target contrast is 21:1 and identical in both
-  polarities, and no target hue coincides with the text-colour manipulation. (This replaced a fixed
-  green target, whose justification — "the only colour not used by any display condition" — expired
-  when green became the fifth text colour.) The participant withholds for the four chromatic
-  distractors (red, blue, yellow, green). The discrimination is therefore achromatic-against-
-  chromatic rather than hue-against-hue: an easier judgement, but it preserves the two
-  fatigue-sensitive indices the task exists to measure — RT variability and lapse rate.
+- A single coloured dot appears each trial, on the active condition's own background, at one of
+  **eight fixed locations** (Round 66; `src/lib/rtLocations.ts`): two rings around the fixation
+  cross, **4° and 8° at 55 cm** (187 and 376 root px; the values are a judgement), on the four
+  diagonals. Every location is used 4 times per 32-trial block — go 10 per ring and 5 per quadrant,
+  no-go 6 per ring and 3 per quadrant — the pattern is mirrored on alternate blocks, each no-go colour
+  is split 2/1 across the rings (alternating between blocks), and no location appears on two
+  consecutive trials. The dot stays 52 px (1.11°) at both rings. Each trial's location is exported
+  (`stim_*` columns of `08_reaction_trials.csv`). It replaced a uniformly random point in x 25–75%,
+  y 28–72% of the screen, whose eccentricity was unrecorded noise in every condition mean.
+- The go-target is the **condition's own text colour** and the no-go dots are the other four text
+  colours of its polarity (investigator decision; see `docs/PROTOCOL.md` and `rtStimulusColours`).
+  An earlier version of this section described an achromatic go-target, which that decision replaced.
+  The fixation cross stays achromatic. Tap anywhere; the card asks for the hand to rest below the
+  screen's bottom edge so the lower dots are never covered.
 - **32 trials/condition**, go-rate **0.625** (≈ 20 go / 12 no-go). **6 unscored practice trials**
   run once, before the first scored block only.
 - Onset is timestamped at the **actual painted frame** (rAF); RT uses the hardware pointer-event

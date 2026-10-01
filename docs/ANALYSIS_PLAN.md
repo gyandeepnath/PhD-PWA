@@ -170,6 +170,35 @@ only after **60 min**.
 | Response bias | `criterion` | LMM | A polarity effect on `criterion` **without** one on `d_prime` is a bias shift, not a sensitivity change. Worth reporting as a distinct finding rather than folding into "RT performance". |
 | PERCLOS | `perclos_p80` | LMM on logit | Bounded; do not model raw. |
 
+### 4a. Reaction-time target location: ring, and ring × colour (Round 66)
+
+From Round 66 the go/no-go dot appears at one of **eight fixed locations**: two rings around the
+fixation cross, 4° and 8° at the nominal 55 cm (a judgement, not a published optimum), on the four
+diagonals. Every 32-trial block uses each location 4 times, with go 10 per ring and no-go 6 per ring,
+so the condition-level outcomes in `09_rt_summary.csv` (mean RT, d′, criterion, lapse rate) stay
+defined and comparable across conditions: every block is balanced over the rings. What changes is
+that location is now a **recorded, balanced factor** in `08_reaction_trials.csv` (`stim_location_id`,
+`stim_ring`, `stim_angle_deg`, `stim_dx_px`, `stim_dy_px`, `stim_ecc_px`, `stim_ecc_deg_55cm`).
+
+- **Ring enters the trial-level models, and so does ring × colour.** Response time rises with target
+  eccentricity, and red–green cone opponency declines with eccentricity faster than blue–yellow,
+  which declines about as achromatic sensitivity does (Mullen & Kingdom 2002). The go/no-go decision
+  here is a colour decision, so the colour conditions are not expected to lose discriminability
+  equally at 8°; with balanced rings that interaction is estimable instead of being noise. The two
+  trial-level models are the probit GLMM for sensitivity and criterion (signal-detection terms on
+  `is_signal`, with `stim_ring` and its interaction with the colour factor added) and an LMM on log
+  RT of valid hits (`stim_ring`, ring × colour, `position_c`, and participant and passage random
+  effects). **The analysis templates do not fit these terms yet**; the analysis batch implements
+  them. This note fixes what they must contain before anyone looks at the data.
+- `stim_ecc_deg_55cm` assumes a 55 cm eye-to-screen distance, which is not recorded; the protocol
+  allows 50–60 cm, about ±9% in angle. Model `stim_ring` as the factor and treat the degree value as
+  descriptive.
+- **Rows recorded before Round 66 have no location columns** (all blank): the dot then landed at a
+  uniformly random point in the central part of the screen, which was not recorded. Those rows enter
+  the condition-level analysis as before and must be left out of any model with a location term —
+  never imputed. They are also a different stimulus layout, so a dataset pooling both should carry the
+  build (`git_hash`) as a factor.
+
 ---
 
 ## 5. Manipulation and quality checks, before any inference

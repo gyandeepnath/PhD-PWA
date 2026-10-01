@@ -1024,6 +1024,65 @@ RSVP of unrelated four-letter words — not page reading. The abstract does not 
 spacing" in CSS line-height terms, so the Round 63 line height of 1.4 rests on this source only as a
 judgement, and the code says so.
 
+### 53. Carrasco, Evert, Chang & Katz (1995) — the eccentricity effect
+**Status: CONFIRMED.** PMID 8539099 · DOI [10.3758/bf03208380](https://doi.org/10.3758/bf03208380)
+
+> Carrasco, M., Evert, D. L., Chang, I., & Katz, S. M. (1995). The eccentricity effect: target
+> eccentricity affects performance on conjunction searches. *Perception & Psychophysics, 57*(8),
+> 1241–1261.
+
+Metadata matches PubMed (re-verified 1 Oct 2026). Claim checked against the abstract only; PubMed lists
+no PMC full text. Verbatim: *"Target eccentricity critically affected performance: A pronounced
+eccentricity effect was very similar for all three experiments; as eccentricity increased, reaction
+times and errors increased gradually."* Cited (Round 66, `src/lib/rtLocations.ts`) for: reaction time
+rises with a target's distance from fixation, so a random dot position is noise in an RT mean. The
+task was orientation × colour CONJUNCTION SEARCH, not single-target go/no-go detection; it supports
+the direction of the effect, not its size here.
+
+### 54. Wall, Kutzko & Chauhan (2002) — reaction time and eccentricity in perimetry
+**Status: CONFIRMED.** PMID 11888543 · DOI [10.1016/s0042-6989(01)00311-x](https://doi.org/10.1016/s0042-6989(01)00311-x)
+
+> Wall, M., Kutzko, K. E., & Chauhan, B. C. (2002). The relationship of visual threshold and reaction
+> time to visual field eccentricity with conventional automated perimetry. *Vision Research, 42*(6),
+> 781–787.
+
+Metadata matches PubMed (re-verified 1 Oct 2026). Claim checked against the abstract only; no PMC full
+text. Verbatim: *"Linear regression showed a significant increase in suprathreshold RT (to the 0 dB
+stimulus) with increasing eccentricity."* Ten perimetrically experienced subjects, Humphrey
+perimeter, 10° to 50° along the nasal horizontal meridian. Cited (Round 66) for the same direction of
+effect as item 53, in simple detection. This study's rings are 4° and 8° on the diagonals, inside and
+off the tested range, so applying it here is an extrapolation.
+
+### 55. Mullen & Kingdom (2002) — red–green and blue–yellow opponency across the visual field
+**Status: CONFIRMED.** PMID 12180855 · DOI [10.1017/s0952523802191103](https://doi.org/10.1017/s0952523802191103)
+
+> Mullen, K. T., & Kingdom, F. A. A. (2002). Differential distributions of red-green and blue-yellow
+> cone opponency across the visual field. *Visual Neuroscience, 19*(1), 109–118.
+
+Metadata matches PubMed (re-verified 1 Oct 2026). Claim checked against the abstract only; no PMC full
+text. Verbatim: *"We find that while red-green cone opponency has a steep decline away from the fovea,
+the loss in blue-yellow cone opponency is more gradual, showing a similar loss to that found for
+achromatic vision."* Cone-contrast thresholds for spatially scaled gratings in the nasal field,
+0–25°. Cited (Round 66, `rtLocations.ts`, `docs/ANALYSIS_PLAN.md` §4a) for why the colour conditions
+need not lose go/no-go discriminability equally with eccentricity, so ring × colour belongs in the
+trial-level models. This study's dots are suprathreshold and its inks are not cone-isolating, so the
+direction of any interaction here is an inference, not a prediction this source makes.
+
+### 56. Berlucchi, Tassinari, Marzi & Di Stefano (1989) — inhibition at a previously flashed location
+**Status: CONFIRMED.** PMID 2927630 · DOI [10.1016/0028-3932(89)90172-3](https://doi.org/10.1016/0028-3932(89)90172-3)
+
+> Berlucchi, G., Tassinari, G., Marzi, C. A., & Di Stefano, M. (1989). Spatial distribution of the
+> inhibitory effect of peripheral non-informative cues on simple reaction time to non-fixated visual
+> targets. *Neuropsychologia, 27*(2), 201–221.
+
+Metadata matches PubMed (re-verified 1 Oct 2026). Claim checked against the abstract only; no PMC full
+text. Verbatim: *"It is known that reaction time (RT) for the detection of a light target at
+extrafoveal locations is lengthened by a previous non-informative light cue at the same location"*
+and *"Both effects were seen with cue-target asynchronies ranging from 0.2 to 1.5 sec."* Cited
+(Round 66, `rtLocations.ts`) for why no location may appear on two consecutive trials. The paradigm
+was a cue flash followed by a target, not one go/no-go target after another; that the previous
+trial's dot acts like a cue is an inference.
+
 ## NOT INDEXED IN PUBMED — verified against a secondary authority, or unverified
 
 PubMed indexes biomedical and life-sciences literature only. The references below fall outside

@@ -257,7 +257,7 @@ Each condition runs the same six measured stages, in this order:
 | `DISPLAY_PERCEPTION` | Comfort and clarity ratings | Do not comment on the display. |
 | `POST_FATIGUE` | Five visual-fatigue items, 0 to 10 | Let them answer at their own pace. |
 | `VISUAL_SEARCH` | Tap every occurrence of a target word, fixed time limit | Do not point. |
-| `REACTION_TIME` | Go/no-go, 32 trials | Nothing. |
+| `REACTION_TIME` | Go/no-go, 32 trials; the dot appears at one of eight places around the central cross | Before **Start**, check the participant's hand rests just below the bottom edge of the screen, as the card asks: a hand on the screen covers the lower dots. Then nothing. |
 | `ADAPTATION` | Neutral grey field. A **Continue** button appears after 30 s; the field moves on by itself at 60 s (120 s when polarity switches) | Let the participant decide when to continue after 30 s. Do not prompt them to hurry: how long they rest is recorded (`adaptation_ms_before`, `adaptation_ended_by`) and analysed. |
 
 `ADAPTATION` runs a grey field **before the first condition** and then after every condition except

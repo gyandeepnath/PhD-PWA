@@ -72,8 +72,16 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                             ≤190 words) at the reading font size, where the target is densest; 4–11
                             targets by passage, recorded as targets_in_set (investigator decision —
                             no equal count is available from these texts in one screen)
-        → REACTION_TIME     colour go/no-go IN the condition's display: one dot at a RANDOM screen
-                            location each trial, on the condition's background; tap only when the dot
+        → REACTION_TIME     colour go/no-go IN the condition's display: one dot per trial at one of
+                            EIGHT FIXED LOCATIONS around the fixation cross — 2 rings (4° and 8° at
+                            55 cm; a judgement) × the 4 diagonals — each used 4 times per block, go
+                            and no-go balanced over rings and quadrants, mirrored on alternate
+                            blocks, never the same location twice in a row (Round 66; until then a
+                            uniformly random, unrecorded point in the central part of the screen).
+                            The dot stays 52 px at both rings. Tap anywhere, the hand resting below
+                            the screen's bottom edge between taps. The location is exported per trial
+                            (stim_* columns); ring and ring × colour enter the trial-level models
+                            (ANALYSIS_PLAN §4a). On the condition's background; tap only when the dot
                             is the condition's own TEXT colour (the colour just read); the no-go dots
                             are the other four text colours of that polarity. Reports RT mean/median/
                             SD/CV, omission & commission errors, d′; each trial's dot colour is
