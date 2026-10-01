@@ -218,6 +218,16 @@ export interface SessionRecord {
   caffeine_today?: boolean | null;
   hours_since_sleep?: number | null;
   /**
+   * Whether THIS sitting administered the app's colour-vision plates. False from creation, true once
+   * the screen's result is stored.
+   *
+   * The result itself is written to the participant record, which is shared across sittings — so its
+   * counts could not say whether the plates were shown in this sitting or only in an earlier one, and
+   * a resume read them as "screened" for every sitting after the first. Resume bookkeeping, not
+   * exported. Absent on sittings started by builds before it was recorded.
+   */
+  colour_vision_screened?: boolean;
+  /**
    * Whether the vendored stimulus typeface was actually available when pre-flight ran. null where
    * the browser gave no answer. The typeface is part of the display condition, so a session that
    * rendered the passage in a fallback face is a session whose stimulus differed from the others.

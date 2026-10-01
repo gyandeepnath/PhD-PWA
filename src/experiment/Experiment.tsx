@@ -19,7 +19,7 @@ import { annotationSegmentSteps, blockPlan, isAnnotationSubsample, type PlannedS
 import { CONFIG, isE2ETimingActive } from './config';
 import {
   initialState, nextStateSkipping, progressPercent, firstUnsatisfiedSetupStage, resumeOwesBaselines,
-  loopEntry, baselineStagesHeld, type MachineState,
+  loopEntry, setupStagesHeld, sittingProfileComplete, sittingColourVisionScreened, type MachineState,
 } from './stateMachine';
 import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
 import { put, get, remove, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows, clearSessionStageRows, storageIsFull } from '@/storage/db';
@@ -139,7 +139,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const transitioning = useRef(false);
 
   /**
-   * Baseline stages a resumed sitting already holds, stepped over by advance() while the resume walks
+   * Administered stages a resumed sitting already holds (the colour-vision plates and the two
+   * baselines; see setupStagesHeld), stepped over by advance() while the resume walks
    * the setup chain. Empty otherwise, and emptied when the resume re-enters the loop.
    */
   const resumeHeld = useRef<ReadonlySet<Stage>>(new Set());
@@ -444,15 +445,20 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
        * App.tsx remounts Experiment, so useTracking() comes back at status 'unavailable' with the
        * EAR and gaze baselines — which live in refs — cleared. Those thresholds are fractions of
        * this participant's own open-eye baseline, so they cannot be inherited.
+       *
+       * The profile and the colour-vision plates are judged by what THIS sitting holds, not by the
+       * participant record, which the first sitting created and every later one shares: read from
+       * the record, a second sitting stopped on its profile resumed past it and never recorded its
+       * own caffeine, sleep, correction or colour-vision answers. See sittingProfileComplete.
        */
       const participantRow = await get('participants', s.participant_id);
       const cvsqRows = await getAllByIndex('cvsq_scores', 'by_session', s.session_id);
       const wantsCamera = s.media_consent?.camera_metrics === true;
       const prereqs = {
         consentGiven: s.consent_given === true,
-        hasParticipantRecord: !!participantRow,
+        profileComplete: sittingProfileComplete(s),
         preflightComplete: s.preflight_complete === true,
-        colourVisionScreened: participantRow?.cvd_screen_total != null,
+        colourVisionScreened: sittingColourVisionScreened(s, participantRow),
         hasBaselineCvsq: cvsqRows.some((c) => c.stage === 'baseline'),
         hasBaselineFatigue: !!baseline,
         wantsCamera,
@@ -511,7 +517,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         // the loop, which still owes the instructions (above).
         resumeConsumeAt.current = resumeOwesBaselines(prereqs) || neverReachedLoop ? 'INSTRUCTIONS' : 'CALIBRATION';
         // Whatever the walk passes that this sitting already holds is stepped over, not re-administered.
-        resumeHeld.current = baselineStagesHeld(prereqs);
+        resumeHeld.current = setupStagesHeld(prereqs);
         setMachine({ stage: owed, stepIndex: loopTarget });
       } else if (neverReachedLoop) {
         // Setup is complete but the loop was never entered: the instructions, then the first grey field.
@@ -794,6 +800,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       randomisation_seed: enrol,
       condition_order: sittingPlan.map((s) => s.conditionIndex),
       preflight_complete: false,
+      // This sitting's own record that its plates were shown; see sittingColourVisionScreened.
+      colour_vision_screened: false,
       // Stamped at creation, so a session run on a bookmarked ?e2e URL can never be mistaken for
       // real data: every protocol duration in it was a token value.
       e2e_timing: isE2ETimingActive(),
@@ -1272,6 +1280,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                   exclusion_reason: verdict.exclusion_reason,
                 });
               }
+              // On the SITTING as well: the participant record above cannot say which sitting showed
+              // the plates, and a resume must know whether this one did. See sittingColourVisionScreened.
+              const fresh = { ...session, colour_vision_screened: true };
+              await put('sessions', fresh);
+              setSession(fresh);
             }
           }}
           /*

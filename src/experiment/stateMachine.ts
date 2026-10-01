@@ -14,7 +14,7 @@
  * Adaptation is skipped after the final condition (nothing to adapt to). Transitions are pure
  * functions of (stage, stepIndex) so they are unit-testable in isolation from React.
  */
-import type { Stage } from '@/storage/types';
+import type { ParticipantRecord, SessionRecord, Stage } from '@/storage/types';
 import { N_CONDITIONS } from './conditions';
 import { TASKS_PER_CONDITION, CONFIG } from './config';
 
@@ -245,8 +245,10 @@ export function isInLoop(stage: Stage): boolean {
  */
 export interface ResumePrerequisites {
   consentGiven: boolean;
-  hasParticipantRecord: boolean;
+  /** THIS sitting's profile stage ran. See sittingProfileComplete. */
+  profileComplete: boolean;
   preflightComplete: boolean;
+  /** THIS sitting administered the colour-vision plates. See sittingColourVisionScreened. */
   colourVisionScreened: boolean;
   hasBaselineCvsq: boolean;
   hasBaselineFatigue: boolean;
@@ -256,7 +258,7 @@ export interface ResumePrerequisites {
 
 export function firstUnsatisfiedSetupStage(p: ResumePrerequisites): Stage | null {
   if (!p.consentGiven) return 'CONSENT';
-  if (!p.hasParticipantRecord) return 'PARTICIPANT_PROFILE';
+  if (!p.profileComplete) return 'PARTICIPANT_PROFILE';
   if (!p.preflightComplete) return 'PREFLIGHT';
   if (!p.colourVisionScreened) return 'COLOR_VISION';
   /**
@@ -281,6 +283,38 @@ export function firstUnsatisfiedSetupStage(p: ResumePrerequisites): Stage | null
 }
 
 /**
+ * THIS SITTING'S profile stage ran — read from the sitting, never from the participant record.
+ *
+ * The check used to be "a participant record exists". That record is created by the first sitting's
+ * profile stage and SHARED by every later one, so in a second sitting (a split, or a new protocol
+ * pass) it was satisfied before that sitting had asked anything. A second sitting stopped on the
+ * profile — "Exit — resume later" makes that one tap — resumed past it, and the sitting never
+ * recorded its own caffeine and hours since waking (exported blank as caffeine_today_session and
+ * hours_since_sleep_session), nor its correction type (contact-lens wear on a test day is an
+ * exclusion) or colour-vision answers. The Exit dialog and the operator manual both promise a
+ * resume at the first setup screen not yet completed.
+ *
+ * The profile's per-sitting product is the state pair it writes on the session; both are required
+ * answers, so neither is null once the stage has run.
+ */
+export function sittingProfileComplete(s: Pick<SessionRecord, 'caffeine_today' | 'hours_since_sleep'>): boolean {
+  return s.caffeine_today != null && s.hours_since_sleep != null;
+}
+
+/**
+ * THIS SITTING administered the colour-vision plates. Same flaw, same fix: the result's counts sit on
+ * the shared participant record, so after the first sitting they answered "screened" for every
+ * sitting. The sitting's own flag decides; a sitting started before the flag existed falls back to
+ * the record, which is what it was resumed on then.
+ */
+export function sittingColourVisionScreened(
+  s: Pick<SessionRecord, 'colour_vision_screened'>,
+  participant: Pick<ParticipantRecord, 'cvd_screen_total'> | undefined,
+): boolean {
+  return s.colour_vision_screened ?? participant?.cvd_screen_total != null;
+}
+
+/**
  * The next state, stepping over stages whose product the sitting already holds.
  *
  * A resume that has to re-run camera setup and calibration AND still owes a baseline walks the
@@ -288,7 +322,7 @@ export function firstUnsatisfiedSetupStage(p: ResumePrerequisites): Stage | null
  * the baseline CVS-Q was saved and before the baseline fatigue scale re-administered the CVS-Q and
  * stored a second baseline row. Two baselines with different totals make the CVS-Q change score
  * ambiguous for that participant, and the second was answered by someone who had just seen the
- * questionnaire. `satisfied` names the stages already done (see baselineStagesHeld); it is empty
+ * questionnaire. `satisfied` names the stages already done (see setupStagesHeld); it is empty
  * outside a resume walk, where this is exactly nextState.
  */
 export function nextStateSkipping(
@@ -300,9 +334,15 @@ export function nextStateSkipping(
   return n;
 }
 
-/** The baseline stages whose rows a resumed sitting already holds, and so must not re-run. */
-export function baselineStagesHeld(p: ResumePrerequisites): ReadonlySet<Stage> {
+/**
+ * The administered stages whose product a resumed sitting already holds, and so must not re-run: the
+ * two baselines, and the colour-vision plates — shown twice in one sitting they are the same plates
+ * (the set is seeded per sitting), so the second look is a memory test. A walk that starts before the
+ * plates (a resume owing the profile or pre-flight) steps over them when this sitting has them.
+ */
+export function setupStagesHeld(p: ResumePrerequisites): ReadonlySet<Stage> {
   const held = new Set<Stage>();
+  if (p.colourVisionScreened) held.add('COLOR_VISION');
   if (p.hasBaselineCvsq) held.add('CVSQ_BASELINE');
   if (p.hasBaselineFatigue) held.add('BASELINE_FATIGUE');
   return held;

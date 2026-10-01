@@ -14,11 +14,15 @@
  * `session_complete` came out TRUE and the codebook's own filter admitted the row.
  */
 import { describe, it, expect } from 'vitest';
-import { firstUnsatisfiedSetupStage, SETUP_ORDER, type ResumePrerequisites } from '@/experiment/stateMachine';
+import { readFileSync } from 'node:fs';
+import {
+  firstUnsatisfiedSetupStage, SETUP_ORDER, setupStagesHeld, sittingColourVisionScreened, sittingProfileComplete,
+  type ResumePrerequisites,
+} from '@/experiment/stateMachine';
 
 const complete: ResumePrerequisites = {
   consentGiven: true,
-  hasParticipantRecord: true,
+  profileComplete: true,
   preflightComplete: true,
   colourVisionScreened: true,
   hasBaselineCvsq: true,
@@ -33,7 +37,7 @@ describe('a resume re-enters setup at the first thing that is missing', () => {
 
   it.each([
     ['consentGiven', 'CONSENT'],
-    ['hasParticipantRecord', 'PARTICIPANT_PROFILE'],
+    ['profileComplete', 'PARTICIPANT_PROFILE'],
     ['preflightComplete', 'PREFLIGHT'],
     ['colourVisionScreened', 'COLOR_VISION'],
     ['hasBaselineCvsq', 'CVSQ_BASELINE'],
@@ -46,14 +50,14 @@ describe('a resume re-enters setup at the first thing that is missing', () => {
     // A session interrupted at the very start is missing everything; it must be sent to the
     // EARLIEST unsatisfied stage, because the later ones depend on it.
     const nothing: ResumePrerequisites = {
-      consentGiven: false, hasParticipantRecord: false, preflightComplete: false,
+      consentGiven: false, profileComplete: false, preflightComplete: false,
       colourVisionScreened: false, hasBaselineCvsq: false, hasBaselineFatigue: false,
       wantsCamera: true,
     };
     expect(firstUnsatisfiedSetupStage(nothing)).toBe('CONSENT');
 
     // And each stage it returns is a real member of the setup chain.
-    for (const k of ['consentGiven', 'hasParticipantRecord', 'preflightComplete',
+    for (const k of ['consentGiven', 'profileComplete', 'preflightComplete',
       'colourVisionScreened', 'hasBaselineCvsq', 'hasBaselineFatigue'] as const) {
       const s = firstUnsatisfiedSetupStage({ ...complete, [k]: false });
       expect(SETUP_ORDER).toContain(s);
@@ -117,5 +121,60 @@ describe('a resumed session still owes its pre-exposure baselines', () => {
     const { resumeOwesBaselines } = await import('@/experiment/stateMachine');
     expect(firstUnsatisfiedSetupStage(complete)).toBeNull();
     expect(resumeOwesBaselines(complete)).toBe(false);
+  });
+});
+
+/**
+ * The profile and the colour-vision plates are owed PER SITTING.
+ *
+ * Both used to be read off the participant record, which the first sitting creates and every later
+ * sitting shares. In a second sitting (a split, or a new protocol pass) both were therefore
+ * "satisfied" before that sitting had shown either: stopped on its profile — one tap on "Exit —
+ * resume later" — it resumed straight to pre-flight, and its own caffeine, hours since waking,
+ * correction type and colour-vision answers were never recorded (caffeine_today_session and
+ * hours_since_sleep_session exported blank). The verdict must come from the sitting itself.
+ */
+describe('a second sitting owes its own profile and its own colour-vision screen', () => {
+  const sittingOneRow = { cvd_screen_total: 6 };
+
+  it('a sitting whose profile has not run is not complete, whatever the participant record holds', () => {
+    // Sitting 2, stopped on the profile: the record from sitting 1 exists, this session has no state pair.
+    expect(sittingProfileComplete({ caffeine_today: undefined, hours_since_sleep: undefined })).toBe(false);
+    expect(sittingProfileComplete({ caffeine_today: null, hours_since_sleep: null })).toBe(false);
+    // Both are required answers; one without the other is a write that did not finish.
+    expect(sittingProfileComplete({ caffeine_today: false, hours_since_sleep: null })).toBe(false);
+    // A real answer, including "no caffeine" and "0 hours", is a completed profile.
+    expect(sittingProfileComplete({ caffeine_today: false, hours_since_sleep: 0 })).toBe(true);
+  });
+
+  it('so the resume sends that sitting to the profile, not past it', () => {
+    const p = { ...complete, profileComplete: sittingProfileComplete({}), wantsCamera: true };
+    expect(firstUnsatisfiedSetupStage(p)).toBe('PARTICIPANT_PROFILE');
+  });
+
+  it('the plates are judged by the sitting\'s own flag, not by an earlier sitting\'s counts', () => {
+    expect(sittingColourVisionScreened({ colour_vision_screened: false }, sittingOneRow)).toBe(false);
+    expect(sittingColourVisionScreened({ colour_vision_screened: true }, sittingOneRow)).toBe(true);
+    expect(sittingColourVisionScreened({ colour_vision_screened: true }, undefined)).toBe(true);
+    // A sitting started before the flag existed is resumed as it was then, from the record.
+    expect(sittingColourVisionScreened({}, sittingOneRow)).toBe(true);
+    expect(sittingColourVisionScreened({}, { cvd_screen_total: null })).toBe(false);
+  });
+
+  it('a walk that passes the plates steps over them when this sitting already has them', () => {
+    // Shown twice in one sitting they are the same seeded plates: the second look is a memory test.
+    const held = setupStagesHeld({ ...complete, profileComplete: false, colourVisionScreened: true });
+    expect(held.has('COLOR_VISION')).toBe(true);
+    expect(setupStagesHeld({ ...complete, colourVisionScreened: false }).has('COLOR_VISION')).toBe(false);
+  });
+
+  it('the app reads both from the sitting, and every new sitting starts unscreened', () => {
+    const src = readFileSync('src/experiment/Experiment.tsx', 'utf8');
+    expect(src).toMatch(/profileComplete: sittingProfileComplete\(s\)/);
+    expect(src).toMatch(/colourVisionScreened: sittingColourVisionScreened\(s, participantRow\)/);
+    expect(src).toMatch(/colour_vision_screened: false,/);
+    expect(src).toMatch(/colour_vision_screened: true \}/);
+    // The shared record is no longer what the profile check reads.
+    expect(src).not.toMatch(/!!participantRow/);
   });
 });

@@ -6,7 +6,7 @@ import {
   shouldBreakAfter,
   loopEntry,
   nextStateSkipping,
-  baselineStagesHeld,
+  setupStagesHeld,
   TOTAL_TRACKED_STEPS,
   type MachineState,
 } from '@/experiment/stateMachine';
@@ -245,17 +245,17 @@ describe('every route into a condition passes through the grey field', () => {
 
 describe('a resume walk does not re-administer a baseline the sitting already holds', () => {
   const base = {
-    consentGiven: true, hasParticipantRecord: true, preflightComplete: true, colourVisionScreened: true,
+    consentGiven: true, profileComplete: true, preflightComplete: true, colourVisionScreened: true,
     wantsCamera: true,
   };
 
   it('interrupted after the baseline CVS-Q: the walk goes calibration -> fatigue, not -> CVS-Q again', () => {
-    const held = baselineStagesHeld({ ...base, hasBaselineCvsq: true, hasBaselineFatigue: false });
+    const held = setupStagesHeld({ ...base, hasBaselineCvsq: true, hasBaselineFatigue: false });
     expect(nextStateSkipping({ stage: 'CALIBRATION', stepIndex: 0 }, N_CONDITIONS, held).stage).toBe('BASELINE_FATIGUE');
   });
 
   it('owing both, it walks both', () => {
-    const held = baselineStagesHeld({ ...base, hasBaselineCvsq: false, hasBaselineFatigue: false });
+    const held = setupStagesHeld({ ...base, hasBaselineCvsq: false, hasBaselineFatigue: false });
     const s1 = nextStateSkipping({ stage: 'CALIBRATION', stepIndex: 0 }, N_CONDITIONS, held);
     expect(s1.stage).toBe('CVSQ_BASELINE');
     expect(nextStateSkipping(s1, N_CONDITIONS, held).stage).toBe('BASELINE_FATIGUE');

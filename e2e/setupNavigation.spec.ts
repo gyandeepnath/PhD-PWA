@@ -203,6 +203,71 @@ test('Exit — resume later from setup leaves one resumable sitting, and the res
   expect(c).toEqual({ sessions: 1, participants: 1, cvsq_scores: 1, fatigue_scores: 1 });
 });
 
+test('a second sitting stopped on its profile resumes ON the profile, and records that sitting\'s own answers', async ({ page }) => {
+  /*
+   * The profile used to count as done once a participant record existed — and the record is created
+   * by the FIRST sitting and shared by the second. So sitting 2, left on its profile with "Exit —
+   * resume later", resumed at pre-flight and never recorded its own caffeine, hours since waking,
+   * correction or colour-vision answers. The colour-vision plates had the same flaw.
+   */
+  test.setTimeout(400_000);
+  const PID = 'SPLITX';
+  await startNewExperiment(page);
+  // Sitting 1 of a split, driven to its end.
+  for (let guard = 0; ; guard++) {
+    if (guard > 600) throw new Error('sitting 1 did not finish');
+    if (await handleStage(page, await stageNow(page), { split: true, participantId: PID })) break;
+  }
+  const [one] = await all(page, 'sessions');
+  expect(one.status).toBe('complete');
+
+  // Sitting 2, same participant: consent, then stopped on the profile.
+  await page.getByTestId('nav-sessions').click();
+  await page.getByRole('button', { name: /New Session/ }).click();
+  await page.waitForSelector('[data-stage="SESSION_INIT"]');
+  await handleStage(page, 'SESSION_INIT', { split: true, participantId: PID });
+  await handleStage(page, 'CONSENT');
+  expect(await stageNow(page)).toBe('PARTICIPANT_PROFILE');
+  await page.getByTestId('nav-exit').click();
+  await page.getByTestId('confirm-ok').click();
+  await page.getByRole('button', { name: /^Resume →/ }).click();
+  await page.waitForFunction(() => {
+    const s = document.querySelector('[data-stage]')?.getAttribute('data-stage');
+    return s && s !== 'SESSION_INIT';
+  });
+  // The first setup screen this sitting has not completed — the profile, not pre-flight.
+  expect(await stageNow(page)).toBe('PARTICIPANT_PROFILE');
+  await recordStages(page);
+
+  // This sitting's answers, chosen to differ from sitting 1's (glasses, no caffeine, 3 h awake).
+  await setInput(page, 'age', '30');
+  await setInput(page, 'hours', '6');
+  for (const name of ['female', 'high', 'dim', 'none', 'normal']) {
+    await page.getByRole('button', { name, exact: true }).click();
+  }
+  await page.getByRole('button', { name: 'no', exact: true }).first().click();
+  await page.getByRole('button', { name: 'yes', exact: true }).nth(1).click();
+  await setInput(page, 'since-sleep', '9');
+  await page.getByRole('button', { name: /^Continue/ }).click();
+  await waitStageChange(page, 'PARTICIPANT_PROFILE');
+  await driveUntil(page, 'CAMERA_SETUP');
+  const seen = await stagesSeen(page);
+  // And this sitting's own colour-vision plates, which sitting 1's result no longer stands in for.
+  expect(seen, seen.join(' > ')).toEqual(['PARTICIPANT_PROFILE', 'PREFLIGHT', 'COLOR_VISION', 'CAMERA_SETUP']);
+
+  const sittings = await all(page, 'sessions');
+  expect(sittings).toHaveLength(2);
+  const two = sittings.find((s) => s.session_index === 2)!;
+  expect(two.caffeine_today).toBe(true);
+  expect(two.hours_since_sleep).toBe(9);
+  expect(two.colour_vision_screened).toBe(true);
+  // Sitting 1 keeps its own state pair.
+  expect(sittings.find((s) => s.session_index === 1)!.caffeine_today).toBe(false);
+  const people = await all(page, 'participants');
+  expect(people).toHaveLength(1);
+  expect(people[0].correction_type).toBe('none');
+});
+
 test('Pause inside a condition confirms in the condition\'s own ink; Keep going carries on, Pause and exit leaves', async ({ page }) => {
   await startNewExperiment(page);
   await driveUntil(page, 'READING_TASK');
