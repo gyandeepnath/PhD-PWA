@@ -222,16 +222,26 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
   }
 
   if (quiet) {
-    // Two lines in the bottom-left corner — on reading, below the passage, left of the footer's
-    // countdown and button — in the screen's ink on no ground.
+    /*
+     * Two lines in the bottom-left corner — on reading, below the passage's rule, in the left of the
+     * footer row, whose countdown and button sit at the right — in the screen's ink on no ground.
+     *
+     * EXACTLY TWO LINES, never wrapped: 2 x 13 px x 1.45 + 12 + 2 = 52 px, inside the footer's 56 px
+     * row (stimulusPage.ts), which the strip shares with nothing. Wrapped, the longest camera state
+     * ("Face seen — blinks NOT counted (no eye baseline)" with the counts after it) made the first
+     * line two, and a 71 px strip rose over the footer's rule into the bottom of the passage's text
+     * box. A line too long for PANEL_STRIP_MAX_PX is cut with an ellipsis; the full card on the
+     * set-up screens and the break says it in full.
+     */
+    const line: React.CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
     return (
-      <div data-testid="researcher-panel-strip" style={{ ...base, color: ink!, background: 'transparent', border: `1px solid ${ink}`, padding: '6px 12px', fontSize: 13, lineHeight: 1.45, maxWidth: PANEL_STRIP_MAX_PX, cursor: 'pointer' }}
+      <div data-testid="researcher-panel-strip" style={{ ...base, color: ink!, background: 'transparent', border: `1px solid ${ink}`, padding: '6px 12px', fontSize: 13, lineHeight: 1.45, maxWidth: PANEL_STRIP_MAX_PX, boxSizing: 'border-box', cursor: 'pointer' }}
         onClick={() => setOpen(false)} role="button" aria-label="Close researcher panel">
-        <div>
+        <div style={line}>
           <span style={{ ...quietDot(9), marginRight: 6 }} />
           {cam.text} · blinks {num(s?.blinks)} ({num(s?.incomplete)} inc) · {num(s?.fps)} fps
         </div>
-        <div>sitting {clock(sittingMs, false)} · condition {p.conditionsDone ?? '—'}/{p.conditionsTotal ?? '—'} · ~{p.minutesLeft ?? '—'} min left</div>
+        <div style={line}>sitting {clock(sittingMs, false)} · condition {p.conditionsDone ?? '—'}/{p.conditionsTotal ?? '—'} · ~{p.minutesLeft ?? '—'} min left</div>
       </div>
     );
   }

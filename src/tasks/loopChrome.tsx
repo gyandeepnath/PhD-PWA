@@ -79,6 +79,8 @@ export function PrimaryButton({ ink, ground, enabled = true, onClick, children, 
     <button
       type="button"
       data-testid={testId}
+      // How e2e/loopChrome.spec.ts finds every primary button in a display, whatever its test id.
+      data-loop-primary=""
       disabled={!enabled}
       onClick={onClick}
       style={{

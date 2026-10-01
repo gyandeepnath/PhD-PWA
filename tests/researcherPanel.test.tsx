@@ -76,6 +76,24 @@ describe('researcher panel', () => {
     m.unmount();
   });
 
+  it('the strip is two lines that never wrap, so it stays inside the reading footer\'s row', () => {
+    // The longest camera state: wrapped, it made the strip three lines (71 px) and lifted it over the
+    // footer's rule into the bottom of the passage.
+    const m = mount({ onStimulus: true, ink: { ink: '#000000', ground: '#FFFFFF' } });
+    m.push(stats({ blinks: null }));
+    act(() => { m.q('researcher-panel-collapsed')!.click(); });
+    const strip = m.q('researcher-panel-strip')!;
+    expect(strip.textContent).toMatch(/blinks NOT counted/);
+    const lines = Array.from(strip.children) as HTMLElement[];
+    expect(lines).toHaveLength(2);
+    for (const l of lines) {
+      expect(l.style.whiteSpace).toBe('nowrap');
+      expect(l.style.overflow).toBe('hidden');
+      expect(l.style.textOverflow).toBe('ellipsis');
+    }
+    m.unmount();
+  });
+
   it('on a condition screen it is an ink indicator: no text, no hue — whatever the camera is doing', () => {
     // Blue text on white, so a hue of the panel's own would differ from the ink. A fresh panel per
     // state: on a condition screen the panel takes at most one reading a second.

@@ -120,10 +120,20 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
    *
    * The selection highlight below is drawn from the condition's own ink, so it says only "this is
    * what you chose", equally legibly in every condition.
+   *
+   * IN FULL INK, reversed — the option filled with the ink and its words in the ground — not a tint.
+   * It was the ink at 8% alpha (text + '15') with the same border as every other option: the tint
+   * stood 1.20:1 off the ground on P1 and 1.15:1 on N1, but 1.04-1.14:1 on the coloured conditions
+   * (1.04 on N2, blue on black; 1.035 on N3) — there the chosen answer could not be told from the
+   * other three — and it also cut the chosen answer's own contrast (21 to 17.5:1 on P1). So whether a
+   * participant could see which answer they had chosen before submitting varied with the very factor
+   * under test (screen audit F9's rule: no alpha on anything the participant must read). Reversed, the
+   * marker has exactly the condition's own contrast, and the chosen answer's words keep it too (ground
+   * on ink is the same pair). The box, border, padding and type are unchanged, so nothing moves.
    */
   const optionStyle = (i: number) => (
     i === selected
-      ? { borderColor: text, background: text + '15' }
+      ? { borderColor: text, background: text, color: background }
       // Full-ink outline: at 30% alpha the unselected options' borders were ~1.1:1 on the dark
       // backgrounds — four answers with no visible edges.
       : { borderColor: text, background: 'transparent' }

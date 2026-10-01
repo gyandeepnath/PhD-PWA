@@ -2153,14 +2153,22 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       {/*
         Below the progress label wherever that label is drawn: both sat at the top right, and the
         warning hid the label completely ("Condition 2 of 10 · break · ~1 min left" was invisible).
-        Outside the condition-run it is set at the operator floor (14 px Roboto, not 12 px mono).
-        Inside the condition-run, where there is no progress label, its place and size are unchanged.
+        Set at the operator floor (14 px Roboto, not 12 px mono).
+
+        NOT INSIDE THE CONDITION-RUN. There it was a cream-and-amber chip in 12 px mono at the top
+        right of every display screen and the grey field, for the whole sitting: fixed colours over
+        the stimulus — the brightest object on a black-background condition and a faint one on a white
+        one — which is the polarity-correlated chrome this file removed from the progress bar and the
+        Pause chip (see showProgress), and in the reaction task's field, inside the corner the dot
+        layout keeps clear. Nothing it asks for can be done mid-display: the screen timeout is set
+        before the sitting, and the warning is on every set-up screen, every break and the closing
+        screens, where the operator can act on it.
       */}
-      {wakeLockUnsupported && (
+      {wakeLockUnsupported && !isInLoop(machine.stage) && (
         <div
           data-testid="wake-lock-warning"
-          className={isInLoop(machine.stage) ? 'font-lab text-xs' : 'font-sans'}
-          style={{ position: 'fixed', top: showProgress ? 44 : 10, right: 12, zIndex: 46, padding: '5px 10px', borderRadius: 8, border: '1px solid #c98a22', background: 'rgba(255,246,229,0.95)', color: '#7a5a10', ...(isInLoop(machine.stage) ? {} : { fontSize: 14 }) }}
+          className="font-sans"
+          style={{ position: 'fixed', top: showProgress ? 44 : 10, right: 12, zIndex: 46, padding: '5px 10px', borderRadius: 8, border: '1px solid #c98a22', background: 'rgba(255,246,229,0.95)', color: '#7a5a10', fontSize: 14 }}
         >
           No screen wake lock on this device — confirm the screen timeout is longer than the sitting
         </div>
