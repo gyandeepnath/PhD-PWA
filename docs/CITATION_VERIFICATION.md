@@ -962,6 +962,14 @@ extends over a factor of 10 in angular print size (x-height) from approximately 
 why a display scale locked at 0.5 (x-height about 7.5′ at 55 cm) presented a non-comparable stimulus,
 and for the reading-text size decision.
 
+Further full-text passages checked (1 Oct 2026, PMC3428264), cited for the Round 63 decision to draw
+the reading text at its true 22 px and no larger: *"The CPS typically lies in the range from about
+0.15° to 0.3° depending on the individual, stimulus factors such as font (), and the methods for
+measuring reading speed"*; newspapers *"a mean visual angle of 0.23° in a range from 0.20° to 0.26°"*;
+*"For paperback books, the mean visual angle is 0.24°"*, the same rounded mean for hardcovers; and
+*"The x-heights are given in degrees of visual angle assuming a 40 cm reading distance"*. Also verbatim
+in the full text: *"print size interacts with text contrast in affecting reading speed."*
+
 ### 48. Kolbe, Müller, Degle & Anders (2023) — character size against ISO 9241-303
 **Status: CONFIRMED.** PMID 37278397 · DOI [10.1111/opo.13170](https://doi.org/10.1111/opo.13170)
 
@@ -976,6 +984,45 @@ size was 14.29 angular minutes (3.53) and therefore… significantly too small c
 9241-303:2011."* Cited only for: 22′ (uppercase height) lies within the ISO/ANSI recommended range
 and 14.3′ is below it. The standards' exact minimum and preferred values were NOT read at source (the
 standards are paywalled) and must not be quoted from this entry.
+
+### 50. Legge, Rubin & Luebker (1987) — contrast and character size in reading
+**Status: CONFIRMED.** PMID 3660667 · DOI [10.1016/0042-6989(87)90028-9](https://doi.org/10.1016/0042-6989(87)90028-9)
+
+> Legge, G. E., Rubin, G. S., & Luebker, A. (1987). Psychophysics of reading—V. The role of contrast in
+> normal vision. *Vision Research, 27*(7), 1165–1177.
+
+Metadata matches PubMed. Claim checked against the abstract only, verbatim: *"Reading rates were
+highest (about 350 words/min) for letters ranging in size from 0.25 degree to 2 degrees. Within this
+range, reading was very tolerant to contrast reduction"* and *"The results were very similar for
+white-on-black and black-on-white text."* Cited (config.ts, READING_FONT_SIZE_PX) for why the reading
+text was not enlarged beyond its true 22 px: contrast differences between conditions matter least for
+comfortably large print. Full text not read.
+
+### 51. Ohnishi et al. (2020) — critical print size rises as contrast falls
+**Status: CONFIRMED.** PMID 31855668 · DOI [10.1016/j.visres.2019.09.010](https://doi.org/10.1016/j.visres.2019.09.010)
+
+> Ohnishi, M., Otsukuni, T., Takahashi, A., Sugiyama, M., Hirakimoto, M., Ogawa, S., Suzuki, A.,
+> Oshima, Y., Sheu, C.-F., & Oda, K. (2020). Effects of luminance contrast and character size on
+> reading speed. *Vision Research, 166*, 52–59.
+
+Metadata matches PubMed (ten authors; the shorthand "Ohnishi et al." is used in code). Claim checked
+against the abstract only, verbatim: *"CPS was found to increase as the luminance contrast
+decreased. The relationship between contrast and CPS was linear in log-log coordinates."* The stimuli
+were Japanese phrases read aloud; transfer to English silent reading is an inference. Cited for why
+the comprehension options, drawn in the condition colours, had to be raised to the passage's size.
+
+### 52. Chung (2004) — vertical word spacing
+**Status: CONFIRMED.** PMID 15252352 · PMC2734885 · DOI [10.1097/00006324-200407000-00014](https://doi.org/10.1097/00006324-200407000-00014)
+
+> Chung, S. T. L. (2004). Reading speed benefits from increased vertical word spacing in normal
+> peripheral vision. *Optometry and Vision Science, 81*(7), 525–535.
+
+Metadata matches PubMed. Claim checked against the abstract only, verbatim: *"At the fovea, reading
+speed increased with vertical word spacing up to about 1.2x to 1.5x the standard spacing and remained
+constant and similar to the unflanked reading speed at larger vertical word spacings."* Five observers,
+RSVP of unrelated four-letter words — not page reading. The abstract does not define the "standard
+spacing" in CSS line-height terms, so the Round 63 line height of 1.4 rests on this source only as a
+judgement, and the code says so.
 
 ## NOT INDEXED IN PUBMED — verified against a secondary authority, or unverified
 

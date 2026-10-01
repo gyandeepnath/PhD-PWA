@@ -3733,3 +3733,60 @@ F14-F17, F21).
 Verification: `npm run verify` green, 1130 unit tests (new: `tests/navigation.test.ts`); 49 end-to-end
 tests pass, including the new `setupNavigation`, `sessionManager` and `dashboardTabs` specs, whose
 clicks are not forced. Every changed screen was photographed at 1152x720 and 1152x650 and inspected.
+
+## Round 63 — stimulus coverage: the canvas, reading, comprehension and search
+
+The investigator asked for the task content to cover more of the screen, worried that a small
+stimulus area would make the ten conditions give the same results. The round-62 screen audit and an
+evidence review (both in the session scratchpad, `round62/`) found the real problem was an accident of
+scaling, not of design.
+
+**What was wrong.** The design canvas was 1194x834 (an iPad's shape). On the study tablet (Xiaomi Pad
+6, 1152x720 CSS px installed, 1152x650 in a browser tab) it was height-bound, so every stimulus was
+drawn at 0.86 (0.76 in a tab) and 29-37% of the width was empty margin. The protocol's 22 px reading
+text arrived as 18.9 px (16.7 px), an x-height of about 12.8′ (11.3′) at 55 cm — at or below the
+0.2° (12′) consensus critical print size (Legge & Bigelow 2011, ledger 47). The comprehension options,
+17 design px, arrived at about 9.9′ — below it — and are drawn in the condition colours, so in the
+low-contrast conditions comprehension partly measured option legibility (the critical print size
+rises as contrast falls: Ohnishi et al. 2020, ledger 51).
+
+**Why not simply bigger text.** The polarity advantage is carried by overall display luminance and
+pupil size (Buchner, Mayr & Brandt 2009, ledger 9; Piepenbrock et al. 2014b, ledger 22), and the
+background already fills 100% of every condition screen (guarded by `e2e/stimulusFill.spec.ts`).
+Letters cover about 10% of a text block, so enlarging the block moves mean screen luminance by about
+2 points, slightly toward the other polarity. And contrast/polarity differences are largest near the
+critical print size and shrink as print grows (Piepenbrock et al. 2014a, ledger 22; Legge, Rubin &
+Luebker 1987, ledger 50). Text much larger than true 22 px would make the conditions MORE alike.
+
+**What changed** (identical in all ten conditions):
+- Design canvas 1152x720, with a 1% snap to 1.0 — scale 1.0 in the installed app, 0.90 in a tab.
+  `STIMULUS_COLUMN_PX` is now an explicit 1040 px (90% of the width), no longer `0.8 x DESIGN_WIDTH`.
+- Reading: true 22 px (x-height 14.9′ at 55 cm; 16.4′ / 13.7′ at 50 / 60 cm — ordinary book print,
+  0.24° in Legge & Bigelow's survey), line height 1.4 (was 1.6), three pages as before. Measured at
+  1152x720: all 30 pages fit, 69-91% of the text box, at least 47 px spare; 104 characters per line
+  (91-112); the text block covers 48-64% of the screen (35-45% before). Line height 1.4 is a
+  judgement: at 1.6 three pages do not fit at the true size, and Chung (2004, ledger 52) found foveal
+  reading speed flat beyond about 1.2-1.5x standard spacing.
+- The reading footer keeps one height locked and unlocked, so the passage no longer jumps about 10 px
+  when "Next page" appears (30 times a sitting, inside the blink window). An e2e check asserts the
+  block top is identical before and after.
+- Comprehension: question and options at the passage's 22 px, line height and 1040 px width, one
+  stacked column, left-aligned. All 30 items fit with at least 105 px spare; option bars 59-90 px tall;
+  the block covers 56-71% of the screen (31-40% before). Added to the stimulus-fit guard.
+- Visual search on the reading geometry; the 190-word excerpt cap and the 4-11 targets are unchanged
+  (all 10 fit, at least 38 px spare). Word tap targets padded vertically without moving any glyph;
+  spacing spans no longer intercept taps.
+- Pre-flight records how the app was launched (`display_mode`, also per condition in
+  02_conditions.csv). If it is not the installed full-screen app, the operator must tick a warning to
+  continue, recorded as `display_mode_acknowledged`. The scale check now expects 1.0.
+
+**Data consequence.** Rows from before and after this round are different stimuli (scale, column,
+line height); the codebook entries for `stimulus_scale` say so. Absolute reading speed, comprehension
+response time and search time are not comparable with pilot data; the condition contrasts are not
+affected.
+
+**Synopsis lines to update (not edited):** SYNOPSIS_AdtU.md line 335 "Passages of four pages" — three
+pages since Round 44, unchanged here. MASTER_BLUEPRINT.md's reading line updated (line height 1.4,
+1040 px column).
+
+Verified: npm run verify green (1136 tests); fit measured at 1152x720 and 1152x650.

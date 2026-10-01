@@ -54,7 +54,13 @@ tablet's own camera during the reading task. Two consequences for you:
   condition, which is the independent variable, and they invalidate the red-green colour-vision
   plates.
 - Screen timeout disabled. Do Not Disturb on. Aeroplane mode on.
-- Landscape, fullscreen, launched from the home-screen icon.
+- Landscape, fullscreen, launched from the home-screen icon. **This now matters for the stimulus,
+  not only for tidiness.** The screens are laid out for the tablet's own full screen (1152x720). In
+  the installed app the reading text is its protocol size, 22 px. In a browser tab the address bar
+  takes about a tenth of the height and everything is drawn about 10% smaller. Pre-flight checks how
+  the app was launched; if it is not the installed full-screen app it shows a warning you must tick
+  to continue, and that tick is recorded as a protocol deviation (`display_mode_acknowledged`).
+  Close the tab and open the app from its icon instead.
 - Battery above 80 per cent, or keep it on charge.
 - **Never run a session in a private or incognito window.** The data is thrown away when the window
   closes and nothing warns you at the time. Always launch from the home-screen icon. Pre-flight
