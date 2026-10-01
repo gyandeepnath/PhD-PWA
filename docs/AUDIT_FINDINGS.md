@@ -3873,3 +3873,195 @@ Pause dialog's keyboard check were run against the code before their fixes and f
 portrait case was not run there, but the same measurement on that code showed the "Nothing is lost"
 wording and one calibration row written in portrait. The unforced taps (item 7) are added coverage:
 those buttons were already reachable.
+
+## Round 65 — screens and navigation, part 2: inside the condition loop
+
+Part 1 (Round 62, with the review fixes of Round 64) dealt with the operator and setup screens. This
+part covers the screens between the grey field and the last reaction-time trial: the words and
+controls around the stimulus (screen audit F9, F10, F13b/c, F14-F17) and the in-loop Pause chip that
+part 1 deferred. **Not changed:** the reading, comprehension and search typography and geometry set
+in Round 63, the reaction-time dot (size, positions, colours, timing; the positions are the next
+round's), the grey field, and every condition colour. Everything changed is identical in all ten
+conditions apart from the condition's own ink and ground.
+
+The work was done in two commits. The first (`71c66e0`) was committed at a green checkpoint after an
+interruption; this round audited it against each finding, kept what was right, and finished or
+corrected the rest (`f07707c` and the commits after it). Both are described together below.
+
+**One list of steps (F14).** The instructions screen listed five steps, while the task screens said
+"Task 1 of 4" to "Task 4 of 4" and left the ratings unnumbered, so step 4 was announced as "Task 3".
+`TASK_STEPS` (`src/experiment/taskSteps.tsx`) is now the one source for the instructions list and
+every eyebrow: Reading, Questions, Ratings (both rating screens), Word search, Reaction.
+`tests/taskSteps.test.ts` holds it to the state machine's `LOOP_ORDER` and every screen to it.
+`71c66e0`'s comments cited this test, but it had not been written.
+
+**Where the participant is (F13b/c).** "Display k of N · Step j of 5 · Name" is on the three task
+intro cards and the two rating screens only. The questions show their step alone ("Step 2 of 5 ·
+Questions"). The reading page, the search excerpt and the reaction-time field carry no step or
+display label. Within-task counters ("Page 1 of 3", "Question 1 of 3", "4 of 11 found") share one
+style (16 px, weight 500) and one place, at the right-hand end of the column's header row. The
+reading page's translucent page bar, a second "page 1 of 3", was removed rather than redrawn. The
+reading and search headers have a fixed height (39.5 and 33.5 px, their Round 63 heights), so
+restyling them could not move the text box.
+
+**Legibility (F9).** Inside a display every word a participant has to read is now at least 16 design
+px (16 CSS px in the installed app, 14.4 with the address bar), in Roboto, at full ink and full
+opacity. Before, in design px: eyebrows 12 (DM Mono), the fatigue scale's "0" and "10" 11 and its
+items 14, both rating instructions 12, the perception anchors 14, the reading title 13 and page
+counter 12, the countdown 14 over a bar at 70% alpha, the reaction-time key 14, and the trial
+counter 12 at half opacity. The fatigue scale had also drawn its answered values, track and button
+in a fixed blue (#4f8ef7, 3.2:1 on the cream) at the baseline. It now uses the ink, so the
+instrument looks the same at the baseline as after each display. The rating screens were re-checked
+for fit at 1152x720, 1152x713 and 1152x650 (`allScreensFit`).
+
+Found in the audit and fixed:
+- *The chosen comprehension answer* was marked only by the ink at 8% alpha, with the same border as
+  the other three. The tint stood 1.20:1 off the ground on P1 and 1.15:1 on N1, but 1.035-1.14:1 on
+  the coloured conditions (1.035 on N3, 1.04 on N2). On those the chosen answer could not be told
+  from the others before Submit; the screenshots at N5 show it. It also cut the chosen answer's own
+  contrast (21 to 17.5:1 on P1). The chosen option is now reversed: filled with the ink, its words
+  in the ground. Its contrast is the condition's own, and box, border, padding and type are
+  unchanged (an e2e check requires every glyph to stay put when an answer is chosen). **Display
+  change for the investigator:** a tapped answer now turns solid. This is the same rule in every
+  condition, and it is not correctness feedback.
+- *The wake-lock warning* (shown only on a device without the wake-lock API) was a cream-and-amber
+  chip in 12 px mono at the top right of every display screen and the grey field. That is fixed
+  colours over the stimulus, the polarity-correlated chrome that `showProgress` removed from the
+  progress bar, and in the reaction field it sat in the corner the dot layout keeps clear. Nothing
+  it asks for can be done mid-display. It is no longer drawn inside the condition loop; it stays on
+  every set-up screen, break and closing screen. Part 1 had left it unchanged inside the loop.
+
+**One primary button (F17).** `PrimaryButton` (`src/tasks/loopChrome.tsx`): 56 px tall (the reading
+footer row, which must not change height), Roboto 17, filled in ink with the ground as its text.
+When not yet available it is a dashed full-ink outline rather than a faded label. One position rule:
+centred on the intro cards; at the right-hand edge of the content everywhere else (the reading and
+search footers, under the options, under the sliders). Before, there were five styles in three
+positions (centred, bottom right, left under the content), in DM Mono at 14 and 16 px. One
+deliberate exception: the grey field keeps its own outlined Continue. That screen is the adaptation
+stimulus, a filled black button would lower its mean luminance, and it is the same in every
+condition.
+
+**The reaction task's card (F15, F16).** The instructions are now the shared intro card, with the
+target dot and the "colour has CHANGED" banner in its `children` slot. Before, it was a card of its
+own in DM Mono, with "Task 4 of 4" as the heading and a 14 px button. Pause is offered on the card,
+where no trial has run, and the task reports when its trials start and end (`onTrialsRunning`).
+Pause disappears at Start and returns once the last trial is over, while the results are saved.
+Accounting:
+- A Pause confirmation opened on the card is notice time like any other (`condition_notice_ms`).
+- Pausing there restarts the condition on resume, which the dialog says.
+- The camera notices, previously deferred over the whole stage, can now appear on the card and are
+  still held back while trials run.
+
+The trial counter is removed rather than enlarged. It was "k/32" at 12 px and half opacity, the only
+chrome in the reaction field, and it counted the six practice trials against the 32 scored ones. At
+full ink and 16 px it would have been a larger, brighter transient at the onset of every trial, in
+the periphery, with its salience following each condition's contrast. The card states the number of
+trials and "Block complete" marks the end. The top-right corner zone (x ≥ 1080, y ≤ 40) is empty.
+
+**The in-loop Pause chip (deferred from part 1).** It is the shared `NavChip` in an ink variant:
+"Pause" at 17 px Roboto in the screen's own ink on no ground. The target is 44 CSS px high at any
+scale (it was a 50 x 24 CSS px target with a 10.3 px label on the tablet at the old 0.86 scale),
+fixed 1 px from the top and 4 px from the left. The conditions for making it legible hold:
+- *Top-left corner, outside the stimulus column.* At scale 1 the target is about (4, 1)-(85, 45) in
+  root px, and every condition screen's column content starts at 46 (`STIMULUS_PAGE_PAD_TOP_PX`).
+  With the address bar (scale 0.90) the root is 1280 px wide, the column starts at 120, and the chip
+  is beside it.
+- *At least 118 px from every planned dot.* The nearest outer-ring dot centre, (310, 94) on the
+  1152x720 canvas, is about 230 px from the target's nearest corner, or about 204 px from the dot's
+  edge. With the address bar it is about 266 px from the edge. Pause is also hidden while the dots
+  run.
+
+The audit changed one thing. `71c66e0` drew the outline the full 44 px, which touched the screen's
+top edge and sat 1 px above the passage title and the search target, as if resting on the page's
+header. The visible outline is now a 34 px box centred in the 44 px target: at scale 1 it runs from
+y 6 to 40, 6 px below the screen's top edge and 6 px above the column's content. The part of the
+target outside the outline is empty corner, so the finger still gets 44 CSS px.
+
+**The researcher panel (F10).**
+- *Setup and closing screens.* The open card docks in a column at the left and pads the screen by
+  it, so the content moves over instead of lying under it. It used to cover "All checks pass —
+  continue" on pre-flight and the baseline fatigue sliders.
+- *Inside a display and on the grey field.* The collapsed panel is a monochrome indicator: a 44 CSS
+  px square outline in the screen's ink with a dot, and no text and no hue. It used to show the
+  sitting clock and turn amber or red, with words, whenever face detection faltered; that was a
+  coloured patch in the periphery during reading and during the colour go/no-go task. It can be
+  opened only on reading and the grey field, as a two-line strip. Everywhere else in a display (the
+  questions, the ratings, search and reaction time) it is locked, so it cannot be opened over the
+  answers or sliders. The same locked indicator is used during the calibration, the self-test and
+  the colour-vision plates. The blocking camera-lost and black-picture notices still fire.
+
+The audit found three gaps and closed them:
+- *The strip could leave its slot.* With a long camera state ("Face seen — blinks NOT counted (no
+  eye baseline)" plus the counts) its first line wrapped. The strip became three lines (71 px) and
+  rose over the footer's rule into the bottom of the passage's text box. It is now exactly two
+  unwrapped lines (52 px, ellipsis if needed), inside the footer row's free left part. The countdown
+  and button are at the right of that row. Decision: the strip keeps that slot rather than being
+  hidden while the countdown shows. Hiding it would flash it off and on at every 20 s unlock, 30
+  times a sitting at the dwell floor, which is the kind of transient Round 63 removed from the
+  footer.
+- *The indicator flickered.* Its dot turned to a ring for any "warn" state, including a face lost
+  for a moment (looking down, leaning in), and back again. It now rings only for a sustained
+  problem: camera stopped or black, no frames, no face for 8 s, or blinks not counted.
+- *It changed during timed procedures.* A dot changing shape in the corner of a dot-detection task
+  is a distractor of the task's own kind. Its rate could even follow the condition, if participants
+  lean closer to low-contrast displays and the face is lost. While reaction-time trials, the
+  calibration dots, the self-test or the colour-vision plates run (`still`), the indicator keeps the
+  look it had when they began. Nothing about it can be acted on mid-block in any case.
+
+**Tests.** `71c66e0`'s comments cited three tests that did not exist. They now do, and each failed
+when its rule was broken on purpose:
+- `tests/loopText.test.ts` checks the source rules: the type floor, no small or monospace labels, no
+  opacity, and ink with alpha only on listed decoration (rules and a found word's tint under its
+  full-ink underline). It also checks the reversed answer, no reaction-time counter, one
+  PrimaryButton per screen and no wake-lock chip in the loop.
+- `tests/taskSteps.test.ts` holds `TASK_STEPS` to `LOOP_ORDER` and every screen's label to it.
+- `e2e/loopChrome.spec.ts` checks two displays of a sitting as rendered, at 1152x720 and 1152x650:
+  - every text node: at least 16 design px, alpha 1, opacity 1;
+  - the labels, counters and button sizes and positions;
+  - the Pause target (44 CSS px, top-left), touching nothing, with 4 px of ground round its outline
+    and at least 118 px to every outer-ring dot;
+  - the indicator: the screen's ink only, no text, tappable only on reading and the grey field;
+  - the strip, inside the footer row and clear of the countdown, the button and the passage, locked
+    and unlocked;
+  - no Pause and no counter while trials run;
+  - the chosen answer reversed with nothing moved;
+  - the same chrome geometry in both displays.
+
+Mutating the reversed answer back to a tint, or the outline back to 44 px, fails it.
+`tests/researcherPanel.test.tsx` gains the strip's two-line rule, ring-only-when-sustained, and
+`still`.
+
+**Decisions for the investigator** (each is the same in every condition, and none changes a
+stimulus's geometry, type or colours):
+- a chosen comprehension answer is shown reversed;
+- the reaction task shows no trial counter;
+- the researcher indicator shows only sustained camera problems and holds still during timed
+  procedures, so the operator no longer sees a momentary face loss during a display;
+- the wake-lock warning is not shown during displays;
+- the camera notices can appear on the reaction task's card.
+
+**Data consequence.** No column, codebook entry or export changed. Comprehension response time per
+item (from the item's onset to Submit) may differ slightly from pilot data now that the chosen
+answer is visible in every condition; Round 63 had already made those times not comparable with the
+pilot.
+
+**Synopsis (read-only, not edited).** No line is contradicted by this round. Informational:
+SYNOPSIS_AdtU_Short.md line 381 still describes an achromatic reaction-time target with the
+chromatic set as distractors. The instrument has run the go-target in the condition's own text
+colour since the investigator's recorded decision in Round 41, and the card this round re-hosts says
+so. That line needs updating with the next synopsis revision.
+
+The operator manual (§5) now describes the in-loop Pause, which is outlined in the display's colour
+and offered on the reaction task's card, and the researcher panel (the indicator, the strip, where
+it cannot be opened, and holding still). It had no account of the panel at all.
+
+Verification: `npm run verify` is green (1179 unit tests; new `tests/loopText.test.ts` and
+`tests/taskSteps.test.ts`, new cases in `tests/researcherPanel.test.tsx`). 50 end-to-end tests pass:
+`fullRun`, `allScreensFit` (1152x720, 1152x713 and 1152x650, and the camera path), `reachability`,
+`stimulusGeometry`, `stimulusFill`, `scaleLock`, `cameraLost`, `cameraBlocked`, `edge`,
+`setupNavigation`, and the new `loopChrome` (both viewports). The stimulus geometry of a whole
+sitting — all 30 reading pages, 30 comprehension items (box, block, question and options) and 10
+search excerpts — was measured at 1152x720 and 1152x650 before this work (at `94f209f`) and after
+it, and is byte-identical. Every screen of a display was photographed at 1152x720 and 1152x650 in a
+positive and a negative condition and inspected; the measured minimum participant text inside a
+display is 16 design px at both (16 and 14.4 CSS px).
