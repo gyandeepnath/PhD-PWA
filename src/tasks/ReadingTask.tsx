@@ -13,6 +13,9 @@ import { trackHiddenTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { TaskIntro } from './TaskIntro';
 import type { Passage } from '@/experiment/passages';
 import { STIMULUS_COLUMN_PX } from '@/lib/viewportScale';
+import {
+  STIMULUS_PAGE_PAD_TOP_PX, STIMULUS_PAGE_PAD_BOTTOM_PX, STIMULUS_FOOTER_ROW_PX, STIMULUS_FOOTER_GAP_PX,
+} from './stimulusPage';
 
 export interface ReadingResult {
   /** Wall-clock reading time MINUS any time the app spent hidden. The exposure. */
@@ -33,6 +36,13 @@ interface Props {
   /** Fired when the participant starts reading — the true opening of the measurement window. */
   onBegin?: () => void;
 }
+
+/**
+ * Width of the locked footer's countdown, right-aligned in the reading column. The researcher panel's
+ * reading strip is at most 440 px from the screen's left edge (ResearcherPanel.tsx), and the column
+ * ends 56 px from the right, so 420 px keeps the two apart on the 1152 px canvas.
+ */
+const COUNTDOWN_WIDTH_PX = 420;
 
 export function ReadingTask({ passage, background, text, onComplete, onBegin }: Props) {
   const [started, setStarted] = useState(false);
@@ -203,11 +213,12 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
        * Fixed pixel padding. The bottom was `3%`, and a percentage padding is a percentage of the
        * containing block's WIDTH — so the reading area was shorter on a wider device, by 2.6 px per
        * 100 px of width, at the same glyph size. The top was 56 px, sized to clear chrome that no
-       * longer sits over the column: the progress bar is gone from the condition-run and the Pause
-       * chip is at the far left, outside the column's 119 px margin. The space returned goes to the
-       * text, which is what lets a third of a passage fit with headroom rather than exactly.
+       * longer sits over the column: the progress bar is gone from the condition-run, and the Pause
+       * chip (top left) ends above the column's first line. The space returned goes to the text,
+       * which is what lets a third of a passage fit with headroom rather than exactly. See
+       * stimulusPage.ts for the numbers.
        */
-      style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', padding: '36px 0 20px', display: 'flex', flexDirection: 'column', height: '100%' }}
+      style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', padding: `${STIMULUS_PAGE_PAD_TOP_PX}px 0 ${STIMULUS_PAGE_PAD_BOTTOM_PX}px`, display: 'flex', flexDirection: 'column', height: '100%' }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         {/* Full ink, like every line on a condition screen that is meant to be read: at 50-60% these
@@ -229,7 +240,9 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
         and page 4 of the same passage 98% full under the same 20 s unlock — the per-page dwell and
         skim checks then meant different things on different pages. The investigator asked for three
         pages, the screen properly used, and justified text; passages.ts now carries three pages of
-        near-equal word count, and this renders them.
+        near-equal word count, and this renders them — since Round 63 at the true 22 px, line height
+        1.4, in the 1040 px column: about 104 characters a line, the text block covering roughly half
+        to two-thirds of the screen (it was about 35-45% at the old 0.86 scale).
 
         No hyphenation (`hyphens: manual`): a word split across two lines is a different reading
         event from an unbroken one, and would vary with the condition only by accident of line
@@ -247,11 +260,15 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
       >
         {/*
           Centred vertically in the page. A ~600-word passage in three pages cannot fill every page
-          identically — measured, pages run 71-91% of the text area on the design canvas — and
+          identically — measured on the 1152x720 canvas, pages run 69-91% of the text area — and
           top-aligned, a short page left the text bunched at the top over an empty band, which is
           what the investigator objected to. Centred, the shortfall becomes even margins. AUTO
           MARGINS rather than justify-content:center, because flex centring pushes the top of
           anything that overflows out of reach; auto margins collapse to zero instead.
+
+          Centring is also why the footer below must never change height: the block sits halfway
+          down whatever box is left, so a footer that grew when Next unlocked moved every line of
+          the passage. See STIMULUS_FOOTER_ROW_PX.
         */}
         <div data-testid="reading-block" style={{ margin: 'auto 0' }}>
           {passage.pages[page].split(/\n{2,}/).map((para, i, all) => (
@@ -268,27 +285,38 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
         </div>
       </div>
 
-      {/* Always-visible footer so the control is never off-screen. */}
-      <div style={{ flexShrink: 0, paddingTop: 12, borderTop: `1px solid ${text}20` }}>
-        {!unlocked ? (
-          <div>
-            <div style={{ fontFamily: '"DM Mono", monospace', fontSize: 14, marginBottom: 6 }}>
-              Please keep reading — you can continue in {secsLeft}s
+      {/*
+        Always-visible footer so the control is never off-screen, and ONE HEIGHT in both states.
+
+        Locked, it holds the countdown; unlocked, the button. It used to be as tall as whichever it
+        held — about 23 px shorter while locked — so when the floor expired the centred passage
+        re-centred and jumped up about 10 px, on every page, inside the blink window (screen audit
+        F3). Both now sit in a row of STIMULUS_FOOTER_ROW_PX, and the button is exactly that tall.
+
+        The countdown sits at the RIGHT, where the button will appear, not across the row: the left
+        of the footer belongs to the researcher panel (its collapsed chip, or its two-line strip
+        when opened), and in the 1040 px column the countdown ran underneath both.
+      */}
+      <div data-testid="reading-footer" style={{ flexShrink: 0, paddingTop: STIMULUS_FOOTER_GAP_PX, borderTop: `1px solid ${text}20` }}>
+        <div style={{ height: STIMULUS_FOOTER_ROW_PX, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+          {!unlocked ? (
+            <div data-testid="reading-countdown" style={{ width: COUNTDOWN_WIDTH_PX, maxWidth: '100%' }}>
+              <div style={{ fontFamily: '"DM Mono", monospace', fontSize: 14, marginBottom: 6 }}>
+                Please keep reading — you can continue in {secsLeft}s
+              </div>
+              <div style={{ height: 6, background: text + '20', borderRadius: 3 }}>
+                <div style={{ height: '100%', width: `${countdownPct}%`, background: text + '70', borderRadius: 3, transition: 'width 0.2s linear' }} />
+              </div>
             </div>
-            <div style={{ height: 6, background: text + '20', borderRadius: 3 }}>
-              <div style={{ height: '100%', width: `${countdownPct}%`, background: text + '70', borderRadius: 3, transition: 'width 0.2s linear' }} />
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          ) : (
             <button
               onClick={next}
-              style={{ background: text, color: background, border: 'none', borderRadius: 12, padding: '16px 32px', fontFamily: '"DM Mono", monospace', fontSize: 16, cursor: 'pointer' }}
+              style={{ height: STIMULUS_FOOTER_ROW_PX, boxSizing: 'border-box', background: text, color: background, border: 'none', borderRadius: 12, padding: '0 32px', fontFamily: '"DM Mono", monospace', fontSize: 16, cursor: 'pointer' }}
             >
               {isLast ? "I've finished reading →" : 'Next page →'}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
     </div>

@@ -17,16 +17,47 @@ const BASE_CONFIG = {
   // Reading: per-page minimum dwell (rAF-gated). The Next button unlocks after this; the
   // participant may take longer (self-paced). reading_time_ms is recorded.
   READING_PAGE_MIN_MS: 20000,
+  /**
+   * The protocol's reading size, and since the canvas was re-based to the study tablet (Round 63)
+   * the size the participant actually sees: 22 CSS px, x-height 14.9 arcmin at 55 cm (16.4 / 13.7 at
+   * 50 / 60 cm), about 0.25 deg — the angular size of ordinary book print, which Legge & Bigelow
+   * (2011, J Vis 11(5):8, full text) put at a mean 0.24 deg at a 40 cm reading distance, and above
+   * the 0.2 deg x-height they give as the consensus critical print size.
+   * On the old 1194x834 canvas it rendered at 18.9 px (16.7 in a browser tab), AT that threshold.
+   *
+   * DELIBERATELY NOT LARGER, although the investigator wanted the task to cover more of the screen.
+   * Contrast- and polarity-driven differences are largest near the critical print size and shrink as
+   * print grows: the positive-polarity advantage "linearly increased with decreasing character size"
+   * (Piepenbrock, Mayr & Buchner 2014a, Hum Factors 56(5):942), reading was "very tolerant to
+   * contrast reduction" for letters from 0.25 to 2 deg (Legge, Rubin & Luebker 1987, Vision Res
+   * 27(7):1165), and the critical print size itself rises as contrast falls (Ohnishi et al. 2020,
+   * Vision Res 166:52) — abstracts read for the last three. Enlarging the text would make the ten
+   * conditions more alike, which works against the study. Coverage came from the wider column
+   * (STIMULUS_COLUMN_PX) and from filling the page height instead.
+   */
   READING_FONT_SIZE_PX: 22,
-  READING_LINE_HEIGHT: 1.6,
+  /**
+   * 1.4, from 1.6 (Round 63). At the true 22 px, in the 1040 px column, a third of a ~590-word
+   * passage fits the 720 px screen only at 1.45 or less: at 1.6 every column width tried left some
+   * page 18-53 px too tall, which would have meant a fourth page per passage (re-paginating the
+   * corpus the investigator had cut to three). Measured at 1.4: all 30 pages fit, 69-91% of the text
+   * box, at least 48 px (1.5 lines) to spare. Evidence on the exact value is thin: Chung (2004, Optom
+   * Vis Sci 81(7):525, abstract) found foveal reading speed rose with vertical word spacing up to
+   * about 1.2-1.5x "standard spacing" and then stayed constant, but the abstract does not define
+   * that standard in CSS terms, so 1.4 rests on it only as a judgement. Same in every condition.
+   */
+  READING_LINE_HEIGHT: 1.4,
   /**
    * Space between paragraphs on a reading page, in em. A fraction of a line rather than a whole
    * blank line (which pre-wrap text gave, at 1.6 em each), so that a third of a ~600-word passage
    * fits one screen at the protocol's 22 px without shrinking the text. Layout only: it changes no
    * glyph size and no line length.
+   *
+   * (READING_MARGIN_PERCENT, the old 10% side margins, is gone: the column is a fixed
+   * STIMULUS_COLUMN_PX of root pixels, and the margin is whatever the screen leaves either side —
+   * 56 px on the study tablet.)
    */
   READING_PARAGRAPH_GAP_EM: 0.7,
-  READING_MARGIN_PERCENT: 10,
 
   // Comprehension: post-answer feedback dwell.
   /**

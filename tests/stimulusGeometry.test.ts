@@ -8,9 +8,10 @@
  *
  * It was not. `#root` is sized `calc(100% / var(--vl-scale))` in both axes while the scale is
  * `min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT)`, so one axis binds and the other over-fills: the root
- * box takes the DEVICE's aspect ratio, never the canvas's 1194/834 = 1.4317. Anything sized as a
- * percentage of the root then reflows by device at an unchanged `--vl-scale` and an unchanged glyph
- * size — invisible in the one covariate an analyst is told to use for exactly this.
+ * box takes the DEVICE's aspect ratio, never the canvas's (1152/720 = 1.60 since the canvas was
+ * re-based to the study tablet; 1194/834 = 1.43 before). Anything sized as a percentage of the root
+ * then reflows by device at an unchanged `--vl-scale` and an unchanged glyph size — invisible in the
+ * one covariate an analyst is told to use for exactly this.
  *
  * The reading passage was a percentage column. The reaction-time target was a percentage position
  * with a constant diameter. Both are now fixed in root pixels, and these tests hold them there.
@@ -22,6 +23,12 @@ import {
   computeScale, STIMULUS_COLUMN_PX, STIMULUS_BOX, DESIGN_WIDTH, DESIGN_HEIGHT,
 } from '@/lib/viewportScale';
 import { CONFIG } from '@/experiment/config';
+
+/**
+ * The reading column's former rule — 10% side margins, i.e. 80% of the root's width. Kept here only
+ * to show that a percentage column varies by device; nothing in src/ sizes a stimulus this way now.
+ */
+const OLD_PERCENT_COLUMN = 0.8;
 
 /** Tablets the study can plausibly run on, plus the design canvas and a large display. */
 const DEVICES: [string, number, number][] = [
@@ -68,24 +75,32 @@ describe('reading line length is the same on every device', () => {
   it('is a constant number of root pixels, so characters per line do not vary', () => {
     /*
      * Before: the column was `padding: 56px 10% 3%` on a full-width root, i.e. 0.8 x rootWidth.
-     * Measured against the design canvas's 955 px that gave +12.2% characters per line at 1152x720,
-     * +27.0% at 1152x650, and +114% at 2560x1600 — where stimulus_scale reads 1.00, the same as the
-     * design canvas. Line length is a first-order determinant of reading rate and regression
-     * frequency, and both are dependent variables here.
+     * Measured against the old design canvas's 955 px that gave +12.2% characters per line at
+     * 1152x720, +27.0% at 1152x650, and +114% at 2560x1600 — where stimulus_scale reads 1.00, the
+     * same as the design canvas. Line length is a first-order determinant of reading rate and
+     * regression frequency, and both are dependent variables here.
      */
+    const oldColumns = new Set<number>();
     for (const [name, w, h] of DEVICES) {
       const b = rootBox(w, h);
-      const oldColumn = b.w * (1 - (2 * CONFIG.READING_MARGIN_PERCENT) / 100);
+      oldColumns.add(Math.round(b.w * OLD_PERCENT_COLUMN));
       const newColumn = Math.min(STIMULUS_COLUMN_PX, b.w);   // maxWidth: 100%
       expect(newColumn, `${name}`).toBe(STIMULUS_COLUMN_PX);
-      // Sanity: the old behaviour really did vary, or this test proves nothing.
-      if (name !== 'design canvas') expect(oldColumn).toBeGreaterThan(STIMULUS_COLUMN_PX);
     }
+    // Sanity: the percentage rule really would vary across these devices, or this test proves nothing.
+    expect(oldColumns.size).toBeGreaterThan(1);
   });
 
-  it('matches what the design canvas always produced, so nothing shifted for the reference device', () => {
-    // 1194 x 0.8 = 955.2. Changing the reference would silently re-baseline the whole study.
-    expect(STIMULUS_COLUMN_PX).toBe(Math.round(DESIGN_WIDTH * (1 - (2 * CONFIG.READING_MARGIN_PERCENT) / 100)));
+  it('is stated, not derived from the canvas, and fits the canvas with margins either side', () => {
+    /*
+     * It used to be round(DESIGN_WIDTH * 0.8). Re-basing the canvas to the tablet (1194 -> 1152)
+     * would have narrowed the line to 922 px without anyone deciding it. The column is a stimulus
+     * parameter, so it is written out: 1040 root px, 90% of the tablet's width, 22.0 deg at 55 cm.
+     */
+    expect(STIMULUS_COLUMN_PX).toBe(1040);
+    expect(STIMULUS_COLUMN_PX).not.toBe(Math.round(DESIGN_WIDTH * OLD_PERCENT_COLUMN));
+    // Room for the in-loop Pause chip at the far left (x 12 to ~60): the margin is (1152-1040)/2.
+    expect((DESIGN_WIDTH - STIMULUS_COLUMN_PX) / 2).toBeGreaterThanOrEqual(56);
   });
 
   it('scales with --vl-scale and only with it, which is what stimulus_scale records', () => {
@@ -94,6 +109,13 @@ describe('reading line length is the same on every device', () => {
     for (const [name, w, h] of DEVICES) {
       expect(cssWidth(w, h) / computeScale(w, h), name).toBeCloseTo(STIMULUS_COLUMN_PX, 6);
     }
+  });
+
+  it('is set at the protocol typography: 22 px, line height 1.4', () => {
+    // Research round 62, recommendation R-A: the TRUE 22 px (not enlarged), 1.4 so that the three
+    // existing pages fit the 720 px screen. Changing either is a protocol change, not a tweak.
+    expect(CONFIG.READING_FONT_SIZE_PX).toBe(22);
+    expect(CONFIG.READING_LINE_HEIGHT).toBe(1.4);
   });
 });
 
@@ -129,9 +151,10 @@ describe('the reaction-time target sits in a device-independent field', () => {
     expect(seen.size, 'the ratio was already constant, so this fix is unnecessary').toBeGreaterThan(1);
   });
 
-  it('is the design canvas, so the reference device is unchanged', () => {
+  it('is the design canvas — the whole of the study tablet\'s screen at scale 1.0', () => {
     expect(STIMULUS_BOX.width).toBe(DESIGN_WIDTH);
     expect(STIMULUS_BOX.height).toBe(DESIGN_HEIGHT);
+    expect([STIMULUS_BOX.width, STIMULUS_BOX.height]).toEqual([1152, 720]);
   });
 });
 

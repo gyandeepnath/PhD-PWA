@@ -38,7 +38,7 @@ export function BreakScreen({ completed, total, onContinue, children }: Props) {
   return (
     <div
       data-stage="BREAK_SCREEN"
-      className="screen scrollable nav-band w-full bg-cream p-[6%] font-sans text-[#1a1a2e] animate-fade-in"
+      className="screen scrollable nav-band panel-band w-full bg-cream p-[6%] font-sans text-[#1a1a2e] animate-fade-in"
       style={{ display: 'flex' }}
     >
       {/* No wave backdrop: its lines ran across the text.

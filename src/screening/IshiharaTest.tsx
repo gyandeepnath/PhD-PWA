@@ -121,7 +121,7 @@ export function IshiharaTest({ onComplete, onDone, seed, onRunning }: Props) {
     // .screen, not min-h-screen: 100vh is not the scaled root's height, so the plate sat off-centre
     // and anything that grew past the bottom was clipped with no way to scroll to it.
     // The top band is kept clear (nav-band) for the progress label and any notice under it.
-    <div className="screen scrollable nav-band w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+    <div className="screen scrollable nav-band panel-band w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div style={{ maxWidth: 560, width: '100%', textAlign: 'center' }}>
         <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]">Colour-vision screening · {idx + 1}/{plates.length}</p>
         <h1 className="mt-2 font-serif text-3xl font-light">Which number do you see?</h1>
@@ -172,7 +172,7 @@ export function IshiharaTest({ onComplete, onDone, seed, onRunning }: Props) {
 function OperatorNotice({ status, onDone }: { status: IshiharaResult['status']; onDone: () => void }) {
   const failed = status === 'screen_failed';
   return (
-    <div className="screen scrollable nav-band w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in" style={{ display: 'flex' }}>
+    <div className="screen scrollable nav-band panel-band w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in" style={{ display: 'flex' }}>
       <div style={{ maxWidth: 760, width: '100%', margin: 'auto' }}>
         <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]">For the researcher</p>
         <h1 className="mt-2 font-serif text-3xl font-light">

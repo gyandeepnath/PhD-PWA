@@ -52,7 +52,7 @@ import {
   Consent, Preflight, Instructions, type SessionInitData, type ProfileData,
 } from '@/start/setupStages';
 import { CalibrationRoutine } from '@/start/CalibrationRoutine';
-import { currentScale, layoutViewport, setScaleFrozen, rescalesWhileFrozen } from '@/lib/viewportScale';
+import { currentScale, layoutViewport, setScaleFrozen, rescalesWhileFrozen, displayMode } from '@/lib/viewportScale';
 import { ResearcherPanel } from '@/components/ResearcherPanel';
 import { NavChip } from '@/components/NavChip';
 import { useDialog } from '@/components/ConfirmDialog';
@@ -1020,6 +1020,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
        */
       stimulus_scale: currentScale(),
       layout_viewport: layoutViewport(),
+      // Per condition, because a resume can come back in a different launch (a tab, or the installed
+      // app) from the one pre-flight checked; see display_mode on the session.
+      display_mode: displayMode(),
     });
     conditionStarted.current[machine.stepIndex] = Date.now();
     conditionRescalesAtStart.current = rescalesWhileFrozen();
@@ -1284,9 +1287,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     case 'PREFLIGHT':
       view = (
         <Preflight
-          onDone={async (fontOk) => {
+          onDone={async ({ fontOk, displayMode, displayModeAcknowledged }) => {
             if (session) {
-              const fresh = { ...session, preflight_complete: true, stimulus_font_ok: fontOk };
+              const fresh = {
+                ...session, preflight_complete: true, stimulus_font_ok: fontOk,
+                display_mode: displayMode, display_mode_acknowledged: displayModeAcknowledged,
+              };
               await put('sessions', fresh);
               setSession(fresh);
             }

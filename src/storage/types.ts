@@ -224,6 +224,20 @@ export interface SessionRecord {
    */
   stimulus_font_ok?: boolean | null;
   /**
+   * The CSS display mode the app ran in at pre-flight: 'fullscreen' or 'standalone' for the installed
+   * home-screen launch, 'browser' or 'minimal-ui' for a tab or window. null where the browser gave no
+   * answer; absent on sittings from builds before it was recorded.
+   *
+   * The design canvas is the installed app's full screen, so in a tab the address bar shrinks every
+   * stimulus by about a tenth — and can change it mid-sitting when the bar hides or reappears.
+   */
+  display_mode?: string | null;
+  /**
+   * True when the app was NOT the installed full-screen launch and the operator acknowledged the
+   * pre-flight warning to run anyway; false when no acknowledgement was needed.
+   */
+  display_mode_acknowledged?: boolean | null;
+  /**
    * The camera self-test run after calibration (tracking/selfTest.ts): cued blinks, how many the
    * tracker saw, extras, face-solved frame rate, face presence and the verdict. The LAST attempt is
    * kept. Absent when the camera was not used or the sitting predates the test.
@@ -369,6 +383,13 @@ export interface ConditionRecord {
    */
   stimulus_scale?: number;
   layout_viewport?: string;
+  /**
+   * The CSS display mode when this condition started ('fullscreen'/'standalone' = the installed app;
+   * 'browser'/'minimal-ui' = a tab or window). Per condition as well as per session because a sitting
+   * can be resumed in a different launch from the one its pre-flight saw — the session-level value
+   * describes only the pre-flight moment. null where the browser gave no answer; absent on older rows.
+   */
+  display_mode?: string | null;
   /**
    * How long the app was in the background during this condition, and how many separate times.
    *

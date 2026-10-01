@@ -15,6 +15,15 @@ import { STIMULUS_FONT_STACK } from '@/lib/fonts';
 import { CONFIG } from '@/experiment/config';
 import { now } from '@/lib/timing';
 import type { Passage, QuestionKind } from '@/experiment/passages';
+import { STIMULUS_COLUMN_PX } from '@/lib/viewportScale';
+import { STIMULUS_FOOTER_ROW_PX } from './stimulusPage';
+
+/**
+ * Vertical padding of the item's screen, in root px. The block is centred in what is left, so this
+ * is only the least margin a long item can have; measured over all thirty items at 1152x720 the
+ * block runs about 440-575 px, leaving at least ~95 px of the 672 px box free.
+ */
+const MCQ_PAD_Y_PX = 24;
 
 export interface ComprehensionResult {
   questionIndex: number;
@@ -120,18 +129,44 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
   );
 
   return (
-    <div className="screen w-full p-[6%] font-sans" style={{ background, color: text, display: 'flex', flexDirection: 'column' }}>
+    /*
+     * THE PASSAGE'S GEOMETRY, not a smaller one of its own (screen audit F5; research round 62, 3.2).
+     *
+     * The item used to sit in a 760 px block with the options at 17 px — 14.6 CSS px on the study
+     * tablet at the old 0.86 scale, an x-height of 9.9 arcmin at 55 cm, below the 12 arcmin critical
+     * print size and below the passage the questions are about. The options are drawn in the
+     * condition's own ink, and low contrast raises the critical print size (Ohnishi et al. 2020,
+     * Vision Res 166:52, abstract), so in the low-contrast conditions a comprehension score partly
+     * measured whether the ANSWERS could be read: a legibility effect entangled with the colour factor
+     * under test. Now the question and every option are set exactly like the passage — the reading
+     * size and line height, in Roboto, in the reading column — so their legibility is the passage's.
+     *
+     * One stacked, left-aligned column (not justified: an option is one or two lines, and justifying
+     * it would stretch the spaces). A 2x2 grid was measured and rejected: option heights ranged from
+     * 59 to 172 px within one item and the reading order became two-dimensional. Layout details are a
+     * judgement; no verified study compares MCQ layouts on tablets.
+     */
+    <div className="screen w-full" style={{ background, color: text, display: 'flex', justifyContent: 'center' }}>
       {/*
         Centred in the screen, not top-aligned: this block used to sit at the top with half the screen
         empty below it, which is the layout the investigator asked to be rid of. Auto margins, so a
-        taller block collapses to the top instead of being clipped.
+        taller block collapses to the top instead of being clipped; and the box scrolls as a last
+        resort only — an item that did not fit would otherwise lose its Submit button to the clipped
+        root. The stimulus-fit end-to-end guard holds every item to fitting without it.
       */}
-      <div style={{ width: '100%', maxWidth: 760, margin: 'auto' }}>
-      <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>
+      <div
+        data-testid="mcq-box"
+        className="scrollable"
+        style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', height: '100%', padding: `${MCQ_PAD_Y_PX}px 0`, display: 'flex', flexDirection: 'column' }}
+      >
+      <div data-testid="mcq-block" style={{ margin: 'auto 0' }}>
+      {/* Full ink and 16 px: at 12 px mono it arrived at 10.3 CSS px on the tablet, in the
+          condition's ink, so the instruction was hardest to read where contrast was lowest. */}
+      <p style={{ fontFamily: STIMULUS_FONT_STACK, fontSize: 16, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>
         Task 2 of 4 · Comprehension {index + 1} of {questions.length} — choose the best answer, then submit
       </p>
-      <h2 data-testid="mcq-question" style={{ fontSize: 22, fontFamily: STIMULUS_FONT_STACK, lineHeight: 1.4 }}>{q.text}</h2>
-      <div className="mt-8 space-y-3">
+      <h2 data-testid="mcq-question" style={{ fontSize: CONFIG.READING_FONT_SIZE_PX, fontFamily: STIMULUS_FONT_STACK, lineHeight: CONFIG.READING_LINE_HEIGHT, fontWeight: 400 }}>{q.text}</h2>
+      <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
         {q.options.map((opt, i) => (
           <button
             // Keyed by item as well as position so React replaces the buttons between items
@@ -144,12 +179,13 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
               display: 'block',
               width: '100%',
               textAlign: 'left',
-              padding: '16px 18px',
+              padding: '12px 18px',
               borderRadius: 12,
               border: '2px solid',
               color: text,
               fontFamily: STIMULUS_FONT_STACK,
-              fontSize: 17,
+              fontSize: CONFIG.READING_FONT_SIZE_PX,
+              lineHeight: CONFIG.READING_LINE_HEIGHT,
               cursor: submitted ? 'default' : 'pointer',
               ...optionStyle(i),
             }}
@@ -162,8 +198,14 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
         data-testid="mcq-submit"
         disabled={selected == null || submitted}
         onClick={() => setSubmitted(true)}
-        className="mt-8 rounded-xl px-8 py-3 font-lab text-sm transition active:scale-95"
+        className="rounded-xl transition active:scale-95"
         style={{
+          marginTop: 24,
+          height: STIMULUS_FOOTER_ROW_PX,
+          boxSizing: 'border-box',
+          padding: '0 32px',
+          fontFamily: '"DM Mono", monospace',
+          fontSize: 16,
           background: selected != null && !submitted ? text : 'transparent',
           color: selected != null && !submitted ? background : text,
           border: selected != null && !submitted ? `2px solid ${text}` : `2px dashed ${text}`,
@@ -171,6 +213,7 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
       >
         {isLast ? 'Submit answer' : 'Submit and continue'}
       </button>
+      </div>
       </div>
     </div>
   );

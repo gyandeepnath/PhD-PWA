@@ -224,6 +224,10 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
       // intermediate submits must NOT wait for a stage change; answer until the final item, which
       // is the one whose button reads "Submit answer" rather than "Submit and continue".
       for (let guard = 0; guard < 8; guard++) {
+        // Every item is held to the same fit as the passage it follows: set at the reading size in
+        // the reading column, a long item must still show all four options and Submit unscrolled.
+        await page.getByTestId('mcq-option').first().waitFor({ state: 'visible' });
+        await assertStimulusFits(page, 'mcq-box');
         await page.getByTestId('mcq-option').first().click({ force: true });
         const isLast = await page.getByRole('button', { name: /Submit answer/ }).count() > 0;
         if (isLast) {
@@ -289,8 +293,12 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
  * page over, and on the search screen an overflow is simply CLIPPED — targets the participant can
  * never see, recorded as misses. Asserted wherever the driver meets a stimulus page, so every run
  * of the suite re-measures every page it visits.
+ *
+ * The comprehension item is held to it too ('mcq-box'): since it is set at the passage's size in
+ * the passage's column, a long item is the likeliest thing on the condition loop to outgrow the
+ * 720 px screen, and an item that scrolled would hide its own Submit button.
  */
-export async function assertStimulusFits(page: Page, testId: 'reading-text' | 'search-text'): Promise<void> {
+export async function assertStimulusFits(page: Page, testId: 'reading-text' | 'search-text' | 'mcq-box'): Promise<void> {
   const m = await page.evaluate((id) => {
     const el = document.querySelector(`[data-testid=${id}]`) as HTMLElement | null;
     const block = el?.firstElementChild as HTMLElement | null;

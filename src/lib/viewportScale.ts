@@ -10,8 +10,8 @@
  * mid-exposure. Together those two facts mean a viewport shorter than the design canvas does not
  * merely clip: the clipped content is unreachable by any gesture, because `body` additionally sets
  * `touch-action: none`. On a Xiaomi Pad 6 in Chrome — about 1152x720 CSS pixels, and nearer 650
- * tall once the address bar is showing, against a design canvas 834 tall — the Continue buttons on
- * the setup screens were simply not on the screen and could not be scrolled to.
+ * tall once the address bar is showing, against the design canvas of the time, 834 tall — the
+ * Continue buttons on the setup screens were simply not on the screen and could not be scrolled to.
  *
  * VISUAL ANGLE. Scaling the root scales the stimulus text with it, which changes visual angle, so
  * this cannot be a silent cosmetic fix. Two things keep it honest:
@@ -56,11 +56,25 @@
  */
 
 /**
- * The design canvas the layouts were authored and tested against — iPad 11" landscape, the largest
- * viewport in the reachability suite. Screens narrower or shorter than this scale down to fit.
+ * The design canvas the layouts are authored and tested against: THE STUDY TABLET — a Xiaomi Pad 6 in
+ * landscape, running the installed app full-screen, 1152x720 CSS px. On that screen the scale is 1.0,
+ * so every size written in this codebase is the size the participant sees: the protocol's 22 px
+ * reading text really is 22 px (x-height 14.9 arcmin at 55 cm). With Chrome's address bar showing
+ * (1152x650) it is 0.90. Screens narrower or shorter than the canvas scale down to fit; larger ones
+ * are never magnified.
+ *
+ * It used to be iPad 11" landscape, 1194x834 — the largest viewport in the reachability suite, not
+ * the device the study runs on. That canvas is squarer than the tablet (1.43 against 1.60), so it was
+ * HEIGHT-bound there and everything rendered at 0.86 installed and 0.76 in a Chrome tab: the protocol's
+ * 22 px arrived at 18.9 or 16.7 CSS px, an x-height of 12.8 or 11.3 arcmin at 55 cm — at or below the
+ * critical print size for fluent reading, about 0.2 deg = 12 arcmin (Legge & Bigelow 2011, J Vis
+ * 11(5):8, full text) — while 29-37% of the screen's width stood empty. Nobody chose that size; it
+ * fell out of a canvas that did not match the screen. Which of the two sizes a sitting got depended
+ * on the address bar, which is why the pre-flight screen now checks that the app is installed and
+ * full-screen (`displayMode` below).
  */
-export const DESIGN_WIDTH = 1194;
-export const DESIGN_HEIGHT = 834;
+export const DESIGN_WIDTH = 1152;
+export const DESIGN_HEIGHT = 720;
 
 /** Never scale below this. Past it the text is too small to be a fair stimulus; see clampNote(). */
 export const MIN_SCALE = 0.5;
@@ -71,6 +85,19 @@ export const MIN_SCALE = 0.5;
  * minimum below, because no step size survives a 70px address bar.
  */
 const STEP = 0.02;
+
+/**
+ * A viewport within this fraction of the canvas renders at exactly 1.0 instead of one step below.
+ *
+ * The canvas IS the study tablet, so the one viewport that matters most sits exactly on the step
+ * boundary: an installed app that reports 1152x719 — a status-bar pixel, a fractional visual
+ * viewport rounded down — would quantise to 0.98 and shrink every glyph of the stimulus by 2% for
+ * a one-pixel difference, and differently on two sittings of the same tablet. Within the tolerance
+ * the canvas overfills the viewport by at most 1% (7 px of 720); every screen keeps more slack than
+ * that — the reading page by at least 48 px, measured — and e2e/allScreensFit.spec.ts walks every
+ * screen at 1152x713, the shortest viewport that snaps.
+ */
+export const SNAP_TO_ONE = 0.01;
 
 let applied = 1;
 
@@ -122,9 +149,12 @@ export function computeScale(w: number, h: number): number {
   const raw = Math.min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT);
   if (!Number.isFinite(raw) || raw <= 0) return 1;
   // Never magnify: a bigger screen shows the design size, so the stimulus matches every other
-  // device at or above the canvas.
-  const capped = Math.min(1, raw);
-  const quantised = Math.floor(capped / STEP) * STEP;
+  // device at or above the canvas. And a viewport a pixel or so short of the canvas — the study
+  // tablet itself, reporting 719 — is the canvas; see SNAP_TO_ONE.
+  if (raw >= 1 - SNAP_TO_ONE) return 1;
+  // The epsilon is floating point, not tolerance: 0.9 / 0.02 is 44.999... in IEEE doubles, which
+  // floored a viewport exactly nine-tenths of the canvas a whole step too small.
+  const quantised = Math.floor(raw / STEP + 1e-9) * STEP;
   return Math.max(MIN_SCALE, Math.min(1, Number(quantised.toFixed(4))));
 }
 
@@ -246,6 +276,43 @@ export function foldViewportFloor(w: number, h: number): { w: number; h: number 
  */
 export function isBelowMinimum(w = measure().w, h = measure().h): boolean {
   return Math.min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT) < MIN_SCALE;
+}
+
+/** How the app is being displayed: the CSS `display-mode` the browser reports. */
+export type DisplayMode = 'fullscreen' | 'standalone' | 'minimal-ui' | 'browser';
+
+/**
+ * The display mode, or null where the browser cannot say.
+ *
+ * WHY THE PRE-FLIGHT SCREEN ASKS. The canvas is the installed app's full screen, 1152x720. In a
+ * Chrome tab the address bar takes about 70 px of it, the scale falls to 0.90, and every stimulus is
+ * drawn 10% smaller — the reading text at 19.8 px instead of 22 — with nothing on the screen to say
+ * so. It is also unstable: the bar can hide and reappear, so a tab can present different sizes to
+ * different sittings. `vite.config.ts` installs the app with `display: 'fullscreen'`, so "launched
+ * from the home-screen icon" is exactly `fullscreen` (`standalone` where a platform declines
+ * full-screen but still drops the browser chrome); anything else is a tab or a window, and the
+ * operator is told before the participant sees a stimulus.
+ *
+ * Read from matchMedia, most specific first, because a browser matches only the mode it is in.
+ * iPadOS Safari predates the media feature on some versions and exposes `navigator.standalone`
+ * instead. Null — not "browser" — when neither is available: a mode that was not reported must not
+ * be recorded as one that was.
+ */
+export function displayMode(): DisplayMode | null {
+  if (typeof window === 'undefined') return null;
+  if (typeof window.matchMedia === 'function') {
+    for (const m of ['fullscreen', 'standalone', 'minimal-ui', 'browser'] as const) {
+      if (window.matchMedia(`(display-mode: ${m})`).matches) return m;
+    }
+  }
+  const nav = typeof navigator !== 'undefined' ? navigator as Navigator & { standalone?: boolean } : null;
+  if (nav && typeof nav.standalone === 'boolean') return nav.standalone ? 'standalone' : 'browser';
+  return null;
+}
+
+/** True when the app runs without browser chrome: the installed, home-screen launch. */
+export function isInstalledDisplay(mode: DisplayMode | null = displayMode()): boolean {
+  return mode === 'fullscreen' || mode === 'standalone';
 }
 
 /**
@@ -406,16 +473,20 @@ export function installViewportScale(): () => void {
  * WHY THIS IS NEEDED. The root transform is NOT a similarity transform of the design canvas, and
  * that was not obvious. `#root` is sized `calc(100% / var(--vl-scale))` in both axes while the scale
  * is `min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT)` — one axis binds and the other over-fills, so the
- * root box takes the DEVICE's aspect ratio, never the canvas's 1194/834. A layout that sizes itself
- * as a percentage of the root therefore gets a different number of characters per line on every
+ * root box takes the DEVICE's aspect ratio, never the canvas's. A layout that sizes itself as a
+ * percentage of the root therefore gets a different number of characters per line on every
  * differently-shaped screen, at the same `--vl-scale`, at the same glyph size.
  *
- * Measured, with the reading passage's 10% side margins:
+ * Measured, with the reading passage's former 10% side margins, on the 1194x834 canvas of the time:
  *
  *   1194x834 (design)   scale 1.00   root 1194 wide   column  955 px   baseline
  *   1152x720 (Xiaomi)   scale 0.86   root 1340 wide   column 1072 px   +12.2% characters per line
  *   1152x650 (bar up)   scale 0.76   root 1516 wide   column 1213 px   +27.0%
  *   2560x1600           scale 1.00   root 2560 wide   column 2048 px   +114%
+ *
+ * On today's 1152x720 canvas the same percentage column would run 922 px on the tablet, 1024 with the
+ * address bar up (+11%) and 2048 on a 2560x1600 display (+122%): the device-shaped root box is a
+ * property of the scaler, not of any one canvas.
  *
  * The last row is the one that matters most, because the header of this file used to claim the
  * opposite: "A larger screen renders at the design size rather than being magnified, so the stimulus
@@ -428,17 +499,29 @@ export function installViewportScale(): () => void {
  * Fixing the column in root pixels restores the property the design assumes: every device presents
  * the same layout, differing only by the uniform magnification `--vl-scale` records. The space left
  * over is filled by the condition's own background, so nothing about it is visible to a participant.
+ *
+ * WHY 1040, AND WHY IT IS WRITTEN OUT. It used to be `round(DESIGN_WIDTH * 0.8)`, which was 955 on
+ * the old canvas — and would have silently become 922 when the canvas was re-based to the tablet,
+ * a narrower line nobody decided on. The column is a stimulus parameter, so it is stated, not
+ * derived: 1040 root px is 90% of the tablet's width (56 px either side), 213.7 mm = 22.0 deg at
+ * 55 cm, about 104 characters of the 22 px Roboto passage per line (91-112; measured). It was chosen
+ * with the 1.4 line height so that each of a passage's existing three pages fits one screen with at
+ * least 48 px to spare, without re-paginating the corpus or enlarging the type. The line is longer
+ * than the 95 characters it replaced — a judgement, not a measured optimum — and it is the same in
+ * all ten conditions, so it cannot confound a condition contrast. It must fit the canvas, which
+ * tests/stimulusGeometry.test.ts asserts.
  */
-export const STIMULUS_COLUMN_PX = Math.round(DESIGN_WIDTH * 0.8);
+export const STIMULUS_COLUMN_PX = 1040;
 
 /**
- * The box a stimulus is positioned within, in root pixels — the design canvas itself.
+ * The box a stimulus is positioned within, in root pixels — the design canvas itself, which is now
+ * the whole of the study tablet's screen at scale 1.0.
  *
  * Used by the reaction-time task, where the target's position is a percentage and its diameter is a
  * constant. Resolving those percentages against the device-shaped root box made the target's
- * eccentricity, and so its size-to-eccentricity ratio, vary by device: 0.148 on the design canvas,
- * 0.136 at 1152x720, 0.123 at 1152x650, 0.071 at 2560x1600. Simple reaction time and detection
- * sensitivity are both monotone in eccentricity, so that entered the data as device-driven variance
- * in a dependent variable with no column identifying it.
+ * eccentricity, and so its size-to-eccentricity ratio, vary by device (measured on the 1194x834
+ * canvas of the time: 0.148 on the canvas, 0.136 at 1152x720, 0.123 at 1152x650, 0.071 at 2560x1600).
+ * Simple reaction time and detection sensitivity are both monotone in eccentricity, so that entered
+ * the data as device-driven variance in a dependent variable with no column identifying it.
  */
 export const STIMULUS_BOX = { width: DESIGN_WIDTH, height: DESIGN_HEIGHT } as const;

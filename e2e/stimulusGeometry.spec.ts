@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { startNewExperiment, driveUntil } from './helpers';
+import { startNewExperiment, driveUntil, assertStimulusFits } from './helpers';
 
 /**
  * The reading column must be the same width, in root pixels, on every device.
@@ -67,3 +67,135 @@ test('the reading column is the same width in root pixels on differently-shaped 
     + `${b.name} — line length, and so reading rate, differs by device`,
   ).toBeLessThanOrEqual(1);
 });
+
+/*
+ * ROUND 63 — the passage must not move when "Next page" unlocks (screen audit F3).
+ *
+ * The page is centred vertically in whatever box the header and footer leave. The footer used to be
+ * about 23 px shorter while it held the countdown than once it held the button, so at 20 s the box
+ * grew and the passage jumped up about 10 px — on every page, thirty times a sitting, inside the
+ * blink window. The footer is now one height in both states; this pins it.
+ *
+ * The ?e2e floor is 150 ms, too short to catch the locked state reliably, so the page's animation
+ * frames are HELD while the locked page is measured (the countdown is rAF-driven and cannot expire
+ * without them), then released. Nothing about the layout depends on rAF.
+ */
+const TABLET = [
+  { name: 'Xiaomi Pad 6, installed', width: 1152, height: 720 },
+  { name: 'Xiaomi Pad 6, address bar showing', width: 1152, height: 650 },
+];
+
+for (const vp of TABLET) {
+  test(`the reading passage does not move when Next page unlocks at ${vp.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: vp.width, height: vp.height });
+    await startNewExperiment(page);
+    await driveUntil(page, 'READING_TASK');
+    await page.evaluate(() => {
+      const w = window as unknown as { __rafQ: FrameRequestCallback[]; __rafReal: typeof requestAnimationFrame };
+      w.__rafQ = [];
+      w.__rafReal = window.requestAnimationFrame.bind(window);
+      // Negative ids, so a cancelAnimationFrame of a held frame can never cancel a real one.
+      window.requestAnimationFrame = (cb) => { w.__rafQ.push(cb); return -w.__rafQ.length; };
+    });
+    await page.getByRole('button', { name: /Begin reading/ }).click({ force: true });
+    await expect(page.getByText(/Please keep reading/)).toBeVisible();
+
+    const measure = () => page.evaluate(() => {
+      const block = document.querySelector('[data-testid=reading-block]') as HTMLElement;
+      const box = document.querySelector('[data-testid=reading-text]') as HTMLElement;
+      const footer = document.querySelector('[data-testid=reading-footer]') as HTMLElement;
+      return {
+        blockTop: block.getBoundingClientRect().top,
+        boxHeight: box.getBoundingClientRect().height,
+        footerHeight: footer.getBoundingClientRect().height,
+      };
+    });
+    const locked = await measure();
+
+    await page.evaluate(() => {
+      const w = window as unknown as { __rafQ: FrameRequestCallback[]; __rafReal: typeof requestAnimationFrame };
+      window.requestAnimationFrame = w.__rafReal;
+      for (const cb of w.__rafQ.splice(0)) w.__rafReal(cb);
+    });
+    await expect(page.getByRole('button', { name: /Next page/ })).toBeVisible();
+    const unlocked = await measure();
+
+    expect(Math.abs(unlocked.footerHeight - locked.footerHeight),
+      `the footer is ${locked.footerHeight.toFixed(1)} px locked and ${unlocked.footerHeight.toFixed(1)} px unlocked`)
+      .toBeLessThanOrEqual(0.5);
+    expect(Math.abs(unlocked.boxHeight - locked.boxHeight), 'the text box changed height at unlock')
+      .toBeLessThanOrEqual(0.5);
+    expect(Math.abs(unlocked.blockTop - locked.blockTop),
+      `the passage moved ${(unlocked.blockTop - locked.blockTop).toFixed(1)} px when Next page unlocked`)
+      .toBeLessThanOrEqual(0.5);
+    await assertStimulusFits(page, 'reading-text');
+  });
+
+  /*
+   * Visual-search word targets (screen audit F21). Each word was a bare inline span about 25 px tall
+   * on a taller line pitch, so a tap in the band between two lines touched no word and was not
+   * recorded at all, and the space spans beside short words caught taps at their edges. The word's
+   * tap box is now padded vertically (no layout change) and the spaces take no pointer events.
+   *
+   * What "no dead band" means precisely: every point of the text area belongs to exactly one line
+   * box, and the browser hit-tests a point only against that line's own boxes. So each word must
+   * own a tile as tall as the line pitch — then the tiles of consecutive lines meet, and the only
+   * points that answer to no word are the columns under the spaces. (Where exactly the line box sits
+   * relative to the glyphs is the font's business, not ours, so the tile is found by scanning, not
+   * assumed to be centred.) Checked with elementFromPoint, the browser's own hit test: every word's
+   * tile at its centre column, and both side edges at mid-height.
+   */
+  test(`every search word answers a tap across the whole line, edges included, at ${vp.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: vp.width, height: vp.height });
+    await startNewExperiment(page);
+    await driveUntil(page, 'VISUAL_SEARCH');
+    await page.getByRole('button', { name: /Begin search/ }).click({ force: true });
+    await page.locator('[data-testid=search-text] [data-word]').first().waitFor({ state: 'visible' });
+
+    const r = await page.evaluate(() => {
+      const out = { words: 0, pitch: 0, edgeMisses: [] as string[], shortTiles: [] as string[] };
+      const hitWord = (x: number, y: number) => document.elementFromPoint(x, y)?.closest('[data-word]') ?? null;
+      const box = document.querySelector('[data-testid=search-text]') as HTMLElement;
+      // The line pitch in CSS px on screen: line-height times the root scale.
+      const scale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vl-scale')) || 1;
+      const pitch = parseFloat(getComputedStyle(box).lineHeight) * scale;
+      out.pitch = pitch;
+      const STEP = 0.25;
+      for (const w of [...box.querySelectorAll('[data-word]')] as HTMLElement[]) {
+        const g = (w.firstElementChild as HTMLElement).getBoundingClientRect();   // the glyphs
+        const cx = (g.left + g.right) / 2;
+        const cy = (g.top + g.bottom) / 2;
+        out.words += 1;
+        // Side edges, at mid-height: the space beside the word must not take the tap.
+        for (const x of [g.left + 1, g.right - 1]) if (hitWord(x, cy) !== w) out.edgeMisses.push(w.textContent ?? '');
+        // The tile: the contiguous run of heights, through the glyphs, at which a tap reaches w.
+        let top = cy; while (top - STEP > cy - pitch && hitWord(cx, top - STEP) === w) top -= STEP;
+        let bottom = cy; while (bottom + STEP < cy + pitch && hitWord(cx, bottom + STEP) === w) bottom += STEP;
+        if (bottom - top + STEP < pitch - 1) out.shortTiles.push(`${w.textContent} ${(bottom - top + STEP).toFixed(1)}px`);
+      }
+      return out;
+    });
+    expect(r.words).toBeGreaterThan(100);
+    expect(r.pitch).toBeGreaterThan(20);
+    expect(r.edgeMisses, 'a tap at the edge of these words did not reach them').toEqual([]);
+    expect(r.shortTiles, `these words answer taps over less than the ${r.pitch.toFixed(1)} px line pitch, `
+      + 'leaving a band between lines where a tap reaches no word').toEqual([]);
+
+    // The padding is not layout: with it stripped, the excerpt sets identically — same box, same
+    // position of every line — and with it, the excerpt still fits its box.
+    const layoutWithAndWithout = await page.evaluate(() => {
+      const block = document.querySelector('[data-testid=search-text]')!.firstElementChild as HTMLElement;
+      const words = [...block.querySelectorAll('[data-word]')] as HTMLElement[];
+      const snap = () => JSON.stringify([block.getBoundingClientRect().toJSON(),
+        ...words.map((w) => { const g = (w.firstElementChild as HTMLElement).getBoundingClientRect(); return [g.left, g.top]; })]);
+      const padded = snap();
+      const saved = words.map((w) => w.style.padding);
+      for (const w of words) w.style.padding = '0';
+      const bare = snap();
+      words.forEach((w, i) => { w.style.padding = saved[i]; });
+      return { padded, bare };
+    });
+    expect(layoutWithAndWithout.padded).toBe(layoutWithAndWithout.bare);
+    await assertStimulusFits(page, 'search-text');
+  });
+}

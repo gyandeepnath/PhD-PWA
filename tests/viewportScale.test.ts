@@ -15,7 +15,7 @@ import { execSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import {
   computeScale, isBelowMinimum, foldViewportFloor, resetViewportFloor,
-  DESIGN_WIDTH, DESIGN_HEIGHT, MIN_SCALE,
+  DESIGN_WIDTH, DESIGN_HEIGHT, MIN_SCALE, SNAP_TO_ONE, displayMode, isInstalledDisplay,
 } from '@/lib/viewportScale';
 
 describe('computeScale', () => {
@@ -30,29 +30,50 @@ describe('computeScale', () => {
     expect(computeScale(1920, 1080)).toBe(1);
   });
 
-  it('shrinks to fit a Xiaomi Pad 6 in landscape — the device that lost its Continue button', () => {
-    // ~1152x720 CSS px, and nearer 650 tall with the address bar showing.
-    const withBar = computeScale(1152, 650);
-    const withoutBar = computeScale(1152, 720);
-    expect(withBar).toBeLessThan(1);
-    expect(withoutBar).toBeLessThan(1);
+  it('renders the study tablet at exactly its design size, and 0.90 with the address bar', () => {
+    /*
+     * The canvas IS the Xiaomi Pad 6, installed full-screen: 1152x720 CSS px. On the 1194x834
+     * canvas it replaced, this device rendered at 0.86 installed and 0.76 in a Chrome tab, so the
+     * protocol's 22 px reading text arrived at 18.9 or 16.7 px — at or below the critical print
+     * size — and nobody had chosen either figure.
+     */
+    expect(computeScale(1152, 720)).toBe(1);
+    // With the address bar showing (~650 tall) the canvas still fits, at nine-tenths.
+    expect(computeScale(1152, 650)).toBe(0.9);
     // Height is the binding constraint on this device, not width.
-    expect(withBar).toBeLessThanOrEqual(650 / DESIGN_HEIGHT + 1e-9);
-    expect(withoutBar).toBeLessThanOrEqual(720 / DESIGN_HEIGHT + 1e-9);
+    expect(computeScale(1152, 650)).toBeLessThanOrEqual(650 / DESIGN_HEIGHT + 1e-9);
+  });
+
+  it('treats a viewport a pixel or so short of the canvas as the canvas', () => {
+    // An installed app reporting 1152x719 would otherwise quantise to 0.98 and shrink every glyph
+    // by 2% for one pixel. The tolerance is 1%: 713 is the shortest height that still snaps.
+    expect(computeScale(1152, 719)).toBe(1);
+    expect(computeScale(1152, 713)).toBe(1);
+    expect(computeScale(1152, 712)).toBe(0.98);
+    expect(computeScale(1141, 720)).toBe(1);
+    expect(SNAP_TO_ONE).toBe(0.01);
+  });
+
+  it('does not lose a whole step to floating point', () => {
+    // 0.9 / 0.02 is 44.999... in IEEE doubles; floored, a viewport exactly nine-tenths of the
+    // canvas came out at 0.88.
+    expect(computeScale(1152, 648)).toBe(0.9);
+    expect(computeScale(1036.8, 1000)).toBe(0.9);
   });
 
   it('always fits: the scaled canvas never exceeds the viewport in either axis', () => {
     const viewports = [
-      [1152, 650], [1152, 720], [1080, 810], [1194, 834], [1280, 800],
+      [1152, 650], [1152, 720], [1152, 719], [1152, 713], [1080, 810], [1194, 834], [1280, 800],
       [1024, 768], [800, 600], [1366, 768], [2560, 1600],
     ];
     for (const [w, h] of viewports) {
       const s = computeScale(w, h);
       // The canvas is DESIGN x DESIGN laid out, then multiplied by s. Both axes must land inside
-      // the viewport, or content is clipped into the unreachable region again.
+      // the viewport, or content is clipped into the unreachable region again — up to the stated
+      // snap tolerance, which every screen is required to have as slack (e2e/allScreensFit).
       if (s > MIN_SCALE) {
-        expect(DESIGN_WIDTH * s).toBeLessThanOrEqual(w + 1e-6);
-        expect(DESIGN_HEIGHT * s).toBeLessThanOrEqual(h + 1e-6);
+        expect(DESIGN_WIDTH * s).toBeLessThanOrEqual(w * (1 + SNAP_TO_ONE) + 1e-6);
+        expect(DESIGN_HEIGHT * s).toBeLessThanOrEqual(h * (1 + SNAP_TO_ONE) + 1e-6);
       }
     }
   });
@@ -99,6 +120,43 @@ describe('isBelowMinimum', () => {
   });
 });
 
+
+describe('displayMode — is the app running installed and full-screen?', () => {
+  /*
+   * The canvas is the installed app's full screen. In a browser tab the address bar costs ~70 px of
+   * height, the scale drops to 0.90 and every stimulus shrinks by a tenth; the pre-flight screen
+   * warns on anything but the installed launch, and the session records what it saw.
+   */
+  const withMedia = (matching: string | null, fn: () => void) => {
+    const had = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: (q: string) => ({ matches: matching != null && q === `(display-mode: ${matching})`, media: q }),
+    });
+    try { fn(); } finally {
+      if (had) Object.defineProperty(window, 'matchMedia', had);
+      else delete (window as { matchMedia?: unknown }).matchMedia;
+    }
+  };
+
+  it('reports the mode the browser matches', () => {
+    withMedia('fullscreen', () => expect(displayMode()).toBe('fullscreen'));
+    withMedia('standalone', () => expect(displayMode()).toBe('standalone'));
+    withMedia('browser', () => expect(displayMode()).toBe('browser'));
+  });
+
+  it('counts only the chrome-free launches as installed', () => {
+    expect(isInstalledDisplay('fullscreen')).toBe(true);
+    expect(isInstalledDisplay('standalone')).toBe(true);
+    expect(isInstalledDisplay('minimal-ui')).toBe(false);
+    expect(isInstalledDisplay('browser')).toBe(false);
+    expect(isInstalledDisplay(null)).toBe(false);
+  });
+
+  it('says null rather than inventing a mode the browser did not report', () => {
+    withMedia(null, () => expect(displayMode()).toBeNull());
+  });
+});
 
 describe('foldViewportFloor — stability across an address-bar cycle', () => {
   beforeEach(() => resetViewportFloor());
@@ -273,14 +331,14 @@ describe('the scale recovers from a lock, and never grows under a reader', () =>
 
   it('a startup lock (floating window, then maximised) clears at the next screen', async () => {
     const m = await reset();
-    setViewport(700, 420);
+    setViewport(560, 340);                  // a floating window: below the floor, so clamped
     m.refitScale();
     expect(m.currentScale()).toBe(0.5);
     setViewport(1152, 720);
     m.remeasureScale();                    // same screen: the running minimum holds, as before
     expect(m.currentScale()).toBe(0.5);
     m.refitScale();                         // the next screen boundary
-    expect(m.currentScale()).toBeCloseTo(0.86, 2);
+    expect(m.currentScale()).toBe(1);       // the study tablet, installed: its design size
   });
 
   it('frozen: the scale never grows, and a genuine shrink is counted', async () => {

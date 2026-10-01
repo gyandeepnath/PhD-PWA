@@ -19,7 +19,10 @@ import { UI_TEXT } from '@/lib/uiPalette';
 import { now } from '@/lib/timing';
 import { trackFieldBlockedTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { stimulusFontLoaded } from '@/lib/fonts';
-import { isBelowMinimum, currentScale, freshScale, refitScale } from '@/lib/viewportScale';
+import {
+  isBelowMinimum, currentScale, freshScale, refitScale, displayMode, isInstalledDisplay,
+  DESIGN_WIDTH, DESIGN_HEIGHT, type DisplayMode,
+} from '@/lib/viewportScale';
 import { startFaceProbe, type FaceProbeResult, type FaceProbeStatus } from '@/screening/faceProbe';
 import type { CameraStatus } from '@/storage/types';
 
@@ -28,10 +31,10 @@ import type { CameraStatus } from '@/storage/types';
  *
  * `#root` is `overflow: hidden` and `body` carries `touch-action: none`, so anything below the fold
  * on a setup screen is not merely off-screen — it is unreachable by any gesture. Measured on the
- * participant profile at iPad 11" landscape (1194x834), the mandated orientation: content height
- * 1167 against a viewport of 834, with the caffeine yes/no buttons AND the Continue button both
- * past the bottom edge. The operator fills in the form and there is no way to submit it, and no way
- * to scroll to find one. iPad 10.2" landscape is the same. Portrait fits, which is why it was not
+ * participant profile at iPad 11" landscape (1194x834, then the design canvas), the mandated
+ * orientation: content height 1167 against a viewport of 834, with the caffeine yes/no buttons AND
+ * the Continue button both past the bottom edge. The operator fills in the form and there is no way
+ * to submit it, and no way to scroll to find one. iPad 10.2" landscape is the same. Portrait fits, which is why it was not
  * noticed.
  *
  * The E2E suite could not catch it either: every click in e2e/helpers.ts passes `force: true`,
@@ -41,9 +44,11 @@ import type { CameraStatus } from '@/storage/types';
  * min-h-0 is what lets the flex child actually shrink to its container instead of growing.
  *
  * `nav-band` keeps the top band clear for the operator's navigation chip ("Exit — resume later",
- * top left) and the progress label, so neither sits on a heading or a field (theme.css).
+ * top left) and the progress label, so neither sits on a heading or a field; `panel-band` keeps the
+ * bottom-left corner clear of the collapsed researcher panel, so it never sits on a button when the
+ * form is scrolled to its end (theme.css).
  */
-const shell = 'h-full w-full bg-cream px-[5%] pb-10 nav-band font-sans text-[#1a1a2e] animate-fade-in overflow-y-auto';
+const shell = 'h-full w-full bg-cream px-[5%] nav-band panel-band font-sans text-[#1a1a2e] animate-fade-in overflow-y-auto';
 const btn = 'rounded-xl px-8 py-3 font-sans text-base font-medium text-white transition active:scale-95';
 /*
  * Back, on the few screens where going back is allowed (experiment/navigation.ts has the policy).
@@ -52,12 +57,13 @@ const btn = 'rounded-xl px-8 py-3 font-sans text-base font-medium text-white tra
  */
 const btnBack = 'rounded-xl border border-[#bdb8ae] bg-white px-6 py-3 font-sans text-base text-[#3a3a4a] transition active:scale-95';
 /*
- * TYPE SCALE for these screens. The whole app is drawn on the 1194x834 design canvas and shrunk to
+ * TYPE SCALE for these screens. The app used to be drawn on a 1194x834 design canvas and shrunk to
  * fit (viewportScale.ts): about 0.86 on a Xiaomi Pad 6, so a 12 px label arrived at the eye as about
  * 10 px — in DM Mono, a typewriter face that reads poorly as running text. The floor is now 15 px for
  * anything read as a sentence and 14 px for the small uppercase headings, in Roboto; DM Mono is kept
- * for what it is good at, the input fields where codes and numbers are typed. Colours are from
- * lib/uiPalette.ts, each at least 4.5:1 on these grounds (tests/contrast.test.ts).
+ * for what it is good at, the input fields where codes and numbers are typed. Since the canvas is the
+ * tablet itself (1152x720), those floors are the sizes the operator actually sees in the installed
+ * app. Colours are from lib/uiPalette.ts, each at least 4.5:1 on these grounds (tests/contrast.test.ts).
  */
 const eyebrow = 'font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]';
 const help = 'font-sans text-[15px] leading-relaxed text-[#4a4a60]';
@@ -1052,8 +1058,21 @@ const PREFLIGHT_ITEMS = [
   'No strong light source behind the participant (no backlight)',
   'Device on a stand at ~50–60 cm viewing distance, landscape',
 ];
+/** What the pre-flight screen measured and the operator acknowledged, stored on the session. */
+export interface PreflightResult {
+  /** Whether the stimulus typeface loaded; null where the browser gave no answer. */
+  fontOk: boolean | null;
+  /** The CSS display mode the app was running in; null where the browser gave no answer. */
+  displayMode: DisplayMode | null;
+  /**
+   * True when the app was NOT the installed full-screen launch and the operator ticked the warning to
+   * run anyway. False when no acknowledgement was needed.
+   */
+  displayModeAcknowledged: boolean;
+}
+
 export function Preflight({ onDone, onBack }: {
-  onDone: (fontOk: boolean | null) => void;
+  onDone: (result: PreflightResult) => void;
   /** Back to the profile to correct an answer. Offered when this sitting's own profile can be replaced. */
   onBack?: () => void;
 }) {
@@ -1110,8 +1129,34 @@ export function Preflight({ onDone, onBack }: {
     window.setTimeout(() => setScale({ applied: currentScale(), fresh: freshScale() }), 100);
   };
 
+  /*
+   * Is this the installed app, full-screen? The design canvas IS the installed app's screen
+   * (1152 x 720), so that is the one launch at which every stimulus is drawn at its protocol size.
+   * In a browser tab the address bar takes about 70 px, the scale drops to 0.90 and the reading text
+   * to 19.8 px — and the bar can hide and reappear, so two sittings run in tabs need not even match
+   * each other. Nothing on the screen shows it; an operator in a hurry would never notice. So it is
+   * checked by machine, like storage and the typeface, and anything other than the installed launch
+   * has to be acknowledged in writing before the sitting can go on — the choice is the operator's,
+   * but it is made knowingly and recorded (display_mode, display_mode_acknowledged).
+   *
+   * Re-read when the mode changes: Chrome can move a page into or out of full-screen under it.
+   */
+  const [mode, setMode] = useState<DisplayMode | null>(() => displayMode());
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined;
+    const queries = (['fullscreen', 'standalone', 'minimal-ui', 'browser'] as const)
+      .map((m) => window.matchMedia(`(display-mode: ${m})`));
+    const update = () => setMode(displayMode());
+    for (const q of queries) q.addEventListener?.('change', update);
+    return () => { for (const q of queries) q.removeEventListener?.('change', update); };
+  }, []);
+  const installed = isInstalledDisplay(mode);
+  const [modeAck, setModeAck] = useState(false);
+  const modeOk = installed || modeAck;
+  const fullSize = scale.applied >= 1;
+
   const storageBlocks = storage?.verdict === 'blocked';
-  const all = checked.every(Boolean) && !!storage && !storageBlocks && fontOk !== undefined;
+  const all = checked.every(Boolean) && !!storage && !storageBlocks && fontOk !== undefined && modeOk;
   // Bright hues for borders and tints; the dark ones, each ≥4.5:1, for the words.
   const tone = { ok: '#22c97a', warn: '#c98a22', blocked: '#e64c4c', unknown: '#5a5a7a' } as const;
   const toneText = { ok: UI_TEXT.green, warn: UI_TEXT.amber, blocked: UI_TEXT.red, unknown: UI_TEXT.muted } as const;
@@ -1141,17 +1186,59 @@ export function Preflight({ onDone, onBack }: {
           <p key={i} className={boxText} style={{ marginTop: 6 }}>{m}</p>
         ))}
       </div>
+      <div data-testid="display-mode-check"
+        style={{ marginTop: 12, padding: '12px 14px', borderRadius: 10, border: `1px solid ${installed ? '#d8d4cc' : tone.warn}`, background: installed ? '#fff' : `${tone.warn}12` }}>
+        {installed ? (
+          <p className={boxText}>
+            <strong>App display:</strong> installed, full-screen — correct.
+          </p>
+        ) : (
+          <>
+            <p className={eyebrow} style={{ color: UI_TEXT.amber }}>
+              Not running as the installed app{mode ? ` (display mode: ${mode})` : ' (display mode not reported)'}
+            </p>
+            <p className={boxText} style={{ marginTop: 6 }}>
+              The app is open in a browser tab or window, not from its home-screen icon. The address
+              bar takes part of the screen, so every stimulus is drawn smaller than the protocol size,
+              and the size can change if the bar hides or reappears. To fix it: tap <strong>Exit —
+              resume later</strong>, close this tab, open VisuLab from the home-screen icon and resume
+              this sitting from the Session Manager.
+            </p>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginTop: 10, cursor: 'pointer' }}>
+              <input type="checkbox" data-testid="display-mode-ack" checked={modeAck}
+                onChange={(e) => setModeAck(e.target.checked)} style={{ width: 22, height: 22, flexShrink: 0, marginTop: 2 }} />
+              <span className="font-sans text-base text-[#1a1a2e]">
+                Run it like this anyway. I understand the stimuli will not be at their protocol size,
+                and that this sitting is recorded as run outside the installed app.
+              </span>
+            </label>
+          </>
+        )}
+      </div>
       <div data-testid="scale-check"
-        style={{ marginTop: 12, padding: '12px 14px', borderRadius: 10, border: `1px solid ${scaleLocked ? '#b3261e' : '#d8d4cc'}`, background: scaleLocked ? '#fdeeee' : '#fff' }}>
+        style={{ marginTop: 12, padding: '12px 14px', borderRadius: 10, border: `1px solid ${scaleLocked ? '#b3261e' : fullSize ? '#d8d4cc' : tone.warn}`, background: scaleLocked ? '#fdeeee' : fullSize ? '#fff' : `${tone.warn}12` }}>
+        {/*
+          This used to print "76% of design size — correct for this screen" on the study tablet in a
+          browser tab: correct only in the sense that the arithmetic fitted the screen. The canvas is
+          now the tablet, so the expected figure is 100%, and anything less is said to be less.
+        */}
         <p className={boxText} style={{ color: scaleLocked ? '#8a1c14' : '#3a3a4a' }}>
-          <strong>Display size:</strong> {Math.round(scale.applied * 100)}% of design size
-          {scaleLocked ? ` — this screen supports ${Math.round(scale.fresh * 100)}%.` : ' — correct for this screen.'}
+          <strong>Display size:</strong>{' '}
+          {fullSize
+            ? 'full size (100%) — every stimulus is drawn at its protocol size.'
+            : `${Math.round(scale.applied * 100)}% of full size`}
+          {!fullSize && (scaleLocked
+            ? ` — this screen supports ${Math.round(scale.fresh * 100)}%.`
+            : ` — the reading text will be ${(CONFIG.READING_FONT_SIZE_PX * scale.applied).toFixed(1)} px instead of ${CONFIG.READING_FONT_SIZE_PX} px. `
+              + (installed
+                ? `This screen is smaller than the study tablet's (${DESIGN_WIDTH} × ${DESIGN_HEIGHT}): a split-screen or floating window, or a different device.`
+                : 'The browser\'s address bar is taking part of the screen; see above.'))}
           {' '}
           <InfoTip label="display size">
-            Every screen is drawn at a fixed design size (1194 × 834) and shrunk to fit this tablet.
-            The percentage is how much it is shrunk. It shrinks the reading text too, so it is saved
-            with every condition. It should match what this screen supports; if it is lower, tap
-            Re-fit.
+            Every screen is laid out for the study tablet&apos;s full screen ({DESIGN_WIDTH} × {DESIGN_HEIGHT}),
+            and shrunk to fit anything smaller. The percentage is how much it is shrunk. It shrinks the
+            reading text too, so it is saved with every condition. On the study tablet, launched from
+            the home-screen icon, it reads 100%. If it is lower than this screen supports, tap Re-fit.
           </InfoTip>
         </p>
         {scaleLocked && (
@@ -1206,7 +1293,7 @@ export function Preflight({ onDone, onBack }: {
         {onBack && <button type="button" className={btnBack} data-testid="back-to-profile" onClick={onBack}>← Back to the profile</button>}
         <button className={btn} disabled={!all} data-testid="preflight-continue"
           style={btnState(all)}
-          onClick={() => all && onDone(fontOk ?? null)}>
+          onClick={() => all && onDone({ fontOk: fontOk ?? null, displayMode: mode, displayModeAcknowledged: !installed && modeAck })}>
           {storageBlocks ? 'Storage problem — cannot start' : 'All checks pass — continue →'}
         </button>
       </div>

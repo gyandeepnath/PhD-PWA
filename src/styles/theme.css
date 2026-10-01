@@ -28,8 +28,9 @@
   --vl-scale: 1;
   /*
    * The operator navigation chip (components/NavChip.tsx) must be a 44 CSS px touch target on the
-   * DEVICE, and everything inside #root is shrunk by --vl-scale — to 0.86 on a Xiaomi Pad 6 and 0.76
-   * with Chrome's address bar showing. A chip sized 44 design px arrives as 38 or 33 px under a finger.
+   * DEVICE, and everything inside #root is shrunk by --vl-scale on any screen smaller than the design
+   * canvas — 0.90 on the study tablet with Chrome's address bar showing (it was 0.86 / 0.76 on the
+   * old 1194x834 canvas). A chip sized 44 design px arrives smaller than that under a finger.
    * Dividing by the scale keeps it at 44 CSS px whatever the scale is.
    */
   --vl-nav-chip-h: calc(44px / var(--vl-scale));
@@ -43,11 +44,25 @@
    * screens it can appear on add it to their bottom padding so it never covers a row or a button.
    */
   --vl-banner-h: 0px;
+  /*
+   * The collapsed researcher panel (components/ResearcherPanel.tsx) sits fixed at the bottom left —
+   * left 10, bottom 10, at least 40 tall — on every Experiment stage but the first and the last. A
+   * screen whose content can reach the bottom left reserves its footprint (`.panel-band`), so the chip
+   * never sits over a Continue or Back button. On the old 1194x834 canvas the tablet's wider root left
+   * a margin the chip fitted into; on the 1152x720 canvas the setup screens' buttons start at x 48-58,
+   * under it.
+   */
+  --vl-panel-reserve: calc(10px + 40px + 14px);
 }
 
 /* A screen that keeps the navigation chip's band clear. See --vl-nav-band. */
 .nav-band {
   padding-top: var(--vl-nav-band) !important;
+}
+
+/* A screen that keeps the collapsed researcher panel's corner clear. See --vl-panel-reserve. */
+.panel-band {
+  padding-bottom: var(--vl-panel-reserve) !important;
 }
 
 html {
@@ -115,7 +130,7 @@ body {
  * `.screen` is the correct full-height container for a stage, and `.screen-col` adds the flex
  * column that lets a long list flex to the space left over rather than being given a guessed
  * fraction of the viewport. The CVS-Q used `maxHeight: 64vh` for its item list; header, list,
- * padding and the submit button then summed to 877 px inside an 834 px canvas, putting Continue
+ * padding and the submit button then summed to 877 px inside the 834 px canvas of the time, putting Continue
  * in the region #root clips and body's `touch-action: none` makes unreachable. Sixteen items could
  * be answered and none of them submitted.
  */

@@ -12,6 +12,20 @@ import { now } from '@/lib/timing';
 import { TaskIntro } from './TaskIntro';
 import type { Passage } from '@/experiment/passages';
 import { STIMULUS_COLUMN_PX } from '@/lib/viewportScale';
+import {
+  STIMULUS_PAGE_PAD_TOP_PX, STIMULUS_PAGE_PAD_BOTTOM_PX, STIMULUS_FOOTER_ROW_PX, STIMULUS_FOOTER_GAP_PX,
+} from './stimulusPage';
+
+/**
+ * Vertical padding on each word's tap target, in em: half the leading, so the targets of adjacent
+ * lines meet (they overlap by a pixel or two in the gap between lines, never over a glyph).
+ *
+ * Words were bare inline spans about 22 px tall on a line pitch of 30-35 px, so a tap between two
+ * lines landed on nothing and was not recorded at all — neither a hit nor a false alarm (screen audit
+ * F21). Vertical padding on an INLINE element does not change the line box, so the text sets exactly
+ * as before; only the area that answers a tap grows.
+ */
+const WORD_TAP_PAD_EM = (CONFIG.READING_LINE_HEIGHT - 1) / 2;
 
 export interface SearchResult {
   searchTimeMs: number;
@@ -202,12 +216,13 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
     <div className="screen w-full" style={{ background, color: text, display: 'flex', justifyContent: 'center' }}>
     {/*
       THE SAME PAGE AS READING: same column, same padding, same font size and line height, justified,
-      the block centred vertically. The search screen used to set the passage at 19 px / 1.9 in a
-      scroll box — a different visual angle from the reading it followed — and required scrolling
-      through 2.5 screens with no cue. Now it is one screen at the reading geometry, and every
-      occurrence of the target is on it from the first moment.
+      the block centred vertically, the same fixed-height footer. The search screen used to set the
+      passage at 19 px / 1.9 in a scroll box — a different visual angle from the reading it followed —
+      and required scrolling through 2.5 screens with no cue. Now it is one screen at the reading
+      geometry (22 px / 1.4 in the 1040 px column since Round 63; the excerpt spans about 22 deg
+      across at 55 cm), and every occurrence of the target is on it from the first moment.
     */}
-    <div style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', padding: '36px 0 20px', display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', padding: `${STIMULUS_PAGE_PAD_TOP_PX}px 0 ${STIMULUS_PAGE_PAD_BOTTOM_PX}px`, display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16 }}>
         <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 15, margin: 0 }}>
           <strong>Find and tap every:</strong>{' '}
@@ -236,37 +251,50 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
             >
               {para.map((tok) =>
                 tok.isWord ? (
+                  /* The tap target: transparent, padded vertically to the line pitch (see
+                     WORD_TAP_PAD_EM). The highlight is on the inner span, so a found word looks
+                     exactly as it did — the padding is never painted. */
                   <span
                     key={tok.i}
+                    data-word={tok.i}
                     onClick={() => tap(tok)}
-                    style={{
-                      cursor: 'pointer',
-                      /* The condition's own ink, not a fixed green: #22c97a measured 2.16:1 on the
-                         light backgrounds and 9.70:1 on the dark ones, and 1.48:1 against the green
-                         ink — invisible in exactly the condition it was marking. A lost marker costs
-                         search time without leaving any trace. */
-                      backgroundColor: foundIdx.has(tok.i) ? text + '30' : 'transparent',
-                      borderBottom: foundIdx.has(tok.i) ? `2px solid ${text}` : '2px solid transparent',
-                      transition: 'background-color 0.1s, border-color 0.1s',
-                    }}
+                    style={{ cursor: 'pointer', padding: `${WORD_TAP_PAD_EM}em 0` }}
                   >
-                    {tok.text}
+                    <span
+                      style={{
+                        /* The condition's own ink, not a fixed green: #22c97a measured 2.16:1 on the
+                           light backgrounds and 9.70:1 on the dark ones, and 1.48:1 against the green
+                           ink — invisible in exactly the condition it was marking. A lost marker costs
+                           search time without leaving any trace. */
+                        backgroundColor: foundIdx.has(tok.i) ? text + '30' : 'transparent',
+                        borderBottom: foundIdx.has(tok.i) ? `2px solid ${text}` : '2px solid transparent',
+                        transition: 'background-color 0.1s, border-color 0.1s',
+                      }}
+                    >
+                      {tok.text}
+                    </span>
                   </span>
                 ) : (
-                  <span key={tok.i}>{' '}</span>
+                  /* Not a target of any kind. These used to take pointer events, so a tap at the
+                     very edge of a short word ("a", "it", "is") landed on the space beside it and was
+                     lost; now it falls through to the word's own padded box or to nothing. */
+                  <span key={tok.i} style={{ pointerEvents: 'none' }}>{' '}</span>
                 ),
               )}
             </p>
           ))}
         </div>
       </div>
-      <div style={{ flexShrink: 0, paddingTop: 12, borderTop: `1px solid ${text}20`, display: 'flex', justifyContent: 'flex-end' }}>
-        <button
-          onClick={() => finish('voluntary_early')}
-          style={{ background: text, color: background, border: 'none', borderRadius: 12, padding: '16px 32px', fontFamily: '"DM Mono", monospace', fontSize: 16, cursor: 'pointer' }}
-        >
-          Done searching →
-        </button>
+      {/* The reading page's footer row, at the same fixed height, so the excerpt's box is the page's. */}
+      <div data-testid="search-footer" style={{ flexShrink: 0, paddingTop: STIMULUS_FOOTER_GAP_PX, borderTop: `1px solid ${text}20` }}>
+        <div style={{ height: STIMULUS_FOOTER_ROW_PX, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <button
+            onClick={() => finish('voluntary_early')}
+            style={{ height: STIMULUS_FOOTER_ROW_PX, boxSizing: 'border-box', background: text, color: background, border: 'none', borderRadius: 12, padding: '0 32px', fontFamily: '"DM Mono", monospace', fontSize: 16, cursor: 'pointer' }}
+          >
+            Done searching →
+          </button>
+        </div>
       </div>
     </div>
     </div>

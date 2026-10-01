@@ -62,7 +62,7 @@ export function NasaTlx({
   const score = scoreTlx(values);
 
   return (
-    <div className="screen scrollable nav-band w-full px-[5%] pb-[4%] font-sans" style={{ background, color: text }}>
+    <div className="screen scrollable nav-band panel-band w-full px-[5%] font-sans" style={{ background, color: text }}>
       <div style={{ width: '100%', maxWidth: 1060, margin: '0 auto' }}>
         <h2 className="font-serif text-3xl font-light">Workload over the whole session</h2>
         <p className="mt-2 font-sans" style={{ fontSize: 17, lineHeight: 1.45 }}>

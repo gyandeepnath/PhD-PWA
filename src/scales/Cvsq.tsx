@@ -84,12 +84,16 @@ interface Props {
  *     than the first is chosen instead of pushing every item below them down the screen;
  *   - the list says when there is more below it (ScrollCue), and "Answered k of 16" sits beside
  *     Continue, so a skipped item is found without scrolling back through the list.
- * Two columns of eight were tried on paper and do not fit the tablet's 834 design px without
- * shrinking the text or the tap targets, which is what this change exists to undo.
+ * Two columns of eight were tried on paper and do not fit the tablet's screen (834 design px then,
+ * 720 now) without shrinking the text or the tap targets, which is what this change exists to undo.
  *
  * The item wording, their order, the anchors and the scoring are unchanged: it is a validated
  * instrument, and only its presentation is touched here.
  */
+/** Width of the text-and-answers column, and of the cue gutter beside the list, in root px. */
+const CVSQ_COLUMN_PX = 920;
+const CUE_GUTTER_PX = 136;
+
 export function Cvsq({ stage, onComplete }: Props) {
   const freqOptions = FREQ_BY_STAGE[stage];
   const [freq, setFreq] = useState<(number | null)[]>(Array(16).fill(null));
@@ -117,8 +121,13 @@ export function Cvsq({ stage, onComplete }: Props) {
   };
 
   return (
-    <div className="screen screen-col nav-band w-full bg-cream px-[4%] pb-[3%] font-sans text-[#1a1a2e] animate-fade-in">
-      <div className="screen-col" style={{ width: '100%', maxWidth: 920, margin: '0 auto', flex: '1 1 auto', minHeight: 0 }}>
+    <div className="screen screen-col nav-band panel-band w-full bg-cream px-[4%] font-sans text-[#1a1a2e] animate-fade-in">
+      {/* The column is the 920 px of text and answers PLUS the list's cue gutter to its right, and it
+          is the whole that is centred. The gutter used to hang 136 px outside a centred 920 px
+          column, into the page margin — which on the 1152 px canvas is only 116 px wide, so the list
+          ran 20 px past the clipped root. */}
+      <div className="screen-col" style={{ width: '100%', maxWidth: CVSQ_COLUMN_PX + CUE_GUTTER_PX, margin: '0 auto', flex: '1 1 auto', minHeight: 0 }}>
+      <div style={{ maxWidth: CVSQ_COLUMN_PX }}>
       <p className="font-sans text-[15px] font-medium uppercase tracking-wide" style={{ color: UI_TEXT.muted }}>
         Computer Vision Syndrome Questionnaire · {stage === 'baseline' ? 'baseline' : 'session end'}
       </p>
@@ -135,12 +144,13 @@ export function Cvsq({ stage, onComplete }: Props) {
         ))}
       </dl>
 
+      </div>
       {/* Flexes into whatever the header and the button leave, rather than claiming a guessed
           fraction of the viewport. The old `maxHeight: 64vh` overflowed the canvas on every device
           the study will use, and `vh` is the wrong unit inside the scaled root regardless. */}
-      {/* The list reaches 136 px past the column on the right, and its "More below" cue sits there:
-          centred, the cue covered the answers of whichever row was last on screen. */}
-      <div data-testid="cvsq-list" className="scrollable screen-grow" style={{ marginTop: 14, marginRight: -136, paddingRight: 136 }}>
+      {/* The list's rows are the column's 920 px; its "More below" cue sits in the gutter to their
+          right: centred, the cue covered the answers of whichever row was last on screen. */}
+      <div data-testid="cvsq-list" className="scrollable screen-grow" style={{ marginTop: 14, paddingRight: CUE_GUTTER_PX }}>
         {CVSQ_ITEMS.map((item, i) => (
           <div key={item} data-testid="cvsq-item" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0', borderBottom: '1px solid #eceae4', borderTop: i === 0 ? '1px solid #e5e2dc' : undefined }}>
             <div className="font-sans" style={{ flex: '1 1 230px', minWidth: 0, fontSize: 17, lineHeight: 1.3, color: UI_TEXT.ink }}>
@@ -164,7 +174,7 @@ export function Cvsq({ stage, onComplete }: Props) {
         <ScrollCue gutter={128} />
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 14, flex: '0 0 auto', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 14, flex: '0 0 auto', flexWrap: 'wrap', maxWidth: CVSQ_COLUMN_PX }}>
         <button onClick={submit} disabled={!ready}
           className="rounded-xl px-8 py-3 font-sans text-base font-medium transition active:scale-95"
           style={ready
