@@ -64,18 +64,31 @@ describe('computeScale', () => {
   it('always fits: the scaled canvas never exceeds the viewport in either axis', () => {
     const viewports = [
       [1152, 650], [1152, 720], [1152, 719], [1152, 713], [1080, 810], [1194, 834], [1280, 800],
-      [1024, 768], [800, 600], [1366, 768], [2560, 1600],
+      [1024, 768], [800, 600], [1366, 768], [2560, 1600], [1141, 720],
     ];
+    let snapped = 0;
     for (const [w, h] of viewports) {
       const s = computeScale(w, h);
-      // The canvas is DESIGN x DESIGN laid out, then multiplied by s. Both axes must land inside
-      // the viewport, or content is clipped into the unreachable region again — up to the stated
-      // snap tolerance, which every screen is required to have as slack (e2e/allScreensFit).
+      const raw = Math.min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT);
+      /*
+       * The canvas is DESIGN x DESIGN laid out, then multiplied by s. Both axes must land inside the
+       * viewport, or content is clipped into the unreachable region again. The one exception is the
+       * snap band — a viewport within SNAP_TO_ONE of the canvas, drawn at exactly 1.0 — where the
+       * canvas may overfill by that tolerance, which every screen is required to have as slack
+       * (e2e/allScreensFit). The tolerance is applied THERE ONLY: granted to every viewport, it let a
+       * quantiser that rounded up instead of down (Math.round for Math.floor) pass, over-scaling
+       * 1080x810 to 1082.88 px wide (review of Round 63).
+       */
+      const inSnapBand = s === 1 && raw < 1 && raw >= 1 - SNAP_TO_ONE;
+      if (inSnapBand) snapped += 1;
+      const slack = inSnapBand ? 1 + SNAP_TO_ONE : 1;
       if (s > MIN_SCALE) {
-        expect(DESIGN_WIDTH * s).toBeLessThanOrEqual(w * (1 + SNAP_TO_ONE) + 1e-6);
-        expect(DESIGN_HEIGHT * s).toBeLessThanOrEqual(h * (1 + SNAP_TO_ONE) + 1e-6);
+        expect(DESIGN_WIDTH * s, `${w}x${h}`).toBeLessThanOrEqual(w * slack + 1e-6);
+        expect(DESIGN_HEIGHT * s, `${w}x${h}`).toBeLessThanOrEqual(h * slack + 1e-6);
       }
     }
+    // The band itself is exercised (1152x719, 1152x713, 1141x720), so the exception is not dead.
+    expect(snapped).toBe(3);
   });
 
   it('absorbs a pixel or two of viewport jitter', () => {
@@ -342,17 +355,32 @@ describe('the scale recovers from a lock, and never grows under a reader', () =>
   });
 
   it('frozen: the scale never grows, and a genuine shrink is counted', async () => {
+    /*
+     * Starts BELOW the cap. This test used to start at 1152x720, which after Round 63's re-base is
+     * scale 1.0 — the cap — so "did not grow" was guaranteed by Math.min(1, …) alone and deleting
+     * either freeze guard left it green (review of Round 63). At 1152x650 the scale is 0.90, and the
+     * address bar hiding (1152x720) is exactly the growth the freeze exists to refuse mid-reading.
+     */
     const m = await reset();
-    setViewport(1152, 720);
+    setViewport(1152, 650);
     m.refitScale();
     const start = m.currentScale();
+    expect(start).toBe(0.9);
     m.setScaleFrozen(true);
-    m.refitScale();                         // refused while frozen
-    setViewport(1400, 900);
+    setViewport(1152, 720);                 // the address bar hides: room for 1.0
+    m.refitScale();                         // refused while frozen …
+    expect(m.layoutViewport()).toBe('1152x650'); // … so the floor it was fitted to is kept
     m.remeasureScale();
     expect(m.currentScale()).toBe(start);   // did not grow
+    // An orientation event resets the floor even while frozen (resetViewportFloor is not gated, and
+    // must not be: a portrait floor must not survive into landscape). The growth guard in apply() is
+    // then the only thing between the reader and larger text.
+    m.resetViewportFloor();
+    m.remeasureScale();
+    expect(m.currentScale()).toBe(start);   // still did not grow
+    expect(m.rescalesWhileFrozen()).toBe(0);
     // A genuine shrink (not an occlusion: above 70% of the largest height seen).
-    setViewport(1152, 680);
+    setViewport(1152, 620);
     m.remeasureScale();
     expect(m.currentScale()).toBeLessThan(start);
     expect(m.rescalesWhileFrozen()).toBe(1);
