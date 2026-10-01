@@ -1099,7 +1099,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     && !isInLoop(machine.stage);
   /** The ink and ground of the screen currently on display, for anything overlaid on it. */
   const stageInk = machine.stage === 'ADAPTATION'
-    ? { ground: CONFIG.ADAPTATION_COLOR, ink: '#FFFFFF' }
+    ? { ground: CONFIG.ADAPTATION_COLOR, ink: CONFIG.ADAPTATION_INK }
     : isInLoop(machine.stage) && cond ? { ground: cond.background, ink: cond.text } : null;
   /*
    * The colour BEHIND every screen follows the stage. See --vl-page-bg in theme.css: in-loop screens

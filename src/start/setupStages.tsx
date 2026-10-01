@@ -813,16 +813,16 @@ export function AdaptationScreen({ minMs, maxMs, nextLabel, onDone }: {
   // The ring fills over the MINIMUM: it says "not yet", then gives way to the Continue button.
   const progress = Math.min(1, visible / Math.max(1, minMs));
   return (
-    <div data-testid="adaptation" style={{ position: 'fixed', inset: 0, background: CONFIG.ADAPTATION_COLOR, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#000' }}>
+    <div data-testid="adaptation" style={{ position: 'fixed', inset: 0, background: CONFIG.ADAPTATION_COLOR, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: CONFIG.ADAPTATION_INK }}>
       {!canContinue ? (
         <svg width={88} height={88} style={{ transform: 'rotate(-90deg)' }}>
           <circle cx={44} cy={44} r={r} fill="none" stroke="#00000030" strokeWidth={6} />
-          <circle cx={44} cy={44} r={r} fill="none" stroke="#000" strokeWidth={6}
+          <circle cx={44} cy={44} r={r} fill="none" stroke={CONFIG.ADAPTATION_INK} strokeWidth={6}
             strokeDasharray={circ} strokeDashoffset={circ * (1 - progress)} style={{ transition: 'stroke-dashoffset 0.1s linear' }} />
         </svg>
       ) : (
         <button type="button" data-testid="adaptation-continue" onClick={() => finish('participant')}
-          style={{ fontFamily: '"DM Mono", monospace', fontSize: 20, padding: '14px 34px', borderRadius: 14, border: '2px solid #000', background: 'transparent', color: '#000', cursor: 'pointer' }}>
+          style={{ fontFamily: '"DM Mono", monospace', fontSize: 20, padding: '14px 34px', borderRadius: 14, border: `2px solid ${CONFIG.ADAPTATION_INK}`, background: 'transparent', color: CONFIG.ADAPTATION_INK, cursor: 'pointer' }}>
           Continue →
         </button>
       )}

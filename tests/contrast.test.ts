@@ -309,3 +309,23 @@ describe('operator-screen text colours meet WCAG AA', () => {
     expect(users).toEqual([]);
   });
 });
+
+describe('the grey adaptation field has one ink, for its own text and for everything drawn over it', () => {
+  /*
+   * The field's text was switched to black because white on #808080 fails the 4.5:1 floor; the
+   * Pause chip, its in-app confirmation and the researcher panel take the screen's ink from
+   * Experiment's stageInk, which still said white — so the Pause dialog over the grey field was the
+   * one 3.95:1 text on it.
+   */
+  it('passes the text floor on the grey', async () => {
+    const { CONFIG } = await import('@/experiment/config');
+    expect(wcagContrastRatio(CONFIG.ADAPTATION_INK, CONFIG.ADAPTATION_COLOR)).toBeGreaterThanOrEqual(4.5);
+    expect(wcagContrastRatio('#FFFFFF', CONFIG.ADAPTATION_COLOR)).toBeLessThan(4.5);
+  });
+  it('is the same constant on the field and in the overlay ink', () => {
+    const experiment = readFileSync('src/experiment/Experiment.tsx', 'utf8');
+    expect(experiment).toMatch(/\{ ground: CONFIG\.ADAPTATION_COLOR, ink: CONFIG\.ADAPTATION_INK \}/);
+    const setup = readFileSync('src/start/setupStages.tsx', 'utf8');
+    expect(setup).toMatch(/background: CONFIG\.ADAPTATION_COLOR,[^}]*color: CONFIG\.ADAPTATION_INK/);
+  });
+});

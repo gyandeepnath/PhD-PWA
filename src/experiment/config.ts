@@ -190,6 +190,13 @@ const BASE_CONFIG = {
   ADAPTATION_SAME_POLARITY_MS: 60000,
   ADAPTATION_SWITCH_POLARITY_MS: 120000,
   ADAPTATION_COLOR: '#808080',
+  /**
+   * The grey field's ink: its own text, ring and Continue outline, and everything overlaid on it —
+   * the Pause chip, its confirmation, the researcher panel. Black on #808080 is 5.3:1; white is
+   * 3.95:1, under the 4.5:1 floor for text this size. The field's text was switched to black for that
+   * reason while the overlays, which take the screen's ink from Experiment's stageInk, stayed white.
+   */
+  ADAPTATION_INK: '#000000',
 
   // Boredom mitigation: a self-paced rest break is offered after every N completed conditions
   // (but never after the last condition of the sitting). Keeps participants fresh without giving
