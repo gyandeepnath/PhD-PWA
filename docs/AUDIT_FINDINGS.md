@@ -3806,8 +3806,9 @@ resumed at pre-flight. Its own caffeine and hours since waking were never record
 correction type (contact-lens wear on a test day is an exclusion) or its colour-vision answers. The
 Exit dialog and the operator manual both promise a resume at the first screen not yet finished. Both
 checks now read the sitting: the profile is done when the session holds its own state pair, and the
-plates when the session's new `colour_vision_screened` flag is set. That flag is resume bookkeeping
-only, not exported; sittings from older builds fall back to the record. A resume walk that passes the
+plates when the session's new `colour_vision_screened` flag is set. That flag is resume bookkeeping:
+it travels in the session JSON and the backup but is not a CSV column. Sittings from older builds
+fall back to the record. A resume walk that passes the
 plates now steps over them when this sitting already has them, since the second look is a memory test.
 New e2e case: split sitting 2, Exit on the profile, Resume shows the profile, and the sitting ends up
 with its own answers and its own plates.

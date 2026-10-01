@@ -223,8 +223,9 @@ export interface SessionRecord {
    *
    * The result itself is written to the participant record, which is shared across sittings — so its
    * counts could not say whether the plates were shown in this sitting or only in an earlier one, and
-   * a resume read them as "screened" for every sitting after the first. Resume bookkeeping, not
-   * exported. Absent on sittings started by builds before it was recorded.
+   * a resume read them as "screened" for every sitting after the first. Resume bookkeeping: it travels
+   * in the session JSON and the backup like every session field, but is not a CSV column. Absent on
+   * sittings started by builds before it was recorded.
    */
   colour_vision_screened?: boolean;
   /**
