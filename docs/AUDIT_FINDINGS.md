@@ -3790,3 +3790,85 @@ pages since Round 44, unchanged here. MASTER_BLUEPRINT.md's reading line updated
 1040 px column).
 
 Verified: npm run verify green (1136 tests); fit measured at 1152x720 and 1152x650.
+
+## Round 64 — review fixes for Round 62
+
+An adversarial review of Round 62 (part 1) confirmed two major and five minor defects. Each was
+reproduced on the current code, after Round 63's re-base, before it was fixed; the fixes are below in
+the review's order.
+
+**1. A second sitting stopped on its profile skipped it on resume (major).** The resume judged the
+profile done when a participant record existed, and the colour-vision plates done when that record
+held screen counts. The record is created by the first sitting and shared by every later one. So a
+second sitting (a split, or a new protocol pass) left on its profile with "Exit — resume later"
+resumed at pre-flight. Its own caffeine and hours since waking were never recorded
+(`caffeine_today_session` and `hours_since_sleep_session` exported blank), and neither were its
+correction type (contact-lens wear on a test day is an exclusion) or its colour-vision answers. The
+Exit dialog and the operator manual both promise a resume at the first screen not yet finished. Both
+checks now read the sitting: the profile is done when the session holds its own state pair, and the
+plates when the session's new `colour_vision_screened` flag is set. That flag is resume bookkeeping
+only, not exported; sittings from older builds fall back to the record. A resume walk that passes the
+plates now steps over them when this sitting already has them, since the second look is a memory test.
+New e2e case: split sitting 2, Exit on the profile, Resume shows the profile, and the sitting ends up
+with its own answers and its own plates.
+
+**2. Portrait during calibration said "Nothing is lost" (major).** The calibration routine and the
+camera self-test sample the camera on a clock. Both carried on under the portrait block and finished
+there, so a calibration row could be taken with the camera on the short edge, every blink threshold
+and the gaze mapping included. A rotation now stops the run at the end of the step in hand. Begin and
+Exit stay withheld until the stopped run has let go of the tracker, its samples are discarded, and
+its start screen returns with a note. The block says the step was stopped and must be begun again.
+"Nothing is lost" remains only where nothing was running. New e2e case: no calibration row is written
+while in portrait; a restarted run writes exactly one; a stopped self-test records nothing.
+
+**3. White Pause dialog on the grey field (minor).** The field's own text is black (5.3:1) because
+white on #808080 is 3.95:1. The overlays took their ink from `stageInk`, which still said white. One
+constant, `CONFIG.ADAPTATION_INK`, now draws the field and everything over it. **Display change for
+the investigator:** the Pause chip and the researcher panel on the grey field are now black instead
+of white. This is identical in every condition and is not part of any measured stimulus.
+
+**4. Touch targets under 44 CSS px (minor).** The setup Back buttons, the CVS-Q answers, and the
+manager's Completed and recycle-bin toggles were sized in design px. Three more had the same defect
+and were fixed with them: the manager's Resume button, its row actions, and the setup primary button
+beside Back. All now take `--vl-nav-chip-h`. Measured at 1152x650 (scale 0.90), before and after:
+
+| Target | Before (CSS px) | After (CSS px) |
+|---|---|---|
+| CVS-Q answers | 39.6 | 44 |
+| Manager Completed and recycle-bin toggles | 39.6 | 44 |
+| Manager Resume | 39.6 | 44 |
+| Manager row actions (Export, Withdrew, Delete) | 38.3 | 44 |
+| Setup Back and Continue | 45 | 45 |
+
+The setup Back and Continue buttons were already above 44 after Round 63's re-base; the minimum now
+holds at any scale. At 1152x720 the scale is 1.0, so every target was already at least 44 there. All sixteen CVS-Q rows
+still fit their 920 px column at both viewports with both intensity answers showing: no row overflows,
+none wraps, and the root does not overflow.
+
+**5. The dialog was not modal for the keyboard (minor).** Tab walked out of `ConfirmDialog` to the page
+behind, including the in-loop Pause chip, and pressing that replaced the pending request. Closing the
+dialog left the focus on `<body>`. Fixes:
+- Tab and Shift+Tab now cycle inside the dialog.
+- Focus returns to the control that opened the dialog.
+- The body is referenced by `aria-describedby`.
+- The title and body ids come from `useId` instead of one fixed id.
+
+**6. The Pause dialog could outlive its screen (minor).** A search that ran out of time under the
+dialog left it up over the reaction-time instructions, where Pause is not offered, with the previous
+screen's stage and pointer in its handler. `useDialog` gains `dismiss()`, and Experiment calls it
+whenever the stage or step changes. The notice-time accounting was already correct and is unchanged.
+
+**7. "Clicks are not forced" was overstated (minor).** Round 62's verification line said the new
+specs' clicks are not forced. In `setupNavigation` only the navigation controls were unforced; its
+form and Continue clicks went through the forcing driver. This log is append-only, so the sentence is
+corrected here rather than edited. The forward buttons on every screen with a Back are now tapped
+unforced, as is "I consent". Both spec headers state which clicks are forced and which are not.
+
+Verification: `npm run verify` is green (1152 unit tests; new `tests/confirmDialog.test.tsx` and new
+cases in `resumePrerequisites`, `navigation` and `contrast`). All 53 end-to-end tests pass, including
+`setupNavigation` (11: three new cases, three extended), `fullRun`, `allScreensFit`, `reachability`,
+`edge`, `splitSession` and `sessionManager`. The second-sitting case, the stage-change case and the
+Pause dialog's keyboard check were run against the code before their fixes and failed there. The
+portrait case was not run there, but the same measurement on that code showed the "Nothing is lost"
+wording and one calibration row written in portrait. The unforced taps (item 7) are added coverage:
+those buttons were already reachable.

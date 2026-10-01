@@ -150,7 +150,10 @@ set-up screen is always the way out, and it always says what it does:
   returns to the Session Manager. Everything already completed is saved, and the sitting stays under
   *In progress*. **Resume** carries on at the first screen that was not finished — and shows the
   participant the instructions again if they had not yet started the first display. If the camera
-  is being used, camera set-up and calibration are always done again on a resume.
+  is being used, camera set-up and calibration are always done again on a resume. In a participant's
+  **second sitting** the profile and the colour-vision plates count as finished only once *that*
+  sitting has done them: each sitting records its own caffeine, hours since waking, correction and
+  colour-vision answers, so stopping on the profile brings you back to the profile.
 - The button disappears while the colour-vision plates are on screen, while the calibration dots
   are running and while the camera self-test dot is flashing. It comes back as soon as that step
   ends. Leaving in the middle of those would mean repeating them, and a second look at the same
@@ -234,6 +237,12 @@ It runs in two parts, and the first one matters more than it looks:
 If the screen reports that the gaze mapping fitted but no open-eye baseline could be measured, it is
 almost always glare across the lid margin — spectacles, a window or a lamp behind the tablet. Move
 the light or the tablet and retry before continuing.
+
+**If the tablet is turned to portrait while the dots are running**, or while the camera-check dot is
+flashing, the app **stops that step** and keeps nothing from it: with the tablet on its side the
+camera sees the face turned through 90 degrees. The dark screen says so. Turn the tablet back; the
+step's start screen returns with a note, and you press **Begin calibration** (or **Start**) to run it
+again from the beginning. On the other set-up screens, turning the tablet loses nothing.
 
 ---
 
