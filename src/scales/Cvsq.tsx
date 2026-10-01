@@ -163,7 +163,7 @@ export function Cvsq({ stage, onComplete }: Props) {
               ))}
             </div>
             {/* A fixed slot: intensity appears here, in place, only when the symptom occurs. */}
-            <div style={{ display: 'flex', gap: 6, flex: '0 0 auto', width: 204, paddingLeft: 12, borderLeft: '1px solid #e5e2dc', minHeight: 44 }}>
+            <div style={{ display: 'flex', gap: 6, flex: '0 0 auto', width: 204, paddingLeft: 12, borderLeft: '1px solid #e5e2dc', minHeight: 'var(--vl-nav-chip-h)' }}>
               {freq[i] != null && freq[i] !== 0 && INTEN.map((it) => (
                 <Chip key={it.value} label={it.label} active={inten[i] === it.value}
                   onClick={() => { const n = [...inten]; n[i] = it.value; setInten(n); }} />
@@ -191,10 +191,14 @@ export function Cvsq({ stage, onComplete }: Props) {
   );
 }
 
+/**
+ * An answer. 44 CSS px tall on the device at any display scale (--vl-nav-chip-h, theme.css): written
+ * as 44 design px it came to 40 under the participant's finger with Chrome's address bar showing.
+ */
 function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} aria-pressed={active} className="font-sans"
-      style={{ minHeight: 44, padding: '0 14px', borderRadius: 10, cursor: 'pointer', fontSize: 16, whiteSpace: 'nowrap',
+      style={{ minHeight: 'var(--vl-nav-chip-h)', padding: '0 14px', borderRadius: 10, cursor: 'pointer', fontSize: 16, whiteSpace: 'nowrap',
         border: `1px solid ${active ? UI_TEXT.ink : '#bdb8ae'}`, background: active ? UI_TEXT.ink : '#ffffff', color: active ? '#ffffff' : UI_TEXT.body }}>
       {label}
     </button>

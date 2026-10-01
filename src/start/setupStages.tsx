@@ -49,13 +49,18 @@ import type { CameraStatus } from '@/storage/types';
  * form is scrolled to its end (theme.css).
  */
 const shell = 'h-full w-full bg-cream px-[5%] nav-band panel-band font-sans text-[#1a1a2e] animate-fade-in overflow-y-auto';
-const btn = 'rounded-xl px-8 py-3 font-sans text-base font-medium text-white transition active:scale-95';
+/*
+ * Both buttons are at least --vl-nav-chip-h tall: 44 CSS px on the device whatever the display scale
+ * (theme.css). Sized in design px alone they arrive smaller under a finger whenever the screen is
+ * scaled down — at 0.90 with Chrome's address bar showing, py-3 text-base comes to 43 px.
+ */
+const btn = 'min-h-[var(--vl-nav-chip-h)] rounded-xl px-8 py-3 font-sans text-base font-medium text-white transition active:scale-95';
 /*
  * Back, on the few screens where going back is allowed (experiment/navigation.ts has the policy).
  * An outline button in the row of primary actions, first in the row, saying where it goes — so it is
  * never mistaken for the way forward, and never needs the operator to guess what it undoes.
  */
-const btnBack = 'rounded-xl border border-[#bdb8ae] bg-white px-6 py-3 font-sans text-base text-[#3a3a4a] transition active:scale-95';
+const btnBack = 'min-h-[var(--vl-nav-chip-h)] rounded-xl border border-[#bdb8ae] bg-white px-6 py-3 font-sans text-base text-[#3a3a4a] transition active:scale-95';
 /*
  * TYPE SCALE for these screens. The app used to be drawn on a 1194x834 design canvas and shrunk to
  * fit (viewportScale.ts): about 0.86 on a Xiaomi Pad 6, so a 12 px label arrived at the eye as about

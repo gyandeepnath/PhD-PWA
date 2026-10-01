@@ -135,3 +135,27 @@ describe('the in-loop Pause keeps its look; the chip everywhere else is the shar
     expect(experiment).not.toMatch(/← Sessions/);
   });
 });
+
+describe('touch targets added or restyled with the navigation are 44 CSS px at any display scale', () => {
+  /*
+   * --vl-nav-chip-h is 44 px divided by the display scale (theme.css). A target written as 44 DESIGN
+   * px came to 40 CSS px under a finger at the 0.90 scale Chrome's address bar causes — the CVS-Q
+   * answers among them, which the participant taps sixteen times or more.
+   */
+  const read = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8');
+  it('Back and the primary button beside it on the setup screens', () => {
+    const setup = read('src/start/setupStages.tsx');
+    expect(setup).toMatch(/const btn = 'min-h-\[var\(--vl-nav-chip-h\)\]/);
+    expect(setup).toMatch(/const btnBack = 'min-h-\[var\(--vl-nav-chip-h\)\]/);
+  });
+  it('the CVS-Q answers and the slot the intensity answers appear in', () => {
+    const cvsq = read('src/scales/Cvsq.tsx');
+    expect(cvsq).toMatch(/function Chip[\s\S]*?minHeight: 'var\(--vl-nav-chip-h\)'/);
+    expect(cvsq).not.toMatch(/minHeight: 44\b/);
+  });
+  it('the session manager\'s list toggles and row actions', () => {
+    const manager = read('src/start/SessionManager.tsx');
+    expect(manager).not.toMatch(/minHeight: 4[0-4]\b/);
+    expect(manager.match(/minHeight: 'var\(--vl-nav-chip-h\)'/g) ?? []).toHaveLength(3);
+  });
+});

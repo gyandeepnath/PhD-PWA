@@ -435,7 +435,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
               {binNotice}
             </p>
           )}
-          <button onClick={() => setShowBin((b) => !b)} data-testid="bin-toggle" className="font-sans text-[15px] text-[#4a4a60]" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0', minHeight: 44 }}>
+          <button onClick={() => setShowBin((b) => !b)} data-testid="bin-toggle" className="font-sans text-[15px] text-[#4a4a60]" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0', minHeight: 'var(--vl-nav-chip-h)' }}>
             {showBin ? '▾' : '▸'} Recycle bin ({bin.length}) · auto-purged after 30 days
           </button>
           {showBin && (
@@ -472,7 +472,7 @@ function Section({ title, children, collapsed, onToggle, testId }: {
     <div style={{ marginTop: 20 }}>
       {onToggle ? (
         <button type="button" onClick={onToggle} data-testid={testId} aria-expanded={!collapsed} className={heading}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, minHeight: 44, marginBottom: 4, textAlign: 'left' }}>
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, minHeight: 'var(--vl-nav-chip-h)', marginBottom: 4, textAlign: 'left' }}>
           {collapsed ? '▸' : '▾'} {title}{collapsed ? ' — tap to show' : ''}
         </button>
       ) : (
@@ -520,9 +520,14 @@ function Row({ s, children, note }: { s: SessionRecord; children: React.ReactNod
     </div>
   );
 }
+/**
+ * A row action, and the two list toggles above, are --vl-nav-chip-h tall at least: 44 CSS px on the
+ * device at any display scale (theme.css). In design px they came to 38-40 under a finger whenever
+ * the manager was scaled down.
+ */
 function Btn({ onClick, color, outline, children }: { onClick: () => void; color: string; outline?: boolean; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className="font-sans text-[15px] font-medium" style={{ padding: '9px 16px', minHeight: 42, borderRadius: 10, cursor: 'pointer', border: `1px solid ${color}`, background: outline ? '#fff' : color, color: outline ? color : '#fff' }}>
+    <button onClick={onClick} className="font-sans text-[15px] font-medium" style={{ padding: '9px 16px', minHeight: 'var(--vl-nav-chip-h)', borderRadius: 10, cursor: 'pointer', border: `1px solid ${color}`, background: outline ? '#fff' : color, color: outline ? color : '#fff' }}>
       {children}
     </button>
   );
