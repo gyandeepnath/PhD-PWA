@@ -367,7 +367,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
                 : '(interrupted during setup — setup will be completed first)'}
               {Object.keys(resumable).length > 1 && ` · ${Object.keys(resumable).length} sessions in progress`}
             </span>
-            <button onClick={() => onResume(mostRecent.pointer.sessionId, mostRecent.pointer.nextStepIndex, mostRecent.pointer.reachedLoop === true)} className="font-sans text-base font-medium text-white" style={{ background: UI_TEXT.blue, border: 'none', borderRadius: 10, padding: '10px 18px', cursor: 'pointer', flex: '0 0 auto' }}>Resume →</button>
+            <button onClick={() => onResume(mostRecent.pointer.sessionId, mostRecent.pointer.nextStepIndex, mostRecent.pointer.reachedLoop === true)} className="font-sans text-base font-medium text-white" style={{ background: UI_TEXT.blue, border: 'none', borderRadius: 10, padding: '10px 18px', minHeight: 'var(--vl-nav-chip-h)', cursor: 'pointer', flex: '0 0 auto' }}>Resume →</button>
           </div>
         )}
 

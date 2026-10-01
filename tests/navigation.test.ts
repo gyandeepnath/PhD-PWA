@@ -157,9 +157,10 @@ describe('touch targets added or restyled with the navigation are 44 CSS px at a
     expect(cvsq).toMatch(/function Chip[\s\S]*?minHeight: 'var\(--vl-nav-chip-h\)'/);
     expect(cvsq).not.toMatch(/minHeight: 44\b/);
   });
-  it('the session manager\'s list toggles and row actions', () => {
+  it('the session manager\'s Resume, list toggles and row actions', () => {
     const manager = read('src/start/SessionManager.tsx');
     expect(manager).not.toMatch(/minHeight: 4[0-4]\b/);
-    expect(manager.match(/minHeight: 'var\(--vl-nav-chip-h\)'/g) ?? []).toHaveLength(3);
+    expect(manager.match(/minHeight: 'var\(--vl-nav-chip-h\)'/g) ?? []).toHaveLength(4);
+    expect(manager).toMatch(/minHeight: 'var\(--vl-nav-chip-h\)', cursor: 'pointer', flex: '0 0 auto' \}\}>Resume →/);
   });
 });
