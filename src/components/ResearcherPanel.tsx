@@ -21,11 +21,21 @@ import { UI_TEXT } from '@/lib/uiPalette';
  * participant can see. So on condition screens and the grey field (`onStimulus`):
  *   - collapsed, the panel is a MONOCHROME INK INDICATOR: a small outline square in the screen's own
  *     ink with a dot in it — filled while the camera is fine or off, an empty ring while there is a
- *     problem — and no text and no hue. It used to show the sitting clock, and turned amber or red,
- *     with words ("No face for 16 s"), whenever face detection faltered: a coloured patch in the
- *     periphery during reading and during the COLOUR go/no-go task, appearing for reasons unrelated
- *     to the condition (screen audit F10). The blocking camera-lost and camera-blocked notices are
- *     what the operator acts on, and they still fire;
+ *     SUSTAINED problem — and no text and no hue. It used to show the sitting clock, and turned amber
+ *     or red, with words ("No face for 16 s"), whenever face detection faltered: a coloured patch in
+ *     the periphery during reading and during the COLOUR go/no-go task, appearing for reasons
+ *     unrelated to the condition (screen audit F10). The blocking camera-lost and camera-blocked
+ *     notices are what the operator acts on, and they still fire;
+ *   - the ring is for the 'bad' states only (camera stopped or black, no frames, no face for 8 s,
+ *     blinks not being counted). A face lost for a moment — the participant looking down, leaning in
+ *     — is 'warn', and turned the dot to a ring and back within seconds: a shape flickering in the
+ *     periphery, about as often as the participant moved, which nobody could act on;
+ *   - `still`: while a timed procedure runs (the reaction-time trials, the calibration dots, the
+ *     self-test, the colour-vision plates) the indicator does not change at all — it keeps the look it
+ *     had when the procedure began. A dot changing shape in the corner of a dot-detection task is a
+ *     distractor of the task's own kind; leaning closer to a low-contrast display can lose the face,
+ *     so its rate could even follow the condition. Nothing about it can be acted on mid-block: Pause
+ *     and the camera notices wait for the trials to end;
  *   - it closes by itself when a condition screen starts, unless "Keep open during tasks" is on;
  *   - opened, it is the compact two-line strip, in the screen's ink on no ground, updated once a
  *     second — and it can be opened only on the reading task and the grey field, whose bottom-left
@@ -64,6 +74,8 @@ export interface ResearcherPanelProps {
   locked: boolean;
   /** The screen's own ink and ground, wherever the panel is drawn as the indicator or the strip. */
   ink: { ink: string; ground: string } | null;
+  /** A timed procedure is running: the indicator holds the look it had when it began. */
+  still?: boolean;
   /** When this sitting's screen time started (Date.now() ms), and the session's recorded start. */
   sittingStartedAt: number;
   sessionStartedAt: number | null;
@@ -167,7 +179,14 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
 
   // The ink of a quiet panel: the screen's own. Never a hue of the panel's own choosing.
   const ink = quiet ? (p.ink?.ink ?? UI_TEXT.ink) : null;
-  const problem = cam.level === 'warn' || cam.level === 'bad';
+  /*
+   * The quiet dot's one bit: a sustained problem, held unchanged while a timed procedure runs (see
+   * `still` above). The ref is the look at the last moment the panel was not held.
+   */
+  const problemNow = cam.level === 'bad';
+  const heldProblem = useRef(problemNow);
+  if (!p.still) heldProblem.current = problemNow;
+  const problem = p.still ? heldProblem.current : problemNow;
   // On set-up screens a problem is shown in colour: the alert the researcher asked for.
   const dotColour = cam.level === 'ok' ? '#22c97a' : cam.level === 'off' ? '#9aa0b4' : cam.level === 'warn' ? '#e0a33c' : '#e5484d';
   /** The quiet dot: filled while all is well (or the camera is simply off), an empty ring on a problem. */

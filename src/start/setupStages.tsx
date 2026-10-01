@@ -827,6 +827,8 @@ export function AdaptationScreen({ minMs, maxMs, nextLabel, onDone }: {
             strokeDasharray={circ} strokeDashoffset={circ * (1 - progress)} style={{ transition: 'stroke-dashoffset 0.1s linear' }} />
         </svg>
       ) : (
+        /* An outline, not the loop's shared filled button (tasks/loopChrome.tsx): this field is the
+           adaptation stimulus, and a filled black button would lower its mean luminance. */
         <button type="button" data-testid="adaptation-continue" onClick={() => finish('participant')}
           style={{ fontFamily: '"DM Mono", monospace', fontSize: 20, padding: '14px 34px', borderRadius: 14, border: `2px solid ${CONFIG.ADAPTATION_INK}`, background: 'transparent', color: CONFIG.ADAPTATION_INK, cursor: 'pointer' }}>
           Continue →

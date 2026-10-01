@@ -2064,6 +2064,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           onStimulus={isInLoop(machine.stage)}
           locked={panelLocked}
           ink={panelInk}
+          still={rtTrialsRunning || procedureRunning}
           sittingStartedAt={sittingStartedAt.current}
           sessionStartedAt={session?.session_start_time ?? null}
           stageStartedAt={stageStartedAt}

@@ -270,14 +270,31 @@ reaction-time tasks.
 
 A self-paced rest break is offered **after every two conditions**. Let the participant take it.
 
-**Pausing.** During a display, the small **Pause** button at the top left exits to the Session
-Manager and the session resumes later. It asks first, in a box drawn in the display's own colours:
-**Pause and exit** leaves, **Keep going** carries on. Answer the box promptly — while it is open it
-covers part of the screen, and that time is recorded against the display (`condition_notice_ms`).
-Where you pause matters, and the box tells you which case you are in: pausing *during* a condition
-restarts that condition on resume, so its measurements are taken again; pausing on the grey rest
-screen keeps the condition you have just finished and resumes at the next one. Pause is hidden while
-the reaction-time dots are running.
+**Pausing.** During a display, the **Pause** button at the top left exits to the Session Manager and
+the session resumes later. It is outlined in the display's own colour, with no fill, so it adds
+nothing to the display. It asks first, in a box drawn in the display's own colours: **Pause and exit**
+leaves, **Keep going** carries on. Answer the box promptly — while it is open it covers part of the
+screen, and that time is recorded against the display (`condition_notice_ms`). Where you pause
+matters, and the box tells you which case you are in: pausing *during* a condition restarts that
+condition on resume, so its measurements are taken again; pausing on the grey rest screen keeps the
+condition you have just finished and resumes at the next one. Pause is offered on the reaction
+task's instruction card, disappears when the participant taps **Start**, and comes back once the last
+dot has been shown, while the results are saved.
+
+**The researcher panel** sits at the bottom left. On set-up, break and closing screens it is a dark
+chip with the sitting clock and a coloured camera dot; tap it for the full panel, which takes a
+column at the left and moves the screen's content over rather than covering it. During a display, on
+the grey field, and while the calibration, the camera self-test or the colour-vision plates run, it
+is only a small square outline in that screen's own colour with a dot inside — no clock, no colour
+of its own, no words. A **filled** dot means the camera is working (or off by consent); an **empty
+ring** means a problem that has lasted: the camera stopped or sees black, no frames, no face for 8
+seconds, or blinks not being counted. A face lost for a moment does not change it. On the reading
+pages and the grey field a tap opens a two-line strip in the bottom-left corner with the details (on
+a reading page the time it is open is recorded against the display); on the questions, the ratings,
+the word search and the reaction task it cannot be opened, because there it would sit where the
+participant answers or looks. While the reaction-time dots, the calibration dots, the camera
+self-test or the colour-vision plates are running it does not change at all. The camera-stopped and
+black-picture notices are what to act on, and they still appear by themselves.
 
 On the **break** screen the way out is the same white **Exit — resume later** button as in set-up;
 the display just finished is kept and the sitting resumes at the next one. The break is the best

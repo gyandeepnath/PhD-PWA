@@ -122,6 +122,33 @@ describe('researcher panel', () => {
     expect(noBaseline.dot).toBe('transparent');
   });
 
+  it('rings only for a sustained problem: a face lost for a moment does not flicker the dot', () => {
+    const dot = (s: LiveTrackingStats) => {
+      const m = mount({ onStimulus: true, ink: { ink: '#000000', ground: '#FFFFFF' } });
+      m.push(s);
+      const bg = (m.q('researcher-panel-collapsed')!.firstElementChild as HTMLElement).style.background;
+      m.unmount();
+      return bg;
+    };
+    expect(cameraState({ cameraStatus: 'active', cameraBlocked: false, cameraLost: false, stale: false, s: stats({ facePresent: false, noFaceForMs: 3_000 }) }).level).toBe('warn');
+    expect(dot(stats({ facePresent: false, noFaceForMs: 3_000 }))).not.toBe('transparent');
+    expect(dot(stats({ facePresent: false, noFaceForMs: 9_000 }))).toBe('transparent');
+  });
+
+  it('holds still while a timed procedure runs, and catches up when it ends', () => {
+    // The reaction-time trials are running (still) and the face is lost for good part-way through:
+    // the indicator keeps the look it had when they began.
+    const m = mount({ onStimulus: true, locked: true, ink: { ink: '#000000', ground: '#FFFFFF' }, still: true });
+    const dot = () => (m.q('researcher-panel-collapsed')!.firstElementChild as HTMLElement).style.background;
+    expect(dot()).not.toBe('transparent');
+    m.push(stats({ facePresent: false, noFaceForMs: 20_000 }));
+    expect(dot()).not.toBe('transparent');
+    // The trials end: the problem shows at once.
+    m.render({ still: false });
+    expect(dot()).toBe('transparent');
+    m.unmount();
+  });
+
   it('a locked indicator over a set-up procedure is the same quiet look, in that screen\'s ink', () => {
     const m = mount({ onStimulus: false, locked: true, ink: { ink: '#ffffff', ground: '#0a0a12' } });
     m.push(stats({ facePresent: false, noFaceForMs: 16_000 }));

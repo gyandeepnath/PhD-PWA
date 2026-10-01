@@ -7,9 +7,9 @@
  * 12 px DM Mono (10.3 px on the tablet at the old scale), "Page 1 of 3" at 12 px, a passage title at
  * 13, rating labels at 11-14, the reaction counter at 12 px and HALF opacity, a page bar at 60% alpha;
  * five primary-button styles in three positions (centred, bottom right, left under the content), in
- * two faces and three sizes. All of it is drawn in the condition's ink, so text set small or
- * translucent was hardest to read in exactly the low-contrast conditions — instruction legibility
- * varying with the factor under test.
+ * DM Mono at 14 and 16 px and at different heights. All of it is drawn in the condition's ink, so
+ * text set small or translucent was hardest to read in exactly the low-contrast conditions —
+ * instruction legibility varying with the factor under test.
  *
  * THE RULES.
  *   - Text a participant has to read on a condition screen is at least LOOP_TEXT_MIN_PX (16) design
@@ -26,7 +26,12 @@
  *     edge of the screen's content — in the footer row on the reading and search pages, directly
  *     under the content on the questions and the ratings — and centred on the task intro cards, where
  *     everything is centred.
- * tests/loopText.test.ts reads the condition-screen sources for these rules.
+ *   - NOT the grey field. Its Continue stays the field's own black outline (setupStages.tsx,
+ *     AdaptationScreen): that screen is the adaptation stimulus, its mean luminance is the point of
+ *     it, and the shared button's filled ink would put a black patch on it. It is the same in every
+ *     condition, so it confounds nothing.
+ * tests/loopText.test.ts reads the condition-screen sources for these rules; e2e/loopChrome.spec.ts
+ * measures them as rendered, on every screen of a display, at the tablet's viewports.
  */
 import type { CSSProperties, ReactNode } from 'react';
 import { STIMULUS_FONT_STACK } from '@/lib/fonts';
