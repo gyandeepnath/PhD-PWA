@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LiveTrackingStats } from '@/tracking/useTracking';
 import { setMonitorOpen } from '@/lib/hiddenTime';
+import { UI_TEXT } from '@/lib/uiPalette';
 
 /**
  * The researcher's corner panel: live camera readout and the session clock, collapsible.
@@ -17,16 +18,31 @@ import { setMonitorOpen } from '@/lib/hiddenTime';
  *               conditions done, and an estimate of time left.
  *
  * PROTECTING THE MEASUREMENT. A live number in the corner of a stimulus screen is something the
- * participant can see. So on condition screens:
- *   - the panel closes by itself when a condition screen starts, unless "Keep open during tasks" is on;
- *   - it is drawn in the screen's own ink on no background (as the Pause button is), so it adds no
- *     patch of a different luminance to the polarity manipulation, and it updates once a second;
- *   - on reading screens it opens as a compact two-line strip in the empty left half of the footer,
- *     below the passage, never over it;
- *   - during word search and the reaction task it stays collapsed and cannot be tapped: an open
- *     panel could cover a target;
+ * participant can see. So on condition screens and the grey field (`onStimulus`):
+ *   - collapsed, the panel is a MONOCHROME INK INDICATOR: a small outline square in the screen's own
+ *     ink with a dot in it — filled while the camera is fine or off, an empty ring while there is a
+ *     problem — and no text and no hue. It used to show the sitting clock, and turned amber or red,
+ *     with words ("No face for 16 s"), whenever face detection faltered: a coloured patch in the
+ *     periphery during reading and during the COLOUR go/no-go task, appearing for reasons unrelated
+ *     to the condition (screen audit F10). The blocking camera-lost and camera-blocked notices are
+ *     what the operator acts on, and they still fire;
+ *   - it closes by itself when a condition screen starts, unless "Keep open during tasks" is on;
+ *   - opened, it is the compact two-line strip, in the screen's ink on no ground, updated once a
+ *     second — and it can be opened only on the reading task and the grey field, whose bottom-left
+ *     corner nothing else uses (the reading footer's countdown and button sit at the right; see
+ *     ReadingTask). Everywhere else in a display — the questions, the ratings, word search, the
+ *     reaction task — it is LOCKED: collapsed and untappable, because an open panel there sat over
+ *     the answers, the sliders, or where a target could be, and a tap near the left edge landed on it;
  *   - every moment it is open is recorded (setMonitorOpen → condition_monitor_open_ms and
  *     reading_monitor_open_ms), so its effect can be modelled rather than assumed away.
+ * During the eye calibration, the camera self-test and the colour-vision plates (`locked`, not on a
+ * condition screen) it is the same locked indicator, in that screen's ink.
+ *
+ * ON SET-UP AND CLOSING SCREENS the panel is the full card, and it RESERVES ITS FOOTPRINT: while it
+ * is open it docks in a column at the left and sets --vl-panel-dock, by which Experiment pads the
+ * screen, so the screen's own content moves over and nothing is ever under the card. Overlaid, it
+ * covered "All checks pass — continue" on pre-flight at every viewport, and the sliders and Continue
+ * of the baseline fatigue scale.
  * Nulls render as "—", never 0.
  */
 export interface ResearcherPanelProps {
@@ -39,13 +55,14 @@ export interface ResearcherPanelProps {
   fpsFloor: number;
   /** Human label of the current stage. */
   stageLabel: string;
-  /** A condition screen is showing (collapse by default, draw in ink). */
+  /** A condition screen or the grey field is showing (collapse by default, draw in ink, strip when open). */
   onStimulus: boolean;
-  /** Reading specifically: open as a compact strip in the footer. */
-  onReading: boolean;
-  /** Word search or reaction trials: stay collapsed and untappable. */
+  /**
+   * Stay collapsed and untappable, as the monochrome indicator: every display screen but reading and
+   * the grey field, and the measured procedures in set-up (calibration, self-test, colour-vision plates).
+   */
   locked: boolean;
-  /** The condition's ink and ground while on a stimulus screen. */
+  /** The screen's own ink and ground, wherever the panel is drawn as the indicator or the strip. */
   ink: { ink: string; ground: string } | null;
   /** When this sitting's screen time started (Date.now() ms), and the session's recorded start. */
   sittingStartedAt: number;
@@ -55,6 +72,12 @@ export interface ResearcherPanelProps {
   conditionsTotal: number | null;
   minutesLeft: number | null;
 }
+
+/** The card's width, and the column a set-up screen gives up while it is open: card + 10 px each side + 4. */
+const PANEL_CARD_PX = 320;
+export const PANEL_DOCK_PX = 10 + PANEL_CARD_PX + 14;
+/** The strip's widest. ReadingTask's countdown starts 420 px from the column's right end, clear of it. */
+export const PANEL_STRIP_MAX_PX = 440;
 
 const KEEP_OPEN_KEY = 'visulab.panel.keepOpen';
 const readKeepOpen = () => { try { return localStorage.getItem(KEEP_OPEN_KEY) === '1'; } catch { return false; } };
@@ -122,34 +145,64 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
     return () => setMonitorOpen(false);
   }, [shown, p.onStimulus]);
 
+  /** Drawn as the indicator or the strip, in the screen's ink: on a display, or locked over a procedure. */
+  const quiet = p.onStimulus || p.locked;
+  /*
+   * The card, open on a set-up or closing screen, reserves its column: Experiment pads the screen by
+   * --vl-panel-dock, so the content moves over instead of lying under the card. Cleared the moment it
+   * closes or the screen becomes one where the card is not drawn.
+   */
+  const docked = shown && !quiet;
+  useEffect(() => {
+    const root = document.documentElement;
+    if (docked) root.style.setProperty('--vl-panel-dock', `${PANEL_DOCK_PX}px`);
+    else root.style.removeProperty('--vl-panel-dock');
+    return () => { root.style.removeProperty('--vl-panel-dock'); };
+  }, [docked]);
+
   const stale = p.cameraStatus === 'active' && at > 0 && now - at > 2500;
   const cam = cameraState({ cameraStatus: p.cameraStatus, cameraBlocked: p.cameraBlocked, cameraLost: p.cameraLost, stale, s });
   const sittingMs = now - p.sittingStartedAt;
   const num = (v: number | null | undefined, d = 0) => (v == null || !Number.isFinite(v) ? '—' : v.toFixed(d));
 
-  // On a stimulus screen: the condition's own ink, no background. Elsewhere: a legible dark card.
-  const ink = p.onStimulus && p.ink ? p.ink.ink : null;
-  const fg = ink ?? '#ffffff';
-  const card: React.CSSProperties = ink
-    ? { background: 'transparent', color: ink, border: `1px solid ${ink}` }
-    : { background: 'rgba(26,26,46,0.94)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 4px 16px rgba(0,0,0,.25)' };
-  // A problem is always shown in colour, even in ink mode: it is the alert the researcher asked for.
-  const dotColour = cam.level === 'ok' ? (ink ?? '#22c97a') : cam.level === 'off' ? (ink ?? '#9aa0b4') : cam.level === 'warn' ? '#e0a33c' : '#e5484d';
-
-  /*
-   * Type sizes. On a condition screen the panel keeps its compact sizes (the strip under the passage
-   * and the open panel are part of what the participant can see there, and are not changed). On
-   * setup screens it is operator UI and follows the setup screens' floor: 15 px text, 14 px labels.
-   */
-  const fsText = p.onStimulus ? 13 : 15;
-  const fsBody = p.onStimulus ? 13.5 : 15;
-  const fsLabel = p.onStimulus ? 13 : 14;
+  // The ink of a quiet panel: the screen's own. Never a hue of the panel's own choosing.
+  const ink = quiet ? (p.ink?.ink ?? UI_TEXT.ink) : null;
+  const problem = cam.level === 'warn' || cam.level === 'bad';
+  // On set-up screens a problem is shown in colour: the alert the researcher asked for.
+  const dotColour = cam.level === 'ok' ? '#22c97a' : cam.level === 'off' ? '#9aa0b4' : cam.level === 'warn' ? '#e0a33c' : '#e5484d';
+  /** The quiet dot: filled while all is well (or the camera is simply off), an empty ring on a problem. */
+  const quietDot = (size: number): React.CSSProperties => ({
+    display: 'inline-block', width: size, height: size, borderRadius: '50%', flex: '0 0 auto', boxSizing: 'border-box',
+    background: problem ? 'transparent' : ink!, border: `2px solid ${ink}`,
+  });
 
   const base: React.CSSProperties = {
     position: 'fixed', left: 10, bottom: 10, zIndex: 45,
     fontFamily: '"DM Mono", ui-monospace, monospace', borderRadius: 12,
     pointerEvents: p.locked ? 'none' : 'auto',
   };
+
+  if (!shown && quiet) {
+    // The monochrome indicator: no text, no hue, one look on every display screen and procedure.
+    return (
+      <button
+        type="button"
+        data-testid="researcher-panel-collapsed"
+        data-quiet="true"
+        aria-label={`Researcher panel: ${cam.text}. Sitting time ${clock(sittingMs)}.${p.locked ? '' : ' Tap to open.'}`}
+        onClick={() => setOpen(true)}
+        style={{
+          ...base, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+          width: 'var(--vl-nav-chip-h)', height: 'var(--vl-nav-chip-h)',
+          background: 'transparent', border: `1px solid ${ink}`, cursor: p.locked ? 'default' : 'pointer',
+        }}
+      >
+        <span style={quietDot(12)} />
+      </button>
+    );
+  }
+
+  const card: React.CSSProperties = { background: 'rgba(26,26,46,0.94)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 4px 16px rgba(0,0,0,.25)' };
 
   if (!shown) {
     return (
@@ -158,22 +211,24 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
         data-testid="researcher-panel-collapsed"
         aria-label={`Researcher panel: ${cam.text}. Sitting time ${clock(sittingMs)}. Tap to open.`}
         onClick={() => setOpen(true)}
-        style={{ ...base, ...card, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', fontSize: 15, cursor: 'pointer', minHeight: 40 }}
+        // 44 CSS px at any display scale, like every other operator control (theme.css).
+        style={{ ...base, ...card, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', fontSize: 15, cursor: 'pointer', minHeight: 'var(--vl-nav-chip-h)' }}
       >
         <span style={{ width: 11, height: 11, borderRadius: '50%', background: dotColour, flex: '0 0 auto' }} />
-        <span>{clock(sittingMs, !p.onStimulus)}</span>
-        {cam.level === 'bad' && <span style={{ fontSize: fsText }}>{cam.text}</span>}
+        <span>{clock(sittingMs)}</span>
+        {cam.level === 'bad' && <span style={{ fontSize: 15 }}>{cam.text}</span>}
       </button>
     );
   }
 
-  if (p.onReading) {
-    // Two lines in the empty left of the reading footer, below the passage.
+  if (quiet) {
+    // Two lines in the bottom-left corner — on reading, below the passage, left of the footer's
+    // countdown and button — in the screen's ink on no ground.
     return (
-      <div data-testid="researcher-panel-strip" style={{ ...base, ...card, padding: '6px 12px', fontSize: 13, lineHeight: 1.45, maxWidth: 440, cursor: 'pointer' }}
+      <div data-testid="researcher-panel-strip" style={{ ...base, color: ink!, background: 'transparent', border: `1px solid ${ink}`, padding: '6px 12px', fontSize: 13, lineHeight: 1.45, maxWidth: PANEL_STRIP_MAX_PX, cursor: 'pointer' }}
         onClick={() => setOpen(false)} role="button" aria-label="Close researcher panel">
         <div>
-          <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: dotColour, marginRight: 6 }} />
+          <span style={{ ...quietDot(9), marginRight: 6 }} />
           {cam.text} · blinks {num(s?.blinks)} ({num(s?.incomplete)} inc) · {num(s?.fps)} fps
         </div>
         <div>sitting {clock(sittingMs, false)} · condition {p.conditionsDone ?? '—'}/{p.conditionsTotal ?? '—'} · ~{p.minutesLeft ?? '—'} min left</div>
@@ -183,19 +238,26 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
 
   const row = (k: string, v: React.ReactNode, testid?: string) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14 }} data-testid={testid}>
-      <span style={{ opacity: ink ? 1 : 0.78 }}>{k}</span><span style={{ textAlign: 'right' }}>{v}</span>
+      <span style={{ opacity: 0.78 }}>{k}</span><span style={{ textAlign: 'right' }}>{v}</span>
     </div>
   );
   return (
-    <div data-testid="researcher-panel" style={{ ...base, ...card, padding: '10px 12px', fontSize: fsBody, lineHeight: 1.5, width: p.onStimulus ? 290 : 320 }}>
+    <div
+      data-testid="researcher-panel"
+      style={{
+        ...base, ...card, padding: '10px 12px', fontSize: 15, lineHeight: 1.5, width: PANEL_CARD_PX,
+        // Docked in the column the screen has given up to it (--vl-panel-dock), below the Exit chip's band.
+        maxHeight: 'calc(100% - var(--vl-nav-band) - 10px)', overflowY: 'auto',
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <strong style={{ fontSize: fsLabel, letterSpacing: 0.5 }}>RESEARCHER</strong>
+        <strong style={{ fontSize: 14, letterSpacing: 0.5 }}>RESEARCHER</strong>
         <button type="button" data-testid="researcher-panel-close" onClick={() => setOpen(false)}
-          style={{ background: 'transparent', color: fg, border: `1px solid ${fg}`, borderRadius: 8, padding: '4px 10px', fontSize: fsLabel, cursor: 'pointer', fontFamily: 'inherit' }}>
+          style={{ background: 'transparent', color: '#fff', border: '1px solid #fff', borderRadius: 8, padding: '4px 10px', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
           Hide
         </button>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, color: cam.level === 'ok' || cam.level === 'off' ? fg : dotColour }} data-testid="researcher-camera-state">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, color: cam.level === 'ok' || cam.level === 'off' ? '#fff' : dotColour }} data-testid="researcher-camera-state">
         <span style={{ width: 11, height: 11, borderRadius: '50%', background: dotColour }} />{cam.text}
       </div>
       <div style={{ marginTop: 6 }}>
@@ -203,17 +265,17 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
         {row('Blinks (sitting)', num(s?.sessionBlinks))}
         {row('Eye open', s?.earRatio != null ? `${Math.round(s.earRatio * 100)}% of baseline` : '—')}
         {row('Gaze', s?.gazeZone ? (s.gazeZone === 'cc' ? 'centre' : s.gazeZone) : '—')}
-        {row('Frame rate', <span style={{ color: s?.fps != null && s.fps < p.fpsFloor && !ink ? '#ffd27a' : undefined }}>{num(s?.fps)} fps{s?.exposureFps != null ? ` · last ${num(s.exposureFps)}` : ''}</span>)}
+        {row('Frame rate', <span style={{ color: s?.fps != null && s.fps < p.fpsFloor ? '#ffd27a' : undefined }}>{num(s?.fps)} fps{s?.exposureFps != null ? ` · last ${num(s.exposureFps)}` : ''}</span>)}
         {row('Brightness', s?.luma != null ? `${s.luma}/255` : '—')}
       </div>
-      <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${ink ?? 'rgba(255,255,255,0.18)'}` }}>
+      <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.18)' }}>
         {row('This sitting', clock(sittingMs), 'researcher-clock')}
         {row('Since start', clock(p.sessionStartedAt != null ? now - p.sessionStartedAt : null))}
         {row('This screen', clock(now - p.stageStartedAt))}
         {row('Conditions', p.conditionsTotal != null ? `${p.conditionsDone ?? 0} of ${p.conditionsTotal}` : '—')}
         {row('Time left', p.minutesLeft != null ? `about ${p.minutesLeft} min` : '—')}
       </div>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: fsText, cursor: 'pointer' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 15, cursor: 'pointer' }}>
         <input type="checkbox" checked={keepOpen} onChange={(e) => { setKeepOpen(e.target.checked); writeKeepOpen(e.target.checked); }} style={{ width: 18, height: 18 }} />
         Keep open during tasks (recorded)
       </label>

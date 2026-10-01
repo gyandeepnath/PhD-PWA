@@ -46,13 +46,19 @@
   --vl-banner-h: 0px;
   /*
    * The collapsed researcher panel (components/ResearcherPanel.tsx) sits fixed at the bottom left —
-   * left 10, bottom 10, at least 40 tall — on every Experiment stage but the first and the last. A
-   * screen whose content can reach the bottom left reserves its footprint (`.panel-band`), so the chip
-   * never sits over a Continue or Back button. On the old 1194x834 canvas the tablet's wider root left
-   * a margin the chip fitted into; on the 1152x720 canvas the setup screens' buttons start at x 48-58,
-   * under it.
+   * left 10, bottom 10, a 44 CSS px target like every operator control — on every Experiment stage but
+   * the first and the last. A screen whose content can reach the bottom left reserves its footprint
+   * (`.panel-band`), so the chip never sits over a Continue or Back button. On the old 1194x834 canvas
+   * the tablet's wider root left a margin the chip fitted into; on the 1152x720 canvas the setup
+   * screens' buttons start at x 48-58, under it.
    */
-  --vl-panel-reserve: calc(10px + 40px + 14px);
+  --vl-panel-reserve: calc(10px + var(--vl-nav-chip-h) + 14px);
+  /*
+   * While the researcher card is OPEN on a set-up or closing screen, the column it is docked in: set
+   * by ResearcherPanel, and Experiment pads the screen by it, so the content moves over rather than
+   * lying under the card. 0 otherwise, and never set on a condition screen.
+   */
+  --vl-panel-dock: 0px;
 }
 
 /* A screen that keeps the navigation chip's band clear. See --vl-nav-band. */

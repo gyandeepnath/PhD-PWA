@@ -10,10 +10,13 @@ import { STIMULUS_FONT_STACK } from '@/lib/fonts';
 import { CONFIG } from '@/experiment/config';
 import { now } from '@/lib/timing';
 import { TaskIntro } from './TaskIntro';
+import { Counter, LOOP_TEXT_MIN_PX, PrimaryButton } from './loopChrome';
 import type { Passage } from '@/experiment/passages';
+import { displayStepLabel, type DisplayPosition } from '@/experiment/taskSteps';
 import { STIMULUS_COLUMN_PX } from '@/lib/viewportScale';
 import {
   STIMULUS_PAGE_PAD_TOP_PX, STIMULUS_PAGE_PAD_BOTTOM_PX, STIMULUS_FOOTER_ROW_PX, STIMULUS_FOOTER_GAP_PX,
+  STIMULUS_SEARCH_HEADER_PX,
 } from './stimulusPage';
 
 /**
@@ -69,9 +72,11 @@ interface Props {
   background: string;
   text: string;
   onComplete: (r: SearchResult) => void;
+  /** Which display of the sitting this is, for the intro card's eyebrow. */
+  display?: DisplayPosition;
 }
 
-export function VisualSearchTask({ passage, background, text, onComplete }: Props) {
+export function VisualSearchTask({ passage, background, text, onComplete, display }: Props) {
   const target = passage.searchTarget.toLowerCase();
   const totalTargets = passage.searchTargetCount;
 
@@ -172,7 +177,7 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
   if (!started) {
     return (
       <TaskIntro
-        eyebrow="Task 3 of 4 · Visual search"
+        eyebrow={displayStepLabel('VISUAL_SEARCH', display)}
         title="Find the target word"
         lines={[
           `Find and tap every occurrence of the word “${passage.searchTarget}” in the text.`,
@@ -223,18 +228,24 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
       across at 55 cm), and every occurrence of the target is on it from the first moment.
     */}
     <div style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', padding: `${STIMULUS_PAGE_PAD_TOP_PX}px 0 ${STIMULUS_PAGE_PAD_BOTTOM_PX}px`, display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16 }}>
-        <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 15, margin: 0 }}>
-          <strong>Find and tap every:</strong>{' '}
-          <span style={{ padding: '2px 10px', borderRadius: 4, border: `1.5px solid ${text}`, fontWeight: 700 }}>
-            {passage.searchTarget}
-          </span>
-        </p>
-        <span data-testid="search-count" style={{ fontFamily: '"DM Mono", monospace', fontSize: 15 }}>
-          {foundIdx.size} / {totalTargets} found
-        </span>
+      {/*
+        What to find, and how many are found so far: at the condition-screen floor in the stimulus face
+        (they were 15 px DM Mono), the count in the shared counter style at the same place as the
+        reading page's "Page 1 of 3". A FIXED height — the one the excerpts were measured against —
+        so the excerpt's box does not move. See STIMULUS_SEARCH_HEADER_PX.
+      */}
+      <div data-testid="search-header" style={{ height: STIMULUS_SEARCH_HEADER_PX, flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16 }}>
+          <p style={{ fontFamily: STIMULUS_FONT_STACK, fontSize: LOOP_TEXT_MIN_PX, margin: 0 }}>
+            <strong>Find and tap every:</strong>{' '}
+            <span style={{ padding: '2px 10px', borderRadius: 4, border: `1.5px solid ${text}`, fontWeight: 700 }}>
+              {passage.searchTarget}
+            </span>
+          </p>
+          <Counter testId="search-count">{foundIdx.size} of {totalTargets} found</Counter>
+        </div>
+        <div style={{ height: 1, background: text + '40', flexShrink: 0 }} />
       </div>
-      <div style={{ height: 1, background: text + '40', margin: '10px 0 0' }} />
       <div
         data-testid="search-text"
         style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', fontSize: CONFIG.READING_FONT_SIZE_PX, lineHeight: CONFIG.READING_LINE_HEIGHT, fontFamily: STIMULUS_FONT_STACK }}
@@ -288,12 +299,9 @@ export function VisualSearchTask({ passage, background, text, onComplete }: Prop
       {/* The reading page's footer row, at the same fixed height, so the excerpt's box is the page's. */}
       <div data-testid="search-footer" style={{ flexShrink: 0, paddingTop: STIMULUS_FOOTER_GAP_PX, borderTop: `1px solid ${text}20` }}>
         <div style={{ height: STIMULUS_FOOTER_ROW_PX, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-          <button
-            onClick={() => finish('voluntary_early')}
-            style={{ height: STIMULUS_FOOTER_ROW_PX, boxSizing: 'border-box', background: text, color: background, border: 'none', borderRadius: 12, padding: '0 32px', fontFamily: '"DM Mono", monospace', fontSize: 16, cursor: 'pointer' }}
-          >
+          <PrimaryButton ink={text} ground={background} onClick={() => finish('voluntary_early')}>
             Done searching →
-          </button>
+          </PrimaryButton>
         </div>
       </div>
     </div>

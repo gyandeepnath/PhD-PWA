@@ -1,6 +1,8 @@
 /**
- * The researcher panel: collapsed by default on condition screens, openable, never tappable over the
- * speeded tasks, and every moment it is open on a condition screen is reported to the recorder.
+ * The researcher panel: collapsed by default on condition screens, an ink indicator there with no hue
+ * and no text, openable only as the compact strip, never tappable where it is locked, docked with its
+ * footprint reserved on set-up screens, and every moment it is open on a condition screen is reported
+ * to the recorder.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createElement, act } from 'react';
@@ -22,7 +24,7 @@ function mount(over: Partial<ResearcherPanelProps> = {}) {
   const props: ResearcherPanelProps = {
     subscribe: (fn) => { push = fn; return () => { push = null; }; },
     cameraStatus: 'active', cameraBlocked: false, cameraLost: false, fpsFloor: 30,
-    stageLabel: 'questions', onStimulus: false, onReading: false, locked: false, ink: null,
+    stageLabel: 'questions', onStimulus: false, locked: false, ink: null,
     sittingStartedAt: Date.now() - 125_000, sessionStartedAt: Date.now() - 600_000,
     stageStartedAt: Date.now() - 5_000, conditionsDone: 3, conditionsTotal: 10, minutesLeft: 49, ...over,
   };
@@ -66,12 +68,68 @@ describe('researcher panel', () => {
     expect(isMonitorOpen()).toBe(false);
   });
 
-  it('on reading it opens as a compact strip, not the full card', () => {
-    const m = mount({ onStimulus: true, onReading: true, ink: { ink: '#000000', ground: '#FFFFFF' } });
+  it('on a condition screen it opens as a compact strip, not the full card', () => {
+    const m = mount({ onStimulus: true, ink: { ink: '#000000', ground: '#FFFFFF' } });
     act(() => { m.q('researcher-panel-collapsed')!.click(); });
     expect(m.q('researcher-panel-strip')).not.toBeNull();
     expect(m.q('researcher-panel')).toBeNull();
     m.unmount();
+  });
+
+  it('on a condition screen it is an ink indicator: no text, no hue — whatever the camera is doing', () => {
+    // Blue text on white, so a hue of the panel's own would differ from the ink. A fresh panel per
+    // state: on a condition screen the panel takes at most one reading a second.
+    const ink = { ink: '#2869FF', ground: '#FFFFFF' };
+    const look = (s: LiveTrackingStats) => {
+      const m = mount({ onStimulus: true, ink });
+      m.push(s);
+      const pill = m.q('researcher-panel-collapsed')!;
+      const colours = [pill, ...Array.from(pill.querySelectorAll('*'))]
+        .flatMap((e) => { const st = (e as HTMLElement).style; return [st.color, st.background, st.backgroundColor, st.borderColor, st.border]; })
+        .join(' ');
+      const out = { text: pill.textContent, colours, dot: (pill.firstElementChild as HTMLElement).style.background };
+      m.unmount();
+      return out;
+    };
+    const fine = look(stats());
+    const noFace = look(stats({ facePresent: false, noFaceForMs: 16_000 }));
+    const noBaseline = look(stats({ blinks: null }));
+    for (const l of [fine, noFace, noBaseline]) {
+      expect(l.text).toBe('');                                // no clock, no "No face for 16 s"
+      expect(l.colours).not.toMatch(/224, 163, 60|229, 72, 77|34, 201, 122|154, 160, 180|e0a33c|e5484d|22c97a|9aa0b4/i);
+    }
+    // A problem is told by shape alone: the filled dot becomes an empty ring.
+    expect(fine.dot).not.toBe('transparent');
+    expect(noFace.dot).toBe('transparent');
+    expect(noBaseline.dot).toBe('transparent');
+  });
+
+  it('a locked indicator over a set-up procedure is the same quiet look, in that screen\'s ink', () => {
+    const m = mount({ onStimulus: false, locked: true, ink: { ink: '#ffffff', ground: '#0a0a12' } });
+    m.push(stats({ facePresent: false, noFaceForMs: 16_000 }));
+    const pill = m.q('researcher-panel-collapsed')!;
+    expect(pill.textContent).toBe('');
+    expect(pill.getAttribute('data-quiet')).toBe('true');
+    expect(pill.style.pointerEvents).toBe('none');
+    m.unmount();
+  });
+
+  it('on a set-up screen the open card reserves its footprint, and gives it back when it closes', () => {
+    const dock = () => document.documentElement.style.getPropertyValue('--vl-panel-dock');
+    const m = mount();
+    expect(dock()).toBe('');
+    act(() => { m.q('researcher-panel-collapsed')!.click(); });
+    expect(m.q('researcher-panel')).not.toBeNull();
+    expect(dock()).toBe('344px');
+    act(() => { m.q('researcher-panel-close')!.click(); });
+    expect(dock()).toBe('');
+    // And a condition screen never docks: the strip is not reserved, it sits where nothing else is.
+    m.render({ onStimulus: true, ink: { ink: '#000000', ground: '#FFFFFF' } });
+    act(() => { m.q('researcher-panel-collapsed')!.click(); });
+    expect(m.q('researcher-panel-strip')).not.toBeNull();
+    expect(dock()).toBe('');
+    m.unmount();
+    expect(dock()).toBe('');
   });
 
   it('cannot be opened during the speeded tasks', () => {

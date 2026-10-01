@@ -11,10 +11,13 @@ import { CONFIG } from '@/experiment/config';
 import { now } from '@/lib/timing';
 import { trackHiddenTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { TaskIntro } from './TaskIntro';
+import { Counter, Eyebrow, LOOP_TEXT_MIN_PX, PrimaryButton } from './loopChrome';
 import type { Passage } from '@/experiment/passages';
+import { displayStepLabel, type DisplayPosition } from '@/experiment/taskSteps';
 import { STIMULUS_COLUMN_PX } from '@/lib/viewportScale';
 import {
   STIMULUS_PAGE_PAD_TOP_PX, STIMULUS_PAGE_PAD_BOTTOM_PX, STIMULUS_FOOTER_ROW_PX, STIMULUS_FOOTER_GAP_PX,
+  STIMULUS_READING_HEADER_PX,
 } from './stimulusPage';
 
 export interface ReadingResult {
@@ -35,6 +38,8 @@ interface Props {
   onComplete: (r: ReadingResult) => void;
   /** Fired when the participant starts reading — the true opening of the measurement window. */
   onBegin?: () => void;
+  /** Which display of the sitting this is, for the intro card's eyebrow. */
+  display?: DisplayPosition;
 }
 
 /**
@@ -44,7 +49,7 @@ interface Props {
  */
 const COUNTDOWN_WIDTH_PX = 420;
 
-export function ReadingTask({ passage, background, text, onComplete, onBegin }: Props) {
+export function ReadingTask({ passage, background, text, onComplete, onBegin, display }: Props) {
   const [started, setStarted] = useState(false);
   const [page, setPage] = useState(0);
   const [unlocked, setUnlocked] = useState(false);
@@ -150,7 +155,7 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
   if (!started) {
     return (
       <TaskIntro
-        eyebrow="Task 1 of 4 · Reading"
+        eyebrow={displayStepLabel('READING_TASK', display)}
         title="Read the passage"
         lines={[
           'Read the passage carefully at your normal pace.',
@@ -188,9 +193,6 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
     } else setPage((p) => p + 1);
   };
 
-  const minSecs = Math.ceil(CONFIG.READING_PAGE_MIN_MS / 1000);
-  const countdownPct = Math.min(100, ((minSecs - secsLeft) / minSecs) * 100);
-
   return (
     /*
      * The column is a FIXED width in root pixels, centred, rather than a percentage of the root.
@@ -220,16 +222,17 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
        */
       style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', padding: `${STIMULUS_PAGE_PAD_TOP_PX}px 0 ${STIMULUS_PAGE_PAD_BOTTOM_PX}px`, display: 'flex', flexDirection: 'column', height: '100%' }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        {/* Full ink, like every line on a condition screen that is meant to be read: at 50-60% these
-            fell to about 1.5:1 in the low-contrast conditions. */}
-        <span style={{ fontFamily: STIMULUS_FONT_STACK, fontSize: 13, textTransform: 'uppercase' }}>{passage.title}</span>
-        <span style={{ fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
-          Page {page + 1} of {totalPages}
-        </span>
-      </div>
-      <div style={{ height: 4, background: text + '20', margin: '8px 0', borderRadius: 2 }}>
-        <div style={{ height: '100%', width: `${((page + 1) / totalPages) * 100}%`, background: text + '60', borderRadius: 2 }} />
+      {/*
+        The passage's title and the page counter, at the condition-screen floor (16 px, full ink): they
+        were 13 px and 12 px DM Mono — 11.2 and 10.3 CSS px on the tablet at the old scale — over a
+        page bar filled at 60% alpha, so the least legible chrome was in the lowest-contrast
+        conditions (screen audit F9). The bar is gone rather than redrawn: it said "page 1 of 3" a
+        second time, in a second style (F13). The header is a FIXED height, the one the pages were
+        measured against, so none of this moves the text box. See STIMULUS_READING_HEADER_PX.
+      */}
+      <div data-testid="reading-header" style={{ height: STIMULUS_READING_HEADER_PX, flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24 }}>
+        <Eyebrow style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{passage.title}</Eyebrow>
+        <Counter testId="reading-page-counter">Page {page + 1} of {totalPages}</Counter>
       </div>
 
       {/*
@@ -294,27 +297,24 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin }: 
         F3). Both now sit in a row of STIMULUS_FOOTER_ROW_PX, and the button is exactly that tall.
 
         The countdown sits at the RIGHT, where the button will appear, not across the row: the left
-        of the footer belongs to the researcher panel (its collapsed chip, or its two-line strip
-        when opened), and in the 1040 px column the countdown ran underneath both.
+        of the footer belongs to the researcher panel (its indicator, or its two-line strip when
+        opened), and in the 1040 px column the countdown ran underneath both.
+
+        The countdown is words only, at the floor (16 px, full ink; it was 14 px DM Mono over a bar
+        filled at 70% alpha). The bar grew continuously through the first 20 s of every page — moving
+        ink in the periphery, inside the blink window, thirty times a sitting — and said nothing the
+        seconds do not.
       */}
       <div data-testid="reading-footer" style={{ flexShrink: 0, paddingTop: STIMULUS_FOOTER_GAP_PX, borderTop: `1px solid ${text}20` }}>
         <div style={{ height: STIMULUS_FOOTER_ROW_PX, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
           {!unlocked ? (
-            <div data-testid="reading-countdown" style={{ width: COUNTDOWN_WIDTH_PX, maxWidth: '100%' }}>
-              <div style={{ fontFamily: '"DM Mono", monospace', fontSize: 14, marginBottom: 6 }}>
-                Please keep reading — you can continue in {secsLeft}s
-              </div>
-              <div style={{ height: 6, background: text + '20', borderRadius: 3 }}>
-                <div style={{ height: '100%', width: `${countdownPct}%`, background: text + '70', borderRadius: 3, transition: 'width 0.2s linear' }} />
-              </div>
-            </div>
+            <p data-testid="reading-countdown" style={{ width: COUNTDOWN_WIDTH_PX, maxWidth: '100%', margin: 0, textAlign: 'right', fontFamily: STIMULUS_FONT_STACK, fontSize: LOOP_TEXT_MIN_PX }}>
+              Please keep reading — you can continue in {secsLeft}s
+            </p>
           ) : (
-            <button
-              onClick={next}
-              style={{ height: STIMULUS_FOOTER_ROW_PX, boxSizing: 'border-box', background: text, color: background, border: 'none', borderRadius: 12, padding: '0 32px', fontFamily: '"DM Mono", monospace', fontSize: 16, cursor: 'pointer' }}
-            >
+            <PrimaryButton ink={text} ground={background} onClick={next}>
               {isLast ? "I've finished reading →" : 'Next page →'}
-            </button>
+            </PrimaryButton>
           )}
         </div>
       </div>

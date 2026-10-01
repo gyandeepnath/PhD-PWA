@@ -7,44 +7,67 @@
  * another; and "Pause" in DM Mono 12, which the tablet draws at about 10 px, on a 50 x 24 px tap
  * target. An operator standing beside a participant had to look for the way out on every screen.
  *
- * THE RULE. Always fixed at the top left, 12 px in. Text at 17 design px in Roboto (15 CSS px on a
- * Xiaomi Pad 6). The tap target is 44 CSS px high on the DEVICE, whatever the display scale is — see
- * --vl-nav-chip-h in theme.css. The label states the action ("Back to sessions", "Exit — resume
- * later"), never just a place name, because what the tap does differs by screen.
+ * THE RULE. Always fixed at the top left, 12 px in (1 and 4 px in on a condition screen; below).
+ * Text at 17 design px in Roboto. The tap target is 44 CSS px high on the DEVICE, whatever the display
+ * scale is — see --vl-nav-chip-h in theme.css. The label states the action ("Back to sessions", "Exit
+ * — resume later"), never just a place name, because what the tap does differs by screen.
  *
- * NOT ON A CONDITION SCREEN. Inside the condition-run the Pause chip is drawn in the screen's own ink
- * at its original size (Experiment.tsx), because anything larger or differently coloured there changes
- * the stimulus. This component is for operator and setup screens, the break and the closing
- * questionnaires, where the cream ground is the same in every condition.
+ * ON A CONDITION SCREEN — `ink` — the same chip is drawn in the screen's own ink on no ground at all
+ * (no fill, no shadow: nothing inside the condition-run may add a colour or a luminance the condition
+ * does not already have), and placed so it never touches the stimulus. It was a 50 x 24 px target in
+ * 12 px DM Mono, 10.3 px on the tablet at the old scale (screen audit F12); it is now the same 17 px
+ * label and 44 CSS px target as everywhere else, in the top-left corner OUTSIDE the stimulus column:
+ *   - 1 px from the top, so a 44 CSS px chip ends at 45, above the 46 px at which every condition
+ *     screen's column content starts (STIMULUS_PAGE_PAD_TOP_PX). Its right end, about 85 px, is past
+ *     the column's left edge (56) on the installed tablet, so it has to be above the column, not
+ *     beside it. With Chrome's address bar (scale 0.90) the root is 1280 wide, the column starts at
+ *     120, and the chip is beside it;
+ *   - well clear of the reaction task's planned dot positions: the nearest, (310, 94) on the
+ *     1152 x 720 canvas and 52 px across, is about 230 px from the chip's nearest corner, over 200 px
+ *     from its edge, against the 118 px every chrome zone is to keep. (Pause is hidden while the dots
+ *     run in any case.)
+ * e2e/loopChrome.spec.ts measures these at the tablet's viewports.
  *
- * Screens whose content could reach the top-left corner reserve the chip's band with `.nav-band`.
+ * Screens whose content could reach the top-left corner reserve the chip's band with `.nav-band`;
+ * condition screens reserve it with their own top padding.
  */
 import type { ReactNode } from 'react';
 import { UI_TEXT } from '@/lib/uiPalette';
 
-export function NavChip({ label, onClick, testId, disabled = false }: {
+export function NavChip({ label, onClick, testId, disabled = false, ink = null, ariaLabel }: {
   /** What the tap does, stated as an action. */
   label: ReactNode;
   onClick: () => void;
   testId?: string;
   disabled?: boolean;
+  /** On a condition screen (or the grey field): that screen's ink and ground. */
+  ink?: { ink: string; ground: string } | null;
+  ariaLabel?: string;
 }) {
+  const look: React.CSSProperties = ink
+    ? {
+      top: 1, left: 4, height: 'var(--vl-nav-chip-h)', padding: '0 16px',
+      border: `1px solid ${ink.ink}`, background: 'transparent', color: ink.ink,
+    }
+    : {
+      top: 12, left: 12, minHeight: 'var(--vl-nav-chip-h)', padding: '0 18px',
+      border: '1px solid #bdb8ae', background: '#ffffff', color: UI_TEXT.ink,
+      boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
+    };
   return (
     <button
       type="button"
       data-testid={testId ?? 'nav-chip'}
+      aria-label={ariaLabel}
       onClick={onClick}
       disabled={disabled}
       className="font-sans"
       style={{
-        position: 'fixed', top: 12, left: 12, zIndex: 45,
-        minHeight: 'var(--vl-nav-chip-h)', minWidth: 'var(--vl-nav-chip-h)',
-        display: 'inline-flex', alignItems: 'center', gap: 8,
-        padding: '0 18px', borderRadius: 12,
-        fontSize: 17, fontWeight: 500, lineHeight: 1.2,
-        border: '1px solid #bdb8ae', background: '#ffffff', color: UI_TEXT.ink,
-        boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
+        position: 'fixed', zIndex: 45, minWidth: 'var(--vl-nav-chip-h)',
+        display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 12,
+        fontSize: 17, fontWeight: 500, lineHeight: 1.2, whiteSpace: 'nowrap',
         cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1,
+        ...look,
       }}
     >
       {label}

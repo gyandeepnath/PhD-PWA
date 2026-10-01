@@ -419,8 +419,12 @@ test('a Pause confirmation never outlives its screen: a timed task ending under 
   await page.waitForFunction(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') !== 'VISUAL_SEARCH', null, { timeout: 60_000 });
   expect(await stageNow(page)).toBe('REACTION_TIME');
   await expect(page.getByTestId('pause-dialog')).toHaveCount(0);
-  // And Pause is not offered over the reaction-time block, as on any other arrival there.
-  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toHaveCount(0);
+  // Pause is re-offered on the new screen's own terms: on the reaction-time instruction card, where
+  // no trial is running (screen audit F15), and never once the trials start.
+  const pause = page.getByRole('button', { name: 'Pause', exact: true });
+  await expect(pause).toHaveCount(1);
+  await page.getByRole('button', { name: /Start practice/ }).click();
+  await expect(pause).toHaveCount(0);
 });
 
 test('a sitting left on the NASA-TLX resumes on the NASA-TLX: the closing CVS-Q is not asked twice', async ({ page }) => {

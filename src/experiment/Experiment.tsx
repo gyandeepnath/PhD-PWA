@@ -56,9 +56,11 @@ import { currentScale, layoutViewport, setScaleFrozen, rescalesWhileFrozen, disp
 import { ResearcherPanel } from '@/components/ResearcherPanel';
 import { NavChip } from '@/components/NavChip';
 import { useDialog } from '@/components/ConfirmDialog';
+import { UI_TEXT } from '@/lib/uiPalette';
 import { CameraSelfTest } from '@/start/CameraSelfTest';
 import { FPS_RATIO_THRESHOLD } from '@/tracking/blink';
 import { backTarget, operatorExitFor, EXIT_LABEL } from './navigation';
+import { displayStepLabel } from './taskSteps';
 
 function provenance(): Provenance {
   return {
@@ -222,8 +224,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
 
   useEffect(() => {
     transitioning.current = false;
-    // Entering a new reaction-time block means trials are running again.
-    if (machine.stage === 'REACTION_TIME') setRtBlockFinished(false);
+    // A new reaction-time block opens on its instruction card: no trial has run yet.
+    if (machine.stage === 'REACTION_TIME') setRtPhase('card');
   }, [machine]);
 
   /**
@@ -362,8 +364,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const [wakeLockUnsupported, setWakeLockUnsupported] = useState(false);
   /** Surfaced when creating the session record failed, so the operator is not left tapping. */
   const [sessionCreateError, setSessionCreateError] = useState<string | null>(null);
-  /** True once the RT block has stopped presenting trials and is only persisting them. */
-  const [rtBlockFinished, setRtBlockFinished] = useState(false);
+  /**
+   * Where the reaction-time block is: on its instruction card, presenting trials, or done and only
+   * saving them. Pause (and the camera notices) are offered on the card and while saving, never while
+   * trials run. Pause used to be withheld for the whole stage, the card included, where nothing is
+   * running (screen audit F15); the task reports the start and end of its trials (onTrialsRunning).
+   */
+  const [rtPhase, setRtPhase] = useState<'card' | 'trials' | 'saving'>('card');
   /** The operator chose to continue after the camera was lost. See the camera-lost notice. */
   const [cameraLossAccepted, setCameraLossAccepted] = useState(false);
   /** The camera self-test is showing, after a completed calibration routine. */
@@ -1140,6 +1147,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     ? conditionMinutes.current.reduce((a, b) => a + b, 0) / conditionMinutes.current.length
     : 9;
   const timeRemainingMin = inLoopish ? Math.max(0, Math.round((nConditions - (conditionsDone ?? 0)) * perCondition)) : null;
+  /*
+   * Which display of this sitting is running, for the eyebrow on the task intro cards and the rating
+   * screens ("Display 3 of 10 · Step 3 of 5 · Ratings"; see experiment/taskSteps.tsx). Counted the
+   * way the break counts them ("Next: Display 3 of 10"), over this sitting's own plan.
+   */
+  const displayPosition = { k: machine.stepIndex + 1, n: nConditions };
 
   let view: React.ReactNode = null;
   switch (machine.stage) {
@@ -1533,6 +1546,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         view = (
           <ReadingTask
             passage={passage} background={cond.background} text={cond.text}
+            display={displayPosition}
             /**
              * The ocular exposure window opens when the participant taps "Begin reading", not when
              * the stage mounts.
@@ -1630,6 +1644,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       if (cond) view = (
         <DisplayPerceptionRating
           background={cond.background} text={cond.text}
+          display={displayPosition}
           onComplete={async (r) => {
             if (session) await clearConditionRows('display_perception', conditionId);
             if (session) await put('display_perception', {
@@ -1649,7 +1664,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           prompt="How are your eyes feeling after this display condition?"
           background={cond?.background ?? '#F8F7F5'}
           text={cond?.text ?? '#1a1a2e'}
-          accent={cond?.text ?? '#1a1a2e'}
+          eyebrow={displayStepLabel('POST_FATIGUE', displayPosition)}
           onComplete={async (r) => {
             if (session) await clearConditionRows('fatigue_scores', conditionId);
             if (session) await put('fatigue_scores', {
@@ -1666,6 +1681,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       if (cond && passage) view = (
         <VisualSearchTask
           passage={passage} background={cond.background} text={cond.text}
+          display={displayPosition}
           onComplete={async (r) => {
             if (session) await put('visual_search', {
               condition_id: conditionId, session_id: session.session_id, passage_id: passage.id,
@@ -1695,9 +1711,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
            */
           {...rtStimulusColours(cond ?? CONDITIONS[0])}
           practiceTrials={machine.stepIndex === 0 && (session?.condition_offset ?? 0) === 0 ? CONFIG.RT_PRACTICE_TRIALS : 0}
+          display={displayPosition}
+          onTrialsRunning={(running) => setRtPhase(running ? 'trials' : 'saving')}
           onComplete={async (res) => {
             // Trials are over; only writes remain, so Pause becomes available again.
-            setRtBlockFinished(true);
+            setRtPhase('saving');
             if (session) {
               // Replace, do not append. Every other per-condition store either replaces (keyed by
               // condition_id) or is cleared first; reaction_trials is keyed by a fresh uuid per row
@@ -1835,8 +1853,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    * Where a pause is allowed: the condition loop and the break, never over running reaction-time
    * trials. Computed before the early return because the camera-lost notice's effects need it.
    */
+  const rtTrialsRunning = machine.stage === 'REACTION_TIME' && rtPhase === 'trials';
+  /** The reaction-time trials are over and their results are being written. */
+  const rtSaving = machine.stage === 'REACTION_TIME' && rtPhase === 'saving';
   const pausable = (isInLoop(machine.stage) || machine.stage === 'BREAK_SCREEN')
-    && (machine.stage !== 'REACTION_TIME' || rtBlockFinished)
+    && !rtTrialsRunning
     && !!session;
   const cameraLostNotice = tracking.cameraLostAt != null && !cameraLossAccepted && pausable;
   /*
@@ -1906,6 +1927,36 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     annotationRecording.current?.finish(false);
     tracking.stop();
     onExit();
+  };
+
+  /** Pause inside the condition-run: confirm, then exit to the session manager. */
+  const confirmPause = async () => {
+    if (!session) return;
+    /*
+     * Pause is offered in REACTION_TIME on the instruction card, before any trial, and again
+     * after the trials have ended, while the results are being written. In the second case it
+     * used to say the condition "will be restarted", which is usually false: the write carries
+     * on after the exit, stamps the condition complete, and the resume counts completed
+     * conditions (listResumable), so it resumes at the NEXT one. It is restarted only if the
+     * write does not finish. The operator is told both, and where to look. On the card nothing
+     * of the block has run, and the condition is restarted like any other.
+     */
+    const saving = machine.stage === 'REACTION_TIME' && rtPhase === 'saving';
+    const msg = pauseAfterFinished
+      ? 'This condition is complete; the session will resume at the next one.'
+      : saving
+        ? 'This condition\'s tasks are finished and its results are being saved. '
+          + 'If the save completes, the session resumes at the next condition; if it does not, this condition is '
+          + 'restarted. The Resume line in the session manager shows which condition is next.'
+        : 'This condition will be restarted on resume.';
+    if (await dialog.confirm({
+      title: 'Pause and exit to the session manager?',
+      body: msg,
+      confirmLabel: 'Pause and exit',
+      cancelLabel: 'Keep going',
+      ink: stageInk,
+      testId: 'pause-dialog',
+    })) pauseAndExit();
   };
 
   /*
@@ -1978,13 +2029,29 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    */
   const showCameraLost = cameraNoticeUp;
 
+  /*
+   * Where the researcher panel may open, and in what ink (screen audit F10). Inside a display only on
+   * the reading task and the grey field, whose bottom-left corner nothing else uses; locked — an ink
+   * indicator that cannot be tapped — on every other display screen, where an open panel sat over the
+   * answers or the sliders or where a target could appear, and during the measured set-up procedures:
+   * the calibration dots and self-test (the whole calibration stage) and the colour-vision plates.
+   */
+  const panelLocked = (isInLoop(machine.stage) && machine.stage !== 'READING_TASK' && machine.stage !== 'ADAPTATION')
+    || machine.stage === 'CALIBRATION' || procedureRunning;
+  const calibrationDark = machine.stage === 'CALIBRATION' && tracking.status === 'active' && !!session;
+  const panelInk = stageInk
+    ?? (calibrationDark ? { ground: '#0a0a12', ink: '#ffffff' } : panelLocked ? { ground: '#F8F7F5', ink: UI_TEXT.ink } : null);
+
   return (
-    <div data-stage={machine.stage} style={{ height: '100%' }}>
+    // --vl-panel-dock is the column the researcher card takes while it is open on a set-up or closing
+    // screen (ResearcherPanel.tsx): the screen gives it up, so nothing of the screen is under the card.
+    <div data-stage={machine.stage} style={{ height: '100%', paddingLeft: 'var(--vl-panel-dock, 0px)' }}>
       {/*
         The researcher panel: live camera readout and the session clock, collapsible. See
-        ResearcherPanel.tsx for how it protects the measurement on condition screens (closes by
-        default, drawn in the screen's own ink, compact strip under the passage, locked during the
-        speeded tasks, and every moment it is open recorded).
+        ResearcherPanel.tsx for how it protects the measurement on condition screens (an ink indicator
+        with no hue and no text, closed by default, a compact strip that opens only on reading and the
+        grey field, locked everywhere else in a display and during the measured set-up procedures,
+        and every moment it is open recorded), and how it reserves its footprint on set-up screens.
       */}
       {machine.stage !== 'SESSION_INIT' && machine.stage !== 'EXPORT_DASHBOARD' && (
         <ResearcherPanel
@@ -1995,9 +2062,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           fpsFloor={FPS_RATIO_THRESHOLD}
           stageLabel={STAGE_LABEL[machine.stage]}
           onStimulus={isInLoop(machine.stage)}
-          onReading={machine.stage === 'READING_TASK'}
-          locked={machine.stage === 'VISUAL_SEARCH' || machine.stage === 'REACTION_TIME'}
-          ink={stageInk}
+          locked={panelLocked}
+          ink={panelInk}
           sittingStartedAt={sittingStartedAt.current}
           sessionStartedAt={session?.session_start_time ?? null}
           stageStartedAt={stageStartedAt}
@@ -2013,7 +2079,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           nextDisplay={nextDisplay}
           displayTotal={nextDisplay != null ? nConditions : undefined}
           timeRemainingMin={timeRemainingMin}
-          onDark={machine.stage === 'CALIBRATION' && tracking.status === 'active' && !!session}
+          onDark={calibrationDark}
         />
       )}
       {/* If the device has no wake-lock API, the operator has to know: the manual's fallback
@@ -2053,7 +2119,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             <strong>Researcher:</strong> pause and resume from the session manager. The camera is set up and
             calibrated again, and {pauseAfterFinished
               ? 'the session continues at the next condition'
-              : machine.stage === 'REACTION_TIME'
+              : rtSaving
                 ? 'the session continues at the next condition once this one\'s results have saved (if they do not, this condition starts again)'
                 : 'this condition starts again'}.
           </p>
@@ -2100,48 +2166,19 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         </div>
       )}
       {/*
-        Inside the condition-run (and the grey field) the Pause chip keeps its size, place and ink: it
-        sits on the stimulus screen, where a larger chip is a change to the display. Its confirmation
-        is the in-app dialog, drawn in the same ink on the same ground, and timed as a notice (above).
-        Everywhere else the operator control is the shared NavChip.
+        Inside the condition-run (and the grey field) the operator chip is Pause, in the screen's own
+        ink on no ground, at the shared chip's size (17 px, a 44 CSS px target) and placed outside the
+        stimulus column — see NavChip.tsx for where and why. Its confirmation is the in-app dialog,
+        drawn in the same ink on the same ground, and timed as a notice (above).
       */}
       {canPause && exitKind === 'pause' && (
-        <button
-          onClick={async () => {
-            if (!session) return;
-            /*
-             * Pause is offered in REACTION_TIME only after the trials have ended, while the results
-             * are being written. It used to say the condition "will be restarted", which is usually
-             * false: the write carries on after the exit, stamps the condition complete, and the resume
-             * counts completed conditions (listResumable), so it resumes at the NEXT one. It is
-             * restarted only if the write does not finish. The operator is told both, and where to look.
-             */
-            const saving = machine.stage === 'REACTION_TIME';
-            const msg = pauseAfterFinished
-              ? 'This condition is complete; the session will resume at the next one.'
-              : saving
-                ? 'This condition\'s tasks are finished and its results are being saved. '
-                  + 'If the save completes, the session resumes at the next condition; if it does not, this condition is '
-                  + 'restarted. The Resume line in the session manager shows which condition is next.'
-                : 'This condition will be restarted on resume.';
-            if (await dialog.confirm({
-              title: 'Pause and exit to the session manager?',
-              body: msg,
-              confirmLabel: 'Pause and exit',
-              cancelLabel: 'Keep going',
-              ink: stageInk,
-              testId: 'pause-dialog',
-            })) pauseAndExit();
-          }}
-          className="font-lab text-xs"
-          aria-label="Pause"
-          style={stageInk
-            // In the condition-run: the screen's own ink on no ground at all. See showProgress above.
-            ? { position: 'fixed', top: 10, left: 12, zIndex: 45, padding: '5px 10px', borderRadius: 8, border: `1px solid ${stageInk.ink}`, background: 'transparent', color: stageInk.ink, cursor: 'pointer' }
-            : { position: 'fixed', top: 10, left: 12, zIndex: 45, padding: '5px 10px', borderRadius: 8, border: '1px solid #d8d4cc', background: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
-        >
-          Pause
-        </button>
+        <NavChip
+          label={EXIT_LABEL.pause}
+          ariaLabel="Pause"
+          testId="pause-chip"
+          ink={stageInk ?? { ground: '#F8F7F5', ink: '#1a1a2e' }}
+          onClick={() => { void confirmPause(); }}
+        />
       )}
       {showOperatorChip && exitKind && (
         <NavChip

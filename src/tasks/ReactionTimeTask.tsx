@@ -24,7 +24,11 @@ import { relativeLuminance } from '@/lib/contrast';
 import { rafDelay, randInt, now } from '@/lib/timing';
 import { median, stdSample } from '@/lib/stats';
 import { computeSdt } from '@/lib/signalDetection';
+import { STIMULUS_FONT_STACK } from '@/lib/fonts';
+import { displayStepLabel, type DisplayPosition } from '@/experiment/taskSteps';
 import type { RtAccuracy } from '@/storage/types';
+import { TaskIntro } from './TaskIntro';
+import { LOOP_TEXT_MIN_PX } from './loopChrome';
 
 export interface RawTrial {
   trial_number: number;
@@ -170,13 +174,23 @@ interface Props {
   /** Unscored practice trials to run before the scored block (0 = none). */
   practiceTrials?: number;
   onComplete: (r: RtResult) => void;
+  /**
+   * Told true when the first trial starts and false when the last has ended. Experiment offers Pause
+   * on the instruction card and while the results save, never while trials run (screen audit F15:
+   * it was hidden for the whole stage, the card included, where nothing is running).
+   */
+  onTrialsRunning?: (running: boolean) => void;
+  /** Which display of the sitting this is, for the instruction card's eyebrow. */
+  display?: DisplayPosition;
 }
 
+/** Messages between trials — practice feedback, "Practice complete", "Block complete": the stimulus face, full ink. */
+const message: React.CSSProperties = { textAlign: 'center', fontFamily: STIMULUS_FONT_STACK, maxWidth: 520, padding: 24 };
+
 export function ReactionTimeTask({
-  background, text, target, targetName, distractors, practiceTrials = 0, onComplete,
+  background, text, target, targetName, distractors, practiceTrials = 0, onComplete, onTrialsRunning, display,
 }: Props) {
   const [phase, setPhase] = useState<Phase>('instruction');
-  const [trialNum, setTrialNum] = useState(0);
   const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null);
   const scored = useRef<Trial[]>(buildTrials(CONFIG.RT_TRIALS_PER_CONDITION, CONFIG.RT_GO_RATE, target, distractors));
   const practice = useRef<Trial[]>(buildTrials(practiceTrials, CONFIG.RT_GO_RATE, target, distractors));
@@ -252,7 +266,6 @@ export function ReactionTimeTask({
 
   const runTrial = async (t: Trial, index: number, isPractice: boolean) => {
     current.current = t;
-    setTrialNum(index + 1);
     respondedAtRef.current = null;
     falseStartRef.current = false;
 
@@ -341,7 +354,12 @@ export function ReactionTimeTask({
     await rafDelay(randInt(Math.random, CONFIG.RT_ITI_MIN_MS, CONFIG.RT_ITI_MAX_MS));
   };
 
+  const started = useRef(false);
   const run = async () => {
+    // One block per mount: a second tap on Start must not launch a second, interleaved run.
+    if (started.current) return;
+    started.current = true;
+    onTrialsRunning?.(true);
     // Record the rule for this block only once it actually starts, so the next block compares
     // against a block that was really presented rather than one merely rendered and abandoned.
     lastTargetColor = targetColor;
@@ -356,6 +374,7 @@ export function ReactionTimeTask({
 
   const finish = () => {
     setPhaseSync('done');
+    onTrialsRunning?.(false);
     const recs = records.current;
     const hits = recs.filter((r) => r.accuracy === 'hit');
     const misses = recs.filter((r) => r.accuracy === 'miss').length;
@@ -449,60 +468,70 @@ export function ReactionTimeTask({
   const showStim = phase === 'stimulus' && t;
   const totalScored = CONFIG.RT_TRIALS_PER_CONDITION;
 
+  if (phase === 'instruction') {
+    /*
+     * The shared intro card (TaskIntro), like reading and word search: it used to be its own card in
+     * DM Mono with a 24 px "Task 4 of 4 · Reaction" as the heading and a 14 px button (screen audit
+     * F15). What only this task needs — the target dot at full size, and the banner when the target
+     * colour has changed — goes in the card's `children` slot. Rendered instead of the trial field,
+     * not inside it, so the tap on Start can never reach the field's response handler.
+     */
+    return (
+      <TaskIntro
+        eyebrow={displayStepLabel('REACTION_TIME', display)}
+        title="Tap for your colour"
+        lines={[
+          <>
+            A dot will appear at a random spot. Tap the screen as fast as you can ONLY when it is{' '}
+            <span style={{ color: targetColor, fontWeight: 700 }}>{targetName}</span> — the same
+            colour as the text you have just read. Do not tap for a dot of any other colour.
+          </>,
+          ...(practiceTrials > 0 ? ['A short practice comes first.'] : []),
+        ]}
+        buttonLabel={practiceTrials > 0 ? 'Start practice →' : `Start (${totalScored} trials) →`}
+        background={background}
+        text={text}
+        onBegin={() => { void run(); }}
+      >
+        {/*
+          Show the actual target, at the size it will appear, and name it.
+
+          The target is this condition's text colour, so it changes from block to block. A missed
+          switch does not look like an error in the data — it looks like a colour or polarity
+          effect on d-prime, which is precisely the comparison this study makes — so the dot is
+          drawn here at full size and the change banner below fires whenever it differs from the
+          previous block's.
+        */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, margin: '6px 0 4px' }}>
+          <div aria-hidden style={{
+            width: CONFIG.RT_DOT_PX, height: CONFIG.RT_DOT_PX, borderRadius: '50%', flex: '0 0 auto',
+            background: targetColor, border: `1px solid ${fixationInk}`,
+          }} />
+          <span style={{ fontFamily: STIMULUS_FONT_STACK, fontSize: LOOP_TEXT_MIN_PX, lineHeight: 1.5, textAlign: 'left' }}>
+            this dot → tap<br />any other colour → do not tap
+          </span>
+        </div>
+
+        {targetChanged && (
+          /* Only when the target colour actually differs from the previous block's. Two
+             consecutive conditions can share a text colour across polarities (P2 then N2), and
+             a banner shown when nothing changed trains the participant to ignore it. */
+          <p role="alert" style={{
+            fontFamily: STIMULUS_FONT_STACK, fontSize: LOOP_TEXT_MIN_PX, lineHeight: 1.5, margin: '14px 0 0', padding: '10px 14px',
+            border: `2px solid ${fixationInk}`, borderRadius: 10, fontWeight: 700,
+          }}>
+            The target colour has CHANGED for this block — it is now {targetName}.
+          </p>
+        )}
+      </TaskIntro>
+    );
+  }
+
   return (
     <div
       onPointerDown={handleResponse}
       style={{ position: 'fixed', inset: 0, background, touchAction: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none' }}
     >
-      {phase === 'instruction' && (
-        <div style={{ textAlign: 'center', color: text, fontFamily: '"DM Mono", monospace', maxWidth: 540, padding: 24 }}>
-          <h2 style={{ fontSize: 24, marginBottom: 16 }}>Task 4 of 4 · Reaction</h2>
-          <p style={{ fontSize: 16, lineHeight: 1.6, marginBottom: 20 }}>
-            A dot will appear at a random spot. Tap the screen as fast as you can ONLY when it is{' '}
-            <span style={{ color: targetColor, fontWeight: 700 }}>{targetName}</span> — the same
-            colour as the text you have just read. Do not tap for a dot of any other colour.
-            {practiceTrials > 0 ? ' A short practice comes first.' : ''}
-          </p>
-
-          {/*
-            Show the actual target, at the size it will appear, and name it.
-
-            The target is this condition's text colour, so it changes from block to block. A missed
-            switch does not look like an error in the data — it looks like a colour or polarity
-            effect on d-prime, which is precisely the comparison this study makes — so the dot is
-            drawn here at full size and the change banner below fires whenever it differs from the
-            previous block's.
-          */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginBottom: 22 }}>
-            <div aria-hidden style={{
-              width: CONFIG.RT_DOT_PX, height: CONFIG.RT_DOT_PX, borderRadius: '50%',
-              background: targetColor, border: `1px solid ${fixationInk}`,
-            }} />
-            <span style={{ fontSize: 14, textAlign: 'left' }}>
-              this dot → tap<br />any other colour → do not tap
-            </span>
-          </div>
-
-          {targetChanged && (
-            /* Only when the target colour actually differs from the previous block's. Two
-               consecutive conditions can share a text colour across polarities (P2 then N2), and
-               a banner shown when nothing changed trains the participant to ignore it. */
-            <p role="alert" style={{
-              fontSize: 15, lineHeight: 1.5, marginBottom: 22, padding: '10px 14px',
-              border: `2px solid ${fixationInk}`, borderRadius: 10, fontWeight: 700,
-            }}>
-              The target colour has CHANGED for this block — it is now {targetName}.
-            </p>
-          )}
-          <button
-            onPointerDown={(e) => { e.stopPropagation(); void run(); }}
-            style={{ background: text, color: background, border: 'none', borderRadius: 12, padding: '14px 28px', fontFamily: '"DM Mono", monospace', fontSize: 14, cursor: 'pointer' }}
-          >
-            {practiceTrials > 0 ? 'Start practice →' : `Start (${totalScored} trials) →`}
-          </button>
-        </div>
-      )}
-
       {(phase === 'fixation' || phase === 'delay') && (
         <div style={{ width: 24, height: 24, position: 'relative' }}>
           {/* Achromatic and full-opacity, chosen by background luminance — NOT the go-target colour.
@@ -547,35 +576,40 @@ export function ReactionTimeTask({
           the task was hardest to read in exactly the conditions where legibility is the variable
           under study. The tick and cross carry the valence. */}
       {phase === 'feedback' && feedback && (
-        <div style={{ textAlign: 'center', fontFamily: '"DM Mono", monospace', fontSize: 20, color: text }}>
+        <div style={{ ...message, fontSize: 20, color: text }}>
           {feedback.msg}
         </div>
       )}
 
       {/* The 'done' phase used to render nothing at all — a blank condition-coloured screen. The
           block's completion handler then awaits ~35 database writes with no try/catch, and Pause is
-          deliberately hidden during REACTION_TIME, so a single rejected write left the participant
+          deliberately hidden during the trials, so a single rejected write left the participant
           facing an empty screen with no control and no browser chrome. Only a force-quit recovered,
-          losing the condition. */}
+          losing the condition. Pause comes back here (onTrialsRunning). */}
       {phase === 'done' && (
-        <div style={{ textAlign: 'center', color: text, fontFamily: '"DM Mono", monospace', maxWidth: 480, padding: 24 }}>
-          <p style={{ fontSize: 18 }}>Block complete.</p>
-          <p style={{ fontSize: 14, marginTop: 8 }}>Saving — this takes a moment.</p>
+        <div style={{ ...message, color: text }}>
+          <p style={{ fontSize: 20 }}>Block complete.</p>
+          <p style={{ fontSize: 17, marginTop: 8 }}>Saving — this takes a moment.</p>
         </div>
       )}
 
       {phase === 'practice_done' && (
-        <div style={{ textAlign: 'center', color: text, fontFamily: '"DM Mono", monospace', maxWidth: 480, padding: 24 }}>
-          <p style={{ fontSize: 18 }}>Practice complete.</p>
-          <p style={{ fontSize: 14, marginTop: 8 }}>The real task begins now — go as fast and accurately as you can.</p>
+        <div style={{ ...message, color: text }}>
+          <p style={{ fontSize: 20 }}>Practice complete.</p>
+          <p style={{ fontSize: 17, marginTop: 8 }}>The real task begins now — go as fast and accurately as you can.</p>
         </div>
       )}
 
-      {(phase === 'fixation' || phase === 'delay' || phase === 'stimulus' || phase === 'iti') && (
-        <div style={{ position: 'fixed', top: 12, right: 14, color: text, opacity: 0.5, fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
-          {phaseRef.current && trialNum > 0 ? `${Math.min(trialNum, totalScored)}/${totalScored}` : ''}
-        </div>
-      )}
+      {/*
+        NO TRIAL COUNTER. There was one at the top right, "k/32" in 12 px DM Mono at half opacity,
+        and it counted the six practice trials against the 32 scored ones ("1/32 … 6/32", then "1/32"
+        again; screen audit F16). Rather than enlarge it to the condition-screen floor (16 px, full
+        ink), it is gone: it was the only chrome in the reaction field, it changed at the onset of
+        every trial — a transient in the ink, in the periphery, timed with the fixation cross — and at
+        full ink it would have been a larger and brighter one, its salience following each
+        condition's contrast. The block is about a minute long; the card says how many trials it has
+        and "Block complete" says when it is over. The top-right corner is now simply empty.
+      */}
     </div>
   );
 }

@@ -131,7 +131,9 @@ describe('the condition-run carries no polarity-correlated flash or chrome', () 
   it('keeps the progress chrome off every condition screen, and draws Pause in the screen\'s own ink', () => {
     const src = read('src/experiment/Experiment.tsx');
     expect(src).toMatch(/const showProgress = [^;]*&& !isInLoop\(machine\.stage\)/);
-    expect(src).toMatch(/border: `1px solid \$\{stageInk\.ink\}`, background: 'transparent', color: stageInk\.ink/);
+    // Pause is the shared chip in its in-loop look: the screen's ink, on no ground at all.
+    expect(src).toMatch(/<NavChip\s+label=\{EXIT_LABEL\.pause\}[\s\S]{0,120}ink=\{stageInk/);
+    expect(read('src/components/NavChip.tsx')).toMatch(/border: `1px solid \$\{ink\.ink\}`, background: 'transparent', color: ink\.ink/);
   });
 });
 
@@ -179,8 +181,8 @@ describe('instruction text on condition screens is never faded', () => {
       expect(src, f).not.toMatch(/opacity: 0\.\d/);
       expect(src, f).not.toMatch(/text-\[#5a5a7a\]/i);
     }
-    // The one exception, documented: the RT trial counter is not instructional text.
-    expect(read('src/tasks/ReactionTimeTask.tsx').match(/opacity: 0\.\d/g) ?? []).toHaveLength(1);
+    // The reaction task too: its one exception, a trial counter at half opacity, is gone (Round 65).
+    expect(read('src/tasks/ReactionTimeTask.tsx')).not.toMatch(/opacity: 0\.\d/);
   });
 
   it('opens every rating slider with no visible anchor, and counts a tap as an answer', () => {
@@ -194,8 +196,8 @@ describe('instruction text on condition screens is never faded', () => {
     }
     expect(read('src/styles/theme.css')).toMatch(/\.vl-untouched::-webkit-slider-thumb \{\s*opacity: 0;/);
     // And neither condition-coloured scale paints its track before it is touched.
-    expect(read('src/scales/DisplayPerceptionRating.tsx')).toMatch(/ratingTrack\(text, comfortTouched, comfort\)/);
-    expect(read('src/scales/FatigueScale.tsx')).toMatch(/ratingTrack\(accent, touched\[it\.key\]/);
+    expect(read('src/scales/DisplayPerceptionRating.tsx')).toMatch(/ratingTrack\(text, touched, value\)/);
+    expect(read('src/scales/FatigueScale.tsx')).toMatch(/ratingTrack\(text, touched\[it\.key\]/);
   });
 
   it('draws the empty track visibly, in full ink, and fills only what was answered', () => {

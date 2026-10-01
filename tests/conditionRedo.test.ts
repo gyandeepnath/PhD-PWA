@@ -273,8 +273,9 @@ describe('the Pause dialog says what the resume will actually do', () => {
   it('in the reaction-time save phase it does not promise a restart that usually will not happen', async () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync('src/experiment/Experiment.tsx', 'utf8');
-    const handler = src.slice(src.indexOf("aria-label=\"Pause\"") - 3000, src.indexOf("aria-label=\"Pause\""));
-    expect(handler).toMatch(/const saving = machine\.stage === 'REACTION_TIME'/);
+    const handler = src.slice(src.indexOf('const confirmPause = async'), src.indexOf('const confirmPause = async') + 2500);
+    // The save phase only: on the instruction card nothing has run, and the condition does restart.
+    expect(handler).toMatch(/const saving = machine\.stage === 'REACTION_TIME' && rtPhase === 'saving'/);
     expect(handler).toMatch(/results are being saved/);
     expect(handler).toMatch(/resumes at the next condition/);
   });

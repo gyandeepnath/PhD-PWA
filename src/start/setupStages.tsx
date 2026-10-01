@@ -10,6 +10,7 @@ import { assessStorageHealth, type StorageHealth } from '@/storage/storageHealth
 import { CONFIG } from '@/experiment/config';
 import { N_CONDITIONS } from '@/experiment/conditions';
 import { PASSAGES, QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
+import { TASK_STEPS } from '@/experiment/taskSteps';
 import { repeatRunAcknowledged, REPEAT_NOTE_MIN_CHARS, SPLIT_REASON_MIN_CHARS } from '@/experiment/participantProgress';
 import { ILLUMINATION, luxInRange, type IlluminationLevel, N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 import type { MediaConsent } from '@/storage/media';
@@ -866,13 +867,12 @@ export function Instructions({ conditions, onContinue }: { conditions: number; o
           background and text colours). For <strong>each</strong> display you’ll complete the same short
           tasks in the same order:
         </p>
-        <ol className="mt-4 font-sans text-[17px] leading-relaxed text-[#3a3a4a]" style={{ paddingLeft: 18, listStyle: 'decimal' }}>
-          <li><strong>Read</strong> a passage of {pages} short pages.</li>
-          <li>Answer <strong>{QUESTIONS_PER_PASSAGE} questions</strong> about it.</li>
-          <li>Rate the display’s <strong>comfort &amp; clarity</strong>, and how your <strong>eyes feel</strong>.</li>
-          <li><strong>Find &amp; tap</strong> every occurrence of a target word, as fast as you can.</li>
-          <li><strong>Tap</strong> when a dot appears in the <strong>same colour as the text you have
-            just read</strong>, and not when it is any other colour (a quick reaction game).</li>
+        {/* The steps are TASK_STEPS (experiment/taskSteps.tsx), the same list every task screen's
+            eyebrow is numbered from — they said "Task N of 4" against these five. */}
+        <ol data-testid="instructions-steps" className="mt-4 font-sans text-[17px] leading-relaxed text-[#3a3a4a]" style={{ paddingLeft: 18, listStyle: 'decimal' }}>
+          {TASK_STEPS.map((step) => (
+            <li key={step.name}>{step.overview({ pages, questions: QUESTIONS_PER_PASSAGE })}</li>
+          ))}
         </ol>
         <p className="mt-4 font-sans text-[17px] leading-relaxed text-[#3a3a4a]">
           Between displays there’s a short rest with a grey screen, and a longer break after

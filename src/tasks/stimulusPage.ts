@@ -15,10 +15,11 @@
  * percentage padding is a percentage of the containing block's WIDTH, so it would make the text box
  * shorter on a wider device at the same glyph size.
  *
- * The top clears the in-loop Pause chip (fixed at top 10, about 28 tall, at the far left): in the
- * 1040 px column the page starts 56 px from the left edge, under the chip's right end, so the header
- * row has to start below it. The bottom is correspondingly smaller, which keeps the text box at the
- * 556 px the typography was measured against (36 + 20 before).
+ * The top clears the in-loop Pause chip at the far left: in the 1040 px column the page starts 56 px
+ * from the left edge, under the chip's right end, so the header row has to start below it. Since
+ * Round 65 the chip is a 44 CSS px target sitting at top 1, ending at 45 (the in-loop variant in
+ * components/NavChip.tsx). The bottom is correspondingly smaller, which keeps the text box at the 556 px the
+ * typography was measured against (36 + 20 before).
  */
 export const STIMULUS_PAGE_PAD_TOP_PX = 46;
 export const STIMULUS_PAGE_PAD_BOTTOM_PX = 10;
@@ -36,3 +37,18 @@ export const STIMULUS_FOOTER_ROW_PX = 56;
 
 /** Space above the footer row, and its rule. Counted in the text box, like everything above. */
 export const STIMULUS_FOOTER_GAP_PX = 12;
+
+/**
+ * Height of the header above the text, in root px — FIXED, at exactly what it measured when the
+ * Round 63 typography was fitted, so that restyling what is in it can never move the text box.
+ *
+ * The headers used to be as tall as whatever they held. On the reading page that was the passage
+ * title (13 px), "Page 1 of 3" (12 px DM Mono) and a 4 px page bar with 8 px above and below it:
+ * 39.5 px, putting the text box at 85.5-641 on the 1152x720 tablet. Raising the header's words to the
+ * condition-screen floor (16 px, full ink; screen audit F9) and dropping the translucent page bar
+ * would otherwise have shifted and resized the box the thirty pages were measured to fit. On the
+ * search page the row held "Find and tap every:" and the found count (15 px DM Mono) over a rule 10 px
+ * below: 33.5 px.
+ */
+export const STIMULUS_READING_HEADER_PX = 39.5;
+export const STIMULUS_SEARCH_HEADER_PX = 33.5;

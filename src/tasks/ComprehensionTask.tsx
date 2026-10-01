@@ -16,7 +16,8 @@ import { CONFIG } from '@/experiment/config';
 import { now } from '@/lib/timing';
 import type { Passage, QuestionKind } from '@/experiment/passages';
 import { STIMULUS_COLUMN_PX } from '@/lib/viewportScale';
-import { STIMULUS_FOOTER_ROW_PX } from './stimulusPage';
+import { stepLabel } from '@/experiment/taskSteps';
+import { ActionRow, Counter, Eyebrow, PrimaryButton } from './loopChrome';
 
 /**
  * Vertical padding of the item's screen, in root px. The block is centred in what is left, so this
@@ -160,11 +161,16 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
         style={{ width: STIMULUS_COLUMN_PX, maxWidth: '100%', height: '100%', padding: `${MCQ_PAD_Y_PX}px 0`, display: 'flex', flexDirection: 'column' }}
       >
       <div data-testid="mcq-block" style={{ margin: 'auto 0' }}>
-      {/* Full ink and 16 px: at 12 px mono it arrived at 10.3 CSS px on the tablet, in the
-          condition's ink, so the instruction was hardest to read where contrast was lowest. */}
-      <p style={{ fontFamily: STIMULUS_FONT_STACK, fontSize: 16, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>
-        Task 2 of 4 · Comprehension {index + 1} of {questions.length} — choose the best answer, then submit
-      </p>
+      {/* The shared eyebrow and counter, at 16 px in full ink: at 12 px mono the eyebrow arrived at
+          10.3 CSS px on the tablet, in the condition's ink, so the instruction was hardest to read
+          where contrast was lowest. The step comes from experiment/taskSteps.tsx (it said "Task 2 of
+          4" while the instructions list five steps); "Question 1 of 3" moved out of the sentence into
+          the counter, where every task keeps its count. The row is exactly as tall as the eyebrow it
+          replaced, so the item's block is unchanged. */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 24, marginBottom: 14 }}>
+        <Eyebrow>{stepLabel('COMPREHENSION')} — choose the best answer, then submit</Eyebrow>
+        <Counter testId="mcq-counter">Question {index + 1} of {questions.length}</Counter>
+      </div>
       <h2 data-testid="mcq-question" style={{ fontSize: CONFIG.READING_FONT_SIZE_PX, fontFamily: STIMULUS_FONT_STACK, lineHeight: CONFIG.READING_LINE_HEIGHT, fontWeight: 400 }}>{q.text}</h2>
       <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
         {q.options.map((opt, i) => (
@@ -194,25 +200,15 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
           </button>
         ))}
       </div>
-      <button
-        data-testid="mcq-submit"
-        disabled={selected == null || submitted}
-        onClick={() => setSubmitted(true)}
-        className="rounded-xl transition active:scale-95"
-        style={{
-          marginTop: 24,
-          height: STIMULUS_FOOTER_ROW_PX,
-          boxSizing: 'border-box',
-          padding: '0 32px',
-          fontFamily: '"DM Mono", monospace',
-          fontSize: 16,
-          background: selected != null && !submitted ? text : 'transparent',
-          color: selected != null && !submitted ? background : text,
-          border: selected != null && !submitted ? `2px solid ${text}` : `2px dashed ${text}`,
-        }}
-      >
-        {isLast ? 'Submit answer' : 'Submit and continue'}
-      </button>
+      {/* The shared primary button, at the right-hand edge under the options: it sat at the left in
+          DM Mono 14, where four other loop screens put theirs somewhere else (screen audit F17). Same
+          height and margin as before, so the block does not change. */}
+      <ActionRow style={{ marginTop: 24 }}>
+        <PrimaryButton ink={text} ground={background} enabled={selected != null && !submitted}
+          onClick={() => setSubmitted(true)} testId="mcq-submit">
+          {isLast ? 'Submit answer' : 'Submit and continue'}
+        </PrimaryButton>
+      </ActionRow>
       </div>
       </div>
     </div>

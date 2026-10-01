@@ -1,61 +1,58 @@
 /**
- * Full-screen task instruction card shown before each task so the participant always knows what to
- * do. Themed to the active condition's colours (or a neutral cream default for setup-level intros).
+ * The instruction card shown before each task of a display — reading, word search and the reaction
+ * task — so the participant always knows what comes next. Drawn in the active condition's colours.
+ *
+ * ONE CARD FOR ALL THREE. The reaction task used to roll its own: a DM Mono 24 px heading where the
+ * others have Georgia 36, a 14 px button, a narrower column, and "Task 4 of 4 · Reaction" set as the
+ * heading instead of the eyebrow (screen audit F15). It now renders this card, with the target dot
+ * and the "colour has changed" banner in the `children` slot.
+ *
+ * The eyebrow, the counter rule and the button are the shared ones (loopChrome.tsx): eyebrow 16 px in
+ * full ink (it was 12 px DM Mono, 10.3 px on the tablet at the old scale), and "Display k of N · Step
+ * j of 5 · Name" drawn from experiment/taskSteps.tsx.
  */
+import type { ReactNode } from 'react';
 import { STIMULUS_FONT_STACK } from '@/lib/fonts';
+import { Eyebrow, PrimaryButton } from './loopChrome';
 
 interface Props {
   eyebrow: string;
   title: string;
-  lines: string[];
+  /** One paragraph each. A line may carry markup, e.g. the target colour's name in that colour. */
+  lines: ReactNode[];
+  /** Shown under the lines, above the button: the reaction task's target dot and change banner. */
+  children?: ReactNode;
   buttonLabel?: string;
-  background?: string;
-  text?: string;
+  background: string;
+  text: string;
   onBegin: () => void;
 }
 
-export function TaskIntro({
-  eyebrow,
-  title,
-  lines,
-  buttonLabel = 'Begin →',
-  background = '#F8F7F5',
-  text = '#1a1a2e',
-  onBegin,
-}: Props) {
-  const onLightTheme = background.toUpperCase() === '#F8F7F5';
+export function TaskIntro({ eyebrow, title, lines, children, buttonLabel = 'Begin →', background, text, onBegin }: Props) {
   return (
     <div
+      data-testid="task-intro"
       className="screen w-full"
-      style={{ background, color: text, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8%' }}
+      /*
+       * Fixed vertical padding, not a percentage: a percentage padding is a percentage of the WIDTH, so
+       * on the 1280 px root that Chrome's address bar produces it took 102 px top and bottom. The
+       * card's content is centred and narrow, so it never comes near the Pause chip (top left) or the
+       * researcher indicator (bottom left).
+       */
+      style={{ background, color: text, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 8%' }}
     >
       <div style={{ maxWidth: 620, textAlign: 'center' }}>
-        <p style={{ fontFamily: '"DM Mono", monospace', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          {eyebrow}
-        </p>
+        <Eyebrow>{eyebrow}</Eyebrow>
         <h1 style={{ fontFamily: 'Georgia, serif', fontWeight: 300, fontSize: 36, margin: '12px 0 18px' }}>{title}</h1>
         {lines.map((l, i) => (
           <p key={i} style={{ fontFamily: STIMULUS_FONT_STACK, fontSize: 17, lineHeight: 1.6, marginBottom: 10 }}>
             {l}
           </p>
         ))}
-        <button
-          onClick={onBegin}
-          style={{
-            marginTop: 24,
-            background: text,
-            color: background,
-            border: 'none',
-            borderRadius: 14,
-            padding: '16px 40px',
-            fontFamily: '"DM Mono", monospace',
-            fontSize: 16,
-            cursor: 'pointer',
-            boxShadow: onLightTheme ? '0 2px 10px rgba(0,0,0,0.12)' : 'none',
-          }}
-        >
-          {buttonLabel}
-        </button>
+        {children}
+        <div style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}>
+          <PrimaryButton ink={text} ground={background} onClick={onBegin}>{buttonLabel}</PrimaryButton>
+        </div>
       </div>
     </div>
   );
