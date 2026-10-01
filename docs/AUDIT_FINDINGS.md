@@ -4156,7 +4156,7 @@ condition RTs are not comparable with pilot data. Trial timing is unchanged; if 
 trials on the active background") and line 359's outcomes stand; target location is a trial-level
 covariate in addition to line 357's list, not a conflict with it.
 
-Verification: `npm run verify` is green (1199 unit tests, among them the new
+Verification: `npm run verify` is green (1200 unit tests, among them the new
 `tests/rtLocations.test.ts`: the eight centres and radii from the constants, the per-ring,
 per-quadrant and per-location counts, the mirror, the colour split and its alternation, no
 consecutive repeat with the run cap kept, a 3000-block property test over both parities, practice,
@@ -4164,8 +4164,9 @@ and the ?e2e cycle; the device-independence test in `tests/stimulusGeometry.test
 fixed offsets; `tests/export.test.ts` checks the seven columns and that they are blank on older
 rows). End-to-end, 53 tests pass: `fullRun`, `allScreensFit` (1152x720, 1152x713, 1152x650, and the
 camera path), `edge`, `cameraLost`, `cameraBlocked`, `stimulusFill`, `stimulusGeometry`, `loopChrome`
-(both viewports), and `reachability`, `scaleLock`, `setupNavigation` and `splitSession` (a second
-sitting continues the block alternation from its global position). `stimulusGeometry` gains a check, at 1152x720 and 1152x650, of every
+(both viewports), and `reachability`, `scaleLock`, `setupNavigation` and `splitSession` (the path on which a
+sitting's first block is not position 0; `tests/rtLocations.test.ts` pins that the task is handed the
+condition's global position). `stimulusGeometry` gains a check, at 1152x720 and 1152x650, of every
 dot of the first two blocks — all eight locations: drawn at its offset from the cross to within a root
 px, its edges at least 60 px inside the screen (measured 68 px at 1152x720, 62.2 CSS px at 1152x650,
 nothing clipped), and at least 118 px from the Pause chip's footprint, the same footprint at the top

@@ -9,6 +9,8 @@
  * the dots land on the real screen are in e2e/stimulusGeometry.spec.ts.
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   RT_LOCATIONS, RT_BLOCK_GO, RT_BLOCK_NOGO, RT_BALANCED_GO, RT_BALANCED_NOGO, RT_RING_ECCENTRICITY_DEG,
   STUDY_TABLET_MM_PER_CSS_PX, NOMINAL_VIEWING_DISTANCE_MM, ringRadiusPx, eccentricityDeg, planRtBlock,
@@ -250,5 +252,14 @@ describe('practice and the end-to-end harness', () => {
       const p = block(n, lcg(n), { nGo, nNoGo: n - nGo });
       for (let k = 1; k < p.trials.length; k++) expect(p.trials[k].location.id).not.toBe(p.trials[k - 1].location.id);
     }
+  });
+});
+
+describe('the block index is the condition\'s global position', () => {
+  it('is what Experiment hands the task, so a second sitting continues the alternation', () => {
+    // A sitting-local index would restart the mirror and the colour split at 0 in a second sitting,
+    // and the Williams balance of odd and even positions is over GLOBAL positions.
+    const src = readFileSync(resolve(__dirname, '..', 'src/experiment/Experiment.tsx'), 'utf8');
+    expect(src).toMatch(/<ReactionTimeTask[\s\S]*?blockIndex=\{step\?\.position \?\? machine\.stepIndex\}/);
   });
 });
