@@ -5,6 +5,7 @@ import { FPS_RATIO_THRESHOLD, FPS_TIER_THRESHOLD } from '@/tracking/blink';
 import { buildConditionSummaries, baselineFatigueMean, ENGAGEMENT } from '@/dashboard/aggregate';
 import { buildExportFiles, escapeCsv, toCsv, fnv1a, CODEBOOK } from '@/storage/export';
 import type { SessionBundle } from '@/storage/gather';
+import { buildFixtureBundle } from '@/sim/bundleFixture';
 import type { Provenance } from '@/storage/types';
 
 const prov: Provenance = {
@@ -235,6 +236,28 @@ describe('export builder', () => {
   it('reaction-trials CSV has 48 data rows', () => {
     const f = files.find((f) => f.filename === '08_reaction_trials.csv')!;
     expect(f.content.trim().split('\n').length).toBe(49); // header + 48
+  });
+
+  it('reaction-trials CSV records where each dot was, and leaves the location blank on older rows', () => {
+    // Round 66: eight fixed locations. These rows predate them (no stim_* fields), so every
+    // location cell must be EMPTY — the dot then landed at an unrecorded random point, and a guessed
+    // location would be a fabricated covariate.
+    const LOC = ['stim_location_id', 'stim_ring', 'stim_angle_deg', 'stim_dx_px', 'stim_dy_px', 'stim_ecc_px', 'stim_ecc_deg_55cm'];
+    const legacy = files.find((f) => f.filename === '08_reaction_trials.csv')!.content.trim().split('\n');
+    const head = legacy[0].split(',');
+    expect(head.slice(head.indexOf('stimulus_color') + 1, head.indexOf('stimulus_color') + 1 + LOC.length)).toEqual(LOC);
+    for (const line of legacy.slice(1)) {
+      const cells = line.split(',');
+      for (const c of LOC) expect(cells[head.indexOf(c)], c).toBe('');
+    }
+    // A current row carries all seven, rounded for the file: trial 1 of the fixture is location 1.
+    const current = buildExportFiles(buildFixtureBundle()).find((f) => f.filename === '08_reaction_trials.csv')!
+      .content.trim().split('\n');
+    // The fixture's participant_id is deliberately hostile ("VER,""01"): drop that quoted first cell
+    // before splitting the rest, which holds no quotes.
+    const rest = (line: string) => line.replace(/^("(?:[^"]|"")*"|[^,]*),/, '').split(',');
+    const row = Object.fromEntries(rest(current[0]).map((h, i) => [h, rest(current[1])[i]]));
+    expect(LOC.map((c) => row[c])).toEqual(['1', 'inner', '45', '132', '-132', '186.68', '3.99']);
   });
 
   it('wide summary has a row per condition and includes qc + contrast', () => {

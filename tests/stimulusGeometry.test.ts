@@ -14,14 +14,17 @@
  * one covariate an analyst is told to use for exactly this.
  *
  * The reading passage was a percentage column. The reaction-time target was a percentage position
- * with a constant diameter. Both are now fixed in root pixels, and these tests hold them there.
+ * with a constant diameter. Both are now fixed in root pixels, and these tests hold them there: the
+ * column is STIMULUS_COLUMN_PX wide, and since Round 66 the target sits at one of eight fixed
+ * root-px offsets from the centre (lib/rtLocations.ts).
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
-  computeScale, STIMULUS_COLUMN_PX, STIMULUS_BOX, DESIGN_WIDTH, DESIGN_HEIGHT,
+  computeScale, STIMULUS_COLUMN_PX, DESIGN_WIDTH, DESIGN_HEIGHT,
 } from '@/lib/viewportScale';
+import { RT_LOCATIONS } from '@/lib/rtLocations';
 import { CONFIG } from '@/experiment/config';
 
 /**
@@ -61,7 +64,7 @@ describe('the root box is device-shaped — the fact everything here exists for'
   });
 
   it('is never narrower or shorter than the design canvas on a device above the minimum', () => {
-    // The fixed-width column and the target box both assume they fit. They do, because the scale is
+    // The fixed-width column and the target offsets both assume they fit. They do, because the scale is
     // the MINIMUM of the two ratios: w/s >= DESIGN_WIDTH and h/s >= DESIGN_HEIGHT follow directly.
     for (const [name, w, h] of DEVICES) {
       const b = rootBox(w, h);
@@ -121,40 +124,45 @@ describe('reading line length is the same on every device', () => {
 
 describe('the reaction-time target sits in a device-independent field', () => {
   const { RT_DOT_PX } = CONFIG;
-  // The sampling window the task uses: x in 25..75, y in 28..72 percent.
-  const MAX_X_PCT = 25;
-  const MAX_Y_PCT = 22;
+  // The rule it replaced: a percentage position, x 25..75 and y 28..72, of whatever box it was in.
+  const OLD_MAX_X_PCT = 25;
+  const OLD_MAX_Y_PCT = 22;
+  const oldRatio = (boxW: number, boxH: number) =>
+    RT_DOT_PX / Math.hypot((OLD_MAX_X_PCT / 100) * boxW, (OLD_MAX_Y_PCT / 100) * boxH);
 
-  const ratio = (boxW: number, boxH: number) => {
-    const ex = (MAX_X_PCT / 100) * boxW;
-    const ey = (MAX_Y_PCT / 100) * boxH;
-    return RT_DOT_PX / Math.hypot(ex, ey);
-  };
-
-  it('keeps the size-to-eccentricity ratio identical across devices', () => {
-    // Against the root box this ran 0.148 / 0.136 / 0.123 / 0.071 across the devices below. RT and
-    // detection sensitivity are both monotone in eccentricity, so the spread entered the data as
-    // device-driven variance in a dependent variable with no column identifying it.
-    const fixed = ratio(STIMULUS_BOX.width, STIMULUS_BOX.height);
-    for (const [name, w, h] of DEVICES) {
-      const b = rootBox(w, h);
-      const box = { w: Math.min(STIMULUS_BOX.width, b.w), h: Math.min(STIMULUS_BOX.height, b.h) };
-      expect(ratio(box.w, box.h), name).toBeCloseTo(fixed, 9);
+  it('is a fixed root-px offset from the centre, so its size-to-eccentricity ratio cannot vary by device', () => {
+    // The offsets are constants of the module, not of the device: nothing about a device enters them.
+    // What a device changes is only --vl-scale, which multiplies the dot and its offset alike.
+    for (const l of RT_LOCATIONS) {
+      expect(Number.isInteger(l.dx) && Number.isInteger(l.dy), `location ${l.id}`).toBe(true);
+      const ratios = new Set(DEVICES.map(([, w, h]) => {
+        const s = computeScale(w, h);
+        return ((RT_DOT_PX * s) / (l.eccPx * s)).toFixed(9);
+      }));
+      expect(ratios.size, `location ${l.id}`).toBe(1);
     }
   });
 
-  it('really did vary against the root box, or the fix is solving nothing', () => {
-    const seen = new Set(DEVICES.map(([, w, h]) => {
+  it('lands inside the root box, 60 root px or more from every edge, on every device', () => {
+    // The root is centred on the screen and never smaller than the canvas (above), so a dot that
+    // clears the canvas's edges clears every device's.
+    for (const [name, w, h] of DEVICES) {
       const b = rootBox(w, h);
-      return ratio(b.w, b.h).toFixed(4);
-    }));
-    expect(seen.size, 'the ratio was already constant, so this fix is unnecessary').toBeGreaterThan(1);
+      for (const l of RT_LOCATIONS) {
+        const cx = b.w / 2 + l.dx;
+        const cy = b.h / 2 + l.dy;
+        const margin = Math.min(cx, b.w - cx, cy, b.h - cy) - RT_DOT_PX / 2;
+        expect(margin, `${name}, location ${l.id}`).toBeGreaterThanOrEqual(60);
+      }
+    }
   });
 
-  it('is the design canvas — the whole of the study tablet\'s screen at scale 1.0', () => {
-    expect(STIMULUS_BOX.width).toBe(DESIGN_WIDTH);
-    expect(STIMULUS_BOX.height).toBe(DESIGN_HEIGHT);
-    expect([STIMULUS_BOX.width, STIMULUS_BOX.height]).toEqual([1152, 720]);
+  it('really did vary under the percentage rule against the root box, or the fix is solving nothing', () => {
+    const seen = new Set(DEVICES.map(([, w, h]) => {
+      const b = rootBox(w, h);
+      return oldRatio(b.w, b.h).toFixed(4);
+    }));
+    expect(seen.size, 'the ratio was already constant, so this fix is unnecessary').toBeGreaterThan(1);
   });
 });
 

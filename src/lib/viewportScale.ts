@@ -396,8 +396,9 @@ function apply(): void {
    * value on the reference tablet: the one device where anyone would have tested it.
    *
    * They are gone rather than fixed. The layout problem they were meant to serve is solved properly
-   * by STIMULUS_COLUMN_PX and STIMULUS_BOX at the foot of this file, which make the stimulus
-   * geometry device-independent instead of inviting each screen to react to the viewport itself.
+   * by STIMULUS_COLUMN_PX at the foot of this file and by the reaction-time targets' fixed root-px
+   * offsets (lib/rtLocations.ts), which make the stimulus geometry device-independent instead of
+   * inviting each screen to react to the viewport itself.
    */
 }
 
@@ -513,15 +514,11 @@ export function installViewportScale(): () => void {
  */
 export const STIMULUS_COLUMN_PX = 1040;
 
-/**
- * The box a stimulus is positioned within, in root pixels — the design canvas itself, which is now
- * the whole of the study tablet's screen at scale 1.0.
- *
- * Used by the reaction-time task, where the target's position is a percentage and its diameter is a
- * constant. Resolving those percentages against the device-shaped root box made the target's
- * eccentricity, and so its size-to-eccentricity ratio, vary by device (measured on the 1194x834
- * canvas of the time: 0.148 on the canvas, 0.136 at 1152x720, 0.123 at 1152x650, 0.071 at 2560x1600).
- * Simple reaction time and detection sensitivity are both monotone in eccentricity, so that entered
- * the data as device-driven variance in a dependent variable with no column identifying it.
+/*
+ * STIMULUS_BOX used to be declared here: the design canvas, as the box the reaction-time target was
+ * positioned within by percentage, because a percentage of the device-shaped root box had made the
+ * target's eccentricity vary by device (measured on the 1194x834 canvas of the time: dot size per
+ * unit eccentricity 0.148 on the canvas, 0.136 at 1152x720, 0.123 at 1152x650, 0.071 at 2560x1600).
+ * Since Round 66 the target sits at one of eight FIXED offsets in root px from the centre
+ * (lib/rtLocations.ts), which no box can change, so the box had no user left and is gone.
  */
-export const STIMULUS_BOX = { width: DESIGN_WIDTH, height: DESIGN_HEIGHT } as const;

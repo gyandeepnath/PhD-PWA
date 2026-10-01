@@ -635,6 +635,30 @@ export interface ReactionTrialRecord {
    * existed lack it; every row this build writes carries it.
    */
   stimulus_color?: string;
+  /**
+   * Where the dot was (Round 66): one of eight fixed locations, two rings x four diagonals around
+   * the fixation cross — see src/lib/rtLocations.ts. 1-4 are the inner ring (4 deg at 55 cm) in
+   * quadrants up-right, up-left, down-left, down-right; 5-8 the outer ring (8 deg) in the same order.
+   *
+   * Optional in the type because rows written before Round 66 have none of these: the dot then
+   * landed at a uniformly random point in the central part of the screen, and where is not
+   * recoverable. Every row this build writes carries all seven.
+   */
+  stim_location_id?: number;
+  stim_ring?: 'inner' | 'outer';
+  /** Direction from the cross, counter-clockwise from the participant's right: 45, 135, 225 or 315. */
+  stim_angle_deg?: number;
+  /** Offset of the dot's centre from the fixation cross in root px; + is right. */
+  stim_dx_px?: number;
+  /** Offset of the dot's centre from the fixation cross in root px; + is DOWN. */
+  stim_dy_px?: number;
+  /** Distance of the dot's centre from the cross in root px (hypot of the two offsets). */
+  stim_ecc_px?: number;
+  /**
+   * That distance as visual angle at the nominal 55 cm: atan(px x scale x 0.2055 mm / 550 mm), with
+   * the display scale read at the dot's onset (0.2055 mm per CSS px is the study tablet at scale 1).
+   */
+  stim_ecc_deg_55cm?: number;
   stimulus_onset_time: number;
   response_time_ms: number | null;
   accuracy: RtAccuracy;

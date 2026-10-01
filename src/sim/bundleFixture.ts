@@ -27,6 +27,7 @@ import { scoreCvsq } from '@/scales/cvsq';
 import { computeSdt } from '@/lib/signalDetection';
 import { fnv1a } from '@/storage/export';
 import { CONFIG } from '@/experiment/config';
+import { RT_LOCATIONS, eccentricityDeg } from '@/lib/rtLocations';
 
 export const FIXTURE = {
   /** Embeds a comma and a quote on purpose: the hardest thing for a CSV writer to get right. */
@@ -203,6 +204,13 @@ function rtTrialsFor(conditionId: string, sid: string, i: number) {
   }
   return Array.from({ length: RT_TOTAL_TRIALS }, (_, t) => {
     const isSignal = signalAt(t);
+    /*
+     * Where the dot was: 3t mod 8 visits all eight locations every eight trials (3 is coprime with
+     * 8), so each is used 4 times and no two consecutive trials share one — the properties the real
+     * planner guarantees, without its randomness, so the export stays byte-reproducible. The fixture
+     * does not reproduce the planner's go/no-go split per ring; tests/rtLocations.test.ts owns that.
+     */
+    const loc = RT_LOCATIONS[(t * 3) % 8];
     const miss = missPositions.has(t);
     const falseAlarm = faPositions.has(t);
     const responded = (isSignal && !miss) || falseAlarm;
@@ -214,6 +222,14 @@ function rtTrialsFor(conditionId: string, sid: string, i: number) {
       trial_number: t + 1,
       trial_category: (isSignal ? 'signal' : 'noise') as 'signal' | 'noise',
       is_signal: isSignal,
+      stim_location_id: loc.id,
+      stim_ring: loc.ring,
+      stim_angle_deg: loc.angleDeg,
+      stim_dx_px: loc.dx,
+      stim_dy_px: loc.dy,
+      stim_ecc_px: loc.eccPx,
+      // The fixture's sessions run at stimulus_scale 1.
+      stim_ecc_deg_55cm: eccentricityDeg(loc.eccPx, 1),
       stimulus_onset_time: 1000 + t * 1500,
       response_time_ms: responded ? 320 + i + (t % 7) * 6 : null,
       accuracy: accuracy as 'hit' | 'miss' | 'false_alarm' | 'correct_rejection',

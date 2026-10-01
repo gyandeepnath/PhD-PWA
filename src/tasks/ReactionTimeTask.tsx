@@ -1,7 +1,8 @@
 /**
  * Colour go/no-go reaction-time task, run IN the condition's display.
  *
- * A single dot appears at a RANDOM location, on the active condition's own background; the
+ * A single dot appears at one of EIGHT FIXED LOCATIONS around the fixation cross — two rings, 4 and
+ * 8 deg, on the diagonals; see src/lib/rtLocations.ts — on the active condition's own background; the
  * participant taps ONLY when it is the same colour as the text they have just been reading — the
  * condition's own text colour — and ignores dots in the other four text colours of that polarity.
  * So in the blue-text condition the go-dot is blue, in the yellow one it is yellow, and RT measures
@@ -12,14 +13,17 @@
  *  - the response time comes from the hardware pointer-event timestamp (low jitter);
  *  - responses < RT_MIN_VALID_RT are anticipations — excluded from RT means, counted separately;
  *  - the trial ends the instant a response is made (only no-go trials wait the window out);
+ *  - every location is used equally often in every block and recorded on every trial, so
+ *    eccentricity is a balanced, modelled factor rather than noise (rtLocations.ts);
  *  - one unscored practice block (with feedback) runs once before the first scored condition;
  *  - metrics include RT mean/median/SD/CV, lapse rate, inverse efficiency, and first/second-half
  *    RT (within-block vigilance) — sensitive to fatigue-driven inconsistency (§12).
  */
 import { useRef, useState } from 'react';
-import { CONFIG } from '@/experiment/config';
-import { nonAgingDelay, planRuns, balancedDistractors } from '@/lib/foreperiod';
-import { STIMULUS_BOX } from '@/lib/viewportScale';
+import { CONFIG, isE2ETimingActive } from '@/experiment/config';
+import { nonAgingDelay } from '@/lib/foreperiod';
+import { planRtBlock, eccentricityDeg, type RtLocation, type RtRing } from '@/lib/rtLocations';
+import { currentScale } from '@/lib/viewportScale';
 import { relativeLuminance } from '@/lib/contrast';
 import { rafDelay, randInt, now } from '@/lib/timing';
 import { median, stdSample } from '@/lib/stats';
@@ -41,6 +45,20 @@ export interface RawTrial {
    * something different from one on an easy one.
    */
   stimulus_color: string;
+  /**
+   * Where the dot was: one of the eight fixed locations (1-4 the inner ring, 5-8 the outer, each in
+   * quadrants up-right, up-left, down-left, down-right). The rest are that location spelled out, so
+   * an analyst need not carry the table: ring, direction, the offset from the fixation cross in root
+   * px (+ right, + down), its length, and its visual angle at the nominal 55 cm at the display scale
+   * the dot was drawn at.
+   */
+  stim_location_id: number;
+  stim_ring: RtRing;
+  stim_angle_deg: number;
+  stim_dx_px: number;
+  stim_dy_px: number;
+  stim_ecc_px: number;
+  stim_ecc_deg_55cm: number;
   stimulus_onset_time: number;
   response_time_ms: number | null;
   accuracy: RtAccuracy;
@@ -85,6 +103,7 @@ type Phase = 'instruction' | 'fixation' | 'delay' | 'stimulus' | 'feedback' | 'i
 interface Trial {
   signal: boolean;
   color: string;
+  location: RtLocation;
 }
 
 /**
@@ -101,14 +120,6 @@ export function fixationInkFor(background: string): string {
   return relativeLuminance(background) > 0.5 ? CONFIG.RT_FIXATION_LIGHT_BG : CONFIG.RT_FIXATION_DARK_BG;
 }
 
-/**
- * Build a block whose go/no-go order carries no long runs.
- *
- * The previous version shuffled a fixed 20 go and 12 no-go without constraint. Runs of six or seven
- * gos occur by chance and prime a response hard enough that the next no-go draws a false alarm that
- * reflects the run rather than the display — and since the counts are fixed, once the last no-go
- * has been seen every remaining trial is a go, so the tail of the block is deterministic.
- */
 /**
  * The go-target of the previous block in this sitting, or null before the first.
  *
@@ -138,12 +149,22 @@ export function setRtTargetMemory(color: string): void {
   lastTargetColor = color;
 }
 
-function buildTrials(n: number, goRate: number, target: string, distractorPalette: readonly string[]): Trial[] {
-  const TARGET = target;
+/**
+ * Build a block: a go/no-go order with no long runs, and a place for every dot.
+ *
+ * The order is planRuns's, as before: an unconstrained shuffle of 20 go and 12 no-go let runs of six
+ * or seven gos prime a response hard enough that the next no-go drew a false alarm reflecting the run
+ * rather than the display, and left the tail of the block deterministic. The locations, and the
+ * no-go colours (now split across the two rings), come from planRtBlock — see rtLocations.ts.
+ */
+function buildTrials(
+  n: number, goRate: number, target: string, distractorPalette: readonly string[], blockIndex: number, practice: boolean,
+): Trial[] {
   const nGo = Math.round(n * goRate);
-  const nNoGo = n - nGo;
-  const { order, capRespected } = planRuns(nGo, nNoGo, CONFIG.RT_MAX_RUN);
-  if (!capRespected) {
+  const plan = planRtBlock({
+    nGo, nNoGo: n - nGo, maxRun: CONFIG.RT_MAX_RUN, target, distractors: distractorPalette, blockIndex, practice,
+  });
+  if (!plan.capRespected) {
     /*
      * Unreachable for every parameter set this app ships — tests/foreperiod.test.ts proves the
      * production, practice and end-to-end counts are all arrangeable within RT_MAX_RUN — so this is
@@ -154,10 +175,15 @@ function buildTrials(n: number, goRate: number, target: string, distractorPalett
      */
     console.error('[visulab] go/no-go run cap could not be honoured: trial predictability is not as configured.');
   }
-  // Balanced by construction rather than sampled with replacement; see balancedDistractors.
-  const distractors = balancedDistractors(nNoGo, distractorPalette);
-  let d = 0;
-  return order.map((isGo) => (isGo ? { signal: true, color: TARGET } : { signal: false, color: distractors[d++] }));
+  // The same kind of guard for the locations: both are unreachable for the shipped counts
+  // (tests/rtLocations.test.ts), and both would otherwise change the design without a trace.
+  if (!plan.noConsecutiveRepeat) {
+    console.error('[visulab] reaction-time locations: a same-location repeat could not be avoided in this block.');
+  }
+  if (!practice && plan.layout !== 'balanced' && !isE2ETimingActive()) {
+    console.error(`[visulab] reaction-time locations: a scored block of ${n} trials has no balanced layout (got '${plan.layout}').`);
+  }
+  return plan.trials;
 }
 
 const avg = (xs: number[]): number | null => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
@@ -182,6 +208,12 @@ interface Props {
   onTrialsRunning?: (running: boolean) => void;
   /** Which display of the sitting this is, for the instruction card's eyebrow. */
   display?: DisplayPosition;
+  /**
+   * The block's serial position in the participant's plan, 0-based (the condition's global
+   * session_position). Odd blocks get the mirrored location pattern and the swapped colour split;
+   * see rtLocations.ts.
+   */
+  blockIndex?: number;
 }
 
 /** Messages between trials — practice feedback, "Practice complete", "Block complete": the stimulus face, full ink. */
@@ -189,18 +221,20 @@ const message: React.CSSProperties = { textAlign: 'center', fontFamily: STIMULUS
 
 export function ReactionTimeTask({
   background, text, target, targetName, distractors, practiceTrials = 0, onComplete, onTrialsRunning, display,
+  blockIndex = 0,
 }: Props) {
   const [phase, setPhase] = useState<Phase>('instruction');
   const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null);
-  const scored = useRef<Trial[]>(buildTrials(CONFIG.RT_TRIALS_PER_CONDITION, CONFIG.RT_GO_RATE, target, distractors));
-  const practice = useRef<Trial[]>(buildTrials(practiceTrials, CONFIG.RT_GO_RATE, target, distractors));
+  // useState's initialiser, not useRef(buildTrials(...)): a ref's argument is evaluated on every
+  // render, and the planner runs a search, so it would be re-planned and discarded at every trial.
+  const [scored] = useState<Trial[]>(() => buildTrials(CONFIG.RT_TRIALS_PER_CONDITION, CONFIG.RT_GO_RATE, target, distractors, blockIndex, false));
+  const [practice] = useState<Trial[]>(() => buildTrials(practiceTrials, CONFIG.RT_GO_RATE, target, distractors, blockIndex, true));
   const records = useRef<RawTrial[]>([]);
   const phaseRef = useRef<Phase>('instruction');
   const onsetRef = useRef(0);
   const respondedAtRef = useRef<number | null>(null);
   const falseStartRef = useRef(false);
   const current = useRef<Trial | null>(null);
-  const clusterPos = useRef<{ x: number; y: number }>({ x: 50, y: 50 });
   const targetColor = target;
   // The fixation cross is NOT the stimulus; it stays achromatic. See fixationInkFor.
   const fixationInk = fixationInkFor(background);
@@ -280,12 +314,14 @@ export function ReactionTimeTask({
      */
     await rafDelay(nonAgingDelay(CONFIG.RT_DELAY_MIN_MS, CONFIG.RT_DELAY_MAX_MS, CONFIG.RT_DELAY_MEAN_MS));
 
-    clusterPos.current = { x: randInt(Math.random, 25, 75), y: randInt(Math.random, 28, 72) };
     // Render the stimulus, but do NOT accept responses yet: phaseRef flips inside markOnsetAtPaint,
     // together with the onset timestamp.
     setPhase('stimulus');
     force((n) => n + 1);
     await markOnsetAtPaint();
+    // The scale the dot was actually drawn at. Frozen for the condition, but it may shrink if the
+    // screen genuinely did (viewportScale.ts), so it is read per trial rather than assumed.
+    const scaleAtOnset = currentScale();
     await waitForResponseOrTimeout(CONFIG.RT_RESPONSE_WINDOW_MS);
 
     const rawRt = respondedAtRef.current != null ? respondedAtRef.current - onsetRef.current : null;
@@ -326,6 +362,13 @@ export function ReactionTimeTask({
         trial_category: t.signal ? 'signal' : 'noise',
         is_signal: t.signal,
         stimulus_color: t.color,
+        stim_location_id: t.location.id,
+        stim_ring: t.location.ring,
+        stim_angle_deg: t.location.angleDeg,
+        stim_dx_px: t.location.dx,
+        stim_dy_px: t.location.dy,
+        stim_ecc_px: t.location.eccPx,
+        stim_ecc_deg_55cm: eccentricityDeg(t.location.eccPx, scaleAtOnset),
         stimulus_onset_time: onsetRef.current,
         response_time_ms: rt,
         accuracy,
@@ -363,12 +406,12 @@ export function ReactionTimeTask({
     // Record the rule for this block only once it actually starts, so the next block compares
     // against a block that was really presented rather than one merely rendered and abandoned.
     lastTargetColor = targetColor;
-    for (let i = 0; i < practice.current.length; i++) await runTrial(practice.current[i], i, true);
-    if (practice.current.length > 0) {
+    for (let i = 0; i < practice.length; i++) await runTrial(practice[i], i, true);
+    if (practice.length > 0) {
       setPhaseSync('practice_done');
       await rafDelay(1400);
     }
-    for (let i = 0; i < scored.current.length; i++) await runTrial(scored.current[i], i, false);
+    for (let i = 0; i < scored.length; i++) await runTrial(scored[i], i, false);
     finish();
   };
 
@@ -482,10 +525,17 @@ export function ReactionTimeTask({
         title="Tap for your colour"
         lines={[
           <>
-            A dot will appear at a random spot. Tap the screen as fast as you can ONLY when it is{' '}
+            A dot will appear somewhere around the cross in the middle of the screen. Tap the screen as
+            fast as you can ONLY when it is{' '}
             <span style={{ color: targetColor, fontWeight: 700 }}>{targetName}</span> — the same
             colour as the text you have just read. Do not tap for a dot of any other colour.
           </>,
+          /*
+           * Tap anywhere, so the response carries no aiming movement whose length would depend on
+           * where the dot was rather than on the display. The hand waits BELOW the screen so it never
+           * covers the lower dots: those sit 68 px from the bottom edge on the tablet.
+           */
+          'Rest your hand just below the bottom edge of the screen. Tap anywhere.',
           ...(practiceTrials > 0 ? ['A short practice comes first.'] : []),
         ]}
         buttonLabel={practiceTrials > 0 ? 'Start practice →' : `Start (${totalScored} trials) →`}
@@ -533,7 +583,7 @@ export function ReactionTimeTask({
       style={{ position: 'fixed', inset: 0, background, touchAction: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none' }}
     >
       {(phase === 'fixation' || phase === 'delay') && (
-        <div style={{ width: 24, height: 24, position: 'relative' }}>
+        <div data-testid="rt-fixation" style={{ width: 24, height: 24, position: 'relative' }}>
           {/* Achromatic and full-opacity, chosen by background luminance — NOT the go-target colour.
               Drawn in the condition ink it would range from 2.39:1 (P4, yellow on white) upward, so
               the marker that holds fixation immediately BEFORE every stimulus would vary with both
@@ -546,29 +596,26 @@ export function ReactionTimeTask({
 
       {showStim && (
         /*
-         * The target is positioned inside a box the size of the DESIGN CANVAS, centred, not inside
-         * the root box.
+         * The dot is placed by a FIXED OFFSET in root px from the centre — where the fixation cross
+         * was — not by a percentage of any box.
          *
-         * Its position is a percentage and its diameter is a constant, so resolving the percentage
-         * against the root — which takes the DEVICE's aspect ratio, not the canvas's — made the
-         * target's eccentricity, and so its size-to-eccentricity ratio, vary by device: 0.148 on the
-         * design canvas, 0.136 at 1152x720, 0.123 at 1152x650, 0.071 on a large display where
-         * stimulus_scale still reads 1.00. Simple reaction time and detection sensitivity are both
-         * monotone in eccentricity, so that entered the data as device-driven variance in a
-         * dependent variable, with nothing in any exported column identifying it.
-         *
-         * The box is invisible: the condition background covers the whole screen behind it.
+         * It used to be a percentage position inside a box the size of the design canvas, because a
+         * percentage of the ROOT box, which takes the device's aspect ratio, had made eccentricity vary
+         * by device (0.148 to 0.071 in dot size per unit eccentricity, at the same stimulus_scale).
+         * An offset in root px has no such dependence at all: on every device the dot is the same
+         * number of root px from the cross, and stimulus_scale is the whole of the difference. The
+         * container is the full root, so the 50% is the cross's own centre.
          */
         <div
           aria-hidden
+          data-testid="rt-dot"
+          data-location={t!.location.id}
           style={{
-            position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-            width: STIMULUS_BOX.width, height: STIMULUS_BOX.height,
-            maxWidth: '100%', maxHeight: '100%', pointerEvents: 'none',
+            position: 'absolute', left: `calc(50% + ${t!.location.dx}px)`, top: `calc(50% + ${t!.location.dy}px)`,
+            transform: 'translate(-50%, -50%)', width: dot, height: dot, borderRadius: '50%', background: t!.color,
+            pointerEvents: 'none',
           }}
-        >
-          <div style={{ position: 'absolute', left: `${clusterPos.current.x}%`, top: `${clusterPos.current.y}%`, transform: 'translate(-50%, -50%)', width: dot, height: dot, borderRadius: '50%', background: t!.color }} />
-        </div>
+        />
       )}
 
       {/* Practice only, and drawn in the condition ink rather than a fixed green/red: those

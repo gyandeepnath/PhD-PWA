@@ -1712,6 +1712,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           {...rtStimulusColours(cond ?? CONDITIONS[0])}
           practiceTrials={machine.stepIndex === 0 && (session?.condition_offset ?? 0) === 0 ? CONFIG.RT_PRACTICE_TRIALS : 0}
           display={displayPosition}
+          /*
+           * The condition's GLOBAL serial position, not its index in this sitting: alternate blocks
+           * mirror the dot-location pattern and swap the no-go colours' ring split
+           * (lib/rtLocations.ts), and a second sitting must continue that alternation rather than
+           * restart it. Across participants the Williams rows put each condition at odd and even
+           * positions equally often, so the alternation never follows a condition.
+           */
+          blockIndex={step?.position ?? machine.stepIndex}
           onTrialsRunning={(running) => setRtPhase(running ? 'trials' : 'saving')}
           onComplete={async (res) => {
             // Trials are over; only writes remain, so Pause becomes available again.
