@@ -359,6 +359,19 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const [cameraLossAccepted, setCameraLossAccepted] = useState(false);
   /** The camera self-test is showing, after a completed calibration routine. */
   const [selfTesting, setSelfTesting] = useState(false);
+  /*
+   * The calibration routine or camera self-test that was running when the tablet turned to portrait,
+   * held for as long as the tablet stays there. The component stops it (its `halted` prop) and then
+   * reports it is no longer running, so this has to remember that it was — the portrait block says
+   * the step was stopped and has to be begun again, not that nothing is lost.
+   */
+  const timedProcedure = procedureRunning && machine.stage === 'CALIBRATION'
+    ? (selfTesting ? 'selftest' : 'calibration') : null;
+  const [stoppedByPortrait, setStoppedByPortrait] = useState<'calibration' | 'selftest' | null>(null);
+  useEffect(() => {
+    if (!portrait) setStoppedByPortrait(null);
+    else if (timedProcedure) setStoppedByPortrait(timedProcedure);
+  }, [portrait, timedProcedure]);
   /** The operator chose to continue while the camera image was blocked; re-armed when it clears. */
   const [cameraBlockAccepted, setCameraBlockAccepted] = useState(false);
   useEffect(() => { if (!tracking.cameraBlocked) setCameraBlockAccepted(false); }, [tracking.cameraBlocked]);
@@ -1438,6 +1451,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             begin={tracking.beginSelfTest}
             end={tracking.endSelfTest}
             onRunning={setProcedureRunning}
+            halted={portrait}
             onDone={async (r) => {
               const fresh = { ...(await get('sessions', session.session_id) ?? session), camera_selftest: { ...r, at: Date.now() } } as SessionRecord;
               await put('sessions', fresh);
@@ -1458,6 +1472,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           endGazeCalibration={tracking.endGazeCalibration}
           onDone={() => setSelfTesting(true)}
           onRunning={setProcedureRunning}
+          halted={portrait}
         />
       ) : (
         <Calibration cameraStatus={tracking.status} onDone={() => advanceOrResume('CALIBRATION')} />
@@ -1997,7 +2012,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           is 30 minutes against a 90-minute sitting. */}
       {/* Blocking, not advisory: continuing in portrait silently invalidates every gaze and
           head-pose measure for the rest of the sitting. */}
-      {portrait && <PortraitBlock stage={machine.stage} calibrated={tracking.status === 'active'} />}
+      {portrait && (
+        <PortraitBlock
+          stage={machine.stage}
+          calibrated={tracking.status === 'active'}
+          // On the first portrait frame the effect above has not run yet; the live value covers it.
+          stopped={stoppedByPortrait ?? timedProcedure}
+        />
+      )}
       {showCameraLost && (
         <div
           data-testid="camera-lost"
@@ -2138,9 +2160,37 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
  * so its 15 and 14 px lines arrived at 9 and 8 CSS px — the one message that has to be read from
  * arm's length while the tablet is being turned. Out here its sizes are real CSS pixels.
  */
-function PortraitBlock({ stage, calibrated }: { stage: Stage; calibrated: boolean }) {
+function PortraitBlock({ stage, calibrated, stopped }: {
+  stage: Stage;
+  calibrated: boolean;
+  /** A timed setup procedure that the rotation stopped. See stoppedByPortrait. */
+  stopped: 'calibration' | 'selftest' | null;
+}) {
   const inCondition = isInLoop(stage);
   const beforeCalibration = (SETUP_BEFORE_CALIBRATION as readonly Stage[]).includes(stage);
+  /*
+   * "Nothing is lost" only where nothing was running. The calibration routine and the camera
+   * self-test sample the camera on a clock; they used to carry on under this block and finish, and
+   * the block told the operator nothing needed redoing. They are now stopped (CalibrationRoutine,
+   * CameraSelfTest), and this says so.
+   */
+  if (stopped) {
+    const what = stopped === 'calibration' ? 'eye calibration' : 'camera check';
+    return createPortal(
+      <div data-testid="portrait-block" style={PORTRAIT_BLOCK_STYLE}>
+        <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 300 }}>Rotate the tablet back to landscape</h1>
+        <p className="font-sans" style={{ fontSize: 19, color: '#dbe6f7', maxWidth: 520, marginTop: 16, lineHeight: 1.55 }}>
+          The {what} has to be taken in landscape, so the one that was running has been stopped. Nothing from it is kept.
+        </p>
+        <p className="font-sans" style={{ fontSize: 17, color: '#c8d8f0', maxWidth: 520, marginTop: 14, lineHeight: 1.55 }}>
+          {stopped === 'calibration'
+            ? 'Rotate back, then begin the calibration again from the start.'
+            : 'Rotate back, then start the camera check again.'}
+        </p>
+      </div>,
+      document.body,
+    );
+  }
   const why = stage === 'CALIBRATION'
     ? 'The eye calibration is taken in landscape. Rotate back to carry on with it.'
     : calibrated && !beforeCalibration
@@ -2152,10 +2202,7 @@ function PortraitBlock({ stage, calibrated }: { stage: Stage; calibrated: boolea
     ? 'Rotate back now — the task underneath is still running, and time spent in portrait is recorded against this condition.'
     : 'Nothing is lost: this screen is still there underneath and carries on as soon as the tablet is landscape again.';
   return createPortal(
-    <div
-      data-testid="portrait-block"
-      style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#1a1a2e', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32, touchAction: 'none' }}
-    >
+    <div data-testid="portrait-block" style={PORTRAIT_BLOCK_STYLE}>
       <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 300 }}>Rotate the tablet back to landscape</h1>
       <p className="font-sans" style={{ fontSize: 19, color: '#dbe6f7', maxWidth: 520, marginTop: 16, lineHeight: 1.55 }}>{why}</p>
       <p className="font-sans" style={{ fontSize: 17, color: '#c8d8f0', maxWidth: 520, marginTop: 14, lineHeight: 1.55 }}>{then}</p>
@@ -2163,6 +2210,11 @@ function PortraitBlock({ stage, calibrated }: { stage: Stage; calibrated: boolea
     document.body,
   );
 }
+
+const PORTRAIT_BLOCK_STYLE: React.CSSProperties = {
+  position: 'fixed', inset: 0, zIndex: 100, background: '#1a1a2e', color: '#fff', display: 'flex', flexDirection: 'column',
+  alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32, touchAction: 'none',
+};
 
 /** Setup screens that come before the eye calibration: nothing has been calibrated yet. */
 const SETUP_BEFORE_CALIBRATION = ['SESSION_INIT', 'CONSENT', 'PARTICIPANT_PROFILE', 'PREFLIGHT', 'COLOR_VISION', 'CAMERA_SETUP'] as const;

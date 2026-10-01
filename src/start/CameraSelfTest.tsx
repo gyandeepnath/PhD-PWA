@@ -11,12 +11,18 @@ import { SELF_TEST, scoreSelfTest, type SelfTestResult } from '@/tracking/selfTe
  * than of any condition. The result is stated in plain words with the reasons, and the operator
  * chooses: continue, try again, or continue anyway — the result is recorded in every case.
  */
-export function CameraSelfTest({ begin, end, onDone, onRunning }: {
+export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false }: {
   begin: () => void;
   end: () => { blinkOnsets: number[]; fps: number | null; facePresence: number | null };
   onDone: (result: SelfTestResult) => void;
   /** True while the dot is flashing: the operator's Exit chip is withheld, as in calibration. */
   onRunning?: (running: boolean) => void;
+  /**
+   * The tablet is in portrait: a check in progress is stopped and what it saw discarded, as the
+   * calibration routine does (CalibrationRoutine.tsx). It used to keep cueing under the portrait
+   * block and score blinks the camera saw from the short edge, while the block said nothing was lost.
+   */
+  halted?: boolean;
 }) {
   const [phase, setPhase] = useState<'intro' | 'running' | 'result'>('intro');
   useEffect(() => { onRunning?.(phase === 'running'); }, [phase, onRunning]);
@@ -25,6 +31,19 @@ export function CameraSelfTest({ begin, end, onDone, onRunning }: {
   const [cueCount, setCueCount] = useState(0);
   const [result, setResult] = useState<SelfTestResult | null>(null);
   const cues = useRef<number[]>([]);
+  /** Which check is current; a stopped one's animation frames see they are not and do nothing. */
+  const run = useRef(0);
+  const [stoppedByRotation, setStoppedByRotation] = useState(false);
+  useEffect(() => {
+    if (!halted || phase !== 'running') return;
+    run.current += 1;
+    end(); // closes the check's own aggregator; what it collected is not scored
+    setFlash(false);
+    setCueCount(0);
+    setStoppedByRotation(true);
+    setPhase('intro');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [halted, phase]);
 
   // Collapsed timings under the test harness, like every other protocol duration.
   const fast = isE2ETimingActive();
@@ -35,10 +54,12 @@ export function CameraSelfTest({ begin, end, onDone, onRunning }: {
     if (phase !== 'running') return;
     cues.current = [];
     begin();
+    const mine = run.current;
     const t0 = now();
     let raf = 0;
     let shown = -1;
     const tick = () => {
+      if (run.current !== mine) return;
       const el = now() - t0;
       const k = Math.floor((el - first) / every);
       // Advance one cue at a time: a late frame (a busy tablet) must delay a cue, never skip it, or
@@ -75,11 +96,17 @@ export function CameraSelfTest({ begin, end, onDone, onRunning }: {
     return (
       <div style={shell} data-testid="camera-selftest">
         <h1 className="font-serif" style={{ fontSize: 34, fontWeight: 300 }}>Quick camera check</h1>
+        {stoppedByRotation && (
+          <p data-testid="selftest-stopped" className="font-sans" style={{ fontSize: 17, color: '#ffd9a8', maxWidth: 560, marginTop: 12, lineHeight: 1.55 }}>
+            The check was stopped when the tablet turned to portrait, and nothing from it is kept.
+            Start it again.
+          </p>
+        )}
         <p className="font-lab" style={{ fontSize: 17, color: '#dbe6f7', maxWidth: 560, marginTop: 14, lineHeight: 1.6 }}>
           Look at the dot in the middle of the screen. Each time it flashes, blink once — a normal,
           firm blink. It flashes {SELF_TEST.CUES} times and takes about {Math.round((SELF_TEST.FIRST_CUE_MS + SELF_TEST.CUES * SELF_TEST.CUE_EVERY_MS) / 1000)} seconds.
         </p>
-        <button type="button" data-testid="selftest-start" onClick={() => setPhase('running')}
+        <button type="button" data-testid="selftest-start" onClick={() => { setStoppedByRotation(false); setPhase('running'); }}
           style={{ ...btn, marginTop: 26, background: '#fff', color: '#1a1a2e', border: 'none' }}>
           Start →
         </button>

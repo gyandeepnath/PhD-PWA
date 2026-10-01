@@ -37,9 +37,20 @@ interface Props {
    * mid-calibration is a restart anyway (experiment/navigation.ts).
    */
   onRunning?: (running: boolean) => void;
+  /**
+   * The tablet is in portrait. A run in progress is STOPPED and its samples are discarded.
+   *
+   * It used to carry on under the portrait block, a fixed loop with no orientation check, and finish
+   * on its own: the stored calibration row — the open-eye baseline every blink threshold is a
+   * fraction of, and the gaze mapping — could be taken wholly or partly in portrait, where the camera
+   * sits on the short edge and the landmark frame is turned 90 degrees, and nothing recorded that.
+   * The block meanwhile told the operator "Nothing is lost". Now the run stops, the screen returns to
+   * its start and says why, and the calibration is begun again in landscape.
+   */
+  halted?: boolean;
 }
 
-export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCalibration, sampleGazeTarget, endGazeCalibration, onDone, onRunning }: Props) {
+export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCalibration, sampleGazeTarget, endGazeCalibration, onDone, onRunning, halted = false }: Props) {
   const STEPS = calibrationSequence();
   /** -1 = intro; otherwise the index into STEPS currently running. */
   const [idx, setIdx] = useState(-1);
@@ -62,21 +73,50 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
   useEffect(() => { onRunning?.(busy); }, [busy, onRunning]);
   useEffect(() => () => onRunning?.(false), [onRunning]);
 
+  /*
+   * Which run is current. A run checks after every step that it still is, and stops when it is not —
+   * which is how a rotation to portrait ends it (see `halted`). It stops at the end of the step in
+   * hand, not in the middle of it: the tracker is still filling that step's window, and a new run
+   * begun before it closes would share it. So `busy` stays set — Begin disabled, Exit withheld — until
+   * the stopped run has actually let go of the tracker.
+   */
+  const run = useRef(0);
+  /** The sampling half is under way: the part a rotation invalidates. The fit after it is not. */
+  const sampling = useRef(false);
+  /** A run was stopped by a rotation; said on the start screen, which is where it begins again. */
+  const [stoppedByRotation, setStoppedByRotation] = useState(false);
+  useEffect(() => {
+    if (!halted || !sampling.current) return;
+    sampling.current = false;
+    run.current += 1;
+    setStoppedByRotation(true);
+  }, [halted]);
+
   const start = async () => {
+    const mine = ++run.current;
+    const current = () => mounted.current && run.current === mine;
+    // A stopped run hands back to the start screen only once its last step has closed.
+    const abandon = () => { if (mounted.current) { setIdx(-1); setBusy(false); } };
+    setStoppedByRotation(false);
     setPoorFit(null);
     setFailure(null);
     setBusy(true);
+    sampling.current = true;
     for (let i = 0; i < STEPS.length; i++) {
       const step = STEPS[i];
       setIdx(i);
       await new Promise((r) => setTimeout(r, STEP_SETTLE_MS)); // let the participant settle on what just appeared
+      if (!current()) { abandon(); return; }
       if (step.kind === 'ear_baseline') {
         await measureEarBaseline(step.ms);
+        if (!current()) { abandon(); return; }
         beginGazeCalibration();
       } else {
         await sampleGazeTarget(step.id, step.ms);
+        if (!current()) { abandon(); return; }
       }
     }
+    sampling.current = false;
     /**
      * The result of calibration is REPORTED, not discarded.
      *
@@ -126,7 +166,7 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
   };
 
   const step: CalibrationStep | null =
-    idx >= 0 && poorFit == null && thinFit == null && failure == null ? STEPS[idx] : null;
+    idx >= 0 && !stoppedByRotation && poorFit == null && thinFit == null && failure == null ? STEPS[idx] : null;
   const target = step?.kind === 'gaze_target' ? step : null;
 
   return (
@@ -194,7 +234,7 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
           </div>
         </div>
       )}
-      {idx === -1 && poorFit == null && failure == null && (
+      {(idx === -1 || stoppedByRotation) && poorFit == null && failure == null && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', textAlign: 'center', padding: 24 }}>
           <h1 className="font-serif" style={{ fontSize: 34, fontWeight: 300, display: 'flex', alignItems: 'center', gap: 10 }}>
             Eye calibration
@@ -205,13 +245,19 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
               detected, this screen says which part failed and offers a retry.
             </InfoTip>
           </h1>
+          {stoppedByRotation && (
+            <p data-testid="calibration-stopped" className="font-sans" style={{ fontSize: 17, color: '#ffd9a8', maxWidth: 600, marginTop: 12, lineHeight: 1.55 }}>
+              The calibration was stopped when the tablet turned to portrait, and nothing from it is kept.
+              Begin it again from the start.
+            </p>
+          )}
           <p className="font-lab" style={{ fontSize: 17, color: '#c8d8f0', maxWidth: 600, marginTop: 12, lineHeight: 1.6 }}>
             First, a dot in the centre of the screen: look straight at it and blink as you normally
             would. Then the dot will appear at nine positions in turn — look directly at each one
             and tap it. Keep your head still throughout and move only your eyes.
           </p>
-          <button onClick={start} disabled={busy} className="font-lab" style={{ marginTop: 24, background: '#1f5fbf', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 28px', fontSize: 16, cursor: 'pointer' }}>
-            Begin calibration →
+          <button onClick={start} disabled={busy} data-testid="calibration-begin" className="font-lab" style={{ marginTop: 24, background: '#1f5fbf', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 28px', fontSize: 16, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+            {busy ? 'Stopping…' : 'Begin calibration →'}
           </button>
         </div>
       )}

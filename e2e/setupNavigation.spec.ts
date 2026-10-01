@@ -268,6 +268,55 @@ test('a second sitting stopped on its profile resumes ON the profile, and record
   expect(people[0].correction_type).toBe('none');
 });
 
+test('turning the tablet to portrait stops a running calibration or camera check; nothing from it is kept', async ({ page }) => {
+  /*
+   * Both sample the camera on a clock. They used to carry on under the portrait block and finish —
+   * a calibration row, every blink threshold included, taken in portrait — while the block told the
+   * operator "Nothing is lost".
+   */
+  test.setTimeout(240_000);
+  const landscape = { width: 1152, height: 720 };
+  const portrait = { width: 720, height: 1152 };
+  await startNewExperiment(page);
+  await handleStage(page, 'SESSION_INIT', { participantId: 'PORT01' });
+  await driveUntil(page, 'CAMERA_SETUP');
+  await page.getByRole('button', { name: /Enable camera/ }).click();
+  await page.getByRole('button', { name: /My face is centred/ }).click({ timeout: 60_000 });
+  await page.waitForSelector('[data-stage="CALIBRATION"]', { timeout: 30_000 });
+
+  await page.getByTestId('calibration-begin').click();
+  await page.waitForTimeout(600);
+  await page.setViewportSize(portrait);
+  const block = page.getByTestId('portrait-block');
+  await expect(block).toContainText('The eye calibration has to be taken in landscape, so the one that was running has been stopped');
+  await expect(block).not.toContainText('Nothing is lost');
+  // Left in portrait past the routine's own length: it does not finish underneath.
+  await page.waitForTimeout(15_000);
+  expect((await dbCounts(page, ['calibration_data'])).calibration_data).toBe(0);
+  await page.setViewportSize(landscape);
+  await expect(page.getByTestId('calibration-stopped')).toBeVisible();
+  // Begun again from the start, it runs to its end and stores one calibration.
+  await page.getByTestId('calibration-begin').click({ timeout: 30_000 });
+  await page.waitForSelector('[data-testid="calibration-accept-thin"], [data-testid="calibration-continue-anyway"]', { timeout: 120_000 });
+  expect((await dbCounts(page, ['calibration_data'])).calibration_data).toBe(1);
+  for (const id of ['calibration-accept-thin', 'calibration-continue-anyway']) {
+    const b = page.getByTestId(id);
+    if (await b.isVisible().catch(() => false)) await b.click();
+  }
+
+  // The camera check, stopped the same way. Under ?e2e it runs for about a second, so the rotation
+  // follows the tap without a pause, and is confirmed to have caught it running.
+  await page.getByTestId('selftest-start').click();
+  await page.setViewportSize(portrait);
+  await expect(block).toContainText('The camera check has to be taken in landscape, so the one that was running has been stopped');
+  await page.waitForTimeout(3_000);
+  await page.setViewportSize(landscape);
+  await expect(page.getByTestId('selftest-stopped')).toBeVisible();
+  await expect(page.getByTestId('selftest-start')).toBeVisible();
+  const [s] = await all(page, 'sessions');
+  expect(s.camera_selftest ?? null).toBeNull();
+});
+
 test('Pause inside a condition confirms in the condition\'s own ink; Keep going carries on, Pause and exit leaves', async ({ page }) => {
   await startNewExperiment(page);
   await driveUntil(page, 'READING_TASK');
