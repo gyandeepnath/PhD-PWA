@@ -10,7 +10,9 @@ import { startNewExperiment, handleStage } from './helpers';
  * two rows that were left. In a study the list grows by one sitting per participant, and it is the
  * only route to export and to recording a withdrawal.
  *
- * Clicks are NOT forced: every control must be reachable by a finger.
+ * The manager's own controls are clicked NOT forced: each must be reachable by a finger. (The one
+ * sitting started through the app to seed the list goes through helpers.ts's handleStage, which
+ * forces its click on "Begin setup"; that screen is not what this spec tests.)
  */
 
 const VIEWPORTS = [

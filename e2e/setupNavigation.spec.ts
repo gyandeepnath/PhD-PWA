@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { stageNow, startNewExperiment, driveUntil, handleStage, setInput, click, waitStageChange, dbCounts } from './helpers';
+import { stageNow, startNewExperiment, driveUntil, handleStage, setInput, waitStageChange, dbCounts } from './helpers';
 
 /**
  * The operator's way back and way out of setup, and what each leaves in the database.
@@ -10,7 +10,15 @@ import { stageNow, startNewExperiment, driveUntil, handleStage, setInput, click,
  * route it allows leaves the records a straight run would have left: no second session, no second
  * participant row, no questionnaire asked twice, and a changed consent kept on the record.
  *
- * Clicks here are NOT forced, unlike the full-run driver: every control must be reachable by a finger.
+ * WHICH CLICKS ARE FORCED. The controls these tests are about are tapped UNFORCED (`tap` below, or a
+ * plain locator click): the navigation chip, every Back, the dialog buttons, and every forward button
+ * on a screen that carries a Back — the profile's form and Continue, pre-flight's checks and "All
+ * checks pass", the camera screen's buttons — plus "I consent". Unforced, Playwright refuses a click on
+ * anything covered, off-screen or disabled, so these are checked to be reachable by a finger; Back sits
+ * in the same row as the forward button it was added beside. Screens a test only passes through are
+ * driven by handleStage / driveUntil from helpers.ts, which DO force their clicks, so this spec says
+ * nothing about those; e2e/reachability.spec.ts covers them. (This header used to claim that no click
+ * here was forced, which was not true of the driver.)
  */
 
 type Row = Record<string, unknown>;
@@ -44,16 +52,24 @@ async function recordStages(page: Page) {
 }
 const stagesSeen = (page: Page) => page.evaluate(() => (window as unknown as { __stages: string[] }).__stages);
 
+/**
+ * A finger's tap: NOT forced, and only once the control is enabled. A string name matches exactly.
+ * (helpers.ts's `click` forces, which skips every actionability check.)
+ */
+async function tap(page: Page, name: RegExp | string, nth = 0) {
+  const btn = page.getByRole('button', typeof name === 'string' ? { name, exact: true } : { name }).nth(nth);
+  await expect(btn).toBeEnabled({ timeout: 15_000 });
+  await btn.click();
+}
+
 async function fillProfile(page: Page, opts: { age: string; cvd: 'no' | 'yes' }) {
   await setInput(page, 'age', opts.age);
   await setInput(page, 'hours', '6');
-  await click(page, /^female$/);
-  await click(page, /^high$/);
-  await click(page, /^dim$/);
-  await click(page, /^glasses$/);
-  await page.getByRole('button', { name: new RegExp(`^${opts.cvd}$`) }).first().click();
-  await click(page, /^normal$/);
-  await page.getByRole('button', { name: /^no$/ }).nth(1).click();
+  for (const name of ['female', 'high', 'dim', 'glasses']) await tap(page, name);
+  // Two no/yes groups: the colour-vision self-report, then caffeine.
+  await tap(page, opts.cvd, 0);
+  await tap(page, 'normal');
+  await tap(page, 'no', 1);
   await setInput(page, 'since-sleep', '3');
 }
 
@@ -98,7 +114,8 @@ test('Back from pre-flight corrects the profile: the answers come back filled in
   expect(await stageNow(page)).toBe('PARTICIPANT_PROFILE');
   // A mistyped age and a mis-tapped colour-vision self-report.
   await fillProfile(page, { age: '34', cvd: 'yes' });
-  await click(page, /^Continue/);
+  await expect(page.getByTestId('back-to-consent')).toBeVisible();
+  await tap(page, /^Continue/);
   await waitStageChange(page, 'PARTICIPANT_PROFILE');
   expect(await stageNow(page)).toBe('PREFLIGHT');
   let p = (await all(page, 'participants'))[0];
@@ -112,10 +129,16 @@ test('Back from pre-flight corrects the profile: the answers come back filled in
   // Filled in with what was submitted, not blank.
   await expect(page.getByTestId('age')).toHaveValue('34');
   await setInput(page, 'age', '24');
-  await page.getByRole('button', { name: /^no$/ }).first().click();
-  await click(page, /^Continue/);
+  await tap(page, 'no', 0);
+  await tap(page, /^Continue/);
   await waitStageChange(page, 'PARTICIPANT_PROFILE');
   expect(await stageNow(page)).toBe('PREFLIGHT');
+  // Pre-flight's own way forward, beside its Back, is reachable too.
+  await expect(page.getByTestId('back-to-profile')).toBeVisible();
+  for (const box of await page.getByRole('checkbox').all()) await box.check();
+  await tap(page, /All checks pass/);
+  await waitStageChange(page, 'PREFLIGHT');
+  expect(await stageNow(page)).toBe('COLOR_VISION');
 
   const rows = await all(page, 'participants');
   expect(rows).toHaveLength(1);
@@ -131,7 +154,7 @@ test('Back to consent from the camera screen changes the grant, keeps the old on
   await handleStage(page, 'SESSION_INIT', { participantId: 'CONS01' });
   // Participation only: the camera is declined.
   await page.getByTestId('consent-core').check();
-  await click(page, /I consent/);
+  await tap(page, /I consent/);
   await waitStageChange(page, 'CONSENT');
   await driveUntil(page, 'CAMERA_SETUP');
   await expect(page.getByRole('heading', { name: 'Camera measurement declined' })).toBeVisible();
@@ -143,7 +166,7 @@ test('Back to consent from the camera screen changes the grant, keeps the old on
   await expect(page.getByTestId('consent-camera')).not.toBeChecked();
   await page.getByTestId('consent-core').check();
   await page.getByTestId('consent-camera').check();
-  await click(page, /I consent/);
+  await tap(page, /I consent/);
   await waitStageChange(page, 'CONSENT');
 
   // Straight back to the camera screen — now the real one, since the grant is given.
@@ -161,6 +184,11 @@ test('Back to consent from the camera screen changes the grant, keeps the old on
   // Nothing duplicated: one sitting, one participant, and the colour-vision screen ran once.
   expect((await dbCounts(page, ['sessions', 'participants'])).sessions).toBe(1);
   expect((await all(page, 'participants'))).toHaveLength(1);
+
+  // The camera screen's own way forward, in the row with its Back, is reachable by a finger.
+  await expect(page.getByTestId('back-to-consent')).toBeVisible();
+  await tap(page, /Continue without camera/);
+  await waitStageChange(page, 'CAMERA_SETUP');
 });
 
 test('no Exit while a colour-vision plate is showing; it returns on the next screen', async ({ page }) => {
@@ -242,13 +270,11 @@ test('a second sitting stopped on its profile resumes ON the profile, and record
   // This sitting's answers, chosen to differ from sitting 1's (glasses, no caffeine, 3 h awake).
   await setInput(page, 'age', '30');
   await setInput(page, 'hours', '6');
-  for (const name of ['female', 'high', 'dim', 'none', 'normal']) {
-    await page.getByRole('button', { name, exact: true }).click();
-  }
-  await page.getByRole('button', { name: 'no', exact: true }).first().click();
-  await page.getByRole('button', { name: 'yes', exact: true }).nth(1).click();
+  for (const name of ['female', 'high', 'dim', 'none', 'normal']) await tap(page, name);
+  await tap(page, 'no', 0);
+  await tap(page, 'yes', 1);
   await setInput(page, 'since-sleep', '9');
-  await page.getByRole('button', { name: /^Continue/ }).click();
+  await tap(page, /^Continue/);
   await waitStageChange(page, 'PARTICIPANT_PROFILE');
   await driveUntil(page, 'CAMERA_SETUP');
   const seen = await stagesSeen(page);
