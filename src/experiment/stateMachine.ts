@@ -11,6 +11,9 @@
  *         CONFIG.BREAK_EVERY_N_CONDITIONS conditions] →
  *   CVSQ_END → NASA_TLX → SESSION_COMPLETE → EXPORT_DASHBOARD
  *
+ * plus LAUNCH_CHECK, outside both orders: the first screen of a resume that is not running in the
+ * installed app and will not pass pre-flight (resumeOwesLaunchCheck below).
+ *
  * Adaptation is skipped after the final condition (nothing to adapt to). Transitions are pure
  * functions of (stage, stepIndex) so they are unit-testable in isolation from React.
  */
@@ -182,6 +185,9 @@ export function nextState(state: MachineState, nConditionsRaw: number = N_CONDIT
 
   // A break is followed by the grey field, never directly by a condition. See REACTION_TIME above.
   if (stage === 'BREAK_SCREEN') return { stage: 'ADAPTATION', stepIndex };
+  // The launch check has no fixed successor: the resume that raised it decides where the sitting goes
+  // next, and the screen hands over itself. Stay put rather than fall through to the terminal stage.
+  if (stage === 'LAUNCH_CHECK') return state;
   // NASA-TLX sits between the end CVS-Q and completion: both are session-level instruments, and
   // asking for workload AFTER the symptom questionnaire keeps the symptom rating from being
   // primed by having just reflected on how hard the session was.
@@ -280,6 +286,31 @@ export function firstUnsatisfiedSetupStage(p: ResumePrerequisites): Stage | null
   if (!p.hasBaselineCvsq) return 'CVSQ_BASELINE';
   if (!p.hasBaselineFatigue) return 'BASELINE_FATIGUE';
   return null;
+}
+
+/**
+ * Whether a resume must first show the launch check (LAUNCH_CHECK) — before camera set-up, the grey
+ * field or anything else the walk holds.
+ *
+ * WHY. The installed-app check lived only on the pre-flight screen, and a resume skips pre-flight once
+ * the sitting has passed it. So a sitting checked as installed could be paused, reopened in a Chrome
+ * tab and continued at scale 0.90 — the operator warned of nothing and ticking nothing, the session
+ * row still saying fullscreen and unacknowledged, and only an unread per-condition column showing it
+ * (review of Round 63, reproduced). The launch belongs to the run of the app, not to the sitting: a
+ * resume is a new launch, so it is checked again.
+ *
+ * Asked only when it matters and is not already asked:
+ *   - not when the app is the installed launch (`installed`);
+ *   - not when no display is left to run (`conditionsLeft` false: only the closing questionnaires,
+ *     which are not stimuli);
+ *   - not when the walk passes pre-flight (`owed` is pre-flight or earlier), which asks itself.
+ * First, rather than just before the grey field, so the operator can exit and relaunch from the icon
+ * BEFORE re-doing camera set-up and calibration in the wrong launch.
+ */
+export function resumeOwesLaunchCheck(owed: Stage | null, conditionsLeft: boolean, installed: boolean): boolean {
+  if (installed || !conditionsLeft) return false;
+  if (owed != null && SETUP_ORDER.indexOf(owed) <= SETUP_ORDER.indexOf('PREFLIGHT')) return false;
+  return true;
 }
 
 /**

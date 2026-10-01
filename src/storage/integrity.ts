@@ -190,6 +190,38 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
       conditions.filter((c) => c.stimulus_scale !== hi).map((c) => c.condition_id));
   }
 
+  /*
+   * ---- every display should have run in the installed app
+   *
+   * The design canvas is the installed app's full screen (1152x720 on the study tablet). In a browser
+   * tab the address bar takes about a tenth of the height, so every stimulus is drawn about 10%
+   * smaller (stimulus_scale 0.90) and can change size when the bar hides or reappears. Pre-flight asks
+   * for an acknowledgement before running like that, and since Round 67 so does a resume and a break —
+   * but the session row holds only pre-flight's answer, and a resume used to be asked nothing, so a
+   * sitting checked as installed could be finished in a tab with the session still saying fullscreen.
+   * This reads the per-condition column, the only place a later launch shows. A null mode (the
+   * browser did not say) is reported too: the installed app could not be confirmed. Rows from builds
+   * before display_mode was recorded carry no field and are not judged.
+   */
+  {
+    const outside = conditions.filter((c) => c.display_mode !== undefined
+      && c.display_mode !== 'fullscreen' && c.display_mode !== 'standalone');
+    if (outside.length) {
+      const unacknowledged = outside.filter((c) => c.display_mode_acknowledged === false);
+      const modes = [...new Set(outside.map((c) => c.display_mode ?? 'not reported'))].join(', ');
+      add('warning', 'display_mode_installed',
+        `${outside.length} condition(s) ran outside the installed full-screen app (display_mode: ${modes}): `
+        + 'the stimuli were drawn at the size a browser tab allows, not necessarily the protocol size, and '
+        + 'could change size when the address bar moved. See display_mode and stimulus_scale on '
+        + '02_conditions.csv.'
+        + (unacknowledged.length
+          ? ` ${unacknowledged.length} of them started in a launch the operator had NOT acknowledged `
+            + '(display_mode_acknowledged FALSE).'
+          : ''),
+        outside.map((c) => c.condition_id));
+    }
+  }
+
   // ---- the join key must be unique, or every join is ambiguous
   const dupIds = duplicates(conditions, (c) => c.condition_id);
   for (const [id, n] of dupIds) {

@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { auditBundle } from '@/storage/integrity';
 import { buildExportFiles } from '@/storage/export';
 import { buildFixtureBundle } from '@/sim/bundleFixture';
+import { splitCsvRow } from './helpers/csv';
 
 const checks = (b: ReturnType<typeof buildFixtureBundle>) => auditBundle(b).findings.map((f) => f.check);
 
@@ -208,6 +209,67 @@ describe('the stimulus must have been the same size throughout a sitting', () =>
 
   it('says nothing for rows recorded before the scale was captured', () => {
     expect(atScales(undefined, undefined)).toHaveLength(0);
+  });
+});
+
+describe('every display should have run in the installed app', () => {
+  /*
+   * The session row holds pre-flight's display_mode only. A sitting checked as installed could be
+   * resumed in a Chrome tab and finished at scale 0.90 with nothing asked, the session still saying
+   * fullscreen (review of Round 63). The per-condition column is the only place a later launch shows,
+   * and nothing read it.
+   */
+  const withModes = (...rows: [string | null | undefined, boolean | null | undefined][]) => {
+    const b = buildFixtureBundle();
+    b.conditions = b.conditions.slice(0, rows.length);
+    b.conditions.forEach((c, i) => {
+      if (rows[i][0] !== undefined) c.display_mode = rows[i][0];
+      if (rows[i][1] !== undefined) c.display_mode_acknowledged = rows[i][1];
+    });
+    return auditBundle(b).findings.filter((f) => f.check === 'display_mode_installed');
+  };
+
+  it('says nothing when every condition ran in the installed app', () => {
+    expect(withModes(['fullscreen', false], ['standalone', false])).toHaveLength(0);
+  });
+
+  it('warns about the conditions resumed in a tab, and names them', () => {
+    const found = withModes(['fullscreen', false], ['browser', true], ['browser', true]);
+    expect(found).toHaveLength(1);
+    expect(found[0].severity).toBe('warning');
+    expect(found[0].detail).toMatch(/^2 condition\(s\) ran outside the installed/);
+    expect(found[0].detail).toMatch(/display_mode: browser/);
+    expect(found[0].detail).not.toMatch(/NOT acknowledged/);
+    expect(found[0].refs).toHaveLength(2);
+  });
+
+  it('says when a launch was not acknowledged, and counts an unreported mode as unconfirmed', () => {
+    const found = withModes(['browser', false], [null, true]);
+    expect(found).toHaveLength(1);
+    expect(found[0].detail).toMatch(/browser, not reported/);
+    expect(found[0].detail).toMatch(/1 of them started in a launch the operator had NOT acknowledged/);
+  });
+
+  it('does not judge rows from builds before display_mode was recorded', () => {
+    expect(withModes([undefined, undefined], [undefined, undefined])).toHaveLength(0);
+  });
+
+  it('exports the acknowledgement per condition, blank on older rows', () => {
+    const b = buildFixtureBundle();
+    b.conditions[0].display_mode = 'browser';
+    b.conditions[0].display_mode_acknowledged = true;
+    b.conditions[1].display_mode = 'fullscreen';
+    b.conditions[1].display_mode_acknowledged = false;
+    const csv = buildExportFiles(b).find((f) => f.filename.endsWith('02_conditions.csv'))!.content;
+    const [head, ...lines] = csv.trim().split(/\r?\n/);
+    const cols = splitCsvRow(head);
+    const at = (row: string, col: string) => splitCsvRow(row)[cols.indexOf(col)];
+    expect(cols).toContain('display_mode_acknowledged');
+    const byId = (id: string) => lines.find((l) => l.includes(id))!;
+    expect(at(byId(b.conditions[0].condition_id), 'display_mode')).toBe('browser');
+    expect(at(byId(b.conditions[0].condition_id), 'display_mode_acknowledged')).toBe('true');
+    expect(at(byId(b.conditions[1].condition_id), 'display_mode_acknowledged')).toBe('false');
+    expect(at(byId(b.conditions[2].condition_id), 'display_mode_acknowledged')).toBe('');
   });
 });
 

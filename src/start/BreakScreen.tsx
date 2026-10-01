@@ -16,11 +16,16 @@ interface Props {
   /** Total conditions in this sitting. */
   total: number;
   onContinue: () => void;
-  /** Researcher-facing slot (mid-session illuminance checkpoint). */
+  /**
+   * False while something in the researcher's slot must be done first — the launch check, when the
+   * app is no longer in a launch anyone acknowledged (Experiment.tsx). Default true.
+   */
+  canContinue?: boolean;
+  /** Researcher-facing slot (mid-session illuminance checkpoint, launch check). */
   children?: ReactNode;
 }
 
-export function BreakScreen({ completed, total, onContinue, children }: Props) {
+export function BreakScreen({ completed, total, onContinue, canContinue = true, children }: Props) {
   const [rested, setRested] = useState(0);
   useEffect(() => {
     const start = now();
@@ -57,9 +62,12 @@ export function BreakScreen({ completed, total, onContinue, children }: Props) {
       {children}
 
         <button
-          onClick={onContinue}
+          onClick={() => { if (canContinue) onContinue(); }}
+          disabled={!canContinue}
           className="mt-8 rounded-xl px-8 py-3 font-sans text-base font-medium text-white transition active:scale-95"
-          style={{ background: '#1a1a2e', cursor: 'pointer' }}
+          style={canContinue
+            ? { background: '#1a1a2e', cursor: 'pointer' }
+            : { background: '#e8e6e1', color: '#4a4a60', cursor: 'not-allowed' }}
         >
           I’m ready — continue →
         </button>

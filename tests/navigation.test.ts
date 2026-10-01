@@ -19,7 +19,7 @@ import { buildFixtureBundle } from '@/sim/bundleFixture';
 import { singleRow } from './helpers/csv';
 
 const CLOSING: Stage[] = ['CVSQ_END', 'NASA_TLX', 'SESSION_COMPLETE', 'EXPORT_DASHBOARD'];
-const ALL: Stage[] = [...SETUP_ORDER, ...LOOP_ORDER, 'BREAK_SCREEN', ...CLOSING];
+const ALL: Stage[] = [...SETUP_ORDER, ...LOOP_ORDER, 'BREAK_SCREEN', 'LAUNCH_CHECK', ...CLOSING];
 
 describe('Back exists only where the screen before can be corrected without touching a measurement', () => {
   it('is offered on exactly the profile, pre-flight and camera screens', () => {
@@ -33,7 +33,7 @@ describe('Back exists only where the screen before can be corrected without touc
 
   it('never on a colour-vision plate, a calibration, a submitted questionnaire, the break or the close', () => {
     for (const s of ['COLOR_VISION', 'CALIBRATION', 'CVSQ_BASELINE', 'BASELINE_FATIGUE', 'INSTRUCTIONS',
-      'BREAK_SCREEN', 'CVSQ_END', 'NASA_TLX', 'SESSION_COMPLETE', 'EXPORT_DASHBOARD', 'CONSENT', 'SESSION_INIT'] as Stage[]) {
+      'BREAK_SCREEN', 'LAUNCH_CHECK', 'CVSQ_END', 'NASA_TLX', 'SESSION_COMPLETE', 'EXPORT_DASHBOARD', 'CONSENT', 'SESSION_INIT'] as Stage[]) {
       expect(backTarget(s), s).toBeNull();
     }
   });
@@ -59,6 +59,9 @@ describe('the operator chip: one way out, everywhere a sitting can be left', () 
   it('exits, resumably, from every other setup screen, the break and both closing questionnaires', () => {
     for (const s of SETUP_ORDER.slice(1)) expect(operatorExitFor(s), s).toBe('exit');
     for (const s of ['BREAK_SCREEN', 'CVSQ_END', 'NASA_TLX'] as Stage[]) expect(operatorExitFor(s), s).toBe('exit');
+  });
+  it('exits from a resume\'s launch check, whose whole point is to offer relaunching from the icon', () => {
+    expect(operatorExitFor('LAUNCH_CHECK')).toBe('exit');
   });
   it('is the existing Pause inside the condition-run', () => {
     for (const s of LOOP_ORDER) expect(operatorExitFor(s), s).toBe('pause');

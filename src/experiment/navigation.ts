@@ -28,7 +28,7 @@
  * Pause-and-resume, which restarts the condition, remains the only backward route inside the loop.
  *
  * LEAVING. SESSION_INIT has Cancel: nothing is written until "Begin setup". Every other setup screen,
- * the break and the two closing questionnaires have "Exit — resume later", which returns to the
+ * the break, a resume's launch check and the two closing questionnaires have "Exit — resume later", which returns to the
  * session manager and leaves the sitting resumable; the resume re-enters at the first screen whose
  * product is missing (Experiment.tsx). Inside the loop the existing Pause does the same. The
  * thank-you screen and the dashboard have neither: the sitting is complete.
@@ -60,7 +60,8 @@ export function operatorExitFor(stage: Stage): OperatorExit {
   if (stage === 'SESSION_INIT') return 'cancel';
   if (isInLoop(stage)) return 'pause';
   if (SETUP_ORDER.includes(stage)) return 'exit';
-  if (stage === 'BREAK_SCREEN' || stage === 'CVSQ_END' || stage === 'NASA_TLX') return 'exit';
+  // The launch check exists to offer this way out: exit, relaunch from the home-screen icon, resume.
+  if (stage === 'BREAK_SCREEN' || stage === 'LAUNCH_CHECK' || stage === 'CVSQ_END' || stage === 'NASA_TLX') return 'exit';
   return null;
 }
 

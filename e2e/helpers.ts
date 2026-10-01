@@ -270,7 +270,20 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
       await waitStageChange(page, stage);
       break;
     case 'BREAK_SCREEN':
+      // The launch check appears here only when the launch changed under the sitting; tick it if so.
+      if (await page.getByTestId('display-mode-ack').count()) await page.getByTestId('display-mode-ack').check({ force: true });
       await click(page, /continue/i);
+      await waitStageChange(page, stage);
+      break;
+    case 'LAUNCH_CHECK':
+      /*
+       * A resume in a launch that is not the installed app — which the test browser, a tab, never is —
+       * opens on this check. Nothing on it is asynchronous, so Continue must be waiting for the tick
+       * before it is given; checked on every resume the suite drives.
+       */
+      await expect(page.getByTestId('launch-check-continue')).toBeDisabled();
+      await page.getByTestId('display-mode-ack').check({ force: true });
+      await click(page, /Continue the sitting/);
       await waitStageChange(page, stage);
       break;
     case 'SESSION_COMPLETE':

@@ -60,7 +60,9 @@ tablet's own camera during the reading task. Two consequences for you:
   takes about a tenth of the height and everything is drawn about 10% smaller. Pre-flight checks how
   the app was launched; if it is not the installed full-screen app it shows a warning you must tick
   to continue, and that tick is recorded as a protocol deviation (`display_mode_acknowledged`).
-  Close the tab and open the app from its icon instead.
+  Close the tab and open the app from its icon instead. **The same check is made again when you
+  resume a sitting** (see *Exit — resume later* below) and at a break if the way the app is
+  displayed has changed, and each display records which launch it ran in.
 - Battery above 80 per cent, or keep it on charge.
 - **Never run a session in a private or incognito window.** The data is thrown away when the window
   closes and nothing warns you at the time. Always launch from the home-screen icon. Pre-flight
@@ -150,7 +152,11 @@ set-up screen is always the way out, and it always says what it does:
   returns to the Session Manager. Everything already completed is saved, and the sitting stays under
   *In progress*. **Resume** carries on at the first screen that was not finished — and shows the
   participant the instructions again if they had not yet started the first display. If the camera
-  is being used, camera set-up and calibration are always done again on a resume. In a participant's
+  is being used, camera set-up and calibration are always done again on a resume. **If the sitting
+  is resumed anywhere but the installed app** — a Chrome tab, say, after the tablet restarted — the
+  first screen is *Before this sitting continues*, the pre-flight display check again. Tap **Exit —
+  resume later**, close the tab, open the app from its home-screen icon and Resume there; or tick the
+  warning to carry on in the tab, which is recorded against every display that follows. In a participant's
   **second sitting** the profile and the colour-vision plates count as finished only once *that*
   sitting has done them: each sitting records its own caffeine, hours since waking, correction and
   colour-vision answers, so stopping on the profile brings you back to the profile.
@@ -298,7 +304,8 @@ black-picture notices are what to act on, and they still appear by themselves.
 
 On the **break** screen the way out is the same white **Exit — resume later** button as in set-up;
 the display just finished is kept and the sitting resumes at the next one. The break is the best
-place to stop. The small grey line at the top right of the break names the display that comes
+place to stop. If the app has stopped being the installed full-screen app since you last confirmed
+it, the break shows the display check too, and *I'm ready — continue* waits until it is ticked. The small grey line at the top right of the break names the display that comes
 **next** ("Next: Display 3 of 10").
 
 **Things you must not do, at any point:**

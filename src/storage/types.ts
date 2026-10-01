@@ -30,6 +30,12 @@ export type Stage =
   | 'REACTION_TIME'
   | 'ADAPTATION'
   | 'BREAK_SCREEN'
+  /**
+   * A resumed sitting's launch check: shown first, before anything else, when the sitting resumes in a
+   * launch that is not the installed app and its walk will not pass pre-flight (which asks itself).
+   * Outside SETUP_ORDER and LOOP_ORDER; the resume decides where it leads. See resumeOwesLaunchCheck.
+   */
+  | 'LAUNCH_CHECK'
   | 'SESSION_COMPLETE'
   | 'CVSQ_END'
   | 'NASA_TLX'
@@ -245,7 +251,8 @@ export interface SessionRecord {
   display_mode?: string | null;
   /**
    * True when the app was NOT the installed full-screen launch and the operator acknowledged the
-   * pre-flight warning to run anyway; false when no acknowledgement was needed.
+   * pre-flight warning to run anyway; false when no acknowledgement was needed. Pre-flight's only: a
+   * resume in another launch is checked again and recorded per condition (ConditionRecord).
    */
   display_mode_acknowledged?: boolean | null;
   /**
@@ -401,6 +408,18 @@ export interface ConditionRecord {
    * describes only the pre-flight moment. null where the browser gave no answer; absent on older rows.
    */
   display_mode?: string | null;
+  /**
+   * Whether the launch this condition started in had been acknowledged by the operator in this run of
+   * the app — at pre-flight, at the resume's launch check, or at a break. True only when display_mode
+   * is not the installed app (or was not reported) and the warning was ticked; false when the app was
+   * installed (nothing to acknowledge) — and false, too, for a launch nobody acknowledged, which the
+   * integrity audit reports. Absent on rows from builds before it was recorded.
+   *
+   * It used to exist only on the session, written by pre-flight. A resume skips pre-flight, so a
+   * sitting checked as installed could be paused, reopened in a Chrome tab and finished at 0.90 with
+   * nothing asked and the session still saying fullscreen, unacknowledged (review of Round 63).
+   */
+  display_mode_acknowledged?: boolean | null;
   /**
    * How long the app was in the background during this condition, and how many separate times.
    *

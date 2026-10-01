@@ -9,6 +9,7 @@ import {
   setupStagesHeld,
   TOTAL_TRACKED_STEPS,
   type MachineState,
+  resumeOwesLaunchCheck,
 } from '@/experiment/stateMachine';
 import type { Stage } from '@/storage/types';
 import { N_CONDITIONS } from '@/experiment/conditions';
@@ -276,5 +277,34 @@ describe('a resume walk does not re-administer a baseline the sitting already ho
     expect(src).toMatch(/clearSessionStageRows\('cvsq_scores', session\.session_id, 'baseline'\)/);
     expect(src).toMatch(/clearSessionStageRows\('fatigue_scores', session\.session_id, 'baseline'\)/);
     expect(src).toMatch(/nextStateSkipping\(m, nConditionsRef\.current, resumeHeld\.current\)/);
+  });
+});
+
+describe('a resume in a launch that is not the installed app is checked before it continues', () => {
+  /*
+   * Pre-flight held the only installed-app check, and a resume skips pre-flight once it is done. A
+   * sitting checked as installed could be paused, reopened in a Chrome tab and finished at 0.90 with
+   * nothing asked (review of Round 63). The resume now opens on LAUNCH_CHECK — unless the app is
+   * installed, nothing is left to display, or the walk passes pre-flight, which asks itself.
+   */
+  it('is owed by an ordinary resume in a tab, whatever the walk re-runs after pre-flight', () => {
+    for (const owed of [null, 'COLOR_VISION', 'CAMERA_SETUP', 'CVSQ_BASELINE', 'BASELINE_FATIGUE'] as (Stage | null)[]) {
+      expect(resumeOwesLaunchCheck(owed, true, false), String(owed)).toBe(true);
+    }
+  });
+  it('is not owed in the installed app', () => {
+    expect(resumeOwesLaunchCheck(null, true, true)).toBe(false);
+    expect(resumeOwesLaunchCheck('CAMERA_SETUP', true, true)).toBe(false);
+  });
+  it('is not owed when only the closing questionnaires remain', () => {
+    expect(resumeOwesLaunchCheck('CAMERA_SETUP', false, false)).toBe(false);
+  });
+  it('is not owed when the walk passes pre-flight, which asks the same question', () => {
+    for (const owed of ['CONSENT', 'PARTICIPANT_PROFILE', 'PREFLIGHT'] as Stage[]) {
+      expect(resumeOwesLaunchCheck(owed, true, false), owed).toBe(false);
+    }
+  });
+  it('stays put if advanced: the resume, not the chain, decides where the check leads', () => {
+    expect(nextState({ stage: 'LAUNCH_CHECK', stepIndex: 3 })).toEqual({ stage: 'LAUNCH_CHECK', stepIndex: 3 });
   });
 });

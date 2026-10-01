@@ -1203,7 +1203,10 @@ export function Preflight({ onDone, onBack }: {
             : ` — the reading text will be ${(CONFIG.READING_FONT_SIZE_PX * scale.applied).toFixed(1)} px instead of ${CONFIG.READING_FONT_SIZE_PX} px. `
               + (installed
                 ? `This screen is smaller than the study tablet's (${DESIGN_WIDTH} × ${DESIGN_HEIGHT}): a split-screen or floating window, or a different device.`
-                : 'The browser\'s address bar is taking part of the screen; see above.'))}
+                : mode
+                  ? 'The browser\'s address bar is taking part of the screen; see above.'
+                  // Not "the address bar": with no mode reported, the cause is not known.
+                  : `This screen is smaller than the study tablet's (${DESIGN_WIDTH} × ${DESIGN_HEIGHT}); the display mode is not reported (see above).`))}
           {' '}
           <InfoTip label="display size">
             Every screen is laid out for the study tablet&apos;s full screen ({DESIGN_WIDTH} × {DESIGN_HEIGHT}),
@@ -1355,6 +1358,56 @@ export function DisplayModeCheck({ mode, scale, acknowledged, onAcknowledge }: {
           </label>
         </>
       )}
+    </div>
+  );
+}
+
+/** The display scale applied now, re-read when the viewport changes (the scale settles a frame later). */
+function useAppliedScale(): number {
+  const [scale, setScale] = useState(() => currentScale());
+  useEffect(() => {
+    const check = () => setScale(currentScale());
+    const late = window.setTimeout(check, 400);
+    const onResize = () => { window.setTimeout(check, 100); };
+    window.addEventListener('resize', onResize);
+    return () => { window.clearTimeout(late); window.removeEventListener('resize', onResize); };
+  }, []);
+  return scale;
+}
+
+/**
+ * A resumed sitting's launch check (stage LAUNCH_CHECK): the first screen of a resume that is not in
+ * the installed app, before camera set-up or anything else (stateMachine.resumeOwesLaunchCheck).
+ *
+ * The same DisplayModeCheck pre-flight shows, and the same tick, because the question is the same one:
+ * the launch belongs to this run of the app, and a resume is a new run. The way out is the operator
+ * chip, "Exit — resume later", which leaves the sitting exactly as it was. `onContinue` is given the
+ * mode that was acknowledged, so it can be recorded against the conditions that follow.
+ */
+export function LaunchCheck({ onContinue }: { onContinue: (acknowledged: DisplayMode | null) => void }) {
+  const mode = useDisplayMode();
+  const scale = useAppliedScale();
+  const [ack, setAck] = useState(false);
+  // The mode can change under the screen; if it becomes the installed launch there is nothing to tick.
+  const ok = isInstalledDisplay(mode) || ack;
+  return (
+    <div className={shell} data-testid="launch-check">
+      <div style={{ width: '100%', maxWidth: 720, margin: '0 auto' }}>
+        <h1 className="font-serif text-4xl font-light">Before this sitting continues</h1>
+        <p className={`mt-3 ${body}`}>
+          Researcher: the sitting is being resumed, so the way the app was opened is checked again.
+          Pre-flight checked it for the launch the sitting started in; a resume is a new launch, and the
+          displays still to come are drawn at the size this one allows.
+        </p>
+        <DisplayModeCheck mode={mode} scale={scale} acknowledged={ack} onAcknowledge={setAck} />
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 20 }}>
+          <button type="button" className={btn} disabled={!ok} data-testid="launch-check-continue"
+            style={btnState(ok)}
+            onClick={() => ok && onContinue(mode)}>
+            Continue the sitting →
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

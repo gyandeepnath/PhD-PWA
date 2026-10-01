@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { stageNow, startNewExperiment, driveUntil, dbCounts, click, validLux } from './helpers';
+import { stageNow, startNewExperiment, driveUntil, dbCounts, click, validLux, handleStage } from './helpers';
 
 /** Edge / "unnatural scenario" E2E checks: invalid input gating, double-submit, reload + resume. */
 
@@ -60,6 +60,10 @@ test('reload mid-session offers resume and continues at a condition', async ({ p
     null,
     { timeout: 20_000 },
   );
+  // The test browser is a tab (display-mode: browser), so the resume opens on the launch check first
+  // — before the camera path, so an operator can relaunch from the icon before re-calibrating.
+  expect(await stageNow(page)).toBe('LAUNCH_CHECK');
+  await handleStage(page, 'LAUNCH_CHECK');
   expect(await stageNow(page)).toBe('CAMERA_SETUP');
 
   // Record every stage the resume passes through. Sampling the landing stage cannot tell a resume

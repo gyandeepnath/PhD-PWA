@@ -19,7 +19,8 @@ import { annotationSegmentSteps, blockPlan, isAnnotationSubsample, type PlannedS
 import { CONFIG, isE2ETimingActive } from './config';
 import {
   initialState, nextStateSkipping, progressPercent, firstUnsatisfiedSetupStage, resumeOwesBaselines,
-  loopEntry, setupStagesHeld, sittingProfileComplete, sittingColourVisionScreened, type MachineState,
+  loopEntry, setupStagesHeld, sittingProfileComplete, sittingColourVisionScreened, resumeOwesLaunchCheck,
+  type MachineState,
 } from './stateMachine';
 import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
 import { put, get, remove, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows, clearSessionStageRows, storageIsFull } from '@/storage/db';
@@ -49,10 +50,12 @@ import { NasaTlx } from '@/scales/NasaTlx';
 import { LuxCheckpointPanel } from '@/start/LuxCheckpoint';
 import {
   SessionInit, ParticipantProfile, CameraSetup, CameraDeclined, Calibration, AdaptationScreen, SessionComplete,
-  Consent, Preflight, Instructions, type SessionInitData, type ProfileData,
+  Consent, Preflight, Instructions, LaunchCheck, DisplayModeCheck, useDisplayMode, type SessionInitData, type ProfileData,
 } from '@/start/setupStages';
 import { CalibrationRoutine } from '@/start/CalibrationRoutine';
-import { currentScale, layoutViewport, setScaleFrozen, rescalesWhileFrozen, displayMode } from '@/lib/viewportScale';
+import {
+  currentScale, layoutViewport, setScaleFrozen, rescalesWhileFrozen, displayMode, isInstalledDisplay, type DisplayMode,
+} from '@/lib/viewportScale';
 import { ResearcherPanel } from '@/components/ResearcherPanel';
 import { NavChip } from '@/components/NavChip';
 import { useDialog } from '@/components/ConfirmDialog';
@@ -101,6 +104,7 @@ const STAGE_LABEL: Record<Stage, string> = {
   REACTION_TIME: 'Reaction Task',
   ADAPTATION: 'Rest',
   BREAK_SCREEN: 'Break',
+  LAUNCH_CHECK: 'Display Check',
   CVSQ_END: 'Eye-Symptom Questionnaire',
   NASA_TLX: 'Workload Questionnaire',
   SESSION_COMPLETE: 'Finished',
@@ -175,6 +179,21 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    * point, set by the resume effect and consumed once.
    */
   const resumeJumpTo = useRef<number | null>(null);
+
+  /**
+   * The launches the operator has acknowledged in THIS run of the app: at pre-flight, at a resume's
+   * launch check, or at a break. A launch that is not the installed app is a property of the run, not
+   * of the sitting — a resume is a new run, possibly in a Chrome tab after a sitting checked as
+   * installed — so the acknowledgement is held per mount and asked again where a mount has not given
+   * it. Each condition records whether its launch was acknowledged (display_mode_acknowledged).
+   */
+  const launchAcks = useRef<Set<DisplayMode | null>>(new Set());
+  /** Where a resume goes once its launch check is passed. See resumeOwesLaunchCheck. */
+  const launchCheckThen = useRef<MachineState | null>(null);
+  /** The display mode now, live: the break re-checks it. */
+  const liveMode = useDisplayMode();
+  /** The break's own tick, keyed to that break and that mode so it cannot carry over to another. */
+  const [breakLaunchAck, setBreakLaunchAck] = useState<string | null>(null);
 
   /**
    * Milliseconds of grey-field adaptation actually delivered before the NEXT condition. Written by
@@ -528,7 +547,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
        * first reading page with the overview never read. It walks through INSTRUCTIONS instead.
        */
       const neverReachedLoop = !resume.reachedLoop;
-      if (idx >= sittingPlan.length && resume.reachedLoop) {
+      const closingOnly = idx >= sittingPlan.length && resume.reachedLoop;
+      let landing: MachineState;
+      if (closingOnly) {
         /*
          * Every condition ran; only the closing instruments remain — and only the ones not yet
          * answered. This always went to the closing CVS-Q, so a sitting stopped on the NASA-TLX asked
@@ -538,7 +559,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
          */
         resumeJumpTo.current = null;
         const closingCvsqDone = cvsqRows.some((c) => c.stage === 'session_end');
-        setMachine({ stage: closingCvsqDone ? 'NASA_TLX' : 'CVSQ_END', stepIndex: sittingPlan.length - 1 });
+        landing = { stage: closingCvsqDone ? 'NASA_TLX' : 'CVSQ_END', stepIndex: sittingPlan.length - 1 };
       } else if (owed) {
         resumeJumpTo.current = loopTarget;
         // A missing baseline means the whole remaining setup chain has to run, so the jump is
@@ -547,11 +568,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         resumeConsumeAt.current = resumeOwesBaselines(prereqs) || neverReachedLoop ? 'INSTRUCTIONS' : 'CALIBRATION';
         // Whatever the walk passes that this sitting already holds is stepped over, not re-administered.
         resumeHeld.current = setupStagesHeld(prereqs);
-        setMachine({ stage: owed, stepIndex: loopTarget });
+        landing = { stage: owed, stepIndex: loopTarget };
       } else if (neverReachedLoop) {
         // Setup is complete but the loop was never entered: the instructions, then the first grey field.
         resumeJumpTo.current = null;
-        setMachine({ stage: 'INSTRUCTIONS', stepIndex: 0 });
+        landing = { stage: 'INSTRUCTIONS', stepIndex: 0 };
       } else {
         resumeJumpTo.current = null;
         /*
@@ -582,7 +603,22 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
          * not hold — the room is. Whether a resume should always take the longer switch field is a
          * methods decision, not one to make here.
          */
-        setMachine(loopEntry(loopTarget, sittingPlan.length));
+        landing = loopEntry(loopTarget, sittingPlan.length);
+      }
+      /*
+       * Is this run of the app the installed launch? Pre-flight asked for the launch the sitting began
+       * in, and a resume that passes pre-flight again is asked there. One that does not — the ordinary
+       * resume, after pre-flight — used to be asked nothing: a sitting checked as installed could be
+       * paused, reopened in a Chrome tab and finished at 0.90 with no warning, no tick, and the session
+       * row still saying fullscreen and unacknowledged (review of Round 63). It now opens on the same
+       * check, before camera set-up, so the operator can exit and relaunch from the icon before
+       * calibrating in the wrong launch, or tick and go on knowingly.
+       */
+      if (resumeOwesLaunchCheck(owed, !closingOnly, isInstalledDisplay(displayMode()))) {
+        launchCheckThen.current = landing;
+        setMachine({ stage: 'LAUNCH_CHECK', stepIndex: landing.stepIndex });
+      } else {
+        setMachine(landing);
       }
       setResuming(false);
     })();
@@ -1026,6 +1062,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
      */
     const prior = await get('conditions', conditionId);
     const attempt = ((prior as { attempt_number?: number } | undefined)?.attempt_number ?? 0) + 1;
+    const launch = displayMode();
     await put('conditions', {
       condition_id: conditionId, session_id: session.session_id,
       // Global serial position (offset + local index) so split sittings keep a 0..9 covariate.
@@ -1058,8 +1095,10 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       stimulus_scale: currentScale(),
       layout_viewport: layoutViewport(),
       // Per condition, because a resume can come back in a different launch (a tab, or the installed
-      // app) from the one pre-flight checked; see display_mode on the session.
-      display_mode: displayMode(),
+      // app) from the one pre-flight checked; see display_mode on the session. And whether that launch
+      // was acknowledged in this run of the app — false where it was installed and nothing needed it.
+      display_mode: launch,
+      display_mode_acknowledged: isInstalledDisplay(launch) ? false : launchAcks.current.has(launch),
     });
     conditionStarted.current[machine.stepIndex] = Date.now();
     conditionRescalesAtStart.current = rescalesWhileFrozen();
@@ -1111,8 +1150,10 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    * current screen's OWN ink on a transparent ground, so it adds no contrast the text on that screen
    * does not already carry.
    */
+  // Not on a resume's launch check either: it stands outside the stage chain, so there is no honest
+  // percentage to show until the resume has landed.
   const showProgress = machine.stage !== 'SESSION_INIT' && machine.stage !== 'EXPORT_DASHBOARD'
-    && !isInLoop(machine.stage);
+    && machine.stage !== 'LAUNCH_CHECK' && !isInLoop(machine.stage);
   /** The ink and ground of the screen currently on display, for anything overlaid on it. */
   const stageInk = machine.stage === 'ADAPTATION'
     ? { ground: CONFIG.ADAPTATION_COLOR, ink: CONFIG.ADAPTATION_INK }
@@ -1336,6 +1377,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       view = (
         <Preflight
           onDone={async ({ fontOk, displayMode, displayModeAcknowledged }) => {
+            if (displayModeAcknowledged) launchAcks.current.add(displayMode);
             if (session) {
               const fresh = {
                 ...session, preflight_complete: true, stimulus_font_ok: fontOk,
@@ -1800,9 +1842,36 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       }} />;
       break;
     }
-    case 'BREAK_SCREEN':
+    case 'BREAK_SCREEN': {
+      /*
+       * The launch is checked again here, with the operator present for the illuminance prompt. A run
+       * of the app does not normally change launch — a tab stays a tab — but a page can leave
+       * full-screen under the sitting, and no display may start in a launch nobody acknowledged. Asked
+       * only when the launch now is not the installed app and this run has not acknowledged it, so an
+       * operator who ticked at pre-flight or at the resume is not asked again.
+       */
+      const launchOk = isInstalledDisplay(liveMode) || launchAcks.current.has(liveMode);
+      const breakKey = `${machine.stepIndex}:${String(liveMode)}`;
+      const breakTicked = breakLaunchAck === breakKey;
       view = (
-        <BreakScreen completed={machine.stepIndex + 1} total={plan.length} onContinue={advance}>
+        <BreakScreen
+          completed={machine.stepIndex + 1}
+          total={plan.length}
+          canContinue={launchOk || breakTicked}
+          onContinue={() => {
+            if (!launchOk) {
+              if (!breakTicked) return;
+              launchAcks.current.add(liveMode);
+            }
+            advance();
+          }}
+        >
+          {!launchOk && (
+            <div style={{ textAlign: 'left', marginTop: 20 }}>
+              <DisplayModeCheck mode={liveMode} scale={currentScale()} acknowledged={breakTicked}
+                onAcknowledge={(t) => setBreakLaunchAck(t ? breakKey : null)} />
+            </div>
+          )}
           {/*
             Show the mid-session illuminance prompt at the break NEAREST the sitting's midpoint,
             not at every break. Rendering it on all of them meant the "middle" reading was taken at
@@ -1819,6 +1888,20 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             />
           )}
         </BreakScreen>
+      );
+      break;
+    }
+    case 'LAUNCH_CHECK':
+      view = (
+        <LaunchCheck onContinue={(mode) => {
+          if (transitioning.current) return;
+          const then = launchCheckThen.current;
+          if (!then) return;
+          launchAcks.current.add(mode);
+          launchCheckThen.current = null;
+          transitioning.current = true;
+          setMachine(then);
+        }} />
       );
       break;
     case 'SESSION_COMPLETE':
@@ -2009,6 +2092,18 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         confirmLabel: 'Exit to sessions',
         cancelLabel: 'Stay on the break',
       })) pauseAndExit();
+      return;
+    }
+    if (machine.stage === 'LAUNCH_CHECK') {
+      // Nothing has happened since Resume, so nothing can be lost — and this is the way out the check
+      // recommends.
+      if (await dialog.confirm({
+        title: 'Exit to relaunch from the home-screen icon?',
+        body: 'Nothing has changed since Resume. The sitting stays in the session manager under In progress. '
+          + 'Close this tab, open VisuLab from its home-screen icon and tap Resume there.',
+        confirmLabel: 'Exit to sessions',
+        cancelLabel: 'Stay here',
+      })) exitSitting();
       return;
     }
     const closing = machine.stage === 'CVSQ_END' || machine.stage === 'NASA_TLX';
