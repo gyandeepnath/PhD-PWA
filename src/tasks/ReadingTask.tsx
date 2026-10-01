@@ -245,7 +245,8 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin, di
         pages, the screen properly used, and justified text; passages.ts now carries three pages of
         near-equal word count, and this renders them — since Round 63 at the true 22 px, line height
         1.4, in the 1040 px column: about 104 characters a line, the text block covering roughly half
-        to two-thirds of the screen (it was about 35-45% at the old 0.86 scale).
+        to two-thirds of the screen (48-64%; it was about 40-52% at the old 0.86 scale — not the 35-45%
+        first given, which multiplied root-px heights by a CSS-px width; see audit Round 67).
 
         No hyphenation (`hyphens: manual`): a word split across two lines is a different reading
         event from an unbroken one, and would vary with the condition only by accident of line

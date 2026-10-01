@@ -1024,6 +1024,16 @@ RSVP of unrelated four-letter words — not page reading. The abstract does not 
 spacing" in CSS line-height terms, so the Round 63 line height of 1.4 rests on this source only as a
 judgement, and the code says so.
 
+Re-verified 1 Oct 2026 (review of Round 63): metadata matches PubMed; the PMC2734885 full text came
+back empty, so this is still abstract only. Spacing is defined there as baseline-to-baseline,
+*"ranging from 0.8× to 2× the standard single-spacing"*; the abstract adds *"In the periphery, reading
+speed also increased with vertical word spacing, but it remained below the unflanked reading speed
+for all spacings tested"* and *"This benefit is greater in peripheral than central vision."* Round
+63's log read the source as support for 1.4; it is not. For any standard of 1.0 em or more, 1.4 em is
+inside or below the knee, so the change from 1.6 is in the direction the source links to slower
+reading. Corrected in Round 67 and in `src/experiment/config.ts`: 1.4 was chosen so three pages fit,
+and is the same in all ten conditions.
+
 ### 53. Carrasco, Evert, Chang & Katz (1995) — the eccentricity effect
 **Status: CONFIRMED.** PMID 8539099 · DOI [10.3758/bf03208380](https://doi.org/10.3758/bf03208380)
 

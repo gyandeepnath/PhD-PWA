@@ -41,10 +41,19 @@ const BASE_CONFIG = {
    * passage fits the 720 px screen only at 1.45 or less: at 1.6 every column width tried left some
    * page 18-53 px too tall, which would have meant a fourth page per passage (re-paginating the
    * corpus the investigator had cut to three). Measured at 1.4: all 30 pages fit, 69-91% of the text
-   * box, at least 48 px (1.5 lines) to spare. Evidence on the exact value is thin: Chung (2004, Optom
-   * Vis Sci 81(7):525, abstract) found foveal reading speed rose with vertical word spacing up to
-   * about 1.2-1.5x "standard spacing" and then stayed constant, but the abstract does not define
-   * that standard in CSS terms, so 1.4 rests on it only as a judgement. Same in every condition.
+   * box, at least 48 px (1.5 lines) to spare.
+   *
+   * 1.4 IS CHOSEN SO THREE PAGES FIT, not because evidence puts it on a plateau. Chung (2004, Optom
+   * Vis Sci 81(7):525; abstract only, ledger 52) found foveal reading speed rose with vertical word
+   * spacing (baseline to baseline) up to about 1.2-1.5x "the standard single-spacing" and stayed
+   * constant beyond. The abstract does not define that standard; for any standard of 1.0 em or more,
+   * 1.4 em sits inside or below that knee, so the move from 1.6 is in the direction the paper links to
+   * SLOWER reading — and the benefit of spacing was larger in peripheral vision (5 and 10 deg), which
+   * the word search, drawn on this line height, also uses. Five observers reading single flanked words
+   * by RSVP, not pages. The line height is the same in all ten conditions, so any cost is a constant
+   * of the layout, not a difference between conditions; whether it interacts with contrast or
+   * polarity this source does not address. (Round 63's log read this source as support; corrected in
+   * Round 67.)
    */
   READING_LINE_HEIGHT: 1.4,
   /**
