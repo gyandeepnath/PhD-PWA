@@ -4065,3 +4065,110 @@ search excerpts — was measured at 1152x720 and 1152x650 before this work (at `
 it, and is byte-identical. Every screen of a display was photographed at 1152x720 and 1152x650 in a
 positive and a negative condition and inspected; the measured minimum participant text inside a
 display is 16 design px at both (16 and 14.4 CSS px).
+
+## Round 66 — reaction-time target locations
+
+The investigator's concern from Round 62 ("everything appears in such a limited area") applied to the
+go/no-go task as much as to reading. The screen audit (F6) and the evidence review (`round62/`,
+section 3.3) found two defects that no exported column could show.
+
+**What was wrong.** The dot landed at a uniformly random point in x 25-75%, y 28-72% of the canvas —
+the central fifth of the screen, about 3.8° from fixation on average and never beyond 7° at 55 cm.
+- *Eccentricity was noise in a dependent variable.* Reaction time rises with a target's distance from
+  fixation (Carrasco et al. 1995, ledger 53, for search; Wall et al. 2002, ledger 54, in perimetry).
+  With 20 random go positions a block's mean eccentricity wanders: simulated on the re-based canvas,
+  its block-to-block SD was about 0.37°. That wander landed on every condition's RT mean, and
+  `08_reaction_trials.csv` had no column in which to see it or model it away.
+- *Colour × eccentricity was hidden.* Red–green cone opponency declines away from the fovea faster
+  than blue–yellow, which declines about as achromatic sensitivity does (Mullen & Kingdom 2002,
+  ledger 55). The go/no-go decision is a colour decision, so the colour conditions need not lose
+  discriminability equally in the periphery. Random positions made that an unmodellable interaction.
+
+**What changed.**
+- Eight fixed locations (`src/lib/rtLocations.ts`): two rings around the fixation cross at the screen
+  centre, 4° and 8° at 55 cm, on the four diagonals. The radii are derived in code from named
+  constants — 0.2055 mm per CSS px (the Xiaomi Pad 6 at scale 1, manufacturer's figure) and 550 mm —
+  as 187 and 376 root px; the offsets are whole root px (±132 and ±266 each way), so the dots sit at
+  (708, 228) … (842, 626) on the 1152x720 tablet. The two ring values are a **judgement**: 8° is about
+  as far as a diagonal reaches on a 720 px-high screen with the dot still 68 px from the edge, and 4°
+  is half of it. Dot centres now span 74% of the screen's height and 46% of its width (22% of the
+  area before, as a field).
+- The dot stays 52 px (1.11°) at both rings, deliberately not scaled with eccentricity, so the outer
+  ring is harder.
+- Per 32-trial block, each location is used 4 times. Go (20): 10 per ring and 5 per quadrant, the
+  inner ring 3, 2, 3, 2 by quadrant (up-right, up-left, down-left, down-right) and the outer 2, 3, 2, 3.
+  No-go (12): 6 per ring and 3 per quadrant, inner 1, 2, 1, 2, outer 2, 1, 2, 1. The pattern is
+  mirrored left-right on alternate blocks, so any two consecutive blocks give every location 5 go
+  and 3 no-go — the block's own 62.5% go rate. Each of the four no-go colours appears 3 times per
+  block, 2 in one ring and 1 in the other, the split alternating between blocks.
+- Block parity is the condition's GLOBAL `session_position` (a split sitting continues the
+  alternation). The Williams rows put each condition at odd and even positions equally often across
+  each ten enrolments, so neither the mirror nor the colour split follows a condition.
+- The go/no-go order is still `planRuns`'s (no run longer than 3). Locations are then assigned by a
+  randomised depth-first search so that no location appears on two consecutive trials: a target at
+  the location of a preceding non-informative flash draws a slower response at 0.2-1.5 s (Berlucchi
+  et al. 1989, ledger 56), the scale of this task's inter-trial gap.
+- Practice (6 trials): 3 inner and 3 outer, six different locations, all four quadrants. The ?e2e block
+  (4 trials, 1 practice) cycles the quadrants with the rings alternating and the starting ring swapped
+  on odd blocks, so two blocks visit all eight — deterministic, for the tests.
+- The dot is placed by its fixed offset from the centre, not by a percentage of any box, so it is the
+  same number of root px from the cross on every device and `stimulus_scale` is the whole of the
+  difference. `STIMULUS_BOX` had no user left and is removed.
+- Tap anywhere is kept: tapping the dot itself would add an aiming movement whose length depends on
+  the location. The instruction card now says the dot appears around the cross and asks: "Rest your
+  hand just below the bottom edge of the screen. Tap anywhere." — so the hand never covers the lower
+  dots. The operator manual tells the operator to check it before Start.
+- `planRtBlock` reports when it could not keep the run cap or the no-repeat rule, and the task logs
+  it, as it already did for the cap; a scored block outside ?e2e that does not get the balanced
+  layout is logged too. All three are unreachable for the shipped counts (3000-block property test).
+
+**New columns in `08_reaction_trials.csv`**, with codebook entries: `stim_location_id` (1-8),
+`stim_ring` (inner/outer), `stim_angle_deg` (45/135/225/315, counter-clockwise from the participant's
+right), `stim_dx_px` and `stim_dy_px` (root px from the cross, + = right / down), `stim_ecc_px`
+(186.68 / 376.18) and `stim_ecc_deg_55cm` = atan(px × scale × 0.2055 mm / 550 mm), with the display
+scale read at the dot's onset: 3.99° / 8.00° installed, 3.59° / 7.21° in a browser tab. Rows recorded
+before this round have uniform-random positions and every `stim_*` cell blank; the codebook says so and
+that they must be left out of any model with a location term, never imputed. `analysis_long.csv` is
+one row per condition and carries no trial-level data, so it is unchanged.
+
+**Analysis.** The condition-level RT mean, d′, criterion and lapse rate stay defined, because every
+block is balanced over the rings. `docs/ANALYSIS_PLAN.md` §4a records that ring and ring × colour
+enter the trial-level models — the probit GLMM for d′ and criterion and an LMM on log RT — and that
+the analysis batch implements those terms; the templates do not fit them yet.
+
+**Data consequence.** RT is now measured at two controlled eccentricities, the outer one harder, so
+condition RTs are not comparable with pilot data. Trial timing is unchanged; if outer-ring go RTs were
+50 ms slower (an assumption, not a cited figure) a sitting would lengthen by about 5 s.
+
+**Decisions for the investigator.**
+- 4° and 8° are a judgement. A viewing distance is not recorded, and the protocol allows 50-60 cm,
+  about ±9% in angle; an operator-entered distance at pre-flight would remove that.
+- The card does not ask the participant to keep their eyes on the cross. The cross is the only thing
+  on screen before each dot, so fixation is likely but not instructed; the eccentricity columns are
+  measured from the cross.
+- During the trials the researcher indicator (bottom left) is drawn in the screen's ink, which in a
+  coloured condition is the go-target's own colour — a small target-coloured ring in the periphery
+  for the whole block. Round 65 chose screen ink so the indicator adds no contrast the text does not
+  already carry; the evidence review (section 3.3) asked for an achromatic indicator during this
+  task. It is constant and 230 px or more from every dot, but it is a choice to make deliberately.
+
+**Synopsis (read-only, not edited).** No line is contradicted. Line 350 ("Go/no-go reaction time — 32
+trials on the active background") and line 359's outcomes stand; target location is a trial-level
+covariate in addition to line 357's list, not a conflict with it.
+
+Verification: `npm run verify` is green (1199 unit tests, among them the new
+`tests/rtLocations.test.ts`: the eight centres and radii from the constants, the per-ring,
+per-quadrant and per-location counts, the mirror, the colour split and its alternation, no
+consecutive repeat with the run cap kept, a 3000-block property test over both parities, practice,
+and the ?e2e cycle; the device-independence test in `tests/stimulusGeometry.test.ts` now covers the
+fixed offsets; `tests/export.test.ts` checks the seven columns and that they are blank on older
+rows). End-to-end, 53 tests pass: `fullRun`, `allScreensFit` (1152x720, 1152x713, 1152x650, and the
+camera path), `edge`, `cameraLost`, `cameraBlocked`, `stimulusFill`, `stimulusGeometry`, `loopChrome`
+(both viewports), and `reachability`, `scaleLock`, `setupNavigation` and `splitSession` (a second
+sitting continues the block alternation from its global position). `stimulusGeometry` gains a check, at 1152x720 and 1152x650, of every
+dot of the first two blocks — all eight locations: drawn at its offset from the cross to within a root
+px, its edges at least 60 px inside the screen (measured 68 px at 1152x720, 62.2 CSS px at 1152x650,
+nothing clipped), and at least 118 px from the Pause chip's footprint, the same footprint at the top
+right, and the researcher indicator (nearest measured: 230 px, the indicator from the lower-left outer
+dot). The reaction-time screen was photographed with the dot at each of the eight locations, and
+with all eight drawn at once, at both viewports, and inspected.
