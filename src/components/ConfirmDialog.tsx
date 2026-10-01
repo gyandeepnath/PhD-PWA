@@ -18,10 +18,18 @@
  * condition-run may add a colour or a luminance the condition does not already have. The time it is
  * open is recorded as blocking-notice time by the caller (see Experiment.tsx).
  *
+ * IT IS MODAL, AND BEHAVES SO. Tab and Shift+Tab cycle inside it: they used to walk out to the page
+ * behind, the in-loop Pause chip under the overlay included, and pressing that replaced the request
+ * being answered. Closing it gives the focus back to the control that opened it rather than dropping
+ * it on <body>. Its title and body are named to assistive technology by ids unique to the instance.
+ *
+ * IT BELONGS TO ITS SCREEN. `dismiss()` answers whatever is open as declined; Experiment calls it
+ * whenever the stage changes, so a confirmation raised on one screen never stays up over the next.
+ *
  * Usage: `const dialog = useDialog();` render `{dialog.element}`, then
  * `if (!(await dialog.confirm({...}))) return;`.
  */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { UI_TEXT } from '@/lib/uiPalette';
 
 export interface DialogRequest {
@@ -56,54 +64,84 @@ export interface DialogApi {
   confirm: (req: DialogRequest) => Promise<boolean>;
   alert: (req: Omit<DialogRequest, 'cancelLabel' | 'danger'>) => Promise<void>;
   prompt: (req: PromptRequest) => Promise<string | null>;
+  /** Close whatever is open, answered as declined (false / null). For a screen going away under it. */
+  dismiss: () => void;
 }
+
+/** The answer that does nothing: Cancel, Escape, a replacement by a later request, or dismiss(). */
+function decline(p: Pending) {
+  if (p.kind === 'confirm') p.resolve(false);
+  else if (p.kind === 'prompt') p.resolve(null);
+  else p.resolve();
+}
+
+/** How the dialog was closed: declined (Cancel, Escape), or accepted — with the typed text for a prompt. */
+type Answer = { accept: false } | { accept: true; text?: string };
 
 export function useDialog(): DialogApi {
   const [pending, setPending] = useState<Pending | null>(null);
   const current = useRef<Pending | null>(null);
   const seq = useRef(0);
+  /** The control that had the focus when the dialog opened; it gets the focus back when it closes. */
+  const opener = useRef<HTMLElement | null>(null);
 
-  // A second request while one is open answers the first as "no" rather than leaving it hanging.
-  const replace = useCallback((next: Pending | null) => {
+  // A second request while one is open answers the first as "no" rather than leaving it hanging. The
+  // focus still goes back, at the end, to whatever had it before the first.
+  const open = useCallback((next: Pending) => {
     const prev = current.current;
-    if (prev && prev !== next) {
-      if (prev.kind === 'confirm') prev.resolve(false);
-      else if (prev.kind === 'prompt') prev.resolve(null);
-      else prev.resolve();
+    if (!prev) {
+      const active = document.activeElement;
+      opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
     }
     current.current = next;
     setPending(next);
+    if (prev) decline(prev);
+  }, []);
+
+  /** Close `which` (or whatever is open, for null) with `answer`. A stale dialog's answer is ignored. */
+  const settle = useCallback((which: Pending | null, answer: Answer) => {
+    const p = current.current;
+    if (!p || (which && which !== p)) return;
+    current.current = null;
+    setPending(null);
+    const back = opener.current;
+    opener.current = null;
+    if (back?.isConnected) back.focus({ preventScroll: true });
+    if (!answer.accept) decline(p);
+    else if (p.kind === 'confirm') p.resolve(true);
+    else if (p.kind === 'prompt') p.resolve(answer.text ?? '');
+    else p.resolve();
   }, []);
 
   const confirm = useCallback((req: DialogRequest) => new Promise<boolean>((resolve) => {
-    replace({ seq: ++seq.current, kind: 'confirm', req, resolve: (v) => { current.current = null; setPending(null); resolve(v); } });
-  }), [replace]);
+    open({ seq: ++seq.current, kind: 'confirm', req, resolve });
+  }), [open]);
   const alert = useCallback((req: Omit<DialogRequest, 'cancelLabel' | 'danger'>) => new Promise<void>((resolve) => {
-    replace({ seq: ++seq.current, kind: 'alert', req, resolve: () => { current.current = null; setPending(null); resolve(); } });
-  }), [replace]);
+    open({ seq: ++seq.current, kind: 'alert', req, resolve });
+  }), [open]);
   const prompt = useCallback((req: PromptRequest) => new Promise<string | null>((resolve) => {
-    replace({ seq: ++seq.current, kind: 'prompt', req, resolve: (v) => { current.current = null; setPending(null); resolve(v); } });
-  }), [replace]);
+    open({ seq: ++seq.current, kind: 'prompt', req, resolve });
+  }), [open]);
+  const dismiss = useCallback(() => settle(null, { accept: false }), [settle]);
 
-  const element = pending ? <ConfirmDialog key={pending.seq} pending={pending} /> : null;
-  return { element, open: pending != null, confirm, alert, prompt };
+  const element = pending ? <ConfirmDialog key={pending.seq} pending={pending} onAnswer={(a) => settle(pending, a)} /> : null;
+  return { element, open: pending != null, confirm, alert, prompt, dismiss };
 }
 
-function ConfirmDialog({ pending }: { pending: Pending }) {
+/** What Tab may land on inside the card. */
+const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+
+function ConfirmDialog({ pending, onAnswer }: { pending: Pending; onAnswer: (a: Answer) => void }) {
   const { req } = pending;
   const [text, setText] = useState(pending.kind === 'prompt' ? pending.req.input.initial : '');
-  const ok = () => {
-    if (pending.kind === 'confirm') pending.resolve(true);
-    else if (pending.kind === 'prompt') pending.resolve(text);
-    else pending.resolve();
-  };
-  const cancel = () => {
-    if (pending.kind === 'confirm') pending.resolve(false);
-    else if (pending.kind === 'prompt') pending.resolve(null);
-    else pending.resolve();
-  };
+  const ok = () => onAnswer({ accept: true, text });
+  const cancel = () => onAnswer({ accept: false });
   const cancellable = pending.kind !== 'alert';
+  // Per instance: two dialogs on one page (the manager's and the dashboard's) must not share an id.
+  const titleId = useId();
+  const bodyId = useId();
 
+  const cardRef = useRef<HTMLDivElement>(null);
   const okRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -111,7 +149,21 @@ function ConfirmDialog({ pending }: { pending: Pending }) {
     if (pending.kind === 'prompt') inputRef.current?.focus();
     else if (req.danger) cancelRef.current?.focus();
     else okRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') cancel(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { cancel(); return; }
+      if (e.key !== 'Tab') return;
+      // Keep Tab inside the card: first <-> last, and back in from anywhere outside it.
+      const card = cardRef.current;
+      if (!card) return;
+      const items = [...card.querySelectorAll<HTMLElement>(FOCUSABLE)];
+      if (items.length === 0) { e.preventDefault(); return; }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const at = document.activeElement;
+      if (!card.contains(at)) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+      else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && at === first) { e.preventDefault(); last.focus(); }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -135,7 +187,8 @@ function ConfirmDialog({ pending }: { pending: Pending }) {
       data-testid={req.testId ?? 'confirm-dialog'}
       role={cancellable ? 'dialog' : 'alertdialog'}
       aria-modal="true"
-      aria-labelledby="vl-dialog-title"
+      aria-labelledby={titleId}
+      aria-describedby={req.body != null ? bodyId : undefined}
       style={{
         position: 'fixed', inset: 0, zIndex: 90, display: 'flex', alignItems: 'center',
         justifyContent: 'center', padding: 24,
@@ -144,6 +197,7 @@ function ConfirmDialog({ pending }: { pending: Pending }) {
       }}
     >
       <div
+        ref={cardRef}
         className="font-sans"
         style={{
           width: '100%', maxWidth: 620, maxHeight: '100%', display: 'flex', flexDirection: 'column',
@@ -152,9 +206,10 @@ function ConfirmDialog({ pending }: { pending: Pending }) {
           boxShadow: ink ? 'none' : '0 10px 40px rgba(0,0,0,0.25)', padding: '24px 26px',
         }}
       >
-        <h2 id="vl-dialog-title" style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.3 }}>{req.title}</h2>
+        <h2 id={titleId} style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.3 }}>{req.title}</h2>
         {req.body != null && (
           <div
+            id={bodyId}
             className="scrollable"
             style={{ marginTop: 10, fontSize: 17, lineHeight: 1.55, whiteSpace: 'pre-wrap', color: ink ? ink.ink : UI_TEXT.body, flex: '1 1 auto', minHeight: 0 }}
           >

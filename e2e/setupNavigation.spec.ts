@@ -341,6 +341,33 @@ test('Pause inside a condition confirms in the condition\'s own ink; Keep going 
   expect(colours.card).toBe(colours.page);
   expect(colours.cardInk).toBe(colours.pageInk);
   expect(colours.scrim).toBe('rgba(0, 0, 0, 0)');
+
+  // Modal for the keyboard too: Tab and Shift+Tab stay inside it. They used to walk out to the page
+  // behind — the Pause chip under the overlay included.
+  const focusInDialog = () => page.evaluate(() => !!document.activeElement?.closest('[data-testid="pause-dialog"]'));
+  for (let i = 0; i < 4; i++) {
+    await page.keyboard.press('Tab');
+    expect(await focusInDialog(), `Tab ${i + 1}`).toBe(true);
+  }
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard.press('Shift+Tab');
+    expect(await focusInDialog(), `Shift+Tab ${i + 1}`).toBe(true);
+  }
+  // Named and described by ids of its own, not a fixed one shared by every dialog.
+  const aria = await page.evaluate(() => {
+    const d = document.querySelector('[data-testid="pause-dialog"]') as HTMLElement;
+    const by = (attr: string) => document.getElementById(d.getAttribute(attr) ?? '')?.textContent ?? null;
+    return { id: d.getAttribute('aria-labelledby'), title: by('aria-labelledby'), body: by('aria-describedby') };
+  });
+  expect(aria.id).not.toBe('vl-dialog-title');
+  expect(aria.title).toBe('Pause and exit to the session manager?');
+  expect(aria.body).toContain('This condition will be restarted on resume');
+  // Escape declines, and the focus goes back to the control that opened it rather than to <body>.
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('Pause');
+
+  await pause.click();
   await page.getByTestId('confirm-cancel').click();
   await expect(dialog).toHaveCount(0);
   expect(await stageNow(page)).toBe('READING_TASK');
@@ -348,6 +375,26 @@ test('Pause inside a condition confirms in the condition\'s own ink; Keep going 
   await pause.click();
   await page.getByTestId('confirm-ok').click();
   await expect(page.getByText(/In progress \(1\)/)).toBeVisible();
+});
+
+test('a Pause confirmation never outlives its screen: a timed task ending under it closes it', async ({ page }) => {
+  /*
+   * The task keeps running under the Pause dialog (by design: it is timed as notice time). When the
+   * search ran out of time underneath, the dialog stayed up over the reaction-time instructions —
+   * where Pause is not offered — still saying the condition would be restarted, and its "Pause and
+   * exit" ran with the previous screen's stage and pointer.
+   */
+  await startNewExperiment(page);
+  await driveUntil(page, 'VISUAL_SEARCH');
+  await page.getByRole('button', { name: /Begin search/ }).click();
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await expect(page.getByTestId('pause-dialog')).toBeVisible();
+  // Left open past the search's time limit.
+  await page.waitForFunction(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') !== 'VISUAL_SEARCH', null, { timeout: 60_000 });
+  expect(await stageNow(page)).toBe('REACTION_TIME');
+  await expect(page.getByTestId('pause-dialog')).toHaveCount(0);
+  // And Pause is not offered over the reaction-time block, as on any other arrival there.
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toHaveCount(0);
 });
 
 test('a sitting left on the NASA-TLX resumes on the NASA-TLX: the closing CVS-Q is not asked twice', async ({ page }) => {

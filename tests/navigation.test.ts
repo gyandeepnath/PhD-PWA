@@ -127,6 +127,10 @@ describe('the in-loop Pause keeps its look; the chip everywhere else is the shar
     const dialog = readFileSync(resolve(__dirname, '..', 'src/components/ConfirmDialog.tsx'), 'utf8');
     expect(dialog).toMatch(/background: ink \? 'transparent' : 'rgba\(26,26,46,0\.45\)'/);
   });
+  it('closes any confirmation when the screen changes under it', () => {
+    // A timed task can end under the Pause dialog; the dialog must not stay up over the next screen.
+    expect(experiment).toMatch(/useEffect\(\(\) => \{ dismissDialog\(\); \}, \[machine\.stage, machine\.stepIndex, dismissDialog\]\)/);
+  });
   it('the dashboard has one way back, drawn in one place for both routes into it', () => {
     const lazy = readFileSync(resolve(__dirname, '..', 'src/dashboard/LazyDashboard.tsx'), 'utf8');
     expect(lazy).toMatch(/<NavChip label="← Back to sessions"/);

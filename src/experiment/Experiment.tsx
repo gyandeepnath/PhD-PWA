@@ -242,6 +242,15 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
 
   /** Every confirmation on these screens (Cancel, Exit, Pause). See ConfirmDialog.tsx. */
   const dialog = useDialog();
+  /*
+   * A confirmation belongs to the screen it was raised on, and closes — declined — when that screen
+   * goes. The task under the Pause dialog keeps running by design, so a timed stage can end while it
+   * is open: it used to stay up over the NEXT screen and still offer "Pause and exit", even over the
+   * reaction-time instructions, where Pause is not offered at all — and its handler ran with the stage
+   * and pointer of the screen it was raised on. Pause is re-offered on the new screen on its own terms.
+   */
+  const dismissDialog = dialog.dismiss;
+  useEffect(() => { dismissDialog(); }, [machine.stage, machine.stepIndex, dismissDialog]);
 
   /** SESSION_INIT has something typed in it, so Cancel asks before discarding it. */
   const [initDirty, setInitDirty] = useState(false);
