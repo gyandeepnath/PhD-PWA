@@ -157,35 +157,53 @@ stamped into every export so a dataset is tied to the exact condition definition
 
 ```
 SESSION_INIT            researcher: participant ID, ambient lux, (optional) white-screen luminance
-                        cd/m² + locked brightness %, session structure (single 8 / split 4+4)
+                        cd/m² + locked brightness %, session structure (10 conditions in one sitting,
+                        or a 5 + 5 split with the reason recorded; CONDITIONS_PER_SESSION_DEFAULT = 10)
   → CONSENT             informed consent (recorded HERE, not at session creation)
-  → PARTICIPANT_PROFILE age (18–80), gender, daily screen hours, device familiarity, lighting habit,
-                        vision correction, self-report CVD, caffeine (≤4 h), hours since waking
+  → PARTICIPANT_PROFILE age (18–35: MIN_AGE / MAX_AGE), gender, daily screen hours, device
+                        familiarity, lighting habit, vision correction, self-report CVD, caffeine
+                        (≤4 h), hours since waking
   → PREFLIGHT           researcher checklist: brightness fixed, auto-brightness + night-shift OFF,
-                        screen clean, ~50–60 cm, landscape, no backlight
+                        screen clean, lux entered, no tinted lenses, no backlight, ~50–60 cm,
+                        landscape; and the display-mode check (the installed full-screen app)
   → COLOR_VISION        digital Ishihara screening (AFTER night-shift is off)
-  → CAMERA_SETUP        webcam permission (or skip → camera_active=false, zeroed eye metrics)
+  → CAMERA_SETUP        webcam permission (or skip → camera_active=false; every ocular column is then
+                        missing, not zero)
   → CALIBRATION         9-point gaze calibration + EAR open-eye baseline + per-person frontal-pitch
-                        baseline (head frontal → pitch zero)  /  positioning check if no camera
+                        baseline (head frontal → pitch zero), then the camera self-test  /
+                        positioning check if no camera
   → CVSQ_BASELINE       validated CVS-Q (16 items)
   → BASELINE_FATIGUE    5-item visual-fatigue VAS (0–10)
   → INSTRUCTIONS        participant overview
+  → ADAPTATION          grey field before the first condition too (see below)
   → [× 10 conditions, Williams order, per illumination block]
-        READING_TASK         self-paced passage (per-page minimum dwell floor); eye-tracking window
-        → COMPREHENSION      1 × 4-option MCQ (accuracy + RT)
+        READING_TASK         self-paced passage in 3 pages (per-page minimum dwell floor);
+                             eye-tracking window
+        → COMPREHENSION      3 × 4-option MCQ per passage — gist, inference, detail
+                             (QUESTIONS_PER_PASSAGE = 3; accuracy + RT per item; no feedback)
         → DISPLAY_PERCEPTION comfort + clarity sliders, captured immediately after reading
         → POST_FATIGUE       5-item VAS, immediately after the strongest fatigue inducer (reading)
-        → VISUAL_SEARCH      tap every target word, 40 s limit (selective attention)
-        → REACTION_TIME      colour go/no-go (dot at 8 fixed balanced locations; respond only to target colour)
-        → ADAPTATION         60 s neutral grey (120 s when polarity switches vs the next condition)
+        → VISUAL_SEARCH      tap every target word in a one-screen excerpt, 60 s limit
+                             (VS_TIME_LIMIT_MS; selective attention)
+        → REACTION_TIME      colour go/no-go (dot at 8 fixed balanced locations; respond only to
+                             target colour)
         → BREAK_SCREEN       self-paced rest after every 2 conditions; never after the last
+        → ADAPTATION         neutral grey (#808080) before the next condition: Continue after 30 s,
+                             ends by itself at 60 s (120 s when polarity switches); not after the last
   → CVSQ_END              CVS-Q again (Δ from baseline = primary validated subjective fatigue outcome)
+  → NASA_TLX              workload, after the end CVS-Q
   → SESSION_COMPLETE
   → EXPORT_DASHBOARD      researcher: QC charts + CSV/JSON export
+
+LAUNCH_CHECK            outside both orders: the first screen of a resume that is not running in the
+                        installed app (the display-mode check again, before camera set-up)
 ```
 
-Progress bar = **8 setup steps + 8×6 measured sub-stages = 56 steps**. The state machine
-(`src/experiment/stateMachine.ts`) is a pure transition function; `Experiment.tsx` is the driver.
+Progress = **9 setup steps (SETUP_STEPS; SESSION_INIT is not counted) + 10 × 6 measured sub-stages
+(TASKS_PER_CONDITION) = 69 steps** (TOTAL_TRACKED_STEPS). The bar is drawn outside the condition loop
+only (`showProgress` in `Experiment.tsx`): no progress chrome is shown on a condition screen or the
+grey field; the break screen says "X of N done". The state machine (`src/experiment/stateMachine.ts`)
+is a pure transition function; `Experiment.tsx` is the driver.
 
 ### 3.1 Ordering rationale (workflow-logic cross-check; all fixed)
 - **Consent** is recorded at the CONSENT stage, not pre-set true at session creation.
@@ -212,8 +230,10 @@ Progress bar = **8 setup steps + 8×6 measured sub-stages = 56 steps**. The stat
 - The reading window is the **eye-tracking window** for blink/gaze/head metrics for that condition.
 
 ### 4.2 Comprehension (`ComprehensionTask.tsx`)
-- One 4-option multiple-choice question per passage; **accuracy + response time**; 1 s post-answer
-  feedback dwell.
+- **Three** 4-option multiple-choice questions per passage (`QUESTIONS_PER_PASSAGE = 3`: gist,
+  inference, detail), one row per item; **accuracy + response time**. **No post-answer feedback**
+  (`COMPREHENSION_FEEDBACK_MS = 0`): the screen never says whether an answer was right. Question and
+  options are set at the passage's size and column width (Round 63).
 
 ### 4.3 Display perception (`DisplayPerceptionRating.tsx`)
 - Two sliders: **display comfort** and **text clarity** (0–100). `touched` flags gate submission
@@ -225,12 +245,14 @@ Progress bar = **8 setup steps + 8×6 measured sub-stages = 56 steps**. The stat
   flags recorded.
 
 ### 4.5 Visual search (`VisualSearchTask.tsx`)
-- Tap **every occurrence** of a target word in the passage; **40 s** limit. Records targets found /
-  missed / false detections, time-to-first-target, inter-target intervals, **accuracy** (found ÷
-  authoritative occurrence count), **search efficiency** (found per minute), termination mode.
-- **Target counts are the ACTUAL occurrence counts** computed from the passage text (the original
-  bundle's stored counts were wrong, e.g. "carbon" stored 8 vs 12 actual); accuracy is therefore
-  correctly calibrated.
+- Tap **every occurrence** of a target word on **one screen**: an excerpt of the passage (whole
+  sentences, ≤190 words, where the target is densest) at the reading font size, no scrolling (Round
+  63); **60 s** limit (`VS_TIME_LIMIT_MS`). Records targets found / missed / false detections,
+  time-to-first-target, inter-target intervals, **accuracy** (found ÷ authoritative occurrence count),
+  **search efficiency** (found per minute), termination mode.
+- **Target counts are the ACTUAL occurrence counts** computed from the excerpt's text (4–11 by
+  passage, exported as `targets_in_set`; the original bundle's stored counts were wrong, e.g.
+  "carbon" stored 8 vs 12 actual); accuracy is therefore correctly calibrated.
 
 ### 4.6 Reaction time — colour go/no-go (`ReactionTimeTask.tsx`)
 - A single coloured dot appears each trial, on the active condition's own background, at one of
@@ -245,8 +267,14 @@ Progress bar = **8 setup steps + 8×6 measured sub-stages = 56 steps**. The stat
 - The go-target is the **condition's own text colour** and the no-go dots are the other four text
   colours of its polarity (investigator decision; see `docs/PROTOCOL.md` and `rtStimulusColours`).
   An earlier version of this section described an achromatic go-target, which that decision replaced.
-  The fixation cross stays achromatic. Tap anywhere; the card asks for the hand to rest below the
-  screen's bottom edge so the lower dots are never covered.
+  The fixation cross stays achromatic. The card asks the participant to **keep their eyes on the
+  cross between dots** (Round 68): the trial's eccentricity columns are measured from the cross. Tap
+  anywhere; the card asks for the hand to rest below the screen's bottom edge so the lower dots are
+  never covered.
+- Nothing but the cross and the dot is drawn while the trials run: no Pause, no trial counter, and
+  no researcher indicator (Round 68 — it was drawn in the screen's ink, which is the go-target's
+  colour). Pause and the indicator are on the instruction card and come back once the last trial
+  has ended.
 - **32 trials/condition**, go-rate **0.625** (≈ 20 go / 12 no-go). **6 unscored practice trials**
   run once, before the first scored block only.
 - Onset is timestamped at the **actual painted frame** (rAF); RT uses the hardware pointer-event
