@@ -265,6 +265,10 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                 <Stat label="Analysable participants" value={`${cohort.analysable_participants}/${cohort.participants}`} />
                 <Stat label="Condition-runs pooled" value={String(cohort.rows)} />
                 <Stat
+                  label="Confirmatory set (modelled)"
+                  value={`${cohort.confirmatory.rows} runs · ${cohort.confirmatory.participants} people`}
+                />
+                <Stat
                   label="Smallest / largest condition n"
                   value={`${cohort.minConditionN} / ${cohort.maxConditionN}`}
                 />
@@ -295,7 +299,8 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                         <th style={cohortHead}>n</th>
                         <th style={cohortHead}>Analysable</th>
                         <th style={cohortHead}>With outcome</th>
-                        <th style={cohortHead}>Mean IBR</th>
+                        <th style={cohortHead}>Pooled IBR</th>
+                        <th style={cohortHead}>Mean of run IBRs</th>
                         <th style={cohortHead}>Blinks</th>
                         <th style={cohortHead}>Low fps</th>
                       </tr>
@@ -309,6 +314,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                           <td style={cohortCell}>{c.n}</td>
                           <td style={cohortCell}>{c.n_analysable}</td>
                           <td style={{ ...cohortCell, color: c.n_with_outcome < c.n ? UI_TEXT.red : undefined }}>{c.n_with_outcome}</td>
+                          <td style={cohortCell}>{c.pooled_ibr == null ? '—' : c.pooled_ibr.toFixed(3)}</td>
                           <td style={cohortCell}>{c.mean_ibr == null ? '—' : c.mean_ibr.toFixed(3)}</td>
                           <td style={cohortCell}>{c.blinks_total}</td>
                           <td style={{ ...cohortCell, color: c.n_fps_inadequate > 0 ? UI_TEXT.amber : undefined }}>{c.n_fps_inadequate}</td>
@@ -319,8 +325,13 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                 </div>
                 <p className="font-sans text-[15px] leading-relaxed text-[#4a4a60]" style={{ marginTop: 6 }}>
                   “Blinks” is the denominator the ratio actually rests on — ten rows of four blinks is
-                  not ten measurements. “With outcome” below n means rows where no blink was counted at
-                  all; a condition where that is common is broken, not merely noisy.
+                  not ten measurements. “Pooled IBR” is incomplete blinks over all blinks in those rows,
+                  the quantity the binomial model weights by; “Mean of run IBRs” counts every run once
+                  however few blinks it had, so the two differ when blink counts vary. “With outcome”
+                  below n means rows where no blink was counted at all; a condition where that is
+                  common is broken, not merely noisy. “Analysable” and the outcome columns cover the
+                  confirmatory set only: analysable by the join check, not withdrawn, not a test
+                  session, first protocol pass — the rows both analysis templates model.
                 </p>
               </div>
 

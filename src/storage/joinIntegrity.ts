@@ -159,6 +159,21 @@ const BLOCKING_AUDIT_CHECKS = new Set([
   'calibration_reference', 'ocular_requires_consent',
 ]);
 
+/**
+ * The blocking codes that say only "this participant's condition set is incomplete".
+ *
+ * ANALYSIS_PLAN.md §1: "The confirmatory analysis is complete-case; a sensitivity analysis including
+ * them is reasonable and should be reported as such." The SENSITIVITY SET is therefore the
+ * confirmatory set plus the finished runs of participants excluded for these codes and for nothing
+ * else — never a participant blocked by an integrity fault, a missing consent, a test-harness sitting
+ * or a repeat pass, which are not completeness questions. Both analysis templates carry the same list
+ * (as COMPLETENESS_CODES, plus their own sitting_not_in_data_dir), and tests/analysisTemplates.test.ts
+ * holds them to it.
+ */
+export const COMPLETENESS_EXCLUSIONS = [
+  'condition_incomplete', 'condition_coverage', 'incomplete_split_sitting', 'incomplete_crossover',
+] as const;
+
 export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): JoinIntegrity {
   const issues: JoinIssue[] = [];
   const byParticipant = new Map<string, SessionBundle[]>();

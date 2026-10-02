@@ -16,10 +16,13 @@
  * So the unit and export suites can both be green while the analysis nobody has run is broken. This
  * closes that by running it.
  *
- * It asserts execution and the presence of the pre-registered sections, not numbers: the fixture is
- * one synthetic participant, so no coefficient it produces means anything. What is being checked is
- * that an analyst pointing the template at a real bundle gets output rather than a traceback, and
- * that the sections docs/ANALYSIS_PLAN.md requires are among them.
+ * It asserted execution and the presence of the pre-registered sections, and nothing about the
+ * numbers under them — so the Python comprehension model ran sign-inverted against R, and the Python
+ * primary answered a different question from R's, with this gate green throughout. It now runs both
+ * templates on ONE simulated cohort with known polarity effects (src/sim/analysisCohort.ts) and also
+ * checks what can be checked without trusting a coefficient's size: that each template recovers the
+ * simulated SIGN, that R and Python agree on it, that no design is rank deficient, and that both model
+ * exactly the confirmatory and sensitivity sets the dashboard counts from the exporter's verdict.
  *
  * `analysis_template.R` IS run here now, and the gap this comment used to describe was not
  * hypothetical. The R template — the one docs/ANALYSIS_PLAN.md §5b calls the implementation of the
@@ -27,13 +30,10 @@
  * exporter writes `lux_logged_all_in_range`, and dplyr stopped at that join. Everything below it,
  * including the primary model, had never executed.
  *
- * The R fixture is MULTI-PARTICIPANT and the Python one is not, for a reason worth stating: the
- * per-session export is one folder per sitting, so a single folder gives `(1 | participant_id)` a
- * single level and glmer stops with "grouping factors must have > 1 sampled level". A one-folder
- * fixture could therefore only ever have tested the R template's data loading, never its models.
- * The clones are perturbed deterministically because twelve identical participants make the
- * binomial response constant, which glmer also refuses — and that refusal is a property of the
- * fixture, not of the template.
+ * The cohort is MULTI-PARTICIPANT for a reason worth stating: the per-session export is one folder
+ * per sitting, so a single folder gives `(1 | participant_id)` a single level and glmer stops with
+ * "grouping factors must have > 1 sampled level". A one-folder fixture could only ever test data
+ * loading, never a model.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from 'node:fs';
@@ -60,19 +60,6 @@ if (!deps) {
 
 const dir = mkdtempSync(join(tmpdir(), 'visulab-analysis-'));
 try {
-  // Dump a fixture export through the real writer, so this checks the bytes the app emits.
-  const dumper = join(dir, 'dump.ts');
-  mkdirSync(join(dir, 'out'), { recursive: true });
-  writeFileSync(dumper, `
-import { writeFileSync } from 'node:fs';
-import { buildExportFiles } from ${JSON.stringify(join(process.cwd(), 'src/storage/export.ts'))};
-import { buildFixtureBundle } from ${JSON.stringify(join(process.cwd(), 'src/sim/bundleFixture.ts'))};
-for (const f of buildExportFiles(buildFixtureBundle())) {
-  writeFileSync(${JSON.stringify(join(dir, 'out'))} + '/' + f.filename, f.content);
-}
-`);
-  execFileSync('npx', ['tsx', dumper], { stdio: 'pipe' });
-
   console.log('='.repeat(104));
   console.log('ANALYSIS TEMPLATE — the shipped Python template must run on the export the app writes');
   console.log('='.repeat(104));
@@ -83,55 +70,72 @@ for (const f of buildExportFiles(buildFixtureBundle())) {
   ], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 
   /*
-   * A MULTI-PARTICIPANT tree for the Python template too, for the same reason the R one needs it.
+   * ONE SIMULATED COHORT, read by BOTH templates, written through the app's real writers.
    *
-   * The design has ten cells and one sitting has ten rows, so a single-participant fixture makes the
-   * GEE saturated: it fits perfectly, every standard error is NaN or machine epsilon, and no
-   * coefficient can be tested. The gate's assertion was that the section's TITLE appears in the
-   * output, so it stayed green while the pre-registered primary model estimated nothing testable.
+   * This used to be two trees of buildFixtureBundle() clones, and every clone kept the fixture's own
+   * Williams row (enrolment 7): serial position and passage were aliased with condition, so the
+   * primary model was not estimable at all. R reported a rank-deficient design; once the Python
+   * primary sum-coded its colour factor its polarity standard error was 2.2e7, and this gate — which
+   * asked only for a finite standard error above 1e-6 — stayed green. The outcomes were near-constant
+   * too, so nothing could check that either template recovers the SIGN of an effect, which is the one
+   * property ANALYSIS_PLAN.md §5b requires the two to share; the Python comprehension model had been
+   * sign-inverted against R for exactly that reason.
    *
-   * Built here rather than reusing the R tree because that one is created later in this file and
-   * only when R is installed; the Python path must not depend on R being present.
+   * src/sim/analysisCohort.ts gives every participant the real counterbalancing for their enrolment,
+   * seeded random outcomes with participant effects, and KNOWN polarity effects on the primary
+   * outcome and on comprehension. One participant withdrew and one paused a run, so both templates
+   * must apply the exporter's verdict. The pooled export sits beside the per-sitting folders, as the
+   * analyst is told to lay them out, and the cohort tab's own count of the confirmatory and
+   * sensitivity sets is written beside it, so the two templates and the dashboard can be held to the
+   * same rows.
+   *
+   * One tree for both, deliberately: the templates must agree on the same data. The Python path still
+   * does not depend on R being installed.
    */
-  const pyDir = join(dir, 'py-cohort');
-  mkdirSync(pyDir, { recursive: true });
-  const pyDumper = join(dir, 'dumpPy.ts');
-  writeFileSync(pyDumper, `
+  const SIM = { n: 24, seed: 20260402, polarityEffectOnIncomplete: 0.4, polarityEffectOnComprehension: 0.6, withdrawn: [5], pausedLast: [11] };
+  // positive minus negative: negative polarity RAISES incomplete blinking; positive polarity RAISES comprehension.
+  const EXPECTED_SIGN = { primary: -1, comprehension: 1 };
+  const cohortDir = join(dir, 'cohort');
+  mkdirSync(cohortDir, { recursive: true });
+  const cohortDumper = join(dir, 'dumpCohort.ts');
+  writeFileSync(cohortDumper, `
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { buildExportFiles } from ${JSON.stringify(join(process.cwd(), 'src/storage/export.ts'))};
-import { buildFixtureBundle } from ${JSON.stringify(join(process.cwd(), 'src/sim/bundleFixture.ts'))};
-const root = ${JSON.stringify(pyDir)};
-const esc = (v) => JSON.stringify(v).slice(1, -1);
-for (let i = 0; i < 12; i++) {
-  const base = buildFixtureBundle();
-  const pid = 'P' + String(i + 1).padStart(3, '0');
-  let json = JSON.stringify(base)
-    .split(esc(base.session.participant_id)).join(pid)
-    .split(esc(base.session.session_id)).join('S' + String(i + 1).padStart(3, '0'));
-  for (const c of base.conditions) json = json.split(esc(c.condition_id)).join(pid + '-' + c.condition_id);
-  const b = JSON.parse(json);
-  b.session.enrolment_number = i + 1;
-  // The same two exclusions the R tree carries, on the same participants, so both templates are
-  // held to removing them — ANALYSIS_PLAN.md 5b requires the toolchains to model the same rows.
-  if (i === 11) b.conditions[b.conditions.length - 1].completed_at = null;
-  if (i === 5) b.session.withdrawn_at = b.session.session_start_time + 3_600_000;
-  // Between-participant variation, so the random/cluster structure has something to estimate —
-  // the SAME deterministic variation the R tree uses. This tree used to vary one count by +/-2,
-  // which left the GEE barely identified: adding the withdrawn and paused exclusions tipped the
-  // polarity standard error to NaN on the CI runner (Python 3.12) while it still fitted locally.
-  // A gate that passes or fails by platform numerics checks nothing.
-  (b.eyeMetrics ?? []).forEach((m, k) => {
-    m.blink_count_full = 26 + ((i * 5 + k * 3) % 11);
-    m.blink_count_micro = (i + k) % 3;
-    m.blink_count_incomplete = 4 + ((i * 7 + k * 5) % 9);
-  });
-  const out = root + '/' + pid;
+import { buildAnalysisDataset } from ${JSON.stringify(join(process.cwd(), 'src/storage/analysisExport.ts'))};
+import { simulateCohort } from ${JSON.stringify(join(process.cwd(), 'src/sim/analysisCohort.ts'))};
+import { cohortSummary } from ${JSON.stringify(join(process.cwd(), 'src/dashboard/aggregate.ts'))};
+import { N_CONDITIONS } from ${JSON.stringify(join(process.cwd(), 'src/experiment/conditions.ts'))};
+const root = ${JSON.stringify(cohortDir)};
+const bundles = simulateCohort(${JSON.stringify(SIM)});
+for (const b of bundles) {
+  const out = root + '/' + b.session.participant_id;
   mkdirSync(out, { recursive: true });
   for (const f of buildExportFiles(b)) writeFileSync(out + '/' + f.filename, f.content);
 }
+const ds = buildAnalysisDataset(bundles);
+mkdirSync(root + '/_pooled', { recursive: true });
+for (const f of ds.files) writeFileSync(root + '/_pooled/' + f.filename, f.content);
+const s = cohortSummary(ds.files, ds.integrity, N_CONDITIONS);
+writeFileSync(${JSON.stringify(join(dir, 'expected.json'))}, JSON.stringify({ confirmatory: s.confirmatory, sensitivity: s.sensitivity }));
 `);
-  execFileSync('npx', ['tsx', pyDumper], { stdio: 'pipe' });
+  execFileSync('npx', ['tsx', cohortDumper], { stdio: 'pipe' });
+  const expected = JSON.parse(readFileSync(join(dir, 'expected.json'), 'utf8'));
+  console.log(`         (cohort: ${SIM.n} participants; dashboard confirmatory set ${expected.confirmatory.rows} runs / `
+    + `${expected.confirmatory.participants} participants, sensitivity set ${expected.sensitivity.rows} / ${expected.sensitivity.participants})`);
 
+  /** The confirmatory and sensitivity counts a template printed, or null. */
+  const setCounts = (text) => {
+    const c = /CONFIRMATORY SET: (\d+) condition-runs from (\d+) participants/.exec(text);
+    const s2 = /SENSITIVITY SET:\s+(\d+) condition-runs from (\d+) participants/.exec(text);
+    return c && s2 ? { confirmatory: { rows: +c[1], participants: +c[2] }, sensitivity: { rows: +s2[1], participants: +s2[2] } } : null;
+  };
+  /** First coefficient on a row named `term` after `heading`, or NaN. */
+  const coefAfter = (text, heading, term) => {
+    const block = text.split(heading)[1] ?? '';
+    const m = new RegExp(`^${term}\\s+(-?[\\d.]+(?:e[-+]?\\d+)?)`, 'm').exec(block);
+    return m ? Number(m[1]) : NaN;
+  };
+  const pyDir = cohortDir;
   const r = run(pyDir);
   ok('the template runs to completion without raising', r.status === 0,
     (r.stderr || '').trim().split('\n').slice(-3).join(' | '));
@@ -154,12 +158,32 @@ for (let i = 0; i < 12; i++) {
     const se = Number(polarityRow[2]);
     ok('the polarity coefficient is not zero to machine precision',
       Number.isFinite(coef) && Math.abs(coef) > 1e-6, `coefficient was ${polarityRow[1]}`);
+    // Bounded ABOVE as well as below. Above 1e-6 alone let a polarity standard error of 2.2e7 pass —
+    // the signature of a design in which polarity is not identified. On the log-odds scale, with
+    // two hundred condition-runs, anything near 1 is already a broken fit.
     ok('the polarity coefficient has a usable standard error',
-      Number.isFinite(se) && se > 1e-6, `standard error was ${polarityRow[2]} — a saturated or constant fit`);
+      Number.isFinite(se) && se > 1e-6 && se < 1, `standard error was ${polarityRow[2]} — a saturated, constant or unidentified fit`);
     console.log(`         (polarity_c: coefficient ${polarityRow[1]}, standard error ${polarityRow[2]})`);
   }
 
   const out = `${r.stdout}\n${r.stderr}`;
+  /*
+   * THE EXPORTER'S VERDICT, APPLIED. The template used to drop withdrawn participants and unfinished
+   * runs and nothing else; it now reads analysis_join_report.csv. Its confirmatory and sensitivity
+   * sets must be the ones the dashboard's cohort tab counts from analysis_long.csv on the same data.
+   */
+  const pySets = setCounts(out);
+  ok('the exclusions are counted per reason', /\[exclusion\] participant_withdrawn\s+10 condition-run/.test(out)
+    && /\[exclusion\] condition_incomplete\s+10 condition-run/.test(out), 'no per-reason exclusion count');
+  ok('the confirmatory and sensitivity sets are the ones the dashboard counts',
+    JSON.stringify(pySets) === JSON.stringify(expected), `template ${JSON.stringify(pySets)} vs dashboard ${JSON.stringify(expected)}`);
+  ok('the sensitivity set is refitted', out.includes('PRIMARY refit on the SENSITIVITY SET'), 'no sensitivity refit');
+  // The simulated effects are known, so the signs are too. A sign-inverted model (the comprehension
+  // GEE was one) or a different estimand would fail here, where a heading check cannot.
+  const pyPrimary = coefAfter(out, 'PRIMARY: incomplete-blink ratio', 'polarity_c');
+  const pyComp = coefAfter(out, 'Comprehension GEE', 'polarity_c');
+  ok('the primary polarity coefficient has the simulated sign', Math.sign(pyPrimary) === EXPECTED_SIGN.primary, `got ${pyPrimary}`);
+  ok('the comprehension polarity coefficient has the simulated sign', Math.sign(pyComp) === EXPECTED_SIGN.comprehension, `got ${pyComp}`);
   // The sections docs/ANALYSIS_PLAN.md names. Absence of one means an analyst ran the file and was
   // not given an outcome the plan requires — which is how the frame-rate sensitivity went missing.
   for (const [label, needle] of [
@@ -233,65 +257,7 @@ for (let i = 0; i < 12; i++) {
       console.log('ANALYSIS TEMPLATE (R) — the authoritative template must run on a MULTI-PARTICIPANT export');
       console.log('='.repeat(104));
 
-      const rDir = join(dir, 'r');
-      mkdirSync(rDir, { recursive: true });
-      const rDumper = join(dir, 'dumpMany.ts');
-      writeFileSync(rDumper, `
-import { writeFileSync, mkdirSync } from 'node:fs';
-import { buildExportFiles } from ${JSON.stringify(join(process.cwd(), 'src/storage/export.ts'))};
-import { buildFixtureBundle } from ${JSON.stringify(join(process.cwd(), 'src/sim/bundleFixture.ts'))};
-const root = ${JSON.stringify(rDir)};
-for (let i = 0; i < 12; i++) {
-  const base = buildFixtureBundle();
-  const pid = 'P' + String(i + 1).padStart(3, '0');
-  const sid = 'S' + String(i + 1).padStart(3, '0');
-  // Substituted in the JSON-ESCAPED form, not the raw one. FIXTURE.pid is 'VER,"01' — it carries a
-  // comma and a quote on purpose, to stress the CSV writer — so the raw string never appears in
-  // JSON.stringify output, and a naive split/join silently replaces nothing. Every participant then
-  // keeps the same id, and lme4 stops with "grouping factors must have > 1 sampled level".
-  const esc = (v) => JSON.stringify(v).slice(1, -1);
-  let json = JSON.stringify(base)
-    .split(esc(base.session.participant_id)).join(pid)
-    .split(esc(base.session.session_id)).join(sid);
-  // condition_id has to be made unique per participant too, and this is not housekeeping. The
-  // fixture's condition ids are fixed values, so twelve clones shared them; every join on
-  // condition_id then matched twelve rows instead of one and the modelling frame came out at 1440
-  // rows for what should be 120. The models still fitted — on a dataset each of whose observations
-  // appeared twelve times — so the gate would have been green while checking nothing real, and a
-  // genuine fan-out bug in the template could have hidden inside the noise.
-  for (const c of base.conditions) json = json.split(esc(c.condition_id)).join(pid + '-' + c.condition_id);
-  const b = JSON.parse(json);
-  b.session.enrolment_number = i + 1;
-  // One PAUSED condition in the cohort: started, never finished, so no completed_at. The template
-  // must remove it before modelling and say how many it removed — checked below.
-  // Put on the LAST participant: the §5.4 truncation test below halves P001's exposures and counts
-  // exactly ten flagged rows, and must not share a participant with this one.
-  if (i === 11) b.conditions[b.conditions.length - 1].completed_at = null;
-  // And one WITHDRAWN participant, on neither of those: every one of their rows must go, and be
-  // counted, before any model sees them.
-  if (i === 5) b.session.withdrawn_at = b.session.session_start_time + 3_600_000;
-  // Deterministic variation — see the header note on "Response is constant".
-  (b.eyeMetrics ?? []).forEach((m, k) => {
-    m.blink_count_full = 26 + ((i * 5 + k * 3) % 11);
-    m.blink_count_micro = (i + k) % 3;
-    m.blink_count_incomplete = 4 + ((i * 7 + k * 5) % 9);
-    m.perclos_p80 = Math.round((0.02 + ((i * 3 + k) % 9) * 0.004) * 1000) / 1000;
-  });
-  // The signal-detection measures need varying too, or the weighted d-prime model fails with
-  // "not a positive definite matrix" — constant across participants is degenerate, the same way
-  // identical blink counts made the binomial response constant. A section that reports "did not
-  // fit" on every run is a section the gate cannot check.
-  (b.rtSummaries ?? []).forEach((r, k) => {
-    r.d_prime = Math.round((1.2 + ((i * 4 + k * 3) % 13) * 0.11) * 1000) / 1000;
-    r.d_prime_se = Math.round((0.28 + ((i + k) % 5) * 0.03) * 1000) / 1000;
-    r.criterion = Math.round((-0.3 + ((i * 3 + k * 5) % 11) * 0.06) * 1000) / 1000;
-  });
-  const out = root + '/' + pid;
-  mkdirSync(out, { recursive: true });
-  for (const f of buildExportFiles(b)) writeFileSync(out + '/' + f.filename, f.content);
-}
-`);
-      execFileSync('npx', ['tsx', rDumper], { stdio: 'pipe' });
+      const rDir = cohortDir;
 
       // DATA_DIR is overridden from outside rather than by editing the shipped file, so what runs
       // here is byte-for-byte what the analyst is given.
@@ -312,6 +278,26 @@ for (let i = 0; i < 12; i++) {
       ok('the R template runs to completion without raising', rRun.status === 0,
         (rRun.stderr || '').trim().split('\n').filter((l) => /^Error|^! /.test(l)).slice(-2).join(' | ')
           || (rRun.stderr || '').trim().split('\n').slice(-2).join(' | '));
+      const rSets = setCounts(rOut);
+      ok('R: the confirmatory and sensitivity sets are the ones the dashboard and Python count',
+        JSON.stringify(rSets) === JSON.stringify(expected) && JSON.stringify(rSets) === JSON.stringify(pySets),
+        `R ${JSON.stringify(rSets)}, Python ${JSON.stringify(pySets)}, dashboard ${JSON.stringify(expected)}`);
+      ok('R: the sensitivity set is refitted', rOut.includes('PRIMARY refit on the SENSITIVITY SET'), 'no sensitivity refit');
+      // ANALYSIS_PLAN.md §5b: the two toolchains must agree in SIGN. Checked against the simulated
+      // sign, so agreement on a wrong answer fails too.
+      const rPrimary = coefAfter(rOut, '=== PRIMARY: incomplete-blink ratio', 'polarity1');
+      const rComp = coefAfter(rOut, 'Comprehension logistic mixed model', 'polarity1');
+      ok('R and Python agree on the sign of the primary polarity effect, and it is the simulated sign',
+        Math.sign(rPrimary) === EXPECTED_SIGN.primary && Math.sign(pyPrimary) === EXPECTED_SIGN.primary,
+        `R ${rPrimary}, Python ${pyPrimary}`);
+      ok('R and Python agree on the sign of the comprehension polarity effect, and it is the simulated sign',
+        Math.sign(rComp) === EXPECTED_SIGN.comprehension && Math.sign(pyComp) === EXPECTED_SIGN.comprehension,
+        `R ${rComp}, Python ${pyComp}`);
+      console.log(`         (polarity: primary R ${rPrimary} / Python ${pyPrimary}; comprehension R ${rComp} / Python ${pyComp})`);
+      // lme4's own message, not the template's explanatory text that mentions the phrase. The old
+      // fixture tripped it on every run, and every marginal mean came back nonEst.
+      ok('R: no model matrix is rank deficient', !/fixed-effect model matrix is rank deficient/.test(rOut)
+        && !/nonEst/.test(rOut), 'lme4 dropped aliased columns, or emmeans reported nonEst');
 
       for (const [label, needle] of [
         ['the PRIMARY outcome is fitted', 'PRIMARY: incomplete-blink ratio'],
@@ -379,10 +365,13 @@ for (let i = 0; i < 12; i++) {
       // were shared across clones, so every join on condition_id matched twelve rows and the frame
       // came out twelve times too large — models fitting happily on data that repeated itself.
       const frameRows = /rows failing at least one §5 check:\s*\d+\/(\d+)/.exec(rOut);
-      // 12 x 10 condition-runs, less the withdrawn participant's ten and the one paused run.
-      ok('R: the modelling frame is one row per participant x FINISHED condition, withdrawn excluded',
-        frameRows != null && Number(frameRows[1]) === 109,
-        `expected 109 rows (12 participants x 10 conditions, less 10 withdrawn and 1 paused), got ${frameRows ? frameRows[1] : 'no match'}`);
+      // Every participant's camera ran, so the ocular frame is the confirmatory set: complete cases
+      // only. It used to be 109 = 120 less the withdrawn participant's ten and the one paused run —
+      // the paused participant's nine finished runs were modelled, against ANALYSIS_PLAN.md §1's
+      // complete-case rule. They are in the SENSITIVITY set now, and only there.
+      ok('R: the modelling frame is one row per participant x condition of the CONFIRMATORY set',
+        frameRows != null && Number(frameRows[1]) === expected.confirmatory.rows,
+        `expected ${expected.confirmatory.rows} rows, got ${frameRows ? frameRows[1] : 'no match'}`);
 
       // The pre-registered coding. Treatment contrasts made the printed polarity row the effect in
       // ACHROMATIC TEXT ONLY, while the plan states H1's falsification rule on the average effect.

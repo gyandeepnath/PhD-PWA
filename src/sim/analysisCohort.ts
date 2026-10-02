@@ -1,0 +1,243 @@
+/**
+ * A simulated COHORT, for running the analysis templates against something a model can estimate.
+ *
+ * WHY THIS EXISTS. scripts/verifyAnalysis.mjs used to build its multi-participant export by cloning
+ * buildFixtureBundle() twelve times. Every clone kept the fixture's own Williams row (enrolment 7),
+ * so serial position and passage were perfectly aliased with condition. In that design the primary
+ * model is not estimable: position_c is a linear combination of the ten condition cells, the R fit
+ * reported a rank-deficient design and non-estimable marginal means, and once the Python primary
+ * sum-coded its colour factor (so that polarity_c is the average effect, as in R) its polarity
+ * standard error came out at 2.2e7 — while the gate, which asked only that a standard error be
+ * finite and above 1e-6, stayed green. The outcomes were also near-deterministic, so nothing
+ * checked that either template recovers the SIGN of an effect, which is the one property
+ * ANALYSIS_PLAN.md §5b requires the two toolchains to share. The Python comprehension model was
+ * sign-inverted against R for exactly that reason, unnoticed.
+ *
+ * What this does instead, for each participant i:
+ *  - the REAL counterbalancing: blockPlan(i + 1, 0) gives the Williams row and the passage rotation
+ *    an enrolment of i + 1 would get, so position and passage vary across participants as they will
+ *    in the study;
+ *  - seeded random outcomes with participant random effects, and KNOWN polarity effects on the
+ *    primary outcome and on comprehension, so a template can be checked for recovering their sign;
+ *  - reaction-time trials rewritten to agree with the summary drawn for them, so the per-sitting
+ *    integrity audit (summary_matches_trials) does not block every participant in the pooled verdict.
+ *
+ * Everything still goes through the app's real writers (buildExportFiles, buildAnalysisDataset) in
+ * the caller, so what the templates read is what the app emits. Adapted from the Round 62 analysis
+ * audit's cohort generator.
+ */
+import type { SessionBundle } from '@/storage/gather';
+import type { RtAccuracy } from '@/storage/types';
+import { buildFixtureBundle } from './bundleFixture';
+import { makeRng, gaussian } from './rng';
+import { blockPlan } from '@/experiment/counterbalance';
+import { CONDITIONS } from '@/experiment/conditions';
+import { PASSAGES, countWords } from '@/experiment/passages';
+import { computeSdt } from '@/lib/signalDetection';
+import { CONFIG } from '@/experiment/config';
+
+export interface CohortOptions {
+  /** Participants, P001..Pnnn, enrolments 1..n. */
+  n: number;
+  seed?: number;
+  /**
+   * Log-odds added to the incomplete-blink probability under NEGATIVE polarity. The sum-coded
+   * polarity coefficient (positive minus negative) therefore has the OPPOSITE sign.
+   */
+  polarityEffectOnIncomplete?: number;
+  /**
+   * Log-odds added to the probability of a correct comprehension answer under POSITIVE polarity.
+   * The sum-coded polarity coefficient (positive minus negative) has the SAME sign.
+   */
+  polarityEffectOnComprehension?: number;
+  /** 0-based participant indices who withdrew. */
+  withdrawn?: number[];
+  /** 0-based participant indices whose last condition was started and never finished. */
+  pausedLast?: number[];
+  /** Camera off for every participant, or for the listed 0-based indices. */
+  cameraOff?: 'all' | number[];
+}
+
+const logistic = (x: number) => 1 / (1 + Math.exp(-x));
+/** JSON-escaped form: the fixture's participant id carries a comma and a quote on purpose. */
+const esc = (v: string) => JSON.stringify(v).slice(1, -1);
+
+export function simulateCohort(opts: CohortOptions): SessionBundle[] {
+  const rng = makeRng(opts.seed ?? 20260402);
+  const binom = (n: number, p: number) => { let x = 0; for (let k = 0; k < n; k++) if (rng() < p) x++; return x; };
+  const poisson = (lambda: number) => {
+    const limit = Math.exp(-lambda);
+    let k = 0; let prod = 1;
+    do { k++; prod *= rng(); } while (prod > limit);
+    return k - 1;
+  };
+  const polInc = opts.polarityEffectOnIncomplete ?? 0.4;
+  const polComp = opts.polarityEffectOnComprehension ?? 0.6;
+  const passageEffect = PASSAGES.map(() => gaussian(rng, 0, 0.15));
+  const colourEffect: Record<string, number> = { achromatic: 0, blue: 0.1, red: 0.05, yellow: -0.1, green: 0 };
+  const bundles: SessionBundle[] = [];
+
+  for (let i = 0; i < opts.n; i++) {
+    const base = buildFixtureBundle();
+    const pid = 'P' + String(i + 1).padStart(3, '0');
+    const sid = 'S' + String(i + 1).padStart(3, '0');
+    let json = JSON.stringify(base)
+      .split(esc(base.session.participant_id)).join(pid)
+      .split(esc(base.session.session_id)).join(sid);
+    // Condition ids are fixed values in the fixture; unique per participant, or every join on
+    // condition_id across the pooled folders fans out.
+    for (const c of base.conditions) json = json.split(esc(c.condition_id)).join(`${pid}-${c.condition_id}`);
+    const b = JSON.parse(json) as SessionBundle;
+    const enrolment = i + 1;
+    b.session.enrolment_number = enrolment;
+    if (b.participant) {
+      b.participant.enrolment_number = enrolment;
+      b.participant.age = 18 + Math.floor(rng() * 17);
+      b.participant.daily_screen_hours = 4 + Math.round(rng() * 80) / 10;
+    }
+
+    // The participant's own Williams row and passage rotation.
+    const plan = blockPlan(enrolment, 0);
+    b.conditions.forEach((c, k) => {
+      const step = plan[k];
+      const def = CONDITIONS[step.conditionIndex];
+      Object.assign(c, {
+        session_position: step.position, condition_label: def.label, polarity: def.polarity,
+        background_color: def.background, text_color: def.text, color_name: def.colorName,
+        ink_name: def.inkName, passage_id: step.passageIndex, wcag_contrast_ratio: def.wcag_contrast_ratio,
+        wcag_level: def.wcag_level, michelson_contrast: def.michelson_contrast, below_wcag_aa: def.below_wcag_aa,
+        reading_time_ms: 150_000 + Math.round(rng() * 60_000),
+      });
+    });
+    b.session.condition_order = plan.map((p) => p.conditionIndex);
+    const byId = new Map(b.conditions.map((c) => [c.condition_id, c]));
+
+    const u = gaussian(rng, 0, 0.5);        // participant intercept, incomplete-blink log-odds
+    const uSlope = gaussian(rng, 0, 0.15);  // participant polarity slope
+    const uComp = gaussian(rng, 0, 0.4);    // participant comprehension ability
+    const rtU = gaussian(rng, 0, 40);
+    const fatU = gaussian(rng, 0, 0.8);
+
+    for (const m of b.eyeMetrics) {
+      const c = byId.get(m.condition_id)!;
+      const neg = c.polarity === 'negative' ? 1 : 0;
+      const eta = Math.log(0.16 / 0.84) + u + neg * (polInc + uSlope) + (colourEffect[c.color_name] ?? 0)
+        + passageEffect[c.passage_id] + 0.03 * c.session_position + gaussian(rng, 0, 0.25);
+      const dur = c.reading_time_ms ?? 180_000;
+      const total = Math.max(3, poisson(15 * (dur / 60_000) * Math.exp(u * 0.3)));
+      const inc = binom(total, logistic(eta));
+      const micro = binom(total - inc, 0.05);
+      const observed = Math.round(dur * (0.93 + rng() * 0.07));
+      const fps = Math.round((22 + rng() * 9) * 10) / 10;
+      Object.assign(m, {
+        blink_count_incomplete: inc, blink_count_micro: micro, blink_count_full: total - inc - micro,
+        incomplete_blink_ratio: Math.round((inc / total) * 10_000) / 10_000,
+        observed_duration_ms: observed,
+        blink_rate: Math.round((total / (observed / 60_000)) * 100) / 100,
+        blink_rate_full: Math.round(((total - inc - micro) / (observed / 60_000)) * 100) / 100,
+        effective_fps: fps, fps_adequate_for_ratio: fps >= 24, fps_adequate_for_tiers: fps >= 20,
+        perclos_p80: Math.round(Math.max(0, 0.03 + gaussian(rng, 0, 0.015)) * 1000) / 1000,
+        face_presence_ratio: Math.round(Math.min(1, 0.9 + rng() * 0.1) * 1000) / 1000,
+        off_axis_ratio: Math.round(rng() * 0.15 * 1000) / 1000,
+      });
+    }
+
+    // Reaction time: 20 go and 12 no-go per block; the trials are rewritten to MATCH the drawn counts.
+    for (const r of b.rtSummaries) {
+      const c = byId.get(r.condition_id)!;
+      const trials = b.reactionTrials.filter((t) => t.condition_id === r.condition_id);
+      const nSignal = trials.filter((t) => t.is_signal).length;
+      const nNoise = trials.length - nSignal;
+      const hits = binom(nSignal, 0.93);
+      const fas = binom(nNoise, 0.15);
+      let seenSignal = 0; let seenNoise = 0;
+      const hitRts: number[] = [];
+      for (const t of trials) {
+        const responded = t.is_signal ? seenSignal++ < hits : seenNoise++ < fas;
+        const accuracy: RtAccuracy = t.is_signal ? (responded ? 'hit' : 'miss') : (responded ? 'false_alarm' : 'correct_rejection');
+        const rt = responded
+          ? Math.round(380 + rtU + 4 * c.session_position + gaussian(rng, 0, 45))
+          : null;
+        Object.assign(t, { accuracy, response_time_ms: rt == null ? null : Math.max(160, rt) });
+        if (accuracy === 'hit' && t.response_time_ms != null) hitRts.push(t.response_time_ms);
+      }
+      const sdt = computeSdt({ hits, misses: nSignal - hits, falseAlarms: fas, correctRejections: nNoise - fas });
+      const mean = hitRts.length ? hitRts.reduce((a, x) => a + x, 0) / hitRts.length : null;
+      Object.assign(r, {
+        hits, misses: nSignal - hits, false_alarms: fas, correct_rejections: nNoise - fas,
+        hit_rate: sdt.hit_rate, false_alarm_rate: sdt.false_alarm_rate,
+        mean_rt_hits_ms: mean == null ? null : Math.round(mean * 100) / 100,
+        d_prime: sdt.d_prime, d_prime_se: sdt.d_prime_se, d_prime_unstable: sdt.d_prime_unstable,
+        criterion: sdt.criterion, d_prime_estimable: sdt.estimable,
+      });
+    }
+
+    // Post-condition fatigue rises with position.
+    for (const f of b.fatigue) {
+      if (f.stage !== 'post_condition' || f.condition_id == null) continue;
+      const c = byId.get(f.condition_id)!;
+      const level = (x: number) => Math.max(0, Math.min(10, Math.round(x)));
+      const m0 = 1.5 + fatU + 0.25 * c.session_position;
+      Object.assign(f, {
+        eye_strain: level(m0 + gaussian(rng)), dryness: level(m0 + gaussian(rng)), blur: level(m0 - 0.5 + gaussian(rng)),
+        burning: level(m0 - 0.7 + gaussian(rng)), headache: level(m0 - 1 + gaussian(rng)),
+      });
+      f.fatigue_mean = (f.eye_strain + f.dryness + f.blur + f.burning + f.headache) / 5;
+    }
+
+    // Comprehension, regenerated for the passage actually read, with the known polarity effect.
+    b.comprehension = b.conditions.flatMap((c, k) => PASSAGES[c.passage_id].questions.map((q, qi) => {
+      const correct = rng() < logistic(0.95 + uComp + (c.polarity === 'positive' ? 0.5 : -0.5) * polComp);
+      return {
+        comprehension_id: `comp-${pid}-${k}-${qi}`, session_id: sid, condition_id: c.condition_id,
+        passage_id: c.passage_id, question_index: qi, question_kind: q.kind,
+        selected_index: correct ? q.correctIndex : (q.correctIndex + 1) % 4, correct_index: q.correctIndex,
+        is_correct: correct, response_time_ms: 6000 + Math.round(rng() * 6000),
+      };
+    }));
+
+    // Visual search for the passage actually read.
+    for (const v of b.visualSearch) {
+      const c = byId.get(v.condition_id)!;
+      const p = PASSAGES[c.passage_id];
+      const inSet = p.searchTargetCount;
+      const draw = rng();
+      const mode = draw < 0.8 ? 'voluntary_full' as const : draw < 0.9 ? 'time_limit' as const : 'voluntary_early' as const;
+      const found = mode === 'voluntary_full' ? inSet : Math.max(0, inSet - 1 - Math.floor(rng() * 2));
+      const time = mode === 'time_limit' ? CONFIG.VS_TIME_LIMIT_MS : Math.round(20_000 + rng() * 35_000);
+      const distractors = countWords([p.searchExcerpt]) - inSet;
+      const fa = rng() < 0.2 ? 1 : 0;
+      const sd = computeSdt({ hits: found, misses: inSet - found, falseAlarms: fa, correctRejections: distractors - fa });
+      Object.assign(v, {
+        passage_id: c.passage_id, search_target: p.searchTarget, targets_in_set: inSet,
+        search_time_ms: time, targets_found: found, targets_missed: inSet - found, false_detections: fa,
+        search_d_prime: sd.d_prime, search_d_prime_se: sd.d_prime_se, distractor_words: distractors,
+        accuracy_rate: inSet > 0 ? found / inSet : null, search_efficiency: found / (time / 60_000),
+        termination_mode: mode, mean_inter_target_interval_ms: found > 1 ? 4000 : null,
+      });
+    }
+
+    // --- states a real cohort reaches ----------------------------------------------------------
+    const cameraOff = opts.cameraOff === 'all' || (Array.isArray(opts.cameraOff) && opts.cameraOff.includes(i));
+    if (cameraOff) {
+      // Declined: no consent, so no ocular measurement may exist (ocular_requires_consent).
+      b.session.media_consent = { ...b.session.media_consent, camera_metrics: false };
+      for (const m of b.eyeMetrics) {
+        Object.assign(m, {
+          camera_active: false, camera_inactive_reason: 'not_running', effective_fps: null,
+          fps_adequate_for_ratio: false, fps_adequate_for_tiers: false, blink_count_incomplete: null,
+          blink_count_full: null, blink_count_micro: null, blink_rate: null, blink_rate_full: null,
+          incomplete_blink_ratio: null, perclos_p80: null, face_presence_ratio: null,
+          observed_duration_ms: null, off_axis_ratio: null, calibration_id: null, gaze_calibrated: false,
+        });
+      }
+    }
+    if (opts.withdrawn?.includes(i)) b.session.withdrawn_at = b.session.session_start_time + 3_600_000;
+    if (opts.pausedLast?.includes(i)) {
+      const last = b.conditions.reduce((a, c) => (c.session_position > a.session_position ? c : a));
+      last.completed_at = null;
+    }
+    bundles.push(b);
+  }
+  return bundles;
+}

@@ -23,6 +23,7 @@ import { resolve } from 'node:path';
 import { ANALYSIS_LONG_COLUMNS } from '@/storage/analysisExport';
 import { ANALYSIS_CODEBOOK } from '@/storage/analysisCodebook';
 import { CODEBOOK } from '@/storage/export';
+import { COMPLETENESS_EXCLUSIONS } from '@/storage/joinIntegrity';
 
 const src = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8');
 
@@ -330,5 +331,39 @@ describe('position_c is centred on the design, not on the data', () => {
     // The source of truth both are meant to agree with.
     const exporter = src('src/storage/analysisExport.ts');
     expect(exporter).toMatch(/position_c: sum\.session_position - \(N_CONDITIONS - 1\) \/ 2/);
+  });
+});
+
+/**
+ * BOTH TEMPLATES APPLY THE EXPORTER'S VERDICT, WITH THE SAME RULE.
+ *
+ * They used to drop withdrawn participants and unfinished runs and nothing else, so a test-harness
+ * session, integrity-blocked sittings and participants without a complete condition set were all
+ * modelled, while the dashboard said the analysis models analysable rows only. Both now read
+ * analysis_join_report.csv. The sensitivity set re-admits participants excluded ONLY for an incomplete
+ * condition set, and which codes those are is defined once, in joinIntegrity.ts; a template carrying
+ * a different list would model a different sensitivity set from the other one. (The gate,
+ * scripts/verifyAnalysis.mjs, checks the resulting COUNTS agree on a cohort; this checks the rule.)
+ */
+describe('the templates read the exporter\'s verdict and agree on the completeness codes', () => {
+  const expected = [...COMPLETENESS_EXCLUSIONS, 'sitting_not_in_data_dir'].sort();
+  const codesIn = (text: string, re: RegExp) => {
+    const m = re.exec(text);
+    return m ? [...m[1].matchAll(/["']([a-z_]+)["']/g)].map((x) => x[1]).sort() : null;
+  };
+
+  it('R lists exactly the join check\'s completeness codes', () => {
+    expect(codesIn(src('src/analysis/analysis_template.R'), /COMPLETENESS_CODES <- c\(([^)]*)\)/)).toEqual(expected);
+  });
+
+  it('Python lists exactly the same codes', () => {
+    expect(codesIn(src('src/analysis/analysis_template.py'), /COMPLETENESS_CODES = \{([^}]*)\}/)).toEqual(expected);
+  });
+
+  it('both read the verdict rather than re-deriving one', () => {
+    for (const f of ['src/analysis/analysis_template.R', 'src/analysis/analysis_template.py']) {
+      expect(src(f)).toContain('analysis_join_report.csv');
+      expect(src(f)).toContain('CONFIRMATORY SET');
+    }
   });
 });

@@ -9,6 +9,7 @@ import { FPS_RATIO_THRESHOLD, FPS_TIER_THRESHOLD } from '@/tracking/blink';
 import type { FatigueRecord, DisplayPerceptionRecord, ComprehensionRecord, RtSummaryRecord, EyeMetricsRecord } from '@/storage/types';
 import { PASSAGES } from '@/experiment/passages';
 import { isConditionComplete } from '@/storage/conditionStatus';
+import { COMPLETENESS_EXCLUSIONS } from '@/storage/joinIntegrity';
 
 export type QcFlag = 'good' | 'warn' | 'bad';
 
@@ -765,14 +766,30 @@ export interface CohortConditionRow {
    * not a quality flag, and this tab is the one people read as "how the study is going".
    */
   n_withdrawn: number;
-  /** Rows the exporter judged analysable. */
+  /**
+   * Rows in the CONFIRMATORY SET (inConfirmatorySet): analysable by the join check, not withdrawn,
+   * not a test-harness sitting, the first protocol pass. The rows both analysis templates model.
+   */
   n_analysable: number;
   /** Rows with a usable primary outcome — a denominator of at least one blink. */
   n_with_outcome: number;
-  /** Mean incomplete-blink ratio over rows that have one. Null when none do. */
+  /**
+   * MEAN OF PER-RUN RATIOS over rows that have one; null when none do. Every run counts once,
+   * whether its ratio rests on 8 blinks or 60 — which is NOT the quantity the primary model
+   * estimates. See pooled_ibr.
+   */
   mean_ibr: number | null;
+  /**
+   * POOLED ratio: incomplete blinks over all blinks, summed across the same rows. The binomial model
+   * weights each run by its blink count, so this — not mean_ibr — is the descriptive quantity it is
+   * estimating (on the logit scale, conditional on the participant). The two differ noticeably when
+   * blink counts vary between runs, so both are shown. Null when no row has a blink.
+   */
+  pooled_ibr: number | null;
   /** Total blinks behind that mean. The ratio's precision rests on this, not on n. */
   blinks_total: number;
+  /** Incomplete blinks summed over the same rows: pooled_ibr = incomplete_total / blinks_total. */
+  incomplete_total: number;
   /** Rows whose frame rate was too low for the ratio to be trusted. */
   n_fps_inadequate: number;
 }
@@ -781,6 +798,13 @@ export interface CohortSummary {
   participants: number;
   analysable_participants: number;
   rows: number;
+  /** The confirmatory set (inConfirmatorySet): what every model in the analysis templates sees. */
+  confirmatory: { rows: number; participants: number };
+  /**
+   * The sensitivity set (inSensitivitySet): the confirmatory set plus the finished runs of
+   * participants excluded ONLY for an incomplete condition set. The templates refit the primary on it.
+   */
+  sensitivity: { rows: number; participants: number };
   /** One row per condition, in condition_label order. */
   conditions: CohortConditionRow[];
   /** condition_label -> how many times it ran at each session position. */
@@ -819,6 +843,41 @@ function readCsv(text: string): Record<string, string>[] {
 
 const isTrue = (v: string | undefined) => v === 'true' || v === 'TRUE' || v === '1';
 
+/** protocol_pass above 0: a repeat pass. Blank is a sitting recorded before the column, all first passes. */
+const isRepeatPass = (v: string | undefined) => Number.isFinite(Number(v)) && Number(v) > 0;
+
+/**
+ * THE CONFIRMATORY SET, row by row, from analysis_long.csv.
+ *
+ * The same rule analysis_template.R and analysis_template.py apply, from the same verdict: the join
+ * check found the participant analysable and this run finished (`analysable` carries both), the
+ * participant did not withdraw, the sitting was not run under the test harness, and it is the
+ * participant's first pass through the protocol. `analysable` already excludes the first three in
+ * every case the join check can see; protocol_pass is checked here because a repeat-pass sitting
+ * whose first pass is no longer on the device is analysable to the join check, and the codebook says
+ * "Exclude or model those participants; do not pool the two passes as independent observations".
+ *
+ * This tab used to say "the analysis models analysable rows only" while both templates modelled
+ * every finished row of every participant who had not withdrawn — test sessions, integrity-blocked
+ * sittings and incomplete participants included. The templates now read the exporter's verdict, so
+ * the claim is true; scripts/verifyAnalysis.mjs checks that R, Python and this function count the
+ * same rows on the same cohort.
+ */
+export function inConfirmatorySet(r: Record<string, string>): boolean {
+  return isTrue(r.analysable) && !isTrue(r.withdrawn) && !isTrue(r.e2e_timing) && !isRepeatPass(r.protocol_pass);
+}
+
+/**
+ * THE SENSITIVITY SET: the confirmatory set plus the finished runs of participants whose ONLY
+ * exclusion is an incomplete condition set (ANALYSIS_PLAN.md §1; COMPLETENESS_EXCLUSIONS).
+ */
+export function inSensitivitySet(r: Record<string, string>): boolean {
+  if (r.condition_complete === 'false' || r.condition_complete === 'FALSE') return false;
+  if (isTrue(r.withdrawn) || isTrue(r.e2e_timing) || isRepeatPass(r.protocol_pass)) return false;
+  const codes = (r.exclusion_reason ?? '').split(';').map((x) => x.trim()).filter(Boolean);
+  return codes.every((c) => (COMPLETENESS_EXCLUSIONS as readonly string[]).includes(c));
+}
+
 /**
  * Summarise the pooled dataset for the cohort tab.
  *
@@ -843,7 +902,8 @@ export function cohortSummary(
     if (!c) {
       c = {
         condition_label: label, polarity: r.polarity ?? '', text_colour: r.text_colour ?? '',
-        n: 0, n_unfinished: 0, n_withdrawn: 0, n_analysable: 0, n_with_outcome: 0, mean_ibr: null, blinks_total: 0, n_fps_inadequate: 0,
+        n: 0, n_unfinished: 0, n_withdrawn: 0, n_analysable: 0, n_with_outcome: 0, mean_ibr: null, pooled_ibr: null,
+        blinks_total: 0, incomplete_total: 0, n_fps_inadequate: 0,
       };
       byCondition.set(label, c);
     }
@@ -869,27 +929,32 @@ export function cohortSummary(
       c.n_unfinished++;
       continue;
     }
-    if (isTrue(r.analysable)) c.n_analysable++;
+    if (inConfirmatorySet(r)) c.n_analysable++;
     /*
-     * Only ANALYSABLE rows reach the outcome mean and the position balance. This tab reads the pooled
-     * file so that the numbers shown are the ones the analysis will see, and the analysis models
-     * analysable rows only: a test-harness sitting, one with broken joins, or one whose ocular data
-     * has no consent behind it (see BLOCKING_AUDIT_CHECKS in joinIntegrity.ts) was averaged in here
-     * all the same. Such rows still count in n, so a condition falling behind is still visible.
+     * Only CONFIRMATORY rows reach the outcome mean and the position balance. This tab reads the
+     * pooled file so that the numbers shown are the ones the analysis will see, and the analysis
+     * models the confirmatory set only (inConfirmatorySet): a test-harness sitting, one with broken
+     * joins, or one whose ocular data has no consent behind it (see BLOCKING_AUDIT_CHECKS in
+     * joinIntegrity.ts) was averaged in here all the same. Such rows still count in n, so a condition
+     * falling behind is still visible.
      */
-    if (!isTrue(r.analysable)) continue;
+    if (!inConfirmatorySet(r)) continue;
     // fps_adequate_for_ratio is only meaningful where the camera ran at all; a blank is "unknown",
     // which is not the same as inadequate and must not be counted as either.
     if (r.fps_adequate_for_ratio !== '' && !isTrue(r.fps_adequate_for_ratio)) c.n_fps_inadequate++;
 
     const denom = Number(r.n_blinks_total);
     const ratio = Number(r.incomplete_blink_ratio);
+    const incomplete = Number(r.n_incomplete);
     if (Number.isFinite(denom) && denom > 0 && Number.isFinite(ratio)) {
       // Accumulated as a running sum in mean_ibr, divided out below. The blink total is carried
       // because it, not the row count, is what the ratio's precision actually rests on.
       c.mean_ibr = (c.mean_ibr ?? 0) + ratio;
       c.n_with_outcome++;
       c.blinks_total += denom;
+      // The numerator from the exported COUNT, not ratio x denominator, so no rounding of the
+      // four-decimal ratio sits between the blink counts and the pooled figure.
+      c.incomplete_total += Number.isFinite(incomplete) ? incomplete : ratio * denom;
     }
 
     const pos = Number(r.session_position);
@@ -899,14 +964,24 @@ export function cohortSummary(
   }
 
   const conditions = [...byCondition.values()]
-    .map((c) => ({ ...c, mean_ibr: c.n_with_outcome > 0 && c.mean_ibr != null ? c.mean_ibr / c.n_with_outcome : null }))
+    .map((c) => ({
+      ...c,
+      mean_ibr: c.n_with_outcome > 0 && c.mean_ibr != null ? c.mean_ibr / c.n_with_outcome : null,
+      pooled_ibr: c.blinks_total > 0 ? c.incomplete_total / c.blinks_total : null,
+    }))
     .sort((a, b) => a.condition_label.localeCompare(b.condition_label));
 
+  const setSize = (pick: (r: Record<string, string>) => boolean) => {
+    const inSet = rows.filter(pick);
+    return { rows: inSet.length, participants: new Set(inSet.map((r) => r.participant_id)).size };
+  };
   const ns = conditions.map((c) => c.n);
   return {
     participants: integrity.total_participants,
     analysable_participants: integrity.analysable_participants,
     rows: rows.length,
+    confirmatory: setSize(inConfirmatorySet),
+    sensitivity: setSize(inSensitivitySet),
     conditions,
     positionBalance,
     exclusions: [...exclusionCounts.entries()]

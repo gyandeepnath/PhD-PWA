@@ -10,8 +10,12 @@
 # hit "Package `see` required for model diagnostic plots" part-way through the run,
 # after the primary model had been fitted and before the sections below it.
 #
-# Point DATA_DIR at the folder holding the exported CSVs, OR at a folder that
-# CONTAINS one exported folder per participant. Both work — see read_export below.
+# Point DATA_DIR at a folder that CONTAINS one exported folder per sitting (the
+# per-session "Export" bundles) AND the pooled analysis export (Dashboard -> "Export
+# analysis dataset": analysis_long.csv, analysis_join_report.csv, ...), in any
+# sub-folder. The per-sitting folders carry the data; analysis_join_report.csv carries
+# the exporter's verdict on which participants may be analysed, and this file applies
+# that verdict rather than re-deriving a second one. See "WHICH ROWS ARE MODELLED".
 # ---------------------------------------------------------------------------
 
 library(tidyverse)
@@ -51,15 +55,24 @@ DATA_DIR <- Sys.getenv("VISULAB_DATA_DIR", unset = ".")
 # column that is empty for participant 001 and numeric for 002 would otherwise be
 # chr in one and dbl in the other, and bind_rows() would abort mid-load.
 # ---------------------------------------------------------------------------
-read_export <- function(name) {
+#
+# `with_folder = TRUE` adds `sitting_folder`, the folder each row was read from. One exported folder
+# is one sitting, so the folder is the one key that ties a row of 01_session_info.csv (which carries
+# no session_id) to the condition rows of the same sitting without going through session_index —
+# which the analysis codebook warns is not unique within a participant. It is added only where it is
+# used, so it does not ride into every join and come back suffixed .x/.y.
+read_export <- function(name, with_folder = FALSE) {
   paths <- list.files(DATA_DIR, pattern = paste0("^", name, "$"),
                       full.names = TRUE, recursive = TRUE)
   if (length(paths) == 0) {
     stop(sprintf("no %s found under DATA_DIR (%s). Point DATA_DIR at an exported folder, or at a folder of them.",
                  name, normalizePath(DATA_DIR, mustWork = FALSE)))
   }
-  parts <- lapply(paths, function(p) read_csv(p, col_types = cols(.default = col_character()),
-                                              progress = FALSE))
+  parts <- lapply(paths, function(p) {
+    d <- read_csv(p, col_types = cols(.default = col_character()), progress = FALSE)
+    if (with_folder) d$sitting_folder <- rep(dirname(p), nrow(d))
+    d
+  })
   out <- bind_rows(parts)
   # Re-infer types ONCE, over the pooled frame, so every column is typed from all
   # the evidence rather than from whichever participant happened to be read first.
@@ -71,66 +84,180 @@ read_export <- function(name) {
 # Photometry covariates (per session, in 01_session_info.csv): screen_white_luminance_cd_m2 and
 # brightness_percent. With a single fixed device they are constant and can be ignored; across
 # devices/brightness settings, join them in as a between-session covariate alongside log_contrast.
-session_info <- read_export("01_session_info.csv")
+session_info <- read_export("01_session_info.csv", with_folder = TRUE)
 
-conditions  <- read_export("02_conditions.csv")
+conditions  <- read_export("02_conditions.csv", with_folder = TRUE)
 fatigue     <- read_export("03_fatigue_scores.csv")
 comprehension <- read_export("04_comprehension.csv")
 rt_summary  <- read_export("09_rt_summary.csv")
 eye_metrics <- read_export("07_eye_metrics.csv")
 quality     <- read_export("12_quality_flags.csv")  # engagement / careless-responding
 wide        <- read_export("10_wide_summary.csv")   # carries session_index per condition
-participant <- read_export("11_participant.csv")   # demographics + vision covariates
-cvsq        <- read_export("13_cvsq.csv")          # CVS-Q symptom questionnaire (per item)
+participant <- read_export("11_participant.csv", with_folder = TRUE)   # demographics + vision covariates
+cvsq        <- read_export("13_cvsq.csv", with_folder = TRUE)          # CVS-Q symptom questionnaire (per item)
 
-# --- WITHDRAWN PARTICIPANTS AND UNFINISHED CONDITION-RUNS ARE NOT ANALYSED --------------------
-# Removed here, ONCE, at the source — from every table before any join — so that no model further
-# down can pick one up by a route nobody thought of. Neither is a sensitivity choice.
+# --- A SITTING EXPORTED TWICE STOPS THE RUN --------------------------------------------------
+# The loader pools every folder it finds, so the same sitting copied into two folders (two exports
+# of one session, or a folder duplicated while organising) is read twice. Nothing downstream can
+# tell: the joins on condition_id fan out many-to-many with only a dplyr warning, and the models
+# fitted RT, fatigue and comprehension on 419 rows where there were 109 before the CVS-Q pivot
+# crashed. Stopped here, before any row is counted, naming the folders.
+dup_cid <- unique(conditions$condition_id[duplicated(conditions$condition_id)])
+if (length(dup_cid) > 0) {
+  where <- unique(conditions$sitting_folder[conditions$condition_id %in% dup_cid[1]])
+  stop(sprintf(paste0("[DUPLICATED EXPORT] %d condition_id value(s) occur more than once under DATA_DIR ",
+                      "(e.g. %s, in: %s). The same sitting has been exported into more than one folder, ",
+                      "so every row of it would be counted twice. Remove the duplicate folder and run again."),
+               length(dup_cid), dup_cid[1], paste(where, collapse = " AND ")), call. = FALSE)
+}
+folder_sessions <- conditions %>% distinct(sitting_folder, session_id)
+if (anyDuplicated(folder_sessions$sitting_folder)) {
+  stop("[MIXED FOLDER] one folder holds condition rows from more than one session_id: ",
+       folder_sessions$sitting_folder[duplicated(folder_sessions$sitting_folder)][1],
+       ". Each exported folder is one sitting; keep the files of different sittings apart.", call. = FALSE)
+}
+
+# ===========================================================================================
+# WHICH ROWS ARE MODELLED: THE EXPORTER'S VERDICT, APPLIED — NOT A SECOND ONE MADE HERE
 #
-# WITHDRAWN: the participant withdrew from the study. That is a standing instruction, not a quality
-# flag, and it applies to the PARTICIPANT: every sitting of theirs is dropped, not only the one the
-# withdrawal was recorded on — which is what the pooled export's join check has always done
-# (participant_withdrawn), so the two routes to a model agree. The flag used to be absent from every
-# CSV in the bundle, so a withdrawn sitting read exactly like an ordinary paused one and this template
-# modelled it. 01_session_info.csv now carries `withdrawn`.
+# This file used to drop withdrawn participants and unfinished runs and nothing else, while the
+# exporter's join check (src/storage/joinIntegrity.ts) also marks as NOT analysable:
+#   - a participant without a complete condition set (ANALYSIS_PLAN.md §1: the confirmatory
+#     analysis is complete-case);
+#   - a sitting run under the end-to-end test harness (e2e_timing), whose own integrity report says
+#     "Do not pool it with collected data";
+#   - a sitting blocked by its per-sitting integrity audit — duplicate ids, orphan rows, a summary
+#     that disagrees with its trials, ocular data with no camera consent behind it;
+#   - repeated or ambiguous sittings, mixed builds within a participant, an unattributable session.
+# On a cohort where three participants had abandoned their sittings part-way, this file fitted 108
+# rows from all twelve; an e2e test session was modelled as a participant. The dashboard's cohort
+# tab claimed meanwhile that the analysis models analysable rows only. It does now.
 #
-# UNFINISHED: a condition started and not finished — paused, crashed, abandoned part-way — leaves
-# real but partial rows. The Pause dialog says it "will be restarted on resume"; if the sitting never
-# was, the rows stay. 02_conditions.csv carries `condition_complete`.
+# analysis_join_report.csv is the verdict, one row per participant: whether they are analysable,
+# and the codes of every issue that excluded them. It is read, never recomputed, so the exporter,
+# the dashboard, this file and the Python cross-check cannot come to four different conclusions.
 #
-# Exports older than either column carry nothing to drop and pass through unchanged.
-drop_ids <- character(0)
-if ("withdrawn" %in% names(session_info)) {
-  wd_pids <- unique(session_info$participant_id[!is.na(session_info$withdrawn) &
-                                                  as.logical(session_info$withdrawn)])
-  cat("\nwithdrawn participants removed before modelling:", length(wd_pids), "\n")
-  if (length(wd_pids) > 0) {
-    drop_ids <- c(drop_ids, conditions$condition_id[conditions$participant_id %in% wd_pids])
-    session_info <- session_info[!(session_info$participant_id %in% wd_pids), , drop = FALSE]
-    cvsq         <- cvsq[!(cvsq$participant_id %in% wd_pids), , drop = FALSE]
-    participant  <- participant[!(participant$participant_id %in% wd_pids), , drop = FALSE]
+# CONFIRMATORY SET (every model): analysable, not withdrawn, not a test-harness sitting, the
+# participant's first protocol pass (protocol_pass 0; blank on sittings recorded before the column
+# existed, which were all first passes), and this condition-run finished.
+#
+# SENSITIVITY SET (one refit of the primary): the confirmatory set PLUS the finished runs of
+# participants excluded ONLY because their condition set is incomplete — the analysis §1 calls
+# "reasonable and should be reported as such". Nothing excluded for any other reason enters it:
+# integrity faults, missing consent, test sessions and repeat passes are not completeness questions.
+# ===========================================================================================
+COMPLETENESS_CODES <- c("condition_incomplete", "condition_coverage", "incomplete_split_sitting",
+                        "incomplete_crossover", "sitting_not_in_data_dir")
+
+verdict_paths <- list.files(DATA_DIR, pattern = "^analysis_join_report\\.csv$", full.names = TRUE, recursive = TRUE)
+if (length(verdict_paths) == 0) {
+  stop(paste0("[NO VERDICT] analysis_join_report.csv was not found under DATA_DIR (",
+              normalizePath(DATA_DIR, mustWork = FALSE), "). Which participants may be analysed is decided ",
+              "by the exporter's join check, not by this file. Take the pooled export (Dashboard -> ",
+              "'Export analysis dataset') from the same tablet and put its folder inside DATA_DIR beside ",
+              "the per-sitting folders."), call. = FALSE)
+}
+if (length(verdict_paths) > 1) {
+  stop("[TWO VERDICTS] more than one analysis_join_report.csv under DATA_DIR (",
+       paste(verdict_paths, collapse = " AND "), "). Keep only the pooled export taken after the last ",
+       "sitting was collected.", call. = FALSE)
+}
+as_flag <- function(x) !is.na(x) & toupper(trimws(as.character(x))) %in% c("TRUE", "1")
+verdict <- read_csv(verdict_paths, col_types = cols(.default = col_character()), progress = FALSE) %>%
+  transmute(participant_key = participant_id, session_id = session_ids,
+            p_analysable = as_flag(analysable), excluded_by = coalesce(excluded_by, "")) %>%
+  tidyr::separate_rows(session_id, sep = ";")
+
+# Session-level facts, per FOLDER. Older exports lack a column: it is then read as absent (FALSE / 0).
+for (col in c("withdrawn", "e2e_timing", "protocol_pass")) {
+  if (!col %in% names(session_info)) session_info[[col]] <- NA
+}
+sitting_flags <- session_info %>%
+  transmute(sitting_folder,
+            sitting_withdrawn = as_flag(withdrawn),
+            test_harness = as_flag(e2e_timing),
+            repeat_pass = coalesce(suppressWarnings(as.numeric(protocol_pass)), 0) > 0)
+# A withdrawal applies to the PARTICIPANT: every sitting of theirs goes, not only the one it was
+# recorded on — as the pooled export's join check (participant_withdrawn) has always done.
+wd_pids <- unique(session_info$participant_id[as_flag(session_info$withdrawn)])
+if (!"condition_complete" %in% names(conditions)) conditions$condition_complete <- NA
+present_sessions <- unique(conditions$session_id)
+# A participant the verdict lists with a sitting that has no condition rows here: their data under
+# DATA_DIR is not the data the verdict was given. Not complete-case, whatever the verdict said.
+short_keys <- unique(verdict$participant_key[!(verdict$session_id %in% present_sessions)])
+
+runs <- conditions %>%
+  select(condition_id, participant_id, session_id, sitting_folder, condition_complete) %>%
+  left_join(sitting_flags, by = "sitting_folder") %>%
+  left_join(verdict, by = "session_id") %>%
+  mutate(finished = is.na(condition_complete) | as_flag(condition_complete),
+         has_verdict = !is.na(p_analysable),
+         p_withdrawn = participant_id %in% wd_pids,
+         short = !is.na(participant_key) & participant_key %in% short_keys)
+runs$reasons <- Map(
+  function(codes, fin, wd, e2e, rep, hv, short) unique(c(
+    codes[nzchar(codes)],
+    if (!fin) "run_unfinished",
+    if (wd) "participant_withdrawn",
+    if (isTRUE(e2e)) "audit_e2e_timing",
+    if (isTRUE(rep)) "protocol_pass_repeat",
+    if (!hv) "no_verdict_for_sitting",
+    if (short) "sitting_not_in_data_dir")),
+  strsplit(coalesce(runs$excluded_by, ""), ";", fixed = TRUE),
+  runs$finished, runs$p_withdrawn, runs$test_harness, runs$repeat_pass, runs$has_verdict, runs$short)
+runs$confirmatory <- lengths(runs$reasons) == 0
+runs$sensitivity <- vapply(runs$reasons, function(r) all(r %in% COMPLETENESS_CODES), logical(1))
+
+cat("\n==========================================================================\n")
+cat("WHICH ROWS ARE MODELLED — the exporter's verdict (", basename(verdict_paths), ")\n", sep = "")
+cat("==========================================================================\n")
+cat("condition-runs under DATA_DIR:", nrow(runs), "from", n_distinct(runs$participant_id), "participant(s)\n")
+cat("withdrawn participants removed before modelling:", length(wd_pids), "\n")
+cat("unfinished condition-runs removed before modelling (paused or interrupted):", sum(!runs$finished), "\n")
+reason_long <- tibble(participant_id = rep(runs$participant_id, lengths(runs$reasons)),
+                      reason = unlist(runs$reasons))
+if (nrow(reason_long) > 0) {
+  cat("\nexclusion reasons (a run can carry several; a participant-level code applies to every run of\n")
+  cat("that participant; run_unfinished is the run itself):\n")
+  reason_tab <- reason_long %>% group_by(reason) %>%
+    summarise(condition_runs = n(), participants = n_distinct(participant_id), .groups = "drop") %>%
+    arrange(desc(condition_runs), reason)
+  for (i in seq_len(nrow(reason_tab))) {
+    cat(sprintf("  [exclusion] %-34s %5d condition-run(s)  %4d participant(s)\n",
+                reason_tab$reason[i], reason_tab$condition_runs[i], reason_tab$participants[i]))
   }
+} else {
+  cat("no condition-run is excluded.\n")
 }
-if ("condition_complete" %in% names(conditions)) {
-  unfinished_ids <- conditions$condition_id[!is.na(conditions$condition_complete) &
-                                              !as.logical(conditions$condition_complete) &
-                                              !(conditions$condition_id %in% drop_ids)]
-  cat("unfinished condition-runs removed before modelling (paused or interrupted):",
-      length(unfinished_ids), "\n")
-  drop_ids <- c(drop_ids, unfinished_ids)
+cat(sprintf("\nCONFIRMATORY SET: %d condition-runs from %d participants\n",
+            sum(runs$confirmatory), n_distinct(runs$participant_id[runs$confirmatory])))
+cat(sprintf("SENSITIVITY SET:  %d condition-runs from %d participants (adds finished runs of participants\n",
+            sum(runs$sensitivity), n_distinct(runs$participant_id[runs$sensitivity])))
+cat("                  excluded only for an incomplete condition set; ANALYSIS_PLAN.md §1)\n")
+
+# The untrimmed tables are kept for the ONE sensitivity refit; every other model sees only the
+# confirmatory set, trimmed here once, at the source, from every table before any join, so no model
+# further down can pick up an excluded row by a route nobody thought of.
+sens_ids <- runs$condition_id[runs$sensitivity]
+sens_folders <- unique(runs$sitting_folder[runs$sensitivity])
+conditions_all <- conditions; eye_metrics_all <- eye_metrics; wide_all <- wide; quality_all <- quality
+session_info_all <- session_info; participant_all <- participant
+keep_ids <- runs$condition_id[runs$confirmatory]
+keep_folders <- unique(runs$sitting_folder[runs$confirmatory])
+keep_rows <- function(d) {
+  if ("condition_id" %in% names(d)) d[d$condition_id %in% keep_ids, , drop = FALSE] else d
 }
-if (length(drop_ids) > 0) {
-  drop_rows <- function(d) {
-    if ("condition_id" %in% names(d)) d[!(d$condition_id %in% drop_ids), , drop = FALSE] else d
-  }
-  conditions    <- drop_rows(conditions)
-  fatigue       <- drop_rows(fatigue)
-  comprehension <- drop_rows(comprehension)
-  rt_summary    <- drop_rows(rt_summary)
-  eye_metrics   <- drop_rows(eye_metrics)
-  quality       <- drop_rows(quality)
-  wide          <- drop_rows(wide)
-}
+conditions    <- keep_rows(conditions)
+fatigue       <- keep_rows(fatigue)
+comprehension <- keep_rows(comprehension)
+rt_summary    <- keep_rows(rt_summary)
+eye_metrics   <- keep_rows(eye_metrics)
+quality       <- keep_rows(quality)
+wide          <- keep_rows(wide)
+# Session-level tables follow their sitting: a folder with no confirmatory run contributes nothing.
+session_info  <- session_info[session_info$sitting_folder %in% keep_folders, , drop = FALSE]
+participant   <- participant[participant$sitting_folder %in% keep_folders, , drop = FALSE]
+cvsq          <- cvsq[cvsq$sitting_folder %in% keep_folders, , drop = FALSE]
 
 # --- Quality control: optionally exclude disengaged conditions -----------------------------
 # Boredom/disengagement over the long session mimics fatigue and adds noise. The engagement
@@ -154,52 +281,62 @@ clean_ids <- quality %>% filter(engagement_flag != "bad") %>% select(participant
 #
 # The participant table is one row per EXPORT, i.e. per sitting, and its mutable covariates can
 # differ between them, so it is de-duplicated before joining rather than silently multiplying rows.
-cond <- conditions %>%
-  # fatigue_delta rides along here because it lives in 10_wide_summary.csv and nowhere
-  # else: ANALYSIS_PLAN.md §4 specifies it as the fatigue response, but this join pulled
-  # only engagement_flag, so the specified response was unreachable and the model
-  # silently fitted fatigue_mean instead.
-  left_join(wide %>% select(condition_id, engagement_flag, fatigue_delta), by = "condition_id") %>%
-  # The careless-responding signals of §5.5, joined PER CONDITION.
-  #
-  # This could not be done before: 12_quality_flags.csv carried only participant_id +
-  # condition_label + session_index, and joining on a label is what the note at the top of this file
-  # warns against because labels repeat across sittings. The flags were therefore reportable only as
-  # study-wide counts, which answers "how often did this happen" and not "was THIS condition for THIS
-  # participant rushed" — the question §5.5 actually asks. The export now carries condition_id in
-  # that file, so the join is the same safe one every other table uses.
-  left_join(quality %>% select(condition_id, careless_straight_lined, careless_rushed_fatigue,
-                               careless_rushed_perception, low_face_presence, reading_skim),
-            by = "condition_id") %>%
-  left_join(participant %>%
-              select(participant_id, age, gender, daily_screen_hours, correction_type, cvd_status) %>%
-              distinct(participant_id, .keep_all = TRUE),
-            by = "participant_id") %>%
-  # Session-level (whole-plot) columns: the illumination factor lives on the SESSION record, not
-  # the condition record, so it must be joined in before it can enter the model.
-  left_join(session_info %>% select(participant_id, session_index, ambient_illumination_level,
-                                    illumination_block, illumination_order_first, lux_mean,
-                                    # lux_logged_all_in_range, NOT lux_all_in_range. The bare name
-                                    # exists — in analysis_long.csv, a different export product —
-                                    # and this file reads the numbered bundle, where the exporter
-                                    # renames it deliberately: it reports only on readings actually
-                                    # TAKEN, so it must be read together with lux_complete. Selecting
-                                    # the wrong one raised "Column `lux_all_in_range` doesn't exist"
-                                    # at this join, and nothing below it had ever run.
-                                    lux_complete, lux_logged_all_in_range,
-                                    session_status, session_complete),
-            by = c("participant_id", "session_index")) %>%
-  mutate(
-    log_contrast = log10(wcag_contrast_ratio),
-    polarity = factor(polarity, levels = c("positive", "negative")),
-    # Text colour is a FIVE-level factor with the same levels in both polarities. Achromatic is a
-    # single level (not "black" and "white"), which is what makes polarity x colour estimable.
-    colour = factor(color_name, levels = c("achromatic", "blue", "red", "yellow", "green")),
-    # Ambient illumination: the session-level (whole-plot) factor.
-    illumination = droplevels(factor(ambient_illumination_level, levels = c("dim", "moderate"))),
-    below_aa = as.integer(below_wcag_aa),
-    session_index = ifelse(is.na(session_index), 1L, session_index)
-  )
+# Written as a function because the SENSITIVITY refit of the primary needs the identical frame built
+# from the untrimmed tables; two copies of this pipeline would drift apart.
+build_cond <- function(conditions, wide, quality, participant, session_info) {
+  conditions %>%
+    # fatigue_delta rides along here because it lives in 10_wide_summary.csv and nowhere
+    # else: ANALYSIS_PLAN.md §4 specifies it as the fatigue response, but this join pulled
+    # only engagement_flag, so the specified response was unreachable and the model
+    # silently fitted fatigue_mean instead.
+    left_join(wide %>% select(condition_id, engagement_flag, fatigue_delta), by = "condition_id") %>%
+    # The careless-responding signals of §5.5, joined PER CONDITION.
+    #
+    # This could not be done before: 12_quality_flags.csv carried only participant_id +
+    # condition_label + session_index, and joining on a label is what the note at the top of this file
+    # warns against because labels repeat across sittings. The flags were therefore reportable only as
+    # study-wide counts, which answers "how often did this happen" and not "was THIS condition for THIS
+    # participant rushed" — the question §5.5 actually asks. The export now carries condition_id in
+    # that file, so the join is the same safe one every other table uses.
+    left_join(quality %>% select(condition_id, careless_straight_lined, careless_rushed_fatigue,
+                                 careless_rushed_perception, low_face_presence, reading_skim),
+              by = "condition_id") %>%
+    left_join(participant %>%
+                select(participant_id, age, gender, daily_screen_hours, correction_type, cvd_status) %>%
+                distinct(participant_id, .keep_all = TRUE),
+              by = "participant_id") %>%
+    # Session-level (whole-plot) columns: the illumination factor lives on the SESSION record, not
+    # the condition record, so it must be joined in before it can enter the model.
+    #
+    # Joined on the FOLDER the two rows were read from — one exported folder is one sitting — and not on
+    # participant_id + session_index: 01_session_info.csv carries no session_id, and session_index is
+    # not unique within a participant when a sitting was binned while a later one started (see the
+    # analysis codebook). session_index itself comes from 02_conditions.csv.
+    left_join(session_info %>% select(sitting_folder, ambient_illumination_level,
+                                      illumination_block, illumination_order_first, lux_mean,
+                                      # lux_logged_all_in_range, NOT lux_all_in_range. The bare name
+                                      # exists — in analysis_long.csv, a different export product —
+                                      # and this file reads the numbered bundle, where the exporter
+                                      # renames it deliberately: it reports only on readings actually
+                                      # TAKEN, so it must be read together with lux_complete. Selecting
+                                      # the wrong one raised "Column `lux_all_in_range` doesn't exist"
+                                      # at this join, and nothing below it had ever run.
+                                      lux_complete, lux_logged_all_in_range,
+                                      session_status, session_complete),
+              by = "sitting_folder") %>%
+    mutate(
+      log_contrast = log10(wcag_contrast_ratio),
+      polarity = factor(polarity, levels = c("positive", "negative")),
+      # Text colour is a FIVE-level factor with the same levels in both polarities. Achromatic is a
+      # single level (not "black" and "white"), which is what makes polarity x colour estimable.
+      colour = factor(color_name, levels = c("achromatic", "blue", "red", "yellow", "green")),
+      # Ambient illumination: the session-level (whole-plot) factor.
+      illumination = droplevels(factor(ambient_illumination_level, levels = c("dim", "moderate"))),
+      below_aa = as.integer(below_wcag_aa),
+      session_index = ifelse(is.na(session_index), 1L, session_index)
+    )
+}
+cond <- build_cond(conditions, wide, quality, participant, session_info)
 
 # ---------------------------------------------------------------------------
 # SUM-TO-ZERO CODING for the two crossed design factors. docs/ANALYSIS_PLAN.md §2:
@@ -619,6 +756,44 @@ if (any(eye$fps_adequate_for_ratio)) {
       cat("\n=== PRIMARY refit on fps_adequate_for_ratio conditions only (sensitivity) ===\n")
       print(summary(m_fps_ok))
     }
+  }
+}
+
+# --- SENSITIVITY SET: the complete-case rule relaxed, and nothing else (ANALYSIS_PLAN.md §1) ------
+# "The confirmatory analysis is complete-case; a sensitivity analysis including them is reasonable
+# and should be reported as such." The plan asked for it and nothing ran it. The same model, refitted
+# on the confirmatory rows PLUS the finished runs of participants excluded ONLY for an incomplete
+# condition set (see WHICH ROWS ARE MODELLED). Built from the untrimmed tables by the same
+# build_cond(), with the same contrast coding, so the two fits differ in their rows and nothing else.
+n_sens_extra <- length(setdiff(sens_ids, keep_ids))
+if (n_sens_extra == 0) {
+  cat("\n[sensitivity set] identical to the confirmatory set here (no participant was excluded only for\n")
+  cat("an incomplete condition set), so there is nothing to refit.\n")
+} else {
+  cond_sens <- build_cond(conditions_all[conditions_all$condition_id %in% sens_ids, , drop = FALSE],
+                          wide_all, quality_all,
+                          participant_all[participant_all$sitting_folder %in% sens_folders, , drop = FALSE],
+                          session_info_all[session_info_all$sitting_folder %in% sens_folders, , drop = FALSE])
+  contrasts(cond_sens$polarity) <- contr.sum(nlevels(cond_sens$polarity)) / 2
+  contrasts(cond_sens$colour)   <- contr.sum(nlevels(cond_sens$colour))
+  if (DROP_DISENGAGED) cond_sens <- cond_sens %>% filter(is.na(engagement_flag) | engagement_flag != "bad")
+  eye_sens <- eye_metrics_all %>% filter(condition_id %in% sens_ids) %>%
+    left_join(cond_sens, by = c("participant_id", "condition_id")) %>%
+    filter(camera_active == 1) %>%
+    mutate(blink_total = blink_count_incomplete + blink_count_full + blink_count_micro,
+           eff_fps_c   = as.numeric(scale(effective_fps, scale = FALSE))) %>%
+    filter(!is.na(blink_total), blink_total > 0)
+  m_sens <- tryCatch(update(m_primary, data = eye_sens), error = function(err) NULL)
+  cat("\n=== PRIMARY refit on the SENSITIVITY SET (", n_sens_extra,
+      " extra finished run(s) of incomplete participants; ANALYSIS_PLAN.md §1) ===\n", sep = "")
+  if (is.null(m_sens)) {
+    cat("the sensitivity refit did not fit.\n")
+  } else {
+    pol_row <- function(m) summary(m)$coefficients["polarity1", ]
+    cat(sprintf("polarity (log-odds, positive minus negative): confirmatory %.4f (SE %.4f, n %d) | sensitivity %.4f (SE %.4f, n %d)\n",
+                pol_row(m_primary)[1], pol_row(m_primary)[2], nobs(m_primary),
+                pol_row(m_sens)[1], pol_row(m_sens)[2], nobs(m_sens)))
+    print(summary(m_sens))
   }
 }
 
