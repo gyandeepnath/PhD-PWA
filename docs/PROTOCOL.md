@@ -152,7 +152,10 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
    illumination block (median ~97 min, p95 ~118 min), closing with the end CVS-Q and NASA-TLX.
 4. At the end, open the session from the manager → **Export** the CSV + JSON bundle.
 5. Analyse with the **mixed-model templates** in `src/analysis/analysis_template.{R,py}` (random
-   intercept per participant; contrast as a covariate; d′ aggregated across conditions).
+   intercept per participant; contrast as a covariate; d′ aggregated across conditions). Point them
+   at a folder holding every per-sitting export AND the pooled export (Dashboard → **Download
+   analysis dataset**): its `analysis_join_report.csv` decides who is analysed, and both templates
+   stop with `[NO VERDICT]` without it.
 
 ## 6. Known limitations to disclose
 

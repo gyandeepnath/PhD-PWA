@@ -598,8 +598,10 @@ npm run sim        # Monte-Carlo + power analysis
 npm run fuzz       # adversarial soak
 npm run stress     # harsh multi-regime stress run
 ```
-Analysis: run `src/analysis/analysis_template.{R,py}` on an exported CSV bundle (random-intercept
-mixed models; contrast as covariate; d′ aggregated; engagement sensitivity analysis).
+Analysis: run `src/analysis/analysis_template.{R,py}` on the per-sitting CSV bundles PLUS the pooled
+export, whose `analysis_join_report.csv` decides the confirmatory set (random-intercept mixed models;
+passage in every model; contrast as covariate; d′ aggregated; engagement as a sensitivity on the
+primary only).
 
 ## 19. Archive contents
 - `MASTER_BLUEPRINT.md` — this document.
