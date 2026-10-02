@@ -13,18 +13,23 @@ population-averaged where lme4's glmer is subject-specific.
 
 TWO LIMITS OF THIS FILE, stated because they are limits of the tool and not choices:
 
-  - A GEE takes ONE clustering level. The pre-registered primary model has
-    `(1 | participant_id) + (1 | passage_id)`; this file can cluster on participant only, so the
-    passage intercept the design deliberately makes available is not fitted here. The R template
-    fits it. A passage effect will therefore load onto the residual here and not there.
+  - A GEE takes ONE clustering level, the participant, so passage enters every model here as a
+    FIXED effect, C(passage_id), where the R template carries a random intercept. This header used
+    to say passage was not fitted here at all, which conflated the two: a passage random effect
+    cannot be fitted in a GEE, a passage fixed effect can, and passage is not balanced against
+    polarity, so leaving it out lets passage difficulty load onto the polarity contrast.
   - `mixedlm` fits a random intercept only. Where the plan's maximal structure carries a random
     slope, this file is at the plan's first reduction from the start.
+
+Every GEE uses statsmodels' bias-reduced sandwich covariance: the plain robust one is too small
+with few participants (see GEE_COV).
 
 Run after exporting the CSV bundle.
 
     pip install pandas numpy statsmodels scipy
 
-Set DATA_DIR to the folder containing the exported CSVs.
+Set DATA_DIR to a folder holding the per-sitting export folders AND the pooled analysis export
+(its analysis_join_report.csv is the verdict on who may be analysed); see the R template's header.
 """
 from __future__ import annotations
 import os
@@ -35,7 +40,7 @@ import statsmodels.api as sm
 import glob
 import statsmodels.formula.api as smf
 
-# Point DATA_DIR at one exported folder, OR at a folder containing one per participant.
+# Point DATA_DIR at a folder containing one exported folder per sitting plus the pooled export.
 # VISULAB_DATA_DIR overrides it from the environment, so scripts/verifyAnalysis.mjs can run this
 # file against a fixture WITHOUT editing it — the gate then checks the bytes the analyst is given.
 DATA_DIR = os.environ.get("VISULAB_DATA_DIR", ".")
@@ -238,9 +243,32 @@ def main() -> None:
     #   "... + age + C(correction_type)"  or stratify by cvd_status.
     PARTICIPANT_COVARIATES = ["age", "gender", "daily_screen_hours", "correction_type", "cvd_status"]
 
-    # Boredom/disengagement mimics fatigue; optionally drop conditions flagged "bad" and re-run as
-    # a sensitivity analysis. session_index distinguishes split-session sittings (1, 2, ...).
-    DROP_DISENGAGED = True
+    # WHAT THE CONFIRMATORY SET CAN SUPPORT, checked before any model — the R template's guards,
+    # with the same messages. One participant used to fit "successfully" here with a polarity
+    # standard error of 6e-16 and z = 3.6e14; one polarity raised a bare LinAlgError.
+    n_participants = conditions["participant_id"].nunique()
+    if n_participants < 2:
+        sys.exit(f"[TOO FEW PARTICIPANTS] the confirmatory set holds {n_participants} participant(s). A "
+                 "cluster-robust standard error needs several clusters, and a population claim many more. "
+                 "See the exclusion counts above for who was left out and why.")
+    if conditions["polarity"].nunique() < 2:
+        sys.exit(f"[ONE POLARITY] every confirmatory condition-run has polarity "
+                 f"'{', '.join(map(str, conditions['polarity'].dropna().unique()))}'. The study's question is "
+                 "the CONTRAST between polarities, which this data cannot estimate.")
+    # ANALYST DEFAULT, as in the R template (SMALL_N_WARN). Below it every standard error rests on few
+    # clusters; the GEEs below use a small-sample correction, but the warning stands.
+    SMALL_N_WARN = 20
+    if n_participants < SMALL_N_WARN:
+        print(f"\n[SMALL N] {n_participants} participants in the confirmatory set (fewer than {SMALL_N_WARN}, "
+              "an ANALYST DEFAULT).\n          Standard errors and p-values rest on few clusters; treat every "
+              "inferential result below as provisional.")
+
+    # ENGAGEMENT: counted, retained, and a sensitivity on the PRIMARY only. This defaulted to True and
+    # dropped every "bad" run from EVERY model, uncounted. The flag is built from comprehension,
+    # reading-skim and false-alarm signals — outcomes modelled below — so filtering on it selects on
+    # the dependent variable, and synopsis §3.9 puts the exclusion in the SENSITIVITY analyses. See
+    # the R template's DROP_DISENGAGED. True removes "bad" runs from the OCULAR models only.
+    DROP_DISENGAGED = False  # ANALYST DEFAULT
 
     # The design's condition count, for position_c. See the note at position_c below.
     # DISTINCT conditions, not rows: load() pools every participant folder, so a 12-participant
@@ -272,8 +300,6 @@ def main() -> None:
         assert len(cond) == len(conditions), "condition join duplicated rows - check the join key"
         # session_index comes from 02_conditions.csv itself now. It is NOT filled with 1 on absence:
         # relabelling an unknown sitting as sitting 1 silently assigns it the wrong illumination level.
-        if DROP_DISENGAGED:
-            cond = cond[cond["engagement_flag"].fillna("good") != "bad"]
         # One row per participant: 11_participant.csv is written per EXPORT, i.e. per sitting, and its
         # mutable covariates can differ between them.
         cond = cond.merge(participant[["participant_id", *PARTICIPANT_COVARIATES]]
@@ -322,37 +348,18 @@ def main() -> None:
         cond["position_c"] = cond["session_position"] - (n_conditions - 1) / 2
         return cond
 
+
     cond = build_cond(conditions, wide, participant, session_info)
-    # CVS-Q change, per SITTING. Pivoting on participant_id alone silently averaged the two sittings
-    # (pivot_table defaults to aggfunc="mean"), which destroyed the illumination contrast that is
-    # the entire reason for administering it twice. 13_cvsq.csv now carries session_index.
-    #
-    # NOTE: baseline and close use DIFFERENT recall frames (see the `frame` column and
-    # docs/LITERATURE_VALIDATION.md). This change score is exploratory.
-    cvsq_wide = cvsq.pivot_table(
-        index=["participant_id", "session_index", "ambient_illumination_level"],
-        columns="stage", values="total_score", aggfunc="first",
-    ).reset_index()
-    if {"baseline", "session_end"} <= set(cvsq_wide.columns):
-        cvsq_wide["change"] = cvsq_wide["session_end"] - cvsq_wide["baseline"]
-        # Previously skipped in silence when the illumination check failed. The baseline-to-close
-        # CHANGE is estimable with one level; only the between-level contrast is not.
-        if cvsq_wide["ambient_illumination_level"].nunique() > 1:
-            m_cvsq = smf.mixedlm(
-                "change ~ C(ambient_illumination_level)",
-                cvsq_wide.dropna(subset=["change"]),
-                groups=cvsq_wide.dropna(subset=["change"])["participant_id"],
-            ).fit()
-            print("\n=== CVS-Q change by illumination (EXPLORATORY: frames differ) ===")
-            print(m_cvsq.summary())
-        else:
-            # This branch did not exist: with one illumination level the whole block vanished
-            # without printing a word, and the key secondary outcome simply never appeared in the
-            # output. The change score itself is perfectly estimable; only the contrast is gone.
-            ch = cvsq_wide["change"].dropna()
-            print("\n=== CVS-Q baseline-to-close change (EXPLORATORY: frames differ) ===")
-            print("One illumination level: no between-level contrast is estimable.")
-            print(f"n = {len(ch)}, mean change = {ch.mean():.2f}, sd = {ch.std():.2f}")
+
+    def report_n(m, data: pd.DataFrame, label: str) -> None:
+        """Rows used of rows given, for every model. patsy drops a row with a missing value in any
+        term without a word; on a dataset with mostly-missing frame rates the R primary fell from 120
+        rows to 23 that way and printed nothing to say so."""
+        used = int(m.nobs)
+        gone = len(data) - used
+        print(f"[n] {label}: {used} of {len(data)} rows used"
+              + (f" — {gone} dropped for a missing value in a model term" if gone > 0 else ""))
+
     # Only include session_index when sittings actually vary (else it is constant → unidentified).
     si = " + session_index" if cond["session_index"].nunique() > 1 else ""
 
@@ -374,17 +381,56 @@ def main() -> None:
              if cond.get("passage_repeat_number") is not None
              and cond["passage_repeat_number"].nunique(dropna=True) > 1 else "")
 
+    # PASSAGE, IN EVERY MODEL, as a FIXED effect. Passage is not balanced against polarity (see the R
+    # template's re_passage: at N = 130 passages 2-4 are read 80:50 under positive polarity), so a
+    # model without it lets passage difficulty load onto the polarity contrast — and no model in this
+    # file carried it. The header used to say passage "is not fitted here" because a GEE takes one
+    # clustering level; that is true of a passage RANDOM effect, and irrelevant to a fixed one, which
+    # fits in every model below. Ten levels, nine parameters: affordable at any N this study reaches.
+    pas = " + C(passage_id)" if cond["passage_id"].nunique() > 1 else ""
+
+    n_bad = int(cond["engagement_flag"].eq("bad").sum())
+    print(f"\n[engagement] {n_bad} of {len(cond)} confirmatory condition-runs are flagged 'bad'. "
+          + ("DROP_DISENGAGED is True: they are removed from the OCULAR models only." if DROP_DISENGAGED
+             else "RETAINED in every model; the primary is refitted without them as a labelled sensitivity."))
+
+    # SMALL-SAMPLE STANDARD ERRORS FOR EVERY GEE. The robust sandwich estimator is biased downward when
+    # clusters are few — on 12 participants the bias-reduced SE of the primary was 0.115 against a
+    # robust 0.078, and on 3 participants 2.6 against 0.47 — and this file printed p < 0.001 from two
+    # clusters. statsmodels' cov_type="bias_reduced" corrects it, but in this version it raises a
+    # broadcasting ValueError when weights= is given, so the primary is fitted on one row per BLINK
+    # (identical point estimates to the count-weighted fit; verified) rather than one row per
+    # condition-run with the blink count as a weight.
+    GEE_COV = "bias_reduced"
+
+    def cluster_note(m, label: str) -> None:
+        """A cluster-robust covariance is a sum of one term per cluster, so its rank is at most the
+        number of clusters. With no more participants than parameters it is singular, and the
+        standard errors it yields are not interpretable — on two participants the primary printed
+        SE nan, on three a refit printed SE 9e7. Said beside the model, not left to be noticed."""
+        n_clusters = len(np.unique(m.model.groups))
+        if n_clusters <= len(m.params):
+            print(f"[SE CAUTION] {label}: {n_clusters} participants (clusters) for {len(m.params)} parameters. "
+                  "The cluster-robust covariance cannot be full rank, so these standard errors and tests are "
+                  "not interpretable; read the coefficients only.")
+
+    # ===========================================================================================
+    # BEHAVIOURAL AND QUESTIONNAIRE OUTCOMES — none of them needs the camera, and none is fitted
+    # inside the ocular section, so a dataset with every camera off still produces all of them.
+    # ===========================================================================================
+
     # --- Reaction time -----------------------------------------------------------------
     rt = rt_summary.merge(cond, on=["participant_id", "condition_id"]).dropna(
         subset=["mean_rt_hits_ms"]
     )
     m_rt = smf.mixedlm(
-        "mean_rt_hits_ms ~ log_contrast + polarity_c + position_c" + si,
+        "mean_rt_hits_ms ~ log_contrast + polarity_c + position_c" + si + pas,
         rt,
         groups=rt["participant_id"],
     ).fit()
     print("=== RT mixed model ===")
     print(m_rt.summary())
+    report_n(m_rt, rt, "RT")
 
     # --- Fatigue -----------------------------------------------------------------------
     # fatigue_delta, per the plan's outcome table: "Change from the participant's own baseline
@@ -401,17 +447,21 @@ def main() -> None:
     if fat_dv == "fatigue_mean":
         print("\n[NOTE] No session baseline available: fitting fatigue_mean, which carries "
               "between-participant scale use. See the plan's outcome table.")
+    n_fat_rows = len(fat)
     fat = fat.dropna(subset=[fat_dv])
     m_fat = smf.mixedlm(
-        f"{fat_dv} ~ log_contrast + polarity_c + position_c" + si,
+        f"{fat_dv} ~ log_contrast + polarity_c + position_c" + si + pas,
         fat,
         groups=fat["participant_id"],
     ).fit()
     print(f"\n=== Fatigue mixed model ({fat_dv}) ===")
     print(m_fat.summary())
+    print(f"[n] fatigue: {int(m_fat.nobs)} of {n_fat_rows} post-condition ratings used")
 
     # --- Comprehension (logistic; GEE as a mixed-logit stand-in) -----------------------
-    comp = comprehension.merge(cond, on=["participant_id", "condition_id"])
+    # passage_id from the condition frame: 04_comprehension.csv carries its own copy, and the merge
+    # would otherwise suffix both.
+    comp = comprehension.drop(columns=["passage_id"], errors="ignore").merge(cond, on=["participant_id", "condition_id"])
     # THE RESPONSE IS 0/1, NOT A BOOLEAN. read_csv types `is_correct` as bool, patsy expands a bool
     # response into TWO indicator columns (is_correct[False], is_correct[True]), and statsmodels'
     # Binomial takes the FIRST as the success — so this model was fitting P(WRONG answer). Every
@@ -426,15 +476,19 @@ def main() -> None:
         # so the robust standard errors allow for the three items of a condition being correlated as
         # well as for the participant's ten conditions. A plain mixed model with a participant
         # intercept alone would treat the three items as independent. (This comment used to say
-        # groups=condition_id, which the code has never used.)
+        # groups=condition_id, which the code has never used.) The passage fixed effect carries
+        # passage difficulty; the R template adds an item intercept, which here would alias with
+        # question_kind.
         f"is_correct ~ log_contrast + polarity_c{ilx} + C(question_kind)"
-        " + position_c" + si,
+        " + position_c" + si + pas,
         groups="participant_id",
         data=comp,
-        family=__import__("statsmodels.api", fromlist=["families"]).families.Binomial(),
-    ).fit()
+        family=sm.families.Binomial(),
+    ).fit(cov_type=GEE_COV)
     print("\n=== Comprehension GEE (logistic) ===")
     print(m_comp.summary())
+    report_n(m_comp, comp, "comprehension")
+    cluster_note(m_comp, "comprehension")
 
     # --- d-prime aggregated across conditions (per-condition d' is unstable) -----------
     dprime = rt_summary.groupby("participant_id").agg(
@@ -444,25 +498,100 @@ def main() -> None:
     print("\n=== Aggregated d' per participant ===")
     print(dprime)
 
-    # --- Ocular fatigue (interpret per codebook; gate duration tiers on effective_fps) ----
+    # CVS-Q change, per SITTING. Pivoting on participant_id alone silently averaged the two sittings
+    # (pivot_table defaults to aggfunc="mean"), which destroyed the illumination contrast that is
+    # the entire reason for administering it twice. 13_cvsq.csv now carries session_index.
+    #
+    # NOTE: baseline and close use DIFFERENT recall frames (see the `frame` column and
+    # docs/LITERATURE_VALIDATION.md). This change score is exploratory.
+    #
+    # One row per stage per sitting is assumed, and the app's integrity audit (one_cvsq_per_stage)
+    # exists because it can fail. aggfunc="first" used to resolve a duplicate SILENTLY; the first row
+    # is still kept, and the duplicate is now named — as in the R template, which crashed on it.
+    dupes = cvsq.groupby(["participant_id", "sitting_folder", "stage"]).size()
+    dupes = dupes[dupes > 1]
+    if len(dupes):
+        pid, _, stage = dupes.index[0]
+        print(f"\n[cvsq] {len(dupes)} sitting x stage combination(s) carry more than one CVS-Q row (e.g. {pid}, "
+              f"stage {stage}); the FIRST row of each is kept. The per-sitting audit (one_cvsq_per_stage) "
+              "should have blocked this sitting — check its 16_integrity_report.csv and whether the pooled "
+              "export predates the data.")
+    cvsq_wide = cvsq.pivot_table(
+        index=["participant_id", "sitting_folder", "session_index", "ambient_illumination_level"],
+        columns="stage", values="total_score", aggfunc="first",
+    ).reset_index()
+    if {"baseline", "session_end"} <= set(cvsq_wide.columns):
+        cvsq_wide["change"] = cvsq_wide["session_end"] - cvsq_wide["baseline"]
+        # Previously skipped in silence when the illumination check failed. The baseline-to-close
+        # CHANGE is estimable with one level; only the between-level contrast is not.
+        if cvsq_wide["ambient_illumination_level"].nunique() > 1:
+            m_cvsq = smf.mixedlm(
+                "change ~ C(ambient_illumination_level)",
+                cvsq_wide.dropna(subset=["change"]),
+                groups=cvsq_wide.dropna(subset=["change"])["participant_id"],
+            ).fit()
+            print("\n=== CVS-Q change by illumination (EXPLORATORY: frames differ) ===")
+            print(m_cvsq.summary())
+        else:
+            # This branch did not exist: with one illumination level the whole block vanished
+            # without printing a word, and the key secondary outcome simply never appeared in the
+            # output. The change score itself is perfectly estimable; only the contrast is gone.
+            ch = cvsq_wide["change"].dropna()
+            print("\n=== CVS-Q baseline-to-close change (EXPLORATORY: frames differ) ===")
+            print("One illumination level: no between-level contrast is estimable.")
+            print(f"n = {len(ch)} sitting(s), mean change = {ch.mean():.2f}, sd = {ch.std():.2f}")
+
+    # --- NASA-TLX: SESSION-level workload ------------------------------------------------
+    # Never analysed here at all. Once per sitting, so it supports a session-level contrast only
+    # (illumination, in archived two-level data); polarity and colour vary within a sitting and
+    # cannot be given one end-of-session rating. Read like every other file and trimmed to the
+    # confirmatory sittings; a duplicated rating is named and the first kept.
+    try:
+        tlx = by_folder(load("14_nasa_tlx.csv", with_folder=True), keep_folders)
+    except FileNotFoundError:
+        tlx = None
+        print("\n[NASA-TLX] 14_nasa_tlx.csv not found under DATA_DIR — not summarised.")
+    if tlx is not None:
+        n_dup = int(tlx["sitting_folder"].duplicated().sum())
+        if n_dup:
+            print(f"\n[NASA-TLX] {n_dup} duplicated rating row(s); the FIRST per sitting is kept (the per-sitting "
+                  "audit, one_tlx_per_session, should have blocked them).")
+            tlx = tlx.drop_duplicates(subset="sitting_folder")
+        if len(tlx) and tlx["ambient_illumination_level"].nunique() > 1:
+            m_tlx = smf.mixedlm("raw_tlx ~ C(ambient_illumination_level)", tlx, groups=tlx["participant_id"]).fit()
+            print("\n=== NASA-TLX raw score by illumination (session level) ===")
+            print(m_tlx.summary())
+        elif len(tlx):
+            print("\n=== NASA-TLX raw score (session level, descriptive) ===")
+            print("One rating per sitting and one illumination level: no contrast is estimable.")
+            print(f"n = {len(tlx)} sitting(s), mean = {tlx['raw_tlx'].mean():.2f}, sd = {tlx['raw_tlx'].std():.2f}")
+        else:
+            print("\n[NASA-TLX not summarised: no confirmatory sitting has a rating]")
+
+    # ===========================================================================================
+    # OCULAR OUTCOMES — the PRIMARY, its sensitivities, and the ocular secondaries.
     # CVS markers: blink_rate (drops with screen concentration) + incomplete_blink_ratio (rises,
     # correlates with CVS symptoms — Portello, Rosenfield & Chu 2013). Drowsiness covariate: perclos_p80.
-    eye_active = eye[truthy(eye["camera_active"])].merge(
-        cond, on=["participant_id", "condition_id"]
-    )
+    # ===========================================================================================
     counts = ["blink_count_incomplete", "blink_count_full", "blink_count_micro"]
 
     def primary_frame(eye_rows: pd.DataFrame, cond_rows: pd.DataFrame) -> pd.DataFrame:
         """Camera-on rows with at least one blink, and the binomial response. Shared by the
-        confirmatory fit and the sensitivity refit so the two differ in their rows only."""
+        confirmatory fit and every sensitivity refit so they differ in their rows only."""
         ea = eye_rows[truthy(eye_rows["camera_active"])].merge(cond_rows, on=["participant_id", "condition_id"])
+        if DROP_DISENGAGED:
+            ea = ea[ea["engagement_flag"].ne("bad")]
         # fps_adequate_for_ratio is deliberately NOT in the dropna subset: a row missing the
         # flag must reach the sensitivity block and be counted there, not vanish from the
         # primary fit for want of a QC column.
         prim = ea.dropna(subset=counts + ["polarity", "ambient_illumination_level"]).copy()
         prim["n_blinks"] = prim[counts].sum(axis=1)
-        prim = prim[prim["n_blinks"] > 0].copy()
+        prim = prim[prim["n_blinks"] > 0].reset_index(drop=True)
         prim["p_incomplete"] = prim["blink_count_incomplete"] / prim["n_blinks"]
+        # Centred frame rate, as in the R primary (eff_fps_c): undersampling inflates the ratio, a
+        # directional bias. It was absent here, so the two primaries differed by a covariate — and by
+        # the rows a missing frame rate removes. The fit without it is reported beside the primary.
+        prim["eff_fps_c"] = prim["effective_fps"] - prim["effective_fps"].mean()
         return prim
 
     # C(color_name, Sum), NOT C(color_name). With treatment-coded colour inside the interaction, the
@@ -472,103 +601,133 @@ def main() -> None:
     # sum-coded too, which is what the R template's contr.sum(5) does. On a simulated N=40 cohort the
     # two codings gave -0.497 (achromatic only) and -0.257 (average), so the "cross-check" was
     # comparing two different estimands.
-    primary_formula = f"p_incomplete ~ polarity_c * C(color_name, Sum){ilx} + position_c{rep_t}"
+    primary_rhs = f"polarity_c * C(color_name, Sum){ilx} + position_c{rep_t}{pas} + eff_fps_c"
 
-    def fit_primary(prim: pd.DataFrame):
-        return smf.gee(primary_formula, groups="participant_id", data=prim,
-                       family=sm.families.Binomial(), weights=prim["n_blinks"]).fit()
+    def fit_primary(prim: pd.DataFrame, rhs: str = primary_rhs):
+        """The binomial GEE on one row per BLINK (incomplete = 1), so the small-sample covariance can
+        be used; see GEE_COV. The point estimates equal the count-weighted fit's. Runs missing a term
+        are dropped HERE, by name, so the [n] line can count them — patsy would drop them silently."""
+        if "eff_fps_c" in rhs:
+            prim = prim[prim["eff_fps_c"].notna()].reset_index(drop=True)
+        blinks = prim.loc[prim.index.repeat(prim["n_blinks"].astype(int))].copy()
+        blinks["incomplete"] = (blinks.groupby(level=0).cumcount() < blinks["blink_count_incomplete"]).astype(int)
+        fitted = smf.gee("incomplete ~ " + rhs, groups="participant_id", data=blinks.reset_index(drop=True),
+                         family=sm.families.Binomial()).fit(cov_type=GEE_COV)
+        fitted.runs_used = len(prim)
+        return fitted
 
-    if len(eye_active):
-        # The PRIMARY outcome is a binomial proportion with an exported denominator, so it is fitted
-        # as one — a GEE with a binomial family and the blink total as the trial count, clustered on
-        # participant. Fitting the naked proportion in a Gaussian model gave a ratio from 8 blinks
-        # the same weight as one from 60, and produced fitted values below zero for the low-blink
-        # conditions.
-        #
+    def sens_line(label: str, m) -> None:
+        print(f"  {label:<44} polarity_c {m.params['polarity_c']:.4f} (SE {m.bse['polarity_c']:.4f}), "
+              f"{int(m.nobs)} blink rows")
+
+    eye_active = eye[truthy(eye["camera_active"])].merge(cond, on=["participant_id", "condition_id"])
+    prim = primary_frame(eye, cond) if all(c in eye.columns for c in counts) else pd.DataFrame()
+    if len(prim) == 0:
+        print("\n" + "#" * 64)
+        print("[PRIMARY NOT ESTIMABLE] no camera-on condition-run with at least one blink in the "
+              "confirmatory set\n— the camera was declined, off or lost for every run. The primary "
+              "outcome and its sensitivity refits\ncannot be estimated from this data. The behavioural "
+              "and questionnaire outcomes above stand.")
+        print("#" * 64)
+    else:
         # NOTE ON ESTIMANDS: GEE is a POPULATION-AVERAGED model. Its coefficients are systematically
         # attenuated relative to the subject-specific ones from the R template's glmer, so the two
         # files answer the same question on different scales and must not be compared coefficient
         # for coefficient. Where they must agree is in SIGN and in significance.
-        if all(c in eye_active.columns for c in counts):
-            prim = primary_frame(eye, cond)
-            if len(prim):
-                m = fit_primary(prim)
-                print("\n=== PRIMARY: incomplete-blink ratio, binomial GEE (population-averaged) ===")
-                print(m.summary())
+        m = fit_primary(prim)
+        print("\n=== PRIMARY: incomplete-blink ratio, binomial GEE (population-averaged) ===")
+        print(m.summary())
+        gone = len(eye_active) - m.runs_used
+        print(f"[n] primary: {m.runs_used} of {len(eye_active)} camera-on condition-runs used ({int(m.nobs)} blinks)"
+              + (f" — {gone} dropped: no blink, or a missing count or frame rate" if gone > 0 else "")
+              + f"; covariance {GEE_COV} over {prim['participant_id'].nunique()} participants")
+        cluster_note(m, "primary")
 
-                # --- the pre-registered frame-rate sensitivity, which was ABSENT ----------------
-                #
-                # docs/ANALYSIS_PLAN.md §5.2: "Below the frame-rate floor the sampled minimum EAR is
-                # biased UPWARD, so incomplete_blink_ratio is inflated — a directional bias, not
-                # symmetric noise. Do not drop these rows silently: frame rate covaries with ambient
-                # illumination, which is an independent variable, so dropping them deletes data
-                # non-randomly with respect to a factor. Run the model with and without them and
-                # report both."
-                #
-                # This file did neither. It pooled the flagged rows into the single fit above and
-                # never named fps_adequate_for_ratio, so an analyst running it got one estimate that
-                # silently included rows the export marks as biased on the primary outcome — and no
-                # indication that a comparison was required. The R template has done this all along.
-                #
-                # The weighting above handles PRECISION (a ratio from 8 blinks is down-weighted
-                # against one from 60). It cannot handle BIAS, which is what this is.
-                if "fps_adequate_for_ratio" in prim.columns:
-                    flag = prim["fps_adequate_for_ratio"].astype("boolean")
-                    n_bad = int((flag == False).sum())  # noqa: E712 — pandas nullable boolean
-                    print(f"\nframe-rate adequacy on the primary-outcome rows: "
-                          f"{int((flag == True).sum())} adequate, {n_bad} below the floor")
-                    if n_bad == 0:
-                        print("No rows below the frame-rate floor: the fit above is already the "
-                              "adequate-only fit, and no sensitivity comparison is needed.")
-                    else:
-                        ok = prim[flag == True]  # noqa: E712
-                        if len(ok) and ok["polarity_c"].nunique() > 1:
-                            m_ok = fit_primary(ok)
-                            print("\n=== PRIMARY refit, adequately-sampled conditions ONLY "
-                                  "(pre-registered sensitivity) ===")
-                            print(m_ok.summary())
-                            print("\nBoth fits are reported because the plan requires both. If the "
-                                  "effect exists only in the pooled fit, it is a camera artefact; if "
-                                  "it survives here, the frame rate is not what produced it.")
-                        else:
-                            print("Too few adequately-sampled rows to refit — report the pooled fit "
-                                  "with this count stated, and do not treat it as unqualified.")
+        print("\n=== PRIMARY: sensitivity refits (polarity_c = positive minus negative, log-odds) ===")
+        sens_line("confirmatory (the primary above)", m)
+        # Without eff_fps_c: ANALYSIS_PLAN.md §2's formula, and the answer if frame rate is a
+        # mediator of the polarity effect (polarity changes face illumination) rather than a nuisance.
+        sens_line("without the eff_fps_c covariate (§2 formula)", fit_primary(prim, primary_rhs.replace(" + eff_fps_c", "")))
+
+        # --- the pre-registered frame-rate sensitivity, which was ABSENT ------------------------
+        #
+        # docs/ANALYSIS_PLAN.md §5.2: "Below the frame-rate floor the sampled minimum EAR is
+        # biased UPWARD, so incomplete_blink_ratio is inflated — a directional bias, not
+        # symmetric noise. Do not drop these rows silently ... Run the model with and without
+        # them and report both."
+        #
+        # This file did neither, until it was fixed: it pooled the flagged rows into the single fit
+        # and never named fps_adequate_for_ratio. The R template has done this all along.
+        if "fps_adequate_for_ratio" in prim.columns:
+            # A missing flag is neither adequate nor inadequate: counted apart, and never used as a
+            # mask (a nullable boolean with NA in it cannot select rows, and raised here).
+            flag = prim["fps_adequate_for_ratio"].astype("boolean")
+            adequate = flag.eq(True).fillna(False).to_numpy()
+            n_low = int(flag.eq(False).fillna(False).sum())
+            print(f"\nframe-rate adequacy on the primary-outcome rows: "
+                  f"{int(adequate.sum())} adequate, {n_low} below the floor, {int(flag.isna().sum())} unknown")
+            if n_low == 0:
+                print("No rows below the frame-rate floor: the fit above is already the "
+                      "adequate-only fit, and no sensitivity comparison is needed.")
+            else:
+                ok = prim[adequate].reset_index(drop=True)
+                if len(ok) and ok["polarity_c"].nunique() > 1 and ok["participant_id"].nunique() > 1:
+                    m_ok = fit_primary(ok)
+                    print("\n=== PRIMARY refit, adequately-sampled conditions ONLY "
+                          "(pre-registered sensitivity) ===")
+                    print(m_ok.summary())
+                    sens_line("fps_adequate_for_ratio conditions only", m_ok)
+                    cluster_note(m_ok, "frame-rate refit")
+                    print("\nBoth fits are reported because the plan requires both. If the "
+                          "effect exists only in the pooled fit, it is a camera artefact; if "
+                          "it survives here, the frame rate is not what produced it.")
                 else:
-                    print("\n[PLAN VIOLATION] fps_adequate_for_ratio is not in this export, so the "
-                          "pre-registered frame-rate sensitivity CANNOT be run. Do not report the "
-                          "primary outcome from this bundle without it.")
+                    print("Too few adequately-sampled rows to refit — report the pooled fit "
+                          "with this count stated, and do not treat it as unqualified.")
+        else:
+            print("\n[PLAN VIOLATION] fps_adequate_for_ratio is not in this export, so the "
+                  "pre-registered frame-rate sensitivity CANNOT be run. Do not report the "
+                  "primary outcome from this bundle without it.")
 
-                # --- the SENSITIVITY SET (ANALYSIS_PLAN.md §1), as in the R template ------------
-                # The same model on the confirmatory rows PLUS the finished runs of participants
-                # excluded ONLY for an incomplete condition set; built by the same functions from the
-                # untrimmed tables, so the two fits differ in their rows and nothing else.
-                n_extra = len(sens_ids - keep_ids)
-                if n_extra == 0:
-                    print("\n[sensitivity set] identical to the confirmatory set here (no participant was "
-                          "excluded only for an incomplete condition set), so there is nothing to refit.")
-                else:
-                    cond_s = build_cond(by_condition(conditions_all, sens_ids), wide_all,
-                                        by_folder(participant_all, sens_folders),
-                                        by_folder(session_info_all, sens_folders))
-                    prim_s = primary_frame(by_condition(eye_all, sens_ids), cond_s)
-                    m_s = fit_primary(prim_s)
-                    print(f"\n=== PRIMARY refit on the SENSITIVITY SET ({n_extra} extra finished run(s) of "
-                          "incomplete participants; ANALYSIS_PLAN.md §1) ===")
-                    print(f"polarity_c: confirmatory {m.params['polarity_c']:.4f} (SE {m.bse['polarity_c']:.4f}, "
-                          f"n {int(m.nobs)}) | sensitivity {m_s.params['polarity_c']:.4f} "
-                          f"(SE {m_s.bse['polarity_c']:.4f}, n {int(m_s.nobs)})")
-                    print(m_s.summary())
+        # --- engagement 'bad' runs out: a labelled sensitivity on the PRIMARY only ----------------
+        if not DROP_DISENGAGED and n_bad > 0:
+            sens_line("without engagement 'bad' runs", fit_primary(prim[prim["engagement_flag"].ne("bad")].reset_index(drop=True)))
 
-        for dv in ["blink_rate", "perclos_p80"]:
-            if dv in eye_active.columns and eye_active[dv].notna().any():
-                sub = eye_active.dropna(subset=[dv, "ambient_illumination_level"])
-                if len(sub):
-                    m = smf.mixedlm(
-                        f"{dv} ~ position_c + polarity_c{il}",
-                        sub, groups=sub["participant_id"],
-                    ).fit()
-                    print(f"\n=== {dv} mixed model ===")
-                    print(m.summary())
+        # --- the SENSITIVITY SET (ANALYSIS_PLAN.md §1), as in the R template --------------------
+        # The same model on the confirmatory rows PLUS the finished runs of participants excluded
+        # ONLY for an incomplete condition set; built by the same functions from the untrimmed
+        # tables, so the two fits differ in their rows and nothing else.
+        n_extra = len(sens_ids - keep_ids)
+        if n_extra == 0:
+            print("\n[sensitivity set] identical to the confirmatory set here (no participant was "
+                  "excluded only for an incomplete condition set), so there is nothing to refit.")
+        else:
+            cond_s = build_cond(by_condition(conditions_all, sens_ids), wide_all,
+                                by_folder(participant_all, sens_folders),
+                                by_folder(session_info_all, sens_folders))
+            m_s = fit_primary(primary_frame(by_condition(eye_all, sens_ids), cond_s))
+            print(f"\n=== PRIMARY refit on the SENSITIVITY SET ({n_extra} extra finished run(s) of "
+                  "incomplete participants; ANALYSIS_PLAN.md §1) ===")
+            print(f"polarity_c: confirmatory {m.params['polarity_c']:.4f} (SE {m.bse['polarity_c']:.4f}, "
+                  f"n {int(m.nobs)} blinks) | sensitivity {m_s.params['polarity_c']:.4f} "
+                  f"(SE {m_s.bse['polarity_c']:.4f}, n {int(m_s.nobs)} blinks)")
+            print(m_s.summary())
+
+    # --- ocular secondaries ----------------------------------------------------------------
+    # PERCLOS is modelled raw here; ANALYSIS_PLAN.md §4 asks for the logit, as the R template does.
+    for dv in ["blink_rate", "perclos_p80"]:
+        if dv in eye_active.columns and eye_active[dv].notna().any():
+            sub = eye_active.dropna(subset=[dv, "ambient_illumination_level"])
+            if DROP_DISENGAGED:
+                sub = sub[sub["engagement_flag"].ne("bad")]
+            if len(sub):
+                mm = smf.mixedlm(
+                    f"{dv} ~ position_c + polarity_c{il}{pas}",
+                    sub, groups=sub["participant_id"],
+                ).fit()
+                print(f"\n=== {dv} mixed model ===")
+                print(mm.summary())
+                report_n(mm, sub, dv)
 
 
 if __name__ == "__main__":

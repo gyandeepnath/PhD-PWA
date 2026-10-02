@@ -97,6 +97,8 @@ try {
   const EXPECTED_SIGN = { primary: -1, comprehension: 1 };
   const cohortDir = join(dir, 'cohort');
   mkdirSync(cohortDir, { recursive: true });
+  // One dumper, called with the cohort's options: the main cohort here, and the small hostile ones
+  // further down. argv: output folder, CohortOptions as JSON, and where to write the dashboard's counts.
   const cohortDumper = join(dir, 'dumpCohort.ts');
   writeFileSync(cohortDumper, `
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -105,8 +107,8 @@ import { buildAnalysisDataset } from ${JSON.stringify(join(process.cwd(), 'src/s
 import { simulateCohort } from ${JSON.stringify(join(process.cwd(), 'src/sim/analysisCohort.ts'))};
 import { cohortSummary } from ${JSON.stringify(join(process.cwd(), 'src/dashboard/aggregate.ts'))};
 import { N_CONDITIONS } from ${JSON.stringify(join(process.cwd(), 'src/experiment/conditions.ts'))};
-const root = ${JSON.stringify(cohortDir)};
-const bundles = simulateCohort(${JSON.stringify(SIM)});
+const [, , root, options, expectedPath] = process.argv;
+const bundles = simulateCohort(JSON.parse(options));
 for (const b of bundles) {
   const out = root + '/' + b.session.participant_id;
   mkdirSync(out, { recursive: true });
@@ -116,10 +118,14 @@ const ds = buildAnalysisDataset(bundles);
 mkdirSync(root + '/_pooled', { recursive: true });
 for (const f of ds.files) writeFileSync(root + '/_pooled/' + f.filename, f.content);
 const s = cohortSummary(ds.files, ds.integrity, N_CONDITIONS);
-writeFileSync(${JSON.stringify(join(dir, 'expected.json'))}, JSON.stringify({ confirmatory: s.confirmatory, sensitivity: s.sensitivity }));
+writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensitivity: s.sensitivity }));
 `);
-  execFileSync('npx', ['tsx', cohortDumper], { stdio: 'pipe' });
-  const expected = JSON.parse(readFileSync(join(dir, 'expected.json'), 'utf8'));
+  const dumpCohort = (root, options) => {
+    mkdirSync(root, { recursive: true });
+    execFileSync('npx', ['tsx', cohortDumper, root, JSON.stringify(options), join(root, '..', `${root.split('/').pop()}.expected.json`)], { stdio: 'pipe' });
+    return JSON.parse(readFileSync(join(root, '..', `${root.split('/').pop()}.expected.json`), 'utf8'));
+  };
+  const expected = dumpCohort(cohortDir, SIM);
   console.log(`         (cohort: ${SIM.n} participants; dashboard confirmatory set ${expected.confirmatory.rows} runs / `
     + `${expected.confirmatory.participants} participants, sensitivity set ${expected.sensitivity.rows} / ${expected.sensitivity.participants})`);
 
@@ -195,7 +201,21 @@ writeFileSync(${JSON.stringify(join(dir, 'expected.json'))}, JSON.stringify({ co
     ['fatigue is fitted', 'Fatigue mixed model'],
     ['comprehension is fitted', 'Comprehension GEE'],
     ['a single illumination level is stated, not silently dropped', 'PROTOCOL NOTE'],
+    // m4: rows used of rows given, for every model.
+    ['every model reports the rows it used', '[n] primary:'],
+    // M5: NASA-TLX was never analysed in this file.
+    ['NASA-TLX is summarised', 'NASA-TLX raw score'],
+    ['the primary is also reported without the frame-rate covariate', 'without the eff_fps_c covariate'],
   ]) ok(label, out.includes(needle), `"${needle}" not in the output`);
+  // M6: the robust sandwich SE is too small with few clusters, and statsmodels' bias-reduced
+  // correction failed outright with weights=; the primary is now fitted per blink so it can be used.
+  ok('the GEEs use the small-sample (bias-reduced) covariance',
+    (out.match(/Covariance type:\s+bias_reduced/g) ?? []).length >= 2, 'a GEE is printed with another covariance type');
+  // M3: passage is not balanced against polarity; a GEE cannot carry a passage random effect but can
+  // carry a fixed one, and did not.
+  ok('the primary and comprehension GEEs carry passage as a fixed effect',
+    /C\(passage_id\)\[T\./.test(primaryBlock) && /C\(passage_id\)\[T\./.test(out.split('Comprehension GEE')[1] ?? ''),
+    'no C(passage_id) term in the primary or the comprehension model');
 
   // The pre-registered codings, which the template silently did not use.
   ok('polarity enters sum-to-zero coded, not treatment coded', out.includes('polarity_c'),
@@ -241,6 +261,10 @@ writeFileSync(${JSON.stringify(join(dir, 'expected.json'))}, JSON.stringify({ co
   // =========================================================================
   // The R template.
   // =========================================================================
+  let rReady = false;
+  const runR = (dataDir) => spawnSync('Rscript', [join(process.cwd(), 'src/analysis/analysis_template.R')], {
+    encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, VISULAB_DATA_DIR: dataDir },
+  });
   const rscript = spawnSync('Rscript', ['--version'], { stdio: 'ignore' }).status === 0 ? 'Rscript' : null;
   if (!rscript) {
     console.log('\n[verify-analysis] Rscript not found — the R template was SKIPPED (not passed).');
@@ -253,6 +277,7 @@ writeFileSync(${JSON.stringify(join(dir, 'expected.json'))}, JSON.stringify({ co
       console.log('\n[verify-analysis] R present but its packages are not — the R template was SKIPPED (not passed).');
       console.log('[verify-analysis] install.packages(c("tidyverse","lme4","lmerTest","emmeans","performance"))');
     } else {
+      rReady = true;
       console.log('\n' + '='.repeat(104));
       console.log('ANALYSIS TEMPLATE (R) — the authoritative template must run on a MULTI-PARTICIPANT export');
       console.log('='.repeat(104));
@@ -448,6 +473,51 @@ writeFileSync(${JSON.stringify(join(dir, 'expected.json'))}, JSON.stringify({ co
           'the combined qc_clean flag did not pick them up');
       }
     }
+  }
+
+  // =========================================================================
+  // States a real cohort reaches. Each used to end in a cryptic error, or worse, in a run that looked
+  // successful: one participant gave lme4's "grouping factors must have > 1 sampled level" in R and,
+  // in Python, a polarity standard error of 6e-16 with z = 3.6e14; a sitting exported into two
+  // folders fitted RT, fatigue and comprehension on 419 rows instead of 109; with every camera off R
+  // stopped at "!is.null(m_primary) is not TRUE" and lost every behavioural outcome. Each must now
+  // end with a NAMED message — and the camera-off cohort must still report the behavioural outcomes.
+  // =========================================================================
+  console.log('\n' + '='.repeat(104));
+  console.log('STATES A REAL COHORT REACHES — each ends with a named message, never a traceback or a wrong number');
+  console.log('='.repeat(104));
+  const both = (d) => [['Python', run(d)], ...(rReady ? [['R', runR(d)]] : [])];
+  const said = (res, re) => re.test(`${res.stdout}\n${res.stderr}`);
+
+  const one = join(dir, 'one');
+  dumpCohort(one, { n: 1, seed: 3 });
+  for (const [who, res] of both(one)) {
+    ok(`${who}: one participant stops, and says why`, res.status !== 0 && said(res, /\[TOO FEW PARTICIPANTS\]/),
+      `exit ${res.status}`);
+  }
+  const twice = join(dir, 'twice');
+  dumpCohort(twice, { n: 4, seed: 4 });
+  execFileSync('cp', ['-r', join(twice, 'P001'), join(twice, 'P001_exported_again')]);
+  for (const [who, res] of both(twice)) {
+    ok(`${who}: a sitting exported into two folders stops, naming them`,
+      res.status !== 0 && said(res, /\[DUPLICATED EXPORT\][^\n]*P001_exported_again/), `exit ${res.status}`);
+  }
+  const noVerdict = join(dir, 'no-verdict');
+  dumpCohort(noVerdict, { n: 4, seed: 5 });
+  rmSync(join(noVerdict, '_pooled'), { recursive: true, force: true });
+  for (const [who, res] of both(noVerdict)) {
+    ok(`${who}: without the pooled export's verdict it stops and says what to export`,
+      res.status !== 0 && said(res, /\[NO VERDICT\][^\n]*Export analysis dataset/), `exit ${res.status}`);
+  }
+  const camerasOff = join(dir, 'cameras-off');
+  dumpCohort(camerasOff, { n: 6, seed: 6, cameraOff: 'all' });
+  for (const [who, res] of both(camerasOff)) {
+    ok(`${who}: with every camera off the run completes and says the primary is not estimable`,
+      res.status === 0 && said(res, /\[PRIMARY NOT ESTIMABLE\]/), `exit ${res.status}: ${(res.stderr || '').trim().split('\n').slice(-1)}`);
+    ok(`${who}: ... and still reports the behavioural outcomes`,
+      said(res, /RT mixed model/) && said(res, /Comprehension (GEE|logistic mixed model)/) && said(res, /NASA-TLX/),
+      'a behavioural or questionnaire section is missing');
+    ok(`${who}: ... and flags the small cohort`, said(res, /\[SMALL N\] 6 participants/), 'no [SMALL N] line');
   }
 } finally {
   rmSync(dir, { recursive: true, force: true });
