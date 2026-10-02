@@ -262,7 +262,7 @@ describe('the R template declares where each of its thresholds came from', () =>
     const src_ = r();
     for (const name of [
       'QC_FACE_PRESENCE_MIN', 'QC_OFF_AXIS_MAX', 'QC_EXPOSURE_MIN_FRAC',
-      'CENSOR_SPREAD_WARN_PP', 'COMPLETION_INFORMATIVE', 'PERCLOS_LOGIT_SQUEEZE', 'ALLFIT_AGREE_SE_FRAC',
+      'CENSOR_SPREAD_WARN_PP', 'COMPLETION_INFORMATIVE', 'ALLFIT_AGREE_SE_FRAC',
     ]) {
       expect(src_).toContain(name);
       // Defined once and then USED — a constant nothing reads is decoration.
@@ -276,7 +276,7 @@ describe('the R template declares where each of its thresholds came from', () =>
     const src_ = r();
     expect(src_).toMatch(/QC_FACE_PRESENCE_MIN[^\n]*PROTOCOL/);
     for (const name of ['QC_OFF_AXIS_MAX', 'QC_EXPOSURE_MIN_FRAC', 'CENSOR_SPREAD_WARN_PP',
-      'COMPLETION_INFORMATIVE', 'PERCLOS_LOGIT_SQUEEZE', 'ALLFIT_AGREE_SE_FRAC']) {
+      'COMPLETION_INFORMATIVE', 'ALLFIT_AGREE_SE_FRAC']) {
       expect(src_).toMatch(new RegExp(name + '[^\\n]*ANALYST DEFAULT'));
     }
   });
@@ -431,5 +431,30 @@ describe('the R template\'s overdispersion refits', () => {
     expect(guard).toBeGreaterThan(0);
     for (const m of code.matchAll(/glmmTMB::/g)) expect(m.index!).toBeGreaterThan(guard);
     expect(code).toContain('[SKIPPED: glmmTMB not installed]');
+  });
+});
+
+/**
+ * PERCLOS IS A COVARIATE, AND BOTH TEMPLATES COMPRESS IT THE SAME WAY.
+ *
+ * The codebook calls perclos_p80 a sleepiness covariate, never a visual-fatigue outcome; the analysis
+ * codebook called it 'secondary', the R template fitted it as an outcome after clipping zeros at a
+ * fixed 5e-4 (logit -7.6, a high-leverage point), and the Python template fitted it RAW. Both now
+ * compress it by the sample size alone, y' = (y (n - 1) + 0.5) / n, before any logit — the same
+ * transform in both, so they can agree in sign.
+ */
+describe('PERCLOS is a covariate, compressed identically in both templates', () => {
+  it('is a covariate in the analysis codebook, as in the export codebook', () => {
+    expect(ANALYSIS_CODEBOOK.find((c) => c.column === 'perclos_p80')?.role).toBe('covariate');
+    expect(CODEBOOK.find((c) => c.column === 'perclos_p80')?.role).toBe('covariate');
+  });
+
+  it('is compressed by (y (n - 1) + 0.5) / n in R and in Python, and clipped at a constant in neither', () => {
+    const r = src('src/analysis/analysis_template.R');
+    const py = src('src/analysis/analysis_template.py');
+    expect(r).toMatch(/perclos_p80 \* \(n_pc - 1\) \+ 0\.5\) \/ n_pc/);
+    expect(py).toMatch(/perclos_p80"\] \* \(n_pc - 1\) \+ 0\.5\) \/ n_pc/);
+    expect(r).not.toMatch(/pmin\(pmax\(eye_pc\$perclos_p80/);
+    expect(py).not.toMatch(/for dv in \[[^\]]*"perclos_p80"/);
   });
 });

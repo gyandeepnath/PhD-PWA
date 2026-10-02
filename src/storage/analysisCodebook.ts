@@ -122,8 +122,15 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
     description: "Passage word count over reading time. Derived identically to 02_conditions.csv." },
 
   // ---------------------------------------------------------------- secondary ocular
-  { column: 'perclos_p80', role: 'secondary', unit: '0-1', missing: 'camera not running',
-    description: 'Proportion of observed time with eye openness below 80% of the calibrated baseline.' },
+  /*
+   * A COVARIATE, not a secondary outcome. This entry said 'secondary' while the numbered bundle's
+   * codebook (export.ts) has always said "a SLEEPINESS covariate, never a visual-fatigue outcome", and
+   * the synopsis agrees (§2.5, §3.7). The description also had the threshold backwards: P80 is the eye
+   * at least 80% CLOSED, i.e. openness at or below 20% of baseline (PERCLOS_P80_OPENNESS = 0.2 in
+   * src/tracking/blink.ts), not "openness below 80%".
+   */
+  { column: 'perclos_p80', role: 'covariate', unit: '0-1', missing: 'camera not running',
+    description: 'Proportion of observed frames with the eye at least 80% closed (openness at or below 20% of the calibrated open baseline). A SLEEPINESS covariate, not a visual-fatigue outcome (synopsis §2.5): the analysis templates add it to the primary as a sensitivity and model it only as a check that the display condition does not move it (ANALYSIS_PLAN.md §4). Complete blinks can add frames to it and incomplete blinks never can, so at a given blink rate it falls as the incomplete-blink ratio rises. Bounded and often exactly 0: compress as (y(n-1)+0.5)/n before any logit, never model it raw.' },
   { column: 'blink_duration_mean_ms', role: 'secondary', unit: 'ms', missing: 'camera not running',
     description: 'Mean duration of detected blinks.' },
   { column: 'mean_inter_blink_interval_ms', role: 'secondary', unit: 'ms', missing: 'fewer than two blinks',

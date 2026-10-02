@@ -825,6 +825,15 @@ def main() -> None:
         if not DROP_DISENGAGED and n_bad > 0:
             sens_line("without engagement 'bad' runs", fit_primary(prim[prim["engagement_flag"].ne("bad")].reset_index(drop=True)))
 
+        # --- PERCLOS-adjusted (synopsis §3.9: "add PERCLOS as a covariate") ----------------------
+        # The R template has always run this sensitivity and this file never did. Read it beside the
+        # PERCLOS covariate check at the end: PERCLOS P80 counts frames at or below 20% of the open
+        # baseline, which a COMPLETE blink can reach and an INCOMPLETE one never does, so it is partly a
+        # function of the very outcome it adjusts (see the R template's note).
+        if "perclos_p80" in prim.columns and prim["perclos_p80"].notna().any():
+            pc_rows = prim[prim["perclos_p80"].notna()].reset_index(drop=True)
+            sens_line("adjusted for perclos_p80 (synopsis §3.9)", fit_primary(pc_rows, primary_rhs + " + perclos_p80"))
+
         # --- the SENSITIVITY SET (ANALYSIS_PLAN.md §1), as in the R template --------------------
         # The same model on the confirmatory rows PLUS the finished runs of participants excluded
         # ONLY for an incomplete condition set; built by the same functions from the untrimmed
@@ -845,9 +854,11 @@ def main() -> None:
                   f"(SE {m_s.bse['polarity_c']:.4f}, n {int(m_s.nobs)} blinks)")
             print(m_s.summary())
 
-    # --- ocular secondaries ----------------------------------------------------------------
-    # PERCLOS is modelled raw here; ANALYSIS_PLAN.md §4 asks for the logit, as the R template does.
-    for dv in ["blink_rate", "perclos_p80"]:
+    # --- ocular secondary: blink rate ------------------------------------------------------
+    # PERCLOS used to be fitted here too, raw, as an outcome of polarity — against the codebook ("a
+    # SLEEPINESS covariate, never a visual-fatigue outcome") and against ANALYSIS_PLAN.md §4 ("do not
+    # model raw"). It is the covariate check below now, as in the R template.
+    for dv in ["blink_rate"]:
         if dv in eye_active.columns and eye_active[dv].notna().any():
             sub = eye_active.dropna(subset=[dv, "ambient_illumination_level"])
             if DROP_DISENGAGED:
@@ -860,6 +871,34 @@ def main() -> None:
                 print(f"\n=== {dv} mixed model ===")
                 print(mm.summary())
                 report_n(mm, sub, dv)
+
+    # --- PERCLOS: a COVARIATE CHECK, not an outcome (the R template's section of that name) ----
+    # The PERCLOS-adjusted refit of the primary assumes the display condition does not itself move
+    # PERCLOS; this checks that assumption on the primary's condition terms. PERCLOS is compressed into
+    # the open interval as y' = (y (n - 1) + 0.5) / n, n the number of rows — no analyst constant, every
+    # value moves by at most 0.5 / n — and the logit of y' is fitted, the R template's fallback when
+    # glmmTMB (its beta GLMM) is absent. Same transform, same terms, so the two agree in sign.
+    if "perclos_p80" in eye_active.columns and eye_active["perclos_p80"].notna().any():
+        pc = eye_active.dropna(subset=["perclos_p80", "ambient_illumination_level"]).reset_index(drop=True)
+        if DROP_DISENGAGED:
+            pc = pc[pc["engagement_flag"].ne("bad")].reset_index(drop=True)
+        n_pc = len(pc)
+        pc["perclos_logit"] = np.log((pc["perclos_p80"] * (n_pc - 1) + 0.5) / n_pc) \
+            - np.log(1 - (pc["perclos_p80"] * (n_pc - 1) + 0.5) / n_pc)
+        print("\n=== PERCLOS by condition — a COVARIATE CHECK for the PERCLOS-adjusted refit, not a fatigue outcome ===")
+        n_bound = int(((pc["perclos_p80"] <= 0) | (pc["perclos_p80"] >= 1)).sum())
+        print(f"[perclos] compressed as (y(n - 1) + 0.5) / n, n = {n_pc}: {n_bound} value(s) at exactly 0 or 1 "
+              f"become {0.5 / n_pc:.5f} or {1 - 0.5 / n_pc:.5f}; no value moves by more than {0.5 / n_pc:.5f}.")
+        m_pc = smf.mixedlm(f"perclos_logit ~ polarity_c * C(color_name, Sum){ilx} + position_c{pas}",
+                           pc, groups=pc["participant_id"]).fit()
+        lo, hi = m_pc.conf_int().loc["polarity_c"]
+        print(f"[perclos] LMM on logit(y'): polarity_c (positive minus negative) {m_pc.params['polarity_c']:.3f} "
+              f"(95% CI {lo:.3f} to {hi:.3f}), p {m_pc.pvalues['polarity_c']:.2g}")
+        report_n(m_pc, pc, "PERCLOS covariate check")
+        print("A polarity or colour effect here means the PERCLOS-adjusted refit adjusts for something the display "
+              "changed: read that refit as a sensitivity, never as the primary.")
+    else:
+        print("\n[perclos] perclos_p80 carries no values — the PERCLOS covariate check is NOT run.")
 
 
 if __name__ == "__main__":

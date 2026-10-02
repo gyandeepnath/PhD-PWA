@@ -220,6 +220,19 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
   ok('the primary family prints H1a and H1b, raw and Holm across the two',
     /PRIMARY FAMILY[\s\S]*H1a polarity[^\n]*Holm across the two [\d.e-]+\n[^\n]*H1b polarity x colour[^\n]*Holm across the two [\d.e-]+/.test(out),
     'no primary-family block with both tests');
+  /*
+   * PERCLOS (M13). A sleepiness COVARIATE in the codebook and the synopsis, which this file fitted RAW
+   * as an outcome of polarity and never used as the covariate the synopsis's sensitivity analysis adds.
+   */
+  ok('PERCLOS is not modelled as an outcome, raw or otherwise', !/=== perclos_p80 mixed model ===/.test(out),
+    'the raw perclos_p80 outcome model is still fitted');
+  ok('the primary is refitted with PERCLOS as a covariate (synopsis §3.9)',
+    /adjusted for perclos_p80 \(synopsis §3\.9\)\s+polarity_c -?[\d.]+/.test(out), 'no PERCLOS-adjusted refit');
+  ok('PERCLOS is checked against the condition, compressed by sample size, not clipped at a constant',
+    /COVARIATE CHECK for the PERCLOS-adjusted refit/.test(out) && /\[perclos\] compressed as \(y\(n - 1\) \+ 0\.5\) \/ n, n = \d+/.test(out)
+      && /\[perclos\] LMM on logit\(y'\): polarity_c/.test(out), 'no PERCLOS covariate check with the compression');
+  ok('the GEE says why it is not refitted for overdispersion', /\[overdispersion\] the participant-clustered sandwich/.test(out),
+    'no [overdispersion] line');
   // The sections docs/ANALYSIS_PLAN.md names. Absence of one means an analyst ran the file and was
   // not given an outcome the plan requires — which is how the frame-rate sensitivity went missing.
   for (const [label, needle] of [
@@ -392,6 +405,17 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
         /PRIMARY MODEL CONVERGENCE \(the ladder, rung by rung\):\n {2}maximal: /.test(rOut), 'no ladder convergence report');
       ok('R: the binomial secondaries report their convergence too',
         /\[convergence\] comprehension: /.test(rOut), 'no [convergence] line for comprehension');
+      // M13: PERCLOS is a covariate — a sensitivity refit and a check, never an outcome, and never
+      // clipped at a fixed constant before the logit.
+      ok('R: PERCLOS is checked against the condition, compressed by sample size, not clipped at a constant',
+        /COVARIATE CHECK for the PERCLOS-adjusted refit/.test(rOut) && /\[perclos\] compressed as \(y\(n - 1\) \+ 0\.5\) \/ n, n = \d+/.test(rOut)
+          && /\[perclos\] LMM on logit\(y'\): polarity/.test(rOut) && !/squeezed inward/.test(rOut),
+        'no PERCLOS covariate check with the compression, or the old squeeze');
+      ok(`R: the PERCLOS beta GLMM ${hasTmb ? 'is fitted' : 'is reported as skipped'}`,
+        hasTmb ? /\[perclos\] beta GLMM on y'/.test(rOut) : /\[perclos\] beta GLMM \[SKIPPED: glmmTMB not installed\]/.test(rOut),
+        'no PERCLOS beta-GLMM line of the expected kind');
+      ok('R: the PERCLOS-adjusted refit sits in the sensitivity list', /adjusted for perclos_p80 \(synopsis §3\.9\)\s+polarity -?[\d.]+/.test(rOut),
+        'no PERCLOS-adjusted sensitivity line');
       // The per-colour polarity effects are ONE family of five. Left grouped by colour, emmeans would
       // adjust each one-contrast group on its own, which is no adjustment.
       ok('R: the per-colour polarity effects are Holm-adjusted across the five colours',

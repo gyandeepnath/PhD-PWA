@@ -14,10 +14,12 @@ each hypothesis. Written against the columns in `analysis_long.csv`; every colum
 and is documented in `analysis_codebook.csv`.
 
 **On citations.** Claims about the *design* are derived from the design itself and need no source.
-Claims about the *literature* are limited to the seven records verified against PubMed in
-`docs/CITATION_VERIFICATION.md` and are named as such. Statistical practice (mixed models, binomial
-error, contrast coding) is stated as methodology, not attributed. Nothing here cites a paper that
-has not been resolved to a real record.
+Claims about the *literature* are limited to records verified against PubMed in
+`docs/CITATION_VERIFICATION.md` and are named as such, with their item numbers. Statistical practice
+(mixed models, binomial error, contrast coding) is stated as methodology, not attributed, except where
+a specific modelling choice rests on a verified source (items 57 and 58, Round 70). Nothing here cites
+a paper that has not been resolved to a real record. (This paragraph used to say "the seven records";
+the plan has cited more than seven since Round 66.)
 
 ---
 
@@ -221,7 +223,33 @@ only after **60 min**.
 | Visual search | `search_time_ms` | LMM, **censored** | The column is `search_termination` in `analysis_long.csv` (the file this plan is written against) and `termination_mode` in `05_visual_search.csv`; it says whether the block ended by completion or by the 60 s cap. An earlier revision of this line claimed `search_termination` did not exist — that was wrong, and came from checking only the numbered bundle's codebook and not `analysisCodebook.ts`. Capped rows are a lower bound; treating them as measurements biases the mean downward. Either model them as censored or report the completion rate alongside. |
 | Sensitivity | `d_prime` | LMM | With 20 go and 12 no-go trials, one block's d′ is imprecise. Check `d_prime_se` in `09_rt_summary.csv` and consider weighting. |
 | Response bias | `criterion` | LMM | A polarity effect on `criterion` **without** one on `d_prime` is a bias shift, not a sensitivity change. Worth reporting as a distinct finding rather than folding into "RT performance". |
-| PERCLOS | `perclos_p80` | LMM on logit | Bounded; do not model raw. |
+| PERCLOS | `perclos_p80` | **A covariate, not an outcome** (Round 70) | See below the table. |
+
+**PERCLOS is a sleepiness covariate, not an outcome** (Round 70). This row used to list it as a
+secondary outcome ("LMM on logit"), the analysis codebook called it `secondary`, and both templates
+fitted it as an outcome of polarity — the Python one raw — while the numbered bundle's codebook says
+"a SLEEPINESS covariate, never a visual-fatigue outcome" and the synopsis says the same (§2.5: "a
+covariate for sleepiness rather than a measure of visual fatigue"; §3.7 lists it among the covariates
+and as a drowsiness index; §3.9: "Sensitivity analyses ... add PERCLOS as a covariate"). It now has two
+uses and no third:
+
+1. **The PERCLOS-adjusted refit of the primary**, the synopsis's sensitivity analysis, in both
+   templates (the Python one never ran it). Two properties limit it, and are printed beside it.
+   PERCLOS P80 counts frames with the eye at or below 20% of the open baseline (`blink.ts`); a
+   complete blink can reach that and an incomplete blink, which never falls below 60% of baseline,
+   cannot — so at a given blink rate PERCLOS falls as the incomplete-blink ratio rises, and the
+   covariate is partly a function of the outcome it adjusts. And if the display condition itself moves
+   PERCLOS, adjusting for it removes part of the condition effect.
+2. **A covariate check**: PERCLOS modelled on the primary's condition terms (polarity × colour, serial
+   position, participant and passage intercepts), to show whether the condition moves it. It is in no
+   outcome family and no multiplicity table (§4b). PERCLOS is bounded, right-skewed and often exactly
+   0, so it is compressed into the open interval as y′ = (y(n − 1) + 0.5)/n, n the number of rows —
+   every value moves by at most 0.5/n and no constant is chosen by the analyst — and, where `glmmTMB`
+   is installed, y′ is modelled by a beta GLMM with a logit link (beta regression: Smithson &
+   Verkuilen 2006, `CITATION_VERIFICATION.md` item 58, which records that the compression formula is
+   not confirmed against that paper's text). Both templates fit an LMM on logit(y′), the R one as its
+   fallback when `glmmTMB` is absent. The fixed clip at 5e-4 it replaces put every zero at −7.6 on the
+   logit scale, the high-leverage pattern §2 rejects for the primary.
 
 ### 4a. Reaction-time target location: ring, and ring × colour (Round 66)
 
@@ -343,6 +371,14 @@ the achromatic simple effect rather than the average effect R tests; and neither
 exporter's verdict. Both now use the confirmatory set above, sum-coded colour, `eff_fps_c` in the
 primary, and passage in every model; Python's GEEs use statsmodels' bias-reduced sandwich covariance,
 because the plain robust one is too small with few participants.
+
+**What the Python file mirrors since Round 70**: the confirmatory pieces. H1's effect sizes on the
+same three scales as R (log-odds with 95% CI, odds ratio, predicted proportion difference with a
+delta-method CI, population-averaged), the primary family (H1a and H1b, raw and Holm across the two;
+H1b by a 4-df Wald test), the PERCLOS-adjusted refit and the PERCLOS covariate check with the same
+compression. It does not refit the primary for overdispersion: its participant-clustered sandwich
+covariance does not assume binomial variance, so extra-binomial variation is already in its standard
+errors, and the output says so. The secondary outcome families (§4b) are R's alone.
 
 Its header used to call itself "authoritative inference", and three requirements of this plan were
 absent from it: the frame-rate sensitivity refit of §5.2, the sum-to-zero polarity coding of §2, and

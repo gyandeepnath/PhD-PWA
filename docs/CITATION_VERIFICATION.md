@@ -1112,6 +1112,25 @@ ecological designs, not blink counts; that the same failure modes apply here is 
 Round 62 audit named Harrison (2014; PMID 25320683, *PeerJ* 2:e616), which concerns Poisson count data;
 the 2015 paper, on binomial data, is the one that bears on this outcome, and it is the one cited.
 
+### 58. Smithson & Verkuilen (2006) — beta regression for bounded outcomes
+**Status: METADATA CONFIRMED. SUBSTANTIVE CLAIM NOT CONFIRMED** for the compression formula; confirmed
+against the abstract for beta regression with a logit link. PMID 16594767 · DOI
+[10.1037/1082-989X.11.1.54](https://doi.org/10.1037/1082-989X.11.1.54)
+
+> Smithson, M., & Verkuilen, J. (2006). A better lemon squeezer? Maximum-likelihood regression with
+> beta-distributed dependent variables. *Psychological Methods, 11*(1), 54–71.
+
+Metadata matches PubMed (verified 2 Oct 2026). No PMC full text; the publisher's page is blocked by the
+egress proxy, and the Scite full-text tool was unavailable (no subscription), so only the abstract was
+read. Verbatim: *"For scales with a lower and upper bound, a suitable candidate for models is the beta
+distribution"* and *"The location sub-model link function is the logit and thereby analogous to
+logistic regression"*. Cited (Round 70, `analysis_template.R`, `docs/ANALYSIS_PLAN.md` §4) for
+modelling PERCLOS, a bounded proportion, by beta regression with a logit link. **Not confirmed:** that
+this paper is the source of the compression y' = (y(n − 1) + 0.5)/n which the templates apply to move
+exact 0s and 1s into the open interval. The Round 62 audit attributed the formula to it; the abstract
+does not mention it. The templates therefore describe the compression as a method and point here for
+its status, rather than attributing it.
+
 ## NOT INDEXED IN PUBMED — verified against a secondary authority, or unverified
 
 PubMed indexes biomedical and life-sciences literature only. The references below fall outside

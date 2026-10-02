@@ -693,10 +693,10 @@ CENSOR_SPREAD_WARN_PP <- 10     # ANALYST DEFAULT — not in the protocol. Perce
 COMPLETION_INFORMATIVE <- c(0.05, 0.95)  # ANALYST DEFAULT — not in the protocol. Outside this band
                                 # the completion outcome is near-constant and carries little
                                 # information, so the time model is the better instrument.
-PERCLOS_LOGIT_SQUEEZE <- 5e-4   # ANALYST DEFAULT — not in the protocol. Exact 0 and 1 have no logit,
-                                # so endpoints are moved inward by this much. The count of values
-                                # moved is REPORTED, because silently relocating data is how a
-                                # bounded outcome quietly becomes a different one.
+# PERCLOS_LOGIT_SQUEEZE (5e-4) is gone too. It moved exact zeros to logit(5e-4) = -7.6, the same
+# high-leverage pattern the primary rejects, while a comment described a data-driven squeeze the code
+# never ran. PERCLOS is compressed into (0, 1) by a rule that depends on the sample size alone and has
+# no free constant to choose (see the PERCLOS covariate check below).
 
 # The ocular frame: camera-on confirmatory runs. Built here, once, because the quality checks read
 # it; the primary further down narrows it to runs with at least one blink.
@@ -1566,13 +1566,26 @@ if (nrow(eye) == 0) {
     }
 
     # --- PERCLOS-adjusted (sensitivity) ------------------------------------------------------
-    # This is what separates visual fatigue from plain sleepiness. It used to open a brace that
-    # closed after visual search, so with PERCLOS missing everywhere four behavioural sections
-    # vanished too; it is self-contained now and says when it cannot run.
+    # Synopsis §3.9: "Sensitivity analyses ... add PERCLOS as a covariate" — this is what separates
+    # visual fatigue from plain sleepiness. It used to open a brace that closed after visual search, so
+    # with PERCLOS missing everywhere four behavioural sections vanished too; it is self-contained now
+    # and says when it cannot run.
+    #
+    # TWO THINGS LIMIT WHAT IT CAN SHOW, both properties of this design and of the app's own code:
+    #  1. PERCLOS P80 counts frames with the eye at or below 20% of the open baseline
+    #     (src/tracking/blink.ts). A COMPLETE blink can contribute such frames; an INCOMPLETE blink — the
+    #     primary outcome's numerator — never can, since by definition it stays above 60% of baseline.
+    #     At a given blink rate, more incomplete blinks therefore mean LOWER PERCLOS, so this covariate
+    #     is partly a function of the outcome it adjusts.
+    #  2. If the display condition itself moves PERCLOS (the covariate check further down), adjusting
+    #     for it removes part of the condition effect along with the sleepiness.
+    # So it is reported as a sensitivity, beside the PERCLOS covariate check, and never in place of the
+    # primary (ANALYSIS_PLAN.md §4, PERCLOS row).
     if (any(!is.na(eye$perclos_p80))) {
       m_primary_adj <- tryCatch(update(m_primary, . ~ . + perclos_p80, data = eye %>% filter(!is.na(perclos_p80))),
                                 error = function(err) NULL)
-      cat("\n=== PRIMARY adjusted for PERCLOS (sensitivity) ===\n")
+      cat("\n=== PRIMARY adjusted for PERCLOS (sensitivity; read beside the PERCLOS covariate check) ===\n")
+      sens_line("adjusted for perclos_p80 (synopsis §3.9)", m_primary_adj)
       if (is.null(m_primary_adj)) cat("the PERCLOS-adjusted model did not fit.\n") else {
         print(summary(m_primary_adj)); report_n(m_primary_adj, eye, "PERCLOS-adjusted primary")
       }
@@ -1618,25 +1631,67 @@ if (nrow(eye) == 0) {
   if (is.null(m_blink)) cat("the blink-rate model did not fit.\n") else { print(summary(m_blink)); report_n(m_blink, eye, "blink rate") }
   add_to_family("blink rate", m_blink, "blinks/min")
 
+  # -------------------------------------------------------------------------------------------
+  # PERCLOS: A COVARIATE CHECK, NOT AN OUTCOME (M13).
+  #
+  # The codebook calls perclos_p80 "a SLEEPINESS covariate, never a visual-fatigue outcome", and the
+  # synopsis agrees (§2.5: "a covariate for sleepiness rather than a measure of visual fatigue"; §3.7
+  # lists it among the covariates and the drowsiness and quality indices). This section was headed
+  # "drowsiness covariate" and fitted PERCLOS as an outcome of polarity all the same, with no stated
+  # reason. There is one reason to model it, and it is the reason it is kept: the PERCLOS-adjusted
+  # refit of the primary assumes the display condition does not itself move PERCLOS. If it does,
+  # that refit adjusts for something the condition changed. So PERCLOS is modelled on the PRIMARY's
+  # condition terms, as a check on that assumption, and it is in no outcome family (ANALYSIS_PLAN.md
+  # §4b) and no multiplicity table.
+  #
+  # TRANSFORM. PERCLOS is a proportion of frames, bounded, right-skewed and often exactly 0, so it is
+  # not modelled raw (ANALYSIS_PLAN.md §4). It used to be clipped at a fixed 5e-4 before the logit,
+  # which put every zero at -7.6 — the high-leverage pattern the primary rejects. It is now compressed
+  # into the open interval as y' = (y (n - 1) + 0.5) / n, n the number of rows: the order of the values
+  # is kept, every value moves by at most 0.5 / n, and nothing is chosen by the analyst. With glmmTMB
+  # the compressed value is modelled by a beta GLMM — beta regression with a logit link (Smithson &
+  # Verkuilen 2006; CITATION_VERIFICATION item 58, which records that the compression formula itself is
+  # not confirmed against that paper's text). Without glmmTMB, an LMM on the logit of y' is the
+  # fallback, labelled as such; the Python cross-check fits the same fallback.
+  # -------------------------------------------------------------------------------------------
   if (any(!is.na(eye$perclos_p80))) {
-    # ANALYSIS_PLAN.md §4, PERCLOS row: "LMM on logit. Bounded; do not model raw."
-    # PERCLOS is a proportion of time with no trial count behind it, so there is no binomial to fall
-    # back on and the logit is what the plan asks for. Exact 0 and 1 have no logit, so the ENDPOINTS
-    # ONLY are moved inward by PERCLOS_LOGIT_SQUEEZE (a fixed ANALYST DEFAULT — an earlier comment here
-    # described a data-driven squeeze the code never implemented) and the count moved is reported,
-    # because silently moving data is how a bounded outcome quietly becomes a different one.
     eye_pc <- eye %>% filter(!is.na(perclos_p80))
-    n_squeezed <- sum(eye_pc$perclos_p80 <= 0 | eye_pc$perclos_p80 >= 1)
-    if (n_squeezed > 0) cat("\n[perclos] ", n_squeezed, " value(s) at 0 or 1 squeezed inward for the logit.\n")
-    eye_pc$perclos_logit <- qlogis(pmin(pmax(eye_pc$perclos_p80, PERCLOS_LOGIT_SQUEEZE),
-                                        1 - PERCLOS_LOGIT_SQUEEZE))
-    m_perclos <- tryCatch(lmer(as.formula(paste0("perclos_logit ~ polarity", il_term,
+    n_pc <- nrow(eye_pc)
+    eye_pc$perclos_sv <- (eye_pc$perclos_p80 * (n_pc - 1) + 0.5) / n_pc
+    eye_pc$perclos_logit <- qlogis(eye_pc$perclos_sv)
+    cat("\n=== PERCLOS by condition — a COVARIATE CHECK for the PERCLOS-adjusted refit, not a fatigue outcome ===\n")
+    cat(sprintf("[perclos] compressed as (y(n - 1) + 0.5) / n, n = %d: %d value(s) at exactly 0 or 1 become %.5f or %.5f;\n",
+                n_pc, sum(eye_pc$perclos_p80 <= 0 | eye_pc$perclos_p80 >= 1), 0.5 / n_pc, 1 - 0.5 / n_pc))
+    cat(sprintf("           no value moves by more than %.5f.\n", 0.5 / n_pc))
+    m_perclos <- tryCatch(lmer(as.formula(paste0("perclos_logit ~ polarity * colour", ilx_term,
                                                  " + session_position + (1 | participant_id)", re_passage)), data = eye_pc),
                           error = function(err) NULL)
-    cat("\n=== PERCLOS P80 (drowsiness covariate) ===\n")
-    if (is.null(m_perclos)) cat("the PERCLOS model did not fit.\n") else { print(summary(m_perclos)); report_n(m_perclos, eye_pc, "PERCLOS") }
+    if (is.null(m_perclos)) cat("the PERCLOS model did not fit.\n") else {
+      pc <- polarity_contrast(m_perclos)
+      cat(sprintf("[perclos] LMM on logit(y'): polarity (positive minus negative) %.3f (95%% CI %.3f to %.3f), p %s; polarity x colour p %s\n",
+                  pc$estimate, pc$lcl, pc$ucl, format.pval(pc$p, digits = 2), format.pval(interaction_p(m_perclos), digits = 2)))
+      report_n(m_perclos, eye_pc, "PERCLOS covariate check")
+    }
+    if (requireNamespace("glmmTMB", quietly = TRUE)) {
+      m_perclos_beta <- tryCatch(
+        glmmTMB::glmmTMB(as.formula(paste0("perclos_sv ~ polarity * colour", ilx_term, " + session_position + (1 | participant_id)", re_passage)),
+                         data = eye_pc, family = glmmTMB::beta_family(link = "logit")),
+        error = function(err) conditionMessage(err))
+      if (is.character(m_perclos_beta)) {
+        cat("[perclos] the beta GLMM did not fit:", m_perclos_beta, "\n")
+      } else {
+        b <- glmmTMB::fixef(m_perclos_beta)$cond[["polarity1"]]
+        se_b <- sqrt(diag(vcov(m_perclos_beta)$cond))[["polarity1"]]
+        cat(sprintf("[perclos] beta GLMM on y': polarity (positive minus negative) %.3f (95%% CI %.3f to %.3f), logit scale\n",
+                    b, b - qnorm(0.975) * se_b, b + qnorm(0.975) * se_b))
+      }
+    } else {
+      cat("[perclos] beta GLMM [SKIPPED: glmmTMB not installed]; the LMM on logit(y') above is the fallback.\n")
+    }
+    cat("A polarity or colour effect here means the PERCLOS-adjusted refit adjusts for something the display\n")
+    cat("changed: read that refit as a sensitivity, never as the primary.\n")
   } else {
-    cat("\n[perclos] perclos_p80 carries no values — the PERCLOS model is NOT run.\n")
+    cat("\n[perclos] perclos_p80 carries no values — the PERCLOS covariate check is NOT run.\n")
   }
 }
 
