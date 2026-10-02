@@ -178,6 +178,25 @@ for (let i = 0; i < 12; i++) {
     'no polarity_c term in any printed model');
   ok('no model prints a treatment-coded polarity term', !/C\(polarity\)/.test(out),
     'C(polarity) appears in a fitted model');
+  /*
+   * A boolean response is never modelled. read_csv types is_correct as bool, patsy expands it into
+   * is_correct[False] and is_correct[True], and statsmodels takes the FIRST as the success: the
+   * comprehension GEE modelled P(wrong answer), every coefficient sign-inverted against R, while this
+   * gate checked only that the heading printed. The Dep. Variable line is what gives it away.
+   */
+  ok('no model\'s response is an expanded boolean (is_correct[False] would model the WRONG answers)',
+    !/Dep\. Variable:[^\n]*\[False\]/.test(out), 'a Dep. Variable line carries [False]');
+  const compBlock = out.split('Comprehension GEE')[1] ?? '';
+  ok('the comprehension response is the 0/1 correct indicator',
+    /Dep\. Variable:\s+is_correct\s/.test(compBlock), 'the comprehension Dep. Variable is not is_correct');
+  /*
+   * Colour is SUM-coded in the primary, so polarity_c is the average polarity effect R and the plan
+   * test. Treatment-coded colour made it the achromatic simple effect — a different estimand under the
+   * same name — and the coefficient table would show C(color_name)[T.blue] rows.
+   */
+  ok('the primary\'s colour term is sum-coded, so polarity_c is the AVERAGE polarity effect',
+    /C\(color_name, Sum\)\[S\./.test(primaryBlock) && !/C\(color_name\)\[T\./.test(primaryBlock),
+    'the primary carries treatment-coded colour rows');
 
   // And the sensitivity refit must actually fire when there is something to be sensitive to.
   const dir2 = join(dir, 'flagged');

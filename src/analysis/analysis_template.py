@@ -282,10 +282,21 @@ def main() -> None:
 
     # --- Comprehension (logistic; GEE as a mixed-logit stand-in) -----------------------
     comp = comprehension.merge(cond, on=["participant_id", "condition_id"])
+    # THE RESPONSE IS 0/1, NOT A BOOLEAN. read_csv types `is_correct` as bool, patsy expands a bool
+    # response into TWO indicator columns (is_correct[False], is_correct[True]), and statsmodels'
+    # Binomial takes the FIRST as the success — so this model was fitting P(WRONG answer). Every
+    # comprehension coefficient came out with the opposite sign to the R template's glmer, with no
+    # warning; ANALYSIS_PLAN.md 5b requires the two to agree in sign. The intercept-only fit gave
+    # p = 0.273 on a cohort whose observed CORRECT rate was 0.727. Coerced from the text form so a
+    # column that arrives as "TRUE"/"true"/"1"/True all mean the same thing.
+    comp["is_correct"] = comp["is_correct"].astype(str).str.strip().str.lower().isin(["true", "1"]).astype(int)
     m_comp = smf.gee(
-        # Item-level rows, three per condition, sharing a passage and a reading episode. GEE with
-        # groups=condition_id gives a working-correlation account of that clustering; a plain
-        # participant-level mixed model would treat the three items as independent.
+        # Item-level rows, three per condition, sharing a passage and a reading episode. Clustered
+        # on PARTICIPANT, which nests the condition (each condition-run belongs to one participant),
+        # so the robust standard errors allow for the three items of a condition being correlated as
+        # well as for the participant's ten conditions. A plain mixed model with a participant
+        # intercept alone would treat the three items as independent. (This comment used to say
+        # groups=condition_id, which the code has never used.)
         f"is_correct ~ log_contrast + polarity_c{ilx} + C(question_kind)"
         " + position_c" + si,
         groups="participant_id",
@@ -330,8 +341,16 @@ def main() -> None:
             prim = prim[prim["n_blinks"] > 0]
             if len(prim):
                 prim["p_incomplete"] = prim["blink_count_incomplete"] / prim["n_blinks"]
+                # C(color_name, Sum), NOT C(color_name). With treatment-coded colour inside the
+                # interaction, the polarity_c coefficient is the polarity effect at the REFERENCE
+                # colour (achromatic) — the anchor contrast — not the average polarity effect that
+                # the R primary and ANALYSIS_PLAN.md §2 test. polarity_c being +/-0.5 does not make
+                # it an average effect; that needs the OTHER factor sum-coded too, which is what the
+                # R template's contr.sum(5) does. On a simulated N=40 cohort the two codings gave
+                # -0.497 (achromatic only) and -0.257 (average), so the "cross-check" was comparing
+                # two different estimands.
                 m = smf.gee(
-                    f"p_incomplete ~ polarity_c * C(color_name){ilx}"
+                    f"p_incomplete ~ polarity_c * C(color_name, Sum){ilx}"
                     f" + position_c{rep_t}",
                     groups="participant_id", data=prim,
                     family=sm.families.Binomial(), weights=prim["n_blinks"],
@@ -367,7 +386,7 @@ def main() -> None:
                         ok = prim[flag == True]  # noqa: E712
                         if len(ok) and ok["polarity_c"].nunique() > 1:
                             m_ok = smf.gee(
-                                f"p_incomplete ~ polarity_c * C(color_name){ilx}"
+                                f"p_incomplete ~ polarity_c * C(color_name, Sum){ilx}"
                                 f" + position_c{rep_t}",
                                 groups="participant_id", data=ok,
                                 family=sm.families.Binomial(), weights=ok["n_blinks"],

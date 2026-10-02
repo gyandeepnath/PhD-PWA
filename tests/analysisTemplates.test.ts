@@ -124,6 +124,9 @@ describe('the Python analysis template references only names that exist', () => 
       for (const raw of m[1].split(/[~+*:,()\s]+/)) {
         const t = raw.trim().replace(/^C$/, '');
         if (!t || t === 'C' || t === '1' || t === '0') continue;
+        // patsy contrast names inside C(x, Sum) — coding syntax, not columns. The primary's colour
+        // term is sum-coded so that polarity_c is the AVERAGE polarity effect, as in the R template.
+        if (t === 'Sum' || t === 'Treatment') continue;
         if (/^[\d.]+$/.test(t)) continue;
         if (!/^[a-z_][a-z0-9_]*$/i.test(t)) continue;
         if (!EXPORTED.has(t) && !created.has(t)) unknown.push(t);
