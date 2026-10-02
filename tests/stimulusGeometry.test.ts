@@ -130,16 +130,31 @@ describe('the reaction-time target sits in a device-independent field', () => {
   const oldRatio = (boxW: number, boxH: number) =>
     RT_DOT_PX / Math.hypot((OLD_MAX_X_PCT / 100) * boxW, (OLD_MAX_Y_PCT / 100) * boxH);
 
-  it('is a fixed root-px offset from the centre, so its size-to-eccentricity ratio cannot vary by device', () => {
-    // The offsets are constants of the module, not of the device: nothing about a device enters them.
-    // What a device changes is only --vl-scale, which multiplies the dot and its offset alike.
+  it('is drawn at a fixed root-px offset from the cross, in the full-root field the cross is centred in', () => {
+    /*
+     * What makes its eccentricity device-independent is how it is DRAWN, so this reads the task's
+     * source: the trial field is the full root (fixed, inset 0) and centres the cross; the dot is
+     * absolutely placed in that same field at 50% plus its location's whole-root-px offset, centred on
+     * that point, at RT_DOT_PX. A percentage of any box anywhere in that, or a box other than the
+     * field, would put the device's aspect ratio back into the offset. (This replaced a check that
+     * divided the dot by its eccentricity at each device's scale: the scale cancelled, and it could
+     * not fail.) e2e/stimulusGeometry.spec.ts measures the drawn dot against the drawn cross.
+     */
+    const src = readFileSync(resolve(__dirname, '..', 'src/tasks/ReactionTimeTask.tsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    const field = src.match(/onPointerDown=\{handleResponse\}\s*style=\{\{([^}]*)\}\}/)?.[1] ?? '';
+    expect(field).toMatch(/position: 'fixed', inset: 0\b/);
+    expect(field).toMatch(/alignItems: 'center', justifyContent: 'center'/);
+    const dotStyle = src.match(/data-testid="rt-dot"[\s\S]*?style=\{\{([\s\S]*?)\}\}/)?.[1] ?? '';
+    expect(dotStyle).toMatch(/position: 'absolute', left: `calc\(50% \+ \$\{t!\.location\.dx\}px\)`, top: `calc\(50% \+ \$\{t!\.location\.dy\}px\)`/);
+    expect(dotStyle).toMatch(/transform: 'translate\(-50%, -50%\)', width: dot, height: dot\b/);
+    expect(src).toMatch(/const dot = CONFIG\.RT_DOT_PX;/);
+    // The only percentages in the dot's placement are the field's centre and the dot's own centring
+    // (and its round corners, which place nothing).
+    expect(dotStyle.replace(/borderRadius: '50%'/, '').match(/-?\d+%/g)).toEqual(['50%', '50%', '-50%', '-50%']);
+    // Whole root px, so a dot never lands on a fractional pixel at scale 1.
     for (const l of RT_LOCATIONS) {
       expect(Number.isInteger(l.dx) && Number.isInteger(l.dy), `location ${l.id}`).toBe(true);
-      const ratios = new Set(DEVICES.map(([, w, h]) => {
-        const s = computeScale(w, h);
-        return ((RT_DOT_PX * s) / (l.eccPx * s)).toFixed(9);
-      }));
-      expect(ratios.size, `location ${l.id}`).toBe(1);
     }
   });
 

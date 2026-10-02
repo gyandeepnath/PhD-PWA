@@ -110,8 +110,9 @@ const BASE_CONFIG = {
    */
   VS_TIME_LIMIT_MS: 60000,
 
-  // Reaction time — pure colour go/no-go (one dot at a random location; respond only to the target
-  // colour), run under the active display condition. Tuned for fatigue/attention-stability goals.
+  // Reaction time — pure colour go/no-go (one dot at one of eight fixed, balanced locations,
+  // src/lib/rtLocations.ts; respond only to the target colour), run under the active display
+  // condition. Tuned for fatigue/attention-stability goals.
   RT_TRIALS_PER_CONDITION: 32,
   /** Proportion of go (target-colour) trials. 0.625 → 20 go / 12 no-go per condition. */
   RT_GO_RATE: 0.625,
