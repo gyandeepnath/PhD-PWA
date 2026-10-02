@@ -1606,12 +1606,26 @@ if (nrow(eye) == 0) {
   }
 
   # --- OBJECTIVE 2: is colour a proxy for luminance contrast, or is there residual hue? -------
-  # Two nested families are compared. If contrast does the work, the residual hue terms shrink and
-  # the parsimonious model is not meaningfully worse. Every one carries the passage intercept.
+  # Three nested models: contrast alone (polarity + log contrast), contrast plus the colour factor
+  # ("both" — log contrast with colour retained, which is how synopsis §3.9's "residual hue terms" are
+  # estimated), and the full ten-cell model (polarity x colour). If contrast does the work, the
+  # residual hue terms shrink and the parsimonious model is not meaningfully worse.
+  #
+  # Every one carries the passage intercept and the primary's covariates, eff_fps_c included, so that
+  # the colour_cat model IS the primary's fixed-effects specification and the three differ only in how
+  # the ten cells are parameterised. (They used to omit eff_fps_c, and so compared a different model
+  # from the one the primary reports; the §2 decision on eff_fps_c applies here as it does there.)
+  #
+  # ANALYSIS_PLAN.md §2 said fitting contrast and colour together "is not [informative], since they are
+  # near-collinear", while the synopsis asks for exactly that fit. Both are partly right: log contrast
+  # is a function of the polarity x colour cell, so beside the colour factor it is identified only by
+  # how contrast differs between polarities within a colour. The nested comparison below is valid
+  # either way; the individual residual-hue coefficients are interpretable only as far as the
+  # collinearity check printed beside them allows.
   obj2 <- tryCatch(list(
-    colour_cat = fit_binom(paste0("polarity * colour", il_term, " + session_position"), eye),
-    contrast   = fit_binom(paste0("polarity + log_contrast", il_term, " + session_position"), eye),
-    both       = fit_binom(paste0("polarity + log_contrast + colour", il_term, " + session_position"), eye)
+    colour_cat = fit_binom(paste0("polarity * colour", il_term, " + session_position + eff_fps_c"), eye),
+    contrast   = fit_binom(paste0("polarity + log_contrast", il_term, " + session_position + eff_fps_c"), eye),
+    both       = fit_binom(paste0("polarity + log_contrast + colour", il_term, " + session_position + eff_fps_c"), eye)
   ), error = function(err) NULL)
   cat("\n=== Objective 2: contrast vs residual hue (binomial GLMMs, nested comparison) ===\n")
   if (is.null(obj2)) {
@@ -1621,6 +1635,14 @@ if (nrow(eye) == 0) {
     report_n(obj2$colour_cat, eye, "Objective 2")
     cat("\nResidual hue terms beyond contrast (small => colour is largely a contrast proxy):\n")
     print(summary(obj2$both)$coefficients)
+    # Variance inflation of the "both" model's terms: how far log contrast and the colour factor can
+    # be told apart in this design (generalised VIF for the colour factor, from performance).
+    cat("\nCollinearity of the residual-hue model (VIF). The larger the log_contrast and colour values, the more\n")
+    cat("those coefficients must be read jointly, through the nested comparison above, rather than one by one:\n")
+    vif <- tryCatch(performance::check_collinearity(obj2$both), error = function(err) conditionMessage(err))
+    if (is.character(vif)) cat("[Objective 2] collinearity could not be computed:", vif, "\n") else {
+      print(as.data.frame(vif)[, c("Term", "VIF")], row.names = FALSE)
+    }
   }
 
   # --- Secondary ocular measures --------------------------------------------------------------

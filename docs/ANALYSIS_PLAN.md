@@ -110,7 +110,15 @@ Notes on each term:
 - **`text_colour`** as a factor, or **`wcag_contrast_ratio`** as a continuous predictor. These
   answer different questions — "does colour matter?" versus "does contrast matter?" — and the
   ten-cell design cannot separate hue from contrast on its own. Fitting both and comparing is
-  informative; fitting them together is not, since they are near-collinear.
+  informative. This bullet went on to say that fitting them together is not, "since they are
+  near-collinear", while synopsis §3.9 asks for exactly that fit ("comparative fit and residual hue
+  terms"). Reconciled in Round 70: log contrast is a function of the polarity × colour cell, so beside
+  the colour factor it is identified only by how contrast differs between the polarities within a
+  colour. The template fits the three nested models (contrast; contrast + colour, the residual-hue
+  model; the full ten-cell model), all with the primary's covariates and passage intercept, compares
+  them by likelihood ratio — valid however collinear the terms — and prints the residual-hue model's
+  variance inflation factors, which say how far its contrast and colour coefficients can be read one
+  by one rather than jointly. (On the 24-participant gate cohort both are about 3.7.)
 - **`position_c`** — order within the sitting, centred. The Williams square balances position across
   participants, so this is a nuisance term rather than a confound, but leaving it out pushes
   fatigue-driven variance into the residual.

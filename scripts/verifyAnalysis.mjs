@@ -416,6 +416,11 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
         'no PERCLOS beta-GLMM line of the expected kind');
       ok('R: the PERCLOS-adjusted refit sits in the sensitivity list', /adjusted for perclos_p80 \(synopsis §3\.9\)\s+polarity -?[\d.]+/.test(rOut),
         'no PERCLOS-adjusted sensitivity line');
+      // m5: Objective 2's three models carry the primary's covariates, and the residual-hue model's
+      // collinearity is printed beside its coefficients.
+      ok('R: the Objective 2 models carry the primary\'s covariates, and the residual-hue model\'s collinearity is shown',
+        /\[model\] Objective 2: [^\n]*eff_fps_c/.test(rOut) && /Collinearity of the residual-hue model \(VIF\)[\s\S]*?log_contrast\s+[\d.]+/.test(rOut),
+        'Objective 2 lacks eff_fps_c or the VIF table');
       // The per-colour polarity effects are ONE family of five. Left grouped by colour, emmeans would
       // adjust each one-contrast group on its own, which is no adjustment.
       ok('R: the per-colour polarity effects are Holm-adjusted across the five colours',
