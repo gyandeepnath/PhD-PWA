@@ -142,6 +142,15 @@ describe('one eyebrow, one counter, one primary button', () => {
   it('the reaction task\'s instructions are the shared intro card', () => {
     expect(code('src/tasks/ReactionTimeTask.tsx')).toMatch(/<TaskIntro\b/);
   });
+
+  it('the reaction card asks for the eyes on the cross, in plain words, in every condition', () => {
+    // The trial's eccentricity columns are measured from the cross (rtLocations.ts, the codebook), so
+    // the card asks for fixation there: a plain line of the card — its face, size and full ink — next
+    // to the hand-rest line, unconditional, so every condition shows the same words.
+    const src = code('src/tasks/ReactionTimeTask.tsx');
+    const lines = src.match(/lines=\{\[([\s\S]*?)\]\}\s*buttonLabel=/)?.[1] ?? '';
+    expect(lines).toMatch(/^\s*'Keep your eyes on the cross between dots\.',\s*'Rest your hand just below the bottom edge of the screen\. Tap anywhere\.',/m);
+  });
 });
 
 describe('no fixed-colour chrome over a display', () => {

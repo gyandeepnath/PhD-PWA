@@ -531,6 +531,14 @@ export function ReactionTimeTask({
             colour as the text you have just read. Do not tap for a dot of any other colour.
           </>,
           /*
+           * Where to look. Every trial's eccentricity (stim_ecc_px, stim_ecc_deg_55cm, stim_ring) is
+           * measured from the cross, so it means what the codebook says only if the eyes are on the
+           * cross when the dot comes on. The cross is the only thing on the screen before each dot, so
+           * fixation was likely, but it was never asked for. Plain text in the card's own face, size and
+           * ink, the same words in every condition.
+           */
+          'Keep your eyes on the cross between dots.',
+          /*
            * Tap anywhere, so the response carries no aiming movement whose length would depend on
            * where the dot was rather than on the display. The hand waits BELOW the screen so it never
            * covers the lower dots: those sit 68 px from the bottom edge on the tablet.
