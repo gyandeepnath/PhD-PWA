@@ -18,11 +18,42 @@
 # that verdict rather than re-deriving a second one. See "WHICH ROWS ARE MODELLED".
 # ---------------------------------------------------------------------------
 
-library(tidyverse)
-library(lme4)
-library(lmerTest)   # p-values for lmer via Satterthwaite
-library(emmeans)
-library(performance)
+# The packages' start-up banners are suppressed so that the first thing the output says is what
+# produced it (PROVENANCE, below), not a page of masking notices.
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(lme4)
+  library(lmerTest)   # p-values for lmer via Satterthwaite
+  library(emmeans)
+  library(performance)
+})
+# Degrees of freedom for every lmer contrast and interval, stated once. emmeans defaults to
+# Kenward-Roger, which needs pbkrtest; without it each call printed "Cannot use mode = kenward-roger"
+# and fell back silently. Satterthwaite is what lmerTest's summary() tables already use, so the
+# effect sizes and the coefficient tables now rest on the same df.
+emm_options(lmer.df = "satterthwaite")
+
+# ===========================================================================================
+# PROVENANCE — printed first. ANALYSIS_PLAN.md §7 asks for the build that collected the data to be
+# reported, and a result is reproducible only with the software that produced it named beside it.
+# Neither was printed: nothing in the output said which R, which lme4 or which collecting build it
+# came from, and the packages are deliberately unpinned in CI. The data's own provenance follows
+# once the per-sitting files are read.
+# ===========================================================================================
+cat("==========================================================================\n")
+cat("PROVENANCE\n")
+cat("==========================================================================\n")
+cat(R.version.string, "\n")
+for (pkg in c("tidyverse", "dplyr", "tidyr", "readr", "lme4", "lmerTest", "emmeans", "performance", "Matrix")) {
+  cat(sprintf("  %-12s %s\n", pkg, as.character(packageVersion(pkg))))
+}
+cat(sprintf("  %-12s %s\n", "glmmTMB", if (requireNamespace("glmmTMB", quietly = TRUE))
+  as.character(packageVersion("glmmTMB")) else "not installed (the beta-binomial sensitivity is skipped)"))
+# Which template produced this output: the script's own checksum, when it was run as a file.
+template_file <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))
+if (length(template_file) == 1 && file.exists(template_file)) {
+  cat("  template     ", basename(template_file), " md5 ", unname(tools::md5sum(template_file)), "\n", sep = "")
+}
 
 # Edit this, or set VISULAB_DATA_DIR in the environment and leave it alone. The
 # environment variable exists so that scripts/verifyAnalysis.mjs can point this file at a
@@ -95,6 +126,23 @@ quality     <- read_export("12_quality_flags.csv")  # engagement / careless-resp
 wide        <- read_export("10_wide_summary.csv")   # carries session_index per condition
 participant <- read_export("11_participant.csv", with_folder = TRUE)   # demographics + vision covariates
 cvsq        <- read_export("13_cvsq.csv", with_folder = TRUE)          # CVS-Q symptom questionnaire (per item)
+
+# --- The data's provenance: which builds collected it ----------------------------------------
+# Every sitting carries the build that started it (git_hash), the instrument version, the hash of the
+# locked condition table and the storage schema. Counted over every sitting read, before exclusions:
+# a mixed-build participant is an exclusion code in the verdict below, but two builds ACROSS
+# participants are not, and ANALYSIS_PLAN.md §4a says a dataset pooling builds with different
+# stimulus layouts must carry the build as a factor — which is decided by reading this table.
+cat("\ndata (", nrow(session_info), " sitting(s) read under DATA_DIR, before exclusions):\n", sep = "")
+for (col in c("git_hash", "app_version", "condition_def_hash", "schema_version")) {
+  v <- if (col %in% names(session_info)) as.character(session_info[[col]]) else rep(NA_character_, nrow(session_info))
+  tab <- sort(table(v, useNA = "ifany"), decreasing = TRUE)
+  cat(sprintf("  %-20s %s\n", col, paste0(names(tab), " (", as.integer(tab), ")", collapse = ", ")))
+}
+if ("build_changed_mid_sitting" %in% names(session_info)) {
+  cat(sprintf("  %-20s %d sitting(s) collected by more than one build (see session_builds)\n",
+              "build_changed_mid_sitting", sum(toupper(as.character(session_info$build_changed_mid_sitting)) %in% c("TRUE", "1"))))
+}
 
 # --- A SITTING EXPORTED TWICE STOPS THE RUN --------------------------------------------------
 # The loader pools every folder it finds, so the same sitting copied into two folders (two exports
@@ -258,6 +306,12 @@ wide          <- keep_rows(wide)
 session_info  <- session_info[session_info$sitting_folder %in% keep_folders, , drop = FALSE]
 participant   <- participant[participant$sitting_folder %in% keep_folders, , drop = FALSE]
 cvsq          <- cvsq[cvsq$sitting_folder %in% keep_folders, , drop = FALSE]
+conf_builds <- sort(unique(na.omit(as.character(session_info$git_hash))))
+cat(sprintf("builds that collected the CONFIRMATORY SET: %s\n", paste(conf_builds, collapse = ", ")))
+if (length(conf_builds) > 1) {
+  cat("[MIXED BUILDS] the confirmatory set was collected by more than one build. ANALYSIS_PLAN.md §4a and §7:\n",
+      "               report every build, and carry git_hash as a factor in any model whose stimulus differs by build.\n", sep = "")
+}
 
 # --- WHAT THE CONFIRMATORY SET CAN SUPPORT, checked before any model is fitted ----------------
 # Each of these used to surface as an lme4 or contrasts error deep in the run — "grouping factors

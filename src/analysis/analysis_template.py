@@ -190,10 +190,48 @@ def exporter_verdict(session_info: pd.DataFrame, conditions: pd.DataFrame) -> pd
     return runs
 
 
+def provenance_header() -> None:
+    """What produced this output, printed first (ANALYSIS_PLAN.md §7): the interpreter, the packages
+    the models come from, and this file's own checksum. None of it was printed, and CI installs the
+    packages unpinned, so an output could not be tied to the software that produced it. The data's
+    provenance (the collecting builds) follows once the per-sitting files are read."""
+    import hashlib
+    import platform
+    import scipy
+    import statsmodels
+    print("=" * 74)
+    print("PROVENANCE")
+    print("=" * 74)
+    print(f"Python {platform.python_version()}")
+    for name, mod in (("pandas", pd), ("numpy", np), ("statsmodels", statsmodels), ("scipy", scipy)):
+        print(f"  {name:<12} {mod.__version__}")
+    try:
+        with open(__file__, "rb") as fh:
+            print(f"  template     {os.path.basename(__file__)} sha256 {hashlib.sha256(fh.read()).hexdigest()[:16]}")
+    except (NameError, OSError):
+        pass
+
+
+def data_provenance(session_info: pd.DataFrame) -> None:
+    """Which builds collected the sittings read, counted before exclusions. A mixed-build participant
+    is an exclusion code in the verdict; two builds ACROSS participants are not, and ANALYSIS_PLAN.md
+    §4a says a dataset pooling builds with different stimulus layouts must carry the build as a factor."""
+    print(f"\ndata ({len(session_info)} sitting(s) read under DATA_DIR, before exclusions):")
+    for col in ("git_hash", "app_version", "condition_def_hash", "schema_version"):
+        v = session_info[col].astype(str) if col in session_info.columns else pd.Series(["NA"] * len(session_info))
+        counts = v.value_counts(dropna=False)
+        print(f"  {col:<20} " + ", ".join(f"{k} ({n})" for k, n in counts.items()))
+    if "build_changed_mid_sitting" in session_info.columns:
+        n_mixed = int(truthy(session_info["build_changed_mid_sitting"]).sum())
+        print(f"  {'build_changed_mid_sitting':<20} {n_mixed} sitting(s) collected by more than one build (see session_builds)")
+
+
 def main() -> None:
+    provenance_header()
     # Photometry covariates live in 01_session_info.csv (screen_white_luminance_cd_m2,
     # brightness_percent); constant on a single fixed device, otherwise join as a session covariate.
     session_info = load("01_session_info.csv", with_folder=True)   # the whole-plot illumination factor lives here
+    data_provenance(session_info)
     conditions = load("02_conditions.csv", with_folder=True)
     fatigue = load("03_fatigue_scores.csv")
     comprehension = load("04_comprehension.csv")
@@ -238,6 +276,11 @@ def main() -> None:
     session_info = by_folder(session_info, keep_folders)
     participant = by_folder(participant, keep_folders)
     cvsq = by_folder(cvsq, keep_folders)
+    conf_builds = sorted(session_info["git_hash"].dropna().astype(str).unique()) if "git_hash" in session_info.columns else []
+    print(f"builds that collected the CONFIRMATORY SET: {', '.join(conf_builds)}")
+    if len(conf_builds) > 1:
+        print("[MIXED BUILDS] the confirmatory set was collected by more than one build. ANALYSIS_PLAN.md §4a and §7:\n"
+              "               report every build, and carry git_hash as a factor in any model whose stimulus differs by build.")
 
     # Join participant covariates onto every condition row so models can adjust for them, e.g.
     #   "... + age + C(correction_type)"  or stratify by cvd_status.

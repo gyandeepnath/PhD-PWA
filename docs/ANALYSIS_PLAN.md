@@ -324,3 +324,14 @@ Every export carries `app_version`, `git_hash`, `condition_def_hash` and `schema
 git hash of the build that collected the data. The export is byte-reproducible — it contains no
 timestamps, so re-exporting the same session yields identical files and the checksums in
 `16_integrity_report.csv` certify content rather than time of export.
+
+**Both templates print their provenance first** (Round 70). Before any data is read: the R or Python
+version, the version of every package a model comes from (and whether `glmmTMB` is installed), and a
+checksum of the template file itself. Then, over every sitting read and before exclusions, the count
+of sittings per `git_hash`, `app_version`, `condition_def_hash` and `schema_version`, and how many
+sittings were collected by more than one build; after the verdict, the builds behind the
+confirmatory set, with `[MIXED BUILDS]` when there is more than one (§4a says when the build must
+then enter a model). Neither template printed any of this before, and CI installs the packages
+unpinned, so an output could not be tied to the software or the build that produced it. The CI
+install stays unpinned on purpose, as a canary for upstream changes; the thesis run should be made
+from a recorded environment, and the provenance block is the record of which one it was.

@@ -209,6 +209,14 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
   ]) ok(label, out.includes(needle), `"${needle}" not in the output`);
   // M6: the robust sandwich SE is too small with few clusters, and statsmodels' bias-reduced
   // correction failed outright with weights=; the primary is now fitted per blink so it can be used.
+  /*
+   * PROVENANCE FIRST (m6). Nothing in the output said which software or which collecting build it
+   * came from, and CI installs the packages unpinned; ANALYSIS_PLAN.md §7 asks for the build.
+   */
+  ok('the output opens with its provenance: interpreter, packages, and the collecting builds',
+    /^=+\nPROVENANCE\n=+\nPython \d/.test(r.stdout) && /^\s+statsmodels\s+\d/m.test(r.stdout)
+      && /^\s+git_hash\s+\S+ \(\d+\)/m.test(r.stdout) && /builds that collected the CONFIRMATORY SET: \S/.test(r.stdout),
+    'no PROVENANCE block, package versions, git_hash table or confirmatory-set build line');
   ok('the GEEs use the small-sample (bias-reduced) covariance',
     (out.match(/Covariance type:\s+bias_reduced/g) ?? []).length >= 2, 'a GEE is printed with another covariance type');
   // M3: passage is not balanced against polarity; a GEE cannot carry a passage random effect but can
@@ -319,6 +327,14 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
         Math.sign(rComp) === EXPECTED_SIGN.comprehension && Math.sign(pyComp) === EXPECTED_SIGN.comprehension,
         `R ${rComp}, Python ${pyComp}`);
       console.log(`         (polarity: primary R ${rPrimary} / Python ${pyPrimary}; comprehension R ${rComp} / Python ${pyComp})`);
+      // m6: provenance first — the R version and packages, then the builds that collected the data.
+      ok('R: the output opens with its provenance: R, packages, and the collecting builds',
+        /^=+\nPROVENANCE\n=+\nR version \d/.test(rRun.stdout) && /^\s+lme4\s+\d/m.test(rOut)
+          && /^\s+git_hash\s+\S+ \(\d+\)/m.test(rOut) && /builds that collected the CONFIRMATORY SET: \S/.test(rOut),
+        'no PROVENANCE block, package versions, git_hash table or confirmatory-set build line');
+      // emmeans' Kenward-Roger default needs pbkrtest; without it every call printed a fallback notice.
+      ok('R: lmer contrasts use the stated Satterthwaite df, not a silent Kenward-Roger fallback',
+        !/Cannot use mode = kenward-roger/.test(rOut), 'emmeans fell back from Kenward-Roger');
       // lme4's own message, not the template's explanatory text that mentions the phrase. The old
       // fixture tripped it on every run, and every marginal mean came back nonEst.
       ok('R: no model matrix is rank deficient', !/fixed-effect model matrix is rank deficient/.test(rOut)
