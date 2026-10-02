@@ -4205,3 +4205,65 @@ minor findings. All eight are fixed (commits 59d12d3, f83ea62, d4be07e, c5af24a)
 
 Verified on c5af24a: npm run verify green (73 files, 1215 tests); the entire Playwright suite, 62
 specs, green.
+
+## Round 68 — review fixes for Rounds 65-66 (inside the loop; reaction-time locations)
+
+An independent review of Rounds 65 and 66 confirmed two major and three minor findings. Each was
+re-checked against the current tree (after Round 67) before it was fixed; all five are real and all
+are fixed (commits 59e8013, 3460343, b2f684a, 0e13431, 5b3dfe5). Two of them settle the two items
+Round 66 left as "decisions for the investigator"; both were decided by the orchestrating review, as
+coverage research 3.3 had asked.
+
+- **Major — the researcher indicator was a target-coloured mark during the go/no-go trials.** Inside
+  a display the indicator is drawn in the screen's ink, which is the condition's text colour, and
+  `rtStimulusColours` makes that the go-target. So for the whole block a 12 px dot in the target
+  colour, in a box of the same colour, sat in the periphery of a colour-detection task (230 px from
+  the nearest dot). The achromatic fixation ink would not have fixed it: it is black on a light
+  ground and white on a dark one, the P1 and N1 targets. `ResearcherPanel` takes a `hidden` prop and
+  draws nothing while `rtTrialsRunning` — from Start, through the practice and "Practice complete",
+  to the last trial. It stays mounted, so its state is kept, and it returns with "Block complete",
+  as Pause does. The camera-lost and black-picture notices are unchanged: they were already held
+  back while trials run and appear on the card and after the trials. Nothing else is drawn with the
+  cross and the dot. `still` now covers only the set-up procedures (calibration, self-test, plates).
+- **Major — the card did not ask for fixation.** `stim_ecc_px`, `stim_ecc_deg_55cm` and `stim_ring`
+  are measured from the cross, and mean what they say only if the eyes are on it at the dot's onset.
+  The card now has "Keep your eyes on the cross between dots." as its own line beside the hand-rest
+  line: the card's 17 px Roboto in full ink, unconditional, so every condition shows the same words.
+  It fits at 1152x720 and 1152x650 with the practice line or the change banner (at 1152x650 with the
+  banner, Start ends 61 px above the indicator); the cards of the first two blocks were photographed
+  at both viewports and inspected. Gaze at the dot's onset is still not recorded, and the codebook
+  says so.
+- **Minor — MASTER_BLUEPRINT §3-§4 stated superseded parameters.** Rewritten from `config.ts`,
+  `passages.ts` and `stateMachine.ts`: three questions per passage with no feedback (was one, with a
+  1 s feedback dwell), a 60 s search cap on a one-screen excerpt (was 40 s on the passage), ten
+  conditions or a 5 + 5 split (was 8 or 4 + 4), progress 9 + 10 x 6 = 69 steps drawn outside the loop
+  only (was 56). The same pass found and fixed more: age 18-35 (was 18-80), ocular columns missing
+  rather than zeroed without a camera, the grey field before the first condition and after a break
+  rather than before it, NASA-TLX and LAUNCH_CHECK, the camera self-test, and the display-mode check.
+- **Minor — `config.ts` still said "one dot at a random location".** It names the eight fixed,
+  balanced locations of `rtLocations.ts`.
+- **Minor — a unit test that could not fail.** "Its size-to-eccentricity ratio cannot vary by device"
+  divided the dot by its eccentricity at each device's scale, so the scale cancelled. It is replaced
+  by a check of how the dot is drawn: the full-root field that centres the cross, the dot at 50% plus
+  its whole-root-px offset in that field, centred, at `RT_DOT_PX`, and no other percentage in its
+  placement. The 60 px edge-margin case is kept.
+
+**Tests.** `tests/researcherPanel.test.tsx`: the indicator draws nothing while hidden (also with a
+sustained camera problem) and returns as the quiet indicator; Experiment hides it for exactly
+`rtTrialsRunning`. `tests/loopText.test.ts` pins the fixation line. `e2e/loopChrome.spec.ts` expects
+no indicator during the trials (and samples them, so the check is not vacuous), and the quiet
+indicator in the screen's ink again while the results save. `e2e/stimulusGeometry.spec.ts` measures
+the indicator's clearance on the card, as it does Pause's, and checks that neither is drawn at any
+dot's onset. Each new check failed with its rule broken on purpose (the hiding switched off; the
+fixation line made conditional; the dot placed by a percentage or in a box other than the root).
+
+**Data consequence.** No column changed. The stim_ecc codebook entries now say the distance is from
+the instructed fixation point, asked for since this round and not before. Any reaction-time rows
+recorded before this round had the target-coloured indicator in the periphery and no fixation
+instruction; if they are ever pooled with later rows, that difference must be stated.
+
+**Synopsis (read-only, not edited).** No line is contradicted. Line 350 of SYNOPSIS_AdtU.md ("Go/no-go
+reaction time — 32 trials on the active background") stands.
+
+Verified on 5b3dfe5: `npm run verify` green (73 files, 1218 unit tests; corpus, codebook, export and
+analysis gates pass); the entire Playwright suite, 62 specs, green.
