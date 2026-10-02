@@ -18,7 +18,8 @@ import { startNewExperiment, stageNow, handleStage, driveUntil, waitStageChange 
  *     at least 118 px from every dot position the reaction task's layout keeps, and never shown while
  *     reaction-time trials run (but shown on that task's instruction card);
  *   - the researcher panel: on every display screen a monochrome indicator in the screen's own ink,
- *     with no text, touching nothing; untappable except on reading and the grey field; opened on a
+ *     with no text, touching nothing; untappable except on reading and the grey field; not drawn at
+ *     all while reaction-time trials run (but drawn on that task's instruction card); opened on a
  *     reading page, a strip held inside the footer row's free left part, clear of the countdown, the
  *     button and the passage;
  *   - all of it identical in the first and second display of the sitting, which differ only by
@@ -264,12 +265,16 @@ async function checkStrip(page: Page, where: string): Promise<void> {
 }
 
 /**
- * The reaction-time block from its Start: no Pause while trials run (it returns once they are over
- * and only the save is left), and no counter or any other words in the field but the task's own
- * messages.
+ * The reaction-time block from its Start: no Pause and no researcher indicator while trials run (both
+ * return once they are over and only the save is left), and no counter or any other words in the
+ * field but the task's own messages.
+ *
+ * The indicator is not drawn at all during the trials: the screen's ink is the go-target's colour, so
+ * an indicator in it was a target-coloured mark in the periphery for the whole block (audit round 68).
  */
 async function runReactionBlock(page: Page, where: string, ink: string): Promise<void> {
   await page.getByRole('button', { name: /^Start/ }).click();
+  let trialSamples = 0;
   for (let i = 0; i < 2000; i++) {
     const s = await page.evaluate(() => {
       const root = document.getElementById('root')!;
@@ -281,15 +286,24 @@ async function runReactionBlock(page: Page, where: string, ink: string): Promise
       }) : [];
       return {
         stage: document.querySelector('[data-stage]')?.getAttribute('data-stage'),
-        pause: !!document.querySelector('[data-testid=pause-chip]'), words, ind, indText: panel?.textContent ?? '',
+        pause: !!document.querySelector('[data-testid=pause-chip]'), panel: !!panel, words, ind, indText: panel?.textContent ?? '',
       };
     });
-    if (s.stage !== 'REACTION_TIME') return;
+    if (s.stage !== 'REACTION_TIME') {
+      expect(trialSamples, `${where}: no sample was taken while the trials ran`).toBeGreaterThan(0);
+      return;
+    }
     const saving = /Block complete/.test(s.words);
-    if (!saving) expect(s.pause, `${where}: Pause offered while trials run ("${s.words}")`).toBe(false);
+    if (!saving) {
+      trialSamples += 1;
+      expect(s.pause, `${where}: Pause offered while trials run ("${s.words}")`).toBe(false);
+      expect(s.panel, `${where}: researcher indicator drawn while trials run ("${s.words}")`).toBe(false);
+    } else if (s.panel) {
+      // Back while the results save: the same quiet indicator as on every other display screen.
+      expect(s.indText, `${where}: text in the indicator while saving`).toBe('');
+      expect([...new Set(s.ind)], `${where}: indicator colours while saving`).toEqual([ink]);
+    }
     expect(s.words, `${where}: a trial counter in the field`).not.toMatch(/\d+\s*\/\s*\d+|\d+ of \d+/);
-    expect(s.indText, `${where}: text in the indicator during trials`).toBe('');
-    expect([...new Set(s.ind)], `${where}: indicator colours during trials`).toEqual([ink]);
     await page.waitForTimeout(10);
   }
   throw new Error(`${where}: the reaction-time block never ended`);

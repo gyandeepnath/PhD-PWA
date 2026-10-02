@@ -1,12 +1,14 @@
 /**
  * The researcher panel: collapsed by default on condition screens, an ink indicator there with no hue
- * and no text, openable only as the compact strip, never tappable where it is locked, docked with its
- * footprint reserved on set-up screens, and every moment it is open on a condition screen is reported
- * to the recorder.
+ * and no text, openable only as the compact strip, never tappable where it is locked, not drawn at all
+ * while the reaction-time trials run, docked with its footprint reserved on set-up screens, and every
+ * moment it is open on a condition screen is reported to the recorder.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createElement, act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { ResearcherPanel, cameraState, clock, type ResearcherPanelProps } from '@/components/ResearcherPanel';
 import { isMonitorOpen } from '@/lib/hiddenTime';
 import type { LiveTrackingStats } from '@/tracking/useTracking';
@@ -136,17 +138,47 @@ describe('researcher panel', () => {
   });
 
   it('holds still while a timed procedure runs, and catches up when it ends', () => {
-    // The reaction-time trials are running (still) and the face is lost for good part-way through:
-    // the indicator keeps the look it had when they began.
-    const m = mount({ onStimulus: true, locked: true, ink: { ink: '#000000', ground: '#FFFFFF' }, still: true });
+    // The calibration dots are running (still), on their dark screen, and the face is lost for good
+    // part-way through: the indicator keeps the look it had when they began.
+    const m = mount({ onStimulus: false, locked: true, ink: { ink: '#ffffff', ground: '#0a0a12' }, still: true });
     const dot = () => (m.q('researcher-panel-collapsed')!.firstElementChild as HTMLElement).style.background;
     expect(dot()).not.toBe('transparent');
     m.push(stats({ facePresent: false, noFaceForMs: 20_000 }));
     expect(dot()).not.toBe('transparent');
-    // The trials end: the problem shows at once.
+    // The procedure ends: the problem shows at once.
     m.render({ still: false });
     expect(dot()).toBe('transparent');
     m.unmount();
+  });
+
+  it('is not drawn at all while the reaction-time trials run, and comes back as it was', () => {
+    // A coloured condition: the screen's ink IS the go-target's colour (conditions.ts,
+    // rtStimulusColours), so any indicator drawn in it would be a target-coloured mark in the
+    // periphery for the whole block. The fixation ink is no way out: black and white are the P1 and
+    // N1 targets.
+    const ink = { ink: '#1E4ED8', ground: '#FFFFFF' };
+    const m = mount({ onStimulus: true, locked: true, ink });
+    expect(m.q('researcher-panel-collapsed')).not.toBeNull();     // on the instruction card
+    m.render({ hidden: true });                                   // Start
+    expect(m.host.innerHTML).toBe('');
+    // A sustained problem during the block draws nothing either, and opens nothing.
+    m.push(stats({ facePresent: false, noFaceForMs: 20_000 }));
+    expect(m.host.innerHTML).toBe('');
+    expect(isMonitorOpen()).toBe(false);
+    m.render({ hidden: false });                                  // "Block complete": saving
+    const pill = m.q('researcher-panel-collapsed')!;
+    expect(pill.getAttribute('data-quiet')).toBe('true');
+    expect((pill.firstElementChild as HTMLElement).style.background).toBe('transparent');
+    m.unmount();
+  });
+
+  it('Experiment hides it for exactly the reaction-time trials', () => {
+    // From Start, through the practice and "Practice complete", to the last trial: the task's
+    // onTrialsRunning puts rtPhase at 'trials' for that span and nowhere else.
+    const src = readFileSync(resolve(__dirname, '..', 'src/experiment/Experiment.tsx'), 'utf8');
+    expect(src).toMatch(/const rtTrialsRunning = machine\.stage === 'REACTION_TIME' && rtPhase === 'trials';/);
+    expect(src).toMatch(/<ResearcherPanel\b[\s\S]*?\bhidden=\{rtTrialsRunning\}[\s\S]*?\/>/);
+    expect(src).toMatch(/onTrialsRunning=\{\(running\) => setRtPhase\(running \? 'trials' : 'saving'\)\}/);
   });
 
   it('a locked indicator over a set-up procedure is the same quiet look, in that screen\'s ink', () => {

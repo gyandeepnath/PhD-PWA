@@ -206,10 +206,12 @@ for (const vp of TABLET) {
    * tests/rtLocations.test.ts proves the arithmetic on the canvas; this proves the wiring on the
    * screen: that each dot is drawn at its location's offset from the fixation cross, that its edges
    * stay at least 60 px inside the screen, and that it keeps 118 px clear of the chrome — the Pause
-   * chip's footprint at the top left (measured on the instruction card, where Pause is offered: it is
-   * withdrawn during trials, but the clearance must not depend on that), the same footprint at the top
-   * right where a trial counter used to sit, and the researcher indicator at the bottom left. At
-   * 1152x650 (the address bar showing, scale 0.90) the same must hold with nothing clipped.
+   * chip's footprint at the top left, the same footprint at the top right where a trial counter used
+   * to sit, and the researcher indicator's at the bottom left. Pause and the indicator are both
+   * measured on the instruction card, where they are drawn: neither is drawn while the trials run
+   * (the indicator, since audit round 68, because the screen's ink is the go-target's colour), and
+   * this checks that too, at every dot — but the clearance must not depend on it. At 1152x650 (the
+   * address bar showing, scale 0.90) the same must hold with nothing clipped.
    *
    * The ?e2e block is 4 trials and 1 practice, laid out by quadrant in turn with the rings
    * alternating and the starting ring swapped on the next block, so the first two blocks of a sitting
@@ -221,17 +223,25 @@ for (const vp of TABLET) {
     await page.setViewportSize({ width: vp.width, height: vp.height });
     await startNewExperiment(page);
 
-    const seen: { id: number; dot: number[]; cross: number[] | null; scale: number; vw: number; vh: number; chrome: Record<string, number[]> }[] = [];
+    const seen: {
+      id: number; dot: number[]; cross: number[] | null; scale: number; vw: number; vh: number;
+      chrome: Record<string, number[]>; live: { researcher: boolean; pause: boolean };
+    }[] = [];
     for (let blockNo = 0; blockNo < 2; blockNo++) {
       await driveUntil(page, 'REACTION_TIME');
       await page.getByRole('button', { name: /^Start/ }).waitFor();
-      // The Pause chip as offered on the card: its footprint is the top-left zone the dots must clear.
-      const pause = await page.evaluate(() => {
-        const r = document.querySelector('[data-testid=pause-chip]')?.getBoundingClientRect();
-        return r ? [r.left, r.top, r.right, r.bottom] : null;
+      // The Pause chip and the researcher indicator as drawn on the card: their footprints are the
+      // top-left and bottom-left zones the dots must clear.
+      const card = await page.evaluate(() => {
+        const box = (sel: string) => {
+          const r = document.querySelector(sel)?.getBoundingClientRect();
+          return r ? [r.left, r.top, r.right, r.bottom] : null;
+        };
+        return { pause: box('[data-testid=pause-chip]'), researcher: box('[data-testid=researcher-panel-collapsed]') };
       });
-      expect(pause, 'Pause is offered on the reaction-time card').not.toBeNull();
-      await page.evaluate((pauseRect) => {
+      expect(card.pause, 'Pause is offered on the reaction-time card').not.toBeNull();
+      expect(card.researcher, 'the researcher indicator is drawn on the reaction-time card').not.toBeNull();
+      await page.evaluate(({ pause: pauseRect, researcher: researcherRect }) => {
         const w = window as unknown as { __rtDots: unknown[]; __rtObs?: MutationObserver };
         w.__rtDots = [];
         let cross: number[] | null = null;
@@ -247,20 +257,21 @@ for (const vp of TABLET) {
           if (!dot || (dot as HTMLElement).dataset.seen) return;
           (dot as HTMLElement).dataset.seen = '1';
           const scale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vl-scale')) || 1;
-          const chrome: Record<string, number[]> = {};
-          const panel = rect(document.querySelector('[data-testid^=researcher-panel]'));
-          if (panel) chrome.researcher = panel;
-          const livePause = rect(document.querySelector('[data-testid=pause-chip]'));
-          chrome.pause = livePause ?? pauseRect;
+          // Either drawn at the onset of a dot would be a failure in itself (below).
+          const live = {
+            researcher: !!document.querySelector('[data-testid^=researcher-panel]'),
+            pause: !!document.querySelector('[data-testid=pause-chip]'),
+          };
+          const chrome: Record<string, number[]> = { pause: pauseRect!, researcher: researcherRect! };
           // Where the trial counter used to be: the Pause footprint, mirrored to the top right.
-          chrome.topRight = [innerWidth - pauseRect[2], pauseRect[1], innerWidth - pauseRect[0], pauseRect[3]];
+          chrome.topRight = [innerWidth - pauseRect![2], pauseRect![1], innerWidth - pauseRect![0], pauseRect![3]];
           w.__rtDots.push({
             id: Number((dot as HTMLElement).dataset.location), dot: rect(dot), cross, scale,
-            vw: innerWidth, vh: innerHeight, chrome,
+            vw: innerWidth, vh: innerHeight, chrome, live,
           });
         });
         w.__rtObs.observe(document.body, { childList: true, subtree: true });
-      }, pause!);
+      }, card);
       await page.getByRole('button', { name: /^Start/ }).click();
       await waitStageChange(page, 'REACTION_TIME');
       seen.push(...await page.evaluate(() => (window as unknown as { __rtDots: never[] }).__rtDots));
@@ -285,7 +296,10 @@ for (const vp of TABLET) {
       // Edges: at least 60 px inside the screen, so nothing is clipped.
       const edge = Math.min(l, t, d.vw - r, d.vh - b);
       expect(edge, `location ${d.id}: dot edge ${edge.toFixed(1)} px from the screen edge`).toBeGreaterThanOrEqual(60);
-      // Chrome: 118 px clear of each zone.
+      // Neither Pause nor the researcher indicator is drawn at the dot's onset.
+      expect(d.live.pause, `location ${d.id}: Pause drawn at the onset of a dot`).toBe(false);
+      expect(d.live.researcher, `location ${d.id}: researcher indicator drawn at the onset of a dot`).toBe(false);
+      // Chrome: 118 px clear of each zone, as drawn on the card.
       expect(Object.keys(d.chrome)).toEqual(expect.arrayContaining(['researcher', 'pause', 'topRight']));
       for (const [name, zone] of Object.entries(d.chrome)) {
         expect(gap(d.dot, zone), `location ${d.id}: ${name} only ${gap(d.dot, zone).toFixed(1)} px away`).toBeGreaterThanOrEqual(118);

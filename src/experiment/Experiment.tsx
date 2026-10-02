@@ -2154,7 +2154,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         ResearcherPanel.tsx for how it protects the measurement on condition screens (an ink indicator
         with no hue and no text, closed by default, a compact strip that opens only on reading and the
         grey field, locked everywhere else in a display and during the measured set-up procedures,
-        and every moment it is open recorded), and how it reserves its footprint on set-up screens.
+        not drawn at all while the reaction-time trials run, and every moment it is open recorded),
+        and how it reserves its footprint on set-up screens.
       */}
       {machine.stage !== 'SESSION_INIT' && machine.stage !== 'EXPORT_DASHBOARD' && (
         <ResearcherPanel
@@ -2167,7 +2168,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           onStimulus={isInLoop(machine.stage)}
           locked={panelLocked}
           ink={panelInk}
-          still={rtTrialsRunning || procedureRunning}
+          // Not drawn while the reaction-time trials run: the screen's ink is the go-target's colour.
+          hidden={rtTrialsRunning}
+          still={procedureRunning}
           sittingStartedAt={sittingStartedAt.current}
           sessionStartedAt={session?.session_start_time ?? null}
           stageStartedAt={stageStartedAt}

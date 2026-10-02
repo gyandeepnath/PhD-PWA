@@ -30,12 +30,19 @@ import { UI_TEXT } from '@/lib/uiPalette';
  *     blinks not being counted). A face lost for a moment — the participant looking down, leaning in
  *     — is 'warn', and turned the dot to a ring and back within seconds: a shape flickering in the
  *     periphery, about as often as the participant moved, which nobody could act on;
- *   - `still`: while a timed procedure runs (the reaction-time trials, the calibration dots, the
- *     self-test, the colour-vision plates) the indicator does not change at all — it keeps the look it
- *     had when the procedure began. A dot changing shape in the corner of a dot-detection task is a
- *     distractor of the task's own kind; leaning closer to a low-contrast display can lose the face,
- *     so its rate could even follow the condition. Nothing about it can be acted on mid-block: Pause
- *     and the camera notices wait for the trials to end;
+ *   - `hidden`: while the reaction-time trials run — from Start, through the practice and "Practice
+ *     complete", to the last trial — it is NOT DRAWN AT ALL. The screen's ink is the condition's text
+ *     colour, and that is the go-target's colour (conditions.ts, rtStimulusColours): the indicator was
+ *     a small target-coloured dot in a target-coloured box, about 230 px from the nearest dot, for the
+ *     whole of a colour go/no-go block (review of rounds 65-66; coverage research 3.3 asked for no hue
+ *     here). The achromatic fixation ink is no way out: it is black on a light ground and white on a
+ *     dark one, which are the P1 and N1 go-targets. It goes with the instruction card at Start, as
+ *     Pause does, and is back with "Block complete", while the results save. Nothing about it could be
+ *     acted on mid-block anyway: the camera notices wait for the trials to end (Experiment, `pausable`);
+ *   - `still`: while another timed procedure runs (the calibration dots, the self-test, the
+ *     colour-vision plates) the indicator does not change at all — it keeps the look it had when the
+ *     procedure began. A dot changing shape in the corner of a dot-detection procedure is a distractor
+ *     of the procedure's own kind;
  *   - it closes by itself when a condition screen starts, unless "Keep open during tasks" is on;
  *   - opened, it is the compact two-line strip, in the screen's ink on no ground, updated once a
  *     second — and it can be opened only on the reading task and the grey field, whose bottom-left
@@ -76,6 +83,12 @@ export interface ResearcherPanelProps {
   ink: { ink: string; ground: string } | null;
   /** A timed procedure is running: the indicator holds the look it had when it began. */
   still?: boolean;
+  /**
+   * Draw nothing: the reaction-time trials are running, and any ink this panel could use matches a
+   * go-target in some condition (see `hidden` above). The component stays mounted, so its state —
+   * open or not, the live readout — is what it was when the block began.
+   */
+  hidden?: boolean;
   /** When this sitting's screen time started (Date.now() ms), and the session's recorded start. */
   sittingStartedAt: number;
   sessionStartedAt: number | null;
@@ -151,7 +164,7 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
     if (p.onStimulus && !keepOpen) setOpen(false);
   }, [p.onStimulus, p.stageStartedAt, keepOpen]);
 
-  const shown = open && !p.locked;
+  const shown = open && !p.locked && !p.hidden;
   useEffect(() => {
     setMonitorOpen(shown && p.onStimulus);
     return () => setMonitorOpen(false);
@@ -194,6 +207,9 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
     display: 'inline-block', width: size, height: size, borderRadius: '50%', flex: '0 0 auto', boxSizing: 'border-box',
     background: problem ? 'transparent' : ink!, border: `2px solid ${ink}`,
   });
+
+  // After every hook, so hiding and showing again keeps the hooks in order.
+  if (p.hidden) return null;
 
   const base: React.CSSProperties = {
     position: 'fixed', left: 10, bottom: 10, zIndex: 45,
