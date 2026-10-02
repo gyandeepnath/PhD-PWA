@@ -4173,3 +4173,35 @@ nothing clipped), and at least 118 px from the Pause chip's footprint, the same 
 right, and the researcher indicator (nearest measured: 230 px, the indicator from the lower-left outer
 dot). The reaction-time screen was photographed with the dot at each of the eight locations, and
 with all eight drawn at once, at both viewports, and inspected.
+
+## Round 67 — review fixes for Round 63 (the canvas re-base)
+
+An independent review of Round 63, run in its own worktree at cc756ac, confirmed one major and seven
+minor findings. All eight are fixed (commits 59d12d3, f83ea62, d4be07e, c5af24a):
+
+- **Major — the installed-app check could be skipped by resuming.** The check lived only on
+  pre-flight, which a resume skips. A sitting checked as installed could be paused, reopened in a
+  Chrome tab and finished at scale 0.90 with no warning, while the session still read
+  `display_mode=fullscreen`. A resume that still has displays to run now opens on the same check
+  (LAUNCH_CHECK) before camera set-up; the break asks again if the launch changed under a running
+  sitting; each condition records `display_mode_acknowledged`; the integrity audit warns on any
+  condition run outside the installed app (`display_mode_installed`). New `e2e/displayMode.spec.ts`
+  covers the gate, its recording in the store and the 01/02 export, the resume in a tab, and a launch
+  that changes mid-sitting.
+- **Coverage figure corrected.** Round 63 said the reading block covered "35-45% of the screen"
+  before the re-base. That came from a units mix-up in the research harness (post-transform width
+  over pre-transform height). The old block covered about **40-52%**; the gain is about 8-12
+  percentage points, not 13-19. The 48-64% figure for the new layout was re-measured and stands.
+- **Data consequence widened.** The re-base also changed the go/no-go dot (44.7 to 52 CSS px on the
+  tablet, 0.96° to 1.11° at 55 cm) and the colour-vision plates (+16%); the codebook and Round 63's
+  note now say so. (The dot's positions changed again in Round 66.)
+- **Chung (2004) stated as the abstract shows it** — RSVP of unrelated words, five observers, a
+  "standard spacing" the abstract does not define in CSS terms — so line height 1.4 is labelled a
+  judgement it is consistent with, not support for it (ledger 52 note).
+- Pre-flight's warning now says only what is true (smaller stimuli only when the scale is below 1;
+  its own wording when the display mode is unknown).
+- Two scale tests could not fail: the 1% snap tolerance now applies only inside the snap band, and
+  the "frozen scale never grows" test starts below the cap. Both were mutation-checked.
+
+Verified on c5af24a: npm run verify green (73 files, 1215 tests); the entire Playwright suite, 62
+specs, green.
