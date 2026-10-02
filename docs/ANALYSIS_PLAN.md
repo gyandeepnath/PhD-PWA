@@ -120,8 +120,29 @@ Notes on each term:
   therefore doing real work rather than being a convenience, and the residual leak onto the polarity
   contrast should be acknowledged in the limitations — it is small only because the corpus is
   length- and difficulty-matched.
-- **Overdispersion must be checked.** Blinks within a condition are not independent Bernoulli trials;
-  if the dispersion statistic exceeds ~1.5, refit with `glmmTMB(..., family = betabinomial)`.
+- **Overdispersion is a standing sensitivity, not a threshold trigger** (amended in Round 70, before
+  data collection). Blinks within a condition are not independent Bernoulli trials. This bullet used
+  to say: if the dispersion statistic exceeds ~1.5, refit with `glmmTMB(..., family = betabinomial)`.
+  The template then printed "betabinomial refit required" at a ratio of 1.55 and fitted nothing, and
+  on the Round 62 audit's null replicates at N = 130, at a ratio of about 1.2 ("within tolerance" by
+  that rule), an observation-level random effect raised the polarity SE by 20-30%. So the ratio is printed
+  for description only, and two refits are reported beside the primary whatever it says: the same
+  model with an **observation-level random effect** (`(1 | run_obs)`, one level per condition-run),
+  and, where `glmmTMB` is installed, a **beta-binomial** refit of the same formula. `glmmTMB` is in
+  neither the install line nor CI; without it the template says `[SKIPPED: glmmTMB not installed]`.
+  Harrison (2015; `CITATION_VERIFICATION.md` item 57) found that an observation-level random effect
+  copes with some sources of binomial overdispersion and not others, and that comparing it with the
+  beta-binomial estimate shows when it is failing — which is why both are printed when both can be.
+  Which fit the thesis reports if they disagree with the binomial one is a decision for the
+  investigator, to be made before unblinding.
+- **Convergence** (synopsis §3.9: "a non-converging random structure is reduced in a pre-specified
+  order and the reduction reported"). The ladder used to step down on a singular or failed fit only
+  and kept a fit lme4 had flagged as not converged. Now, when lme4 warns, `allFit()` refits the rung
+  with every available optimizer; the rung stands only if every fixed effect agrees across them to
+  within 0.05 of its standard error (`ALLFIT_AGREE_SE_FRAC`, an analyst default), and otherwise the
+  next rung is tried. If none converges, the most reduced structure that fitted is reported, marked
+  NOT CONVERGED. The verdict for every rung tried is printed under `PRIMARY MODEL CONVERGENCE`, and the
+  binomial secondaries (comprehension, search completion) report theirs the same way.
 - **`eff_fps_c`, the centred effective frame rate, is in the templates' primary model and not in the
   formula above** (Round 69 makes this explicit). Undersampling biases the measured minimum EAR
   upward and so inflates the ratio, which is the case for adjusting; but polarity changes how the

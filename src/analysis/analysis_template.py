@@ -735,6 +735,15 @@ def main() -> None:
               + (f" — {gone} dropped: no blink, or a missing count or frame rate" if gone > 0 else "")
               + f"; covariance {GEE_COV} over {prim['participant_id'].nunique()} participants")
         cluster_note(m, "primary")
+        # Overdispersion (ANALYSIS_PLAN.md §2). The R template refits its binomial GLMM with an
+        # observation-level random effect because the GLMM's standard errors assume binomial variance
+        # within a run. This GEE's do not: the sandwich covariance is built from the residuals clustered
+        # by participant, so extra-binomial variation between the blinks of one run — and between that
+        # participant's runs — is already in them. Said here so the absence of a refit is not read as
+        # an omission.
+        print("[overdispersion] the participant-clustered sandwich covariance does not assume binomial variance, so "
+              "extra-binomial variation is already in these standard errors; the R template reports the "
+              "observation-level refit.")
 
         # Without eff_fps_c: ANALYSIS_PLAN.md §2's formula, and the answer if frame rate is a
         # mediator of the polarity effect (polarity changes face illumination) rather than a nuisance.

@@ -370,6 +370,28 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
       ok('R: the primary family prints H1a and H1b, raw and Holm across the two',
         /PRIMARY FAMILY[\s\S]*H1a polarity[^\n]*Holm across the two [\d.e-]+\n[^\n]*H1b polarity x colour[^\n]*Holm across the two [\d.e-]+/.test(rOut),
         'no primary-family block with both tests');
+      /*
+       * OVERDISPERSION AND CONVERGENCE (M9, m8). The beta-binomial refit used to be "required" above a
+       * dispersion ratio of 1.5 and never fitted; an observation-level refit now runs on every primary,
+       * and the beta-binomial one wherever glmmTMB is installed (it is in neither the install line nor
+       * CI, so its absence must be SAID). And a fit lme4 flagged as not converged used to be kept.
+       */
+      const olre = /\[OLRE\] polarity log-odds (-?[\d.]+) \(95% CI (-?[\d.]+) to (-?[\d.]+)\), odds ratio [\d.]+; SE ([\d.]+) vs binomial ([\d.]+)/.exec(rOut);
+      ok('R: the observation-level refit of the primary runs, whatever the dispersion ratio',
+        olre != null && Math.sign(+olre[1]) === EXPECTED_SIGN.primary && (+olre[2] > 0 || +olre[3] < 0),
+        olre ? `OLRE ${olre[1]} (${olre[2]} to ${olre[3]})` : 'no [OLRE] line');
+      ok('R: ... and its polarity SE is not smaller than the binomial one (it adds variance, it cannot remove it)',
+        olre != null && +olre[4] >= 0.98 * +olre[5], olre ? `SE ${olre[4]} vs ${olre[5]}` : 'no [OLRE] line');
+      const hasTmb = spawnSync('Rscript', ['-e', 'q(status = as.integer(!requireNamespace("glmmTMB", quietly = TRUE)))'], { stdio: 'ignore' }).status === 0;
+      ok(`R: the beta-binomial refit ${hasTmb ? 'is fitted (glmmTMB is installed)' : 'is reported as skipped (glmmTMB is not installed)'}`,
+        hasTmb ? /\[beta-binomial\] polarity log-odds -?[\d.]+/.test(rOut) : /\[beta-binomial\] \[SKIPPED: glmmTMB not installed\]/.test(rOut),
+        'no [beta-binomial] line of the expected kind');
+      ok('R: no dispersion threshold is left deciding a refit that is never run',
+        !/betabinomial refit required/.test(rOut), 'the old "refit required" verdict printed');
+      ok('R: the reduction ladder reports its convergence verdict rung by rung',
+        /PRIMARY MODEL CONVERGENCE \(the ladder, rung by rung\):\n {2}maximal: /.test(rOut), 'no ladder convergence report');
+      ok('R: the binomial secondaries report their convergence too',
+        /\[convergence\] comprehension: /.test(rOut), 'no [convergence] line for comprehension');
       // The per-colour polarity effects are ONE family of five. Left grouped by colour, emmeans would
       // adjust each one-contrast group on its own, which is no adjustment.
       ok('R: the per-colour polarity effects are Holm-adjusted across the five colours',

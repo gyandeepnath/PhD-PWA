@@ -520,6 +520,32 @@ report_n <- function(m, data, label) {
 # is the more useful number.
 # ===========================================================================================
 
+# --- CONVERGENCE (m8) ------------------------------------------------------------------------
+# Synopsis §3.9: "A non-converging random structure is reduced in a pre-specified order and the
+# reduction reported." The reduction ladder stepped down on a singular fit or on no fit at all, and
+# KEPT a fit lme4 had flagged as not converged; the flag surfaced only as a trailing R warning after
+# the output it qualified. lme4's gradient check is known to raise false alarms on large models, so a
+# warning alone is not a verdict: allFit() refits the model with every available optimizer, and the
+# fit stands only if they agree. Used to decide the primary's ladder and to report on the binomial
+# secondaries.
+CONVERGENCE_PATTERN <- "converge|gradient|Hessian|eigenvalue|unidentifiable"
+convergence_verdict <- function(m, notes = character(0)) {
+  msgs <- unique(grep(CONVERGENCE_PATTERN, c(notes, m@optinfo$conv$lme4$messages), value = TRUE))
+  if (!length(msgs)) return(list(ok = TRUE, warned = FALSE, text = "no convergence warning"))
+  af <- tryCatch(suppressWarnings(suppressMessages(allFit(m, verbose = FALSE))), error = function(err) NULL)
+  if (is.null(af)) return(list(ok = FALSE, warned = TRUE, text = paste0(msgs[1], "; allFit could not be run")))
+  ss <- summary(af)
+  good <- ss$which.OK
+  fx <- ss$fixef[good, , drop = FALSE]
+  se <- sqrt(diag(as.matrix(vcov(m))))[colnames(fx)]
+  spread <- if (sum(good) >= 2) max(apply(fx, 2, function(col) diff(range(col))) / se) else NA_real_
+  ok <- isTRUE(spread < ALLFIT_AGREE_SE_FRAC)
+  list(ok = ok, warned = TRUE, text = sprintf(
+    "%s; allFit: %d of %d optimizers fitted, fixed effects agree to %s SE (ANALYST DEFAULT %g) — %s",
+    msgs[1], sum(good), length(good), if (is.na(spread)) "n/a" else sprintf("%.3f", spread),
+    ALLFIT_AGREE_SE_FRAC, if (ok) "the warning is a false alarm; the fit stands" else "NOT CONVERGED"))
+}
+
 # The polarity contrast of any fitted model with a `polarity` factor: estimate, CI, test.
 # The interval columns are named by the df method — asymp.LCL for a glmer, lower.CL for an lmer — so
 # both names are matched; a column that is not found stops the run rather than printing nothing.
@@ -649,8 +675,16 @@ QC_EXPOSURE_MIN_FRAC <- 0.90   # ANALYST DEFAULT — not in the protocol. Fracti
 # at their use sites. Three of the QC bounds above were already labelled with their provenance and
 # these four were not, which is an inconsistency in this file's own standard: a number that decides
 # how a result is read has to say where it came from, or nobody can defend it or reproduce it.
-DISPERSION_REFIT_AT  <- 1.5     # PROTOCOL: ANALYSIS_PLAN.md §2 — "if the dispersion statistic
-                                # exceeds ~1.5, refit with glmmTMB(..., family = betabinomial)".
+#
+# DISPERSION_REFIT_AT (1.5, ANALYSIS_PLAN.md §2's former refit trigger) is gone, not relabelled. On the
+# Round 62 audit's null replicates at N = 130, at a dispersion ratio of about 1.2 ("within tolerance" by
+# that trigger), an observation-level random effect raised the polarity SE by 20-30%; at 1.55 the
+# template printed "betabinomial refit required" and did nothing. The overdispersion refit is now a
+# standing sensitivity, fitted whatever the ratio (see OVERDISPERSION below), so no threshold decides it.
+ALLFIT_AGREE_SE_FRAC <- 0.05    # ANALYST DEFAULT — not in the protocol. After a convergence warning,
+                                # the fit is accepted only if every fixed effect agrees across lme4's
+                                # optimizers (allFit) to within this fraction of its standard error;
+                                # a disagreement that could move an inference reduces the structure.
 CENSOR_SPREAD_WARN_PP <- 10     # ANALYST DEFAULT — not in the protocol. Percentage points of spread
                                 # in the visual-search censoring rate ACROSS CONDITIONS beyond which
                                 # the time model must not be read unqualified. Any non-zero spread is
@@ -849,6 +883,7 @@ m_comp <- glmer(
   data = comp, family = binomial
 )
 cat("\n=== Comprehension logistic mixed model ===\n"); print(summary(m_comp)); report_n(m_comp, comp, "comprehension")
+cat("[convergence] comprehension:", convergence_verdict(m_comp)$text, "\n")
 add_to_family("comprehension", m_comp, "odds ratio, correct", odds_ratio = TRUE)
 
 # --- d-prime: aggregate ACROSS conditions per participant (per-condition d' is unstable) ----
@@ -1037,7 +1072,10 @@ if (!is.null(search) && "search_time_ms" %in% names(search)) {
               data = vs, family = binomial),
         error = function(err) NULL
       )
-      if (is.null(m_vs_done)) cat("the completion model did not fit.\n") else { print(summary(m_vs_done)); report_n(m_vs_done, vs, "search completion") }
+      if (is.null(m_vs_done)) cat("the completion model did not fit.\n") else {
+        print(summary(m_vs_done)); report_n(m_vs_done, vs, "search completion")
+        cat("[convergence] search completion:", convergence_verdict(m_vs_done)$text, "\n")
+      }
       add_to_family("search completion", m_vs_done, "odds ratio, completed", odds_ratio = TRUE)
     }
   }
@@ -1233,23 +1271,42 @@ if (nrow(eye) == 0) {
   # ANALYSIS_PLAN.md §2 prescribes the passage intercept, and passage is NOT balanced against
   # condition (see re_passage). It is carried through every rung of the ladder rather than being the
   # first thing dropped, because the plan's pre-specified reduction order is about the PARTICIPANT
-  # structure and says nothing about passage. A dataset with too few distinct passages to support it
-  # is handled at the end, loudly.
-  rung <- "maximal"
-  fit <- fit_noting(update(f_primary, as.formula(paste0(". ~ . + (1 + polarity | participant_id)", re_sitting, re_passage))))
-  if (is.null(fit$model) || isSingular(fit$model)) {
-    rung <- "reduction 1 (no polarity slope)"
-    fit <- fit_noting(update(f_primary, as.formula(paste0(". ~ . + (1 | participant_id)", re_sitting, re_passage))))
+  # structure and says nothing about passage. The passage intercept is dropped (rung 1b) only when
+  # keeping it prevents a converged fit — and then it is said out loud.
+  #
+  # A rung is ACCEPTED when it fits, is not singular (the maximal rung only: a singular random slope
+  # is the reason to reduce), and passes convergence_verdict(). A fit that lme4 flags and allFit does
+  # not vindicate is NOT accepted, and the next rung is tried (m8). If no rung is accepted, the most
+  # reduced structure that did fit is reported, marked NOT CONVERGED, rather than nothing.
+  rungs <- list(
+    list(label = "maximal", singular_ok = FALSE, applies = TRUE,
+         rhs = paste0(". ~ . + (1 + polarity | participant_id)", re_sitting, re_passage)),
+    list(label = "reduction 1 (no polarity slope)", singular_ok = TRUE, applies = TRUE,
+         rhs = paste0(". ~ . + (1 | participant_id)", re_sitting, re_passage)),
+    list(label = "reduction 1b — NO PASSAGE INTERCEPT, passage variance loads onto the residual",
+         singular_ok = TRUE, applies = nzchar(re_passage), rhs = paste0(". ~ . + (1 | participant_id)", re_sitting)),
+    list(label = "reduction 2 — NO SITTING INTERCEPT", singular_ok = TRUE, applies = nzchar(re_sitting),
+         rhs = ". ~ . + (1 | participant_id)"))
+  fit <- list(model = NULL, notes = character(0))
+  rung <- NA_character_
+  ladder_log <- character(0)
+  fallback <- NULL
+  for (rg in rungs) {
+    if (!rg$applies) next
+    cand <- fit_noting(update(f_primary, as.formula(rg$rhs)))
+    if (is.null(cand$model)) { ladder_log <- c(ladder_log, paste0(rg$label, ": did not fit")); next }
+    if (!rg$singular_ok && isSingular(cand$model)) {
+      ladder_log <- c(ladder_log, paste0(rg$label, ": boundary (singular) fit — reduced"))
+      next
+    }
+    conv <- convergence_verdict(cand$model, cand$notes)
+    ladder_log <- c(ladder_log, paste0(rg$label, ": ", conv$text))
+    if (conv$ok) { fit <- cand; rung <- rg$label; break }
+    fallback <- list(fit = cand, label = rg$label)
   }
-  if (is.null(fit$model) && nzchar(re_passage)) {
-    # The passage intercept is prescribed, so it is dropped only when keeping it prevents a fit at
-    # all — and then it is said out loud.
-    rung <- "reduction 1b — NO PASSAGE INTERCEPT, passage variance loads onto the residual"
-    fit <- fit_noting(update(f_primary, as.formula(paste0(". ~ . + (1 | participant_id)", re_sitting))))
-  }
-  if (is.null(fit$model) && nzchar(re_sitting)) {
-    rung <- "reduction 2 — NO SITTING INTERCEPT"
-    fit <- fit_noting(update(f_primary, . ~ . + (1 | participant_id)))
+  if (is.null(fit$model) && !is.null(fallback)) {
+    fit <- fallback$fit
+    rung <- paste0(fallback$label, " — NOT CONVERGED at any rung; the most reduced structure that fitted")
   }
   m_primary <- fit$model
 
@@ -1261,6 +1318,7 @@ if (nrow(eye) == 0) {
     cat("\n[PRIMARY NOT FITTED] the primary model could not be fitted at any rung of the reduction ladder,\n")
     cat(sprintf("on %d camera-on condition-runs with at least one blink from %d participant(s).\n",
                 nrow(eye), n_distinct(eye$participant_id)))
+    cat(paste0("  ", ladder_log, "\n"), sep = "")
   } else {
     # Printed IMMEDIATELY. It used to be printed after the CVS-Q block, so a crash there took the
     # primary result down with it.
@@ -1273,36 +1331,30 @@ if (nrow(eye) == 0) {
              collapse = " + "))
 
     # -----------------------------------------------------------------------------------------
-    # OVERDISPERSION. ANALYSIS_PLAN.md §2: "Overdispersion must be checked. Blinks within a
-    # condition are not independent Bernoulli trials; if the dispersion statistic exceeds
-    # ~1.5, refit with glmmTMB(..., family = betabinomial)."
-    #
-    # Blink classification within one condition is serially correlated, so dispersion above 1 is
+    # OVERDISPERSION. Blinks within a condition are not independent Bernoulli trials: blink
+    # classification within one exposure is serially correlated, so variation beyond the binomial is
     # the expectation rather than a worry — and an unadjusted binomial GLMM then understates every
     # standard error on the primary outcome, which inflates significance on exactly the polarity x
     # colour interaction the study is built to test.
     #
-    # Reported, never applied silently: refitting as beta-binomial changes the model the thesis
-    # reports, and that is the investigator's call to make deliberately.
+    # The dispersion ratio is printed here for DESCRIPTION. It used to decide whether a beta-binomial
+    # refit was "required" (above 1.5), and the template then printed that and fitted nothing; and at
+    # ratios near 1.2, "within tolerance", an observation-level random effect raised the polarity SE by
+    # 20-30% on the Round 62 audit's null replicates. The refits below are therefore STANDING sensitivities (ANALYSIS_PLAN.md
+    # §2), fitted whatever the ratio says.
     # -----------------------------------------------------------------------------------------
     dispersion_note <- tryCatch({
       od <- performance::check_overdispersion(m_primary)
       ratio <- as.numeric(od$dispersion_ratio)
       cat("\n=== OVERDISPERSION CHECK (ANALYSIS_PLAN.md §2) ===\n")
       print(od)
-      if (is.finite(ratio) && ratio > DISPERSION_REFIT_AT) {
-        cat("\n*** dispersion ratio ", round(ratio, 2), " EXCEEDS ", DISPERSION_REFIT_AT, ".\n",
-            "*** The plan requires a refit as glmmTMB(..., family = betabinomial) before\n",
-            "*** any inference is drawn from the standard errors below.\n", sep = "")
-        sprintf("OVERDISPERSED (ratio %.2f) — betabinomial refit required", ratio)
-      } else {
-        sprintf("dispersion ratio %.2f, within tolerance", ratio)
-      }
+      sprintf("dispersion ratio %.2f (descriptive; the observation-level refit below is reported whatever it is)", ratio)
     }, error = function(e) paste("overdispersion check could not be computed:", conditionMessage(e)))
 
     cat("\n################################################################\n")
     cat("PRIMARY MODEL RANDOM STRUCTURE: ", primary_structure, "\n")
     cat("PRIMARY MODEL DISPERSION:       ", dispersion_note, "\n")
+    cat("PRIMARY MODEL CONVERGENCE (the ladder, rung by rung):\n", paste0("  ", ladder_log, "\n"), sep = "")
     if (length(fit$notes)) cat("fit notes:\n  ", paste(fit$notes, collapse = "\n  "), "\n")
     cat("################################################################\n")
 
@@ -1316,9 +1368,66 @@ if (nrow(eye) == 0) {
     cat("\n=== H1 EFFECT SIZE (ANALYSIS_PLAN.md §2 and §4b) ===\n")
     cat("Falsification rule (§2): H1 is not supported if the 95% CI of the polarity effect includes zero.\n")
     cat("Proportions: random effects at zero, covariates at their means, averaged over the five colours.\n")
+    if (grepl("NOT CONVERGED", rung)) {
+      cat("[H1] CAUTION: no rung of the reduction ladder converged (see PRIMARY MODEL CONVERGENCE above);\n")
+      cat("     the estimates below come from a fit the optimizers do not agree on.\n")
+    }
     h1_primary <- h1_effects(m_primary)
     print_h1("primary", h1_primary)
     print_h1("without eff_fps_c (§2 formula)", tryCatch(h1_effects(m_no_fps), error = function(err) NULL))
+
+    # -----------------------------------------------------------------------------------------
+    # OVERDISPERSION SENSITIVITY — STANDING, NOT TRIGGERED (M9; ANALYSIS_PLAN.md §2).
+    #
+    # 1. An OBSERVATION-LEVEL RANDOM EFFECT: one random intercept per condition-run, which absorbs
+    #    extra-binomial variation in that run's blink classification. Same fixed effects, same random
+    #    structure otherwise — update(m_primary, ...) — so a difference is the dispersion and nothing
+    #    else.
+    # 2. A BETA-BINOMIAL refit, when glmmTMB is installed. It is not a dependency of this template
+    #    (nor of CI), so its absence is stated, never an error. Harrison (2015; CITATION_VERIFICATION
+    #    item 57) found that an OLRE copes with some sources of binomial overdispersion and not others,
+    #    and that comparing the OLRE estimate with the beta-binomial one shows when it is failing — so
+    #    when both exist they are printed side by side.
+    # Which fit the thesis reports if they disagree with the binomial is the investigator's decision
+    # (ANALYSIS_PLAN.md §2); this section makes the comparison impossible to skip.
+    # -----------------------------------------------------------------------------------------
+    cat("\n=== PRIMARY: overdispersion sensitivity, fitted whatever the dispersion ratio (ANALYSIS_PLAN.md §2) ===\n")
+    eye$run_obs <- factor(seq_len(nrow(eye)))
+    m_olre <- tryCatch(
+      suppressWarnings(update(m_primary, . ~ . + (1 | run_obs))),
+      error = function(err) NULL
+    )
+    se_binom <- sqrt(diag(as.matrix(vcov(m_primary))))[["polarity1"]]
+    if (is.null(m_olre)) {
+      cat("[OLRE] the observation-level refit did not fit.\n")
+    } else {
+      h_olre <- h1_effects(m_olre)
+      se_olre <- sqrt(diag(as.matrix(vcov(m_olre))))[["polarity1"]]
+      olre_sd <- as.data.frame(VarCorr(m_olre))
+      cat(sprintf("[OLRE] polarity log-odds %.3f (95%% CI %.3f to %.3f), odds ratio %.3f; SE %.4f vs binomial %.4f (x%.2f); run-level SD %.3f\n",
+                  h_olre$estimate, h_olre$lcl, h_olre$ucl, exp(h_olre$estimate), se_olre, se_binom, se_olre / se_binom,
+                  olre_sd$sdcor[olre_sd$grp == "run_obs"][1]))
+      cat(sprintf("[OLRE] predicted proportion difference %.4f (95%% CI %.4f to %.4f); the CI %s zero\n",
+                  h_olre$diff, h_olre$diff_lcl, h_olre$diff_ucl, if (h_olre$lcl > 0 || h_olre$ucl < 0) "EXCLUDES" else "INCLUDES"))
+    }
+    if (requireNamespace("glmmTMB", quietly = TRUE)) {
+      m_bb <- tryCatch(
+        glmmTMB::glmmTMB(formula(m_primary), data = eye, family = glmmTMB::betabinomial(link = "logit")),
+        error = function(err) conditionMessage(err)
+      )
+      if (is.character(m_bb)) {
+        cat("[beta-binomial] glmmTMB could not fit the primary formula:", m_bb, "\n")
+      } else {
+        b <- glmmTMB::fixef(m_bb)$cond[["polarity1"]]
+        se_bb <- sqrt(diag(vcov(m_bb)$cond))[["polarity1"]]
+        cat(sprintf("[beta-binomial] polarity log-odds %.3f (95%% CI %.3f to %.3f), odds ratio %.3f; SE %.4f vs binomial %.4f (x%.2f); precision phi %.1f (larger = nearer binomial)%s\n",
+                    b, b - qnorm(0.975) * se_bb, b + qnorm(0.975) * se_bb, exp(b), se_bb, se_binom, se_bb / se_binom,
+                    sigma(m_bb), if (isTRUE(m_bb$sdr$pdHess)) "" else " — Hessian NOT positive definite: do not read this fit"))
+      }
+    } else {
+      cat("[beta-binomial] [SKIPPED: glmmTMB not installed] install.packages(\"glmmTMB\") to fit the beta-binomial\n")
+      cat("                refit and compare it with the observation-level one (ANALYSIS_PLAN.md §2).\n")
+    }
 
     cat("\nMarginal means (back-transformed to the proportion scale):\n")
     if (USE_ILLUMINATION) {
@@ -1408,6 +1517,7 @@ if (nrow(eye) == 0) {
 
     # Without eff_fps_c: §2's own formula (m_no_fps, fitted with the H1 effect size above).
     sens_line("without the eff_fps_c covariate (§2 formula)", m_no_fps)
+    sens_line("observation-level random effect (§2)", m_olre)
 
     # §5 QC-clean. The QC panel said this refit ran; it did not, until now.
     if (any(!eye$qc_clean)) {

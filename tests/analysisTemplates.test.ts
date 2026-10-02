@@ -262,8 +262,7 @@ describe('the R template declares where each of its thresholds came from', () =>
     const src_ = r();
     for (const name of [
       'QC_FACE_PRESENCE_MIN', 'QC_OFF_AXIS_MAX', 'QC_EXPOSURE_MIN_FRAC',
-      'DISPERSION_REFIT_AT', 'CENSOR_SPREAD_WARN_PP', 'COMPLETION_INFORMATIVE',
-      'PERCLOS_LOGIT_SQUEEZE',
+      'CENSOR_SPREAD_WARN_PP', 'COMPLETION_INFORMATIVE', 'PERCLOS_LOGIT_SQUEEZE', 'ALLFIT_AGREE_SE_FRAC',
     ]) {
       expect(src_).toContain(name);
       // Defined once and then USED — a constant nothing reads is decoration.
@@ -276,9 +275,8 @@ describe('the R template declares where each of its thresholds came from', () =>
     // chosen by the analyst has to be visible so it can be argued with and changed deliberately.
     const src_ = r();
     expect(src_).toMatch(/QC_FACE_PRESENCE_MIN[^\n]*PROTOCOL/);
-    expect(src_).toMatch(/DISPERSION_REFIT_AT[^\n]*PROTOCOL/);
     for (const name of ['QC_OFF_AXIS_MAX', 'QC_EXPOSURE_MIN_FRAC', 'CENSOR_SPREAD_WARN_PP',
-      'COMPLETION_INFORMATIVE', 'PERCLOS_LOGIT_SQUEEZE']) {
+      'COMPLETION_INFORMATIVE', 'PERCLOS_LOGIT_SQUEEZE', 'ALLFIT_AGREE_SE_FRAC']) {
       expect(src_).toMatch(new RegExp(name + '[^\\n]*ANALYST DEFAULT'));
     }
   });
@@ -402,5 +400,36 @@ describe('the R template\'s outcome families match its models and the plan', () 
   it('either models each member or declares it not yet modelled — never both, never neither', () => {
     expect(members.filter((o) => !registered.includes(o) && !notYet.includes(o))).toEqual([]);
     expect(notYet.filter((o) => registered.includes(o) || !members.includes(o))).toEqual([]);
+  });
+});
+
+/**
+ * THE OVERDISPERSION REFIT IS A STANDING SENSITIVITY, AND glmmTMB IS NEVER A HARD DEPENDENCY.
+ *
+ * ANALYSIS_PLAN.md §2 used to trigger a beta-binomial refit at a dispersion ratio above 1.5
+ * (DISPERSION_REFIT_AT). The template printed "betabinomial refit required" and fitted nothing, and
+ * at ratios near 1.2 — "within tolerance" — an observation-level random effect raised the polarity
+ * SE by 20-30% in the Round 62 audit's null replicates. The observation-level refit now runs whatever the ratio, and the
+ * beta-binomial one runs only where glmmTMB is installed: it is in neither the install line nor CI.
+ */
+describe('the R template\'s overdispersion refits', () => {
+  const r = src('src/analysis/analysis_template.R');
+  const code = r.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+
+  it('has no dispersion threshold deciding whether a refit runs', () => {
+    expect(code).not.toMatch(/DISPERSION_REFIT_AT/);
+    expect(code).not.toMatch(/ratio\s*>\s*[\d.]/);
+  });
+
+  it('fits the observation-level random effect on the primary, unconditionally', () => {
+    expect(code).toMatch(/update\(m_primary, \. ~ \. \+ \(1 \| run_obs\)\)/);
+  });
+
+  it('touches glmmTMB only behind requireNamespace, and says when it is skipped', () => {
+    expect(code).not.toMatch(/library\(glmmTMB\)|require\(glmmTMB\)/);
+    const guard = code.indexOf('if (requireNamespace("glmmTMB", quietly = TRUE)) {');
+    expect(guard).toBeGreaterThan(0);
+    for (const m of code.matchAll(/glmmTMB::/g)) expect(m.index!).toBeGreaterThan(guard);
+    expect(code).toContain('[SKIPPED: glmmTMB not installed]');
   });
 });
