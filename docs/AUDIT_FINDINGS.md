@@ -4267,3 +4267,164 @@ reaction time — 32 trials on the active background") stands.
 
 Verified on 5b3dfe5: `npm run verify` green (73 files, 1218 unit tests; corpus, codebook, export and
 analysis gates pass); the entire Playwright suite, 62 specs, green.
+
+## Round 69 — analysis pipeline, part 1: correctness and robustness
+
+The Round 62 analysis audit ran both templates on realistic simulated cohorts and on the states a real
+cohort reaches. They ran, and the gate was green, but some of the numbers under the headings were wrong
+or answered a different question. This round fixes the findings on correctness, exclusions and
+robustness (B1, B2, M1-M6, m1-m4, m7, m9). Effect sizes and multiplicity, the d-prime model, the
+overdispersion refit, censoring, the remaining pre-registered analyses, PERCLOS modelling and the rest
+of the minor findings are part 2 (see the end). Each finding was reproduced on the current tree before
+it was fixed. Commits 29615fb, 7d581f8, 6070802, 16e691e, b187a07.
+
+**Blockers.**
+
+- **B1 — the Python comprehension model was fitting P(wrong answer).** `is_correct` loads as a bool,
+  patsy expands a bool response into `is_correct[False]` and `is_correct[True]`, and the Binomial GEE
+  takes the first as the success. Every comprehension sign was inverted against R. It is now a 0/1 int.
+  On the audit's N=40 cohort `polarity_c` is now -0.2389, R's sign; before, it was +0.2389.
+- **B2 — neither template applied the exporter's verdict.** Both dropped withdrawn participants and
+  unfinished runs, and nothing else. So incomplete participants, a test-harness (`e2e_timing`) session,
+  sittings blocked by their own integrity audit (including ocular data with no camera consent) and
+  repeat passes were all modelled. Meanwhile the cohort tab said "the analysis models analysable rows
+  only". Both templates now read `analysis_join_report.csv` and apply the same rule:
+  - **confirmatory:** analysable, not withdrawn, not `e2e_timing`, `protocol_pass` 0, and the run
+    finished;
+  - **sensitivity:** the confirmatory set plus the finished runs of participants excluded *only* for
+    an incomplete condition set. `COMPLETENESS_EXCLUSIONS` in `joinIntegrity.ts` lists those codes, and
+    a unit test holds both templates' lists to it.
+
+  Each template prints a count of condition-runs and participants per exclusion reason and refits the
+  primary on the sensitivity set. If the verdict is missing they stop with `[NO VERDICT]`; if there are
+  two, with `[TWO VERDICTS]`. The cohort tab now applies the same predicate (`inConfirmatorySet`). That
+  also closes a gap the join check leaves: a repeat-pass sitting whose first pass is no longer on the
+  device is analysable to the join check. The tab now shows the size of the confirmatory set, so its
+  claim is true. One structural fix came with this. 01_session_info.csv carries no session_id, and
+  session_index is not unique within a participant, so session-level facts are now joined by the folder
+  the row was read from: one exported folder is one sitting.
+
+**Majors.**
+
+- **M1 — the Python primary estimated the achromatic simple effect.** Colour was treatment-coded inside
+  the interaction. It is now `C(color_name, Sum)`, the same estimand as R's `contr.sum(5)` (N=40:
+  -0.257 instead of -0.497).
+- **M2 — `DROP_DISENGAGED` was TRUE.** It silently removed "bad" runs from every model, and the flag is
+  built partly from the comprehension, reading-skim and false-alarm outcomes. It is now FALSE in both
+  templates. "Bad" runs are counted and kept. The primary is refitted without them as a labelled
+  sensitivity, and no secondary is ever filtered on the flag. In `aggregate.ts` every ENGAGEMENT
+  threshold is labelled ANALYST DEFAULT (only the face-presence pilot gate is PROTOCOL), and the penalty
+  weights are named (`ENGAGEMENT_PENALTY`) instead of bare literals. A test enforces the labels. The
+  codebook's `engagement_flag` entry says the same.
+- **M3 — passage was in the primary only.** Passage is not balanced against polarity, and the imbalance
+  grows with N, so every model now carries it. R adds `(1 | passage_id)` to RT, fatigue, reading speed,
+  criterion, d-prime, search, anchor, Objective 2, blink rate and PERCLOS, and comprehension also gets
+  `(1 | item)`. Python adds `C(passage_id)` to every GEE and MixedLM. The "decoupled from condition"
+  claims are corrected in the R comment, the Python docstring (which said passage could not be fitted at
+  all), the analysis codebook, README, MASTER_BLUEPRINT, spec/CONSTANTS.md (which also gave the rotation
+  period as 10; it is 13) and types.ts. Raising the rotation period is a design question for the
+  investigator, not taken here.
+- **M4 — behavioural outcomes depended on the camera.** The R PERCLOS block's brace enclosed reading
+  speed, criterion, d-prime and search, and reading speed was fitted on camera-on rows only. Now all
+  behavioural and questionnaire models run on the condition frame before the ocular section. With every
+  camera off, both templates print `[PRIMARY NOT ESTIMABLE]`, exit 0 and report every behavioural
+  section. A primary that cannot be fitted on camera-on data ends the R run non-zero, last, with a named
+  message; before, `stopifnot()` ended it.
+- **M5 — NASA-TLX, CVS-Q and the primary printout.** R looked for NASA-TLX at DATA_DIR's top level only
+  and Python never read it; both now read and summarise it. A duplicated CVS-Q stage crashed R's pivot
+  (and lost the primary's printout, which came later). Python resolved it silently. Both now name the
+  duplicate and keep the first row. `summary(m_primary)` prints immediately after fitting.
+- **M6 — guards and small-sample errors.** Both templates now stop with a named message for fewer than
+  two participants (`[TOO FEW PARTICIPANTS]`), one polarity (`[ONE POLARITY]`), or a sitting exported
+  into two folders (`[DUPLICATED EXPORT]`, naming both), and print `[SMALL N]` below 20 participants
+  (an analyst default). Every Python GEE now uses statsmodels' `bias_reduced` covariance. In this
+  version that covariance raises a broadcasting error with `weights=`, so the primary is fitted on one
+  row per blink, which gives identical point estimates. On the 24-participant gate cohort, without the
+  frame-rate term, the polarity SE moves from 0.072 to 0.080. Where a model has no more participants
+  than parameters, Python prints `[SE CAUTION]`; this is the right outcome for N = 2 and 3, which printed
+  SE nan and 9e7. **Consequence:** with passage as a fixed effect, the Python primary has 20 parameters.
+  Below 21 participants its standard errors are therefore not interpretable and the cross-check is a
+  sign check only. R is unaffected.
+
+**Minors.** m1: the random-structure line is read from the fitted model, so it no longer claims a
+sitting term that was not fitted, and the split-plot description is rewritten for the single-level
+design. m2: R no longer fills a missing `session_index` with 1. m3: every primary sensitivity is now
+`update(m_primary, data = ...)` with the same random structure, the dead `m_primary_fps` fit is gone,
+and the frame-rate guard tolerates NA. The QC-clean refit, which the QC panel said ran, now does. m4:
+every model prints `[n]` rows used of rows given and its fitted formula; on the NA-heavy cohort this
+shows the primary using 32 of 120 runs. Python's primary now carries `eff_fps_c` as R's does, and both
+report the fit without it. m7: the comprehension comment, the `load()` docstring, the `d_prime_se`
+codebook entry (no block can be below 0.3; the minimum is 0.458, checked against `computeSdt` over
+every 20/12 outcome), ANALYSIS_PLAN §5.2's "illumination is an independent variable", and the label on
+the face-presence threshold (protocol-derived, applied per row) are corrected. m9: the cohort tab shows
+the pooled ratio (incomplete over all blinks), which is what the binomial model weights by, beside the
+mean of per-run ratios. Also found and fixed: 05_visual_search.csv was never trimmed to the analysed
+rows, and the comprehension and search tables' own `passage_id` collided with the condition frame's as
+`.x`/`.y`.
+
+**The gate (part of M12).** `verifyAnalysis.mjs` used to clone the fixture participant twelve times.
+Every clone was in the same Williams row, so the R primary was rank-deficient, and after M1 the Python
+polarity SE was 2.2e7, with the gate still green. It now runs both templates on one simulated cohort
+(`src/sim/analysisCohort.ts`). Each participant gets their own Williams row and passage rotation, plus
+known polarity effects, and RT trials that agree with their summaries. The gate checks:
+- the simulated signs are recovered, and R and Python agree on them, for the primary and for
+  comprehension;
+- no model matrix is rank-deficient and no emmeans row is nonEst;
+- the polarity SE is bounded;
+- R, Python and the dashboard count the same confirmatory and sensitivity sets;
+- passage and item terms appear in the model formulas, along with the `[n]` lines and NASA-TLX;
+- one participant, a duplicated folder, a missing verdict and an all-cameras-off cohort each end with
+  their named message.
+
+**Hostile variants** (the auditor's generator with the pooled verdict, and its RT trials made consistent
+with their summaries; exit codes R / Python):
+
+| Variant | Before | Now |
+|---|---|---|
+| N = 1 | R lme4 error; Python exit 0, z 3.6e14 | both exit 1, `[TOO FEW PARTICIPANTS]` |
+| N = 2, 3 | p < 0.001 from 2 clusters | exit 0, `[SMALL N]`, Python `[SE CAUTION]` |
+| One polarity (verdict hand-marked analysable) | contrasts error / LinAlgError | both exit 1, `[ONE POLARITY]` |
+| All cameras off | R crash; Python primary silently absent | both exit 0, `[PRIMARY NOT ESTIMABLE]`, behavioural sections present |
+| Some cameras off | reading speed on 9 of 12 participants | reading speed 120 of 120; primary 90 camera-on runs |
+| PERCLOS all missing | four behavioural sections silently absent | all present; R's PERCLOS model and PERCLOS-adjusted refit each say they did not run |
+| NA-heavy | primary 120 → 23 rows, unstated | `[n] primary: 32 of 120 rows used — 88 dropped`, both templates |
+| Abandoned sittings | 108 rows from 12 participants modelled | confirmatory 90 from 9 (`condition_coverage` x3), sensitivity 108 |
+| e2e session | modelled | `audit_e2e_timing` excluded, 110 from 11 |
+| Duplicated folder | 419 rows, then crash | both exit 1, `[DUPLICATED EXPORT]` naming both folders |
+| Duplicated CVS-Q row | crash, primary output lost | `[cvsq]` named, first kept, exit 0 |
+| No pooled export | — | both exit 1, `[NO VERDICT]` |
+| N = 130 | — | primary R -0.287 / Python -0.276, SE 0.027 / 0.026, LRT Df 4 |
+
+From N = 9 up, R and Python agree in sign on the primary and on comprehension in every variant. At
+N = 2-3 they do not, which is what `[SE CAUTION]` is for.
+
+**Data consequence.** No export column changed. The analysis now needs the pooled export beside the
+per-sitting folders. OPERATOR_MANUAL §7 says so, and names the button by its real label, "Download
+analysis dataset". Any result produced by the templates before this round modelled incomplete,
+test-harness and integrity-blocked rows. Its Python comprehension signs were inverted, and its Python
+primary was the achromatic simple effect.
+
+**Decisions for the investigator.**
+1. Whether `eff_fps_c` belongs in the confirmatory model. It is not in ANALYSIS_PLAN §2's formula, and
+   frame rate may mediate polarity. Both fits are reported until this is decided.
+2. Whether to raise the passage rotation period.
+3. Whether the Python cross-check should drop the passage fixed effect below about 21 participants,
+   trading the passage adjustment for interpretable SEs at pilot size.
+
+**Part 2** (not in this round): M7 (effect sizes, CIs, H1 falsification quantities, multiplicity),
+M8 (trial-level SDT), M9 (OLRE/beta-binomial sensitivity), M10 (censoring), M11 (ordinal, moderators,
+RT variability, lapses, carryover), M12's parameter-recovery simulation, M13 (PERCLOS), m5, m6, m8,
+m10, m11.
+
+**Synopsis (read-only, not edited).** These lines are contradicted or go beyond what the code does:
+- SYNOPSIS_AdtU.md 3.9 states the confirmatory model without a passage term or a frame-rate covariate;
+  the templates carry `(1 | passage_id)` (as ANALYSIS_PLAN §2 already did) and `eff_fps_c`.
+- LITERATURE_REVIEW.md lines 334 and 418 describe passage assignment as "counterbalanced independently
+  of condition (second orthogonal square)". The rotation is not orthogonal to condition, which is why
+  every model now carries passage.
+- SYNOPSIS_AdtU.md 3.9's "effect sizes with confidence intervals and multiplicity control" is still
+  unimplemented (part 2).
+
+Verified on b187a07 plus this entry: `npm run verify` green (73 files, 1226 unit tests; corpus,
+codebook, export and analysis gates pass); `e2e/dashboardTabs.spec.ts` and `e2e/fullRun.spec.ts`
+green (the cohort tab changed).
