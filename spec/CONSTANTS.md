@@ -36,8 +36,11 @@ covariate. C4/C6/C7 are below AA and flagged in the codebook.
 - Williams balanced Latin square, first row `[0,1,9,2,8,3,7,4,6,5]` (N=10). Row = `(enrolment−1) % 10`.
 - **Enrolment number is a sequential index** assigned at session creation (NOT a hash of the
   arbitrary participant ID — the late builds' hashing broke balance).
-- Passage decoupled: `passage(condition, p) = (conditionIndex + (p−1) % 10) % 10` → every
-  condition meets every passage once per block of 10 participants. (Original build yoked
+- Passage rotated: `passage(condition, p) = (conditionIndex + (p−1) % 13) % 10`
+  (`PASSAGE_ROTATION_PERIOD` = 13 in `counterbalance.ts`) → passage is exactly uniform against serial
+  position, but NOT balanced against condition: offsets 10-12 collide with 0-2, so each condition
+  meets three passages twice as often as the other seven. An earlier version of this line gave a
+  period of 10 and called passage "decoupled" from condition. (Original build yoked
   `passage = conditionIndex`, a confound.)
 
 ## Stage machine
@@ -51,7 +54,7 @@ though it administers three items, because the three run inside a single stage.)
 | Constant | Bundle value | Doc value | Plan (refined) |
 |---|---|---|---|
 | Reading | per-page ~20 s minimum-unlock (rAF) | 120s min/180s max (stale config) | floor, self-paced beyond; record `reading_time_ms`/wpm |
-| Passages | 8 science topics, ~274–292 words, 2 pages | same | **10 topics, ~584 words, 4 pages** — length sets the reading exposure and therefore the precision of the primary outcome; decoupled from condition |
+| Passages | 8 science topics, ~274–292 words, 2 pages | same | **10 topics, ~584 words, 4 pages** — length sets the reading exposure and therefore the precision of the primary outcome; rotated against condition, not balanced against it |
 | Comprehension | 1×4-option MCQ, RT recorded, 1 s feedback | **NO feedback** — see below | **3×4-option MCQ per passage** (gist, inference, detail), each timed from its own mount; one stored row per ITEM, so a per-condition join must aggregate |
 | Visual search | 40 000 ms limit | 60s (doc) / 120s (config) ⚠️ | use ACTUAL occurrence count (see below); record as covariate |
 

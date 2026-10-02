@@ -111,7 +111,7 @@ def exporter_verdict(session_info: pd.DataFrame, conditions: pd.DataFrame) -> pd
         sys.exit(
             f"[NO VERDICT] analysis_join_report.csv was not found under DATA_DIR "
             f"({os.path.abspath(DATA_DIR)}). Which participants may be analysed is decided by the "
-            "exporter's join check, not by this file. Take the pooled export (Dashboard -> 'Export "
+            "exporter's join check, not by this file. Take the pooled export (Dashboard -> 'Download "
             "analysis dataset') from the same tablet and put its folder inside DATA_DIR beside the "
             "per-sitting folders.")
     if len(paths) > 1:

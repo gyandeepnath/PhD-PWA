@@ -3,7 +3,7 @@ import type { QuestionKind } from '@/experiment/passages';
  * VisuLab data model (IndexedDB schema v6).
  *
  * Carries the original v5 stores forward and adds the refinement fields from the literature
- * audit: vision covariates, display photometry, decoupled passage_id, effective FPS,
+ * audit: vision covariates, display photometry, a rotated passage_id, effective FPS,
  * within-task blink bins, CVS-Q, session position, slider touched-flags, and build provenance.
  * All physical units are explicit in field names (ms, deg, cd/m2, ratio, 0-10).
  */
@@ -352,7 +352,7 @@ export interface ConditionRecord {
   color_name: string;
   /** Human-readable ink name (black/white/blue/...). Display only, never an analysis factor. */
   ink_name: string;
-  /** Decoupled passage shown under this condition. */
+  /** Passage shown under this condition: rotated against condition, NOT balanced against it (counterbalance.ts). */
   passage_id: number;
   // Photometric covariates (computed; see lib/contrast.ts).
   wcag_contrast_ratio: number;

@@ -402,6 +402,14 @@ else a sitting produces put together.
    - `07_eye_metrics.csv` — confirm `camera_active` is true and `face_presence_ratio` is high.
 5. **Copy the export off the tablet the same day.** Not at the end of the week. Everything lives in
    the tablet's browser storage until you do, and a wiped or failed device destroys it.
+
+   **For the analysis, the per-sitting folders are not enough on their own.** The analysis templates
+   decide who may be analysed from the pooled export's verdict: Dashboard → **Download analysis
+   dataset ↓** writes `analysis_long.csv`, `analysis_join_report.csv` and their companions. Take it from
+   the tablet after the last sitting has been collected and put its folder beside the per-sitting
+   folders. Without it, both templates stop and say so (`[NO VERDICT]`); with two of them, they stop
+   too (`[TWO VERDICTS]`) — keep only the latest. A sitting exported into two folders also stops the
+   run (`[DUPLICATED EXPORT]`), naming both.
 6. There is no second session to book. If the sitting had to be **split** for scheduling, book the
    remaining half as soon as the participant can manage — the ten conditions belong to one
    protocol, and a long gap between halves adds a period effect the design does not model.

@@ -98,11 +98,13 @@ with an explanation if you try.
 - **Condition hex values are locked** and contrast is recorded as a covariate. P4 (yellow on white)
   is 2.39:1, below WCAG AA; conditions below AA are balanced two per polarity so polarity is not
   confounded with accessibility compliance.
-- **Passages are decoupled from conditions** by a rotating Latin square, so passage difficulty stays
-  orthogonal to display condition. It does not prevent a re-read: ten passages cover twenty
-  condition-runs, so each is read once per sitting. Because illumination is confounded with session
-  order within a participant, the practice effect would otherwise load onto the illumination main
-  effect, so `passage_repeat_number` is exported and must be modelled.
+- **Passages are rotated against conditions** (period 13, `passageForCondition`), which makes passage
+  exactly uniform against SERIAL POSITION but NOT balanced against display condition: each condition
+  meets three of the ten passages twice as often as the other seven, and against polarity the gap
+  grows with recruitment. Every model in both analysis templates therefore carries passage (a random
+  intercept in R, a fixed effect in Python). This line used to say the rotation kept passage
+  "orthogonal to display condition", which was wrong. Each passage is read once per sitting; a whole
+  repeat of the protocol is marked by `passage_repeat_number` and `protocol_pass`.
 - **Passage length is load-bearing.** Each passage is about 585 words (571–601), laid out as three pages, which buys a
   ~180 s reading exposure. At the earlier ~240 words the exposure was 73 s, about 16 blinks, and the
   polarity × colour interaction had 27% power. `npm run verify:corpus` guards this.

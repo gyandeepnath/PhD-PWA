@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { conditionEngagement, ENGAGEMENT } from '@/dashboard/aggregate';
 import type { FatigueRecord, DisplayPerceptionRecord, ComprehensionRecord, RtSummaryRecord, EyeMetricsRecord } from '@/storage/types';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const fatigue = (over: Partial<FatigueRecord> = {}): FatigueRecord => ({
   fatigue_id: 'f', session_id: 'S', condition_id: 'A', stage: 'post_condition',
@@ -317,5 +319,36 @@ describe('a reaction-time block that scored no trial at all', () => {
   it('does not fire for a normal block', () => {
     const e = conditionEngagement({ reading_time_ms: 180_000, word_count: 580, rt: rt() });
     expect(e.rt_disengaged).toBe(false);
+  });
+});
+
+/*
+ * Every number that decides the engagement flag says where it came from.
+ *
+ * The analysis templates used to drop every "bad" run from every model by default, so these
+ * unlabelled values decided which rows the confirmatory analysis saw. The flag is now a sensitivity
+ * only, but a threshold that decides how a result is read still has to be defensible: PROTOCOL if it
+ * is the protocol's, ANALYST DEFAULT if it was chosen here.
+ */
+describe('the engagement thresholds declare their provenance', () => {
+  const source = readFileSync(resolve(__dirname, '..', 'src/dashboard/aggregate.ts'), 'utf8');
+
+  it('labels every ENGAGEMENT constant as PROTOCOL or ANALYST DEFAULT', () => {
+    const body = source.slice(source.indexOf('export const ENGAGEMENT = {'), source.indexOf('} as const;'));
+    // Each key with the doc comment that precedes it (everything since the previous key).
+    const unlabelled: string[] = [];
+    let since = 0;
+    for (const m of body.matchAll(/^\s{2}([A-Z_]+):/gm)) {
+      const doc = body.slice(since, m.index);
+      if (!/ANALYST DEFAULT|PROTOCOL/.test(doc)) unlabelled.push(m[1]);
+      since = m.index! + m[0].length;
+    }
+    expect(Object.keys(ENGAGEMENT).length).toBeGreaterThan(10);
+    expect(unlabelled).toEqual([]);
+  });
+
+  it('names the penalty weights instead of leaving bare literals at the call sites', () => {
+    expect(source).toMatch(/ANALYST DEFAULTS, every one[\s\S]*export const ENGAGEMENT_PENALTY/);
+    expect(source).not.toMatch(/penalise\(\s*\d/);
   });
 });

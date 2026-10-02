@@ -11,7 +11,7 @@
 # after the primary model had been fitted and before the sections below it.
 #
 # Point DATA_DIR at a folder that CONTAINS one exported folder per sitting (the
-# per-session "Export" bundles) AND the pooled analysis export (Dashboard -> "Export
+# per-session "Export" bundles) AND the pooled analysis export (Dashboard -> "Download
 # analysis dataset": analysis_long.csv, analysis_join_report.csv, ...), in any
 # sub-folder. The per-sitting folders carry the data; analysis_join_report.csv carries
 # the exporter's verdict on which participants may be analysed, and this file applies
@@ -154,7 +154,7 @@ if (length(verdict_paths) == 0) {
   stop(paste0("[NO VERDICT] analysis_join_report.csv was not found under DATA_DIR (",
               normalizePath(DATA_DIR, mustWork = FALSE), "). Which participants may be analysed is decided ",
               "by the exporter's join check, not by this file. Take the pooled export (Dashboard -> ",
-              "'Export analysis dataset') from the same tablet and put its folder inside DATA_DIR beside ",
+              "'Download analysis dataset') from the same tablet and put its folder inside DATA_DIR beside ",
               "the per-sitting folders."), call. = FALSE)
 }
 if (length(verdict_paths) > 1) {

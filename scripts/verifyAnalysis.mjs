@@ -507,7 +507,7 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
   rmSync(join(noVerdict, '_pooled'), { recursive: true, force: true });
   for (const [who, res] of both(noVerdict)) {
     ok(`${who}: without the pooled export's verdict it stops and says what to export`,
-      res.status !== 0 && said(res, /\[NO VERDICT\][^\n]*Export analysis dataset/), `exit ${res.status}`);
+      res.status !== 0 && said(res, /\[NO VERDICT\][^\n]*Download analysis dataset/), `exit ${res.status}`);
   }
   const camerasOff = join(dir, 'cameras-off');
   dumpCohort(camerasOff, { n: 6, seed: 6, cameraOff: 'all' });

@@ -53,6 +53,23 @@ crossover (twenty condition-runs across two illumination levels) is also flagged
 them would average two illumination cells into one and call the result a constant-illumination
 measurement.
 
+**The two sets, as both templates apply them** (Round 69). Both analysis templates read this file —
+the exporter's verdict — rather than re-deriving one, and stop with a named message if it is not
+under `DATA_DIR`. They used to drop only withdrawn participants and unfinished runs, so test-harness
+sittings, integrity-blocked sittings and incomplete participants were modelled.
+
+- **Confirmatory set** (every model): `analysable`, not `withdrawn`, not `e2e_timing`,
+  `protocol_pass` 0 (blank on older sittings, which were all first passes), and the run finished.
+- **Sensitivity set** (one refit of the primary): the confirmatory set plus the finished runs of
+  participants excluded *only* for an incomplete condition set (`condition_incomplete`,
+  `condition_coverage`, `incomplete_split_sitting`, `incomplete_crossover`; the list is
+  `COMPLETENESS_EXCLUSIONS` in `src/storage/joinIntegrity.ts`). Nobody excluded for an integrity
+  fault, missing consent, a test session or a repeat pass enters it.
+
+Each template prints the count of condition-runs and participants per exclusion reason, and the size
+of both sets; the dashboard's cohort tab counts the same two sets from `analysis_long.csv`, and
+`npm run verify:analysis` checks that R, Python and the dashboard agree on a simulated cohort.
+
 ---
 
 ## 2. The primary outcome, and why it is a count and not a number
@@ -105,6 +122,13 @@ Notes on each term:
   length- and difficulty-matched.
 - **Overdispersion must be checked.** Blinks within a condition are not independent Bernoulli trials;
   if the dispersion statistic exceeds ~1.5, refit with `glmmTMB(..., family = betabinomial)`.
+- **`eff_fps_c`, the centred effective frame rate, is in the templates' primary model and not in the
+  formula above** (Round 69 makes this explicit). Undersampling biases the measured minimum EAR
+  upward and so inflates the ratio, which is the case for adjusting; but polarity changes how the
+  face is lit, so frame rate may lie on the path from polarity to the outcome, which is the case
+  against. Both templates therefore report the primary WITH it and, beside it, the formula above
+  WITHOUT it. Which one is the confirmatory model is the investigator's decision, to be fixed before
+  the data are unblinded; until it is, report both.
 
 **Falsification.** H1 (polarity affects incomplete blinking) is not supported if the `polarity_c`
 coefficient's 95% CI includes zero in the model above. Report the coefficient on the log-odds scale
@@ -211,9 +235,11 @@ These are not optional and they come first.
    `lux_all_in_range` flags those, and `lux_complete` says whether all three checkpoints were taken.
 2. **Was the primary outcome measurable?** `fps_adequate_for_ratio`. Below the frame-rate floor the
    sampled minimum EAR is biased **upward**, so `incomplete_blink_ratio` is inflated — a directional
-   bias, not symmetric noise. **Do not drop these rows silently:** frame rate covaries with ambient
-   illumination, which is an independent variable, so dropping them deletes data non-randomly with
-   respect to a factor. Run the model with and without them and report both.
+   bias, not symmetric noise. **Do not drop these rows silently:** frame rate covaries with how the
+   face is lit, and display polarity — an independent variable — changes that, so dropping them
+   deletes data non-randomly with respect to a factor. (This item used to name ambient illumination
+   as the independent variable; illumination is now held constant.) Run the model with and without
+   them and report both.
 3. **Was the participant present?** `face_presence_ratio` and `off_axis_ratio`.
 4. **Was the exposure complete?** `observed_duration_ms` against `reading_time_ms`. A large shortfall
    means every rate in that row describes only the fraction the camera saw, and the rates themselves
@@ -231,12 +257,21 @@ structure it settled on, and runs the pre-specified sensitivity refits.
 `analysis_template.py` is a CROSS-CHECK in a second toolchain, and two of its limits are limits of
 the tool rather than choices:
 
-- statsmodels' GEE takes one clustering level, so the `(1 | passage_id)` intercept this design
-  deliberately makes available is not fitted there. A passage effect loads onto the residual in the
-  Python fit and not in the R one.
+- statsmodels' GEE takes one clustering level, so passage cannot be a random intercept there; it
+  enters every Python model as a FIXED effect, `C(passage_id)`. (This bullet used to say a passage
+  effect "loads onto the residual in the Python fit", which was true only because no Python model
+  carried passage at all — and, until Round 69, only the R primary did.)
 - GEE is population-averaged where `glmer` is subject-specific, so the two sets of coefficients are
   on different scales. Where they must agree is in SIGN and in significance, never coefficient for
   coefficient.
+
+For the two to be comparable at all they must estimate the same quantity on the same rows. Until
+Round 69 they did not: the Python comprehension model was fitting P(wrong answer), so every sign was
+inverted against R; the Python primary's colour factor was treatment-coded, so its `polarity_c` was
+the achromatic simple effect rather than the average effect R tests; and neither applied the
+exporter's verdict. Both now use the confirmatory set above, sum-coded colour, `eff_fps_c` in the
+primary, and passage in every model; Python's GEEs use statsmodels' bias-reduced sandwich covariance,
+because the plain robust one is too small with few participants.
 
 Its header used to call itself "authoritative inference", and three requirements of this plan were
 absent from it: the frame-rate sensitivity refit of §5.2, the sum-to-zero polarity coding of §2, and
@@ -255,6 +290,14 @@ level, and fitted PERCLOS raw against the instruction in §4. All of these are n
 section is missing. The R fixture is multi-participant, because a single-folder fixture can only
 exercise data loading and never a model. Neither template had ever been run against the app's own
 output; neither worked when it was.
+
+Checking that sections print could not catch a model that runs and answers the wrong question, so
+since Round 69 the gate runs both templates on ONE simulated cohort (`src/sim/analysisCohort.ts`: the
+real Williams row and passage rotation for each enrolment, and known polarity effects on the primary
+and on comprehension). It fails unless both recover the simulated SIGN, no design is rank deficient,
+the polarity standard error is bounded, and R, Python and the dashboard count the same confirmatory
+and sensitivity sets. It also runs one participant, a sitting exported twice, a missing verdict and an
+all-cameras-off cohort through both templates, each of which must end with its named message.
 
 ---
 

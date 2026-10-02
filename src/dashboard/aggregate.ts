@@ -21,20 +21,34 @@ export type QcFlag = 'good' | 'warn' | 'bad';
  * conditions whose data quality is suspect so the analyst can exclude or model them — they are
  * deliberately conservative so genuine responding is not discarded. All reuse existing recorded
  * fields; nothing extra is shown to the participant (no performance feedback → no confound).
+ *
+ * PROVENANCE. Every value here is an ANALYST DEFAULT — chosen for this app, not pre-registered and
+ * not taken from a cited source — EXCEPT FACE_PRESENCE_PILOT_GATE, which is the protocol's pilot gate.
+ * The same is true of the penalty weights (ENGAGEMENT_PENALTY) and of the good/warn/bad cut-offs
+ * (QUALITY_GOOD, QUALITY_WARN). They were unlabelled while the analysis templates dropped every
+ * "bad" run from every model by default, which made a set of unlabelled analyst choices decide which
+ * rows the confirmatory analysis saw.
+ *
+ * WHAT THE COMPOSITE FLAG MAY BE USED FOR. It is built partly from OUTCOMES — comprehension_wrong,
+ * reading_skim and rt_disengaged (a false-alarm rate) are the comprehension, reading-speed and
+ * d-prime/criterion outcomes — so it must never filter a model of those outcomes: that is selection
+ * on the dependent variable. Both analysis templates keep every run in every model and use the flag
+ * for one labelled sensitivity refit of the PRIMARY (no signal here is built from an ocular outcome).
  */
 export const ENGAGEMENT = {
-  /** Fatigue questionnaire (5 sliders) faster than this is implausibly rushed. */
+  /** Fatigue questionnaire (5 sliders) faster than this is implausibly rushed. ANALYST DEFAULT. */
   FATIGUE_RUSHED_MS: 3000,
-  /** Perception rating (2 sliders) faster than this is implausibly rushed. */
+  /** Perception rating (2 sliders) faster than this is implausibly rushed. ANALYST DEFAULT. */
   PERCEPTION_RUSHED_MS: 2000,
-  /** Reading faster than wordCount / this (wpm) is an implausible skim (normal reading ≤ ~400 wpm). */
+  /** Reading faster than wordCount / this (wpm) is an implausible skim (normal reading ≤ ~400 wpm). ANALYST DEFAULT. */
   SKIM_WPM_CEILING: 400,
   /**
    * A page advanced within this long of its own unlock was waited out, not read. Generous enough
    * that a reader who finishes just as the button becomes live is not flagged for a fast page.
+   * ANALYST DEFAULT.
    */
   PAGE_UNLOCK_GRACE_MS: 1500,
-  /** Hidden time during a passage beyond this means the exposure window is not what it claims. */
+  /** Hidden time during a passage beyond this means the exposure window is not what it claims. ANALYST DEFAULT. */
   READING_HIDDEN_MAX_MS: 5000,
   /**
    * Hidden time ANYWHERE in the condition beyond this means its timing measures are not
@@ -44,7 +58,7 @@ export const ENGAGEMENT = {
    * few seconds away cost time and nothing else. The reaction-time block is a sequence of
    * one-second trials with one-second response windows, and a browser throttles timers in a hidden
    * tab — two seconds of absence there is several trials that resolve as misses because the clock
-   * stopped, not because the participant did.
+   * stopped, not because the participant did. ANALYST DEFAULT.
    */
   CONDITION_HIDDEN_MAX_MS: 2000,
   /**
@@ -66,12 +80,13 @@ export const ENGAGEMENT = {
    *
    * Same principle as the interruption rule below: rates that a non-participant cause can explain
    * are not evidence about the participant. Not pre-registered; changed before any data collection.
+   * ANALYST DEFAULT.
    */
   RT_FALSE_ALARM_MAX: 0.3,
-  /** Camera face presence below this (when camera active) flags the participant turning away. */
+  /** Camera face presence below this (when camera active) flags the participant turning away. ANALYST DEFAULT. */
   FACE_PRESENCE_MIN: 0.5,
   /**
-   * Face presence at or above which the QC tile reads GOOD. The protocol gate, not a display default.
+   * Face presence at or above which the QC tile reads GOOD. PROTOCOL: the pilot gate, not a display default.
    *
    * The codebook entry for `face_presence_ratio` states the pilot gate as ">= 0.90 in at least 90%
    * of condition-runs", and analysis_template.R applies exactly that as QC_FACE_PRESENCE_MIN. The
@@ -97,12 +112,31 @@ export const ENGAGEMENT = {
    *
    * 20 is set as the floor at which the ratio is reported without a caveat. Runs below it are
    * flagged so they can be down-weighted or excluded in a sensitivity analysis, and so a thin
-   * exposure window cannot be mistaken for a clean null.
+   * exposure window cannot be mistaken for a clean null. ANALYST DEFAULT (the SE arithmetic above is
+   * why, not a source).
    */
   MIN_BLINKS_FOR_RATIO: 20,
-  /** quality_score >= GOOD → good; >= WARN → warn; else bad. */
+  /** quality_score >= GOOD → good; >= WARN → warn; else bad. ANALYST DEFAULT. */
   QUALITY_GOOD: 0.8,
+  /** The warn/bad boundary. ANALYST DEFAULT. */
   QUALITY_WARN: 0.5,
+} as const;
+
+/**
+ * What each fired signal subtracts from the 1.0 quality score. ANALYST DEFAULTS, every one: weighted
+ * so that a single weak signal (one wrong MCQ, a rushed rating) only warns, while a strong behavioural
+ * signal (a skim, RT disengagement) or an interruption can, with one more, reach "bad". They were bare
+ * literals at the call sites, where nobody could see that they decide the flag.
+ */
+export const ENGAGEMENT_PENALTY = {
+  READING_SKIM: 0.3,
+  INTERRUPTED: 0.25,
+  RT_DISENGAGED: 0.3,
+  RUSHED_FATIGUE: 0.2,
+  RUSHED_PERCEPTION: 0.1,
+  STRAIGHT_LINED: 0.1,
+  COMPREHENSION_BELOW_CHANCE: 0.1,
+  LOW_FACE_PRESENCE: 0.25,
 } as const;
 
 export interface ConditionSummary {
@@ -328,8 +362,8 @@ const FATIGUE_MAX = 10;
 
 /**
  * Per-condition engagement / careless-responding assessment. Pure and unit-tested. Each fired
- * signal subtracts a weight from a 1.0 quality score; the composite flag is derived from the
- * remaining score. Weighted so a single weak signal (e.g. one wrong MCQ) only warns, while the
+ * signal subtracts a weight (ENGAGEMENT_PENALTY) from a 1.0 quality score; the composite flag is
+ * derived from the remaining score. Weighted so a single weak signal (e.g. one wrong MCQ) only warns, while the
  * strong behavioural signals (skim, RT disengagement) can push a condition to "bad".
  */
 export function conditionEngagement(args: {
@@ -378,16 +412,16 @@ export function conditionEngagement(args: {
     && reading_min_page_dwell_ms < CONFIG.READING_PAGE_MIN_MS + ENGAGEMENT.PAGE_UNLOCK_GRACE_MS;
   const reading_skim = wholePassageSkim || pageWaitedOut;
   if (wholePassageSkim) {
-    penalise(0.3, `reading skimmed (${Math.round(reading_time_ms!)}ms < ${Math.round(skimFloorMs!)}ms floor)`);
+    penalise(ENGAGEMENT_PENALTY.READING_SKIM, `reading skimmed (${Math.round(reading_time_ms!)}ms < ${Math.round(skimFloorMs!)}ms floor)`);
   } else if (pageWaitedOut) {
-    penalise(0.3, `a page was advanced ${Math.round(reading_min_page_dwell_ms! - CONFIG.READING_PAGE_MIN_MS)}ms after its unlock — waited out, not read`);
+    penalise(ENGAGEMENT_PENALTY.READING_SKIM, `a page was advanced ${Math.round(reading_min_page_dwell_ms! - CONFIG.READING_PAGE_MIN_MS)}ms after its unlock — waited out, not read`);
   }
 
   // Time the app spent hidden during the passage: the participant was not looking at the stimulus,
   // and if it is large the ocular measures for this condition cover a window that includes it.
   const reading_interrupted = reading_hidden_ms != null && reading_hidden_ms > ENGAGEMENT.READING_HIDDEN_MAX_MS;
   if (reading_interrupted) {
-    penalise(0.25, `app was hidden for ${Math.round(reading_hidden_ms! / 1000)}s during reading`);
+    penalise(ENGAGEMENT_PENALTY.INTERRUPTED, `app was hidden for ${Math.round(reading_hidden_ms! / 1000)}s during reading`);
   }
 
   /*
@@ -421,13 +455,13 @@ export function conditionEngagement(args: {
     && condition_notice_ms > ENGAGEMENT.CONDITION_HIDDEN_MAX_MS;
   const condition_interrupted = hiddenTooLong || rotatedTooLong || noticeTooLong;
   if (hiddenTooLong && !reading_interrupted) {
-    penalise(0.25, `app was hidden for ${Math.round(condition_hidden_ms! / 1000)}s during this condition, outside the passage`);
+    penalise(ENGAGEMENT_PENALTY.INTERRUPTED, `app was hidden for ${Math.round(condition_hidden_ms! / 1000)}s during this condition, outside the passage`);
   }
   if (rotatedTooLong) {
-    penalise(0.25, `tablet was in portrait for ${Math.round(condition_portrait_ms! / 1000)}s during this condition — the task could not be answered while the overlay was up`);
+    penalise(ENGAGEMENT_PENALTY.INTERRUPTED, `tablet was in portrait for ${Math.round(condition_portrait_ms! / 1000)}s during this condition — the task could not be answered while the overlay was up`);
   }
   if (noticeTooLong) {
-    penalise(0.25, `a notice (camera lost or blocked, or the Pause confirmation) covered the task for ${Math.round(condition_notice_ms! / 1000)}s during this condition`);
+    penalise(ENGAGEMENT_PENALTY.INTERRUPTED, `a notice (camera lost or blocked, or the Pause confirmation) covered the task for ${Math.round(condition_notice_ms! / 1000)}s during this condition`);
   }
 
   // RT block disengagement: COMMISSION errors only — see ENGAGEMENT.RT_FALSE_ALARM_MAX for why
@@ -472,7 +506,7 @@ export function conditionEngagement(args: {
   const rt_disengaged = rtDisengagementSignal && !condition_interrupted;
   if (rt_disengaged) {
     penalise(
-      0.3,
+      ENGAGEMENT_PENALTY.RT_DISENGAGED,
       rtRanButScoredNothing
         ? `reaction-time block ran ${rt!.total_trials} trials and scored none of them — every `
           + 'response fell inside the anticipation cutoff, which is what rhythmic tapping produces'
@@ -492,13 +526,13 @@ export function conditionEngagement(args: {
 
   // Rushed questionnaires.
   const careless_rushed_fatigue = !!fatigue && fatigue.response_time_ms != null && fatigue.response_time_ms < ENGAGEMENT.FATIGUE_RUSHED_MS;
-  if (careless_rushed_fatigue) penalise(0.2, `fatigue scale rushed (${Math.round(fatigue!.response_time_ms!)}ms)`);
+  if (careless_rushed_fatigue) penalise(ENGAGEMENT_PENALTY.RUSHED_FATIGUE, `fatigue scale rushed (${Math.round(fatigue!.response_time_ms!)}ms)`);
   const careless_rushed_perception = !!perception && perception.response_time_ms != null && perception.response_time_ms < ENGAGEMENT.PERCEPTION_RUSHED_MS;
-  if (careless_rushed_perception) penalise(0.1, `perception rating rushed (${Math.round(perception!.response_time_ms!)}ms)`);
+  if (careless_rushed_perception) penalise(ENGAGEMENT_PENALTY.RUSHED_PERCEPTION, `perception rating rushed (${Math.round(perception!.response_time_ms!)}ms)`);
 
   // Straight-lined fatigue ratings.
   const careless_straight_lined = isStraightLined(fatigue);
-  if (careless_straight_lined) penalise(0.1, 'fatigue ratings straight-lined (all five identical)');
+  if (careless_straight_lined) penalise(ENGAGEMENT_PENALTY.STRAIGHT_LINED, 'fatigue ratings straight-lined (all five identical)');
 
   // Comprehension miss (weak on its own). With three items per passage a single slip is not
   // evidence of disengagement, so the flag fires only at or below chance, which for three
@@ -506,7 +540,7 @@ export function conditionEngagement(args: {
   const compAnswered = comprehension?.length ?? 0;
   const compCorrect = comprehension?.filter((x) => x.is_correct).length ?? 0;
   const comprehension_wrong = compAnswered > 0 && compCorrect / compAnswered < 0.5;
-  if (comprehension_wrong) penalise(0.1, `comprehension below chance (${compCorrect}/${compAnswered})`);
+  if (comprehension_wrong) penalise(ENGAGEMENT_PENALTY.COMPREHENSION_BELOW_CHANCE, `comprehension below chance (${compCorrect}/${compAnswered})`);
 
   // Camera: participant turned away for a large share of the condition.
   // Null face presence means no face was ever found; that is not "low presence", it is no
@@ -515,7 +549,7 @@ export function conditionEngagement(args: {
     && eye.face_presence_ratio < ENGAGEMENT.FACE_PRESENCE_MIN;
   // Raised from 0.1: at 0.1 a condition whose face was found in a third of frames still scored 0.9
   // and passed as "good", so the pre-registered drop-disengaged filter did not remove it.
-  if (low_face_presence) penalise(0.25, `low face presence (${Math.round((eye!.face_presence_ratio as number) * 100)}%)`);
+  if (low_face_presence) penalise(ENGAGEMENT_PENALTY.LOW_FACE_PRESENCE, `low face presence (${Math.round((eye!.face_presence_ratio as number) * 100)}%)`);
 
   // Too few blinks for the PRIMARY outcome to mean anything in this condition. Flagged rather than
   // dropped: the run's other measures are still valid, and silently discarding it would bias the

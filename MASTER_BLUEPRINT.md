@@ -402,7 +402,9 @@ hash, schema version; the export manifest carries **per-file FNV-1a checksums**.
   condition exactly once and first-order carryover is balanced.
 - `conditionOrderFor(enrolment)` maps the **1-based enrolment number** to a row (`(n−1) mod 8`),
   cycling every 10 participants; safe-modulo guards non-integer/negative inputs.
-- `passageForCondition` applies a **rotating offset** so passage is decoupled from condition.
+- `passageForCondition` applies a **rotating offset** (period 13) so passage is uniform against serial
+  position. It is NOT balanced against condition (each condition meets three passages twice as often
+  as the other seven), so every analysis model carries passage.
 
 ---
 
@@ -528,7 +530,8 @@ Each item below was a deliberate, verified change from the original single-file 
 in `spec/CONSTANTS.md` and `docs/PROTOCOL.md`.
 
 **Scientific design**
-- Passage **decoupled** from condition (rotating Latin square) — removed content confound.
+- Passage **rotated** against condition (period 13) — removed the yoked passage = condition confound;
+  passage stays only partly balanced against condition, so every analysis model carries it.
 - **Contrast recorded as covariate** (WCAG + Michelson + below-AA flag); colours left locked.
 - **Williams** square indexed by sequential enrolment (was an ID hash → unbalanced).
 - **Colour-vision screening** added and ordered **after** night-shift-off preflight.
