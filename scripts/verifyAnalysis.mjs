@@ -328,7 +328,18 @@ writeFileSync(${JSON.stringify(join(dir, 'expected.json'))}, JSON.stringify({ co
         // The interaction had no formal test: the line headed "the polarity x colour interaction"
         // called emmeans, which returns marginal MEANS — no contrast, no statistic, no p-value.
         ['the interaction is tested, not just described', 'OMNIBUS TEST'],
-        ['the passage intercept ANALYSIS_PLAN.md §2 prescribes is in the structure', '(1 | passage)'],
+        ['the passage intercept ANALYSIS_PLAN.md §2 prescribes is in the structure', '(1 | passage_id)'],
+        // The structure line is read from the fitted model now; it used to be a label that claimed a
+        // sitting term (1 | participant:sitting) which had not been fitted.
+        ['the structure printed is the one fitted, read from the model', 'PRIMARY MODEL RANDOM STRUCTURE:  maximal: (1 + polarity | participant_id) + (1 | passage_id)'],
+        // m4: every model says how many rows it used of the rows it was given.
+        ['every model reports the rows it used', '[n] primary:'],
+        ['the behavioural models report theirs too', '[n] comprehension:'],
+        // M5: NASA-TLX was looked for at DATA_DIR's top level only and never analysed.
+        ['NASA-TLX is found in the one-folder-per-sitting layout and summarised', 'NASA-TLX raw score'],
+        // M2: engagement-flagged runs are counted and retained; the without-'bad' fit is a sensitivity.
+        ['engagement-flagged runs are counted and retained', '[engagement]'],
+        ['the primary sensitivity refits are reported side by side', 'PRIMARY: sensitivity refits'],
         // Four of the seven §4 secondary outcomes were not modelled at all. They are
         // pre-registered, so an analyst running this file produced a thesis with four of its own
         // stated outcomes unanalysed.
@@ -353,6 +364,19 @@ writeFileSync(${JSON.stringify(join(dir, 'expected.json'))}, JSON.stringify({ co
         ['completion is offered as a censoring-immune outcome', 'completed within the window'],
         ['the uncensored fit declares its own downward bias', 'biased DOWNWARD'],
       ]) ok(`R: ${label}`, rOut.includes(needle), `"${needle}" not in the output`);
+
+      // M3: passage is not balanced against polarity, so it is in EVERY model, not only the primary.
+      // (Matched across the line break R puts in a long formula.)
+      // Read from the one-line [model] formula each fit prints, not from summary(), which lmerTest
+      // prints as the unevaluated paste0() call.
+      const modelLine = (label) => new RegExp(`^\\[model\\] ${label}: (.*)$`, 'm').exec(rOut)?.[1] ?? '';
+      ok('R: comprehension carries the passage and item intercepts',
+        modelLine('comprehension').includes('(1 | passage_id)') && modelLine('comprehension').includes('(1 | item)'),
+        `the comprehension formula is "${modelLine('comprehension')}"`);
+      for (const label of ['RT', 'fatigue', 'reading speed', 'criterion', 'd-prime', 'search time', 'anchor', 'blink rate']) {
+        ok(`R: the ${label} model carries the passage intercept too`, modelLine(label).includes('(1 | passage_id)'),
+          `the ${label} formula is "${modelLine(label)}"`);
+      }
 
       // A threshold that is not in the protocol must say so where it is read, not only in a comment.
       const quitLine = /stopped early by the participant:\s*(\d+)/.exec(rOut);
