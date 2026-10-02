@@ -263,7 +263,7 @@ Each condition runs the same six measured stages, in this order:
 | `DISPLAY_PERCEPTION` | Comfort and clarity ratings | Do not comment on the display. |
 | `POST_FATIGUE` | Five visual-fatigue items, 0 to 10 | Let them answer at their own pace. |
 | `VISUAL_SEARCH` | Tap every occurrence of a target word, fixed time limit | Do not point. |
-| `REACTION_TIME` | Go/no-go, 32 trials; the dot appears at one of eight places around the central cross | Before **Start**, check the participant's hand rests just below the bottom edge of the screen, as the card asks: a hand on the screen covers the lower dots. Then nothing. |
+| `REACTION_TIME` | Go/no-go, 32 trials; the dot appears at one of eight places around the central cross. The card asks the participant to keep their eyes on the cross between dots | Before **Start**, check the participant's hand rests just below the bottom edge of the screen, as the card asks: a hand on the screen covers the lower dots. Then nothing: do not repeat or add to the card's words, which are the same in every condition. |
 | `ADAPTATION` | Neutral grey field. A **Continue** button appears after 30 s; the field moves on by itself at 60 s (120 s when polarity switches) | Let the participant decide when to continue after 30 s. Do not prompt them to hurry: how long they rest is recorded (`adaptation_ms_before`, `adaptation_ended_by`) and analysed. |
 
 `ADAPTATION` runs a grey field **before the first condition** and then after every condition except
@@ -298,9 +298,12 @@ seconds, or blinks not being counted. A face lost for a moment does not change i
 pages and the grey field a tap opens a two-line strip in the bottom-left corner with the details (on
 a reading page the time it is open is recorded against the display); on the questions, the ratings,
 the word search and the reaction task it cannot be opened, because there it would sit where the
-participant answers or looks. While the reaction-time dots, the calibration dots, the camera
-self-test or the colour-vision plates are running it does not change at all. The camera-stopped and
-black-picture notices are what to act on, and they still appear by themselves.
+participant answers or looks. While the reaction-time trials run — from **Start** to the last dot —
+it is not shown at all, because it is drawn in the display's own colour and that is the colour the
+participant is looking for; it is back when "Block complete" appears. While the calibration dots,
+the camera self-test or the colour-vision plates are running it does not change at all. The
+camera-stopped and black-picture notices are what to act on, and they still appear by themselves —
+during the reaction task, on its instruction card and once the trials are over.
 
 On the **break** screen the way out is the same white **Exit — resume later** button as in set-up;
 the display just finished is kept and the sitting resumes at the next one. The break is the best

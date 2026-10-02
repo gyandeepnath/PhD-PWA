@@ -78,10 +78,15 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                             and no-go balanced over rings and quadrants, mirrored on alternate
                             blocks, never the same location twice in a row (Round 66; until then a
                             uniformly random, unrecorded point in the central part of the screen).
-                            The dot stays 52 px at both rings. Tap anywhere, the hand resting below
-                            the screen's bottom edge between taps. The location is exported per trial
-                            (stim_* columns); ring and ring × colour enter the trial-level models
-                            (ANALYSIS_PLAN §4a). On the condition's background; tap only when the dot
+                            The dot stays 52 px at both rings. The card asks the participant to keep
+                            their eyes on the cross between dots (Round 68; the eccentricities are
+                            measured from it) and to tap anywhere, the hand resting below the
+                            screen's bottom edge between taps. No chrome is drawn while the trials
+                            run: no Pause, no counter, no researcher indicator (Round 68: the
+                            indicator was in the screen's ink, the go-target's own colour). The
+                            location is exported per trial (stim_* columns); ring and ring × colour
+                            enter the trial-level models (ANALYSIS_PLAN §4a). On the condition's
+                            background; tap only when the dot
                             is the condition's own TEXT colour (the colour just read); the no-go dots
                             are the other four text colours of that polarity. Reports RT mean/median/
                             SD/CV, omission & commission errors, d′; each trial's dot colour is
