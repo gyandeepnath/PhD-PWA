@@ -39,6 +39,7 @@ import pandas as pd
 import statsmodels.api as sm
 import glob
 import statsmodels.formula.api as smf
+from statsmodels.stats.multitest import multipletests
 
 # Point DATA_DIR at a folder containing one exported folder per sitting plus the pooled export.
 # VISULAB_DATA_DIR overrides it from the environment, so scripts/verifyAnalysis.mjs can run this
@@ -657,7 +658,56 @@ def main() -> None:
         fitted = smf.gee("incomplete ~ " + rhs, groups="participant_id", data=blinks.reset_index(drop=True),
                          family=sm.families.Binomial()).fit(cov_type=GEE_COV)
         fitted.runs_used = len(prim)
+        fitted.runs_frame = prim
         return fitted
+
+    def h1_effects(m, prim: pd.DataFrame) -> dict:
+        """H1's three quantities (ANALYSIS_PLAN.md §2 and §4b), as in the R template: the polarity
+        log-odds difference with its 95% CI, the odds ratio, and the predicted difference in
+        PROPORTION with a delta-method CI. None of them was printed.
+
+        The proportions are read at a reference point built the way emmeans builds R's: each colour
+        and each passage weighted equally, every numeric covariate at its mean over the condition-runs,
+        and polarity_c at +0.5 or -0.5. A sum-coded colour column is then 0, a treatment-coded column
+        1/k, and a product term the product of its parts. GEE is POPULATION-AVERAGED, so these are
+        population-level proportions where R's are for a participant with random effects at zero; the
+        two agree in sign, not to the decimal."""
+        names = m.model.exog_names
+        beta = m.params.to_numpy()
+        cov = m.cov_params().to_numpy()
+        runs = prim.reset_index(drop=True)
+
+        def part(term: str, pol: float) -> float:
+            if term == "polarity_c":
+                return pol
+            if term.startswith("C(") and "Sum)[S." in term:
+                return 0.0
+            if term.startswith("C(") and ")[T." in term:
+                prefix = term.split(")[T.")[0] + ")[T."
+                return 1.0 / (sum(1 for n in names if ":" not in n and n.startswith(prefix)) + 1)
+            return float(runs[term].mean())
+
+        def point(pol: float) -> np.ndarray:
+            return np.array([1.0 if n == "Intercept" else float(np.prod([part(t, pol) for t in n.split(":")]))
+                             for n in names])
+
+        x_pos, x_neg = point(0.5), point(-0.5)
+        expit = lambda v: 1.0 / (1.0 + np.exp(-v))
+        p_pos, p_neg = expit(x_pos @ beta), expit(x_neg @ beta)
+        grad = p_pos * (1 - p_pos) * x_pos - p_neg * (1 - p_neg) * x_neg
+        se_diff = float(np.sqrt(grad @ cov @ grad))
+        lo, hi = m.conf_int().loc["polarity_c"]
+        return {"estimate": m.params["polarity_c"], "lcl": lo, "ucl": hi, "p": m.pvalues["polarity_c"],
+                "p_pos": p_pos, "p_neg": p_neg, "diff": p_pos - p_neg,
+                "diff_lcl": p_pos - p_neg - 1.959964 * se_diff, "diff_ucl": p_pos - p_neg + 1.959964 * se_diff}
+
+    def print_h1(label: str, h: dict) -> None:
+        verdict = "EXCLUDES" if (h["lcl"] > 0 or h["ucl"] < 0) else "INCLUDES"
+        print(f"[H1] {label}: polarity_c (positive minus negative) log-odds {h['estimate']:.3f} "
+              f"(95% CI {h['lcl']:.3f} to {h['ucl']:.3f}), p {h['p']:.2g} — the CI {verdict} zero")
+        print(f"[H1] {label}: odds ratio {np.exp(h['estimate']):.3f} (95% CI {np.exp(h['lcl']):.3f} to {np.exp(h['ucl']):.3f})")
+        print(f"[H1] {label}: predicted proportion incomplete, positive {h['p_pos']:.3f} vs negative {h['p_neg']:.3f}; "
+              f"difference {h['diff']:.4f} (95% CI {h['diff_lcl']:.4f} to {h['diff_ucl']:.4f})")
 
     def sens_line(label: str, m) -> None:
         print(f"  {label:<44} polarity_c {m.params['polarity_c']:.4f} (SE {m.bse['polarity_c']:.4f}), "
@@ -686,11 +736,41 @@ def main() -> None:
               + f"; covariance {GEE_COV} over {prim['participant_id'].nunique()} participants")
         cluster_note(m, "primary")
 
-        print("\n=== PRIMARY: sensitivity refits (polarity_c = positive minus negative, log-odds) ===")
-        sens_line("confirmatory (the primary above)", m)
         # Without eff_fps_c: ANALYSIS_PLAN.md §2's formula, and the answer if frame rate is a
         # mediator of the polarity effect (polarity changes face illumination) rather than a nuisance.
-        sens_line("without the eff_fps_c covariate (§2 formula)", fit_primary(prim, primary_rhs.replace(" + eff_fps_c", "")))
+        # H1 is reported on both until the investigator decides which model is confirmatory (§2).
+        m_no_fps = fit_primary(prim, primary_rhs.replace(" + eff_fps_c", ""))
+        print("\n=== H1 EFFECT SIZE (ANALYSIS_PLAN.md §2 and §4b) — population-averaged ===")
+        print("Falsification rule (§2): H1 is not supported if the 95% CI of the polarity effect includes zero.")
+        h1 = h1_effects(m, m.runs_frame)
+        print_h1("primary", h1)
+        print_h1("without eff_fps_c (§2 formula)", h1_effects(m_no_fps, m_no_fps.runs_frame))
+
+        # THE PRIMARY FAMILY (§4b): H1a (polarity) and H1b (polarity x colour), raw and Holm across the
+        # two, as in the R template. H1b is a Wald test of the four interaction columns on the
+        # bias-reduced covariance, where R uses a likelihood-ratio test; GEE has no likelihood.
+        names = m.model.exog_names
+        int_cols = [n for n in names if n.startswith("polarity_c:C(color_name, Sum)")]
+        p_h1b = np.nan
+        if int_cols:
+            constraint = np.zeros((len(int_cols), len(names)))
+            for i, c in enumerate(int_cols):
+                constraint[i, names.index(c)] = 1.0
+            p_h1b = float(m.wald_test(constraint, scalar=True).pvalue)
+        p_fam = np.array([h1["p"], p_h1b])
+        holm = np.full(2, np.nan)
+        # isfinite, not the unary negation operator: tests/analysisTemplates.test.ts reads any quoted span
+        # containing that character as a patsy formula.
+        ok = np.isfinite(p_fam)
+        holm[ok] = multipletests(p_fam[ok], method="holm")[1]
+        print("\n=== PRIMARY FAMILY (ANALYSIS_PLAN.md §4b): the two pre-specified tests on the primary outcome ===")
+        print(f"  {'H1a polarity (Wald z)':<44} p {p_fam[0]:<10.3g} Holm across the two {holm[0]:.3g}")
+        print(f"  {'H1b polarity x colour (Wald, ' + str(len(int_cols)) + ' df)':<44} p {p_fam[1]:<10.3g} Holm across the two {holm[1]:.3g}")
+        print("  §2 decides H1 on the UNADJUSTED 95% CI; the Holm column is printed for the decision §4b leaves open.")
+
+        print("\n=== PRIMARY: sensitivity refits (polarity_c = positive minus negative, log-odds) ===")
+        sens_line("confirmatory (the primary above)", m)
+        sens_line("without the eff_fps_c covariate (§2 formula)", m_no_fps)
 
         # --- the pre-registered frame-rate sensitivity, which was ABSENT ------------------------
         #

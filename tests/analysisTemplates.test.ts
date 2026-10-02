@@ -367,3 +367,40 @@ describe('the templates read the exporter\'s verdict and agree on the completene
     }
   });
 });
+
+/**
+ * THE OUTCOME FAMILIES ARE ONE LIST, AND EVERY SECONDARY MODEL IS IN IT.
+ *
+ * Synopsis §3.9 asks for multiplicity control within outcome families, and ANALYSIS_PLAN.md §4b
+ * defines them. The R template applies Holm within each family over the models registered with
+ * add_to_family(). A model registered under a label that is not a family member would be left out of
+ * every family's adjustment without a word; a member that is neither registered nor declared
+ * not-yet-modelled would make the family look smaller than the plan says it is.
+ */
+describe('the R template\'s outcome families match its models and the plan', () => {
+  const r = src('src/analysis/analysis_template.R');
+  const block = /OUTCOME_FAMILIES <- list\(([\s\S]*?)\n\)/.exec(r);
+  const families = new Map<string, string[]>();
+  for (const m of (block?.[1] ?? '').matchAll(/(\w+)\s*=\s*c\(([^)]*)\)/g)) {
+    families.set(m[1], [...m[2].matchAll(/"([^"]+)"/g)].map((x) => x[1]));
+  }
+  const members = [...families.values()].flat();
+  const registered = [...r.matchAll(/add_to_family\("([^"]+)"/g)].map((m) => m[1]);
+  const notYet = [...(/NOT_YET_MODELLED <- c\(([^)]*)\)/.exec(r)?.[1] ?? '').matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+
+  it('defines the three families of ANALYSIS_PLAN.md §4b', () => {
+    expect([...families.keys()].sort()).toEqual(['ocular', 'performance', 'subjective']);
+    const plan = src('docs/ANALYSIS_PLAN.md');
+    for (const f of ['Ocular', 'Subjective', 'Performance']) expect(plan).toMatch(new RegExp(`^\\| ${f}`, 'm'));
+  });
+
+  it('registers every secondary model under a family member', () => {
+    expect(registered.length).toBeGreaterThanOrEqual(9);
+    expect(registered.filter((o) => !members.includes(o))).toEqual([]);
+  });
+
+  it('either models each member or declares it not yet modelled — never both, never neither', () => {
+    expect(members.filter((o) => !registered.includes(o) && !notYet.includes(o))).toEqual([]);
+    expect(notYet.filter((o) => registered.includes(o) || !members.includes(o))).toEqual([]);
+  });
+});

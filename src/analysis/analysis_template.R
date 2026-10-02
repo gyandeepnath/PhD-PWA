@@ -502,6 +502,101 @@ report_n <- function(m, data, label) {
   cat(sprintf("[model] %s: %s\n", label, paste(deparse(formula(m), width.cutoff = 500L), collapse = " ")))
 }
 
+# ===========================================================================================
+# EFFECT SIZES AND MULTIPLICITY — ANALYSIS_PLAN.md §4b; synopsis §3.9: "Effect sizes with confidence
+# intervals and multiplicity control within outcome families are reported throughout."
+#
+# Neither was. Every model printed summary() — a coefficient, its SE, a z or t and a p — and no
+# interval; the plan's H1 falsification quantities (the 95% CI of the polarity effect and the
+# predicted difference in proportion) were never computed; and a dozen secondary p-values were
+# printed side by side with nothing to say how many had been looked at.
+#
+# The polarity effect is read through emmeans, not from the coefficient table, so that it is the
+# same quantity in every model: positive minus negative, AVERAGED over colour wherever colour is in
+# the model (which, with colour sum-coded, is the polarity main effect), at the mean of every
+# covariate. Effects are reported in each outcome's own units — log-odds and odds ratios for the
+# binomial models, ms, words/min or scale points for the Gaussian ones — not standardised: a mixed
+# model has no single standard deviation to divide by, and a unit an optometry reader can picture
+# is the more useful number.
+# ===========================================================================================
+
+# The polarity contrast of any fitted model with a `polarity` factor: estimate, CI, test.
+# The interval columns are named by the df method — asymp.LCL for a glmer, lower.CL for an lmer — so
+# both names are matched; a column that is not found stops the run rather than printing nothing.
+ci_col <- function(s, side) {
+  hit <- grep(if (side == "lower") "(LCL|lower\\.CL)$" else "(UCL|upper\\.CL)$", names(s), value = TRUE)
+  if (length(hit) != 1) stop("no ", side, " confidence limit in the emmeans summary: ", paste(names(s), collapse = ", "))
+  s[[hit]]
+}
+# emmeans notes that a main effect "may be misleading due to involvement in interactions"; averaging
+# over colour is the estimand here (the sum-coded main effect), so the note is silenced, not ignored.
+polarity_contrast <- function(m) {
+  # The formula on a line of its own, for the reason given at m_additive.
+  e <- suppressMessages(emmeans(m, ~ polarity))
+  s <- summary(pairs(e), infer = c(TRUE, TRUE))
+  list(estimate = s$estimate, se = s$SE, lcl = ci_col(s, "lower"), ucl = ci_col(s, "upper"), p = s$p.value)
+}
+
+# H1's three quantities (ANALYSIS_PLAN.md §2): the log-odds difference with its 95% CI, the same as
+# an odds ratio, and the predicted difference in PROPORTION — "because a log-odds of 0.2 is not
+# interpretable to an optometry readership". The proportions are for a participant and a passage
+# with random effects at zero (the model's "typical" participant, not a population average), at the
+# mean serial position and frame rate, averaged over the five colours.
+h1_effects <- function(m) {
+  if (is.null(m)) return(NULL)
+  e <- suppressMessages(emmeans(m, ~ polarity))
+  lo <- polarity_contrast(m)
+  pr <- summary(regrid(e))
+  pd <- summary(pairs(regrid(e)), infer = c(TRUE, TRUE))
+  c(lo, list(p_pos = pr$prob[pr$polarity == "positive"], p_neg = pr$prob[pr$polarity == "negative"],
+             diff = pd$estimate, diff_lcl = ci_col(pd, "lower"), diff_ucl = ci_col(pd, "upper")))
+}
+print_h1 <- function(label, h) {
+  if (is.null(h)) { cat(sprintf("[H1] %s: not fitted\n", label)); return(invisible(NULL)) }
+  cat(sprintf("[H1] %s: polarity (positive minus negative) log-odds %.3f (95%% CI %.3f to %.3f), p %s — the CI %s zero\n",
+              label, h$estimate, h$lcl, h$ucl, format.pval(h$p, digits = 2),
+              if (h$lcl > 0 || h$ucl < 0) "EXCLUDES" else "INCLUDES"))
+  cat(sprintf("[H1] %s: odds ratio %.3f (95%% CI %.3f to %.3f)\n", label, exp(h$estimate), exp(h$lcl), exp(h$ucl)))
+  cat(sprintf("[H1] %s: predicted proportion incomplete, positive %.3f vs negative %.3f; difference %.4f (95%% CI %.4f to %.4f)\n",
+              label, h$p_pos, h$p_neg, h$diff, h$diff_lcl, h$diff_ucl))
+}
+
+# The interaction's p-value, by the test that suits the model: Satterthwaite F for an lmer (lmerTest),
+# a likelihood-ratio test against the additive model for a glmer. NA where the model has no
+# polarity x colour term (RT, fatigue and comprehension are specified with log contrast instead).
+interaction_p <- function(m) {
+  if (!"polarity:colour" %in% attr(terms(m), "term.labels")) return(NA_real_)
+  if (inherits(m, "lmerModLmerTest")) return(anova(m)["polarity:colour", "Pr(>F)"])
+  additive <- update(m, . ~ . - polarity:colour)
+  anova(additive, m)[2, "Pr(>Chisq)"]
+}
+
+# The outcome families of ANALYSIS_PLAN.md §4b, and the label each member's model is fitted under.
+# A member not modelled yet is listed so the family's size is stated, not silently smaller.
+OUTCOME_FAMILIES <- list(
+  ocular      = c("blink rate", "inter-blink interval"),
+  subjective  = c("fatigue", "comfort", "clarity"),
+  performance = c("reading speed", "comprehension", "RT", "RT variability", "lapse rate",
+                  "d-prime", "criterion", "search completion", "search time")
+)
+family_rows <- list()
+# Registered where each model is fitted; read once, at the end, by the multiplicity table.
+add_to_family <- function(outcome, m, units, odds_ratio = FALSE, note = NULL) {
+  row <- list(outcome = outcome, units = units, estimate = NA_real_, lcl = NA_real_, ucl = NA_real_,
+              p = NA_real_, p_int = NA_real_, note = note)
+  if (!is.null(m)) {
+    pc <- tryCatch(polarity_contrast(m), error = function(err) conditionMessage(err))
+    if (is.character(pc)) row$note <- paste("polarity contrast failed:", pc) else {
+      tf <- if (odds_ratio) exp else identity
+      row[c("estimate", "lcl", "ucl", "p")] <- list(tf(pc$estimate), tf(pc$lcl), tf(pc$ucl), pc$p)
+    }
+    row$p_int <- tryCatch(interaction_p(m), error = function(err) NA_real_)
+  } else if (is.null(note)) {
+    row$note <- "model did not fit"
+  }
+  family_rows[[outcome]] <<- row
+}
+
 # --- ENGAGEMENT: counted, retained, and a sensitivity on the PRIMARY only ---------------------
 # DROP_DISENGAGED used to default to TRUE, which removed every condition-run flagged "bad" from
 # EVERY model, silently (no count was printed), and the "with and without" comparison its comment
@@ -700,6 +795,7 @@ m_rt <- lmer(
   data = rt
 )
 cat("\n=== RT mixed model ===\n"); print(summary(m_rt)); report_n(m_rt, rt, "RT")
+add_to_family("RT", m_rt, "ms")
 cat("\nMarginal means by polarity:\n"); print(emmeans(m_rt, ~ polarity))
 
 # --- Subjective fatigue (post-condition VAS composite) -------------------------------------
@@ -724,6 +820,7 @@ m_fat <- lmer(
   data = fat
 )
 cat("\n=== Fatigue mixed model ===\n"); print(summary(m_fat)); report_n(m_fat, fat, "fatigue")
+add_to_family("fatigue", m_fat, paste0(fat_response, ", 0-10 pts"))
 
 # --- Comprehension accuracy (logistic mixed model) -----------------------------------------
 # passage_id is taken from the condition frame: 04_comprehension.csv carries its own copy, and the two
@@ -752,6 +849,7 @@ m_comp <- glmer(
   data = comp, family = binomial
 )
 cat("\n=== Comprehension logistic mixed model ===\n"); print(summary(m_comp)); report_n(m_comp, comp, "comprehension")
+add_to_family("comprehension", m_comp, "odds ratio, correct", odds_ratio = TRUE)
 
 # --- d-prime: aggregate ACROSS conditions per participant (per-condition d' is unstable) ----
 dprime_overall <- rt_summary %>%
@@ -788,6 +886,7 @@ if ("reading_speed_wpm" %in% names(cond) && sum(is.finite(cond$reading_speed_wpm
     error = function(err) NULL
   )
   if (is.null(m_wpm)) cat("the reading-speed model did not fit.\n") else { print(summary(m_wpm)); report_n(m_wpm, cond, "reading speed") }
+  add_to_family("reading speed", m_wpm, "words/min")
 } else {
   cat("\n[reading speed] reading_speed_wpm carries no finite values — not modelled.\n")
 }
@@ -805,6 +904,7 @@ if ("criterion" %in% names(rt) && sum(is.finite(rt$criterion)) > 0) {
     error = function(err) NULL
   )
   if (is.null(m_crit)) cat("the criterion model did not fit.\n") else { print(summary(m_crit)); report_n(m_crit, rt, "criterion") }
+  add_to_family("criterion", m_crit, "criterion (z units)")
 }
 
 # §4 on d-prime: "With 20 go and 12 no-go trials, one block's d' is imprecise. Check `d_prime_se`
@@ -831,6 +931,7 @@ if ("d_prime" %in% names(rt) && sum(is.finite(rt$d_prime)) > 0) {
     error = function(err) NULL
   )
   if (is.null(m_dp)) cat("the d-prime model did not fit.\n") else { print(summary(m_dp)); report_n(m_dp, dp, "d-prime") }
+  add_to_family("d-prime", m_dp, "d' (z units)")
 }
 
 # --- Visual search (§4: LMM, censored) ----------------------------------------------------
@@ -937,6 +1038,7 @@ if (!is.null(search) && "search_time_ms" %in% names(search)) {
         error = function(err) NULL
       )
       if (is.null(m_vs_done)) cat("the completion model did not fit.\n") else { print(summary(m_vs_done)); report_n(m_vs_done, vs, "search completion") }
+      add_to_family("search completion", m_vs_done, "odds ratio, completed", odds_ratio = TRUE)
     }
   }
 
@@ -948,6 +1050,7 @@ if (!is.null(search) && "search_time_ms" %in% names(search)) {
     error = function(err) NULL
   )
   if (is.null(m_vs)) cat("the visual-search model did not fit.\n") else { print(summary(m_vs)); report_n(m_vs, vs, "search time") }
+  add_to_family("search time", m_vs, "ms (uncensored)")
 } else {
   cat("\n[visual search] 05_visual_search.csv not found or carries no search_time_ms.\n")
 }
@@ -1203,6 +1306,20 @@ if (nrow(eye) == 0) {
     if (length(fit$notes)) cat("fit notes:\n  ", paste(fit$notes, collapse = "\n  "), "\n")
     cat("################################################################\n")
 
+    # Without eff_fps_c: §2's own formula, and the answer if frame rate is a mediator, not a nuisance.
+    # Fitted here because H1 is reported on both until the investigator decides which is confirmatory
+    # (§2). (The formula on its own line, for the reason given at m_additive.)
+    m_no_fps <- tryCatch(
+      update(m_primary, . ~ . - eff_fps_c),
+      error = function(err) NULL
+    )
+    cat("\n=== H1 EFFECT SIZE (ANALYSIS_PLAN.md §2 and §4b) ===\n")
+    cat("Falsification rule (§2): H1 is not supported if the 95% CI of the polarity effect includes zero.\n")
+    cat("Proportions: random effects at zero, covariates at their means, averaged over the five colours.\n")
+    h1_primary <- h1_effects(m_primary)
+    print_h1("primary", h1_primary)
+    print_h1("without eff_fps_c (§2 formula)", tryCatch(h1_effects(m_no_fps), error = function(err) NULL))
+
     cat("\nMarginal means (back-transformed to the proportion scale):\n")
     if (USE_ILLUMINATION) {
       print(emmeans(m_primary, ~ polarity | illumination, type = "response"))
@@ -1241,6 +1358,28 @@ if (nrow(eye) == 0) {
     # type = 'response' so these print as proportions.
     print(emmeans(m_primary, ~ colour | polarity, type = "response"))
 
+    # The polarity effect WITHIN each colour, as odds ratios, Holm-adjusted ACROSS the five colours.
+    # by = NULL is what makes the five one family: left grouped by colour, emmeans adjusts each
+    # one-contrast group on its own, which is no adjustment at all.
+    cat("\nPolarity effect within each colour (odds ratio, positive / negative), Holm across the five colours.\n")
+    cat("They describe the SHAPE of an interaction; read them only beside the omnibus test above.\n")
+    print(summary(pairs(emmeans(m_primary, ~ polarity | colour), type = "response"),
+                  by = NULL, adjust = "holm", infer = c(TRUE, TRUE)))
+
+    # THE PRIMARY FAMILY (§4b): the two pre-specified tests on the primary outcome, H1a (polarity) and
+    # H1b (polarity x colour). §2's rule decides H1 on the unadjusted 95% CI; whether H1a and H1b
+    # should instead share a family-wise error rate is a decision §4b leaves to the investigator, so
+    # both p-values are printed raw and Holm-adjusted across the two.
+    p_h1b <- if (is.null(m_additive)) NA_real_ else anova(m_additive, m_primary)[2, "Pr(>Chisq)"]
+    p_fam <- c(H1a = h1_primary$p, H1b = p_h1b)
+    p_fam_holm <- p.adjust(p_fam, method = "holm")
+    cat("\n=== PRIMARY FAMILY (ANALYSIS_PLAN.md §4b): the two pre-specified tests on the primary outcome ===\n")
+    cat(sprintf("  %-40s p %-10s Holm across the two %s\n", "H1a polarity (Wald z)",
+                format.pval(p_fam[1], digits = 3), format.pval(p_fam_holm[1], digits = 3)))
+    cat(sprintf("  %-40s p %-10s Holm across the two %s\n", "H1b polarity x colour (likelihood ratio)",
+                format.pval(p_fam[2], digits = 3), format.pval(p_fam_holm[2], digits = 3)))
+    cat("  §2 decides H1 on the UNADJUSTED 95% CI; the Holm column is printed for the decision §4b leaves open.\n")
+
     # ===========================================================================================
     # SENSITIVITY REFITS OF THE PRIMARY. Each is the SAME model — update(m_primary, data = ...) — on
     # different rows, so a difference between it and the confirmatory fit is a difference in the
@@ -1267,12 +1406,7 @@ if (nrow(eye) == 0) {
       cat("  every camera-on run is adequately sampled (or none is): no frame-rate refit to run.\n")
     }
 
-    # Without eff_fps_c: §2's own formula, and the answer if frame rate is a mediator, not a nuisance.
-    # (The formula on its own line, for the reason given at m_additive.)
-    m_no_fps <- tryCatch(
-      update(m_primary, . ~ . - eff_fps_c),
-      error = function(err) NULL
-    )
+    # Without eff_fps_c: §2's own formula (m_no_fps, fitted with the H1 effect size above).
     sens_line("without the eff_fps_c covariate (§2 formula)", m_no_fps)
 
     # §5 QC-clean. The QC panel said this refit ran; it did not, until now.
@@ -1372,6 +1506,7 @@ if (nrow(eye) == 0) {
                       error = function(err) NULL)
   cat("\n=== Blink-rate mixed model (secondary) ===\n")
   if (is.null(m_blink)) cat("the blink-rate model did not fit.\n") else { print(summary(m_blink)); report_n(m_blink, eye, "blink rate") }
+  add_to_family("blink rate", m_blink, "blinks/min")
 
   if (any(!is.na(eye$perclos_p80))) {
     # ANALYSIS_PLAN.md §4, PERCLOS row: "LMM on logit. Bounded; do not model raw."
@@ -1392,6 +1527,47 @@ if (nrow(eye) == 0) {
     if (is.null(m_perclos)) cat("the PERCLOS model did not fit.\n") else { print(summary(m_perclos)); report_n(m_perclos, eye_pc, "PERCLOS") }
   } else {
     cat("\n[perclos] perclos_p80 carries no values — the PERCLOS model is NOT run.\n")
+  }
+}
+
+# ===========================================================================================
+# SECONDARY OUTCOMES: EFFECT SIZES AND HOLM WITHIN FAMILY (ANALYSIS_PLAN.md §4b)
+#
+# One table per family, from the models registered as they were fitted. Two hypothesis terms per
+# outcome, each Holm-adjusted across the family's outcomes separately: the polarity effect, and the
+# polarity x colour interaction where the model has one. A family member this template does not
+# model yet is LISTED, not dropped: the adjusted p-values are over the members that were modelled,
+# so they are smaller than they will be once the rest are added, and the table says so.
+# ===========================================================================================
+NOT_YET_MODELLED <- c("inter-blink interval", "comfort", "clarity", "RT variability", "lapse rate")
+cat("\n=== SECONDARY OUTCOMES: effect sizes and multiplicity (ANALYSIS_PLAN.md §4b) ===\n")
+cat("Effect = polarity, positive minus negative (ratio positive / negative for odds ratios), at the mean of\n")
+cat("the covariates and averaged over colour where colour is in the model; 95% CI unadjusted. Holm is applied\n")
+cat("within each family, separately to the polarity p-values and to the interaction p-values. Confirmatory\n")
+cat("inference is confined to the primary outcome (synopsis §3.7); these are secondary.\n")
+fmt_p <- function(p) if (is.na(p)) "-" else format.pval(p, digits = 2, eps = 1e-4)
+for (fam in names(OUTCOME_FAMILIES)) {
+  members <- OUTCOME_FAMILIES[[fam]]
+  rows <- family_rows[intersect(members, names(family_rows))]
+  p_pol <- vapply(rows, function(r) r$p, numeric(1))
+  p_int <- vapply(rows, function(r) r$p_int, numeric(1))
+  holm_pol <- p.adjust(p_pol, method = "holm")
+  holm_int <- p.adjust(p_int, method = "holm")
+  absent <- setdiff(members, names(rows))
+  cat(sprintf("\n[family] %s: %d of %d outcome(s) tested for polarity; Holm across those %d\n",
+              fam, sum(!is.na(p_pol)), length(members), sum(!is.na(p_pol))))
+  cat(sprintf("  %-18s %-34s %-26s %-9s %-9s | %-12s %s\n",
+              "outcome", "effect (95% CI)", "units", "p", "p Holm", "interaction", "p Holm"))
+  for (o in names(rows)) {
+    r <- rows[[o]]
+    eff <- if (is.na(r$estimate)) (if (is.null(r$note)) "-" else r$note) else sprintf("%.3f (%.3f to %.3f)", r$estimate, r$lcl, r$ucl)
+    cat(sprintf("  %-18s %-34s %-26s %-9s %-9s | %-12s %s\n", o, eff, r$units,
+                fmt_p(r$p), fmt_p(holm_pol[[o]]), fmt_p(r$p_int), fmt_p(holm_int[[o]])))
+  }
+  for (o in absent) {
+    cat(sprintf("  %-18s %s\n", o, if (o %in% NOT_YET_MODELLED)
+      "not yet modelled by this template — the Holm values above will rise when it is"
+      else "not modelled in this run (no data, or the model did not fit; see its section)"))
   }
 }
 

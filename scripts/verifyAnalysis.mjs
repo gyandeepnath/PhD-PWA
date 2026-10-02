@@ -190,6 +190,36 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
   const pyComp = coefAfter(out, 'Comprehension GEE', 'polarity_c');
   ok('the primary polarity coefficient has the simulated sign', Math.sign(pyPrimary) === EXPECTED_SIGN.primary, `got ${pyPrimary}`);
   ok('the comprehension polarity coefficient has the simulated sign', Math.sign(pyComp) === EXPECTED_SIGN.comprehension, `got ${pyComp}`);
+  /*
+   * H1'S EFFECT SIZE (M7). The plan's falsification quantities — the polarity effect's 95% CI, and the
+   * predicted difference in proportion — were never printed by either template. Read back here and
+   * held to the simulated sign, to each other (the odds ratio is exp(log-odds), on both limits), and,
+   * further down, to R's.
+   */
+  const h1 = (text) => {
+    const lo = /\[H1\] primary: polarity\S* \(positive minus negative\) log-odds (-?[\d.]+) \(95% CI (-?[\d.]+) to (-?[\d.]+)\), p \S+ — the CI (EXCLUDES|INCLUDES) zero/.exec(text);
+    const or = /\[H1\] primary: odds ratio ([\d.]+) \(95% CI ([\d.]+) to ([\d.]+)\)/.exec(text);
+    const pd = /\[H1\] primary: predicted proportion incomplete, positive ([\d.]+) vs negative ([\d.]+); difference (-?[\d.]+) \(95% CI (-?[\d.]+) to (-?[\d.]+)\)/.exec(text);
+    return lo && or && pd ? {
+      est: +lo[1], lcl: +lo[2], ucl: +lo[3], verdict: lo[4], or: [+or[1], +or[2], +or[3]],
+      pPos: +pd[1], pNeg: +pd[2], diff: +pd[3], dLcl: +pd[4], dUcl: +pd[5],
+    } : null;
+  };
+  const h1Sane = (h) => h != null
+    && Math.abs(h.or[0] - Math.exp(h.est)) < 0.002 && Math.abs(h.or[1] - Math.exp(h.lcl)) < 0.002 && Math.abs(h.or[2] - Math.exp(h.ucl)) < 0.002
+    && h.lcl < h.est && h.est < h.ucl && h.dLcl < h.diff && h.diff < h.dUcl
+    && Math.abs(h.pPos - h.pNeg - h.diff) < 0.0011;
+  const pyH1 = h1(out);
+  ok('H1 is reported as a log-odds difference with its 95% CI, an odds ratio, and a difference in proportion',
+    h1Sane(pyH1), `parsed ${JSON.stringify(pyH1)}`);
+  ok('... with the simulated sign on both scales, and a CI that excludes zero for a simulated 0.4 log-odds effect',
+    pyH1 != null && Math.sign(pyH1.est) === EXPECTED_SIGN.primary && Math.sign(pyH1.diff) === EXPECTED_SIGN.primary
+      && pyH1.verdict === 'EXCLUDES' && Math.sign(pyH1.dUcl) === EXPECTED_SIGN.primary, `parsed ${JSON.stringify(pyH1)}`);
+  ok('H1 is also reported on the §2 formula, without the frame-rate covariate',
+    /\[H1\] without eff_fps_c \(§2 formula\): polarity/.test(out), 'no H1 line for the fit without eff_fps_c');
+  ok('the primary family prints H1a and H1b, raw and Holm across the two',
+    /PRIMARY FAMILY[\s\S]*H1a polarity[^\n]*Holm across the two [\d.e-]+\n[^\n]*H1b polarity x colour[^\n]*Holm across the two [\d.e-]+/.test(out),
+    'no primary-family block with both tests');
   // The sections docs/ANALYSIS_PLAN.md names. Absence of one means an analyst ran the file and was
   // not given an outcome the plan requires — which is how the frame-rate sensitivity went missing.
   for (const [label, needle] of [
@@ -327,6 +357,45 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
         Math.sign(rComp) === EXPECTED_SIGN.comprehension && Math.sign(pyComp) === EXPECTED_SIGN.comprehension,
         `R ${rComp}, Python ${pyComp}`);
       console.log(`         (polarity: primary R ${rPrimary} / Python ${pyPrimary}; comprehension R ${rComp} / Python ${pyComp})`);
+
+      // M7: H1's effect size, read back as in Python, and the two toolchains agreeing on it in sign.
+      const rH1 = h1(rOut);
+      ok('R: H1 is reported as a log-odds difference with its 95% CI, an odds ratio, and a difference in proportion',
+        h1Sane(rH1), `parsed ${JSON.stringify(rH1)}`);
+      ok('R: the H1 log-odds equal the primary\'s polarity coefficient (emmeans reads the sum-coded main effect)',
+        rH1 != null && Math.abs(rH1.est - rPrimary) < 0.0011, `H1 ${rH1?.est} vs coefficient ${rPrimary}`);
+      ok('R and Python agree on the sign of H1 on both scales, and both CIs exclude zero',
+        rH1 != null && pyH1 != null && Math.sign(rH1.est) === Math.sign(pyH1.est) && Math.sign(rH1.diff) === Math.sign(pyH1.diff)
+          && rH1.verdict === 'EXCLUDES' && pyH1.verdict === 'EXCLUDES', `R ${JSON.stringify(rH1)}, Python ${JSON.stringify(pyH1)}`);
+      ok('R: the primary family prints H1a and H1b, raw and Holm across the two',
+        /PRIMARY FAMILY[\s\S]*H1a polarity[^\n]*Holm across the two [\d.e-]+\n[^\n]*H1b polarity x colour[^\n]*Holm across the two [\d.e-]+/.test(rOut),
+        'no primary-family block with both tests');
+      // The per-colour polarity effects are ONE family of five. Left grouped by colour, emmeans would
+      // adjust each one-contrast group on its own, which is no adjustment.
+      ok('R: the per-colour polarity effects are Holm-adjusted across the five colours',
+        /P value adjustment: holm method for 5 tests/.test(rOut), 'no "holm method for 5 tests" under the per-colour contrasts');
+      /*
+       * The secondary families of ANALYSIS_PLAN.md §4b: every family printed, every modelled member
+       * with an effect and its CI, the Holm-adjusted p never below the raw one, and the members the
+       * template does not model yet listed rather than silently dropped.
+       */
+      const famBlock = rOut.split('=== SECONDARY OUTCOMES: effect sizes and multiplicity')[1] ?? '';
+      const famRows = [...famBlock.matchAll(/^ {2}(\S+(?: \S+)?)\s+(-?[\d.]+) \((-?[\d.]+) to (-?[\d.]+)\)\s+.*?\s(\S+)\s+(\S+)\s+\| (\S+)\s+(\S+)$/gm)];
+      const pnum = (s) => (s === '-' ? NaN : s.startsWith('<') ? 0 : Number(s));
+      ok('R: the three outcome families are printed, each with its size',
+        ['ocular', 'subjective', 'performance'].every((f) => new RegExp(`\\[family\\] ${f}: \\d+ of \\d+ outcome`).test(famBlock)),
+        'a family header is missing');
+      ok('R: every performance outcome the template models has an effect with a 95% CI',
+        ['reading speed', 'comprehension', 'RT', 'd-prime', 'criterion', 'search completion', 'search time']
+          .every((o) => famRows.some((m) => m[1] === o)), `rows: ${famRows.map((m) => m[1]).join(', ')}`);
+      ok('R: the blink-rate and fatigue rows are in their families too',
+        famRows.some((m) => m[1] === 'blink rate') && famRows.some((m) => m[1] === 'fatigue'), `rows: ${famRows.map((m) => m[1]).join(', ')}`);
+      ok('R: no Holm-adjusted p is below its raw p',
+        famRows.length > 0 && famRows.every((m) => !(pnum(m[6]) < pnum(m[5])) && !(pnum(m[8]) < pnum(m[7]))),
+        famRows.map((m) => `${m[1]} ${m[5]}/${m[6]} ${m[7]}/${m[8]}`).join('; '));
+      ok('R: family members not modelled yet are listed, not dropped',
+        /RT variability\s+not yet modelled/.test(famBlock) && /inter-blink interval\s+not yet modelled/.test(famBlock),
+        'a not-yet-modelled member is missing from its family');
       // m6: provenance first — the R version and packages, then the builds that collected the data.
       ok('R: the output opens with its provenance: R, packages, and the collecting builds',
         /^=+\nPROVENANCE\n=+\nR version \d/.test(rRun.stdout) && /^\s+lme4\s+\d/m.test(rOut)

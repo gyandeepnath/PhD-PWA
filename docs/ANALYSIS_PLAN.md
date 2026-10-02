@@ -135,6 +135,14 @@ coefficient's 95% CI includes zero in the model above. Report the coefficient on
 *and* as a predicted difference in proportion at the mean, because a log-odds of 0.2 is not
 interpretable to an optometry readership.
 
+Neither template reported either quantity until Round 70. Both now print, under `[H1]`, the
+log-odds difference (positive minus negative) with its 95% CI and whether that CI includes zero, the
+odds ratio with its CI, and the predicted proportions and their difference with a delta-method CI —
+for the model with `eff_fps_c` and for the formula above, until the investigator decides which is
+confirmatory. "At the mean" means: each colour weighted equally, serial position and frame rate at
+their means, and, in R, random effects at zero, so the proportions are those of a typical participant;
+the Python GEE's are population-averaged, so the two agree in sign and not to the decimal.
+
 ---
 
 ## 3. What the verified literature does and does not license
@@ -222,6 +230,48 @@ that location is now a **recorded, balanced factor** in `08_reaction_trials.csv`
   the condition-level analysis as before and must be left out of any model with a location term —
   never imputed. They are also a different stimulus layout, so a dataset pooling both should carry the
   build (`git_hash`) as a factor.
+
+### 4b. Effect sizes and multiplicity: the outcome families (Round 70)
+
+Synopsis §3.9: "Effect sizes with confidence intervals and multiplicity control within outcome
+families are reported throughout." §3.7: "Confirmatory inference is confined to the primary outcome."
+Until Round 70 neither template printed a single confidence interval or adjusted a single p-value.
+
+**Effect sizes.** Every polarity effect is read through `emmeans` as positive minus negative,
+averaged over colour wherever colour is in the model (which, colour being sum-coded, is the main
+effect), at the mean of every covariate, with an unadjusted 95% CI. Effects stay in each outcome's own
+units — odds ratios for the binomial models; ms, words/min, scale points or z units for the Gaussian
+ones — rather than being standardised: a mixed model has no single standard deviation to divide by,
+and a unit a reader can picture is the more useful number. lmer intervals use Satterthwaite degrees of
+freedom, as lmerTest's tables do.
+
+**The primary family.** Two pre-specified tests on the primary outcome: H₁ₐ, the polarity effect
+(§2's rule, the unadjusted 95% CI), and H₁ᵦ, the polarity × colour interaction (the likelihood-ratio
+test against the additive model; a 4-df Wald test in the Python GEE, which has no likelihood). Both
+templates print both p-values raw and Holm-adjusted across the two. **§2's rule stands as written
+until the investigator decides otherwise**: whether H₁ₐ and H₁ᵦ share one family-wise error rate (the
+Holm column then decides H1, at the cost of a stricter bar) or H₁ₐ alone is confirmatory is a decision
+for the investigator, to be fixed before unblinding. The polarity effect within each colour is
+reported as an odds ratio, Holm-adjusted across the five colours, and is read only beside the omnibus
+interaction test: it describes the shape of an interaction and does not establish one.
+
+**The secondary families.** Holm is applied within each family, separately to the polarity p-values
+and to the interaction p-values (where the model has an interaction), across the family's outcomes:
+
+| Family | Members | Modelled in the templates now |
+|---|---|---|
+| Ocular | blink rate; inter-blink interval | blink rate |
+| Subjective (per condition) | visual fatigue (`fatigue_delta`); comfort; clarity | visual fatigue |
+| Performance | reading speed; comprehension; RT mean; RT variability; lapse rate; d′; criterion; visual-search completion; visual-search time | all but RT variability and lapse rate |
+
+Members not modelled yet are listed in the output under their family, and the printed Holm values
+cover only the members that were modelled, so they will rise when the rest are added; the table says
+so rather than presenting a smaller family as the whole. Outside every family: the key secondary
+CVS-Q change and NASA-TLX are once per sitting, so no polarity contrast exists for them (they are
+reported descriptively); PERCLOS, head pose and face presence are covariates and quality indices, not
+outcomes (§4, PERCLOS row). The R template implements all three families, and a unit test holds its
+family list to its models; the Python cross-check implements the primary family only, since its role
+is the confirmatory sign check (§5b).
 
 ---
 
