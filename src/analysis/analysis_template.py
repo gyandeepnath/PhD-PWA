@@ -452,11 +452,14 @@ def main() -> None:
         number of clusters. With no more participants than parameters it is singular, and the
         standard errors it yields are not interpretable — on two participants the primary printed
         SE nan, on three a refit printed SE 9e7. Said beside the model, not left to be noticed."""
-        n_clusters = len(np.unique(m.model.groups))
-        if n_clusters <= len(m.params):
-            print(f"[SE CAUTION] {label}: {n_clusters} participants (clusters) for {len(m.params)} parameters. "
-                  "The cluster-robust covariance cannot be full rank, so these standard errors and tests are "
-                  "not interpretable; read the coefficients only.")
+        if not se_interpretable(m):
+            print(f"[SE CAUTION] {label}: {len(np.unique(m.model.groups))} participants (clusters) for {len(m.params)} "
+                  "parameters. The cluster-robust covariance cannot be full rank, so these standard errors and "
+                  "tests are not interpretable; read the coefficients only.")
+
+    def se_interpretable(m) -> bool:
+        """More clusters than parameters: the condition under which cluster_note stays silent."""
+        return len(np.unique(m.model.groups)) > len(m.params)
 
     # ===========================================================================================
     # BEHAVIOURAL AND QUESTIONNAIRE OUTCOMES — none of them needs the camera, and none is fitted
@@ -701,7 +704,14 @@ def main() -> None:
                 "p_pos": p_pos, "p_neg": p_neg, "diff": p_pos - p_neg,
                 "diff_lcl": p_pos - p_neg - 1.959964 * se_diff, "diff_ucl": p_pos - p_neg + 1.959964 * se_diff}
 
-    def print_h1(label: str, h: dict) -> None:
+    def print_h1(label: str, h: dict, se_ok: bool = True) -> None:
+        if not se_ok:
+            # An interval from a rank-deficient covariance is not a wide interval, it is no interval:
+            # on three participants it printed -553 to 554 and a 4-df Wald p of exactly 0.
+            print(f"[H1] {label}: polarity_c (positive minus negative) log-odds {h['estimate']:.3f}; odds ratio "
+                  f"{np.exp(h['estimate']):.3f}; predicted proportion incomplete, positive {h['p_pos']:.3f} vs negative "
+                  f"{h['p_neg']:.3f} — intervals and p-values WITHHELD: [SE CAUTION] above")
+            return
         verdict = "EXCLUDES" if (h["lcl"] > 0 or h["ucl"] < 0) else "INCLUDES"
         print(f"[H1] {label}: polarity_c (positive minus negative) log-odds {h['estimate']:.3f} "
               f"(95% CI {h['lcl']:.3f} to {h['ucl']:.3f}), p {h['p']:.2g} — the CI {verdict} zero")
@@ -752,8 +762,8 @@ def main() -> None:
         print("\n=== H1 EFFECT SIZE (ANALYSIS_PLAN.md §2 and §4b) — population-averaged ===")
         print("Falsification rule (§2): H1 is not supported if the 95% CI of the polarity effect includes zero.")
         h1 = h1_effects(m, m.runs_frame)
-        print_h1("primary", h1)
-        print_h1("without eff_fps_c (§2 formula)", h1_effects(m_no_fps, m_no_fps.runs_frame))
+        print_h1("primary", h1, se_interpretable(m))
+        print_h1("without eff_fps_c (§2 formula)", h1_effects(m_no_fps, m_no_fps.runs_frame), se_interpretable(m_no_fps))
 
         # THE PRIMARY FAMILY (§4b): H1a (polarity) and H1b (polarity x colour), raw and Holm across the
         # two, as in the R template. H1b is a Wald test of the four interaction columns on the
@@ -773,9 +783,12 @@ def main() -> None:
         ok = np.isfinite(p_fam)
         holm[ok] = multipletests(p_fam[ok], method="holm")[1]
         print("\n=== PRIMARY FAMILY (ANALYSIS_PLAN.md §4b): the two pre-specified tests on the primary outcome ===")
-        print(f"  {'H1a polarity (Wald z)':<44} p {p_fam[0]:<10.3g} Holm across the two {holm[0]:.3g}")
-        print(f"  {'H1b polarity x colour (Wald, ' + str(len(int_cols)) + ' df)':<44} p {p_fam[1]:<10.3g} Holm across the two {holm[1]:.3g}")
-        print("  §2 decides H1 on the UNADJUSTED 95% CI; the Holm column is printed for the decision §4b leaves open.")
+        if se_interpretable(m):
+            print(f"  {'H1a polarity (Wald z)':<44} p {p_fam[0]:<10.3g} Holm across the two {holm[0]:.3g}")
+            print(f"  {'H1b polarity x colour (Wald, ' + str(len(int_cols)) + ' df)':<44} p {p_fam[1]:<10.3g} Holm across the two {holm[1]:.3g}")
+            print("  §2 decides H1 on the UNADJUSTED 95% CI; the Holm column is printed for the decision §4b leaves open.")
+        else:
+            print("  p-values WITHHELD: [SE CAUTION] above — the covariance behind every test is rank deficient.")
 
         print("\n=== PRIMARY: sensitivity refits (polarity_c = positive minus negative, log-odds) ===")
         sens_line("confirmatory (the primary above)", m)

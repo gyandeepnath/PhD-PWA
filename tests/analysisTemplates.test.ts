@@ -262,7 +262,7 @@ describe('the R template declares where each of its thresholds came from', () =>
     const src_ = r();
     for (const name of [
       'QC_FACE_PRESENCE_MIN', 'QC_OFF_AXIS_MAX', 'QC_EXPOSURE_MIN_FRAC',
-      'CENSOR_SPREAD_WARN_PP', 'COMPLETION_INFORMATIVE', 'ALLFIT_AGREE_SE_FRAC',
+      'CENSOR_SPREAD_WARN_PP', 'COMPLETION_INFORMATIVE', 'ALLFIT_AGREE_SE_FRAC', 'ALLFIT_LOGLIK_TOL',
     ]) {
       expect(src_).toContain(name);
       // Defined once and then USED — a constant nothing reads is decoration.
@@ -276,7 +276,7 @@ describe('the R template declares where each of its thresholds came from', () =>
     const src_ = r();
     expect(src_).toMatch(/QC_FACE_PRESENCE_MIN[^\n]*PROTOCOL/);
     for (const name of ['QC_OFF_AXIS_MAX', 'QC_EXPOSURE_MIN_FRAC', 'CENSOR_SPREAD_WARN_PP',
-      'COMPLETION_INFORMATIVE', 'ALLFIT_AGREE_SE_FRAC']) {
+      'COMPLETION_INFORMATIVE', 'ALLFIT_AGREE_SE_FRAC', 'ALLFIT_LOGLIK_TOL']) {
       expect(src_).toMatch(new RegExp(name + '[^\\n]*ANALYST DEFAULT'));
     }
   });

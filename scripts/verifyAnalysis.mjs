@@ -645,6 +645,16 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
     ok(`${who}: without the pooled export's verdict it stops and says what to export`,
       res.status !== 0 && said(res, /\[NO VERDICT\][^\n]*Download analysis dataset/), `exit ${res.status}`);
   }
+  // With no more participants than GEE parameters the cluster-robust covariance is rank deficient: the
+  // Python H1 interval printed -553 to 554 and the interaction's Wald p was exactly 0 on three
+  // participants. The coefficients are printed; the intervals and tests are withheld, and say why.
+  const few = join(dir, 'few');
+  dumpCohort(few, { n: 3, seed: 31 });
+  const fewPy = run(few);
+  ok('Python: with fewer participants than parameters, H1\'s intervals and tests are withheld, not printed',
+    fewPy.status === 0 && /\[H1\] primary: polarity_c[^\n]*WITHHELD: \[SE CAUTION\]/.test(fewPy.stdout)
+      && !/\[H1\] primary: polarity_c[^\n]*95% CI/.test(fewPy.stdout) && /p-values WITHHELD/.test(fewPy.stdout),
+    `exit ${fewPy.status}`);
   const camerasOff = join(dir, 'cameras-off');
   dumpCohort(camerasOff, { n: 6, seed: 6, cameraOff: 'all' });
   for (const [who, res] of both(camerasOff)) {

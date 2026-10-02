@@ -148,9 +148,12 @@ Notes on each term:
 - **Convergence** (synopsis §3.9: "a non-converging random structure is reduced in a pre-specified
   order and the reduction reported"). The ladder used to step down on a singular or failed fit only
   and kept a fit lme4 had flagged as not converged. Now, when lme4 warns, `allFit()` refits the rung
-  with every available optimizer; the rung stands only if every fixed effect agrees across them to
-  within 0.05 of its standard error (`ALLFIT_AGREE_SE_FRAC`, an analyst default), and otherwise the
-  next rung is tried. If none converges, the most reduced structure that fitted is reported, marked
+  with every available optimizer (lme4's own help calls this "the gold standard"). The rung stands
+  only if it reached the highest log-likelihood any optimizer found (within 0.01,
+  `ALLFIT_LOGLIK_TOL`) and the optimizers that reached it agree on every fixed effect to within 0.05
+  of its standard error (`ALLFIT_AGREE_SE_FRAC`); both are analyst defaults. An optimizer that
+  stopped at a lower likelihood is a worse fit, not a competing answer, and is not compared.
+  Otherwise the next rung is tried. If none converges, the most reduced structure that fitted is reported, marked
   NOT CONVERGED. The verdict for every rung tried is printed under `PRIMARY MODEL CONVERGENCE`, and the
   binomial secondaries (comprehension, search completion) report theirs the same way.
 - **`eff_fps_c`, the centred effective frame rate, is in the templates' primary model and not in the

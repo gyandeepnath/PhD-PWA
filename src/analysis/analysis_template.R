@@ -524,10 +524,15 @@ report_n <- function(m, data, label) {
 # Synopsis §3.9: "A non-converging random structure is reduced in a pre-specified order and the
 # reduction reported." The reduction ladder stepped down on a singular fit or on no fit at all, and
 # KEPT a fit lme4 had flagged as not converged; the flag surfaced only as a trailing R warning after
-# the output it qualified. lme4's gradient check is known to raise false alarms on large models, so a
-# warning alone is not a verdict: allFit() refits the model with every available optimizer, and the
-# fit stands only if they agree. Used to decide the primary's ladder and to report on the binomial
-# secondaries.
+# the output it qualified. lme4's own help (?convergence) says such warnings "do *not* necessarily
+# mean the fit is incorrect" and calls allFit() "the gold standard": refit with every available
+# optimizer, and "if all optimizers converge to values that are practically equivalent", the warnings
+# are false positives. So the fit stands only if it reached the highest log-likelihood any optimizer
+# found, and the optimizers that reached it agree on the fixed effects. An optimizer that stopped at a
+# LOWER likelihood has not converged to anything and is left out of the comparison: on a simulated
+# N = 40 cohort one nloptwrap variant stopped 0.023 log-likelihood units short with estimates 0.09 SE
+# away, while the other four agreed to 0.001 SE at the same maximum. Used to decide the primary's
+# ladder and to report on the binomial secondaries.
 CONVERGENCE_PATTERN <- "converge|gradient|Hessian|eigenvalue|unidentifiable"
 convergence_verdict <- function(m, notes = character(0)) {
   msgs <- unique(grep(CONVERGENCE_PATTERN, c(notes, m@optinfo$conv$lme4$messages), value = TRUE))
@@ -535,14 +540,18 @@ convergence_verdict <- function(m, notes = character(0)) {
   af <- tryCatch(suppressWarnings(suppressMessages(allFit(m, verbose = FALSE))), error = function(err) NULL)
   if (is.null(af)) return(list(ok = FALSE, warned = TRUE, text = paste0(msgs[1], "; allFit could not be run")))
   ss <- summary(af)
-  good <- ss$which.OK
-  fx <- ss$fixef[good, , drop = FALSE]
+  ll <- ss$llik[ss$which.OK]
+  at_max <- names(ll)[ll >= max(ll) - ALLFIT_LOGLIK_TOL]
+  own_at_max <- as.numeric(logLik(m)) >= max(ll) - ALLFIT_LOGLIK_TOL
+  fx <- ss$fixef[at_max, , drop = FALSE]
   se <- sqrt(diag(as.matrix(vcov(m))))[colnames(fx)]
-  spread <- if (sum(good) >= 2) max(apply(fx, 2, function(col) diff(range(col))) / se) else NA_real_
-  ok <- isTRUE(spread < ALLFIT_AGREE_SE_FRAC)
+  spread <- if (length(at_max) >= 2) max(apply(fx, 2, function(col) diff(range(col))) / se) else NA_real_
+  # A fit that is the only one at the maximum is as converged as allFit can show.
+  ok <- own_at_max && (length(at_max) < 2 || isTRUE(spread < ALLFIT_AGREE_SE_FRAC))
   list(ok = ok, warned = TRUE, text = sprintf(
-    "%s; allFit: %d of %d optimizers fitted, fixed effects agree to %s SE (ANALYST DEFAULT %g) — %s",
-    msgs[1], sum(good), length(good), if (is.na(spread)) "n/a" else sprintf("%.3f", spread),
+    "%s; allFit: %d of %d optimizers fitted, %d reached the maximum log-likelihood (within %g)%s, agreeing on the fixed effects to %s SE (ANALYST DEFAULT %g) — %s",
+    msgs[1], length(ll), length(ss$which.OK), length(at_max), ALLFIT_LOGLIK_TOL,
+    if (own_at_max) " including this fit" else ", NOT this fit", if (is.na(spread)) "n/a" else sprintf("%.3f", spread),
     ALLFIT_AGREE_SE_FRAC, if (ok) "the warning is a false alarm; the fit stands" else "NOT CONVERGED"))
 }
 
@@ -607,7 +616,8 @@ OUTCOME_FAMILIES <- list(
 )
 family_rows <- list()
 # Registered where each model is fitted; read once, at the end, by the multiplicity table.
-add_to_family <- function(outcome, m, units, odds_ratio = FALSE, note = NULL) {
+add_to_family <- function(outcome, m, units, odds_ratio = FALSE, note = NULL, converged = TRUE) {
+  if (!converged) units <- paste(units, "[NOT CONVERGED]")
   row <- list(outcome = outcome, units = units, estimate = NA_real_, lcl = NA_real_, ucl = NA_real_,
               p = NA_real_, p_int = NA_real_, note = note)
   if (!is.null(m)) {
@@ -685,6 +695,10 @@ ALLFIT_AGREE_SE_FRAC <- 0.05    # ANALYST DEFAULT — not in the protocol. After
                                 # the fit is accepted only if every fixed effect agrees across lme4's
                                 # optimizers (allFit) to within this fraction of its standard error;
                                 # a disagreement that could move an inference reduces the structure.
+ALLFIT_LOGLIK_TOL    <- 0.01    # ANALYST DEFAULT — not in the protocol. An optimizer counts as having
+                                # reached the maximum when its log-likelihood is within this of the
+                                # best found (a deviance difference of 0.02, immaterial to any test);
+                                # only those are compared, and the fit itself must be one of them.
 CENSOR_SPREAD_WARN_PP <- 10     # ANALYST DEFAULT — not in the protocol. Percentage points of spread
                                 # in the visual-search censoring rate ACROSS CONDITIONS beyond which
                                 # the time model must not be read unqualified. Any non-zero spread is
@@ -883,8 +897,9 @@ m_comp <- glmer(
   data = comp, family = binomial
 )
 cat("\n=== Comprehension logistic mixed model ===\n"); print(summary(m_comp)); report_n(m_comp, comp, "comprehension")
-cat("[convergence] comprehension:", convergence_verdict(m_comp)$text, "\n")
-add_to_family("comprehension", m_comp, "odds ratio, correct", odds_ratio = TRUE)
+conv_comp <- convergence_verdict(m_comp)
+cat("[convergence] comprehension:", conv_comp$text, "\n")
+add_to_family("comprehension", m_comp, "odds ratio, correct", odds_ratio = TRUE, converged = conv_comp$ok)
 
 # --- d-prime: aggregate ACROSS conditions per participant (per-condition d' is unstable) ----
 dprime_overall <- rt_summary %>%
@@ -1074,9 +1089,10 @@ if (!is.null(search) && "search_time_ms" %in% names(search)) {
       )
       if (is.null(m_vs_done)) cat("the completion model did not fit.\n") else {
         print(summary(m_vs_done)); report_n(m_vs_done, vs, "search completion")
-        cat("[convergence] search completion:", convergence_verdict(m_vs_done)$text, "\n")
+        conv_done <- convergence_verdict(m_vs_done)
+        cat("[convergence] search completion:", conv_done$text, "\n")
+        add_to_family("search completion", m_vs_done, "odds ratio, completed", odds_ratio = TRUE, converged = conv_done$ok)
       }
-      add_to_family("search completion", m_vs_done, "odds ratio, completed", odds_ratio = TRUE)
     }
   }
 
