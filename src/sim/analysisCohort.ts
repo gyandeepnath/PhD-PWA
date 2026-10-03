@@ -65,6 +65,14 @@ export interface CohortOptions {
   pausedLast?: number[];
   /** Camera off for every participant, or for the listed 0-based indices. */
   cameraOff?: 'all' | number[];
+  /**
+   * Every run is shown in THIS polarity, its colour kept: ten complete runs per participant, so the
+   * exporter's verdict admits them, and not one in the other polarity — the export of a build whose
+   * condition table lost a polarity, or of a pilot run in one. (Dropping the other five runs instead
+   * leaves every participant with an incomplete set, and the verdict excludes them all first.)
+   * Nothing in it can estimate the contrast the study asks about, and both templates must say so.
+   */
+  onePolarity?: 'positive' | 'negative';
 }
 
 const logistic = (x: number) => 1 / (1 + Math.exp(-x));
@@ -121,7 +129,10 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
     const plan = blockPlan(enrolment, 0);
     b.conditions.forEach((c, k) => {
       const step = plan[k];
-      const def = CONDITIONS[step.conditionIndex];
+      const planned = CONDITIONS[step.conditionIndex];
+      const def = opts.onePolarity
+        ? CONDITIONS.find((d) => d.colorName === planned.colorName && d.polarity === opts.onePolarity)!
+        : planned;
       Object.assign(c, {
         session_position: step.position, condition_label: def.label, polarity: def.polarity,
         background_color: def.background, text_color: def.text, color_name: def.colorName,

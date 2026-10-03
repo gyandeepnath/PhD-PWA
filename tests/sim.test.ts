@@ -4,6 +4,7 @@ import { makeRng, gaussian } from '@/sim/rng';
 import { generateParticipant, generateCohort } from '@/sim/participant';
 import { cohortRows, ols, isSignificant } from '@/sim/analysis';
 import { GROUND_TRUTH as GT } from '@/sim/effects';
+import { simulateCohort } from '@/sim/analysisCohort';
 
 describe('seeded RNG', () => {
   it('is deterministic for a given seed', () => {
@@ -81,5 +82,24 @@ describe('analysis recovers injected effects', () => {
   it('per-condition d-prime SE reflects small-N instability', () => {
     const meanSE = rows.reduce((s, r) => s + (r.d_prime_se as number), 0) / rows.length;
     expect(meanSE).toBeGreaterThan(0.15);
+  });
+});
+
+describe('analysis cohort (scripts/verifyAnalysis.mjs)', () => {
+  it('gives each enrolment its own Williams row, so position is not aliased with condition', () => {
+    const cohort = simulateCohort({ n: 4, seed: 1 });
+    const orders = cohort.map((b) => b.session.condition_order.join(','));
+    expect(new Set(orders).size).toBe(4);
+  });
+
+  it('onePolarity keeps ten complete runs, every one in that polarity, each colour twice', () => {
+    for (const b of simulateCohort({ n: 2, seed: 2, onePolarity: 'positive' })) {
+      expect(b.conditions).toHaveLength(N_CONDITIONS);
+      expect(new Set(b.conditions.map((c) => c.polarity))).toEqual(new Set(['positive']));
+      const perColour = new Map<string, number>();
+      for (const c of b.conditions) perColour.set(c.color_name, (perColour.get(c.color_name) ?? 0) + 1);
+      expect([...perColour.values()]).toEqual([2, 2, 2, 2, 2]);
+      expect(b.conditions.every((c) => c.background_color === '#FFFFFF')).toBe(true);
+    }
   });
 });
