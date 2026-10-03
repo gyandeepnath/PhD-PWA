@@ -363,8 +363,9 @@ from processed-frame timestamps and **gates** the timing-dependent metrics.
 - **Signal Detection Theory** (`signalDetection.ts`): `d′ = z(H) − z(F)` with the **Acklam probit**;
   rates clamped via a loglinear `1/(2N)` correction to avoid infinities. **criterion (response bias)
   `c = −0.5·(zH+zF)`** (>0 conservative, <0 liberal) is reported. Per-condition `d′_se` is computed
-  (Macmillan & Creelman) and **flagged unstable when SE > 0.3** — analysis should use d′ aggregated
-  across conditions.
+  (Macmillan & Creelman) and **flagged unstable when SE > 0.3** — which, with 20 go and 12 no-go
+  trials (SE ≥ ~0.46), is every block. The analysis template therefore models sensitivity and
+  criterion on the trials (a probit GLMM, Round 71) and never weights per-block d′ by its SE.
 - **RT metrics:** mean/median/SD/CV of valid hit RTs; **inverse efficiency** = mean RT ÷ proportion
   correct; **lapse rate**; **anticipation count**; first/second-half mean RT (within-block vigilance).
 - **Search:** accuracy = found ÷ actual target count; efficiency = found per minute.
@@ -496,7 +497,7 @@ fatigue + CVS-Q are re-measured each sitting (fatigue resets — documented, not
    prefer within-person change.
 4. **Contrast confound**: contrast is not balanced across polarity (C4/C6/C7 below AA, unevenly
    split) — model contrast as a covariate or reframe as polarity × contrast.
-5. **Per-condition d′ is small-N** (~20 go trials of 32; SE often > 0.3) — aggregate across conditions.
+5. **Per-condition d′ is small-N** (~20 go trials of 32; SE never below ~0.46) — modelled on the trials, not read block by block (ANALYSIS_PLAN §4c).
 6. **Session length (~60–90 min)** accumulates fatigue and boredom; `session_position` + engagement
    flags address this but cannot fully remove it.
 7. **Ishihara digital screening** is an aid, not a diagnosis; depends on uncalibrated display colour.

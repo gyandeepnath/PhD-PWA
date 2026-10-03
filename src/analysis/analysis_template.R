@@ -7,7 +7,8 @@
 #
 # Optional: install.packages("glmmTMB") adds the beta-binomial refit of the primary and the beta GLMM
 # of the PERCLOS covariate check. Without it both say [SKIPPED: glmmTMB not installed] and the run
-# completes; it is deliberately not on the line above, nor in CI.
+# completes; it is deliberately not on the line above, nor in CI. install.packages("ordinal") likewise
+# adds the cumulative-link sensitivity on the fatigue items ([SKIPPED: ordinal not installed] without it).
 #
 # `afex` was listed here and is never loaded; `see` was NOT listed and check_model()
 # hard-requires it. An analyst who installed exactly what this line named therefore
@@ -53,6 +54,8 @@ for (pkg in c("tidyverse", "dplyr", "tidyr", "readr", "lme4", "lmerTest", "emmea
 }
 cat(sprintf("  %-12s %s\n", "glmmTMB", if (requireNamespace("glmmTMB", quietly = TRUE))
   as.character(packageVersion("glmmTMB")) else "not installed (the beta-binomial sensitivity is skipped)"))
+cat(sprintf("  %-12s %s\n", "ordinal", if (requireNamespace("ordinal", quietly = TRUE))
+  as.character(packageVersion("ordinal")) else "not installed (the cumulative-link sensitivity is skipped)"))
 # Which template produced this output: the script's own checksum, when it was run as a file.
 template_file <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))
 if (length(template_file) == 1 && file.exists(template_file)) {
@@ -377,10 +380,12 @@ build_cond <- function(conditions, wide, quality, participant, session_info) {
     # participant rushed" — the question §5.5 actually asks. The export now carries condition_id in
     # that file, so the join is the same safe one every other table uses.
     left_join(quality %>% select(condition_id, careless_straight_lined, careless_rushed_fatigue,
-                                 careless_rushed_perception, low_face_presence, reading_skim),
+                                 careless_rushed_perception, low_face_presence, reading_skim,
+                                 condition_interrupted),
               by = "condition_id") %>%
     left_join(participant %>%
-                select(participant_id, age, gender, daily_screen_hours, correction_type, cvd_status) %>%
+                select(participant_id, age, gender, daily_screen_hours, device_familiarity, lighting_habit,
+                       correction_type, cvd_status) %>%
                 distinct(participant_id, .keep_all = TRUE),
               by = "participant_id") %>%
     # Session-level columns: the illumination level lives on the SESSION record, not the condition
@@ -436,6 +441,15 @@ build_cond <- function(conditions, wide, quality, participant, session_info) {
   # contr.sum(2)/2 gives exactly the +/-0.5 the plan names (positive +0.5, negative -0.5).
   # emmeans is invariant to the coding, so every marginal-mean section below is unchanged.
   # Set inside build_cond so the sensitivity frame is coded identically.
+  # FIRST-ORDER CARRYOVER (m11). Whether the condition run immediately before this one, in the same
+  # sitting, had the other polarity. The Williams design is chosen to balance first-order carryover
+  # (synopsis §3.8), and nothing examined it. Computed per sitting from serial position, as
+  # analysis_long.csv's polarity_switched is; empty for the first condition of a sitting and where the
+  # position before this one is missing, never filled in.
+  d <- d %>% group_by(sitting_folder) %>% arrange(session_position, .by_group = TRUE) %>%
+    mutate(polarity_switched = ifelse(dplyr::lag(session_position) == session_position - 1,
+                                      as.character(dplyr::lag(polarity)) != as.character(polarity), NA)) %>%
+    ungroup()
   contrasts(d$polarity) <- contr.sum(nlevels(d$polarity)) / 2
   contrasts(d$colour)   <- contr.sum(nlevels(d$colour))
   d
@@ -853,6 +867,67 @@ cat("\n=== RT mixed model ===\n"); print(summary(m_rt)); report_n(m_rt, rt, "RT"
 add_to_family("RT", m_rt, "ms")
 cat("\nMarginal means by polarity:\n"); print(emmeans(m_rt, ~ polarity))
 
+# --- RT polarity x serial position (ANALYSIS_PLAN.md §3) ------------------------------------------
+# §3: a sitting runs past both of Pattyn et al.'s time-on-task thresholds, so "a polarity_c x
+# position_c interaction is worth testing explicitly: an effect that appears only late in the sitting
+# is a fatigue interaction, not a display effect." It was never tested.
+m_rt_pos <- tryCatch(
+  update(m_rt, . ~ . + polarity:session_position),
+  error = function(err) NULL
+)
+if (!is.null(m_rt_pos)) {
+  ct <- summary(m_rt_pos)$coefficients["polarity1:session_position", ]
+  ci <- ct[["Estimate"]] + c(-1, 1) * qt(0.975, ct[["df"]]) * ct[["Std. Error"]]
+  cat(sprintf("[RT x position] polarity x serial position (§3): %.2f ms per position (95%% CI %.2f to %.2f), p %s —\n",
+              ct[["Estimate"]], ci[1], ci[2], format.pval(ct[["Pr(>|t|)"]], digits = 2)))
+  cat("                the change in the polarity effect (positive minus negative) per later serial position\n")
+}
+
+# --- RT variability and lapses (ANALYSIS_PLAN.md §4b, performance family) -------------------------
+# Synopsis §2.6: lapses and reaction-time variability are the vigilance decrement's "most
+# fatigue-sensitive indices". Both are in the performance family and neither was modelled.
+#   - VARIABILITY: the SD of a block's hit latencies, on the log scale (an SD is positive and
+#     right-skewed; the effect is then a RATIO of SDs, positive over negative).
+#   - LAPSES: hits slower than the lapse threshold, out of the block's valid hits — a binomial count,
+#     like the primary, so a block with 12 hits is not weighted like one with 20. Anticipations are
+#     their own accuracy level and never hits, so `hits` is the lapse_rate denominator.
+rt_var <- rt %>% filter(is.finite(rt_sd_ms), rt_sd_ms > 0)
+m_rtsd <- tryCatch(
+  lmer(as.formula(paste0("log(rt_sd_ms) ~ polarity * colour", ilx_term,
+                         " + session_position + (1 | participant_id)", re_sitting, re_passage)),
+       data = rt_var),
+  error = function(err) NULL
+)
+cat("\n=== RT variability: log SD of hit latencies (secondary) ===\n")
+if (is.null(m_rtsd)) cat("the RT-variability model did not fit.\n") else { print(summary(m_rtsd)); report_n(m_rtsd, rt_var, "RT variability") }
+add_to_family("RT variability", m_rtsd, "ratio of SDs", odds_ratio = TRUE)
+
+rt_lapse <- rt %>% filter(is.finite(lapse_count), is.finite(hits), hits > 0)
+cat("\n=== Lapses: hits slower than the lapse threshold, binomial GLMM (secondary) ===\n")
+if (nrow(rt_lapse) == 0 || sum(rt_lapse$lapse_count) == 0) {
+  cat("[lapses] no lapse in the confirmatory set — nothing to model.\n")
+  add_to_family("lapse rate", NULL, "odds ratio, lapse", note = "no lapses: not modelled")
+} else {
+  cat(sprintf("[lapses] %d lapse(s) among %d hits (%.1f%%)\n", sum(rt_lapse$lapse_count), sum(rt_lapse$hits),
+              100 * sum(rt_lapse$lapse_count) / sum(rt_lapse$hits)))
+  m_lapse <- tryCatch(
+    glmer(as.formula(paste0("cbind(lapse_count, hits - lapse_count) ~ polarity * colour", ilx_term,
+                            " + session_position + (1 | participant_id)", re_sitting, re_passage)),
+          data = rt_lapse, family = binomial,
+          control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))),
+    error = function(err) NULL
+  )
+  if (is.null(m_lapse)) {
+    cat("the lapse model did not fit.\n")
+    add_to_family("lapse rate", NULL, "odds ratio, lapse")
+  } else {
+    print(summary(m_lapse)); report_n(m_lapse, rt_lapse, "lapse rate")
+    conv_lapse <- convergence_verdict(m_lapse)
+    cat("[convergence] lapse rate:", conv_lapse$text, "\n")
+    add_to_family("lapse rate", m_lapse, "odds ratio, lapse", odds_ratio = TRUE, converged = conv_lapse$ok)
+  }
+}
+
 # --- Subjective fatigue (post-condition VAS composite) -------------------------------------
 fat <- fatigue %>%
   filter(stage == "post_condition") %>%
@@ -876,6 +951,74 @@ m_fat <- lmer(
 )
 cat("\n=== Fatigue mixed model ===\n"); print(summary(m_fat)); report_n(m_fat, fat, "fatigue")
 add_to_family("fatigue", m_fat, paste0(fat_response, ", 0-10 pts"))
+
+# --- The fatigue ITEMS as ordinal ratings (synopsis §3.9: "Ordinal cumulative-link models serve rating
+# outcomes") — a SENSITIVITY for the fatigue member, fitted only where `ordinal` is installed ---------
+# The five post-condition items (eye strain, dryness, blur, burning, headache) are 0-10 integer
+# ratings: eleven ordered categories, which a cumulative-link mixed model (ordinal::clmm) takes as they
+# are, with no assumption that the steps between them are equal. Stacked, with the item as a factor and
+# the participant and passage intercepts. `ordinal` is in neither the install line nor CI, so without it
+# this says so and the LMM on fatigue_delta above stands alone: a composite of five items, change-scored
+# against the participant's own baseline, is close enough to interval-scaled for an LMM, and it is the
+# model ANALYSIS_PLAN.md §4 specifies. clmm's coefficient is on the latent logit scale, and positive
+# means HIGHER (worse) ratings.
+if (requireNamespace("ordinal", quietly = TRUE)) {
+  items <- c("eye_strain", "dryness", "blur", "burning", "headache")
+  fat_items <- fat %>% select(participant_id, condition_id, polarity, colour, passage_id, session_position, any_of(items)) %>%
+    tidyr::pivot_longer(any_of(items), names_to = "item", values_to = "rating") %>%
+    filter(is.finite(rating)) %>%
+    mutate(rating = factor(rating, levels = sort(unique(rating)), ordered = TRUE), item = factor(item))
+  m_fat_clmm <- tryCatch(
+    ordinal::clmm(as.formula(paste0("rating ~ polarity * colour + item + session_position + (1 | participant_id)", re_passage)),
+                  data = fat_items),
+    error = function(err) conditionMessage(err))
+  cat("\n=== Fatigue items as ordinal ratings: cumulative-link mixed model (sensitivity, ordinal::clmm) ===\n")
+  if (is.character(m_fat_clmm)) cat("[clmm] the cumulative-link model did not fit:", m_fat_clmm, "\n") else {
+    cc <- summary(m_fat_clmm)$coefficients
+    cat(sprintf("[clmm] polarity (positive minus negative), latent logit scale: %.3f (95%% CI %.3f to %.3f), p %s; %d ratings, %d categories\n",
+                cc["polarity1", "Estimate"], cc["polarity1", "Estimate"] - qnorm(0.975) * cc["polarity1", "Std. Error"],
+                cc["polarity1", "Estimate"] + qnorm(0.975) * cc["polarity1", "Std. Error"],
+                format.pval(cc["polarity1", "Pr(>|z|)"], digits = 2), nrow(fat_items), nlevels(fat_items$rating)))
+    cat("       Read beside the fatigue LMM: a disagreement in sign is a reason to look at how the items are used.\n")
+  }
+} else {
+  cat("\n[clmm] [SKIPPED: ordinal not installed] install.packages(\"ordinal\") for the cumulative-link sensitivity on the\n")
+  cat("       fatigue items; the LMM on fatigue_delta (ANALYSIS_PLAN.md §4) stands alone.\n")
+}
+
+# --- Display comfort and text clarity (§4b, subjective family) -------------------------------------
+# 06_display_perception.csv was never read. Both are 0-100 sliders rated immediately after reading,
+# modelled by LMM. NOT a cumulative-link model, whether or not `ordinal` is installed, and this is the
+# justification: a slider with 101 response points needs a threshold between every pair of adjacent
+# values used, which about ten ratings per participant cannot support, while the scores are already
+# close to continuous. A slider never moved (comfort_touched / clarity_touched FALSE) still shows its
+# default value, which the codebook says "should not be treated as a response", so it is left out.
+perception <- tryCatch(read_export("06_display_perception.csv"), error = function(err) NULL)
+if (!is.null(perception)) perception <- keep_rows(perception)
+fit_perception <- function(outcome, score, touched) {
+  cat(sprintf("\n=== Display perception: %s (%s, 0-100 slider, LMM) ===\n", outcome, score))
+  if (is.null(perception) || !(score %in% names(perception))) {
+    cat(sprintf("[%s] 06_display_perception.csv not found or has no %s — not modelled.\n", outcome, score))
+    return(list(model = NULL, note = "no data in this export"))
+  }
+  untouched <- if (touched %in% names(perception)) !as_flag(perception[[touched]]) else rep(FALSE, nrow(perception))
+  cat(sprintf("[%s] %d of %d rating(s) left at the slider's default (never moved) — excluded\n",
+              outcome, sum(untouched), nrow(perception)))
+  d_pr <- perception[!untouched, , drop = FALSE] %>% select(-any_of("passage_id")) %>%
+    left_join(cond, by = c("participant_id", "condition_id")) %>% filter(is.finite(.data[[score]]))
+  m_pr <- tryCatch(
+    lmer(as.formula(paste0(score, " ~ polarity * colour", ilx_term,
+                           " + session_position + (1 | participant_id)", re_sitting, re_passage)),
+         data = d_pr),
+    error = function(err) NULL
+  )
+  if (is.null(m_pr)) cat("the model did not fit.\n") else { print(summary(m_pr)); report_n(m_pr, d_pr, outcome) }
+  list(model = m_pr, note = NULL)
+}
+fp <- fit_perception("comfort", "display_comfort_score", "comfort_touched")
+add_to_family("comfort", fp$model, "points, 0-100", note = fp$note)
+fp <- fit_perception("clarity", "text_clarity_score", "clarity_touched")
+add_to_family("clarity", fp$model, "points, 0-100", note = fp$note)
 
 # --- Comprehension accuracy (logistic mixed model) -----------------------------------------
 # passage_id is taken from the condition frame: 04_comprehension.csv carries its own copy, and the two
@@ -992,14 +1135,20 @@ if (is.null(trials) || nrow(trials) == 0) {
            sig = ifelse(as_flag(is_signal), 0.5, -0.5),
            ring = factor(stim_ring, levels = c("inner", "outer")))
   n_located <- sum(!is.na(sdt_trials$ring))
-  USE_RING <- n_located > 0 && n_distinct(na.omit(sdt_trials$ring)) == 2
+  # Both rings must carry go AND no-go trials, as every balanced block does (10 and 6 per ring);
+  # otherwise ring is aliased with the signal and the ring terms on d' are not identified.
+  ring_x_sig <- table(sdt_trials$ring, sdt_trials$sig)
+  USE_RING <- n_located > 0 && n_distinct(na.omit(sdt_trials$ring)) == 2 && all(ring_x_sig > 0)
   cat("\n=== SENSITIVITY AND CRITERION: trial-level probit GLMM (secondary, §4 and §4a) ===\n")
   cat(sprintf("scored trials: %d (anticipations excluded, as in the summaries); with a target location: %d\n",
               nrow(sdt_trials), n_located))
-  if (!USE_RING) {
+  if (n_located == 0) {
     cat("[location] NO target location in these trials (an export recorded before Round 66, which did not\n")
     cat("           record where the dot appeared). The model is fitted WITHOUT the ring and ring x colour\n")
     cat("           terms ANALYSIS_PLAN.md §4a specifies; they cannot be estimated from this data.\n")
+  } else if (!USE_RING) {
+    cat("[location] the rings are NOT both crossed with go and no-go in these trials, so ring is aliased with the\n")
+    cat("           signal; fitted WITHOUT the ring terms. Every balanced block puts both kinds on both rings.\n")
   } else if (n_located < nrow(sdt_trials)) {
     cat(sprintf("[location] %d trial(s) carry no location (recorded before Round 66) and are LEFT OUT of this model,\n",
                 nrow(sdt_trials) - n_located))
@@ -1070,6 +1219,45 @@ if (!is.null(m_sdt)) {
                 effect = c(e_dp, list(p_int = unname(w_dp_int["p"]))))
   add_to_family("criterion", m_sdt, "criterion c (probit units)", converged = conv_sdt$ok,
                 effect = c(e_c, list(p_int = unname(w_c_int["p"]))))
+}
+
+# --- LOG RT OF VALID HITS, trial by trial (ANALYSIS_PLAN.md §4a) ---------------------------------
+# §4a's second trial-level model: response time rises with target eccentricity, so ring and
+# ring x colour enter here as they do the probit model, with the polarity x serial-position term of §3.
+# Not in a family: the RT member is the per-block mean above; this is where the location terms live.
+if (!is.null(trials) && nrow(trials) > 0) {
+  rt_trials <- trials %>%
+    filter(accuracy == "hit", !as_flag(anticipatory), is.finite(response_time_ms), response_time_ms > 0) %>%
+    left_join(cond %>% select(condition_id, polarity, colour, passage_id, session_position), by = "condition_id") %>%
+    mutate(ring = factor(stim_ring, levels = c("inner", "outer")))
+  use_ring_rt <- n_distinct(na.omit(rt_trials$ring)) == 2
+  if (use_ring_rt) {
+    rt_trials <- rt_trials %>% filter(!is.na(ring))
+    contrasts(rt_trials$ring) <- contr.sum(2) / 2
+  }
+  m_rt_trial <- tryCatch(
+    lmer(as.formula(paste0("log(response_time_ms) ~ polarity * colour", ilx_term, " + session_position + polarity:session_position",
+                           if (use_ring_rt) " + ring + ring:colour" else "", " + (1 | participant_id)", re_passage)),
+         data = rt_trials),
+    error = function(err) NULL
+  )
+  cat("\n=== Log RT of valid hits, trial level (§4a: ring and ring x colour; §3: polarity x position) ===\n")
+  if (!use_ring_rt) cat("[location] no target location in these trials (pre-Round 66): fitted without the ring terms.\n")
+  if (is.null(m_rt_trial)) cat("the trial-level RT model did not fit.\n") else {
+    report_n(m_rt_trial, rt_trials, "log RT (trials)")
+    cf <- summary(m_rt_trial)$coefficients
+    for (term in intersect(c("polarity1", "polarity1:session_position", "ring1"), rownames(cf))) {
+      ci <- cf[term, "Estimate"] + c(-1, 1) * qt(0.975, cf[term, "df"]) * cf[term, "Std. Error"]
+      cat(sprintf("[RT trials] %-28s x%.4f (95%% CI %.4f to %.4f), p %s  (ratio of RTs%s)\n", term,
+                  exp(cf[term, "Estimate"]), exp(ci[1]), exp(ci[2]), format.pval(cf[term, "Pr(>|t|)"], digits = 2),
+                  switch(term, polarity1 = ", positive / negative", `polarity1:session_position` = ", change in that ratio per position",
+                         ring1 = ", inner / outer")))
+    }
+    if (use_ring_rt) {
+      w_rc <- wald_terms(m_rt_trial, "^colour\\d:ring1$")
+      cat(sprintf("[RT trials] ring x colour: Wald chi2(%d) %.2f, p %s\n", as.integer(w_rc["df"]), w_rc["chisq"], format.pval(w_rc["p"], digits = 2)))
+    }
+  }
 }
 
 # --- CROSS-CHECKS on the per-block summaries: d' and criterion, UNWEIGHTED (not in any family) ---
@@ -1339,10 +1527,34 @@ if (nrow(cvsq_change) > 0) {
   if (dplyr::n_distinct(cvsq_change$illumination) > 1) {
     print(summary(lmer(change ~ illumination + (1 | participant_id), data = cvsq_change)))
   } else {
+    # ONE CHANGE PER PARTICIPANT, WITH ITS INTERVAL (m10). This printed a mean change over SITTINGS,
+    # with no interval: a participant whose session was split contributed two half-exposure changes,
+    # counted as two independent observations (the audit's split cohort: "n = 16" from 12 people).
+    # The change is now taken per participant, from the baseline of their FIRST sitting to the close of
+    # their LAST — the whole exposure, which is what the questionnaire brackets — and the mean change
+    # gets a t interval over participants, the unit that was sampled.
     cat("One illumination level: reporting the change itself, with no between-level contrast.\n")
-    print(summary(cvsq_change$change))
-    cat(sprintf("mean change = %.2f (n = %d sitting(s), %d participant(s))\n", mean(cvsq_change$change),
-                nrow(cvsq_change), n_distinct(cvsq_change$participant_id)))
+    per_p <- cvsq %>%
+      select(participant_id, sitting_folder, session_index, stage, total_score) %>%
+      filter(is.finite(total_score)) %>%
+      group_by(participant_id) %>%
+      summarise(n_sittings = n_distinct(sitting_folder),
+                baseline = total_score[stage == "baseline"][which.min(session_index[stage == "baseline"])][1],
+                session_end = total_score[stage == "session_end"][which.max(session_index[stage == "session_end"])][1],
+                .groups = "drop") %>%
+      filter(!is.na(baseline), !is.na(session_end)) %>%
+      mutate(change = session_end - baseline)
+    n_split <- sum(per_p$n_sittings > 1)
+    if (nrow(per_p) >= 2 && isTRUE(sd(per_p$change) > 0)) {
+      tt <- t.test(per_p$change)
+      cat(sprintf("[cvsq] mean change, close minus baseline: %.2f points (95%% CI %.2f to %.2f), n = %d participant(s)%s\n",
+                  mean(per_p$change), tt$conf.int[1], tt$conf.int[2], nrow(per_p),
+                  if (n_split > 0) sprintf("; %d split across sittings, first baseline to last close", n_split) else ""))
+    } else {
+      cat(sprintf("[cvsq] mean change %.2f from %d participant(s), with no variation between them: no interval.\n",
+                  mean(per_p$change), nrow(per_p)))
+    }
+    print(summary(per_p$change))
   }
 } else {
   cat("\n[CVS-Q change not modelled: needs BOTH stages present]\n")
@@ -1381,6 +1593,15 @@ if (is.null(tlx)) {
     cat("One rating per sitting and one illumination level: no contrast is estimable.\n")
     print(summary(tlx$raw_tlx))
     cat(sprintf("n = %d sitting(s), %d participant(s)\n", nrow(tlx), n_distinct(tlx$participant_id)))
+    # Its level, with an interval over PARTICIPANTS (m10): a split sitting has two ratings, each of part
+    # of the workload, so they are averaged into one per participant rather than counted twice.
+    tlx_p <- tlx %>% filter(is.finite(raw_tlx)) %>% group_by(participant_id) %>%
+      summarise(raw_tlx = mean(raw_tlx), .groups = "drop")
+    if (nrow(tlx_p) >= 2 && isTRUE(sd(tlx_p$raw_tlx) > 0)) {
+      tt <- t.test(tlx_p$raw_tlx)
+      cat(sprintf("[NASA-TLX] mean raw TLX %.1f (95%% CI %.1f to %.1f), one value per participant, n = %d\n",
+                  mean(tlx_p$raw_tlx), tt$conf.int[1], tt$conf.int[2], nrow(tlx_p)))
+    }
   } else {
     cat("\n[NASA-TLX not summarised: no confirmatory sitting has a rating]\n")
   }
@@ -1740,6 +1961,78 @@ if (nrow(eye) == 0) {
       cat("  no run is flagged 'bad': the without-'bad' refit is the primary itself.\n")
     }
 
+    # Restarted and interrupted runs (M11). attempt_number above 1 means the condition was restarted
+    # after a pause or a crash, so the passage had been read before; condition_interrupted means the app
+    # was backgrounded, held in portrait or covered by a blocking notice for more than 2 s. Both are
+    # finished, confirmatory runs; these refits show whether the conclusion leans on them.
+    restarted <- !is.na(eye$attempt_number) & eye$attempt_number > 1
+    if (any(restarted)) sens_line("without restarted runs (attempt_number > 1)", refit_on(eye[!restarted, , drop = FALSE])) else
+      cat("  no run was restarted (attempt_number > 1): that refit is the primary itself.\n")
+    interrupted <- as_flag(eye$condition_interrupted)
+    if (any(interrupted)) sens_line("without interrupted runs (condition_interrupted)", refit_on(eye[!interrupted, , drop = FALSE])) else
+      cat("  no run was interrupted (condition_interrupted): that refit is the primary itself.\n")
+
+    # SERIAL POSITION AND CARRYOVER (m11). Position entered only as a straight line, and carryover —
+    # the reason synopsis §3.8 gives for the Williams design — was never looked at. (1) Position as a
+    # FACTOR, nine parameters instead of one, so fatigue that rises and levels off is not forced onto a
+    # line. (2) polarity_switched: whether the run before had the other polarity, which a light-to-dark
+    # or dark-to-light change of adaptation state could make matter. The first run of each sitting has no
+    # predecessor and drops out of (2), so (2) is compared with the primary refitted on the same rows.
+    sens_line("serial position as a factor", tryCatch(suppressWarnings(update(m_primary, . ~ . - session_position + factor(session_position))),
+                                                      error = function(err) NULL))
+    eye_co <- eye %>% filter(!is.na(polarity_switched))
+    if (n_distinct(eye_co$polarity_switched) == 2) {
+      # Not refit_on(): anova() requires both fits to name the same data object in their calls.
+      m_co_base <- tryCatch(suppressWarnings(update(m_primary, data = eye_co)), error = function(err) NULL)
+      # The formula on a line of its own, for the reason given at m_additive.
+      m_co <- if (is.null(m_co_base)) NULL else tryCatch(suppressWarnings(update(m_co_base,
+        . ~ . + polarity_switched, data = eye_co)),
+        error = function(err) NULL)
+      sens_line("with first-order carryover (polarity_switched)", m_co)
+      if (!is.null(m_co_base) && !is.null(m_co)) {
+        cf <- summary(m_co)$coefficients["polarity_switchedTRUE", ]
+        cat(sprintf("  [carryover] after a polarity switch: log-odds %.3f (95%% CI %.3f to %.3f), LRT p %s, on %d runs with a predecessor\n",
+                    cf[["Estimate"]], cf[["Estimate"]] - qnorm(0.975) * cf[["Std. Error"]], cf[["Estimate"]] + qnorm(0.975) * cf[["Std. Error"]],
+                    format.pval(anova(m_co_base, m_co)[2, "Pr(>Chisq)"], digits = 2), nobs(m_co)))
+      }
+    } else {
+      cat("  [carryover] polarity_switched does not vary on the runs with a predecessor: not estimable.\n")
+    }
+
+    # --- MODERATION (synopsis Objective 3, H1rho; §3.9: "Moderation is tested by condition-by-moderator
+    # interactions"). The participant covariates were joined and never used. Each pre-specified
+    # moderator the profiling questionnaire records — habitual screen exposure (daily_screen_hours,
+    # standardised), typical ambient lighting (lighting_habit) and digital literacy (device_familiarity)
+    # — is added with its polarity interaction, one at a time, and the interaction tested by likelihood
+    # ratio against the primary refitted on the same rows (a participant missing the moderator drops out
+    # of both). Holm across the moderators tested. EXPLORATORY: a between-participant moderator of a
+    # within-participant effect has the participant count as its sample size. H1rho's fourth
+    # moderator, habitual display-mode preference, is not recorded by the app, so it cannot be tested.
+    cat("\n=== MODERATION of the polarity effect (synopsis Objective 3; exploratory) ===\n")
+    moderators <- list(daily_screen_hours = "scale(daily_screen_hours)", lighting_habit = "lighting_habit",
+                       device_familiarity = "device_familiarity")
+    mod_p <- c()
+    for (mn in names(moderators)) {
+      if (!(mn %in% names(eye))) { cat(sprintf("  [moderator] %-20s not in the participant table\n", mn)); next }
+      rows <- eye[!is.na(eye[[mn]]), , drop = FALSE]
+      if (n_distinct(rows[[mn]]) < 2 || n_distinct(rows$participant_id) < 3) {
+        cat(sprintf("  [moderator] %-20s fewer than two values in the data: not testable\n", mn)); next
+      }
+      m_mbase <- tryCatch(suppressWarnings(update(m_primary, data = rows)), error = function(err) NULL)
+      m_mod <- if (is.null(m_mbase)) NULL else tryCatch(suppressWarnings(update(m_mbase, as.formula(paste0(". ~ . + ", moderators[[mn]], " + polarity:", moderators[[mn]])), data = rows)),
+                                                     error = function(err) NULL)
+      if (is.null(m_mod)) { cat(sprintf("  [moderator] %-20s the model did not fit\n", mn)); next }
+      lr <- anova(m_mbase, m_mod)
+      mod_p[mn] <- lr[2, "Pr(>Chisq)"]
+      cat(sprintf("  [moderator] %-20s polarity x moderator: chi2(%d) %.2f, p %s, %d participants\n", mn,
+                  as.integer(lr$Df[2]), lr$Chisq[2], format.pval(mod_p[mn], digits = 2), n_distinct(rows$participant_id)))
+    }
+    if (length(mod_p)) {
+      cat(sprintf("  Holm across the %d moderator(s) tested: %s\n", length(mod_p),
+                  paste(names(mod_p), format.pval(p.adjust(mod_p, "holm"), digits = 2), sep = " ", collapse = "; ")))
+    }
+    cat("  [moderator] habitual display-mode preference (H1rho) is not recorded by the app: NOT TESTABLE.\n")
+
     # --- SENSITIVITY SET: the complete-case rule relaxed, and nothing else (ANALYSIS_PLAN.md §1) ---
     # "The confirmatory analysis is complete-case; a sensitivity analysis including them is
     # reasonable and should be reported as such." The plan asked for it and nothing ran it: the same
@@ -1857,6 +2150,19 @@ if (nrow(eye) == 0) {
   if (is.null(m_blink)) cat("the blink-rate model did not fit.\n") else { print(summary(m_blink)); report_n(m_blink, eye, "blink rate") }
   add_to_family("blink rate", m_blink, "blinks/min")
 
+  # Inter-blink interval: the ocular family's second member, never modelled. On the log scale (an
+  # interval is positive and right-skewed), so the effect is a RATIO of intervals. It is close to the
+  # reciprocal of blink rate — the two answer nearly the same question, which Holm within the family
+  # allows for rather than double-counts — but not identical: a mean of intervals weights a long pause
+  # once, where a rate weights it by its length.
+  eye_ibi <- eye %>% filter(is.finite(mean_inter_blink_interval_ms), mean_inter_blink_interval_ms > 0)
+  m_ibi <- tryCatch(lmer(as.formula(paste0("log(mean_inter_blink_interval_ms) ~ polarity * colour", il_term,
+                                           " + session_position + (1 | participant_id)", re_passage)), data = eye_ibi),
+                    error = function(err) NULL)
+  cat("\n=== Inter-blink interval, log scale (secondary) ===\n")
+  if (is.null(m_ibi)) cat("the inter-blink-interval model did not fit.\n") else { print(summary(m_ibi)); report_n(m_ibi, eye_ibi, "inter-blink interval") }
+  add_to_family("inter-blink interval", m_ibi, "ratio of intervals", odds_ratio = TRUE)
+
   # -------------------------------------------------------------------------------------------
   # PERCLOS: A COVARIATE CHECK, NOT AN OUTCOME (M13).
   #
@@ -1930,7 +2236,9 @@ if (nrow(eye) == 0) {
 # model yet is LISTED, not dropped: the adjusted p-values are over the members that were modelled,
 # so they are smaller than they will be once the rest are added, and the table says so.
 # ===========================================================================================
-NOT_YET_MODELLED <- c("inter-blink interval", "comfort", "clarity", "RT variability", "lapse rate")
+# Every member is modelled since Round 71 (none is left to list); kept so a member added to a family
+# before its model exists is still declared rather than silently missing.
+NOT_YET_MODELLED <- c()
 cat("\n=== SECONDARY OUTCOMES: effect sizes and multiplicity (ANALYSIS_PLAN.md §4b) ===\n")
 cat("Effect = polarity, positive minus negative (ratio positive / negative for odds ratios), at the mean of\n")
 cat("the covariates and averaged over colour where colour is in the model; 95% CI unadjusted. Holm is applied\n")
@@ -1947,16 +2255,16 @@ for (fam in names(OUTCOME_FAMILIES)) {
   absent <- setdiff(members, names(rows))
   cat(sprintf("\n[family] %s: %d of %d outcome(s) tested for polarity; Holm across those %d\n",
               fam, sum(!is.na(p_pol)), length(members), sum(!is.na(p_pol))))
-  cat(sprintf("  %-18s %-34s %-32s %-9s %-9s | %-12s %s\n",
+  cat(sprintf("  %-20s %-34s %-32s %-9s %-9s | %-12s %s\n",
               "outcome", "effect (95% CI)", "units", "p", "p Holm", "interaction", "p Holm"))
   for (o in names(rows)) {
     r <- rows[[o]]
     eff <- if (is.na(r$estimate)) (if (is.null(r$note)) "-" else r$note) else sprintf("%.3f (%.3f to %.3f)", r$estimate, r$lcl, r$ucl)
-    cat(sprintf("  %-18s %-34s %-32s %-9s %-9s | %-12s %s\n", o, eff, r$units,
+    cat(sprintf("  %-20s %-34s %-32s %-9s %-9s | %-12s %s\n", o, eff, r$units,
                 fmt_p(r$p), fmt_p(holm_pol[[o]]), fmt_p(r$p_int), fmt_p(holm_int[[o]])))
   }
   for (o in absent) {
-    cat(sprintf("  %-18s %s\n", o, if (o %in% NOT_YET_MODELLED)
+    cat(sprintf("  %-20s %s\n", o, if (o %in% NOT_YET_MODELLED)
       "not yet modelled by this template — the Holm values above will rise when it is"
       else "not modelled in this run (no data, or the model did not fit; see its section)"))
   }

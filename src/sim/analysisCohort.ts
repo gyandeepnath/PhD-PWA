@@ -34,6 +34,7 @@ import { blockPlan } from '@/experiment/counterbalance';
 import { CONDITIONS, rtStimulusColours } from '@/experiment/conditions';
 import { PASSAGES, countWords } from '@/experiment/passages';
 import { computeSdt } from '@/lib/signalDetection';
+import { scoreCvsq } from '@/scales/cvsq';
 import { planRtBlock, eccentricityDeg } from '@/lib/rtLocations';
 import { CONFIG } from '@/experiment/config';
 
@@ -111,6 +112,9 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
       b.participant.enrolment_number = enrolment;
       b.participant.age = 18 + Math.floor(rng() * 17);
       b.participant.daily_screen_hours = 4 + Math.round(rng() * 80) / 10;
+      // The pre-specified moderators (synopsis Objective 3) vary, so a moderation term can be fitted.
+      b.participant.device_familiarity = (['low', 'moderate', 'high'] as const)[Math.floor(rng() * 3)];
+      b.participant.lighting_habit = (['bright', 'moderate', 'dim'] as const)[Math.floor(rng() * 3)];
     }
 
     // The participant's own Williams row and passage rotation.
@@ -151,6 +155,7 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
         incomplete_blink_ratio: Math.round((inc / total) * 10_000) / 10_000,
         observed_duration_ms: observed,
         blink_rate: Math.round((total / (observed / 60_000)) * 100) / 100,
+        mean_inter_blink_interval_ms: Math.round((observed / total) * Math.exp(gaussian(rng, 0, 0.1))),
         blink_rate_full: Math.round(((total - inc - micro) / (observed / 60_000)) * 100) / 100,
         effective_fps: fps, fps_adequate_for_ratio: fps >= 24, fps_adequate_for_tiers: fps >= 20,
         perclos_p80: Math.round(Math.max(0, 0.03 + gaussian(rng, 0, 0.015)) * 1000) / 1000,
@@ -189,7 +194,11 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
         const crit = 0.15 + critU;
         const responded = rng() < phi((p.signal ? dp / 2 : -dp / 2) - crit);
         const accuracy: RtAccuracy = p.signal ? (responded ? 'hit' : 'miss') : (responded ? 'false_alarm' : 'correct_rejection');
-        const rt = responded ? Math.max(160, Math.round(380 + rtU + 4 * c.session_position + (outer ? 20 : 0) + gaussian(rng, 0, 45))) : null;
+        // A few slow responses beyond the 600 ms lapse threshold, so the lapse model has events to fit.
+        const lapse = responded && p.signal && rng() < 0.05;
+        const rt = responded
+          ? Math.max(160, Math.round((lapse ? 720 : 380 + rtU + 4 * c.session_position + (outer ? 20 : 0)) + gaussian(rng, 0, 45)))
+          : null;
         Object.assign(t, {
           is_signal: p.signal, trial_category: p.signal ? 'signal' : 'noise', stimulus_color: p.color,
           stim_location_id: p.location.id, stim_ring: p.location.ring, stim_angle_deg: p.location.angleDeg,
@@ -202,7 +211,15 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
       });
       const sdt = computeSdt({ hits, misses, falseAlarms: fas, correctRejections: crs });
       const mean = hitRts.length ? hitRts.reduce((a, x) => a + x, 0) / hitRts.length : null;
+      const sd = hitRts.length > 1 && mean != null
+        ? Math.sqrt(hitRts.reduce((a, x) => a + (x - mean) ** 2, 0) / (hitRts.length - 1)) : null;
+      const sorted = [...hitRts].sort((a, x) => a - x);
+      const median = sorted.length ? (sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2) : null;
+      const lapses = hitRts.filter((x) => x > CONFIG.RT_LAPSE_THRESHOLD_MS).length;
       Object.assign(r, {
+        median_rt_hits_ms: median, rt_sd_ms: sd == null ? null : Math.round(sd * 100) / 100,
+        rt_cv: sd != null && mean ? Math.round((sd / mean) * 10_000) / 10_000 : null,
+        lapse_count: lapses, lapse_rate: hitRts.length ? lapses / hitRts.length : null,
         hits, misses, false_alarms: fas, correct_rejections: crs,
         hit_rate: sdt.hit_rate, false_alarm_rate: sdt.false_alarm_rate,
         mean_rt_hits_ms: mean == null ? null : Math.round(mean * 100) / 100,
@@ -222,6 +239,30 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
         burning: level(m0 - 0.7 + gaussian(rng)), headache: level(m0 - 1 + gaussian(rng)),
       });
       f.fatigue_mean = (f.eye_strain + f.dryness + f.blur + f.burning + f.headache) / 5;
+    }
+
+    // Comfort and clarity ratings (0-100 sliders), with participant scale use and no condition effect.
+    const comfortU = gaussian(rng, 0, 10);
+    for (const pr of b.perception) {
+      const slider = (x: number) => Math.max(0, Math.min(100, Math.round(x)));
+      pr.display_comfort_score = slider(60 + comfortU + gaussian(rng, 0, 12));
+      pr.text_clarity_score = slider(65 + comfortU * 0.5 + gaussian(rng, 0, 12));
+      pr.comfort_touched = rng() > 0.03;
+    }
+
+    // CVS-Q at the close and NASA-TLX vary between participants, so their intervals can be computed.
+    // The close is re-scored by the real scorer, so 13_cvsq.csv stays consistent with its items.
+    for (const q of b.cvsq) {
+      if (q.stage !== 'session_end') continue;
+      q.frequency = q.frequency.map(() => (rng() < 0.6 ? 1 : rng() < 0.5 ? 0 : 2));
+      q.intensity = q.intensity.map((_, k) => (q.frequency[k] === 0 ? 0 : 1 + (rng() < 0.3 ? 1 : 0)));
+      const scored = scoreCvsq(q.frequency, q.intensity);
+      q.total_score = scored.total; q.symptomatic = scored.symptomatic;
+    }
+    for (const t of b.tlx) {
+      const r = () => Math.max(0, Math.min(100, Math.round(50 + gaussian(rng, 0, 15))));
+      Object.assign(t, { mental_demand: r(), physical_demand: r(), temporal_demand: r(), performance: r(), effort: r(), frustration: r() });
+      t.raw_tlx = (t.mental_demand + t.physical_demand + t.temporal_demand + t.performance + t.effort + t.frustration) / 6;
     }
 
     // Comprehension, regenerated for the passage actually read, with the known polarity effect.

@@ -458,16 +458,50 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
         ['ocular', 'subjective', 'performance'].every((f) => new RegExp(`\\[family\\] ${f}: \\d+ of \\d+ outcome`).test(famBlock)),
         'a family header is missing');
       ok('R: every performance outcome the template models has an effect with a 95% CI',
-        ['reading speed', 'comprehension', 'RT', 'd-prime', 'criterion', 'search completion', 'search rate', 'search d-prime']
+        ['reading speed', 'comprehension', 'RT', 'RT variability', 'lapse rate', 'd-prime', 'criterion', 'search completion', 'search rate', 'search d-prime']
           .every((o) => famRows.some((m) => m[1] === o)), `rows: ${famRows.map((m) => m[1]).join(', ')}`);
-      ok('R: the blink-rate and fatigue rows are in their families too',
-        famRows.some((m) => m[1] === 'blink rate') && famRows.some((m) => m[1] === 'fatigue'), `rows: ${famRows.map((m) => m[1]).join(', ')}`);
+      ok('R: the ocular and subjective families are complete: blink rate, inter-blink interval, fatigue, comfort, clarity',
+        ['blink rate', 'inter-blink interval', 'fatigue', 'comfort', 'clarity'].every((o) => famRows.some((m) => m[1] === o)),
+        `rows: ${famRows.map((m) => m[1]).join(', ')}`);
       ok('R: no Holm-adjusted p is below its raw p',
         famRows.length > 0 && famRows.every((m) => !(pnum(m[6]) < pnum(m[5])) && !(pnum(m[8]) < pnum(m[7]))),
         famRows.map((m) => `${m[1]} ${m[5]}/${m[6]} ${m[7]}/${m[8]}`).join('; '));
-      ok('R: family members not modelled yet are listed, not dropped',
-        /RT variability\s+not yet modelled/.test(famBlock) && /inter-blink interval\s+not yet modelled/.test(famBlock),
-        'a not-yet-modelled member is missing from its family');
+      ok('R: every family member is modelled (Round 71) — none is listed as not yet modelled',
+        !/not yet modelled/.test(famBlock) && ['ocular: 2 of 2', 'subjective: 3 of 3', 'performance: 10 of 10'].every((f) => famBlock.includes(`[family] ${f}`)),
+        'a family member is still unmodelled');
+      /*
+       * THE REST OF THE PRE-REGISTERED ANALYSES (M11, m10, m11): RT polarity x position (§3), the trial-
+       * level log-RT model with the ring terms (§4a), the restarted / interrupted / serial-position /
+       * carryover refits of the primary, moderation (Objective 3), and the CVS-Q and NASA-TLX intervals,
+       * one value per participant.
+       */
+      ok('R: the RT polarity x serial-position interaction is tested (§3)',
+        /\[RT x position\] polarity x serial position \(§3\): -?[\d.]+ ms per position \(95% CI/.test(rOut), 'no [RT x position] line');
+      ok('R: the trial-level log-RT model carries ring, ring x colour and polarity x position (§4a)',
+        /\[RT trials\] ring1\s+x[\d.]+/.test(rOut) && /\[RT trials\] ring x colour: Wald chi2\(4\)/.test(rOut)
+          && /\[RT trials\] polarity1:session_position/.test(rOut), 'the trial-level RT lines are missing');
+      ok('R: the simulated slower outer ring is found in the trial RTs (inner / outer below 1)',
+        +(/\[RT trials\] ring1\s+x([\d.]+)/.exec(rOut)?.[1] ?? NaN) < 1, 'ring1 ratio not below 1');
+      ok('R: untouched sliders are counted and left out of comfort and clarity',
+        /\[comfort\] \d+ of \d+ rating\(s\) left at the slider's default/.test(rOut), 'no untouched-slider count');
+      const hasOrdinal = spawnSync('Rscript', ['-e', 'q(status = as.integer(!requireNamespace("ordinal", quietly = TRUE)))'], { stdio: 'ignore' }).status === 0;
+      ok(`R: the ordinal sensitivity on the fatigue items ${hasOrdinal ? 'is fitted' : 'is reported as skipped'}`,
+        hasOrdinal ? /\[clmm\] polarity \(positive minus negative\), latent logit scale/.test(rOut) : /\[clmm\] \[SKIPPED: ordinal not installed\]/.test(rOut),
+        'no [clmm] line of the expected kind');
+      for (const [label, re] of [
+        ['restarted runs', /without restarted runs \(attempt_number > 1\)|no run was restarted/],
+        ['interrupted runs', /without interrupted runs \(condition_interrupted\)|no run was interrupted/],
+        ['serial position as a factor', /serial position as a factor\s+polarity -?[\d.]+/],
+        ['first-order carryover', /\[carryover\] after a polarity switch: log-odds -?[\d.]+ \(95% CI/],
+      ]) ok(`R: the primary is refitted for ${label}`, re.test(rOut), `no ${label} line`);
+      ok('R: each recorded moderator of Objective 3 is tested, Holm across them, and the unrecorded one is named',
+        ['daily_screen_hours', 'lighting_habit', 'device_familiarity'].every((m) => new RegExp(`\\[moderator\\] ${m}\\s+polarity x moderator: chi2\\(\\d+\\)`).test(rOut))
+          && /Holm across the 3 moderator\(s\) tested/.test(rOut) && /display-mode preference \(H1rho\) is not recorded/.test(rOut),
+        'a moderator line is missing');
+      ok('R: the CVS-Q change has an interval over PARTICIPANTS, and NASA-TLX one per participant',
+        /\[cvsq\] mean change, close minus baseline: -?[\d.]+ points \(95% CI -?[\d.]+ to -?[\d.]+\), n = 22 participant/.test(rOut)
+          && /\[NASA-TLX\] mean raw TLX [\d.]+ \(95% CI [\d.]+ to [\d.]+\), one value per participant, n = 22/.test(rOut),
+        'no per-participant CVS-Q or NASA-TLX interval');
       // m6: provenance first — the R version and packages, then the builds that collected the data.
       ok('R: the output opens with its provenance: R, packages, and the collecting builds',
         /^=+\nPROVENANCE\n=+\nR version \d/.test(rRun.stdout) && /^\s+lme4\s+\d/m.test(rOut)

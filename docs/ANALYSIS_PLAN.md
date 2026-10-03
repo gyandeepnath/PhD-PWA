@@ -234,6 +234,10 @@ only after **60 min**.
 | Visual search | `targets_found` over `search_time_ms`; `search_d_prime`; completion (`search_termination`) | **Poisson rate GLMM, search d′ LMM, completion GLMM; censoring tested** (Round 71, §4c) | Round 71: the uncensored time LMM is printed as a description only. Before: The column is `search_termination` in `analysis_long.csv` (the file this plan is written against) and `termination_mode` in `05_visual_search.csv`; it says whether the block ended by completion or by the 60 s cap. An earlier revision of this line claimed `search_termination` did not exist — that was wrong, and came from checking only the numbered bundle's codebook and not `analysisCodebook.ts`. Capped rows are a lower bound; treating them as measurements biases the mean downward. Either model them as censored or report the completion rate alongside. |
 | Sensitivity | the trials in `08_reaction_trials.csv` (`d_prime` per block as a cross-check) | **Probit GLMM on the trials** (Round 71) | With 20 go and 12 no-go trials, one block's d′ is imprecise. This row used to say "consider weighting" by `d_prime_se`; the template did, and that was biased, because the SE rises with d′ itself (correlation 0.95 on the Round 62 audit's N = 40 cohort), so inverse-variance weights down-weight high-sensitivity blocks. See §4c. |
 | Response bias | the trials (`criterion` per block as a cross-check) | **The same probit GLMM** (Round 71) | A polarity effect on `criterion` **without** one on `d_prime` is a bias shift, not a sensitivity change. Worth reporting as a distinct finding rather than folding into "RT performance". |
+| Comfort, clarity | `display_comfort_score`, `text_clarity_score` (06) | LMM (Round 71) | 0-100 sliders. Untouched sliders (`comfort_touched` / `clarity_touched` FALSE) are excluded. Not a cumulative-link model: see §4c. |
+| RT variability | `rt_sd_ms` | LMM on log (Round 71) | Effect is a ratio of SDs. |
+| Lapses | `lapse_count` of `hits` | Binomial GLMM (Round 71) | Weighted by the block's hits, as the primary is by its blinks. |
+| Inter-blink interval | `mean_inter_blink_interval_ms` | LMM on log (Round 71) | Near the reciprocal of blink rate; both are in the ocular family. |
 | PERCLOS | `perclos_p80` | **A covariate, not an outcome** (Round 70) | See below the table. |
 
 **PERCLOS is a sleepiness covariate, not an outcome** (Round 70). This row used to list it as a
@@ -320,15 +324,15 @@ and to the interaction p-values (where the model has an interaction), across the
 
 | Family | Members | Modelled in the templates now |
 |---|---|---|
-| Ocular | blink rate; inter-blink interval | blink rate |
-| Subjective (per condition) | visual fatigue (`fatigue_delta`); comfort; clarity | visual fatigue |
-| Performance | reading speed; comprehension; RT mean; RT variability; lapse rate; d′; criterion; visual-search completion; visual-search rate; search d′ | all but RT variability and lapse rate |
+| Ocular | blink rate; inter-blink interval | both (inter-blink interval from Round 71) |
+| Subjective (per condition) | visual fatigue (`fatigue_delta`); comfort; clarity | all three (comfort and clarity from Round 71) |
+| Performance | reading speed; comprehension; RT mean; RT variability; lapse rate; d′; criterion; visual-search completion; visual-search rate; search d′ | all ten (RT variability, lapse rate, search rate and search d′ from Round 71) |
 
-Members not modelled yet are listed in the output under their family, and the printed Holm values
-cover only the members that were modelled, so they will rise when the rest are added; the table says
-so rather than presenting a smaller family as the whole. Outside every family: the key secondary
-CVS-Q change and NASA-TLX are once per sitting, so no polarity contrast exists for them (they are
-reported descriptively); PERCLOS, head pose and face presence are covariates and quality indices, not
+Every member is modelled since Round 71. A member that does not fit in a given run (no data, or a
+model that fails) is still listed under its family with the reason, so a smaller family is never
+presented as the whole. Outside every family: the key secondary CVS-Q change and NASA-TLX are once per
+sitting, so no polarity contrast exists for them (they are reported with an interval over
+participants, §4c); PERCLOS, head pose and face presence are covariates and quality indices, not
 outcomes (§4, PERCLOS row). The R template implements all three families, and a unit test holds its
 family list to its models; the Python cross-check implements the primary family only, since its role
 is the confirmatory sign check (§5b).
@@ -379,6 +383,40 @@ ten-cell logistic model is separated (its estimates run off to infinity), so the
 fitted and labelled `[additive]`, with no interaction test; when a whole polarity or colour level is
 degenerate, no completion model is fitted. A censored-time model (a Cox or censored-normal mixed model)
 is not fitted: it needs a package (`survival`) that is not in the install line or CI.
+
+**The remaining members and analyses (Round 71).**
+
+- **RT variability** (log SD of hit latencies) and **lapses** (hits slower than the lapse threshold, a
+  binomial count out of the block's hits) — synopsis §2.6's "most fatigue-sensitive indices".
+- **Inter-blink interval** on the log scale, beside blink rate.
+- **Comfort and clarity**, LMMs. Synopsis §3.9 says "ordinal cumulative-link models serve rating
+  outcomes". For a 0-100 slider that is not workable: a cumulative-link model needs a threshold between
+  every pair of adjacent values used, about ten ratings per participant cannot support up to 100 of
+  them, and the scores are close to continuous already, so the LMM is the model, by this amendment. The
+  0-10 fatigue ITEMS are ordinal ratings in the ordinary sense; where `ordinal` is installed the template
+  fits a cumulative-link mixed model (`ordinal::clmm`) to the five post-condition items stacked, as a
+  sensitivity for the fatigue member, and otherwise says `[SKIPPED: ordinal not installed]`. `ordinal`,
+  like `glmmTMB`, is in neither the install line nor CI.
+- **RT polarity × serial position** (§3): on the per-block mean RT model, and in a trial-level LMM on the
+  log RT of valid hits that also carries §4a's ring and ring × colour terms.
+- **Primary sensitivities**: without restarted runs (`attempt_number` > 1); without interrupted runs
+  (`condition_interrupted`); serial position as a factor rather than a line; and first-order carryover —
+  `polarity_switched` (the run before, in the same sitting, had the other polarity) added, tested by
+  likelihood ratio against the primary refitted on the runs that have a predecessor.
+- **Moderation** (Objective 3; synopsis §3.9, "condition-by-moderator interactions"): each recorded
+  moderator — `daily_screen_hours` (standardised), `lighting_habit`, `device_familiarity` — with its
+  polarity interaction, one at a time, by likelihood ratio against the primary on the same rows, Holm
+  across the three. Exploratory: the sample size of a between-participant moderator is the number of
+  participants. H₁ᵨ's habitual display-mode preference is **not recorded** by the app and cannot be
+  tested.
+- **CVS-Q change and NASA-TLX**: one value per participant — for CVS-Q the first sitting's baseline to
+  the last sitting's close, for NASA-TLX the mean of a participant's sittings — with a t interval over
+  participants. A split sitting used to contribute two half-exposure changes counted as independent.
+
+**Not done, and why.** A censored-time model of search (Cox or censored-normal): needs `survival`,
+not in the install line or CI (the search rate makes it unnecessary for the family). Moderation of
+the colour effect, and moderators beyond polarity: not pre-specified in a form small enough to test.
+The Python cross-check mirrors none of this — its role is the confirmatory sign check (§5b).
 
 ---
 
