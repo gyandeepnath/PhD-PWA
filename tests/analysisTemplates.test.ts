@@ -511,3 +511,29 @@ describe('the Python template fits every MixedLM through its guard', () => {
     expect(py.slice(helper, calls[0])).not.toMatch(/\n {4}def (?!fit_lmm)/);
   });
 });
+
+/**
+ * NO CODEBOOK ENTRY RECOMMENDS INVERSE-VARIANCE WEIGHTING OF A d-PRIME.
+ *
+ * The standard error of a d′ — reaction-time or search — is computed from the same counts as the
+ * estimate and rises with it, so 1 / SE² weights down-weight the most sensitive blocks. Round 71
+ * stopped the template doing it and rewrote the d_prime_se entry, but both search_d_prime_se entries
+ * still told the analyst to weight by the inverse, one "as the plan does for the reaction-time
+ * d-prime", which the plan no longer did (Round 73). Any sentence that pairs weighting with an inverse
+ * must be a warning against it.
+ */
+describe('no codebook description recommends weighting a d-prime by its inverse SE', () => {
+  it('pairs "weight" with "inverse" only in a sentence that says not to', () => {
+    const offenders: string[] = [];
+    for (const [book, entries] of [['export', CODEBOOK], ['analysis', ANALYSIS_CODEBOOK]] as const) {
+      for (const c of entries) {
+        for (const sentence of c.description.split(/(?<=\.)\s+/)) {
+          if (/weight/i.test(sentence) && /\binverse\b/i.test(sentence) && !/\bnot\b/i.test(sentence)) {
+            offenders.push(`${book} codebook, ${c.column}: ${sentence}`);
+          }
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
