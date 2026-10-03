@@ -162,6 +162,9 @@ try {
     'cameras-some': { n: 12, seed: 8, cameraOff: [0, 1, 2] },
     'one-polarity': { n: 4, seed: 7, onePolarity: 'positive' },
     'one-polarity-edited': { n: 4, seed: 9 },
+    // Ten participants, the size of the pilot: this seed puts the PERCLOS participant variance at its
+    // boundary, where statsmodels' gradient-based optimizers raise LinAlgError (2 of 20 seeds at N = 10).
+    ten: { n: 10, seed: 1 },
   };
   const cohortDumper = join(dir, 'dumpCohort.ts');
   writeFileSync(cohortDumper, `
@@ -239,7 +242,7 @@ for (const { root, options } of jobs) {
     'Python:cohort': launchPy(cohortDir), 'Python:flagged': launchPy(at('flagged')),
     'Python:cameras-some': launchPy(at('cameras-some')), 'Python:cameras-off': launchPy(at('cameras-off')),
     'Python:one': launchPy(at('one')), 'Python:twice': launchPy(at('twice')), 'Python:no-verdict': launchPy(at('no-verdict')),
-    'Python:few': launchPy(at('few')), 'Python:one-polarity': launchPy(at('one-polarity')),
+    'Python:few': launchPy(at('few')), 'Python:ten': launchPy(at('ten')), 'Python:one-polarity': launchPy(at('one-polarity')),
     'Python:one-polarity-edited': launchPy(at('one-polarity-edited')),
   };
   console.log(`         (cohort: ${SIM.n} participants; dashboard confirmatory set ${expected.confirmatory.rows} runs / `
@@ -354,6 +357,8 @@ for (const { root, options } of jobs) {
    * PERCLOS (M13). A sleepiness COVARIATE in the codebook and the synopsis, which this file fitted RAW
    * as an outcome of polarity and never used as the covariate the synopsis's sensitivity analysis adds.
    */
+  ok('every mixed model fits on the main cohort (none is named as not fitted)', !/the LMM did not fit/.test(out),
+    (/^\[[^\]]+\] the LMM did not fit[^\n]*/m.exec(out) ?? [''])[0]);
   ok('PERCLOS is not modelled as an outcome, raw or otherwise', !/=== perclos_p80 mixed model ===/.test(out),
     'the raw perclos_p80 outcome model is still fitted');
   ok('the primary is refitted with PERCLOS as a covariate (synopsis §3.9)',
@@ -832,6 +837,17 @@ for (const { root, options } of jobs) {
     fewPy.status === 0 && /\[H1\] primary: polarity_c[^\n]*WITHHELD: \[SE CAUTION\]/.test(fewPy.stdout)
       && !/\[H1\] primary: polarity_c[^\n]*95% CI/.test(fewPy.stdout) && /p-values WITHHELD/.test(fewPy.stdout),
     `exit ${fewPy.status}`);
+  /*
+   * A BOUNDARY FIT IS NOT A CRASH. On ten participants a participant variance of zero is ordinary;
+   * lme4 returns a singular fit, and statsmodels' default optimizers raised LinAlgError("Singular
+   * matrix") in the PERCLOS covariate check, so the cross-check ended in a traceback, exit 1. Every
+   * MixedLM now retries by Powell's method, says so, and names a model that fits by neither.
+   */
+  const tenPy = await RUNS['Python:ten'];
+  ok('Python: a 10-participant cohort whose PERCLOS variance is at its boundary runs to the end, without a traceback',
+    tenPy.status === 0 && !/Traceback/.test(tenPy.stderr) && /\[perclos\] the gradient-based optimizers stopped \(LinAlgError/.test(tenPy.stdout)
+      && /\[perclos\] LMM on logit\(y'\): polarity_c/.test(tenPy.stdout),
+    `exit ${tenPy.status}: ${(tenPy.stderr || '').trim().split('\n').slice(-1)}`);
   /*
    * WITHOUT THE CAMERA. Every behavioural section — not a sample of three — because the original
    * defect (M4) was a brace: the PERCLOS block closed two hundred lines late, so reading speed, d' and

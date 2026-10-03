@@ -461,6 +461,31 @@ def main() -> None:
         """More clusters than parameters: the condition under which cluster_note stays silent."""
         return len(np.unique(m.model.groups)) > len(m.params)
 
+    def fit_lmm(label: str, formula: str, data: pd.DataFrame):
+        """A participant-intercept MixedLM, or None with the reason printed — never a traceback.
+
+        statsmodels' gradient-based optimizers (BFGS, then L-BFGS) stop with LinAlgError("Singular
+        matrix") when the participant variance sits at its boundary, zero: an ordinary outcome with ten
+        participants, where lme4 returns a boundary (singular) fit and carries on. The PERCLOS covariate
+        check raised it on the Round 62 audit's withdrawn cohort and on 2 of 20 simulated 10-participant
+        cohorts, and the whole cross-check ended in a traceback with every section after it lost
+        (Round 73). Powell's method needs no gradient and reaches the boundary, so it is tried next and
+        the output says so; a model that fits by neither is named and skipped, as the R template's
+        tryCatch does, and the run continues."""
+        model = smf.mixedlm(formula, data, groups=data["participant_id"])
+        try:
+            return model.fit()
+        except (np.linalg.LinAlgError, ValueError) as err:
+            first = f"{type(err).__name__}: {err}"
+        try:
+            fitted = model.fit(method="powell")
+        except (np.linalg.LinAlgError, ValueError) as err:
+            print(f"[{label}] the LMM did not fit: {first}; by Powell's method, {type(err).__name__}: {err}")
+            return None
+        print(f"[{label}] the gradient-based optimizers stopped ({first}), as they do with the participant variance "
+              f"at its boundary; refitted by Powell's method: participant variance {float(fitted.cov_re.iloc[0, 0]):.3g}")
+        return fitted
+
     # ===========================================================================================
     # BEHAVIOURAL AND QUESTIONNAIRE OUTCOMES — none of them needs the camera, and none is fitted
     # inside the ocular section, so a dataset with every camera off still produces all of them.
@@ -470,14 +495,11 @@ def main() -> None:
     rt = rt_summary.merge(cond, on=["participant_id", "condition_id"]).dropna(
         subset=["mean_rt_hits_ms"]
     )
-    m_rt = smf.mixedlm(
-        "mean_rt_hits_ms ~ log_contrast + polarity_c + position_c" + si + pas,
-        rt,
-        groups=rt["participant_id"],
-    ).fit()
     print("=== RT mixed model ===")
-    print(m_rt.summary())
-    report_n(m_rt, rt, "RT")
+    m_rt = fit_lmm("RT", "mean_rt_hits_ms ~ log_contrast + polarity_c + position_c" + si + pas, rt)
+    if m_rt is not None:
+        print(m_rt.summary())
+        report_n(m_rt, rt, "RT")
 
     # --- Fatigue -----------------------------------------------------------------------
     # fatigue_delta, per the plan's outcome table: "Change from the participant's own baseline
@@ -496,14 +518,11 @@ def main() -> None:
               "between-participant scale use. See the plan's outcome table.")
     n_fat_rows = len(fat)
     fat = fat.dropna(subset=[fat_dv])
-    m_fat = smf.mixedlm(
-        f"{fat_dv} ~ log_contrast + polarity_c + position_c" + si + pas,
-        fat,
-        groups=fat["participant_id"],
-    ).fit()
     print(f"\n=== Fatigue mixed model ({fat_dv}) ===")
-    print(m_fat.summary())
-    print(f"[n] fatigue: {int(m_fat.nobs)} of {n_fat_rows} post-condition ratings used")
+    m_fat = fit_lmm("fatigue", f"{fat_dv} ~ log_contrast + polarity_c + position_c" + si + pas, fat)
+    if m_fat is not None:
+        print(m_fat.summary())
+        print(f"[n] fatigue: {int(m_fat.nobs)} of {n_fat_rows} post-condition ratings used")
 
     # --- Comprehension (logistic; GEE as a mixed-logit stand-in) -----------------------
     # passage_id from the condition frame: 04_comprehension.csv carries its own copy, and the merge
@@ -574,13 +593,10 @@ def main() -> None:
         # Previously skipped in silence when the illumination check failed. The baseline-to-close
         # CHANGE is estimable with one level; only the between-level contrast is not.
         if cvsq_wide["ambient_illumination_level"].nunique() > 1:
-            m_cvsq = smf.mixedlm(
-                "change ~ C(ambient_illumination_level)",
-                cvsq_wide.dropna(subset=["change"]),
-                groups=cvsq_wide.dropna(subset=["change"])["participant_id"],
-            ).fit()
             print("\n=== CVS-Q change by illumination (EXPLORATORY: frames differ) ===")
-            print(m_cvsq.summary())
+            m_cvsq = fit_lmm("cvsq", "change ~ C(ambient_illumination_level)", cvsq_wide.dropna(subset=["change"]))
+            if m_cvsq is not None:
+                print(m_cvsq.summary())
         else:
             # This branch did not exist: with one illumination level the whole block vanished
             # without printing a word, and the key secondary outcome simply never appeared in the
@@ -607,9 +623,10 @@ def main() -> None:
                   "audit, one_tlx_per_session, should have blocked them).")
             tlx = tlx.drop_duplicates(subset="sitting_folder")
         if len(tlx) and tlx["ambient_illumination_level"].nunique() > 1:
-            m_tlx = smf.mixedlm("raw_tlx ~ C(ambient_illumination_level)", tlx, groups=tlx["participant_id"]).fit()
             print("\n=== NASA-TLX raw score by illumination (session level) ===")
-            print(m_tlx.summary())
+            m_tlx = fit_lmm("NASA-TLX", "raw_tlx ~ C(ambient_illumination_level)", tlx)
+            if m_tlx is not None:
+                print(m_tlx.summary())
         elif len(tlx):
             print("\n=== NASA-TLX raw score (session level, descriptive) ===")
             print("One rating per sitting and one illumination level: no contrast is estimable.")
@@ -881,13 +898,11 @@ def main() -> None:
             if DROP_DISENGAGED:
                 sub = sub[sub["engagement_flag"].ne("bad")]
             if len(sub):
-                mm = smf.mixedlm(
-                    f"{dv} ~ position_c + polarity_c{il}{pas}",
-                    sub, groups=sub["participant_id"],
-                ).fit()
                 print(f"\n=== {dv} mixed model ===")
-                print(mm.summary())
-                report_n(mm, sub, dv)
+                mm = fit_lmm(dv, f"{dv} ~ position_c + polarity_c{il}{pas}", sub)
+                if mm is not None:
+                    print(mm.summary())
+                    report_n(mm, sub, dv)
 
     # --- PERCLOS: a COVARIATE CHECK, not an outcome (the R template's section of that name) ----
     # The PERCLOS-adjusted refit of the primary assumes the display condition does not itself move
@@ -906,12 +921,15 @@ def main() -> None:
         n_bound = int(((pc["perclos_p80"] <= 0) | (pc["perclos_p80"] >= 1)).sum())
         print(f"[perclos] compressed as (y(n - 1) + 0.5) / n, n = {n_pc}: {n_bound} value(s) at exactly 0 or 1 "
               f"become {0.5 / n_pc:.5f} or {1 - 0.5 / n_pc:.5f}; no value moves by more than {0.5 / n_pc:.5f}.")
-        m_pc = smf.mixedlm(f"perclos_logit ~ polarity_c * C(color_name, Sum){ilx} + position_c{pas}",
-                           pc, groups=pc["participant_id"]).fit()
-        lo, hi = m_pc.conf_int().loc["polarity_c"]
-        print(f"[perclos] LMM on logit(y'): polarity_c (positive minus negative) {m_pc.params['polarity_c']:.3f} "
-              f"(95% CI {lo:.3f} to {hi:.3f}), p {m_pc.pvalues['polarity_c']:.2g}")
-        report_n(m_pc, pc, "PERCLOS covariate check")
+        m_pc = fit_lmm("perclos", f"perclos_logit ~ polarity_c * C(color_name, Sum){ilx} + position_c{pas}", pc)
+        if m_pc is None:
+            print("[perclos] the covariate-check LMM did not fit (reason above): whether the display condition moves "
+                  "PERCLOS is not known from this file, so read the PERCLOS-adjusted refit with the R template's check.")
+        else:
+            lo, hi = m_pc.conf_int().loc["polarity_c"]
+            print(f"[perclos] LMM on logit(y'): polarity_c (positive minus negative) {m_pc.params['polarity_c']:.3f} "
+                  f"(95% CI {lo:.3f} to {hi:.3f}), p {m_pc.pvalues['polarity_c']:.2g}")
+            report_n(m_pc, pc, "PERCLOS covariate check")
         print("A polarity or colour effect here means the PERCLOS-adjusted refit adjusts for something the display "
               "changed: read that refit as a sensitivity, never as the primary.")
     else:

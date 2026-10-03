@@ -490,3 +490,24 @@ describe('the R template refits on other rows only through refit()', () => {
     expect(code).toMatch(/refit <- function\(m, rows, change = NULL\) \{[\s\S]*?environment\(f\) <- environment\(\)[\s\S]*?cl\$data <- quote\(rows\)/);
   });
 });
+
+/**
+ * EVERY PYTHON MIXED MODEL GOES THROUGH fit_lmm().
+ *
+ * statsmodels' gradient-based optimizers raise LinAlgError("Singular matrix") when the participant
+ * variance is at zero, which ten participants reach routinely (2 of 20 simulated cohorts). The
+ * PERCLOS covariate check was fitted directly and ended the cross-check in a traceback (Round 73).
+ * fit_lmm() retries by Powell's method and names a model that fits by neither.
+ */
+describe('the Python template fits every MixedLM through its guard', () => {
+  const py = src('src/analysis/analysis_template.py');
+
+  it('calls smf.mixedlm in exactly one place, inside fit_lmm', () => {
+    const calls = [...py.matchAll(/smf\.mixedlm\(/g)].map((m) => m.index!);
+    expect(calls).toHaveLength(1);
+    const helper = py.indexOf('def fit_lmm(');
+    expect(helper).toBeGreaterThan(0);
+    expect(calls[0]).toBeGreaterThan(helper);
+    expect(py.slice(helper, calls[0])).not.toMatch(/\n {4}def (?!fit_lmm)/);
+  });
+});
