@@ -4760,3 +4760,80 @@ effect is not done.
 
 Verified on the commit carrying this entry: `npm run verify` green, with R and Python both running in
 the analysis gate; the gate also green with `ordinal` and `glmmTMB` on the library path.
+
+## Round 72 — analysis gate
+
+M12 of the Round 62 analysis audit: `scripts/verifyAnalysis.mjs` checked that headings printed, on a
+cohort of clones of one participant, so it could not have caught B1, M1, M4 or M5. Rounds 69-71 had
+already rebuilt most of it (the simulated cohort of `src/sim/analysisCohort.ts`, with each enrolment's
+own Williams row and passage rotation and known polarity effects; checks on the simulated sign in R
+and Python; no `rank deficient`, no `nonEst`; NASA-TLX; no `[False]` Dep. Variable; N = 1, a
+duplicated folder, no verdict and all cameras off). This round closes what was still open and then
+tests the gate itself.
+
+**What the gate still lacked, and now checks.**
+
+- **The designed degrees of freedom.** The R heading says the LRT Df is 4 for the full 2 × 5
+  crossing and lower if lme4 dropped aliased columns, but nothing held it to 4. The gate now reads the
+  `m_primary` row of the omnibus `anova()` table and requires Df 4. It also requires Python's H1b to be
+  `(Wald, 4 df)`, and no `[SE CAUTION]` on the 22-participant cohort.
+- **One polarity.** Both templates had an `[ONE POLARITY]` guard that no cohort exercised. A new
+  cohort option, `onePolarity`, shows every run in one polarity with its colour kept: ten complete
+  runs, two per colour cell. Through the app's own writers it never reaches a model. The exporter's
+  audit marks every sitting `duplicate_cell` (and `audit_condition_label_unique`), so the confirmatory
+  set is empty, and both templates stop with `[TOO FEW PARTICIPANTS] ... holds 0`, after the
+  per-reason exclusion counts name why. The gate checks that. The template guard is the second line,
+  for a condition table edited after export. A copy of a normal cohort whose per-sitting
+  `02_conditions.csv` says `positive` on every row passes the verdict, and both templates stop with
+  `[ONE POLARITY] every confirmatory condition-run has polarity 'positive'`. Dropping the other
+  polarity's five runs instead, as the Round 62 generator did, makes every set incomplete, and the
+  verdict excludes everyone before the guard is reached.
+- **Cameras off for some.** Three of twelve declined the camera. Both templates must exit 0 and fit
+  the primary on the 90 camera-on runs. Every behavioural model must use all 120: RT and fatigue in
+  both templates, and reading speed in R, which used to come from the camera-on frame (M4.2).
+- **Every behavioural section without a camera.** The all-cameras-off and some-cameras-off checks
+  name every behavioural and questionnaire section: RT, fatigue, comprehension, d′ (the trial-level
+  probit model in R, the per-participant table in Python), reading speed and visual search (R), CVS-Q
+  and NASA-TLX. Before, the gate checked three of them.
+
+**Mutation test.** Each of the original defects was put back into its own scratch copy of the tree
+(`round62/b3_mut/<defect>/`, outside the repository), and the gate was run there:
+
+| Defect put back | Gate | Checks that failed |
+|---|---|---|
+| B1: `is_correct` left a bool in the Python comprehension GEE | exit 1 | 4: the comprehension sign (Python −0.495 against simulated +, R +0.533), R/Python agreement, the `[False]` Dep. Variable, the `is_correct` response |
+| M1: `C(color_name)` treatment-coded in the Python primary | exit 1 | 3: sum-coded colour rows, H1b at 4 df (it found 0), the primary-family block |
+| M4: reading speed, d′/criterion and visual search inside an `if (any(!is.na(eye$perclos_p80)))` block, the PERCLOS brace bug | exit 1 | 1: all cameras off, reading speed, d′ and criterion, and visual search missing |
+| M5: NASA-TLX read from `file.path(DATA_DIR, "14_nasa_tlx.csv")` only | exit 1 | 4: the NASA-TLX section, its per-participant interval, and the section list on both camera-off cohorts |
+
+The gate as it stood at 1195ff7 (the end of Round 71) PASSED with M4 put back. Its camera-off check
+asked for RT, comprehension and NASA-TLX only, and the main cohort has PERCLOS values, so nothing else
+noticed the missing sections. M1 does not change the sign on this cohort, so the sign checks alone
+would not catch it. The sum-coding and 4-df checks do.
+
+**Runtime.** Before this round the gate ran its template runs one after another: 177 s on this
+4-core container, about 60 s of it for each of the two full R runs. All 19 runs are now launched
+together on a pool of `min(6, max(2, cores))` processes, longest first, with BLAS pinned to one thread
+per process. The checks read the results in the order they are written, and every cohort comes from
+one `tsx` process instead of one per cohort. The gate now takes 68-70 s here, with 176 checks (163
+before), so its wall time is about that of the longest R run.
+
+**Not changed.**
+- `deploy.yml` still reaches the gate through `npm run verify` on a runner without pandas or R. There
+  it prints `SKIPPED (not passed)` and exits 0. `verify.yml` installs both and runs it. The CI
+  configuration is outside this task. Making a skip fatal when, for example, `CI` is set would block
+  deploys until `deploy.yml` installs the analysis stack, so it is left to the investigator.
+- M12's parameter-recovery simulation (CI coverage over seeded replicates) is still not done. The gate
+  checks signs, intervals that exclude zero for the simulated effects, and degrees of freedom. It does
+  not check coverage, which needs hundreds of fits and does not belong in CI.
+
+**Citations.** None added.
+
+**Data consequence.** None: no export column, codebook entry or template output changed.
+`src/sim/analysisCohort.ts` gains `onePolarity`, and `tests/sim.test.ts` covers it and the per-enrolment
+Williams rows.
+
+**Synopsis (read-only).** No line is contradicted by this round.
+
+Verified on the commit carrying this entry: `npm run verify` green, with R and Python both running in
+the analysis gate.

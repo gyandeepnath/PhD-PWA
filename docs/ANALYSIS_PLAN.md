@@ -499,8 +499,14 @@ since Round 69 the gate runs both templates on ONE simulated cohort (`src/sim/an
 real Williams row and passage rotation for each enrolment, and known polarity effects on the primary
 and on comprehension). It fails unless both recover the simulated SIGN, no design is rank deficient,
 the polarity standard error is bounded, and R, Python and the dashboard count the same confirmatory
-and sensitivity sets. It also runs one participant, a sitting exported twice, a missing verdict and an
-all-cameras-off cohort through both templates, each of which must end with its named message.
+and sensitivity sets. It also runs one participant, a sitting exported twice, a missing verdict, a
+one-polarity cohort (both as the app writes it, which the exporter's verdict refuses, and with the
+condition table edited after export, which only the templates' own guard can see) and an
+all-cameras-off cohort through both templates, each of which must end with its named message. Since
+Round 72 it also holds the polarity x colour test to its designed 4 df in both templates, and runs a
+cohort where three of twelve declined the camera: the primary is fitted on the camera-on runs, and
+every behavioural model on all twelve. The gate was mutation-tested in Round 72: with each of the
+original B1, M1, M4 and M5 defects put back into a scratch copy of the templates, it fails.
 
 ---
 
