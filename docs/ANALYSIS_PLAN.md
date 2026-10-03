@@ -405,8 +405,8 @@ is not fitted: it needs a package (`survival`) that is not in the install line o
   likelihood ratio against the primary refitted on the runs that have a predecessor.
 - **Moderation** (Objective 3; synopsis §3.9, "condition-by-moderator interactions"): each recorded
   moderator — `daily_screen_hours` (standardised), `lighting_habit`, `device_familiarity` — with its
-  polarity interaction, one at a time, by likelihood ratio against the primary on the same rows, Holm
-  across the three. Exploratory: the sample size of a between-participant moderator is the number of
+  polarity interaction, one at a time, by likelihood ratio against the primary plus the moderator's
+  main effect on the same rows, Holm across the three. Exploratory: the sample size of a between-participant moderator is the number of
   participants. H₁ᵨ's habitual display-mode preference is **not recorded** by the app and cannot be
   tested.
 - **CVS-Q change and NASA-TLX**: one value per participant — for CVS-Q the first sitting's baseline to

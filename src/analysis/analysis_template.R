@@ -2004,9 +2004,10 @@ if (nrow(eye) == 0) {
     # moderator the profiling questionnaire records — habitual screen exposure (daily_screen_hours,
     # standardised), typical ambient lighting (lighting_habit) and digital literacy (device_familiarity)
     # — is added with its polarity interaction, one at a time, and the interaction tested by likelihood
-    # ratio against the primary refitted on the same rows (a participant missing the moderator drops out
-    # of both). Holm across the moderators tested. EXPLORATORY: a between-participant moderator of a
-    # within-participant effect has the participant count as its sample size. H1rho's fourth
+    # ratio against the primary plus the moderator's main effect, refitted on the same rows (a
+    # participant missing the moderator drops out of both). Holm across the moderators tested.
+    # EXPLORATORY: a between-participant moderator of a within-participant effect has the participant
+    # count as its sample size. H1rho's fourth
     # moderator, habitual display-mode preference, is not recorded by the app, so it cannot be tested.
     cat("\n=== MODERATION of the polarity effect (synopsis Objective 3; exploratory) ===\n")
     moderators <- list(daily_screen_hours = "scale(daily_screen_hours)", lighting_habit = "lighting_habit",
@@ -2018,8 +2019,11 @@ if (nrow(eye) == 0) {
       if (n_distinct(rows[[mn]]) < 2 || n_distinct(rows$participant_id) < 3) {
         cat(sprintf("  [moderator] %-20s fewer than two values in the data: not testable\n", mn)); next
       }
-      m_mbase <- tryCatch(suppressWarnings(update(m_primary, data = rows)), error = function(err) NULL)
-      m_mod <- if (is.null(m_mbase)) NULL else tryCatch(suppressWarnings(update(m_mbase, as.formula(paste0(". ~ . + ", moderators[[mn]], " + polarity:", moderators[[mn]])), data = rows)),
+      # The moderator's own (between-participant) main effect is in BOTH models, so the test is of the
+      # polarity x moderator interaction alone.
+      m_mbase <- tryCatch(suppressWarnings(update(m_primary, as.formula(paste0(". ~ . + ", moderators[[mn]])), data = rows)),
+                          error = function(err) NULL)
+      m_mod <- if (is.null(m_mbase)) NULL else tryCatch(suppressWarnings(update(m_mbase, as.formula(paste0(". ~ . + polarity:", moderators[[mn]])), data = rows)),
                                                      error = function(err) NULL)
       if (is.null(m_mod)) { cat(sprintf("  [moderator] %-20s the model did not fit\n", mn)); next }
       lr <- anova(m_mbase, m_mod)

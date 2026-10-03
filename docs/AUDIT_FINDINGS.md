@@ -4589,3 +4589,174 @@ carryover), and Python's secondary families.
   outcome families are reported throughout"): implemented for the outcomes the templates model; the
   families' unmodelled members (part 2b) are not yet reported, and the Python cross-check reports the
   primary family only.
+
+## Round 71 — analysis pipeline, part 2b: secondary models
+
+Rounds 69 and 70 fixed what the templates got wrong and added the intervals and multiplicity control
+they lacked. This round adds the secondary models the Round 62 analysis audit found missing or wrong:
+M8 (sensitivity and criterion), M10 (visual search), M11 (the remaining pre-registered analyses), m10
+(CVS-Q and NASA-TLX intervals) and m11 (serial position and carryover). Each was reproduced on the
+tree after Round 70 before it was changed. Commits 1a470cb, 409e6ad and the one carrying this entry.
+
+**Majors.**
+
+- **M8 — d′ was weighted against itself, and an always-true flag was printed as a finding.** The d′
+  LMM weighted each block by 1 / `d_prime_se`², and that SE rises with d′ (correlation 0.95 on the
+  audit's N = 40 cohort), so the weights down-weighted high-sensitivity blocks and any condition that
+  raised sensitivity. The template printed the share of blocks flagged `d_prime_unstable`; with 20 go
+  and 12 no-go trials no block can have an SE below about 0.46, so the 0.3 flag is TRUE for every block
+  (400 of 400 on that cohort). Sensitivity and criterion are now ONE probit GLMM on the scored trials of
+  `08_reaction_trials.csv`: with the signal coded ±0.5, every term multiplying it is an effect on d′
+  and every other term an effect on −c. Round 66's `stim_ring` and ring × colour terms (ANALYSIS_PLAN
+  §4a) enter when both rings carry go and no-go trials. With no location in the trials (an export from
+  before Round 66), the model is fitted without them and `[location] NO target location` says so; if
+  only some trials are located, the unlocated ones are left out and counted. The polarity × colour
+  interaction on d′ and on c, and ring × colour on d′, are joint Wald tests. The per-block LMMs on
+  `d_prime` and `criterion` stay as **unweighted** cross-checks in no family; the d-prime and criterion
+  rows of the performance family come from the trial model. Python's per-participant d′ table no
+  longer carries the flag. The `d_prime`, `d_prime_se` and `d_prime_unstable` codebook entries (both
+  codebooks), PROTOCOL §6 and MASTER_BLUEPRINT now say this. On the gate cohort, with a simulated
+  polarity effect of +0.4 on d′, the trial model gives 0.376 (95% CI 0.209 to 0.544) and the per-block
+  cross-check 0.309 (0.185 to 0.434). The per-block value is rate-corrected at the bounds, which pulls
+  it towards zero. The simulated outer-ring loss of 0.4 comes back as d′ 2.640 inner vs 2.239 outer.
+- **M10 — the censoring rule was not a test, and the search outcome it guarded was uncensored.**
+  `CENSOR_SPREAD_WARN_PP` warned when ten cells' censoring rates spanned more than 10 points. In the
+  audit's null simulations, where censoring did not depend on condition at all, it fired in 79% of
+  datasets at N = 40 and 55% at N = 130 (20% censoring). It is removed, not relabelled. In its place:
+  - a likelihood-ratio test of `censored ~ polarity × colour` against the same model without the
+    condition terms (9 df);
+  - search speed as a Poisson GLMM of `targets_found` with `log(search_time_ms / 60000)` as an offset,
+    with the participant and passage intercepts. A capped block contributes what it found in the time
+    it searched, which is what was observed, so the rate needs no censoring model;
+  - search d′ (an unweighted LMM with the passage intercept, which the codebook asks to prefer to
+    accuracy).
+
+  "Search time" leaves the performance family for "search rate" and "search d-prime". The uncensored
+  time LMM is printed as a description. **Found while doing it:** when one polarity × colour cell
+  completed every search, the completion GLMM was separated. It printed an odds ratio of 43 with an
+  interval from 0 to infinity, entered the family as a result, and broke the family row's format. Now a
+  degenerate cell switches to the additive model, labelled `[additive]`, with no interaction test, and
+  a degenerate polarity or colour level fits nothing and says so. A Cox or censored-normal model is not
+  fitted: `survival` is not in the install line or CI.
+- **M11 — the remaining pre-registered analyses.** Every member of the three outcome families is
+  modelled now: RT variability (log SD of hit latencies), lapses (binomial, out of the block's hits),
+  inter-blink interval (log), comfort and clarity (06_display_perception.csv, never read before;
+  untouched sliders excluded). Synopsis §3.9's "ordinal cumulative-link models serve rating outcomes" is
+  met where it can be. A 0-100 slider would need a threshold between every adjacent pair of values used,
+  which ten ratings per participant cannot support, so comfort and clarity are LMMs, by amendment
+  (ANALYSIS_PLAN §4c). The 0-10 fatigue items are ordinal ratings in the ordinary sense: where `ordinal`
+  is installed, `ordinal::clmm` is fitted to the five post-condition items stacked, as a sensitivity for
+  the fatigue member, and otherwise the output says `[SKIPPED: ordinal not installed]`. Like `glmmTMB`,
+  `ordinal` is in neither the install line nor CI. The rest:
+  - RT polarity × serial position (§3), on the block means and in a trial-level log-RT LMM that also
+    carries §4a's ring and ring × colour terms;
+  - primary refits without restarted runs (`attempt_number` > 1) and without interrupted runs
+    (`condition_interrupted`, now joined into the condition frame);
+  - moderation (Objective 3): each recorded moderator (`daily_screen_hours` standardised,
+    `lighting_habit`, `device_familiarity`) with its polarity interaction, tested by likelihood ratio
+    against the primary plus the moderator's main effect, Holm across the three. The first version
+    tested the main effect and the interaction together (2 df for a single numeric moderator) and was
+    corrected before commit.
+
+  H₁ᵨ's fourth moderator, habitual display-mode preference, is not recorded by the app; the output names
+  it as untestable.
+
+**Minors.**
+
+- **m10 — the key secondary had no interval, and split sittings counted twice.** The CVS-Q change was
+  a mean over SITTINGS: on the audit's split cohort, "n = 16" came from 12 people. It is now one change
+  per participant, from the first sitting's baseline to the last sitting's close, with a t interval
+  over participants. On the audit's split variant it reads 12 participants. NASA-TLX also gets an
+  interval over participants, one value each (the mean of a split participant's sittings). If the
+  change has no variation (the fixture's CVS-Q is constant), the output says no interval is possible;
+  `t.test` used to stop the run there.
+- **m11 — position only as a line, carryover never examined.** The primary is refitted with serial
+  position as a factor, and with `polarity_switched`, computed per sitting from serial position and
+  blank where there is no adjacent predecessor. That fit is tested by likelihood ratio against the
+  primary refitted on the same rows. These are sensitivity lines beside the others.
+
+**The simulated cohort and the gate.** `src/sim/analysisCohort.ts` now lays out each RT block with the
+app's own planner (`planRtBlock`), so 10 go and 6 no-go trials fall on each ring. The fixture had put
+every no-go trial on the inner ring, which aliases ring with signal. Responses are drawn from an
+equal-variance signal-detection model with known polarity (+0.4, gate option) and outer-ring (−0.4)
+effects on d′, and the summary rows are recomputed from those trials. The cohort also gains:
+- lapses, inter-blink intervals, comfort and clarity ratings with untouched sliders;
+- varying moderators;
+- re-scored CVS-Q closes and varying NASA-TLX.
+
+`verifyAnalysis.mjs` checks:
+- the SDT model recovers the simulated d′ sign with a CI excluding zero, reports the criterion
+  separately, and carries the ring terms with the outer-ring loss;
+- no `d_prime_unstable` count and no SE weighting;
+- the family rows come from the trial model;
+- the censoring LRT, the search-rate and search-d′ models with the passage intercept, and no spread rule;
+- every family complete (2 of 2, 3 of 3, 10 of 10);
+- RT × position, and the trial-level RT ring terms with the slower outer ring found;
+- the untouched-slider count, the `ordinal` line of the kind the environment allows, and the four new
+  primary refits;
+- the three moderators with Holm and the untestable one named;
+- the per-participant CVS-Q and NASA-TLX intervals;
+- a copy with every `stim_ring` blanked (a pre-Round-66 export) fitting the SDT model without the ring
+  terms and saying so.
+
+The whole gate also ran with `ordinal` and `glmmTMB` on the library path, both from scratch libraries
+unpacked from Ubuntu's `r-cran-ordinal` 2023.12-4 and `r-cran-glmmtmb` 1.1.8 packages and never
+installed into the system: green. A unit test now fails if `CENSOR_SPREAD_WARN_PP` returns.
+
+**Hostile variants** (the Round 62 generator, with the pooled verdict; R and Python each exit 0 on all
+of them): split, all cameras off, some cameras off, PERCLOS all missing, N = 3, abandoned sittings,
+NA-heavy, e2e session. In every variant:
+- the families print in full, or list a member with its reason (all cameras off: the two ocular
+  members; the fixture's RT has no lapses: lapse rate);
+- the generator's fixture-layout RT trials are reported as rings not crossed with go/no-go, and the
+  SDT model is fitted without the ring terms;
+- most cohorts separate at least one completion cell and fall back to `[additive]`.
+
+**Citations** (re-verified against PubMed, 3 Oct 2026, abstracts only):
+- Item 59, Wright, Horry & Skagerberg 2009 (PMID 19363166), CONFIRMED, for multilevel generalized
+  linear models in place of per-participant signal-detection measures. The probit coding of the signal
+  term is not in its abstract and is described as the method, not attributed to it.
+- DeCarlo 1998 is not cited: PubMed has no record and Crossref is blocked.
+- Mancl & DeRouen 2001 (PMID 11252587) was re-checked and is not newly cited, since the Python
+  covariance is unchanged.
+
+**Data consequence.** No export column changed. Codebook descriptions changed for `d_prime`,
+`d_prime_se` and `d_prime_unstable` (09_rt_summary.csv) and `d_prime` (analysis codebook). Before
+this round, results had:
+- d′ inverse-variance weighted against itself;
+- a search-censoring warning that was mostly noise;
+- no model at all for five family members;
+- a CVS-Q change counting split sittings twice.
+
+**Decisions for the investigator.**
+1. Whether the analysis environment for the thesis run installs `ordinal` (the clmm sensitivity) and
+   `survival` (a censored search-time model, not written).
+2. Whether comfort and clarity as LMMs (ANALYSIS_PLAN §4c) is acceptable against synopsis §3.9's
+   "ordinal cumulative-link models serve rating outcomes", or whether a different rating model (for
+   example ordered-beta regression, not verified here and not implemented) should be considered.
+3. Whether habitual display-mode preference (H₁ᵨ) should be added to the profiling questionnaire
+   before data collection. It cannot be tested otherwise.
+4. Whether search d′ belongs in the performance family. It is there now, and that raises every Holm
+   value in the family.
+5. Whether moderation beyond polarity × moderator (colour × moderator) should be pre-specified.
+
+**Deferred.** M12's parameter-recovery simulation (CI coverage over seeded replicates) is not done.
+The gate checks signs, not coverage. Python mirrors none of the secondaries: its role is the
+confirmatory sign check (§5b), and its CVS-Q change is still per sitting. Moderation of the colour
+effect is not done.
+
+**Synopsis (read-only, not edited).** These lines are contradicted or go beyond what the code does:
+- SYNOPSIS_AdtU.md 369, SYNOPSIS_FULL_REFERENCE.md 399, SYNOPSIS_AdtU_Short.md 395, and
+  LITERATURE_REVIEW.md 338 and 424 ("ordinal (cumulative-link) models for Likert-type and
+  visual-analogue symptom outcomes"). Comfort and clarity are LMMs. Fatigue is an LMM on
+  `fatigue_delta` with a clmm sensitivity only where `ordinal` is installed.
+- SYNOPSIS_AdtU.md 103 (H₁ᵨ: "Habitual display-mode preference ... moderate the magnitude of these
+  effects"). The app records no display-mode preference, so this moderator cannot be tested.
+- SYNOPSIS_AdtU.md 369 ("Moderation is tested by condition-by-moderator interactions"). Implemented for
+  polarity × moderator only, not colour × moderator.
+- SYNOPSIS_AdtU.md 359 ("visual-search accuracy and efficiency"). Search is modelled as d′ (which
+  accounts for false taps, where accuracy does not), as a rate (the modelled form of efficiency) and as
+  completion; `accuracy_rate` itself is not modelled.
+
+Verified on the commit carrying this entry: `npm run verify` green, with R and Python both running in
+the analysis gate; the gate also green with `ordinal` and `glmmTMB` on the library path.
