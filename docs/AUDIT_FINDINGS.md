@@ -4837,3 +4837,139 @@ Williams rows.
 
 Verified on the commit carrying this entry: `npm run verify` green, with R and Python both running in
 the analysis gate.
+
+## Round 73 — review fixes for Rounds 69-72 (the analysis pipeline)
+
+An independent review of Rounds 69-72 confirmed three major and two minor findings. Each was
+re-checked on 6a5e96b before it was changed; all five are real and all are fixed (commits d16af17,
+fe864f5, 493ffa5, 984b500, aab749f). Each fix was then tested by putting the defect back into a
+scratch copy of the tree (outside the repository) and running the gate there.
+
+**Majors.**
+
+- **The sensitivity-set refit fitted the confirmatory rows.** `refit_on(rows)` called
+  `update(m_primary, data = rows)`. lme4's `update.merMod` evaluates the new call first in the
+  formula's environment, which is the global one here, and only then in the caller's frame. Round 71's
+  moderator loop (409e6ad) assigns a global `rows` before the sensitivity-set refit runs, so that refit
+  silently refitted the confirmatory frame and printed its estimate, SE and n as the sensitivity
+  result. Reproduced on the Round 62 generator's `missing` variant: "sensitivity set -0.1471 (SE
+  0.0817), n 90", identical to the confirmatory fit. With the fix it reads -0.1530 (SE 0.0741), 108 of
+  108 rows. The earlier refits were right only because no global `rows` existed yet when they ran.
+  Every refit on other rows now goes through `refit()`, which sets the formula's environment to its own
+  frame. The fit, and anything that later re-evaluates its call (`update`, `allFit`, `emmeans`), then
+  reads the rows it was handed. The carryover, moderator and PERCLOS-adjusted refits use it too, and
+  the moderator loop's frame is `mod_rows`. The sensitivity refit prints `[n] sensitivity set: used of
+  given`. The gate requires R's refit to use every run of the sensitivity set (229, against 220
+  confirmatory), and Python's to carry more blinks than the confirmatory fit. A unit test refuses any
+  `update()` handed `data =`. With the old `refit_on` put back, the gate fails that check ("220 of
+  229").
+- **A boundary fit crashed the Python cross-check.** statsmodels' gradient-based optimizers raise
+  `LinAlgError("Singular matrix")` when the participant variance sits at zero. The PERCLOS covariate
+  check (Round 70) hit this on the Round 62 generator's `withdrawn` variant, exit 1. It also hit 2 of
+  20 simulated 10-participant cohorts drawn from the gate's simulator at 6a5e96b; the simulated PERCLOS
+  has no participant variance at all. Every `MixedLM` (RT, fatigue, CVS-Q, NASA-TLX, blink rate,
+  PERCLOS) now goes through `fit_lmm()`. It retries by Powell's method, which needs no gradient and
+  reaches the boundary, and prints the participant variance it found. A model that fits by neither
+  method is named and skipped, as the R template's `tryCatch` does. On `withdrawn` the run now ends
+  with exit 0: "refitted by Powell's method: participant variance 8.87e-11", polarity_c 0.009 (95% CI
+  -0.253 to 0.271). The gate runs a 10-participant cohort (seed 28, one of 3 in 80 seeds that reach
+  the boundary with the new simulator). It requires the run to end without a traceback and the PERCLOS
+  check to be fitted or named. It also reports whether the boundary was reached, since CI installs
+  statsmodels unpinned. A unit test keeps `smf.mixedlm` inside the guard. With the unguarded fit put
+  back, the gate fails (exit 1, `LinAlgError`). The comprehension GEE is not wrapped: a GEE estimates
+  no variance component, and no failure was seen.
+- **The trial- and item-level models ignored the condition-run.** Polarity, colour and serial position
+  vary only between runs. Yet the trial-level probit GLMM (`(1 + sig | participant_id)` and passage)
+  and the trial-level log-RT LMM (`(1 | participant_id)` and passage) had no run term, so 15-32
+  correlated trials per run counted as independent evidence about the condition. The review's null
+  simulations were re-run here (24 participants, 10 runs each):
+  - log-RT polarity (run SD 0.06), 200 replicates: type-I rate 0.375 without a run intercept, 0.040
+    with one;
+  - probit criterion (run SD 0.25 on criterion and d′), 100 replicates: 0.11 without, 0.06 with;
+  - probit d′: 0.08 with or without the term.
+
+  The stacked fatigue-item `clmm` had the same structure (five items per run). The lapse binomial,
+  one row per run, had no allowance for extra-binomial variation between runs. Now:
+  - the probit GLMM carries `(1 + sig || run_id)`. A term whose variance is estimated at zero is
+    dropped, and the output says this changes nothing. A model that does not fit or converge drops the
+    run's d′ term first, then its criterion, and the output says the tests on what was dropped are
+    anti-conservative;
+  - the log-RT LMM and the `clmm` carry `(1 | run_id)`;
+  - the lapse GLMM carries `(1 | run_id)` as an observation-level term;
+  - `run_id` is participant:condition, built by one helper, and each model prints the run SD it found.
+
+  On a 24-participant simulated cohort with run-level variation, the run terms widened the SEs as
+  follows:
+
+  | Model | Polarity SE before | After |
+  |---|---|---|
+  | Probit, criterion | 0.043 | 0.053 |
+  | Probit, d′ | 0.085 | 0.097 |
+  | Log RT | 0.0148 | 0.0213 |
+  | Log RT, polarity × position | 0.0029 | 0.0042 |
+  | Lapses (log-odds) | 0.141 | 0.152 |
+  | `clmm` | 0.112 | 0.163 |
+
+  The probit fit takes about 22 s instead of 14 s. `src/sim/analysisCohort.ts` now gives each block its
+  own criterion, d′, speed and lapse propensity (SD 0.25, 0.25, 25 ms and 0.5 log-odds: the review's
+  assumptions, not estimates from data). It also gives each participant their own lapse rate and each
+  fatigue rating a run level. On the gate cohort the probit model keeps both run terms (SD 0.210
+  criterion, 0.238 d′) and the log-RT run SD is 0.063. The gate requires the run terms in the fitted
+  formulas and non-zero run SDs, and the `clmm` line where `ordinal` is installed. With the three terms
+  removed, it fails three checks. ANALYSIS_PLAN §4, §4a and §4c document the run term and its
+  reduction.
+
+**Minors.**
+
+- **Nothing protected the M2 fix.** Setting `DROP_DISENGAGED` back to TRUE in both templates passed the
+  gate and the unit tests, because no simulated run was flagged 'bad'. `simulateCohort` gains
+  `disengaged`: the listed participants' first run has a page advanced just after its unlock and both
+  ratings rushed. The app's own scorer flags such a run 'bad' (quality 0.4), and only QC timings
+  change. The gate cohort has three such runs. Both templates must count them, keep them in the
+  primary (220 runs) and refit without them (217 in R; fewer blinks in Python). With `DROP_DISENGAGED`
+  put back to TRUE in both, the gate fails six checks. A unit test checks that the option flags
+  exactly those runs through `buildConditionSummaries`.
+- **Both codebooks told the analyst to weight search d′ by its inverse SE.** The analysis codebook did
+  so "as the plan does for the reaction-time d-prime", which the plan has not done since Round 71. Like
+  `d_prime_se`, `search_d_prime_se` comes from the same counts as the estimate and rises with it.
+  Within a passage the two correlated at 0.97-0.99 on 20 simulated cohorts, scored by the app's
+  `computeSdt`. Both entries now say not to weight by it, and that the template fits an unweighted LMM
+  with a passage intercept. A unit test refuses any codebook sentence that pairs "weight" with
+  "inverse" without saying not to.
+
+**Hostile variants** (the Round 62 generator, pooled verdict): n3, missing, camoff_all, camoff_some,
+withdrawn, split, nahevy, perclosnull, e2e and n40. R and Python exit 0 on all ten (`withdrawn` used to
+exit 1 in Python). That generator draws no run-level variation. So in eight variants both run
+variances of the probit model are estimated at zero and dropped, in `nahevy` the d′ one is dropped,
+and in `e2e` both are kept. The output says each time that dropping the term changes nothing.
+
+**The gate.** 187 checks over 20 template runs (176 over 19 before), about 60 s on this 4-core
+container (about 45 s before; the probit model's run terms account for most of the difference). It was
+also run with `ordinal` and `glmmTMB` on the library path, from the scratch libraries of Rounds 70-71:
+green.
+
+**Citations.** None added.
+
+**Data consequence.** No export column changed. Codebook descriptions changed for `search_d_prime_se`
+(`05_visual_search.csv` and the analysis codebook). Template output changed as follows:
+- the R sensitivity-set refit printed the confirmatory fit from 409e6ad until this round;
+- every trial-level polarity test, the lapse test and the `clmm` test were anti-conservative to the
+  extent that runs vary, before this round;
+- new lines: `[n] sensitivity set`, the probit model's run-term steps, `[RT trials] condition-run
+  intercept`, `[lapses] observation-level`, `[clmm] condition-run intercept`, and the Python Powell
+  retry.
+
+**Decision for the investigator.** The run-to-run SDs in the simulated cohort are the review's
+assumptions. The pilot's trials will show the real ones, and how much the run terms widen the
+secondary intervals. The terms stay whatever the pilot shows, because they cost nothing when the
+variance is zero.
+
+**Synopsis (read-only, not edited).** No line is contradicted. LITERATURE_REVIEW.md 338 and 424 ("linear
+mixed-effects models with random intercept per participant"; "hierarchical treatment of signal-detection
+indices") describe a participant intercept, and the trial- and item-level models now add a run
+intercept to it. That goes beyond those lines and is in their direction. SYNOPSIS_AdtU.md 367 ("A
+non-converging random structure is reduced in a pre-specified order and the reduction reported") is
+what the probit model's run terms now do.
+
+Verified on the commit carrying this entry: `npm run verify` green (73 files, 1242 unit tests; corpus,
+codebook, export and analysis gates pass), with R and Python both running in the analysis gate.
