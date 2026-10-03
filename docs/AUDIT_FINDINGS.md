@@ -4428,3 +4428,164 @@ m10, m11.
 Verified on b187a07 plus this entry: `npm run verify` green (73 files, 1226 unit tests; corpus,
 codebook, export and analysis gates pass); `e2e/dashboardTabs.spec.ts` and `e2e/fullRun.spec.ts`
 green (the cohort tab changed).
+
+## Round 70 — analysis pipeline, part 2a: effect sizes, multiplicity, overdispersion, PERCLOS
+
+Round 69 fixed what the templates got wrong. This round adds what they did not report, from the same
+Round 62 analysis audit: M7 (effect sizes, confidence intervals, multiplicity), M9 (overdispersion),
+M13 (PERCLOS), m5 (Objective 2), m6 (provenance) and m8 (convergence). Each was reproduced on the
+tree after Round 69 before it was changed. Commits 4214c70, d7d59be, d983cd1, a1c7753, c90a240,
+7ba3a4d.
+
+**Majors.**
+
+- **M7 — no effect size had an interval, and no p-value was adjusted.** Synopsis §3.9 asks for
+  "effect sizes with confidence intervals and multiplicity control within outcome families"; every
+  model printed `summary()` and nothing else, and ANALYSIS_PLAN §2's own H1 quantities (the 95% CI of
+  the polarity effect, the predicted difference in proportion) were never computed. Both templates
+  now print `[H1]` lines: the log-odds difference (positive minus negative) with its 95% CI and
+  whether it includes zero, the odds ratio, and the predicted proportions with a delta-method CI for
+  their difference, for the model with `eff_fps_c` and for §2's formula without it. Both print the
+  **primary family** (H1a polarity, H1b polarity × colour), raw and Holm across the two; §2's rule
+  (the unadjusted CI) stands until the investigator decides otherwise. R adds the polarity effect
+  within each colour as odds ratios, Holm across the five — `by = NULL` matters: grouped by colour,
+  emmeans adjusts each one-contrast group alone, which is no adjustment — and one table per
+  **secondary family** of the new ANALYSIS_PLAN §4b (ocular, subjective, performance), from models
+  registered as they are fitted, each row an effect in its own units with a 95% CI, the polarity p
+  and the interaction p, each Holm-adjusted within the family. Members not modelled yet (inter-blink
+  interval, comfort, clarity, RT variability, lapse rate) are listed under their family with a note
+  that the Holm values will rise when they are added. A unit test holds the template's family list
+  to its registered models. Python mirrors the confirmatory pieces only (H1 and the primary family,
+  H1b by a 4-df Wald test). Also: emmeans' lmer df are now stated (Satterthwaite, as lmerTest's tables
+  use); every call used to fall back from Kenward-Roger with a notice.
+- **M9 — the beta-binomial refit was "required" and never fitted.** §2 triggered it above a
+  dispersion ratio of 1.5; at 1.55 the template printed "betabinomial refit required" and did
+  nothing, and at about 1.2 ("within tolerance") an observation-level random effect raised the null
+  polarity SE by 20-30% in the Round 62 replicates. The trigger is gone (`DISPERSION_REFIT_AT`
+  removed, not relabelled). Every primary is refitted with an observation-level random effect
+  (`(1 | run_obs)`), and with a beta-binomial (`glmmTMB`) wherever it is installed, printed side by
+  side, because Harrison (2015; ledger item 57) found that comparing the two shows when the
+  observation-level model is failing. `glmmTMB` is in neither the install line nor CI, and CI was not
+  changed; without it the output says `[SKIPPED: glmmTMB not installed]`. The path with it was run
+  from a scratch library built from Ubuntu's `r-cran-glmmtmb` 1.1.8 package, never installed into
+  the system. The Python GEE says why it needs no refit: its participant-clustered sandwich does not
+  assume binomial variance.
+- **M13 — PERCLOS was modelled as an outcome.** The export codebook and the synopsis (§2.5, §3.7,
+  §3.9) call it a sleepiness covariate, never a visual-fatigue outcome. The analysis codebook said
+  `secondary` and described P80 backwards ("openness below 80%"; it is openness at or below 20%,
+  `PERCLOS_P80_OPENNESS = 0.2`); R fitted it as an outcome after clipping zeros at logit(5e-4) = −7.6
+  (`PERCLOS_LOGIT_SQUEEZE`, removed); Python fitted it raw and never ran the PERCLOS-adjusted refit
+  the synopsis specifies. Now both run that refit, and both check whether the condition moves PERCLOS
+  on the primary's condition terms — a check on the refit's assumption, in no family — after
+  compressing it by the sample size alone, y′ = (y(n − 1) + 0.5)/n (every value moves by at most
+  0.5/n). R fits a beta GLMM to y′ where `glmmTMB` is installed (beta regression: Smithson &
+  Verkuilen 2006, ledger item 58) and an LMM on logit(y′) otherwise; Python fits the same LMM.
+  **Found while reconciling it:** PERCLOS P80 counts frames at or below 20% of the open baseline; a
+  complete blink can reach that and an incomplete blink, which stays above 60%, never can. At a given
+  blink rate PERCLOS therefore falls as the incomplete-blink ratio rises, so the PERCLOS-adjusted
+  refit partly adjusts the outcome for itself. Both templates, both codebooks and §4 say so; it is a
+  sensitivity, never a correction.
+
+**Minors.**
+
+- **m5 — Objective 2.** The three nested models omitted `eff_fps_c`, so the ten-cell model was not
+  the primary's specification; they carry the primary's covariates now. §2 said fitting contrast and
+  colour together "is not informative, since they are near-collinear", while synopsis §3.9 asks for
+  that fit ("residual hue terms"). Reconciled: log contrast is a function of the polarity × colour
+  cell, identified beside colour only by how contrast differs between the polarities within a colour;
+  the likelihood-ratio comparison holds regardless, and the residual-hue model's VIFs are printed
+  (about 3.7 for log contrast and colour on the gate cohort). No VIF cut-off is asserted.
+- **m6 — provenance.** Both templates open with a `PROVENANCE` block: interpreter and package
+  versions, whether `glmmTMB` is present, the template's own checksum, then the sittings per
+  `git_hash`, `app_version`, `condition_def_hash` and `schema_version` and the mixed-build count, and
+  after the verdict the builds behind the confirmatory set (`[MIXED BUILDS]` if more than one). The
+  pinned lockfile the audit suggested for the thesis run is not added (see decisions).
+- **m8 — convergence.** Synopsis §3.9: "a non-converging random structure is reduced in a
+  pre-specified order". The ladder kept fits lme4 flagged as not converged. A flagged rung now runs
+  `allFit()` (lme4's help: "the gold standard"); it stands if it reached the best log-likelihood any
+  optimizer found (within 0.01) and the optimizers that reached it agree on every fixed effect to
+  within 0.05 SE (both analyst defaults, labelled), else the next rung is tried, and every rung's
+  verdict is printed under `PRIMARY MODEL CONVERGENCE`. The first version compared all optimizers and
+  called a null N = 40 comprehension fit NOT CONVERGED because one nloptwrap variant stopped 0.023
+  log-likelihood units short, 0.09 SE away, while four agreed to 0.001 SE: an optimizer that stopped
+  lower has not converged to anything, so only those at the maximum are compared. Forcing warnings
+  (gradient tolerance 1e-9 and an agreement fraction of 1e-12, in a scratch copy) walked the ladder
+  down every applicable rung and reported the most reduced fit as NOT CONVERGED, with a caution on H1.
+  Comprehension and search completion report their verdict, and a family row is marked
+  `[NOT CONVERGED]` when it fails. `sess_qc` (m8's other half) had already been built from
+  `session_info` in Round 69.
+
+**Also found and fixed.** With three participants the Python GEE printed an H1 interval of −553 to
+554 and an interaction Wald p of exactly 0 from a rank-deficient covariance; below one participant
+per parameter it now prints the coefficients and withholds intervals and tests, naming
+`[SE CAUTION]`. ANALYSIS_PLAN's citation note said its literature claims were "limited to the seven
+records"; it has cited more since Round 66. The audit named Harrison (2014, PMID 25320683), on
+Poisson counts; Harrison (2015, PMID 26244118), on binomial data, is the one cited.
+
+**Citations** (re-verified against PubMed, 2 Oct 2026, abstracts only). Item 57, Harrison 2015,
+CONFIRMED; PMC full text exists and was not read. Item 58, Smithson & Verkuilen 2006: METADATA
+CONFIRMED, SUBSTANTIVE CLAIM NOT CONFIRMED for the compression formula — the abstract supports beta
+regression with a logit link and does not mention the formula, there is no PMC text, and the Scite
+full-text tool was unavailable — so the templates describe the compression as a method rather than
+attribute it. DeCarlo 1998 and Brooks et al. 2017 are not cited (not verifiable here).
+
+**The gate** (`verifyAnalysis.mjs`) now checks, on the 24-participant cohort: both provenance
+blocks; the `[H1]` lines read back, odds ratio against log-odds on both limits, R's log-odds equal to
+its coefficient, R and Python agreeing in sign on both scales with CIs excluding zero; both primary
+families; Holm across five colours; all three families, every modelled member with an interval and
+no Holm value below its raw p; the observation-level refit with the simulated sign and an SE not
+below the binomial one; the beta-binomial line of the kind the environment allows; the ladder's
+convergence report; PERCLOS not modelled as an outcome, refitted as a covariate in both, checked with
+the compression; Objective 2's covariates and VIFs; and, on a three-participant cohort, Python
+withholding H1's intervals. The whole gate was also run with `glmmTMB` on the library path: green.
+
+**Runs** (final templates; R / Python):
+
+| Cohort | H1 log-odds (95% CI) | Notes |
+|---|---|---|
+| Gate, N = 24 (22 confirmatory) | −0.490 (−0.650 to −0.330) / −0.437 (−0.612 to −0.262) | difference in proportion −0.079 / −0.074; OLRE SE ×1.00; comprehension warning a false alarm |
+| N = 40, glmmTMB present | −0.528; OLRE −0.531; beta-binomial −0.527 (−0.625 to −0.429) | PERCLOS beta GLMM −0.091 (−0.205 to 0.022) |
+| Null N = 40 | 0.036 (−0.079 to 0.151) / 0.063 (−0.049 to 0.176) | both CIs include zero; H1b Holm 0.648 |
+| N = 130 | −0.349 (−0.404 to −0.293) / −0.333 (−0.385 to −0.281) | difference −0.059 / −0.060; OLRE SE ×1.00 |
+| N = 3 | −0.775 (−1.362 to −0.188) / withheld | Python `[SE CAUTION]`; R reduced to no slope (singular) |
+| Some cameras off (9 of 12) | −0.404 (−0.607 to −0.200) / withheld at 9 < 21 parameters | |
+| All cameras off | `[PRIMARY NOT ESTIMABLE]`, exit 0 | families print; blink rate "not modelled in this run" |
+| PERCLOS all missing | runs | both say the adjusted refit and the covariate check did not run |
+
+The simulated cohorts carry little overdispersion (ratio 0.99 on the gate cohort), so these runs
+show the refits working, not how far they move a real result.
+
+**Data consequence.** No export column changed. Two codebook descriptions did: `perclos_p80` in the
+analysis codebook (now `covariate`, P80 described the right way round) and in the export codebook
+(the blink coupling). Results produced before this round carry no intervals, no multiplicity
+control and no overdispersion refit; any PERCLOS "effect" in them modelled a covariate as an outcome.
+
+**Decisions for the investigator.**
+1. Whether H1a and H1b share one family-wise error rate (Holm across the two decides H1) or H1a alone
+   is confirmatory (§2's unadjusted CI, the current rule). Both are printed.
+2. Which fit the thesis reports if the observation-level or beta-binomial refit disagrees with the
+   binomial primary, and whether the thesis run installs `glmmTMB` so the beta-binomial is fitted.
+3. Whether the sleepiness covariate should be one blinks cannot feed — `long_closure_total_ms`
+   (closures over 500 ms), or a PERCLOS that excludes blink events (an app change) — beside or instead
+   of PERCLOS P80 in the H3a sensitivity.
+4. The `eff_fps_c` decision of Round 69 now also governs Objective 2's three models.
+5. Whether to record a pinned environment (an `renv.lock` and a Python requirements file) for the
+   thesis run; CI stays unpinned as a canary.
+6. The two convergence tolerances (0.05 SE, 0.01 log-likelihood) are analyst defaults.
+
+**Part 2b** (not in this round): M8 (trial-level SDT model), M10 (censoring test, search rate and
+search d′), M11 (ordinal ratings, comfort and clarity, moderators, RT variability and lapses,
+inter-blink interval, attempt and interruption sensitivities, RT polarity × position), M12's
+parameter-recovery simulation, m10 (CVS-Q and NASA-TLX intervals), m11 (position as a factor,
+carryover), and Python's secondary families.
+
+**Synopsis (read-only, not edited).** These lines are contradicted or go beyond what the code does:
+- SYNOPSIS_AdtU_Short.md 395 ("with PERCLOS entered as a covariate so that visual fatigue can be
+  separated from sleepiness"), GUIDE.html 1435 ("which is how visual fatigue is separated from plain
+  sleepiness") and LITERATURE_REVIEW.md 396 (H3a, effects "persist after adjustment for PERCLOS,
+  distinguishing visual fatigue from sleepiness"): PERCLOS P80 is partly a function of the
+  incomplete-blink outcome, so the adjustment cannot cleanly separate the two.
+- SYNOPSIS_AdtU.md 369 ("Effect sizes with confidence intervals and multiplicity control within
+  outcome families are reported throughout"): implemented for the outcomes the templates model; the
+  families' unmodelled members (part 2b) are not yet reported, and the Python cross-check reports the
+  primary family only.

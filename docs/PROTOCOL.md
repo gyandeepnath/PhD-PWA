@@ -155,7 +155,9 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
    intercept per participant; contrast as a covariate; d′ aggregated across conditions). Point them
    at a folder holding every per-sitting export AND the pooled export (Dashboard → **Download
    analysis dataset**): its `analysis_join_report.csv` decides who is analysed, and both templates
-   stop with `[NO VERDICT]` without it.
+   stop with `[NO VERDICT]` without it. The R template reports effect sizes with 95% CIs and
+   Holm-adjusted p-values within the outcome families of `docs/ANALYSIS_PLAN.md` §4b (the Python
+   cross-check, the primary's); both open with their provenance.
 
 ## 6. Known limitations to disclose
 

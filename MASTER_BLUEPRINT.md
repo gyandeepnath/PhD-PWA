@@ -601,7 +601,9 @@ npm run stress     # harsh multi-regime stress run
 Analysis: run `src/analysis/analysis_template.{R,py}` on the per-sitting CSV bundles PLUS the pooled
 export, whose `analysis_join_report.csv` decides the confirmatory set (random-intercept mixed models;
 passage in every model; contrast as covariate; d′ aggregated; engagement as a sensitivity on the
-primary only).
+primary only; effect sizes with 95% CIs and Holm within the outcome families of ANALYSIS_PLAN §4b;
+an observation-level overdispersion refit on every primary; PERCLOS a covariate, never an outcome;
+provenance printed first).
 
 ## 19. Archive contents
 - `MASTER_BLUEPRINT.md` — this document.

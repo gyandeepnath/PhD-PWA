@@ -846,6 +846,8 @@ def main() -> None:
         if "perclos_p80" in prim.columns and prim["perclos_p80"].notna().any():
             pc_rows = prim[prim["perclos_p80"].notna()].reset_index(drop=True)
             sens_line("adjusted for perclos_p80 (synopsis §3.9)", fit_primary(pc_rows, primary_rhs + " + perclos_p80"))
+        else:
+            print("[perclos] perclos_p80 carries no values — the PERCLOS-adjusted refit is NOT run.")
 
         # --- the SENSITIVITY SET (ANALYSIS_PLAN.md §1), as in the R template --------------------
         # The same model on the confirmatory rows PLUS the finished runs of participants excluded

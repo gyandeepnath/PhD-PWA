@@ -5,6 +5,10 @@
 #
 #   install.packages(c("tidyverse","lme4","lmerTest","emmeans","performance"))
 #
+# Optional: install.packages("glmmTMB") adds the beta-binomial refit of the primary and the beta GLMM
+# of the PERCLOS covariate check. Without it both say [SKIPPED: glmmTMB not installed] and the run
+# completes; it is deliberately not on the line above, nor in CI.
+#
 # `afex` was listed here and is never loaded; `see` was NOT listed and check_model()
 # hard-requires it. An analyst who installed exactly what this line named therefore
 # hit "Package `see` required for model diagnostic plots" part-way through the run,

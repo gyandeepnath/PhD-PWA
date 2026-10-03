@@ -409,7 +409,10 @@ else a sitting produces put together.
    the tablet after the last sitting has been collected and put its folder beside the per-sitting
    folders. Without it, both templates stop and say so (`[NO VERDICT]`); with two of them, they stop
    too (`[TWO VERDICTS]`) — keep only the latest. A sitting exported into two folders also stops the
-   run (`[DUPLICATED EXPORT]`), naming both.
+   run (`[DUPLICATED EXPORT]`), naming both. Keep a template's whole printed output with any result
+   taken from it: it opens with a `PROVENANCE` block — the R or Python version, the package versions,
+   the template's own checksum and the builds that collected the data — which is the only record of
+   how those numbers were produced.
 6. There is no second session to book. If the sitting had to be **split** for scheduling, book the
    remaining half as soon as the participant can manage — the ten conditions belong to one
    protocol, and a long gap between halves adds a period effect the design does not model.
