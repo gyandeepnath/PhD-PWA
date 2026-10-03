@@ -232,11 +232,11 @@ only after **60 min**.
 | Comprehension | `comprehension_correct` / `comprehension_items` | Binomial GLMM | Same argument as the primary: 2/3 is a coarse measurement and should be weighted as such. |
 | Reading speed | `reading_speed_wpm` | LMM | Check against `observed_duration_ms` first — a truncated exposure produces a normal-looking speed. |
 | Visual search | `targets_found` over `search_time_ms`; `search_d_prime`; completion (`search_termination`) | **Poisson rate GLMM, search d′ LMM, completion GLMM; censoring tested** (Round 71, §4c) | Round 71: the uncensored time LMM is printed as a description only. Before: The column is `search_termination` in `analysis_long.csv` (the file this plan is written against) and `termination_mode` in `05_visual_search.csv`; it says whether the block ended by completion or by the 60 s cap. An earlier revision of this line claimed `search_termination` did not exist — that was wrong, and came from checking only the numbered bundle's codebook and not `analysisCodebook.ts`. Capped rows are a lower bound; treating them as measurements biases the mean downward. Either model them as censored or report the completion rate alongside. |
-| Sensitivity | the trials in `08_reaction_trials.csv` (`d_prime` per block as a cross-check) | **Probit GLMM on the trials** (Round 71) | With 20 go and 12 no-go trials, one block's d′ is imprecise. This row used to say "consider weighting" by `d_prime_se`; the template did, and that was biased, because the SE rises with d′ itself (correlation 0.95 on the Round 62 audit's N = 40 cohort), so inverse-variance weights down-weight high-sensitivity blocks. See §4c. |
+| Sensitivity | the trials in `08_reaction_trials.csv` (`d_prime` per block as a cross-check) | **Probit GLMM on the trials** (Round 71), with the condition-run's own criterion and d′ (Round 73) | With 20 go and 12 no-go trials, one block's d′ is imprecise. This row used to say "consider weighting" by `d_prime_se`; the template did, and that was biased, because the SE rises with d′ itself (correlation 0.95 on the Round 62 audit's N = 40 cohort), so inverse-variance weights down-weight high-sensitivity blocks. See §4c. |
 | Response bias | the trials (`criterion` per block as a cross-check) | **The same probit GLMM** (Round 71) | A polarity effect on `criterion` **without** one on `d_prime` is a bias shift, not a sensitivity change. Worth reporting as a distinct finding rather than folding into "RT performance". |
 | Comfort, clarity | `display_comfort_score`, `text_clarity_score` (06) | LMM (Round 71) | 0-100 sliders. Untouched sliders (`comfort_touched` / `clarity_touched` FALSE) are excluded. Not a cumulative-link model: see §4c. |
 | RT variability | `rt_sd_ms` | LMM on log (Round 71) | Effect is a ratio of SDs. |
-| Lapses | `lapse_count` of `hits` | Binomial GLMM (Round 71) | Weighted by the block's hits, as the primary is by its blinks. |
+| Lapses | `lapse_count` of `hits` | Binomial GLMM with an observation-level (run) term (Rounds 71, 73) | Weighted by the block's hits, as the primary is by its blinks. The run term carries the extra-binomial variation between runs; see §4c. |
 | Inter-blink interval | `mean_inter_blink_interval_ms` | LMM on log (Round 71) | Near the reciprocal of blink rate; both are in the ocular family. |
 | PERCLOS | `perclos_p80` | **A covariate, not an outcome** (Round 70) | See below the table. |
 
@@ -285,7 +285,9 @@ that location is now a **recorded, balanced factor** in `08_reaction_trials.csv`
   `is_signal`, with `stim_ring` and its interaction with the colour factor added) and an LMM on log
   RT of valid hits (`stim_ring`, ring × colour, `position_c`, and participant and passage random
   effects). This note fixed what they must contain before anyone looked at the data; the R template
-  fits the probit GLMM with these terms from Round 71 (§4c).
+  fits the probit GLMM with these terms from Round 71 (§4c). From Round 73 both also carry the
+  **condition-run** as a random effect, because polarity, colour and position vary only between runs
+  and a run's trials are not independent evidence about them (§4c).
 - `stim_ecc_deg_55cm` assumes a 55 cm eye-to-screen distance, which is not recorded; the protocol
   allows 50–60 cm, about ±9% in angle. Model `stim_ring` as the factor and treat the degree value as
   descriptive.
@@ -349,7 +351,8 @@ per-block `criterion` column estimates, −(z(H) + z(F))/2). The model is
 
 ```r
 glmer(cbind(responded, not) ~ sig * (polarity * colour + session_position + ring + ring:colour)
-        + (1 + sig | participant_id) + (1 | passage_id), family = binomial(link = "probit"))
+        + (1 + sig | participant_id) + (1 | passage_id) + (1 + sig || run_id),
+      family = binomial(link = "probit"))
 ```
 
 with trials of identical covariates grouped (the likelihood is unchanged). The polarity effect on d′ is
@@ -361,6 +364,32 @@ participant; the probit coding is the method, stated rather than attributed. It 
 no rate correction (20 of 20 hits is a likelihood term, not a bound to nudge). Rows recorded before
 Round 66 carry no target location: with none located, the model is fitted without the ring terms and
 says so; with some, the located trials are modelled and the count left out is printed.
+
+**The condition-run as a random effect (Round 73).** `run_id` is the condition-run (participant ×
+condition). Polarity, colour and serial position vary only between a participant's ten runs, and the
+32 trials of a run share its moment — attention, arousal, the minute of the session — so each run has
+a criterion and a d′ of its own around the participant's. Without a term for that, the model counted a
+run's 32 correlated trials as independent evidence about its condition. In the null simulation of the
+review of Rounds 69-72 (24 participants, run-to-run SD 0.25 on both), the polarity test on the criterion rejected
+11% of the time instead of 5%, and 6% with the run term; the d′ test was not inflated in that setting
+(8% with and without). The same applies more strongly to the trial-level log-RT model: with a run SD of
+0.06 on log RT its polarity test rejected 37% of the time, and 4% with `(1 | run_id)`. It is the
+pseudo-replication the comprehension model's `(1 | participant_id/condition_id)` already avoids. So:
+
+- the probit GLMM carries `(1 + sig || run_id)`, the run's own criterion and d′, uncorrelated. A run
+  term whose variance is estimated at zero (a singular fit) is dropped, and the output says the data
+  show no run-to-run variation in it, so dropping it changes nothing. If the model does not fit or
+  fails the convergence check, terms are dropped in a **pre-specified order**, the run's d′ first and
+  then its criterion, and the output says that tests on what was dropped are anti-conservative to the
+  extent that runs vary in it;
+- the trial-level log-RT LMM carries `(1 | run_id)`, removed only if the model with it does not fit,
+  which the output then says;
+- the lapse GLMM (one row per run) carries `(1 | run_id)` as an observation-level random effect, so its
+  polarity row in the performance family allows for extra-binomial variation between runs;
+- the stacked fatigue-item `clmm` carries `(1 | run_id)`: the five items of one rating share the run.
+
+The simulated cohort the analysis gate runs on draws each block's own criterion, d′, speed and lapse
+propensity, so the gate can tell these models from ones without the run term.
 
 The per-block LMMs on `d_prime` and `criterion` are kept as **unweighted cross-checks**, in no
 family. The template no longer prints a count of blocks with `d_prime_unstable`, which is TRUE for
@@ -394,11 +423,12 @@ is not fitted: it needs a package (`survival`) that is not in the install line o
   every pair of adjacent values used, about ten ratings per participant cannot support up to 100 of
   them, and the scores are close to continuous already, so the LMM is the model, by this amendment. The
   0-10 fatigue ITEMS are ordinal ratings in the ordinary sense; where `ordinal` is installed the template
-  fits a cumulative-link mixed model (`ordinal::clmm`) to the five post-condition items stacked, as a
-  sensitivity for the fatigue member, and otherwise says `[SKIPPED: ordinal not installed]`. `ordinal`,
+  fits a cumulative-link mixed model (`ordinal::clmm`) to the five post-condition items stacked, with the
+  condition-run intercept (Round 73), as a sensitivity for the fatigue member, and otherwise says `[SKIPPED: ordinal not installed]`. `ordinal`,
   like `glmmTMB`, is in neither the install line nor CI.
 - **RT polarity × serial position** (§3): on the per-block mean RT model, and in a trial-level LMM on the
-  log RT of valid hits that also carries §4a's ring and ring × colour terms.
+  log RT of valid hits that also carries §4a's ring and ring × colour terms and, from Round 73, the
+  condition-run intercept (polarity × position is a between-run contrast too).
 - **Primary sensitivities**: without restarted runs (`attempt_number` > 1); without interrupted runs
   (`condition_interrupted`); serial position as a factor rather than a line; and first-order carryover —
   `polarity_switched` (the run before, in the same sitting, had the other polarity) added, tested by

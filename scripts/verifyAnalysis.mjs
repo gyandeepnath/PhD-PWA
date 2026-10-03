@@ -168,9 +168,10 @@ try {
     'cameras-some': { n: 12, seed: 8, cameraOff: [0, 1, 2] },
     'one-polarity': { n: 4, seed: 7, onePolarity: 'positive' },
     'one-polarity-edited': { n: 4, seed: 9 },
-    // Ten participants, the size of the pilot: this seed puts the PERCLOS participant variance at its
-    // boundary, where statsmodels' gradient-based optimizers raise LinAlgError (2 of 20 seeds at N = 10).
-    ten: { n: 10, seed: 1 },
+    // Ten participants, the size of the pilot. With statsmodels 0.15 this seed puts the PERCLOS
+    // participant variance at its boundary, where the gradient-based optimizers raise LinAlgError (3 of
+    // 80 seeds at N = 10; the PERCLOS simulated here has no participant variance at all).
+    ten: { n: 10, seed: 28 },
   };
   const cohortDumper = join(dir, 'dumpCohort.ts');
   writeFileSync(cohortDumper, `
@@ -751,6 +752,28 @@ for (const { root, options } of jobs) {
         `the ${label} formula is "${modelLine(label)}"`);
     }
 
+    /*
+     * THE CONDITION-RUN IN EVERY MODEL WHERE A RUN GIVES SEVERAL ROWS (Round 73). Polarity, colour and
+     * position vary only between runs; the trial-level probit and log-RT models had only participant
+     * and passage terms, so a run's 15-32 trials counted as independent evidence about the condition
+     * (null type-I 37% for RT polarity in the review's simulation). The cohort now draws each block's
+     * own criterion, d', speed and lapse propensity (SD 0.25, 0.25, 25 ms, 0.5 log-odds), so the run
+     * terms must be in the fitted formulas and must find that variation.
+     */
+    const sdtRun = /\[sdt\] condition-run term: \(1 \+ sig \|\| run_id\); SD between runs of the criterion ([\d.]+), of d' ([\d.]+)/.exec(rOut);
+    ok('R: the probit model carries the run\'s own criterion and d\' (1 + sig || run_id), at the first rung, and finds both',
+      modelLine('signal detection \\(trial cells\\)').includes('(1 + sig || run_id)') && sdtRun != null && +sdtRun[1] > 0.05 && +sdtRun[2] > 0.05,
+      sdtRun ? `SD criterion ${sdtRun[1]}, d' ${sdtRun[2]}` : `the formula is "${modelLine('signal detection \\(trial cells\\)')}"`);
+    const rtRun = /\[RT trials\] condition-run intercept: SD between runs ([\d.]+) on the log scale/.exec(rOut);
+    ok('R: the trial-level log-RT model carries the run intercept (1 | run_id), and finds the run-to-run variation',
+      modelLine('log RT \\(trials\\)').includes('(1 | run_id)') && rtRun != null && +rtRun[1] > 0.01,
+      rtRun ? `SD ${rtRun[1]}` : `the formula is "${modelLine('log RT \\(trials\\)')}"`);
+    ok('R: the lapse GLMM carries an observation-level (run) term', modelLine('lapse rate').includes('(1 | run_id)')
+      && /\[lapses\] observation-level \(condition-run\) term: SD [\d.]+/.test(rOut), `the formula is "${modelLine('lapse rate')}"`);
+    if (hasOrdinal) {
+      ok('R: the stacked fatigue items carry the run intercept in the clmm', /\[clmm\] condition-run intercept: SD between runs [\d.]+/.test(rOut),
+        'no [clmm] condition-run line');
+    }
     // A threshold that is not in the protocol must say so where it is read, not only in a comment.
     const quitLine = /stopped early by the participant:\s*(\d+)/.exec(rOut);
     ok('R: the fixture\'s early-stopped searches are counted',
@@ -870,11 +893,17 @@ for (const { root, options } of jobs) {
    * matrix") in the PERCLOS covariate check, so the cross-check ended in a traceback, exit 1. Every
    * MixedLM now retries by Powell's method, says so, and names a model that fits by neither.
    */
+  // Whether the boundary is reached depends on the optimizer, and CI installs statsmodels unpinned, so
+  // what is CHECKED is that the run ends and the PERCLOS check either fits or is named as not fitted;
+  // whether this run needed the Powell retry is printed beside it.
   const tenPy = await RUNS['Python:ten'];
-  ok('Python: a 10-participant cohort whose PERCLOS variance is at its boundary runs to the end, without a traceback',
-    tenPy.status === 0 && !/Traceback/.test(tenPy.stderr) && /\[perclos\] the gradient-based optimizers stopped \(LinAlgError/.test(tenPy.stdout)
-      && /\[perclos\] LMM on logit\(y'\): polarity_c/.test(tenPy.stdout),
+  const tenBoundary = /\[perclos\] the gradient-based optimizers stopped/.test(tenPy.stdout);
+  ok('Python: a 10-participant cohort runs to the end without a traceback, the PERCLOS check fitted or named as not fitted',
+    tenPy.status === 0 && !/Traceback/.test(tenPy.stderr)
+      && /\[perclos\] (LMM on logit\(y'\): polarity_c|the covariate-check LMM did not fit)/.test(tenPy.stdout),
     `exit ${tenPy.status}: ${(tenPy.stderr || '').trim().split('\n').slice(-1)}`);
+  console.log(`         (10 participants: the PERCLOS participant variance ${tenBoundary
+    ? 'reached its boundary and the LMM was refitted by Powell\'s method' : 'did not reach its boundary with this statsmodels'})`);
   /*
    * WITHOUT THE CAMERA. Every behavioural section — not a sample of three — because the original
    * defect (M4) was a brace: the PERCLOS block closed two hundred lines late, so reading speed, d' and

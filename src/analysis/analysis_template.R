@@ -520,6 +520,21 @@ report_n <- function(m, data, label) {
   cat(sprintf("[model] %s: %s\n", label, paste(deparse(formula(m), width.cutoff = 500L), collapse = " ")))
 }
 
+# THE CONDITION-RUN as a grouping factor (Round 73). Polarity, colour and serial position vary only
+# BETWEEN a participant's ten runs, so wherever one run contributes several rows — the trials of its
+# reaction-time block, the five items of its fatigue rating — those rows share the run's own level and
+# are not independent evidence about the condition. Each such model carries (1 | run_id), as the
+# comprehension model has always carried (1 | participant_id/condition_id); the lapse model, one row
+# per run, carries it as an observation-level term. Built from both ids, so it identifies the run even
+# if a condition id were reused across sittings.
+run_key <- function(d) paste(d$participant_id, d$condition_id, sep = ":")
+# The SDs of a model's run-level random effects, named by term, for the reduction rules and the report.
+run_sds <- function(m) {
+  vc <- as.data.frame(VarCorr(m))
+  at_run <- grepl("^run_id", vc$grp) & is.na(vc$var2)
+  setNames(vc$sdcor[at_run], vc$var1[at_run])
+}
+
 # ===========================================================================================
 # EFFECT SIZES AND MULTIPLICITY — ANALYSIS_PLAN.md §4b; synopsis §3.9: "Effect sizes with confidence
 # intervals and multiplicity control within outcome families are reported throughout."
@@ -890,7 +905,11 @@ if (!is.null(m_rt_pos)) {
 #     right-skewed; the effect is then a RATIO of SDs, positive over negative).
 #   - LAPSES: hits slower than the lapse threshold, out of the block's valid hits — a binomial count,
 #     like the primary, so a block with 12 hits is not weighted like one with 20. Anticipations are
-#     their own accuracy level and never hits, so `hits` is the lapse_rate denominator.
+#     their own accuracy level and never hits, so `hits` is the lapse_rate denominator. One row per
+#     run, so (1 | run_id) is an observation-level random effect (Round 73): a run's hits share its
+#     lapse propensity, and the binomial alone assumes they do not, which understates the SE of every
+#     between-run contrast — the reason the primary has its observation-level refit. Here it is in the
+#     model itself, because this model's polarity row goes into the performance family's Holm table.
 rt_var <- rt %>% filter(is.finite(rt_sd_ms), rt_sd_ms > 0)
 m_rtsd <- tryCatch(
   lmer(as.formula(paste0("log(rt_sd_ms) ~ polarity * colour", ilx_term,
@@ -903,6 +922,7 @@ if (is.null(m_rtsd)) cat("the RT-variability model did not fit.\n") else { print
 add_to_family("RT variability", m_rtsd, "ratio of SDs", odds_ratio = TRUE)
 
 rt_lapse <- rt %>% filter(is.finite(lapse_count), is.finite(hits), hits > 0)
+rt_lapse$run_id <- run_key(rt_lapse)
 cat("\n=== Lapses: hits slower than the lapse threshold, binomial GLMM (secondary) ===\n")
 if (nrow(rt_lapse) == 0 || sum(rt_lapse$lapse_count) == 0) {
   cat("[lapses] no lapse in the confirmatory set — nothing to model.\n")
@@ -912,7 +932,7 @@ if (nrow(rt_lapse) == 0 || sum(rt_lapse$lapse_count) == 0) {
               100 * sum(rt_lapse$lapse_count) / sum(rt_lapse$hits)))
   m_lapse <- tryCatch(
     glmer(as.formula(paste0("cbind(lapse_count, hits - lapse_count) ~ polarity * colour", ilx_term,
-                            " + session_position + (1 | participant_id)", re_sitting, re_passage)),
+                            " + session_position + (1 | participant_id)", re_sitting, re_passage, " + (1 | run_id)")),
           data = rt_lapse, family = binomial,
           control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))),
     error = function(err) NULL
@@ -922,6 +942,7 @@ if (nrow(rt_lapse) == 0 || sum(rt_lapse$lapse_count) == 0) {
     add_to_family("lapse rate", NULL, "odds ratio, lapse")
   } else {
     print(summary(m_lapse)); report_n(m_lapse, rt_lapse, "lapse rate")
+    if (length(run_sds(m_lapse))) cat(sprintf("[lapses] observation-level (condition-run) term: SD %.3f on the log-odds scale\n", run_sds(m_lapse)[[1]]))
     conv_lapse <- convergence_verdict(m_lapse)
     cat("[convergence] lapse rate:", conv_lapse$text, "\n")
     add_to_family("lapse rate", m_lapse, "odds ratio, lapse", odds_ratio = TRUE, converged = conv_lapse$ok)
@@ -957,7 +978,9 @@ add_to_family("fatigue", m_fat, paste0(fat_response, ", 0-10 pts"))
 # The five post-condition items (eye strain, dryness, blur, burning, headache) are 0-10 integer
 # ratings: eleven ordered categories, which a cumulative-link mixed model (ordinal::clmm) takes as they
 # are, with no assumption that the steps between them are equal. Stacked, with the item as a factor and
-# the participant and passage intercepts. `ordinal` is in neither the install line nor CI, so without it
+# the participant and passage intercepts, and the run intercept (1 | run_id): the five items of one rating
+# share that run's level, and stacked without it they counted five times as evidence about a condition
+# that varies only between runs (Round 73). `ordinal` is in neither the install line nor CI, so without it
 # this says so and the LMM on fatigue_delta above stands alone: a composite of five items, change-scored
 # against the participant's own baseline, is close enough to interval-scaled for an LMM, and it is the
 # model ANALYSIS_PLAN.md §4 specifies. clmm's coefficient is on the latent logit scale, and positive
@@ -968,8 +991,10 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
     tidyr::pivot_longer(any_of(items), names_to = "item", values_to = "rating") %>%
     filter(is.finite(rating)) %>%
     mutate(rating = factor(rating, levels = sort(unique(rating)), ordered = TRUE), item = factor(item))
+  # clmm takes no a:b grouping term, which is one more reason the run is a column of its own.
+  fat_items$run_id <- run_key(fat_items)
   m_fat_clmm <- tryCatch(
-    ordinal::clmm(as.formula(paste0("rating ~ polarity * colour + item + session_position + (1 | participant_id)", re_passage)),
+    ordinal::clmm(as.formula(paste0("rating ~ polarity * colour + item + session_position + (1 | participant_id)", re_passage, " + (1 | run_id)")),
                   data = fat_items),
     error = function(err) conditionMessage(err))
   cat("\n=== Fatigue items as ordinal ratings: cumulative-link mixed model (sensitivity, ordinal::clmm) ===\n")
@@ -979,6 +1004,8 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
                 cc["polarity1", "Estimate"], cc["polarity1", "Estimate"] - qnorm(0.975) * cc["polarity1", "Std. Error"],
                 cc["polarity1", "Estimate"] + qnorm(0.975) * cc["polarity1", "Std. Error"],
                 format.pval(cc["polarity1", "Pr(>|z|)"], digits = 2), nrow(fat_items), nlevels(fat_items$rating)))
+    cat(sprintf("[clmm] condition-run intercept: SD between runs %.3f (latent logit scale), %d runs\n",
+                attr(ordinal::VarCorr(m_fat_clmm)$run_id, "stddev")[[1]], n_distinct(fat_items$run_id)))
     cat("       Read beside the fatigue LMM: a disagreement in sign is a reason to look at how the items are used.\n")
   }
 } else {
@@ -1118,11 +1145,24 @@ if ("reading_speed_wpm" %in% names(cond) && sum(is.finite(cond$reading_speed_wpm
 # are never imputed. With no location anywhere the model is fitted without the ring terms and says so;
 # with some, the ring model is fitted on the located trials and the count left out is printed.
 #
+# THE CONDITION-RUN'S OWN CRITERION AND d' (Round 73). Polarity, colour and serial position vary only
+# BETWEEN runs, and the 32 trials of a run share its moment — attention, arousal, the minute of the
+# session — so each run has a criterion and a sensitivity of its own around the participant's. With only
+# (1 + sig | participant_id), those 32 correlated trials counted as 32 independent pieces of evidence
+# about the condition: in the null simulation of the review of Rounds 69-72 (24 participants, run SD
+# 0.25 on both), the polarity test on the criterion rejected at 11% where 5% was intended, and at 6%
+# with a run term. It is the pseudo-replication the comprehension model's
+# (1 | participant_id/condition_id) exists to avoid. So the run gets an intercept and a sig slope,
+# uncorrelated: (1 + sig || run_id). A run term whose variance is estimated at zero is dropped, which
+# changes nothing; if the model does not fit or fails convergence_verdict(), the run's d' term goes
+# first and then its criterion term, a PRE-SPECIFIED order as the primary's ladder is, and the output
+# says the tests on what was dropped are anti-conservative.
+#
 # The per-block LMMs are kept as CROSS-CHECKS, UNWEIGHTED, and are not in any outcome family.
 # ===========================================================================================
 trials <- tryCatch(read_export("08_reaction_trials.csv"), error = function(err) NULL)
 if (!is.null(trials)) trials <- keep_rows(trials)
-m_sdt <- NULL
+m_sdt <- NULL; conv_sdt <- NULL; sdt_rung <- NA_character_
 if (is.null(trials) || nrow(trials) == 0) {
   cat("\n[signal detection] 08_reaction_trials.csv not found or empty — the trial-level model is NOT run;\n")
   cat("                   the per-block cross-checks below are the only sensitivity and bias analysis.\n")
@@ -1134,6 +1174,7 @@ if (is.null(trials) || nrow(trials) == 0) {
     mutate(responded = as.integer(accuracy %in% c("hit", "false_alarm")),
            sig = ifelse(as_flag(is_signal), 0.5, -0.5),
            ring = factor(stim_ring, levels = c("inner", "outer")))
+  sdt_trials$run_id <- run_key(sdt_trials)
   n_located <- sum(!is.na(sdt_trials$ring))
   # Both rings must carry go AND no-go trials, as every balanced block does (10 and 6 per ring);
   # otherwise ring is aliased with the signal and the ring terms on d' are not identified.
@@ -1157,16 +1198,60 @@ if (is.null(trials) || nrow(trials) == 0) {
   }
   if (USE_RING) contrasts(sdt_trials$ring) <- contr.sum(2) / 2
   sdt_cells <- sdt_trials %>%
-    group_by(across(any_of(c("participant_id", "condition_id", "polarity", "colour", "passage_id",
+    group_by(across(any_of(c("participant_id", "condition_id", "run_id", "polarity", "colour", "passage_id",
                              "session_position", "sig", if (USE_RING) "ring")))) %>%
     summarise(k_resp = sum(responded), n_trials = n(), .groups = "drop")
   sdt_terms <- paste0("polarity * colour", ilx_term, " + session_position", if (USE_RING) " + ring + ring:colour" else "")
-  m_sdt <- tryCatch(
-    glmer(as.formula(paste0("cbind(k_resp, n_trials - k_resp) ~ sig * (", sdt_terms, ")",
-                            " + (1 + sig | participant_id)", re_passage)),
-          data = sdt_cells, family = binomial(link = "probit"),
-          control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))),
-    error = function(err) { cat("the trial-level probit model did not fit:", conditionMessage(err), "\n"); NULL })
+  # The run-level terms, and the pre-specified reduction (see the section heading). Two reasons to drop
+  # one, with different consequences, and the output keeps them apart:
+  #  - its variance is estimated at ZERO (a singular fit): the data show no run-to-run variation in
+  #    that quantity, the term contributes nothing, and the fit without it is the same fit;
+  #  - the model with it does not fit or does not converge: the term is dropped in the fixed order (the
+  #    run's d' first, then its criterion), and tests on that quantity are then anti-conservative to the
+  #    extent that runs do vary.
+  run_parts <- c("(Intercept)" = "the criterion", sig = "d'")
+  run_re <- function(parts) {
+    if (!length(parts)) return("")
+    if (length(parts) == 2) return(" + (1 + sig || run_id)")
+    if (names(parts) == "sig") " + (0 + sig | run_id)" else " + (1 | run_id)"
+  }
+  sdt_log <- character(0); run_zero <- character(0); run_failed <- character(0)
+  repeat {
+    re <- run_re(run_parts)
+    label <- if (nzchar(re)) trimws(sub("^ \\+ ", "", re)) else "no condition-run term"
+    cand <- tryCatch(
+      glmer(as.formula(paste0("cbind(k_resp, n_trials - k_resp) ~ sig * (", sdt_terms, ")",
+                              " + (1 + sig | participant_id)", re_passage, re)),
+            data = sdt_cells, family = binomial(link = "probit"),
+            control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))),
+      error = function(err) conditionMessage(err))
+    if (is.character(cand)) {
+      sdt_log <- c(sdt_log, paste0(label, ": did not fit (", cand, ")"))
+      if (!length(run_parts)) break
+      run_failed <- c(run_failed, run_parts[length(run_parts)]); run_parts <- run_parts[-length(run_parts)]; next
+    }
+    at_zero <- names(which(run_sds(cand) < 1e-4))
+    if (length(at_zero)) {
+      sdt_log <- c(sdt_log, paste0(label, ": the run variance of ", paste(run_parts[at_zero], collapse = " and "),
+                                   " is estimated at zero (singular) — that term is dropped"))
+      run_zero <- c(run_zero, run_parts[at_zero]); run_parts <- run_parts[setdiff(names(run_parts), at_zero)]; next
+    }
+    conv <- convergence_verdict(cand)
+    sdt_log <- c(sdt_log, paste0(label, ": ", conv$text))
+    if (conv$ok || !length(run_parts)) { m_sdt <- cand; conv_sdt <- conv; sdt_rung <- label; break }
+    run_failed <- c(run_failed, run_parts[length(run_parts)]); run_parts <- run_parts[-length(run_parts)]
+  }
+  cat("[sdt] condition-run random effects, step by step:\n", paste0("  ", sdt_log, collapse = "\n"), "\n", sep = "")
+  if (length(run_zero)) {
+    cat(sprintf("[sdt] no run-to-run variation in %s in these data: dropping %s changes nothing.\n",
+                paste(run_zero, collapse = " or "), if (length(run_zero) > 1) "those terms" else "its term"))
+  }
+  if (length(run_failed)) {
+    cat(sprintf("[sdt] RUN TERM DROPPED because the model with it did not fit or converge: %s. Tests on %s are\n",
+                paste(run_failed, collapse = ", "), paste(run_failed, collapse = " and ")))
+    cat("      ANTI-CONSERVATIVE to the extent that runs vary in it (each run's trials count as independent).\n")
+  }
+  if (is.null(m_sdt)) cat("the trial-level probit model did not fit.\n")
 }
 # The two effects of a factor on this model: on d' (the slope of sig) and on the criterion (minus the
 # intercept at sig = 0), each as positive minus negative, averaged over colour (and ring).
@@ -1194,9 +1279,16 @@ wald_terms <- function(m, pattern) {
 }
 if (!is.null(m_sdt)) {
   print(summary(m_sdt)); report_n(m_sdt, sdt_cells, "signal detection (trial cells)")
-  cat(sprintf("[n] signal detection: %d scored trials in %d cells of identical covariates\n", sum(sdt_cells$n_trials), nrow(sdt_cells)))
-  conv_sdt <- convergence_verdict(m_sdt)
+  cat(sprintf("[n] signal detection: %d scored trials in %d cells of identical covariates, %d condition-runs\n",
+              sum(sdt_cells$n_trials), nrow(sdt_cells), n_distinct(sdt_cells$run_id)))
   cat("[convergence] signal detection:", conv_sdt$text, "\n")
+  sd_run <- run_sds(m_sdt)
+  run_sd_text <- function(part) {
+    if (part %in% names(sd_run)) sprintf("%.3f", sd_run[[part]])
+    else if (part %in% names(run_zero)) "0 (term dropped)" else "NOT MODELLED (did not fit)"
+  }
+  cat(sprintf("[sdt] condition-run term: %s; SD between runs of the criterion %s, of d' %s (probit units)\n", sdt_rung,
+              run_sd_text("(Intercept)"), run_sd_text("sig")))
   e_dp <- sdt_effect(m_sdt, "dprime"); e_c <- sdt_effect(m_sdt, "criterion")
   w_dp_int <- wald_terms(m_sdt, "^sig:polarity1:colour\\d$")
   w_c_int <- wald_terms(m_sdt, "^polarity1:colour\\d$")
@@ -1225,26 +1317,42 @@ if (!is.null(m_sdt)) {
 # §4a's second trial-level model: response time rises with target eccentricity, so ring and
 # ring x colour enter here as they do the probit model, with the polarity x serial-position term of §3.
 # Not in a family: the RT member is the per-block mean above; this is where the location terms live.
+# The run intercept (1 | run_id) is the run's own speed (Round 73). Without it, a block's hits (up to
+# 20) counted as independent evidence about polarity, which varies only between blocks: in the null
+# simulation of the review of Rounds 69-72 (24 participants, run SD 0.06 on log RT) the polarity test
+# rejected at 37% where 5% was intended, and at 4% with the term — and polarity x position, §3's test,
+# is a between-run contrast too. Only an error removes it, and the output then says so.
 if (!is.null(trials) && nrow(trials) > 0) {
   rt_trials <- trials %>%
     filter(accuracy == "hit", !as_flag(anticipatory), is.finite(response_time_ms), response_time_ms > 0) %>%
     left_join(cond %>% select(condition_id, polarity, colour, passage_id, session_position), by = "condition_id") %>%
     mutate(ring = factor(stim_ring, levels = c("inner", "outer")))
+  rt_trials$run_id <- run_key(rt_trials)
   use_ring_rt <- n_distinct(na.omit(rt_trials$ring)) == 2
   if (use_ring_rt) {
     rt_trials <- rt_trials %>% filter(!is.na(ring))
     contrasts(rt_trials$ring) <- contr.sum(2) / 2
   }
-  m_rt_trial <- tryCatch(
+  fit_rt_trial <- function(re_run) tryCatch(
     lmer(as.formula(paste0("log(response_time_ms) ~ polarity * colour", ilx_term, " + session_position + polarity:session_position",
-                           if (use_ring_rt) " + ring + ring:colour" else "", " + (1 | participant_id)", re_passage)),
+                           if (use_ring_rt) " + ring + ring:colour" else "", " + (1 | participant_id)", re_passage, re_run)),
          data = rt_trials),
     error = function(err) NULL
   )
   cat("\n=== Log RT of valid hits, trial level (§4a: ring and ring x colour; §3: polarity x position) ===\n")
+  m_rt_trial <- fit_rt_trial(" + (1 | run_id)")
+  if (is.null(m_rt_trial)) {
+    m_rt_trial <- fit_rt_trial("")
+    if (!is.null(m_rt_trial)) cat("[RT trials] the model with the condition-run intercept did not fit; fitted WITHOUT it, so every\n",
+                                  "           between-run test below (polarity, polarity x position) is anti-conservative.\n", sep = "")
+  }
   if (!use_ring_rt) cat("[location] no target location in these trials (pre-Round 66): fitted without the ring terms.\n")
   if (is.null(m_rt_trial)) cat("the trial-level RT model did not fit.\n") else {
     report_n(m_rt_trial, rt_trials, "log RT (trials)")
+    if (length(run_sds(m_rt_trial))) {
+      cat(sprintf("[RT trials] condition-run intercept: SD between runs %.4f on the log scale, %d runs\n",
+                  run_sds(m_rt_trial)[[1]], n_distinct(rt_trials$run_id)))
+    }
     cf <- summary(m_rt_trial)$coefficients
     for (term in intersect(c("polarity1", "polarity1:session_position", "ring1"), rownames(cf))) {
       ci <- cf[term, "Estimate"] + c(-1, 1) * qt(0.975, cf[term, "df"]) * cf[term, "Std. Error"]

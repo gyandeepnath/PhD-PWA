@@ -194,9 +194,17 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
      * an equal-variance signal-detection model, P(respond) = Phi(+-d'/2 - c), with KNOWN effects of
      * polarity and ring on d', so the templates' trial-level probit model can be checked for
      * recovering their sign; the summary row is recomputed from the trials, so the two agree.
+     *
+     * EVERY BLOCK HAS ITS OWN LEVEL, shared by all its trials: a criterion, a d', an RT offset and a
+     * lapse propensity drawn once per block (attention, arousal, the minute of the session). Polarity,
+     * colour and position vary only BETWEEN blocks, so a trial-level model without a condition-run
+     * random effect treats a block's 32 correlated trials as 32 independent pieces of evidence about
+     * them. This cohort drew every trial independently, so the gate could not tell such a model from a
+     * correct one (Round 73); the block SDs here are the ones the review's null simulations used.
      */
     const dpU = gaussian(rng, 0, 0.3);
     const critU = gaussian(rng, 0, 0.2);
+    const lapseU = gaussian(rng, 0, 0.4);   // participants differ in how often they lapse, as in d' and c
     const phi = (x: number) => 0.5 * (1 + erf(x / Math.SQRT2));
     for (const r of b.rtSummaries) {
       const c = byId.get(r.condition_id)!;
@@ -207,19 +215,23 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
         blockIndex: c.session_position, practice: false, rand: rng,
       });
       const trials = b.reactionTrials.filter((t) => t.condition_id === r.condition_id);
+      const blockCrit = gaussian(rng, 0, 0.25);
+      const blockDp = gaussian(rng, 0, 0.25);
+      const blockRt = gaussian(rng, 0, 25);
+      const blockLapse = logistic(Math.log(0.05 / 0.95) + lapseU + gaussian(rng, 0, 0.5));
       let hits = 0; let misses = 0; let fas = 0; let crs = 0;
       const hitRts: number[] = [];
       trials.forEach((t, k) => {
         const p = plan.trials[k];
         const outer = p.location.ring === 'outer';
-        const dp = 2.6 + dpU + (c.polarity === 'positive' ? 0.5 : -0.5) * polDp + (outer ? outerDp : 0);
-        const crit = 0.15 + critU;
+        const dp = 2.6 + dpU + blockDp + (c.polarity === 'positive' ? 0.5 : -0.5) * polDp + (outer ? outerDp : 0);
+        const crit = 0.15 + critU + blockCrit;
         const responded = rng() < phi((p.signal ? dp / 2 : -dp / 2) - crit);
         const accuracy: RtAccuracy = p.signal ? (responded ? 'hit' : 'miss') : (responded ? 'false_alarm' : 'correct_rejection');
         // A few slow responses beyond the 600 ms lapse threshold, so the lapse model has events to fit.
-        const lapse = responded && p.signal && rng() < 0.05;
+        const lapse = responded && p.signal && rng() < blockLapse;
         const rt = responded
-          ? Math.max(160, Math.round((lapse ? 720 : 380 + rtU + 4 * c.session_position + (outer ? 20 : 0)) + gaussian(rng, 0, 45)))
+          ? Math.max(160, Math.round((lapse ? 720 : 380 + rtU + blockRt + 4 * c.session_position + (outer ? 20 : 0)) + gaussian(rng, 0, 45)))
           : null;
         Object.assign(t, {
           is_signal: p.signal, trial_category: p.signal ? 'signal' : 'noise', stimulus_color: p.color,
@@ -250,12 +262,13 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
       });
     }
 
-    // Post-condition fatigue rises with position.
+    // Post-condition fatigue rises with position. The five items of one rating share the run's own
+    // level as well as the participant's, as items rated together do (the stacked ordinal model).
     for (const f of b.fatigue) {
       if (f.stage !== 'post_condition' || f.condition_id == null) continue;
       const c = byId.get(f.condition_id)!;
       const level = (x: number) => Math.max(0, Math.min(10, Math.round(x)));
-      const m0 = 1.5 + fatU + 0.25 * c.session_position;
+      const m0 = 1.5 + fatU + 0.25 * c.session_position + gaussian(rng, 0, 0.6);
       Object.assign(f, {
         eye_strain: level(m0 + gaussian(rng)), dryness: level(m0 + gaussian(rng)), blur: level(m0 - 0.5 + gaussian(rng)),
         burning: level(m0 - 0.7 + gaussian(rng)), headache: level(m0 - 1 + gaussian(rng)),
