@@ -1131,6 +1131,22 @@ exact 0s and 1s into the open interval. The Round 62 audit attributed the formul
 does not mention it. The templates therefore describe the compression as a method and point here for
 its status, rather than attributing it.
 
+### 59. Wright, Horry & Skagerberg (2009) — multilevel GLMs for signal detection
+**Status: CONFIRMED.** PMID 19363166 · DOI [10.3758/BRM.41.2.257](https://doi.org/10.3758/BRM.41.2.257)
+
+> Wright, D. B., Horry, R., & Skagerberg, E. M. (2009). Functions for traditional and multilevel
+> approaches to signal detection theory. *Behavior Research Methods, 41*(2), 257–267.
+
+Metadata matches PubMed (verified 3 Oct 2026). Claim checked against the abstract only; no full text
+was read. Verbatim: *"Arguments are made for using an alternative approach--multilevel generalized
+linear models--and a function is presented for it."* Cited (Round 71, `analysis_template.R`,
+`docs/ANALYSIS_PLAN.md` §4c) for modelling go/no-go sensitivity and criterion as a multilevel GLM on
+the trials rather than as per-block d′ values. **Not cited for:** the probit coding of the signal term
+(d′ as the slope on a ±0.5 signal indicator, the criterion as minus the intercept), which the abstract
+does not describe; the templates state it as the method. The Round 62 audit also named DeCarlo (1998,
+*Psychological Methods*) for that coding; PubMed returns no record for it, Crossref is blocked, and it
+is not cited.
+
 ## NOT INDEXED IN PUBMED — verified against a secondary authority, or unverified
 
 PubMed indexes biomedical and life-sciences literature only. The references below fall outside

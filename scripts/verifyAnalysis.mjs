@@ -36,7 +36,7 @@
  * loading, never a model.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -92,9 +92,10 @@ try {
    * One tree for both, deliberately: the templates must agree on the same data. The Python path still
    * does not depend on R being installed.
    */
-  const SIM = { n: 24, seed: 20260402, polarityEffectOnIncomplete: 0.4, polarityEffectOnComprehension: 0.6, withdrawn: [5], pausedLast: [11] };
+  const SIM = { n: 24, seed: 20260402, polarityEffectOnIncomplete: 0.4, polarityEffectOnComprehension: 0.6, polarityEffectOnDprime: 0.4, withdrawn: [5], pausedLast: [11] };
   // positive minus negative: negative polarity RAISES incomplete blinking; positive polarity RAISES comprehension.
-  const EXPECTED_SIGN = { primary: -1, comprehension: 1 };
+  // positive polarity RAISES d' (the trial-level signal-detection model); the outer ring LOWERS it (the default).
+  const EXPECTED_SIGN = { primary: -1, comprehension: 1, dprime: 1 };
   const cohortDir = join(dir, 'cohort');
   mkdirSync(cohortDir, { recursive: true });
   // One dumper, called with the cohort's options: the main cohort here, and the small hostile ones
@@ -405,6 +406,26 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
         /PRIMARY MODEL CONVERGENCE \(the ladder, rung by rung\):\n {2}maximal: /.test(rOut), 'no ladder convergence report');
       ok('R: the binomial secondaries report their convergence too',
         /\[convergence\] comprehension: /.test(rOut), 'no [convergence] line for comprehension');
+      /*
+       * SENSITIVITY AND CRITERION ON THE TRIALS (M8). d' was an LMM on per-block values weighted by
+       * 1 / d_prime_se^2 — and that SE rises with d', so the weights penalised high sensitivity — and the
+       * template printed the share of blocks flagged d_prime_unstable, which is every block there can be.
+       * The cohort simulates a polarity effect on d' (positive higher) and a lower d' on the outer ring.
+       */
+      const sdtDp = /\[sdt\] polarity effect on d' \(positive minus negative\) (-?[\d.]+) \(95% CI (-?[\d.]+) to (-?[\d.]+)\), p \S+; polarity x colour on d': Wald chi2\(4\)/.exec(rOut);
+      ok('R: the trial-level probit model recovers the simulated polarity effect on d\', with a CI that excludes zero',
+        sdtDp != null && Math.sign(+sdtDp[1]) === EXPECTED_SIGN.dprime && +sdtDp[2] > 0, sdtDp ? sdtDp.slice(1).join(' / ') : 'no [sdt] d\' line');
+      ok('R: ... reports the criterion separately, with its own interval and interaction test',
+        /\[sdt\] polarity effect on the criterion c \(positive minus negative\) -?[\d.]+ \(95% CI -?[\d.]+ to -?[\d.]+\), p \S+; polarity x colour on c: Wald chi2\(4\)/.test(rOut),
+        'no [sdt] criterion line');
+      const ring = /\[sdt\] ring \(§4a\): d' inner ([\d.]+), outer ([\d.]+); ring on d' Wald p \S+; ring x colour on d' Wald chi2\(4\)/.exec(rOut);
+      ok('R: ... carries the Round 66 ring and ring x colour terms, and finds the simulated outer-ring loss',
+        ring != null && +ring[2] < +ring[1], ring ? `inner ${ring[1]}, outer ${ring[2]}` : 'no [sdt] ring line');
+      ok('R: no d_prime_unstable count is printed as a finding, and no d\' fit is weighted by its SE',
+        !/blocks flagged d_prime_unstable/.test(rOut) && !/weights: 1 \/ d_prime_se/.test(rOut), 'the old count or weighting is still printed');
+      ok('R: the d-prime and criterion family rows come from the trial-level model',
+        /^ {2}d-prime\s+-?[\d.]+ \(-?[\d.]+ to -?[\d.]+\)\s+d' \(probit units\)/m.test(rOut) && /^ {2}criterion\s+-?[\d.]+ \(-?[\d.]+ to -?[\d.]+\)\s+criterion c \(probit units\)/m.test(rOut),
+        'the family rows are not the probit model\'s');
       // M13: PERCLOS is a covariate — a sensitivity refit and a check, never an outcome, and never
       // clipped at a fixed constant before the logit.
       ok('R: PERCLOS is checked against the condition, compressed by sample size, not clipped at a constant',
@@ -437,7 +458,7 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
         ['ocular', 'subjective', 'performance'].every((f) => new RegExp(`\\[family\\] ${f}: \\d+ of \\d+ outcome`).test(famBlock)),
         'a family header is missing');
       ok('R: every performance outcome the template models has an effect with a 95% CI',
-        ['reading speed', 'comprehension', 'RT', 'd-prime', 'criterion', 'search completion', 'search time']
+        ['reading speed', 'comprehension', 'RT', 'd-prime', 'criterion', 'search completion', 'search rate', 'search d-prime']
           .every((o) => famRows.some((m) => m[1] === o)), `rows: ${famRows.map((m) => m[1]).join(', ')}`);
       ok('R: the blink-rate and fatigue rows are in their families too',
         famRows.some((m) => m[1] === 'blink rate') && famRows.some((m) => m[1] === 'fatigue'), `rows: ${famRows.map((m) => m[1]).join(', ')}`);
@@ -505,8 +526,8 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
         // pre-registered, so an analyst running this file produced a thesis with four of its own
         // stated outcomes unanalysed.
         ['§4 reading speed is modelled', 'Reading speed (secondary'],
-        ['§4 response bias is modelled separately from sensitivity', 'Response bias: criterion'],
-        ['§4 sensitivity is modelled, not just averaged', 'Sensitivity: d-prime'],
+        ['§4 sensitivity and response bias are modelled on the trials', 'SENSITIVITY AND CRITERION: trial-level probit GLMM'],
+        ['the per-block d\' and criterion are kept as unweighted cross-checks', 'per-block d\' and criterion, LMM, UNWEIGHTED'],
         ['§4 visual search is modelled', 'Visual search (secondary'],
         ['the visual-search censoring rate is reported', 'right-censored'],
         // Uniform censoring biases every condition alike and a between-condition comparison partly
@@ -521,7 +542,12 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
         // four were bare literals, which is an inconsistency in the file's own standard: a number
         // that decides how a result is read has to be defensible and reproducible.
         ['analyst-chosen thresholds are still declared as such', 'ANALYST DEFAULT'],
-        ['the spread in censoring across conditions is quantified', 'spread in censoring across conditions'],
+        // M10: a range of ten cells' censoring rates is not a test (it fired in most null datasets); a
+        // likelihood ratio is. Search speed is a Poisson rate with the time as exposure, and search d'
+        // (which the codebook asks to prefer to accuracy) is modelled.
+        ['whether censoring depends on the condition is TESTED', '[censoring] LRT of the condition terms: chi2(9)'],
+        ['search speed is a rate with the search time as exposure', 'targets found per minute (Poisson GLMM, time as exposure)'],
+        ['search d\' is modelled', 'search d\' (LMM, unweighted)'],
         ['completion is offered as a censoring-immune outcome', 'completed within the window'],
         ['the uncensored fit declares its own downward bias', 'biased DOWNWARD'],
       ]) ok(`R: ${label}`, rOut.includes(needle), `"${needle}" not in the output`);
@@ -534,7 +560,12 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
       ok('R: comprehension carries the passage and item intercepts',
         modelLine('comprehension').includes('(1 | passage_id)') && modelLine('comprehension').includes('(1 | item)'),
         `the comprehension formula is "${modelLine('comprehension')}"`);
-      for (const label of ['RT', 'fatigue', 'reading speed', 'criterion', 'd-prime', 'search time', 'anchor', 'blink rate']) {
+      ok('R: no range rule on the censoring rates is left', !/spread in censoring across conditions/.test(rOut), 'the 10-point spread warning still prints');
+      for (const label of ['search rate', 'search d-prime']) {
+        ok(`R: the ${label} model carries the passage intercept (target counts differ by passage)`, modelLine(label).includes('(1 | passage_id)'),
+          `the ${label} formula is "${modelLine(label)}"`);
+      }
+      for (const label of ['RT', 'fatigue', 'reading speed', 'signal detection \\(trial cells\\)', 'per-block d_prime', 'per-block criterion', 'search time', 'anchor', 'blink rate']) {
         ok(`R: the ${label} model carries the passage intercept too`, modelLine(label).includes('(1 | passage_id)'),
           `the ${label} formula is "${modelLine(label)}"`);
       }
@@ -593,6 +624,17 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
           lines[i] = cells.join(',');
         }
         writeFileSync(shortFile, lines.join('\n'));
+        // The same copy doubles as a PRE-ROUND-66 export: no trial records where the dot appeared. The
+        // ring terms cannot be estimated, and the template must say so and fit the model without them.
+        for (const pid of readdirSync(shortDir).filter((f) => /^P\d+$/.test(f))) {
+          const tf = join(shortDir, pid, '08_reaction_trials.csv');
+          const tl = readFileSync(tf, 'utf8').split('\n');
+          const ringIdx = tl[0].split(',').indexOf('stim_ring');
+          writeFileSync(tf, tl.map((l, i) => {
+            if (i === 0 || !l.trim()) return l;
+            const c2 = l.split(','); c2[ringIdx] = ''; return c2.join(',');
+          }).join('\n'));
+        }
         const shortRun = spawnSync('Rscript', [join(process.cwd(), 'src/analysis/analysis_template.R')], {
           encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
           env: { ...process.env, VISULAB_DATA_DIR: shortDir },
@@ -604,6 +646,9 @@ writeFileSync(expectedPath, JSON.stringify({ confirmatory: s.confirmatory, sensi
         ok('R: §5.4 detects a half-length exposure rather than reporting zero',
           flagged != null && Number(flagged[1]) === 10,
           `expected 10 flagged rows (one participant x ten conditions), got ${flagged ? flagged[1] : 'no match'}`);
+        ok('R: an export with no target locations (pre-Round 66) fits the trial model without the ring terms, and says so',
+          /\[location\] NO target location/.test(shortOut) && /\[sdt\] polarity effect on d'/.test(shortOut) && !/\[sdt\] ring/.test(shortOut),
+          'no [location] message, or the ring line printed anyway');
         ok('R: the flagged rows are counted as failing a §5 check',
           /rows failing at least one §5 check:\s*10\//.test(shortOut),
           'the combined qc_clean flag did not pick them up');

@@ -31,9 +31,10 @@ import type { RtAccuracy } from '@/storage/types';
 import { buildFixtureBundle } from './bundleFixture';
 import { makeRng, gaussian } from './rng';
 import { blockPlan } from '@/experiment/counterbalance';
-import { CONDITIONS } from '@/experiment/conditions';
+import { CONDITIONS, rtStimulusColours } from '@/experiment/conditions';
 import { PASSAGES, countWords } from '@/experiment/passages';
 import { computeSdt } from '@/lib/signalDetection';
+import { planRtBlock, eccentricityDeg } from '@/lib/rtLocations';
 import { CONFIG } from '@/experiment/config';
 
 export interface CohortOptions {
@@ -50,6 +51,13 @@ export interface CohortOptions {
    * The sum-coded polarity coefficient (positive minus negative) has the SAME sign.
    */
   polarityEffectOnComprehension?: number;
+  /**
+   * Added to d' (probit units) under POSITIVE polarity, so the polarity effect on sensitivity
+   * (positive minus negative) has the SAME sign. Default 0.
+   */
+  polarityEffectOnDprime?: number;
+  /** Added to d' on the OUTER ring of target locations (negative = harder at 8 deg). Default -0.4. */
+  outerRingEffectOnDprime?: number;
   /** 0-based participant indices who withdrew. */
   withdrawn?: number[];
   /** 0-based participant indices whose last condition was started and never finished. */
@@ -59,6 +67,13 @@ export interface CohortOptions {
 }
 
 const logistic = (x: number) => 1 / (1 + Math.exp(-x));
+/** Abramowitz & Stegun 7.1.26 (|error| < 1.5e-7) — ample for drawing simulated responses. */
+function erf(x: number): number {
+  const s = Math.sign(x); const a = Math.abs(x);
+  const t = 1 / (1 + 0.3275911 * a);
+  const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-a * a);
+  return s * y;
+}
 /** JSON-escaped form: the fixture's participant id carries a comma and a quote on purpose. */
 const esc = (v: string) => JSON.stringify(v).slice(1, -1);
 
@@ -73,6 +88,8 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
   };
   const polInc = opts.polarityEffectOnIncomplete ?? 0.4;
   const polComp = opts.polarityEffectOnComprehension ?? 0.6;
+  const polDp = opts.polarityEffectOnDprime ?? 0;
+  const outerDp = opts.outerRingEffectOnDprime ?? -0.4;
   const passageEffect = PASSAGES.map(() => gaussian(rng, 0, 0.15));
   const colourEffect: Record<string, number> = { achromatic: 0, blue: 0.1, red: 0.05, yellow: -0.1, green: 0 };
   const bundles: SessionBundle[] = [];
@@ -142,29 +159,51 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
       });
     }
 
-    // Reaction time: 20 go and 12 no-go per block; the trials are rewritten to MATCH the drawn counts.
+    /*
+     * Reaction time, TRIAL BY TRIAL. Every block is laid out by the app's own planner (planRtBlock:
+     * 20 go and 12 no-go, 10 and 6 per ring), so the go/no-go split per ring is the real one — the
+     * fixture's fixed layout put every no-go trial on the inner ring, which aliases ring with
+     * signal and leaves a trial-level ring term unestimable. Each trial's response is then drawn from
+     * an equal-variance signal-detection model, P(respond) = Phi(+-d'/2 - c), with KNOWN effects of
+     * polarity and ring on d', so the templates' trial-level probit model can be checked for
+     * recovering their sign; the summary row is recomputed from the trials, so the two agree.
+     */
+    const dpU = gaussian(rng, 0, 0.3);
+    const critU = gaussian(rng, 0, 0.2);
+    const phi = (x: number) => 0.5 * (1 + erf(x / Math.SQRT2));
     for (const r of b.rtSummaries) {
       const c = byId.get(r.condition_id)!;
+      const def = CONDITIONS.find((d) => d.label === c.condition_label)!;
+      const colours = rtStimulusColours(def);
+      const plan = planRtBlock({
+        nGo: 20, nNoGo: 12, maxRun: CONFIG.RT_MAX_RUN, target: colours.target, distractors: colours.distractors,
+        blockIndex: c.session_position, practice: false, rand: rng,
+      });
       const trials = b.reactionTrials.filter((t) => t.condition_id === r.condition_id);
-      const nSignal = trials.filter((t) => t.is_signal).length;
-      const nNoise = trials.length - nSignal;
-      const hits = binom(nSignal, 0.93);
-      const fas = binom(nNoise, 0.15);
-      let seenSignal = 0; let seenNoise = 0;
+      let hits = 0; let misses = 0; let fas = 0; let crs = 0;
       const hitRts: number[] = [];
-      for (const t of trials) {
-        const responded = t.is_signal ? seenSignal++ < hits : seenNoise++ < fas;
-        const accuracy: RtAccuracy = t.is_signal ? (responded ? 'hit' : 'miss') : (responded ? 'false_alarm' : 'correct_rejection');
-        const rt = responded
-          ? Math.round(380 + rtU + 4 * c.session_position + gaussian(rng, 0, 45))
-          : null;
-        Object.assign(t, { accuracy, response_time_ms: rt == null ? null : Math.max(160, rt) });
-        if (accuracy === 'hit' && t.response_time_ms != null) hitRts.push(t.response_time_ms);
-      }
-      const sdt = computeSdt({ hits, misses: nSignal - hits, falseAlarms: fas, correctRejections: nNoise - fas });
+      trials.forEach((t, k) => {
+        const p = plan.trials[k];
+        const outer = p.location.ring === 'outer';
+        const dp = 2.6 + dpU + (c.polarity === 'positive' ? 0.5 : -0.5) * polDp + (outer ? outerDp : 0);
+        const crit = 0.15 + critU;
+        const responded = rng() < phi((p.signal ? dp / 2 : -dp / 2) - crit);
+        const accuracy: RtAccuracy = p.signal ? (responded ? 'hit' : 'miss') : (responded ? 'false_alarm' : 'correct_rejection');
+        const rt = responded ? Math.max(160, Math.round(380 + rtU + 4 * c.session_position + (outer ? 20 : 0) + gaussian(rng, 0, 45))) : null;
+        Object.assign(t, {
+          is_signal: p.signal, trial_category: p.signal ? 'signal' : 'noise', stimulus_color: p.color,
+          stim_location_id: p.location.id, stim_ring: p.location.ring, stim_angle_deg: p.location.angleDeg,
+          stim_dx_px: p.location.dx, stim_dy_px: p.location.dy, stim_ecc_px: p.location.eccPx,
+          stim_ecc_deg_55cm: eccentricityDeg(p.location.eccPx, 1),
+          accuracy, response_time_ms: rt,
+        });
+        if (accuracy === 'hit') { hits++; hitRts.push(rt!); } else if (accuracy === 'miss') misses++;
+        else if (accuracy === 'false_alarm') fas++; else crs++;
+      });
+      const sdt = computeSdt({ hits, misses, falseAlarms: fas, correctRejections: crs });
       const mean = hitRts.length ? hitRts.reduce((a, x) => a + x, 0) / hitRts.length : null;
       Object.assign(r, {
-        hits, misses: nSignal - hits, false_alarms: fas, correct_rejections: nNoise - fas,
+        hits, misses, false_alarms: fas, correct_rejections: crs,
         hit_rate: sdt.hit_rate, false_alarm_rate: sdt.false_alarm_rate,
         mean_rt_hits_ms: mean == null ? null : Math.round(mean * 100) / 100,
         d_prime: sdt.d_prime, d_prime_se: sdt.d_prime_se, d_prime_unstable: sdt.d_prime_unstable,

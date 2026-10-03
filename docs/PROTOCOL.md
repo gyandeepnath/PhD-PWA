@@ -185,7 +185,7 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
   prefer within-person change. When uncalibrated, a population default zero is used.
 - **Contrast confound**: P4 (yellow-on-white) is below WCAG AA (2.39:1); treat WCAG ratio as a
   covariate or reframe as polarity × contrast.
-- **Per-condition d′** rests on ~20 signal (go) trials of 32 (unstable; SE often > 0.3) — report aggregated d′.
+- **Per-condition d′** rests on ~20 signal (go) trials of 32, so one block's d′ is imprecise (its SE cannot fall below about 0.46). It is not read block by block: the analysis template fits a trial-level probit GLMM to `08_reaction_trials.csv` (d′ and criterion effects together, with the ring terms of ANALYSIS_PLAN.md §4a), and an unweighted per-block LMM as a cross-check (Round 71).
 - **Session length** (median ~97 min) accumulates fatigue; `session_position` (0 … conditions_per_session − 1, so 0–9 for a full sitting) is recorded as a covariate.
 
 ## 7. Boredom / disengagement vs. fatigue

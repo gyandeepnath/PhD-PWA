@@ -616,15 +616,20 @@ OUTCOME_FAMILIES <- list(
   ocular      = c("blink rate", "inter-blink interval"),
   subjective  = c("fatigue", "comfort", "clarity"),
   performance = c("reading speed", "comprehension", "RT", "RT variability", "lapse rate",
-                  "d-prime", "criterion", "search completion", "search time")
+                  "d-prime", "criterion", "search completion", "search rate", "search d-prime")
 )
 family_rows <- list()
 # Registered where each model is fitted; read once, at the end, by the multiplicity table.
-add_to_family <- function(outcome, m, units, odds_ratio = FALSE, note = NULL, converged = TRUE) {
+# `effect` is a precomputed list(estimate, lcl, ucl, p, p_int) for a model whose polarity effect is not
+# the emmeans main effect — the trial-level signal-detection model, where it is a slope or minus an
+# intercept.
+add_to_family <- function(outcome, m, units, odds_ratio = FALSE, note = NULL, converged = TRUE, effect = NULL) {
   if (!converged) units <- paste(units, "[NOT CONVERGED]")
   row <- list(outcome = outcome, units = units, estimate = NA_real_, lcl = NA_real_, ucl = NA_real_,
               p = NA_real_, p_int = NA_real_, note = note)
-  if (!is.null(m)) {
+  if (!is.null(effect)) {
+    row[c("estimate", "lcl", "ucl", "p", "p_int")] <- effect[c("estimate", "lcl", "ucl", "p", "p_int")]
+  } else if (!is.null(m)) {
     pc <- tryCatch(polarity_contrast(m), error = function(err) conditionMessage(err))
     if (is.character(pc)) row$note <- paste("polarity contrast failed:", pc) else {
       tf <- if (odds_ratio) exp else identity
@@ -703,11 +708,9 @@ ALLFIT_LOGLIK_TOL    <- 0.01    # ANALYST DEFAULT — not in the protocol. An op
                                 # reached the maximum when its log-likelihood is within this of the
                                 # best found (a deviance difference of 0.02, immaterial to any test);
                                 # only those are compared, and the fit itself must be one of them.
-CENSOR_SPREAD_WARN_PP <- 10     # ANALYST DEFAULT — not in the protocol. Percentage points of spread
-                                # in the visual-search censoring rate ACROSS CONDITIONS beyond which
-                                # the time model must not be read unqualified. Any non-zero spread is
-                                # a problem in principle; this is the point at which it stops being
-                                # arguably negligible.
+# CENSOR_SPREAD_WARN_PP (10 percentage points of spread in the search censoring rate across conditions)
+# is gone as well: a range over ten small cells is not a test, and under the null it fired in most
+# simulated datasets. Censoring is now tested by a likelihood ratio (see Visual search).
 COMPLETION_INFORMATIVE <- c(0.05, 0.95)  # ANALYST DEFAULT — not in the protocol. Outside this band
                                 # the completion outcome is near-constant and carries little
                                 # information, so the time model is the better instrument.
@@ -905,13 +908,6 @@ conv_comp <- convergence_verdict(m_comp)
 cat("[convergence] comprehension:", conv_comp$text, "\n")
 add_to_family("comprehension", m_comp, "odds ratio, correct", odds_ratio = TRUE, converged = conv_comp$ok)
 
-# --- d-prime: aggregate ACROSS conditions per participant (per-condition d' is unstable) ----
-dprime_overall <- rt_summary %>%
-  group_by(participant_id) %>%
-  summarise(mean_dprime = mean(d_prime, na.rm = TRUE),
-            any_unstable = any(d_prime_unstable, na.rm = TRUE))
-cat("\n=== Aggregated d' per participant ===\n"); print(dprime_overall)
-
 # ===========================================================================================
 # SECONDARY OUTCOMES from ANALYSIS_PLAN.md §4 that this file did not model at all.
 #
@@ -945,61 +941,190 @@ if ("reading_speed_wpm" %in% names(cond) && sum(is.finite(cond$reading_speed_wpm
   cat("\n[reading speed] reading_speed_wpm carries no finite values — not modelled.\n")
 }
 
-# --- Response bias and sensitivity (§4: LMM each) -----------------------------------------
+# ===========================================================================================
+# SENSITIVITY AND RESPONSE BIAS — the TRIAL-LEVEL signal-detection model (M8; ANALYSIS_PLAN.md §4, §4a)
+#
 # §4 is explicit about why these are separate: "A polarity effect on `criterion` WITHOUT one on
-# `d_prime` is a bias shift, not a sensitivity change. Worth reporting as a distinct finding rather
-# than folding into 'RT performance'." Folding them in is exactly what this file did.
-if ("criterion" %in% names(rt) && sum(is.finite(rt$criterion)) > 0) {
-  cat("\n=== Response bias: criterion (secondary, §4) ===\n")
-  m_crit <- tryCatch(
-    lmer(as.formula(paste0("criterion ~ polarity * colour", ilx_term,
-                           " + session_position + (1 | participant_id)", re_sitting, re_passage)),
-         data = rt),
-    error = function(err) NULL
-  )
-  if (is.null(m_crit)) cat("the criterion model did not fit.\n") else { print(summary(m_crit)); report_n(m_crit, rt, "criterion") }
-  add_to_family("criterion", m_crit, "criterion (z units)")
-}
-
-# §4 on d-prime: "With 20 go and 12 no-go trials, one block's d' is imprecise. Check `d_prime_se`
-# and consider weighting." Weighted by inverse variance, so an imprecise block carries the weight it
-# has earned rather than the same weight as a precise one. Unstable blocks are reported, not dropped.
-if ("d_prime" %in% names(rt) && sum(is.finite(rt$d_prime)) > 0) {
-  cat("\n=== Sensitivity: d-prime, inverse-variance weighted (secondary, §4) ===\n")
-  dp <- rt %>% filter(is.finite(d_prime))
-  n_unstable <- sum(dp$d_prime_unstable %in% c(TRUE, "true"), na.rm = TRUE)
-  cat("blocks flagged d_prime_unstable: ", qc_pct(n_unstable, nrow(dp)), " - RETAINED\n")
-  usable_se <- with(dp, is.finite(d_prime_se) & d_prime_se > 0)
-  if (all(usable_se)) {
-    dp$dp_w <- 1 / dp$d_prime_se^2
-    cat("weights: 1 / d_prime_se^2\n")
-  } else {
-    dp$dp_w <- 1
-    cat("d_prime_se is missing or zero on ", qc_pct(sum(!usable_se), nrow(dp)),
-        " of blocks, so the fit is UNWEIGHTED. §4 asks for weighting to be considered; it could not be applied here.\n")
+# `d_prime` is a bias shift, not a sensitivity change." Both used to be LMMs on the per-block
+# summaries, and d' was weighted by 1 / d_prime_se^2. That weighting was biased: the standard error of
+# d' RISES with d' (on the Round 62 audit's N = 40 cohort their correlation was 0.95), so it
+# down-weighted exactly the high-sensitivity blocks, and any condition that raised d' — the weighted
+# mean was 2.48 where the unweighted one was 2.61. And it printed "blocks flagged d_prime_unstable" as
+# though that were a finding, when with 20 go and 12 no-go trials no block can have an SE below about
+# 0.46, so the 0.3 flag is TRUE for every block there can be (400 of 400 on that cohort).
+#
+# The model that needs neither a weight nor a per-block d' is a probit GLMM on the trials themselves.
+# Each scored trial is a Bernoulli "responded or not"; with the signal coded sig = +0.5 (go) / -0.5
+# (no-go), the equal-variance signal-detection model is P(respond) = Phi(a + d' * sig), so
+#   - every term multiplying `sig` is an effect on SENSITIVITY (d', probit units), and
+#   - every term not multiplying it is an effect on (minus) the CRITERION: a = -c, where c is the
+#     criterion at the midpoint between the two distributions — the quantity 09_rt_summary.csv's
+#     `criterion` column estimates per block, -(z(H) + z(F)) / 2.
+# Wright, Horry & Skagerberg (2009; CITATION_VERIFICATION item 59) argue for multilevel generalized
+# linear models as the alternative to computing signal-detection measures participant by participant;
+# the probit coding of the signal term above is the method, described here rather than attributed. Extreme rates need no correction here: a block of 20 hits out of 20
+# is a likelihood term like any other, where the per-block formula must nudge it off the bound.
+#
+# Anticipations (accuracy 'anticipation', RT under 150 ms) are left out, as the summaries leave them
+# out of both pools. Trials with identical covariates are grouped as cbind(responded, not) — the
+# likelihood is the same as one row per trial, and the fit takes seconds instead of minutes.
+#
+# TARGET LOCATION (Round 66, ANALYSIS_PLAN.md §4a). From Round 66 every block puts 10 go and 6 no-go
+# trials on each ring (4 deg and 8 deg), so the ring and ring x colour terms §4a fixes in advance are
+# estimable on both sensitivity and criterion. Rows recorded before Round 66 carry no location; they
+# are never imputed. With no location anywhere the model is fitted without the ring terms and says so;
+# with some, the ring model is fitted on the located trials and the count left out is printed.
+#
+# The per-block LMMs are kept as CROSS-CHECKS, UNWEIGHTED, and are not in any outcome family.
+# ===========================================================================================
+trials <- tryCatch(read_export("08_reaction_trials.csv"), error = function(err) NULL)
+if (!is.null(trials)) trials <- keep_rows(trials)
+m_sdt <- NULL
+if (is.null(trials) || nrow(trials) == 0) {
+  cat("\n[signal detection] 08_reaction_trials.csv not found or empty — the trial-level model is NOT run;\n")
+  cat("                   the per-block cross-checks below are the only sensitivity and bias analysis.\n")
+} else {
+  if (!"stim_ring" %in% names(trials)) trials$stim_ring <- NA_character_
+  sdt_trials <- trials %>%
+    filter(accuracy %in% c("hit", "miss", "false_alarm", "correct_rejection")) %>%
+    left_join(cond %>% select(condition_id, polarity, colour, passage_id, session_position), by = "condition_id") %>%
+    mutate(responded = as.integer(accuracy %in% c("hit", "false_alarm")),
+           sig = ifelse(as_flag(is_signal), 0.5, -0.5),
+           ring = factor(stim_ring, levels = c("inner", "outer")))
+  n_located <- sum(!is.na(sdt_trials$ring))
+  USE_RING <- n_located > 0 && n_distinct(na.omit(sdt_trials$ring)) == 2
+  cat("\n=== SENSITIVITY AND CRITERION: trial-level probit GLMM (secondary, §4 and §4a) ===\n")
+  cat(sprintf("scored trials: %d (anticipations excluded, as in the summaries); with a target location: %d\n",
+              nrow(sdt_trials), n_located))
+  if (!USE_RING) {
+    cat("[location] NO target location in these trials (an export recorded before Round 66, which did not\n")
+    cat("           record where the dot appeared). The model is fitted WITHOUT the ring and ring x colour\n")
+    cat("           terms ANALYSIS_PLAN.md §4a specifies; they cannot be estimated from this data.\n")
+  } else if (n_located < nrow(sdt_trials)) {
+    cat(sprintf("[location] %d trial(s) carry no location (recorded before Round 66) and are LEFT OUT of this model,\n",
+                nrow(sdt_trials) - n_located))
+    cat("           never imputed. A dataset pooling both layouts should carry git_hash as a factor (§4a).\n")
+    sdt_trials <- sdt_trials %>% filter(!is.na(ring))
   }
-  m_dp <- tryCatch(
-    lmer(as.formula(paste0("d_prime ~ polarity * colour", ilx_term,
-                           " + session_position + (1 | participant_id)", re_sitting, re_passage)),
-         data = dp, weights = dp$dp_w),
-    error = function(err) NULL
-  )
-  if (is.null(m_dp)) cat("the d-prime model did not fit.\n") else { print(summary(m_dp)); report_n(m_dp, dp, "d-prime") }
-  add_to_family("d-prime", m_dp, "d' (z units)")
+  if (USE_RING) contrasts(sdt_trials$ring) <- contr.sum(2) / 2
+  sdt_cells <- sdt_trials %>%
+    group_by(across(any_of(c("participant_id", "condition_id", "polarity", "colour", "passage_id",
+                             "session_position", "sig", if (USE_RING) "ring")))) %>%
+    summarise(k_resp = sum(responded), n_trials = n(), .groups = "drop")
+  sdt_terms <- paste0("polarity * colour", ilx_term, " + session_position", if (USE_RING) " + ring + ring:colour" else "")
+  m_sdt <- tryCatch(
+    glmer(as.formula(paste0("cbind(k_resp, n_trials - k_resp) ~ sig * (", sdt_terms, ")",
+                            " + (1 + sig | participant_id)", re_passage)),
+          data = sdt_cells, family = binomial(link = "probit"),
+          control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))),
+    error = function(err) { cat("the trial-level probit model did not fit:", conditionMessage(err), "\n"); NULL })
+}
+# The two effects of a factor on this model: on d' (the slope of sig) and on the criterion (minus the
+# intercept at sig = 0), each as positive minus negative, averaged over colour (and ring).
+sdt_effect <- function(m, which) {
+  # The formulas on lines of their own, for the reason given at m_additive.
+  e <- if (which == "dprime") {
+    suppressMessages(emtrends(m, ~ polarity, var = "sig"))
+  } else {
+    suppressMessages(emmeans(m, ~ polarity, at = list(sig = 0)))
+  }
+  s <- summary(pairs(e), infer = c(TRUE, TRUE))
+  flip <- if (which == "criterion") -1 else 1   # c = -a
+  lo <- flip * ci_col(s, "lower"); hi <- flip * ci_col(s, "upper")
+  list(estimate = flip * s$estimate, lcl = min(lo, hi), ucl = max(lo, hi), p = s$p.value)
+}
+# A joint Wald chi-square on the coefficients whose names match `pattern` — the polarity x colour
+# interaction on d' or on the criterion, or the ring x colour one. Wald rather than a likelihood
+# ratio, so that a test is one matrix product and not one more refit of a 20-second model.
+wald_terms <- function(m, pattern) {
+  b <- fixef(m); hit <- grep(pattern, names(b))
+  if (!length(hit)) return(c(chisq = NA_real_, df = 0, p = NA_real_))
+  V <- as.matrix(vcov(m))[hit, hit, drop = FALSE]
+  x2 <- as.numeric(t(b[hit]) %*% solve(V, b[hit]))
+  c(chisq = x2, df = length(hit), p = pchisq(x2, length(hit), lower.tail = FALSE))
+}
+if (!is.null(m_sdt)) {
+  print(summary(m_sdt)); report_n(m_sdt, sdt_cells, "signal detection (trial cells)")
+  cat(sprintf("[n] signal detection: %d scored trials in %d cells of identical covariates\n", sum(sdt_cells$n_trials), nrow(sdt_cells)))
+  conv_sdt <- convergence_verdict(m_sdt)
+  cat("[convergence] signal detection:", conv_sdt$text, "\n")
+  e_dp <- sdt_effect(m_sdt, "dprime"); e_c <- sdt_effect(m_sdt, "criterion")
+  w_dp_int <- wald_terms(m_sdt, "^sig:polarity1:colour\\d$")
+  w_c_int <- wald_terms(m_sdt, "^polarity1:colour\\d$")
+  dp_by_pol <- summary(suppressMessages(emtrends(m_sdt, ~ polarity, var = "sig")))
+  cat(sprintf("[sdt] d' (averaged over colour%s): positive %.3f, negative %.3f\n", if (USE_RING) " and ring" else "",
+              dp_by_pol$sig.trend[dp_by_pol$polarity == "positive"], dp_by_pol$sig.trend[dp_by_pol$polarity == "negative"]))
+  cat(sprintf("[sdt] polarity effect on d' (positive minus negative) %.3f (95%% CI %.3f to %.3f), p %s; polarity x colour on d': Wald chi2(%d) %.2f, p %s\n",
+              e_dp$estimate, e_dp$lcl, e_dp$ucl, format.pval(e_dp$p, digits = 2), as.integer(w_dp_int["df"]), w_dp_int["chisq"], format.pval(w_dp_int["p"], digits = 2)))
+  cat(sprintf("[sdt] polarity effect on the criterion c (positive minus negative) %.3f (95%% CI %.3f to %.3f), p %s; polarity x colour on c: Wald chi2(%d) %.2f, p %s\n",
+              e_c$estimate, e_c$lcl, e_c$ucl, format.pval(e_c$p, digits = 2), as.integer(w_c_int["df"]), w_c_int["chisq"], format.pval(w_c_int["p"], digits = 2)))
+  cat("      (a criterion effect WITHOUT a d' effect is a bias shift, not a sensitivity change — §4)\n")
+  if (USE_RING) {
+    dp_ring <- summary(suppressMessages(emtrends(m_sdt, ~ ring, var = "sig")))
+    w_ring <- wald_terms(m_sdt, "^sig:ring1$"); w_ringcol <- wald_terms(m_sdt, "^sig:colour\\d:ring1$")
+    cat(sprintf("[sdt] ring (§4a): d' inner %.3f, outer %.3f; ring on d' Wald p %s; ring x colour on d' Wald chi2(%d) %.2f, p %s\n",
+                dp_ring$sig.trend[dp_ring$ring == "inner"], dp_ring$sig.trend[dp_ring$ring == "outer"],
+                format.pval(w_ring["p"], digits = 2), as.integer(w_ringcol["df"]), w_ringcol["chisq"], format.pval(w_ringcol["p"], digits = 2)))
+  }
+  add_to_family("d-prime", m_sdt, "d' (probit units)", converged = conv_sdt$ok,
+                effect = c(e_dp, list(p_int = unname(w_dp_int["p"]))))
+  add_to_family("criterion", m_sdt, "criterion c (probit units)", converged = conv_sdt$ok,
+                effect = c(e_c, list(p_int = unname(w_c_int["p"]))))
 }
 
-# --- Visual search (§4: LMM, censored) ----------------------------------------------------
+# --- CROSS-CHECKS on the per-block summaries: d' and criterion, UNWEIGHTED (not in any family) ---
+# Unweighted, for the reason given above. A d' per block that the trial model and this disagree on in
+# SIGN is worth a look: the per-block value is rate-corrected at the bounds, the trial model is not.
+cat("\n=== Cross-check: per-block d' and criterion, LMM, UNWEIGHTED (not in any outcome family) ===\n")
+for (dv in c("d_prime", "criterion")) {
+  if (!(dv %in% names(rt)) || !any(is.finite(rt[[dv]]))) { cat(sprintf("[cross-check] %s carries no values.\n", dv)); next }
+  d_blk <- rt %>% filter(is.finite(.data[[dv]]))
+  m_blk <- tryCatch(
+    lmer(as.formula(paste0(dv, " ~ polarity * colour", ilx_term,
+                           " + session_position + (1 | participant_id)", re_sitting, re_passage)),
+         data = d_blk),
+    error = function(err) NULL
+  )
+  if (is.null(m_blk)) { cat(sprintf("[cross-check] the per-block %s model did not fit.\n", dv)); next }
+  pc_blk <- polarity_contrast(m_blk)
+  cat(sprintf("[cross-check] per-block %s: polarity (positive minus negative) %.3f (95%% CI %.3f to %.3f), p %s\n",
+              dv, pc_blk$estimate, pc_blk$lcl, pc_blk$ucl, format.pval(pc_blk$p, digits = 2)))
+  report_n(m_blk, d_blk, paste("per-block", dv))
+}
+if (is.null(m_sdt)) {
+  # The trial model is the registered analysis; without it the families say so rather than quietly
+  # substituting the per-block fit.
+  add_to_family("d-prime", NULL, "d' (probit units)", note = "trial-level model not fitted (see its section)")
+  add_to_family("criterion", NULL, "criterion c (probit units)", note = "trial-level model not fitted (see its section)")
+}
+
+# --- Visual search (§4, amended in Round 71) -------------------------------------------------
 # §4: "`search_termination` says whether the block ended by completion or by the 60 s cap. Capped
 # rows are a lower bound; treating them as measurements biases the mean downward. Either model them
-# as censored or report the completion rate alongside."
+# as censored or report the completion rate alongside." The column is `termination_mode` in
+# 05_visual_search.csv and `search_termination` in analysis_long.csv.
 #
-# TWO THINGS TO STATE PLAINLY. The column is called `termination_mode` in the export, not
-# `search_termination` — the plan named a column that does not exist, which is the same defect class
-# that stopped this whole file running. And the second of the plan's two permitted options is taken:
-# the completion rate is reported beside an uncensored fit. A genuinely censored LMM needs a package
-# this template does not carry, and adding a dependency silently is worse than saying which option
-# was used. The fit below is therefore BIASED DOWNWARD to the extent that rows hit the cap, and the
-# completion rate is the number that says how much.
+# What used to be here: an UNCENSORED LMM of search time, a completion GLMM, and a rule that warned
+# when the censoring rates of the ten conditions spanned more than 10 percentage points. That rule is
+# not a test. Ten cells of about 20-40 blocks each spread that far by sampling alone: in the Round 62
+# audit's null simulations, where censoring did not depend on condition at all, it fired in 79% of
+# datasets at N = 40 (10% censoring) and 97% (20%), and in 14% / 55% at N = 130. It is gone
+# (CENSOR_SPREAD_WARN_PP removed, not relabelled), and four models take its place:
+#   1. CENSORING, TESTED: a likelihood-ratio test of censored ~ polarity x colour against the same
+#      model without the condition terms. It says whether censoring depends on condition; a large p
+#      is not evidence that it does not.
+#   2. SEARCH RATE (the search-speed outcome in the performance family): a Poisson GLMM of
+#      targets_found with log(search_time_ms in minutes) as an OFFSET — targets found per minute of
+#      searching, with the passage intercept (the target count differs by passage). A block that hit
+#      the cap contributes the targets it found over the time it searched, which is exactly what was
+#      observed, so the rate needs no censoring model; it is the modelled form of search_efficiency.
+#   3. SEARCH d': sensitivity over words (targets tapped against non-targets tapped), which the
+#      codebook asks to prefer to accuracy. An LMM, unweighted — search_d_prime_se, like the go/no-go
+#      d_prime_se, grows with the estimate — with the passage intercept, because its precision and the
+#      target count both differ by passage.
+#   4. COMPLETION within the window, the censoring-immune binomial, as before.
+# The uncensored time LMM is still printed, as a description, in no family: its mean is biased
+# downward by the censoring and nothing below rests on it.
 search <- tryCatch(read_export("05_visual_search.csv"), error = function(err) NULL)
 # Trimmed to the confirmatory set like every other table. It was read here, after the trimming at the
 # top, and never trimmed at all: a withdrawn participant's searches entered the censoring tables, and
@@ -1023,27 +1148,15 @@ if (!is.null(search) && "search_time_ms" %in% names(search)) {
     cat("blocks ending before every target was found (right-censored): ",
         qc_pct(capped + quit_early, nrow(vs)), "\n")
     cat("  of which at the time limit:", capped, "; stopped early by the participant:", quit_early, "\n")
-    cat("the model below is UNCENSORED, so its mean is biased DOWNWARD by that fraction.\n")
   } else {
-    cat("termination_mode absent — the censoring rate cannot be reported for this export.\n")
+    cat("termination_mode absent — the censoring rate cannot be reported or tested for this export.\n")
   }
-  # -----------------------------------------------------------------------------------------
-  # CENSORING BY CONDITION. This is the part that decides whether the time model means anything.
-  #
-  # A uniform censoring rate biases every condition's mean downward by roughly the same amount, and
-  # a comparison BETWEEN conditions partly survives it. A rate that VARIES by condition does not:
-  # if low-contrast or dark-polarity blocks hit the cap more often, then the conditions are censored
-  # unequally, and the difference in mean search time is partly a difference in how often the clock
-  # ran out. That bias points the same way as the hypothesis, which is the worst possible direction.
-  #
-  # So the rate is broken out by polarity and colour before any coefficient is read.
-  # -----------------------------------------------------------------------------------------
   if ("termination_mode" %in% names(vs)) {
     vs$capped <- vs$termination_mode == "time_limit"
     vs$quit_early <- vs$termination_mode == "voluntary_early"
-    vs$censored <- vs$termination_mode != "voluntary_full"
-    vs$completed <- vs$termination_mode == "voluntary_full"
-    cat("\ncensoring rate by condition (the number that decides whether the time model is usable):\n")
+    vs$censored <- as.integer(vs$termination_mode != "voluntary_full")
+    vs$completed <- as.integer(vs$termination_mode == "voluntary_full")
+    cat("\ncensoring rate by condition (described here, TESTED below):\n")
     by_cond <- vs %>%
       group_by(polarity, colour) %>%
       # n_capped, NOT capped: summarise() evaluates its arguments in order and in the same scope, so
@@ -1057,58 +1170,129 @@ if (!is.null(search) && "search_time_ms" %in% names(search)) {
                 pct_completed = round(100 * mean(completed, na.rm = TRUE), 1),
                 .groups = "drop")
     print(as.data.frame(by_cond))
-    # On everything censored, not only the cap: see above.
-    spread_pct <- diff(range(by_cond$pct_censored))
-    cat("\nspread in censoring across conditions:", round(spread_pct, 1), "percentage points\n")
-    if (is.finite(spread_pct) && spread_pct > CENSOR_SPREAD_WARN_PP) {
-      cat("*** The censoring rate differs by more than", CENSOR_SPREAD_WARN_PP, "points between conditions. The mean search\n")
-      cat("*** time is then partly a measure of how often the clock ran out, and that bias runs WITH\n")
-      cat("*** the hypothesis. Use the completion model below as the primary search outcome, or fit\n")
-      cat("*** a properly censored model, before drawing any conclusion from the times.\n")
+
+    # 1. Does censoring depend on the condition? One likelihood-ratio test of the ten-cell terms,
+    # with the serial-position and passage terms in both models, so it asks about the display alone.
+    cat("\n=== Visual search: does censoring depend on the condition? (likelihood-ratio test) ===\n")
+    cens_lrt <- tryCatch({
+      m_c0 <- suppressWarnings(glmer(as.formula(paste0("censored ~ session_position + (1 | participant_id)", re_sitting, re_passage)),
+                                     data = vs, family = binomial))
+      m_c1 <- suppressWarnings(update(m_c0, as.formula(paste0(". ~ . + polarity * colour", ilx_term))))
+      anova(m_c0, m_c1)
+    }, error = function(err) conditionMessage(err))
+    if (is.character(cens_lrt)) {
+      cat("[censoring] the test could not be run:", cens_lrt, "\n")
+    } else if (sum(vs$censored) == 0) {
+      cat("[censoring] no block was censored: nothing to test, and the time model below is not biased by censoring.\n")
+    } else {
+      cat(sprintf("[censoring] LRT of the condition terms: chi2(%d) %.2f, p %s\n",
+                  as.integer(cens_lrt$Df[2]), cens_lrt$Chisq[2], format.pval(cens_lrt[["Pr(>Chisq)"]][2], digits = 2)))
+      cat("[censoring] A small p means the conditions are censored unequally, so a difference in mean search time is\n")
+      cat("            partly a difference in how often the clock ran out. A large p does not show equal censoring.\n")
+      cat("            Neither the search-rate model nor the completion model below depends on the answer.\n")
     }
 
-    # COMPLETION AS AN OUTCOME IN ITS OWN RIGHT — "did they find every target inside the window?"
-    #
-    # This is immune to the censoring problem by construction: it uses the fact that the clock ran
-    # out rather than pretending a time was measured. It is a binomial proportion, the same family
-    # as the primary outcome. It is LESS powerful than a clean time measure, because someone who
-    # finished in 10 s and someone who finished at 59 s both count as a success — so it is reported
-    # beside the time model, not instead of it, and which one is primary depends on the censoring
-    # rate printed above.
-    #
-    # It is also only informative if it VARIES. If nearly everyone completes, or nearly no one does,
-    # there is almost nothing to model and the time measure is the better instrument.
+    # 4. COMPLETION within the window — "did they find every target?" — binomial and immune to the
+    # censoring problem by construction. Informative only if it VARIES; and when some polarity x
+    # colour cell completed every block (or none), the ten-cell logistic model is SEPARATED: its
+    # coefficients run off towards infinity with standard errors in the hundreds, and the effect it
+    # prints (an odds ratio of 43 with an interval from 0 to infinity, on a simulated cohort) is no
+    # estimate at all. Then the additive model (polarity + colour) is fitted instead, and said.
     cat("\n=== Visual search: completed within the window (binomial, censoring-immune) ===\n")
     rate <- mean(vs$completed, na.rm = TRUE)
     cat("overall completion rate:", round(100 * rate, 1), "%\n")
     if (!is.finite(rate) || rate < COMPLETION_INFORMATIVE[1] || rate > COMPLETION_INFORMATIVE[2]) {
-      cat("completion is near-constant at this cap, so it carries little information — read the time\n")
+      cat("completion is near-constant at this cap, so it carries little information — read the search-rate\n")
       cat("model instead, and note the cap in the limitations.\n")
+      add_to_family("search completion", NULL, "odds ratio, completed", note = "near-constant: not modelled (see its section)")
     } else {
-      m_vs_done <- tryCatch(
-        glmer(as.formula(paste0("completed ~ polarity * colour", ilx_term,
-                                " + session_position + (1 | participant_id)", re_sitting, re_passage)),
-              data = vs, family = binomial),
-        error = function(err) NULL
-      )
-      if (is.null(m_vs_done)) cat("the completion model did not fit.\n") else {
-        print(summary(m_vs_done)); report_n(m_vs_done, vs, "search completion")
-        conv_done <- convergence_verdict(m_vs_done)
-        cat("[convergence] search completion:", conv_done$text, "\n")
-        add_to_family("search completion", m_vs_done, "odds ratio, completed", odds_ratio = TRUE, converged = conv_done$ok)
+      degenerate <- function(g) any(tapply(vs$completed, g, function(x) all(x == 1) || all(x == 0)))
+      if (degenerate(interaction(vs$polarity, vs$colour)) && (degenerate(vs$polarity) || degenerate(vs$colour))) {
+        cat("[SEPARATION] a polarity or colour level completed every block (or none): no logistic model of completion\n")
+        cat("             is estimable. Read the completion table above and the search-rate model.\n")
+        add_to_family("search completion", NULL, "odds ratio, completed", note = "separated: not estimable (see its section)")
+      } else {
+        separated <- degenerate(interaction(vs$polarity, vs$colour))
+        done_terms <- if (separated) paste0("polarity + colour", il_term) else paste0("polarity * colour", ilx_term)
+        if (separated) {
+          cat("[SEPARATION] at least one polarity x colour cell completed every block (or none), so the ten-cell model is\n")
+          cat("             not estimable; the ADDITIVE model (polarity + colour) is fitted, and no interaction is tested.\n")
+        }
+        m_vs_done <- tryCatch(
+          glmer(as.formula(paste0("completed ~ ", done_terms,
+                                  " + session_position + (1 | participant_id)", re_sitting, re_passage)),
+                data = vs, family = binomial),
+          error = function(err) NULL
+        )
+        if (is.null(m_vs_done)) cat("the completion model did not fit.\n") else {
+          print(summary(m_vs_done)); report_n(m_vs_done, vs, "search completion")
+          conv_done <- convergence_verdict(m_vs_done)
+          cat("[convergence] search completion:", conv_done$text, "\n")
+          add_to_family("search completion", m_vs_done,
+                        if (separated) "odds ratio, completed [additive]" else "odds ratio, completed",
+                        odds_ratio = TRUE, converged = conv_done$ok)
+        }
       }
     }
   }
 
-  cat("\n=== Visual search: time, UNCENSORED (read the censoring table above first) ===\n")
+  # 2. SEARCH RATE: targets found per minute of searching, a Poisson GLMM with the time as exposure.
+  if (all(c("targets_found", "search_time_ms") %in% names(vs))) {
+    vs_rate <- vs %>% filter(is.finite(targets_found), search_time_ms > 0)
+    cat("\n=== Visual search: RATE — targets found per minute (Poisson GLMM, time as exposure) ===\n")
+    m_vs_rate <- tryCatch(
+      glmer(as.formula(paste0("targets_found ~ polarity * colour", ilx_term,
+                              " + session_position + offset(log(search_time_ms / 60000)) + (1 | participant_id)",
+                              re_sitting, re_passage)),
+            data = vs_rate, family = poisson,
+            control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))),
+      error = function(err) NULL
+    )
+    if (is.null(m_vs_rate)) cat("the search-rate model did not fit.\n") else {
+      print(summary(m_vs_rate)); report_n(m_vs_rate, vs_rate, "search rate")
+      conv_rate <- convergence_verdict(m_vs_rate)
+      cat("[convergence] search rate:", conv_rate$text, "\n")
+      # A count bounded by the targets in the excerpt is UNDER- rather than over-dispersed when most
+      # blocks finish; the ratio is printed so a reader can see which, and is not used to decide anything.
+      disp <- tryCatch(sum(residuals(m_vs_rate, type = "pearson")^2) / df.residual(m_vs_rate), error = function(err) NA_real_)
+      cat(sprintf("[search rate] Pearson dispersion ratio %.2f (descriptive: below 1, the Poisson SEs are conservative;\n", disp))
+      cat("              above 1, they are too small)\n")
+      add_to_family("search rate", m_vs_rate, "rate ratio, targets/min", odds_ratio = TRUE, converged = conv_rate$ok)
+    }
+  } else {
+    cat("\n[search rate] targets_found is absent from this export — the search-rate model is NOT run.\n")
+  }
+
+  # 3. SEARCH d'.
+  if ("search_d_prime" %in% names(vs) && any(is.finite(vs$search_d_prime))) {
+    vs_dp <- vs %>% filter(is.finite(search_d_prime))
+    cat("\n=== Visual search: sensitivity over words, search d' (LMM, unweighted) ===\n")
+    m_vs_dp <- tryCatch(
+      lmer(as.formula(paste0("search_d_prime ~ polarity * colour", ilx_term,
+                             " + session_position + (1 | participant_id)", re_sitting, re_passage)),
+           data = vs_dp),
+      error = function(err) NULL
+    )
+    if (is.null(m_vs_dp)) cat("the search d' model did not fit.\n") else { print(summary(m_vs_dp)); report_n(m_vs_dp, vs_dp, "search d-prime") }
+    add_to_family("search d-prime", m_vs_dp, "search d'")
+  } else {
+    cat("\n[search d'] search_d_prime carries no values in this export — not modelled.\n")
+  }
+
+  cat("\n=== Visual search: time, UNCENSORED — a description, in no family (read the censoring test first) ===\n")
+  cat("Its mean is biased DOWNWARD by the censored blocks; the search-rate model above is the search-speed outcome.\n")
   m_vs <- tryCatch(
     lmer(as.formula(paste0("search_time_ms ~ polarity * colour", ilx_term,
                            " + session_position + (1 | participant_id)", re_sitting, re_passage)),
          data = vs),
     error = function(err) NULL
   )
-  if (is.null(m_vs)) cat("the visual-search model did not fit.\n") else { print(summary(m_vs)); report_n(m_vs, vs, "search time") }
-  add_to_family("search time", m_vs, "ms (uncensored)")
+  if (is.null(m_vs)) cat("the visual-search time model did not fit.\n") else {
+    pc_vs <- polarity_contrast(m_vs)
+    cat(sprintf("[search time] polarity (positive minus negative) %.0f ms (95%% CI %.0f to %.0f), uncensored\n",
+                pc_vs$estimate, pc_vs$lcl, pc_vs$ucl))
+    report_n(m_vs, vs, "search time")
+  }
 } else {
   cat("\n[visual search] 05_visual_search.csv not found or carries no search_time_ms.\n")
 }
@@ -1763,12 +1947,12 @@ for (fam in names(OUTCOME_FAMILIES)) {
   absent <- setdiff(members, names(rows))
   cat(sprintf("\n[family] %s: %d of %d outcome(s) tested for polarity; Holm across those %d\n",
               fam, sum(!is.na(p_pol)), length(members), sum(!is.na(p_pol))))
-  cat(sprintf("  %-18s %-34s %-26s %-9s %-9s | %-12s %s\n",
+  cat(sprintf("  %-18s %-34s %-32s %-9s %-9s | %-12s %s\n",
               "outcome", "effect (95% CI)", "units", "p", "p Holm", "interaction", "p Holm"))
   for (o in names(rows)) {
     r <- rows[[o]]
     eff <- if (is.na(r$estimate)) (if (is.null(r$note)) "-" else r$note) else sprintf("%.3f (%.3f to %.3f)", r$estimate, r$lcl, r$ucl)
-    cat(sprintf("  %-18s %-34s %-26s %-9s %-9s | %-12s %s\n", o, eff, r$units,
+    cat(sprintf("  %-18s %-34s %-32s %-9s %-9s | %-12s %s\n", o, eff, r$units,
                 fmt_p(r$p), fmt_p(holm_pol[[o]]), fmt_p(r$p_int), fmt_p(holm_int[[o]])))
   }
   for (o in absent) {

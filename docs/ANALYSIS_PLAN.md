@@ -231,9 +231,9 @@ only after **60 min**.
 | Subjective fatigue | `fatigue_delta` | LMM, Gaussian | Change from the participant's own baseline removes between-person scale use. Use `fatigue_mean` only if baselines are missing. |
 | Comprehension | `comprehension_correct` / `comprehension_items` | Binomial GLMM | Same argument as the primary: 2/3 is a coarse measurement and should be weighted as such. |
 | Reading speed | `reading_speed_wpm` | LMM | Check against `observed_duration_ms` first — a truncated exposure produces a normal-looking speed. |
-| Visual search | `search_time_ms` | LMM, **censored** | The column is `search_termination` in `analysis_long.csv` (the file this plan is written against) and `termination_mode` in `05_visual_search.csv`; it says whether the block ended by completion or by the 60 s cap. An earlier revision of this line claimed `search_termination` did not exist — that was wrong, and came from checking only the numbered bundle's codebook and not `analysisCodebook.ts`. Capped rows are a lower bound; treating them as measurements biases the mean downward. Either model them as censored or report the completion rate alongside. |
-| Sensitivity | `d_prime` | LMM | With 20 go and 12 no-go trials, one block's d′ is imprecise. Check `d_prime_se` in `09_rt_summary.csv` and consider weighting. |
-| Response bias | `criterion` | LMM | A polarity effect on `criterion` **without** one on `d_prime` is a bias shift, not a sensitivity change. Worth reporting as a distinct finding rather than folding into "RT performance". |
+| Visual search | `targets_found` over `search_time_ms`; `search_d_prime`; completion (`search_termination`) | **Poisson rate GLMM, search d′ LMM, completion GLMM; censoring tested** (Round 71, §4c) | Round 71: the uncensored time LMM is printed as a description only. Before: The column is `search_termination` in `analysis_long.csv` (the file this plan is written against) and `termination_mode` in `05_visual_search.csv`; it says whether the block ended by completion or by the 60 s cap. An earlier revision of this line claimed `search_termination` did not exist — that was wrong, and came from checking only the numbered bundle's codebook and not `analysisCodebook.ts`. Capped rows are a lower bound; treating them as measurements biases the mean downward. Either model them as censored or report the completion rate alongside. |
+| Sensitivity | the trials in `08_reaction_trials.csv` (`d_prime` per block as a cross-check) | **Probit GLMM on the trials** (Round 71) | With 20 go and 12 no-go trials, one block's d′ is imprecise. This row used to say "consider weighting" by `d_prime_se`; the template did, and that was biased, because the SE rises with d′ itself (correlation 0.95 on the Round 62 audit's N = 40 cohort), so inverse-variance weights down-weight high-sensitivity blocks. See §4c. |
+| Response bias | the trials (`criterion` per block as a cross-check) | **The same probit GLMM** (Round 71) | A polarity effect on `criterion` **without** one on `d_prime` is a bias shift, not a sensitivity change. Worth reporting as a distinct finding rather than folding into "RT performance". |
 | PERCLOS | `perclos_p80` | **A covariate, not an outcome** (Round 70) | See below the table. |
 
 **PERCLOS is a sleepiness covariate, not an outcome** (Round 70). This row used to list it as a
@@ -280,8 +280,8 @@ that location is now a **recorded, balanced factor** in `08_reaction_trials.csv`
   trial-level models are the probit GLMM for sensitivity and criterion (signal-detection terms on
   `is_signal`, with `stim_ring` and its interaction with the colour factor added) and an LMM on log
   RT of valid hits (`stim_ring`, ring × colour, `position_c`, and participant and passage random
-  effects). **The analysis templates do not fit these terms yet**; the analysis batch implements
-  them. This note fixes what they must contain before anyone looks at the data.
+  effects). This note fixed what they must contain before anyone looked at the data; the R template
+  fits the probit GLMM with these terms from Round 71 (§4c).
 - `stim_ecc_deg_55cm` assumes a 55 cm eye-to-screen distance, which is not recorded; the protocol
   allows 50–60 cm, about ±9% in angle. Model `stim_ring` as the factor and treat the degree value as
   descriptive.
@@ -322,7 +322,7 @@ and to the interaction p-values (where the model has an interaction), across the
 |---|---|---|
 | Ocular | blink rate; inter-blink interval | blink rate |
 | Subjective (per condition) | visual fatigue (`fatigue_delta`); comfort; clarity | visual fatigue |
-| Performance | reading speed; comprehension; RT mean; RT variability; lapse rate; d′; criterion; visual-search completion; visual-search time | all but RT variability and lapse rate |
+| Performance | reading speed; comprehension; RT mean; RT variability; lapse rate; d′; criterion; visual-search completion; visual-search rate; search d′ | all but RT variability and lapse rate |
 
 Members not modelled yet are listed in the output under their family, and the printed Holm values
 cover only the members that were modelled, so they will rise when the rest are added; the table says
@@ -332,6 +332,53 @@ reported descriptively); PERCLOS, head pose and face presence are covariates and
 outcomes (§4, PERCLOS row). The R template implements all three families, and a unit test holds its
 family list to its models; the Python cross-check implements the primary family only, since its role
 is the confirmatory sign check (§5b).
+
+
+### 4c. The secondary models (Round 71)
+
+**Sensitivity and criterion: one probit GLMM on the trials.** Every scored trial of
+`08_reaction_trials.csv` (anticipations excluded, as the summaries exclude them) is a Bernoulli
+"responded or not". With the signal coded `sig` = +0.5 (go) / −0.5 (no-go), the equal-variance
+signal-detection model is P(respond) = Φ(a + d′·sig): every term multiplying `sig` is an effect on d′,
+and every term that does not is an effect on −c, the criterion at the midpoint (the quantity the
+per-block `criterion` column estimates, −(z(H) + z(F))/2). The model is
+
+```r
+glmer(cbind(responded, not) ~ sig * (polarity * colour + session_position + ring + ring:colour)
+        + (1 + sig | participant_id) + (1 | passage_id), family = binomial(link = "probit"))
+```
+
+with trials of identical covariates grouped (the likelihood is unchanged). The polarity effect on d′ is
+the difference in the `sig` slope between polarities, averaged over colour and ring; on c, minus the
+difference in the intercept. The polarity × colour interaction on each, and ring × colour on d′, are
+joint Wald tests. Wright, Horry & Skagerberg (2009; `CITATION_VERIFICATION.md` item 59) argue for
+multilevel generalized linear models in place of signal-detection measures computed participant by
+participant; the probit coding is the method, stated rather than attributed. It needs no weights and
+no rate correction (20 of 20 hits is a likelihood term, not a bound to nudge). Rows recorded before
+Round 66 carry no target location: with none located, the model is fitted without the ring terms and
+says so; with some, the located trials are modelled and the count left out is printed.
+
+The per-block LMMs on `d_prime` and `criterion` are kept as **unweighted cross-checks**, in no
+family. The template no longer prints a count of blocks with `d_prime_unstable`, which is TRUE for
+every block this design can produce.
+
+**Visual search: censoring tested, speed as a rate, search d′.** The template used to warn when the
+ten conditions' censoring rates spanned more than 10 percentage points. That is not a test: in the
+Round 62 audit's null simulations it fired in 79% of datasets at N = 40 and 55% at N = 130 (20%
+censoring). It is replaced by a likelihood-ratio test of `censored ~ polarity × colour` against the same
+model without the condition terms (serial position and the participant and passage intercepts in both),
+and the outcome that carries search speed in the performance family is now a **Poisson GLMM of
+`targets_found` with `log(search_time_ms / 60000)` as an offset** — targets found per minute, the
+modelled form of `search_efficiency`. A block that hit the cap contributes what it found in the time it
+searched, which is what was observed, so the rate needs no censoring model; the passage intercept is
+there because the target count differs by passage. **Search d′** (targets tapped against non-targets
+tapped), which the codebook asks to prefer to accuracy, is an unweighted LMM with the passage intercept
+and joins the performance family; "visual-search time" leaves it, and the uncensored time LMM is printed
+as a description. **Completion** stays: when a polarity × colour cell completed every block or none, the
+ten-cell logistic model is separated (its estimates run off to infinity), so the additive model is
+fitted and labelled `[additive]`, with no interaction test; when a whole polarity or colour level is
+degenerate, no completion model is fitted. A censored-time model (a Cox or censored-normal mixed model)
+is not fitted: it needs a package (`survival`) that is not in the install line or CI.
 
 ---
 

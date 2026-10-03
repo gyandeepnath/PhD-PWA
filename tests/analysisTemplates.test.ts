@@ -262,7 +262,7 @@ describe('the R template declares where each of its thresholds came from', () =>
     const src_ = r();
     for (const name of [
       'QC_FACE_PRESENCE_MIN', 'QC_OFF_AXIS_MAX', 'QC_EXPOSURE_MIN_FRAC',
-      'CENSOR_SPREAD_WARN_PP', 'COMPLETION_INFORMATIVE', 'ALLFIT_AGREE_SE_FRAC', 'ALLFIT_LOGLIK_TOL',
+      'COMPLETION_INFORMATIVE', 'ALLFIT_AGREE_SE_FRAC', 'ALLFIT_LOGLIK_TOL',
     ]) {
       expect(src_).toContain(name);
       // Defined once and then USED — a constant nothing reads is decoration.
@@ -275,10 +275,18 @@ describe('the R template declares where each of its thresholds came from', () =>
     // chosen by the analyst has to be visible so it can be argued with and changed deliberately.
     const src_ = r();
     expect(src_).toMatch(/QC_FACE_PRESENCE_MIN[^\n]*PROTOCOL/);
-    for (const name of ['QC_OFF_AXIS_MAX', 'QC_EXPOSURE_MIN_FRAC', 'CENSOR_SPREAD_WARN_PP',
+    for (const name of ['QC_OFF_AXIS_MAX', 'QC_EXPOSURE_MIN_FRAC',
       'COMPLETION_INFORMATIVE', 'ALLFIT_AGREE_SE_FRAC', 'ALLFIT_LOGLIK_TOL']) {
       expect(src_).toMatch(new RegExp(name + '[^\\n]*ANALYST DEFAULT'));
     }
+  });
+
+  it('decides nothing by a range rule on the search censoring rates (Round 71)', () => {
+    // CENSOR_SPREAD_WARN_PP warned when ten cells' censoring rates spanned more than 10 points, which
+    // sampling alone does in most null datasets; censoring is tested by a likelihood ratio instead.
+    const code = r().split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+    expect(code).not.toMatch(/CENSOR_SPREAD_WARN_PP/);
+    expect(code).toMatch(/does censoring depend on the condition\? \(likelihood-ratio test\)/);
   });
 
   it('does not re-derive the accepted illuminance band the app already owns', () => {

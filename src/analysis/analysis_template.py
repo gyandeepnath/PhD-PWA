@@ -537,12 +537,14 @@ def main() -> None:
     report_n(m_comp, comp, "comprehension")
     cluster_note(m_comp, "comprehension")
 
-    # --- d-prime aggregated across conditions (per-condition d' is unstable) -----------
-    dprime = rt_summary.groupby("participant_id").agg(
-        mean_dprime=("d_prime", "mean"),
-        any_unstable=("d_prime_unstable", "any"),
-    )
-    print("\n=== Aggregated d' per participant ===")
+    # --- d-prime: descriptive only here -------------------------------------------------
+    # Sensitivity and criterion are modelled in the R template by a trial-level probit GLMM, a
+    # secondary outcome this cross-check does not mirror (ANALYSIS_PLAN.md §5b). This table used to
+    # carry any(d_prime_unstable) per participant, which is TRUE for every block this design can
+    # produce (no block's SE can fall below about 0.46, and the flag is set above 0.3), so it said
+    # nothing; it is gone.
+    dprime = rt_summary.groupby("participant_id").agg(mean_dprime=("d_prime", "mean"))
+    print("\n=== Mean per-block d' per participant (descriptive; the R template models the trials) ===")
     print(dprime)
 
     # CVS-Q change, per SITTING. Pivoting on participant_id alone silently averaged the two sittings

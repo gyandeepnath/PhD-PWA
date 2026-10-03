@@ -178,7 +178,7 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
   { column: 'rt_median_hits_ms', role: 'secondary', unit: 'ms', missing: 'no valid hits',
     description: 'Median reaction time on correct go trials. More robust to lapses than the mean; report both.' },
   { column: 'd_prime', role: 'secondary', unit: 'z', missing: 'block not completed, OR one trial pool was empty so sensitivity was not estimable — d_prime_estimable in 09_rt_summary.csv separates the two',
-    description: `Sensitivity on the go/no-go block. Check d_prime_se in 09_rt_summary.csv: with 20 go and 12 no-go trials a single block's d-prime is imprecise, and this column carries no indication of that on its own. ${RATE_CORRECTION_NOTE}` },
+    description: `Sensitivity on the go/no-go block. Check d_prime_se in 09_rt_summary.csv: with 20 go and 12 no-go trials a single block's d-prime is imprecise, and this column carries no indication of that on its own. Do not weight a model of it by 1 / d_prime_se^2 (that SE rises with d-prime, so the weights penalise high sensitivity); the analysis template models sensitivity and criterion together as a probit GLMM on the trials of 08_reaction_trials.csv and keeps an unweighted LMM on this column as a cross-check. ${RATE_CORRECTION_NOTE}` },
   { column: 'criterion', role: 'secondary', unit: 'z', missing: 'block not completed',
     description: 'Response bias. A polarity effect on criterion without one on d_prime is a bias shift, not a sensitivity change — a distinction worth making explicitly.' },
   { column: 'rt_lapses', role: 'qc', unit: 'count', missing: 'block not completed',
