@@ -5,6 +5,7 @@ import { generateParticipant, generateCohort } from '@/sim/participant';
 import { cohortRows, ols, isSignificant } from '@/sim/analysis';
 import { GROUND_TRUTH as GT } from '@/sim/effects';
 import { simulateCohort } from '@/sim/analysisCohort';
+import { buildConditionSummaries } from '@/dashboard/aggregate';
 
 describe('seeded RNG', () => {
   it('is deterministic for a given seed', () => {
@@ -101,5 +102,12 @@ describe('analysis cohort (scripts/verifyAnalysis.mjs)', () => {
       expect([...perColour.values()]).toEqual([2, 2, 2, 2, 2]);
       expect(b.conditions.every((c) => c.background_color === '#FFFFFF')).toBe(true);
     }
+  });
+
+  it('disengaged flags exactly the first run of each listed participant bad, through the app\'s own scorer', () => {
+    const cohort = simulateCohort({ n: 4, seed: 3, disengaged: [1, 3] });
+    const bad = cohort.map((b) => buildConditionSummaries(b).filter((s) => s.engagement === 'bad').map((s) => s.session_position));
+    const firstPosition = Math.min(...cohort[0].conditions.map((c) => c.session_position));
+    expect(bad).toEqual([[], [firstPosition], [], [firstPosition]]);
   });
 });

@@ -37,6 +37,7 @@ import { computeSdt } from '@/lib/signalDetection';
 import { scoreCvsq } from '@/scales/cvsq';
 import { planRtBlock, eccentricityDeg } from '@/lib/rtLocations';
 import { CONFIG } from '@/experiment/config';
+import { ENGAGEMENT } from '@/dashboard/aggregate';
 
 export interface CohortOptions {
   /** Participants, P001..Pnnn, enrolments 1..n. */
@@ -73,6 +74,16 @@ export interface CohortOptions {
    * Nothing in it can estimate the contrast the study asks about, and both templates must say so.
    */
   onePolarity?: 'positive' | 'negative';
+  /**
+   * 0-based participant indices whose FIRST run was done disengaged, as the app's own scorer
+   * (conditionEngagement) sees it: a page advanced just after its unlock (a skim, 0.3), the fatigue
+   * rating rushed (0.2) and the perception rating rushed (0.1) leave a quality score of 0.4, under
+   * QUALITY_WARN, so 10_wide_summary.csv flags the run 'bad'. Only those QC timings change — no outcome
+   * moves — so the runs are confirmatory like any other, and a template that drops them is selecting on
+   * the flag alone. Without them no run is 'bad', and DROP_DISENGAGED could be set back to TRUE (the
+   * Round 62 audit's M2) with the gate green.
+   */
+  disengaged?: number[];
 }
 
 const logistic = (x: number) => 1 / (1 + Math.exp(-x));
@@ -322,6 +333,14 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
           observed_duration_ms: null, off_axis_ratio: null, calibration_id: null, gaze_calibrated: false,
         });
       }
+    }
+    if (opts.disengaged?.includes(i)) {
+      const first = b.conditions.reduce((a, c) => (c.session_position < a.session_position ? c : a));
+      first.reading_min_page_dwell_ms = CONFIG.READING_PAGE_MIN_MS + Math.round(ENGAGEMENT.PAGE_UNLOCK_GRACE_MS / 3);
+      const fat = b.fatigue.find((f) => f.stage === 'post_condition' && f.condition_id === first.condition_id);
+      if (fat) fat.response_time_ms = Math.round(ENGAGEMENT.FATIGUE_RUSHED_MS / 2);
+      const perc = b.perception.find((pr) => pr.condition_id === first.condition_id);
+      if (perc) perc.response_time_ms = Math.round(ENGAGEMENT.PERCEPTION_RUSHED_MS / 2);
     }
     if (opts.withdrawn?.includes(i)) b.session.withdrawn_at = b.session.session_start_time + 3_600_000;
     if (opts.pausedLast?.includes(i)) {

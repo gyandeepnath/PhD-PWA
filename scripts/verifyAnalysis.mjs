@@ -142,7 +142,13 @@ try {
    * One tree for both, deliberately: the templates must agree on the same data. The Python path still
    * does not depend on R being installed.
    */
-  const SIM = { n: 24, seed: 20260402, polarityEffectOnIncomplete: 0.4, polarityEffectOnComprehension: 0.6, polarityEffectOnDprime: 0.4, withdrawn: [5], pausedLast: [11] };
+  const SIM = {
+    n: 24, seed: 20260402, polarityEffectOnIncomplete: 0.4, polarityEffectOnComprehension: 0.6, polarityEffectOnDprime: 0.4,
+    withdrawn: [5], pausedLast: [11],
+    // Three runs the app's own scorer flags engagement 'bad' (only QC timings changed; see the option).
+    disengaged: [2, 7, 13],
+  };
+  const N_BAD = SIM.disengaged.length;
   // positive minus negative: negative polarity RAISES incomplete blinking; positive polarity RAISES comprehension.
   // positive polarity RAISES d' (the trial-level signal-detection model); the outer ring LOWERS it (the default).
   const EXPECTED_SIGN = { primary: -1, comprehension: 1, dprime: 1 };
@@ -309,6 +315,20 @@ for (const { root, options } of jobs) {
   const pySens = /polarity_c: confirmatory -?[\d.]+ \(SE [\d.]+, n (\d+) blinks\) \| sensitivity -?[\d.]+ \(SE [\d.]+, n (\d+) blinks\)/.exec(out);
   ok('... on the sensitivity set\'s rows, which carry more blinks than the confirmatory set\'s',
     pySens != null && +pySens[2] > +pySens[1], pySens ? `confirmatory ${pySens[1]} blinks, sensitivity ${pySens[2]}` : 'no confirmatory | sensitivity line');
+  /*
+   * ENGAGEMENT 'bad' RUNS ARE COUNTED, KEPT, AND REFITTED WITHOUT ONLY AS A SENSITIVITY (M2).
+   * DROP_DISENGAGED used to be TRUE: 'bad' runs vanished from every model without a count, and the
+   * flag is built partly from outcomes. Put back, it passed this whole gate, because no run here was
+   * 'bad'. Three are now, so the primary must use them and the without-'bad' refit must fire.
+   */
+  const pyPrimRuns = +(/^\[n\] primary: (\d+) of \d+ camera-on condition-runs used \((\d+) blinks\)/m.exec(out)?.[1] ?? NaN);
+  const pyPrimBlinks = +(/^\[n\] primary: \d+ of \d+ camera-on condition-runs used \((\d+) blinks\)/m.exec(out)?.[1] ?? NaN);
+  const pyNoBad = /without engagement 'bad' runs\s+polarity_c -?[\d.]+ \(SE [\d.]+\), (\d+) blink rows/.exec(out);
+  ok(`the ${N_BAD} engagement-'bad' runs are counted and RETAINED: the primary uses every confirmatory run`,
+    new RegExp(`\\[engagement\\] ${N_BAD} of ${expected.confirmatory.rows} confirmatory condition-runs are flagged 'bad'\\. RETAINED`).test(out)
+      && pyPrimRuns === expected.confirmatory.rows, `[engagement] line or primary runs (${pyPrimRuns}) wrong`);
+  ok('... and the primary is refitted without them, on fewer blinks, as a labelled sensitivity',
+    pyNoBad != null && +pyNoBad[1] < pyPrimBlinks, pyNoBad ? `${pyNoBad[1]} blink rows vs ${pyPrimBlinks}` : 'no without-\'bad\' refit line');
   // The simulated effects are known, so the signs are too. A sign-inverted model (the comprehension
   // GEE was one) or a different estimand would fail here, where a heading check cannot.
   const pyPrimary = coefAfter(out, 'PRIMARY: incomplete-blink ratio', 'polarity_c');
@@ -476,6 +496,13 @@ for (const { root, options } of jobs) {
     ok('R: ... on its own rows: every run of the sensitivity set, more than the confirmatory fit',
       rSensN != null && +rSensN[1] === +rSensN[2] && +rSensN[1] === expected.sensitivity.rows && +rSensN[1] > rPrimN,
       rSensN ? `sensitivity refit used ${rSensN[1]} of ${rSensN[2]} rows; set ${expected.sensitivity.rows}; primary ${rPrimN}` : 'no [n] sensitivity set line');
+    // M2, as in Python: the 'bad' runs counted and kept, and the without-'bad' refit on the rest.
+    const rNoBad = /without engagement 'bad' runs\s+polarity -?[\d.]+ \(SE [\d.]+\), n (\d+)/.exec(rOut);
+    ok(`R: the ${N_BAD} engagement-'bad' runs are counted and RETAINED: the primary uses every confirmatory run`,
+      new RegExp(`\\[engagement\\] ${N_BAD} of ${expected.confirmatory.rows} confirmatory condition-runs are flagged 'bad'\\. RETAINED`).test(rOut)
+        && rPrimN === expected.confirmatory.rows, `[engagement] line or primary rows (${rPrimN}) wrong`);
+    ok('R: ... and the primary is refitted without them as a labelled sensitivity',
+      rNoBad != null && +rNoBad[1] === expected.confirmatory.rows - N_BAD, rNoBad ? `n ${rNoBad[1]}` : 'no without-\'bad\' refit line');
     // ANALYSIS_PLAN.md §5b: the two toolchains must agree in SIGN. Checked against the simulated
     // sign, so agreement on a wrong answer fails too.
     const rPrimary = coefAfter(rOut, '=== PRIMARY: incomplete-blink ratio', 'polarity1');
