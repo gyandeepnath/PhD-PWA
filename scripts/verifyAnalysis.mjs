@@ -300,6 +300,12 @@ for (const { root, options } of jobs) {
   ok('the confirmatory and sensitivity sets are the ones the dashboard counts',
     JSON.stringify(pySets) === JSON.stringify(expected), `template ${JSON.stringify(pySets)} vs dashboard ${JSON.stringify(expected)}`);
   ok('the sensitivity set is refitted', out.includes('PRIMARY refit on the SENSITIVITY SET'), 'no sensitivity refit');
+  // ... ON ITS OWN ROWS. A heading proves nothing: the R refit printed this heading for two rounds
+  // while fitting the confirmatory rows (see the R check of the same name). The paused participant's
+  // nine finished runs are in the sensitivity set only, so it must model more blinks.
+  const pySens = /polarity_c: confirmatory -?[\d.]+ \(SE [\d.]+, n (\d+) blinks\) \| sensitivity -?[\d.]+ \(SE [\d.]+, n (\d+) blinks\)/.exec(out);
+  ok('... on the sensitivity set\'s rows, which carry more blinks than the confirmatory set\'s',
+    pySens != null && +pySens[2] > +pySens[1], pySens ? `confirmatory ${pySens[1]} blinks, sensitivity ${pySens[2]}` : 'no confirmatory | sensitivity line');
   // The simulated effects are known, so the signs are too. A sign-inverted model (the comprehension
   // GEE was one) or a different estimand would fail here, where a heading check cannot.
   const pyPrimary = coefAfter(out, 'PRIMARY: incomplete-blink ratio', 'polarity_c');
@@ -453,6 +459,18 @@ for (const { root, options } of jobs) {
       JSON.stringify(rSets) === JSON.stringify(expected) && JSON.stringify(rSets) === JSON.stringify(pySets),
       `R ${JSON.stringify(rSets)}, Python ${JSON.stringify(pySets)}, dashboard ${JSON.stringify(expected)}`);
     ok('R: the sensitivity set is refitted', rOut.includes('PRIMARY refit on the SENSITIVITY SET'), 'no sensitivity refit');
+    /*
+     * ... ON THE SENSITIVITY SET'S ROWS. refit_on() called update(m_primary, data = rows), which lme4
+     * evaluates first in the formula's (global) environment; once the moderator loop had assigned a
+     * global `rows`, the "sensitivity set" fit was the confirmatory fit again — n 220 on this cohort's
+     * set of 229 — and only the heading was checked. Every camera on this cohort is on and every run
+     * blinks, so the refit must use exactly the sensitivity set's runs, more than the primary's.
+     */
+    const rSensN = /^\[n\] sensitivity set: (\d+) of (\d+) rows used/m.exec(rOut);
+    const rPrimN = +(/^\[n\] primary: (\d+) of \d+/m.exec(rOut)?.[1] ?? NaN);
+    ok('R: ... on its own rows: every run of the sensitivity set, more than the confirmatory fit',
+      rSensN != null && +rSensN[1] === +rSensN[2] && +rSensN[1] === expected.sensitivity.rows && +rSensN[1] > rPrimN,
+      rSensN ? `sensitivity refit used ${rSensN[1]} of ${rSensN[2]} rows; set ${expected.sensitivity.rows}; primary ${rPrimN}` : 'no [n] sensitivity set line');
     // ANALYSIS_PLAN.md §5b: the two toolchains must agree in SIGN. Checked against the simulated
     // sign, so agreement on a wrong answer fails too.
     const rPrimary = coefAfter(rOut, '=== PRIMARY: incomplete-blink ratio', 'polarity1');

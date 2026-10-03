@@ -1915,7 +1915,7 @@ if (nrow(eye) == 0) {
     cat("  §2 decides H1 on the UNADJUSTED 95% CI; the Holm column is printed for the decision §4b leaves open.\n")
 
     # ===========================================================================================
-    # SENSITIVITY REFITS OF THE PRIMARY. Each is the SAME model — update(m_primary, data = ...) — on
+    # SENSITIVITY REFITS OF THE PRIMARY. Each is the SAME model — refit(m_primary, rows), below — on
     # different rows, so a difference between it and the confirmatory fit is a difference in the
     # rows and nothing else. They used to be fitted with a reduced random structure (no passage
     # intercept, no slope), which made them incomparable with the primary they were meant to test.
@@ -1925,7 +1925,26 @@ if (nrow(eye) == 0) {
       if (is.null(m)) { cat(sprintf("  %-42s did not fit\n", label)); return(invisible(NULL)) }
       cat(sprintf("  %-42s polarity %.4f (SE %.4f), n %d\n", label, pol_row(m)[1], pol_row(m)[2], nobs(m)))
     }
-    refit_on <- function(rows) tryCatch(suppressWarnings(update(m_primary, data = rows)), error = function(err) NULL)
+    # THE SAME MODEL ON OTHER ROWS, and never update(m, data = rows). lme4's update.merMod evaluates
+    # the new call FIRST in environment(formula(m)) — the GLOBAL environment for the primary, whose
+    # formula is built at top level — and falls back to the caller's frame only if that fails. So a
+    # `data = rows` written inside a function resolved to any GLOBAL `rows`: once the moderator loop
+    # below had assigned one, the sensitivity-set refit fitted the confirmatory rows again and printed
+    # the confirmatory estimate as the sensitivity result (Round 73; the earlier refits were right only
+    # because no global `rows` existed yet when they ran). Here the formula's environment is THIS
+    # call's frame, where `rows` can only be the argument, so the fit — and anything that re-evaluates
+    # its call later (update, allFit, emmeans) — reads the rows it was handed. `change` is an optional
+    # formula update. Two refits name the same data symbol, so anova() accepts them as nested.
+    refit <- function(m, rows, change = NULL) {
+      f <- formula(m)
+      if (!is.null(change)) f <- update(f, change)
+      environment(f) <- environment()
+      cl <- getCall(m)
+      cl$formula <- f
+      cl$data <- quote(rows)
+      eval(cl)
+    }
+    refit_on <- function(rows) tryCatch(suppressWarnings(refit(m_primary, rows)), error = function(err) NULL)
     cat("\n=== PRIMARY: sensitivity refits (polarity = positive minus negative, log-odds) ===\n")
     sens_line("confirmatory (the primary above)", m_primary)
 
@@ -1982,11 +2001,11 @@ if (nrow(eye) == 0) {
                                                       error = function(err) NULL))
     eye_co <- eye %>% filter(!is.na(polarity_switched))
     if (n_distinct(eye_co$polarity_switched) == 2) {
-      # Not refit_on(): anova() requires both fits to name the same data object in their calls.
-      m_co_base <- tryCatch(suppressWarnings(update(m_primary, data = eye_co)), error = function(err) NULL)
+      # Both through refit(), so both calls name the same data symbol, as anova() requires.
+      m_co_base <- refit_on(eye_co)
       # The formula on a line of its own, for the reason given at m_additive.
-      m_co <- if (is.null(m_co_base)) NULL else tryCatch(suppressWarnings(update(m_co_base,
-        . ~ . + polarity_switched, data = eye_co)),
+      m_co <- if (is.null(m_co_base)) NULL else tryCatch(suppressWarnings(refit(m_co_base, eye_co,
+        . ~ . + polarity_switched)),
         error = function(err) NULL)
       sens_line("with first-order carryover (polarity_switched)", m_co)
       if (!is.null(m_co_base) && !is.null(m_co)) {
@@ -2015,21 +2034,23 @@ if (nrow(eye) == 0) {
     mod_p <- c()
     for (mn in names(moderators)) {
       if (!(mn %in% names(eye))) { cat(sprintf("  [moderator] %-20s not in the participant table\n", mn)); next }
-      rows <- eye[!is.na(eye[[mn]]), , drop = FALSE]
-      if (n_distinct(rows[[mn]]) < 2 || n_distinct(rows$participant_id) < 3) {
+      # mod_rows, not `rows`: a global of that name is what the sensitivity-set refit used to pick up
+      # (see refit above, which no longer can).
+      mod_rows <- eye[!is.na(eye[[mn]]), , drop = FALSE]
+      if (n_distinct(mod_rows[[mn]]) < 2 || n_distinct(mod_rows$participant_id) < 3) {
         cat(sprintf("  [moderator] %-20s fewer than two values in the data: not testable\n", mn)); next
       }
       # The moderator's own (between-participant) main effect is in BOTH models, so the test is of the
       # polarity x moderator interaction alone.
-      m_mbase <- tryCatch(suppressWarnings(update(m_primary, as.formula(paste0(". ~ . + ", moderators[[mn]])), data = rows)),
+      m_mbase <- tryCatch(suppressWarnings(refit(m_primary, mod_rows, as.formula(paste0(". ~ . + ", moderators[[mn]])))),
                           error = function(err) NULL)
-      m_mod <- if (is.null(m_mbase)) NULL else tryCatch(suppressWarnings(update(m_mbase, as.formula(paste0(". ~ . + polarity:", moderators[[mn]])), data = rows)),
+      m_mod <- if (is.null(m_mbase)) NULL else tryCatch(suppressWarnings(refit(m_mbase, mod_rows, as.formula(paste0(". ~ . + polarity:", moderators[[mn]])))),
                                                      error = function(err) NULL)
       if (is.null(m_mod)) { cat(sprintf("  [moderator] %-20s the model did not fit\n", mn)); next }
       lr <- anova(m_mbase, m_mod)
       mod_p[mn] <- lr[2, "Pr(>Chisq)"]
       cat(sprintf("  [moderator] %-20s polarity x moderator: chi2(%d) %.2f, p %s, %d participants\n", mn,
-                  as.integer(lr$Df[2]), lr$Chisq[2], format.pval(mod_p[mn], digits = 2), n_distinct(rows$participant_id)))
+                  as.integer(lr$Df[2]), lr$Chisq[2], format.pval(mod_p[mn], digits = 2), n_distinct(mod_rows$participant_id)))
     }
     if (length(mod_p)) {
       cat(sprintf("  Holm across the %d moderator(s) tested: %s\n", length(mod_p),
@@ -2063,6 +2084,9 @@ if (nrow(eye) == 0) {
       cat("\n=== PRIMARY refit on the SENSITIVITY SET (", n_sens_extra,
           " extra finished run(s) of incomplete participants; ANALYSIS_PLAN.md §1) ===\n", sep = "")
       sens_line("sensitivity set", m_sens)
+      # Rows used of the sensitivity set's own camera-on rows: the line that would have shown the
+      # refit quietly fitting the confirmatory rows (n 220 against a set of 229 on the gate cohort).
+      report_n(m_sens, eye_sens, "sensitivity set")
       if (!is.null(m_sens)) print(summary(m_sens))
     }
 
@@ -2083,7 +2107,7 @@ if (nrow(eye) == 0) {
     # So it is reported as a sensitivity, beside the PERCLOS covariate check, and never in place of the
     # primary (ANALYSIS_PLAN.md §4, PERCLOS row).
     if (any(!is.na(eye$perclos_p80))) {
-      m_primary_adj <- tryCatch(update(m_primary, . ~ . + perclos_p80, data = eye %>% filter(!is.na(perclos_p80))),
+      m_primary_adj <- tryCatch(refit(m_primary, eye %>% filter(!is.na(perclos_p80)), . ~ . + perclos_p80),
                                 error = function(err) NULL)
       cat("\n=== PRIMARY adjusted for PERCLOS (sensitivity; read beside the PERCLOS covariate check) ===\n")
       sens_line("adjusted for perclos_p80 (synopsis §3.9)", m_primary_adj)

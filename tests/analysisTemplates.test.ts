@@ -466,3 +466,27 @@ describe('PERCLOS is a covariate, compressed identically in both templates', () 
     expect(py).not.toMatch(/for dv in \[[^\]]*"perclos_p80"/);
   });
 });
+
+/**
+ * NO update() IN THE R TEMPLATE IS HANDED ITS DATA.
+ *
+ * lme4's update.merMod evaluates the new call FIRST in environment(formula(model)) — the global
+ * environment for the primary — and falls back to the caller's frame only if that fails. So
+ * `update(m_primary, data = rows)` inside refit_on() fitted whatever a GLOBAL `rows` held: after the
+ * moderator loop assigned one, the "sensitivity set" refit was the confirmatory fit again, estimate,
+ * SE and n (Round 73). refit() builds the call with the formula's environment set to its own frame,
+ * so a refit reads the rows it was handed; an update() that passes `data =` would reopen the trap.
+ */
+describe('the R template refits on other rows only through refit()', () => {
+  const code = src('src/analysis/analysis_template.R').split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+
+  it('passes data = to no update() call', () => {
+    // An update( ... ) call up to its closing parenthesis on the same or the next line.
+    const offenders = [...code.matchAll(/\bupdate\(([^()]|\([^()]*\))*\bdata\s*=/g)].map((m) => m[0]);
+    expect(offenders).toEqual([]);
+  });
+
+  it('sets the refit formula\'s environment to the refit\'s own frame', () => {
+    expect(code).toMatch(/refit <- function\(m, rows, change = NULL\) \{[\s\S]*?environment\(f\) <- environment\(\)[\s\S]*?cl\$data <- quote\(rows\)/);
+  });
+});
