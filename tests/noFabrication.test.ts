@@ -183,12 +183,29 @@ describe('the stimulus scale is never substituted when it was not measured', () 
     }
   });
 
-  it('never claims a larger stimulus than the design canvas', () => {
-    // Scaling ABOVE 1 would present a bigger stimulus than every other device and record it as
-    // such. The cap means a value of 1 always means the same physical presentation.
-    return import('@/lib/viewportScale').then(({ computeScale }) => {
-      expect(computeScale(3840, 2160)).toBe(1);
-      expect(computeScale(2560, 1600)).toBe(1);
+  it('does not let a scale stand in for a physical size (the claim the old cap rested on)', () => {
+    /*
+     * This test used to assert the cap at 1, on the claim that "a value of 1 always means the same
+     * physical presentation". It never did: a CSS pixel's size depends on the pixel ratio the browser
+     * chose, and the cap drew the canvas in the middle of any screen with more CSS pixels than it
+     * (Round 74). The true invariant runs the other way. Fitted to the screen, the SAME panel at every
+     * pixel ratio gets a different scale and the same millimetres per design pixel, within a step —
+     * so stimulus_scale is not a size, and the export's physical columns come from the session's ruler
+     * calibration, never from the scale alone.
+     */
+    return import('@/lib/viewportScale').then(({ computeScale, DESIGN_WIDTH, SCALE_STEP, MAX_SCALE }) => {
+      const PANEL_MM = 236.7;            // a 2880 px panel at 309 ppi (manufacturer's figures)
+      const perDesignPx = [1.25, 1.5, 2, 2.5, 3].map((dpr) => {
+        const cssW = 2880 / dpr;
+        return computeScale(cssW, 1800 / dpr) * (PANEL_MM / cssW);
+      });
+      const scales = [1.25, 1.5, 2, 2.5, 3].map((dpr) => computeScale(2880 / dpr, 1800 / dpr));
+      expect(new Set(scales).size).toBe(5);
+      for (const mm of perDesignPx) {
+        expect(Math.abs(mm - PANEL_MM / DESIGN_WIDTH) / (PANEL_MM / DESIGN_WIDTH)).toBeLessThan(SCALE_STEP);
+      }
+      // And the only cap left is against absurd monitors.
+      expect(computeScale(3840, 2160)).toBe(MAX_SCALE);
     });
   });
 });

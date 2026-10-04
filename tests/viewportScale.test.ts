@@ -14,8 +14,9 @@ import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import {
-  computeScale, isBelowMinimum, foldViewportFloor, resetViewportFloor,
-  DESIGN_WIDTH, DESIGN_HEIGHT, MIN_SCALE, SNAP_TO_ONE, displayMode, isInstalledDisplay,
+  computeScale, isBelowMinimum, foldViewportFloor, resetViewportFloor, screenFill,
+  DESIGN_WIDTH, DESIGN_HEIGHT, MIN_SCALE, MAX_SCALE, SCALE_STEP, OVERFILL_TOLERANCE,
+  displayMode, isInstalledDisplay,
 } from '@/lib/viewportScale';
 
 describe('computeScale', () => {
@@ -23,35 +24,64 @@ describe('computeScale', () => {
     expect(computeScale(DESIGN_WIDTH, DESIGN_HEIGHT)).toBe(1);
   });
 
-  it('never magnifies on a larger screen, so the stimulus matches across devices', () => {
-    // Visual angle is a controlled variable. Scaling UP on a big screen would silently present a
-    // different stimulus than the design canvas does.
-    expect(computeScale(2560, 1600)).toBe(1);
-    expect(computeScale(1920, 1080)).toBe(1);
+  it('FILLS a larger screen instead of drawing the canvas in its middle (Round 74)', () => {
+    /*
+     * The cap at 1 is gone. On the real tablet the investigator saw every task in the middle of the
+     * screen with about a quarter of the width blank on each side: what a canvas capped at 1 looks
+     * like on a viewport about 1920 CSS px wide. Each of these used to be exactly 1.
+     */
+    expect(computeScale(1920, 1200)).toBe(1.66);
+    expect(computeScale(2560, 1600)).toBe(2.22);
+    expect(computeScale(1600, 1000)).toBe(1.38);
+    expect(computeScale(1280, 800)).toBe(1.12);
+    // Another shape fits by its binding axis: 1920x1080 is height-bound.
+    expect(computeScale(1920, 1080)).toBe(1.5);
   });
 
-  it('renders the study tablet at exactly its design size, and 0.90 with the address bar', () => {
-    /*
-     * The canvas IS the Xiaomi Pad 6, installed full-screen: 1152x720 CSS px. On the 1194x834
-     * canvas it replaced, this device rendered at 0.86 installed and 0.76 in a Chrome tab, so the
-     * protocol's 22 px reading text arrived at 18.9 or 16.7 px — at or below the critical print
-     * size — and nobody had chosen either figure.
-     */
+  it('fits the 16:10 canvas to within one step of a 16:10 screen, at every pixel ratio', () => {
+    // The same 2880x1800 panel at the pixel ratios Android offers: the canvas spans the width each time.
+    for (const dpr of [1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3]) {
+      const w = 2880 / dpr;
+      const h = 1800 / dpr;
+      const s = computeScale(w, h);
+      expect(Math.abs(DESIGN_WIDTH * s - w), `dpr ${dpr}`).toBeLessThanOrEqual(DESIGN_WIDTH * SCALE_STEP);
+      expect(DESIGN_WIDTH * s, `dpr ${dpr}`).toBeLessThanOrEqual(w * (1 + OVERFILL_TOLERANCE) + 1e-6);
+    }
+  });
+
+  it('caps an absurdly large monitor, and only there', () => {
+    expect(MAX_SCALE).toBe(3);
+    expect(computeScale(5120, 2880)).toBe(MAX_SCALE);
+    expect(computeScale(3456, 2160)).toBe(MAX_SCALE);
+    expect(computeScale(3400, 2125)).toBeLessThan(MAX_SCALE);
+  });
+
+  it('draws a 1152x720 viewport at exactly 1, and 0.90 at 1152x650', () => {
     expect(computeScale(1152, 720)).toBe(1);
-    // With the address bar showing (~650 tall) the canvas still fits, at nine-tenths.
     expect(computeScale(1152, 650)).toBe(0.9);
-    // Height is the binding constraint on this device, not width.
+    // Height is the binding constraint there, not width.
     expect(computeScale(1152, 650)).toBeLessThanOrEqual(650 / DESIGN_HEIGHT + 1e-9);
   });
 
-  it('treats a viewport a pixel or so short of the canvas as the canvas', () => {
-    // An installed app reporting 1152x719 would otherwise quantise to 0.98 and shrink every glyph
-    // by 2% for one pixel. The tolerance is 1%: 713 is the shortest height that still snaps.
+  it('rounds to the NEAREST step, so a pixel short of a boundary is not a whole step smaller', () => {
+    // A viewport reporting 1152x719 — a status-bar pixel, a fractional height rounded down — would
+    // floor to 0.98 and shrink every glyph by 2% for one pixel. 713 is the shortest height that
+    // still rounds to 1.0 (1% overfill); 712 would overfill by more and takes the step below.
     expect(computeScale(1152, 719)).toBe(1);
     expect(computeScale(1152, 713)).toBe(1);
     expect(computeScale(1152, 712)).toBe(0.98);
     expect(computeScale(1141, 720)).toBe(1);
-    expect(SNAP_TO_ONE).toBe(0.01);
+    // The same rule above 1, where it used to be a floor: 1920x1199 is not a step below 1920x1200.
+    expect(computeScale(1920, 1199)).toBe(computeScale(1920, 1200));
+    expect(OVERFILL_TOLERANCE).toBe(0.01);
+    expect(SCALE_STEP).toBe(0.02);
+  });
+
+  it('below 1, takes the step below when rounding up would overfill by more than the tolerance', () => {
+    // raw 0.5113: the nearest step is 0.52, 1.7% over the fit; 0.50 is taken instead.
+    expect(computeScale(589, 368.15)).toBe(0.5);
+    // raw 0.5149: 0.52 is under 1% over, so it stands.
+    expect(computeScale(593.2, 370.7)).toBe(0.52);
   });
 
   it('does not lose a whole step to floating point', () => {
@@ -61,47 +91,43 @@ describe('computeScale', () => {
     expect(computeScale(1036.8, 1000)).toBe(0.9);
   });
 
-  it('always fits: the scaled canvas never exceeds the viewport in either axis', () => {
+  it('fills and fits: within one step of the exact fit, and never more than 1% over it', () => {
+    /*
+     * The canvas is DESIGN x DESIGN laid out, then multiplied by s. Above the fit it overfills — the
+     * root box is then a little smaller than the canvas — by at most OVERFILL_TOLERANCE, the slack
+     * every screen is required to have (e2e/allScreensFit walks every screen at 1152x713, 1% over).
+     * Below the fit it leaves part of the screen blank, by less than one step. The first bound fails
+     * if the quantiser rounds UP (Math.ceil: 1152x721 overfills 1.9%) or loses the tolerance check
+     * (589x368 overfills 1.7%); the second if it rounds DOWN by more than a step, or is capped again
+     * (1920x1200 would be 0.67 under).
+     */
     const viewports = [
-      [1152, 650], [1152, 720], [1152, 719], [1152, 713], [1080, 810], [1194, 834], [1280, 800],
-      [1024, 768], [800, 600], [1366, 768], [2560, 1600], [1141, 720],
+      [1152, 650], [1152, 720], [1152, 719], [1152, 713], [1152, 721], [1080, 810], [1194, 834],
+      [1280, 800], [1024, 768], [800, 600], [1366, 768], [2560, 1600], [1141, 720], [1920, 1200],
+      [1600, 1000], [1920, 1080], [589, 368.15], [700, 437], [1440, 900], [2000, 1250], [1600, 1100],
     ];
-    let snapped = 0;
     for (const [w, h] of viewports) {
       const s = computeScale(w, h);
       const raw = Math.min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT);
-      /*
-       * The canvas is DESIGN x DESIGN laid out, then multiplied by s. Both axes must land inside the
-       * viewport, or content is clipped into the unreachable region again. The one exception is the
-       * snap band — a viewport within SNAP_TO_ONE of the canvas, drawn at exactly 1.0 — where the
-       * canvas may overfill by that tolerance, which every screen is required to have as slack
-       * (e2e/allScreensFit). The tolerance is applied THERE ONLY: granted to every viewport, it let a
-       * quantiser that rounded up instead of down (Math.round for Math.floor) pass, over-scaling
-       * 1080x810 to 1082.88 px wide (review of Round 63).
-       */
-      const inSnapBand = s === 1 && raw < 1 && raw >= 1 - SNAP_TO_ONE;
-      if (inSnapBand) snapped += 1;
-      const slack = inSnapBand ? 1 + SNAP_TO_ONE : 1;
-      if (s > MIN_SCALE) {
-        expect(DESIGN_WIDTH * s, `${w}x${h}`).toBeLessThanOrEqual(w * slack + 1e-6);
-        expect(DESIGN_HEIGHT * s, `${w}x${h}`).toBeLessThanOrEqual(h * slack + 1e-6);
+      if (s > MIN_SCALE && s < MAX_SCALE) {
+        expect(s / raw, `${w}x${h}: overfills`).toBeLessThanOrEqual(1 + OVERFILL_TOLERANCE + 1e-9);
+        expect(raw - s, `${w}x${h}: leaves more than a step blank`).toBeLessThan(SCALE_STEP + 1e-9);
       }
     }
-    // The band itself is exercised (1152x719, 1152x713, 1141x720), so the exception is not dead.
-    expect(snapped).toBe(3);
   });
 
   it('absorbs a pixel or two of viewport jitter', () => {
     // Quantisation handles jitter only. The address bar is handled by the running floor below —
     // a 70px swing crosses any step boundary, so quantising alone would NOT have been enough.
     expect(computeScale(1152, 700)).toBe(computeScale(1152, 700.4));
+    expect(computeScale(1920, 1140)).toBe(computeScale(1920, 1140.6));
   });
 
-  it('is monotonic in viewport height', () => {
+  it('is monotonic in viewport height, through 1 and beyond it', () => {
     let prev = 0;
-    for (const h of [600, 650, 700, 750, 800, 834, 900]) {
-      const s = computeScale(1194, h);
-      expect(s).toBeGreaterThanOrEqual(prev);
+    for (let h = 300; h <= 2000; h += 1) {
+      const s = computeScale(4000, h);
+      expect(s, `h ${h}`).toBeGreaterThanOrEqual(prev);
       prev = s;
     }
   });
@@ -121,6 +147,24 @@ describe('computeScale', () => {
   });
 });
 
+describe('screenFill — the applied scale against the full screen', () => {
+  it('is 1 when the canvas fills the screen as the installed app does', () => {
+    expect(screenFill(1.66, 1.66)).toBe(1);
+    // A fitted viewport a step short of the screen is the screen.
+    expect(screenFill(1.64, 1.66)).toBe(1);
+  });
+
+  it('is the ratio when a tab or a window makes the canvas smaller', () => {
+    expect(screenFill(1.56, 1.66)).toBeCloseTo(0.9398, 3);
+    expect(screenFill(0.9, 1)).toBeCloseTo(0.9, 9);
+  });
+
+  it('is null where the screen is not reported, never a guessed 1', () => {
+    expect(screenFill(1.2, null)).toBeNull();
+    expect(screenFill(1.2, 0)).toBeNull();
+  });
+});
+
 describe('isBelowMinimum', () => {
   it('is false for real tablets, including the one that failed', () => {
     expect(isBelowMinimum(1152, 650)).toBe(false);
@@ -136,9 +180,10 @@ describe('isBelowMinimum', () => {
 
 describe('displayMode — is the app running installed and full-screen?', () => {
   /*
-   * The canvas is the installed app's full screen. In a browser tab the address bar costs ~70 px of
-   * height, the scale drops to 0.90 and every stimulus shrinks by a tenth; the pre-flight screen
-   * warns on anything but the installed launch, and the session records what it saw.
+   * The protocol's sizes are the installed app's full screen. In a browser tab the address bar costs
+   * part of the height, the canvas is fitted to the shorter box and every stimulus shrinks with it;
+   * the pre-flight screen warns on anything but the installed launch, and the session records what it
+   * saw.
    */
   const withMedia = (matching: string | null, fn: () => void) => {
     const had = Object.getOwnPropertyDescriptor(window, 'matchMedia');
@@ -351,15 +396,19 @@ describe('the scale recovers from a lock, and never grows under a reader', () =>
     m.remeasureScale();                    // same screen: the running minimum holds, as before
     expect(m.currentScale()).toBe(0.5);
     m.refitScale();                         // the next screen boundary
-    expect(m.currentScale()).toBe(1);       // the study tablet, installed: its design size
+    expect(m.currentScale()).toBe(1);       // a 1152x720 viewport: the canvas exactly
+    setViewport(1920, 1200);
+    m.refitScale();
+    expect(m.currentScale()).toBe(1.66);    // and a larger one is filled, not left at 1 (Round 74)
   });
 
   it('frozen: the scale never grows, and a genuine shrink is counted', async () => {
     /*
-     * Starts BELOW the cap. This test used to start at 1152x720, which after Round 63's re-base is
-     * scale 1.0 — the cap — so "did not grow" was guaranteed by Math.min(1, …) alone and deleting
+     * Starts where growth is possible. This test used to start at 1152x720, which after Round 63 was
+     * scale 1.0 — then the cap — so "did not grow" was guaranteed by Math.min(1, …) alone and deleting
      * either freeze guard left it green (review of Round 63). At 1152x650 the scale is 0.90, and the
      * address bar hiding (1152x720) is exactly the growth the freeze exists to refuse mid-reading.
+     * Round 74 removed the cap, so the same must hold above 1: see the next test.
      */
     const m = await reset();
     setViewport(1152, 650);
@@ -386,6 +435,31 @@ describe('the scale recovers from a lock, and never grows under a reader', () =>
     expect(m.rescalesWhileFrozen()).toBe(1);
     m.setScaleFrozen(false);                // unfreezing re-measures
     expect(m.currentScale()).toBeCloseTo(m.freshScale(), 5);
+  });
+
+  it('frozen above 1: the address bar hiding on a large viewport does not enlarge the text', async () => {
+    /*
+     * Without the cap, the scale above 1 is as free to grow as it was below it. A tab on a viewport
+     * 1920 wide with its address bar showing (1920x1130: 1.56) loses the bar mid-reading (1920x1200:
+     * 1.66) — a 6% enlargement under a reader, refused by the same two guards.
+     */
+    const m = await reset();
+    setViewport(1920, 1130);
+    m.refitScale();
+    const start = m.currentScale();
+    expect(start).toBe(1.56);
+    m.setScaleFrozen(true);
+    setViewport(1920, 1200);
+    m.refitScale();                         // refused while frozen
+    expect(m.layoutViewport()).toBe('1920x1130');
+    m.remeasureScale();
+    expect(m.currentScale()).toBe(start);
+    m.resetViewportFloor();                 // an orientation event: only apply()'s guard is left
+    m.remeasureScale();
+    expect(m.currentScale()).toBe(start);
+    expect(m.rescalesWhileFrozen()).toBe(0);
+    m.setScaleFrozen(false);                // the next screen boundary may grow it
+    expect(m.currentScale()).toBe(1.66);
   });
 
   it('ignores measurements while a text field has focus (the soft keyboard)', async () => {

@@ -91,16 +91,27 @@ async function tickAllButAck(page: Page) {
   }
 }
 
+test.describe('a tab on a 1152x720 screen', () => {
+  /*
+   * The SCREEN this test runs on is 1152x720 CSS px, so the 1152x650 viewport is a tab whose address
+   * bar takes 70 px of it. Since Round 74 the size sentence judges the applied scale against the
+   * screen's own full-screen fit, not against 1 — and Playwright reports a screen the size of the
+   * viewport unless told otherwise (page.setViewportSize resets it too): a tab that fills its screen,
+   * which no tablet is. So both are set here, on the context, and the viewport is not changed after.
+   * The screen goes through contextOptions: the project's device descriptor carries its own `screen`,
+   * which a plain `screen` option here does not displace.
+   */
+  test.use({ viewport: { width: 1152, height: 650 }, contextOptions: { screen: { width: 1152, height: 720 } } });
+
 test('a browser launch must be acknowledged at pre-flight, and is recorded and exported', async ({ page }) => {
   await fakeDisplayMode(page);
-  await page.setViewportSize({ width: 1152, height: 650 });
   await page.goto('/?e2e=1');
   await launchAs(page, 'browser');
   await startNewExperiment(page);
   await driveUntil(page, 'PREFLIGHT');
   await expect(page.getByTestId('display-mode-check')).toContainText('display mode: browser');
-  // At 0.90 the size sentence says the stimuli are smaller — and by how much.
-  await expect(page.getByTestId('display-mode-check')).toContainText('drawn smaller than the protocol size (90%)');
+  // At 0.90 of the screen's full-screen fit the size sentence says the stimuli are smaller — and by how much.
+  await expect(page.getByTestId('display-mode-check')).toContainText('drawn smaller than in the installed app (90% of full-screen size)');
   await tickAllButAck(page);
   const go = page.getByTestId('preflight-continue');
   const ack = page.getByTestId('display-mode-ack');
@@ -131,6 +142,7 @@ test('a browser launch must be acknowledged at pre-flight, and is recorded and e
   expect(x.conditions[0].display_mode_acknowledged).toBe('true');
   expect(x.findings).toHaveLength(1);
   expect(x.findings[0].detail).not.toMatch(/NOT acknowledged/);
+});
 });
 
 test('the installed app is told so, asks for nothing, and is recorded as such', async ({ page }) => {

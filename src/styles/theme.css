@@ -8,8 +8,10 @@
  *
  * 1. html/body fill the physical CSS viewport exactly — no zoom, no transform here.
  * 2. #root is scaled via transform:scale() using the --vl-scale CSS variable.
- * 3. When scale < 1, #root's layout dimensions are expanded inversely
- *    (width: calc(100% / var(--vl-scale))) so content fills the viewport after scaling.
+ * 3. #root's layout dimensions are resized inversely (width: calc(100% / var(--vl-scale))) so
+ *    content fills the viewport after scaling — expanded when the scale is below 1, contracted
+ *    when it is above 1. Since Round 74 the scale fits the design canvas to the viewport in both
+ *    directions (lib/viewportScale.ts), so on a 16:10 screen #root is the 1152x720 canvas.
  * 4. transform-origin: top left ensures alignment.
  * 5. All position:fixed children are contained within #root's stacking context.
  *
@@ -27,13 +29,20 @@
 :root {
   --vl-scale: 1;
   /*
-   * The operator navigation chip (components/NavChip.tsx) must be a 44 CSS px touch target on the
-   * DEVICE, and everything inside #root is shrunk by --vl-scale on any screen smaller than the design
-   * canvas — 0.90 on the study tablet with Chrome's address bar showing (it was 0.86 / 0.76 on the
-   * old 1194x834 canvas). A chip sized 44 design px arrives smaller than that under a finger.
-   * Dividing by the scale keeps it at 44 CSS px whatever the scale is.
+   * The operator navigation chip (components/NavChip.tsx) must be at least a 44 CSS px touch target
+   * on the DEVICE, and everything inside #root is shrunk by --vl-scale on any viewport smaller than
+   * the design canvas (a browser tab with its address bar, a split screen). A chip sized 44 design px
+   * arrives smaller than that under a finger; dividing by the scale keeps it at 44 CSS px.
+   *
+   * ABOVE 1 it is 44 DESIGN px, not 44 CSS px (Round 74). Since the canvas is fitted up as well as
+   * down, a scale above 1 means the viewport has more CSS pixels than the canvas — on a tablet, that
+   * each is physically small: at a pixel ratio of 1.5 on the study tablet's 309 ppi panel, 44 CSS px is
+   * about 5.4 mm, under any touch-target guideline — while 44 design px is the same
+   * fraction of the screen at every pixel ratio (about 9 mm on the study tablet's 236.7 mm-wide panel).
+   * It also keeps every band derived from the chip, and so every layout above 1, identical in design
+   * px to the layout at 1.
    */
-  --vl-nav-chip-h: calc(44px / var(--vl-scale));
+  --vl-nav-chip-h: calc(44px / min(var(--vl-scale), 1));
   /*
    * The band at the top of a screen that the chip sits in. A screen whose content could reach the
    * top-left corner reserves it (`.nav-band`), so the chip never covers a heading or a field.

@@ -6,6 +6,9 @@
  * "full size (100%)", in a tab whose address bar was hidden — and telling the operator "the app is
  * open in a browser tab" when the browser had reported no mode at all. The size sentence follows the
  * applied scale; an unreported mode has its own words; the acknowledgement is required either way.
+ *
+ * Since Round 74 the size is judged against the screen's own full-screen fit (`fill`), not against a
+ * scale of 1: the canvas is fitted up as well as down, so a scale says nothing by itself.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { createElement, act } from 'react';
@@ -16,13 +19,13 @@ import type { DisplayMode } from '@/lib/viewportScale';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mounted: { root: Root; host: HTMLElement }[] = [];
-function render(mode: DisplayMode | null, scale: number): HTMLElement {
+function render(mode: DisplayMode | null, fill: number | null): HTMLElement {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const root = createRoot(host);
   mounted.push({ root, host });
   act(() => {
-    root.render(createElement(DisplayModeCheck, { mode, scale, acknowledged: false, onAcknowledge: () => {} }));
+    root.render(createElement(DisplayModeCheck, { mode, fill, acknowledged: false, onAcknowledge: () => {} }));
   });
   return host;
 }
@@ -45,18 +48,18 @@ describe('DisplayModeCheck', () => {
     }
   });
 
-  it('a tab drawn at 0.90 says the stimuli are smaller, and by how much', () => {
-    const el = render('browser', 0.9);
+  it('a tab drawn at 94% of the full screen says the stimuli are smaller, and by how much', () => {
+    const el = render('browser', 0.94);
     expect(text(el)).toContain('display mode: browser');
     expect(text(el)).toContain('open in a browser tab or window');
-    expect(text(el)).toContain('drawn smaller than the protocol size (90%)');
+    expect(text(el)).toContain('drawn smaller than in the installed app (94% of full-screen size)');
     expect(ack(el)).not.toBeNull();
   });
 
   it('a tab at full size does not claim the stimuli are smaller', () => {
     const el = render('browser', 1);
-    expect(text(el)).not.toContain('drawn smaller than the protocol size');
-    expect(text(el)).toContain('at its protocol size on this screen at the moment');
+    expect(text(el)).not.toContain('drawn smaller than in the installed app');
+    expect(text(el)).toContain('at its full-screen size on this screen at the moment');
     // Still required: the address bar can come back mid-sitting.
     expect(ack(el)).not.toBeNull();
     expect(text(el)).toContain('may not be at their protocol size');
@@ -71,6 +74,13 @@ describe('DisplayModeCheck', () => {
     expect(text(el)).toContain('not confirmed to be the installed app');
     expect(ack(el)).not.toBeNull();
     const small = render(null, 0.9);
-    expect(text(small)).toContain('drawn at 90% of its protocol size');
+    expect(text(small)).toContain('drawn at 90% of its full-screen size');
+  });
+
+  it('an unreported screen size is said to be unknown, not assumed full', () => {
+    const el = render('browser', null);
+    expect(text(el)).toContain('does not report the screen size');
+    expect(text(el)).not.toContain('at its full-screen size on this screen');
+    expect(ack(el)).not.toBeNull();
   });
 });

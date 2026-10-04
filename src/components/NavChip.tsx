@@ -17,9 +17,10 @@
  * does not already have), and placed so it never touches the stimulus. It was a 50 x 24 px target in
  * 12 px DM Mono, 10.3 px on the tablet at the old scale (screen audit F12); it is now the same 17 px
  * label and 44 CSS px target as everywhere else, in the top-left corner OUTSIDE the stimulus column:
- *   - the TARGET sits 1 px from the top, so at scale 1 it ends at 45, above the 46 px at which every
+ *   - the TARGET sits 1 px from the top, so at scale 1 — and at any scale above it, where the chip
+ *     is 44 design px (theme.css, Round 74) — it ends at 45, above the 46 px at which every
  *     condition screen's column content starts (STIMULUS_PAGE_PAD_TOP_PX). Its right end, about
- *     85 px, is past the column's left edge (56) on the installed tablet, so it has to be above the
+ *     85 px, is past the column's left edge (56) on a 16:10 screen the canvas fills, so it has to be above the
  *     column, not beside it. With Chrome's address bar (scale 0.90) the root is 1280 wide, the column
  *     starts at 120, and the chip is beside it;
  *   - the visible OUTLINE is a 34 px box centred in that target (FACE_PX). Drawn the full 44 px it

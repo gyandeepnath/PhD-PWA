@@ -22,7 +22,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
-  computeScale, STIMULUS_COLUMN_PX, DESIGN_WIDTH, DESIGN_HEIGHT,
+  computeScale, STIMULUS_COLUMN_PX, DESIGN_WIDTH, DESIGN_HEIGHT, OVERFILL_TOLERANCE,
 } from '@/lib/viewportScale';
 import { RT_LOCATIONS } from '@/lib/rtLocations';
 import { CONFIG } from '@/experiment/config';
@@ -33,11 +33,17 @@ import { CONFIG } from '@/experiment/config';
  */
 const OLD_PERCENT_COLUMN = 0.8;
 
-/** Tablets the study can plausibly run on, plus the design canvas and a large display. */
+/**
+ * Viewports the study can plausibly run on, plus the design canvas and a large display. The study
+ * tablet's real CSS viewport was never measured (Round 74), so it appears at several pixel ratios: the
+ * 1152x720 / 1152x650 pair Rounds 63-66 assumed, and the same 16:10 panel at a lower ratio.
+ */
 const DEVICES: [string, number, number][] = [
   ['design canvas', DESIGN_WIDTH, DESIGN_HEIGHT],
-  ['Xiaomi Pad 6, bar hidden', 1152, 720],
-  ['Xiaomi Pad 6, bar showing', 1152, 650],
+  ['16:10 at the assumed 1152x720, bar hidden', 1152, 720],
+  ['16:10 at the assumed 1152x720, bar showing', 1152, 650],
+  ['16:10 at 1920x1200', 1920, 1200],
+  ['16:10 at 1920x1200, bar showing', 1920, 1130],
   ['iPad 9.7', 1024, 768],
   ['Galaxy Tab', 1280, 800],
   ['1366x768 laptop', 1366, 768],
@@ -63,13 +69,26 @@ describe('the root box is device-shaped — the fact everything here exists for'
     expect(off.length).toBeGreaterThan(0);
   });
 
-  it('is never narrower or shorter than the design canvas on a device above the minimum', () => {
+  it('is never more than 1% narrower or shorter than the design canvas on a device above the minimum', () => {
     // The fixed-width column and the target offsets both assume they fit. They do, because the scale is
-    // the MINIMUM of the two ratios: w/s >= DESIGN_WIDTH and h/s >= DESIGN_HEIGHT follow directly.
+    // the MINIMUM of the two ratios, rounded to a step that exceeds the exact fit by at most
+    // OVERFILL_TOLERANCE (viewportScale.ts): w/s >= DESIGN_WIDTH / (1 + T), and the same for h. Every
+    // screen keeps that 1% as slack (e2e/allScreensFit at 1152x713).
     for (const [name, w, h] of DEVICES) {
       const b = rootBox(w, h);
-      expect(b.w, `${name} root box is narrower than the canvas`).toBeGreaterThanOrEqual(DESIGN_WIDTH - 1e-6);
-      expect(b.h, `${name} root box is shorter than the canvas`).toBeGreaterThanOrEqual(DESIGN_HEIGHT - 1e-6);
+      expect(b.w, `${name} root box is narrower than the canvas`).toBeGreaterThanOrEqual(DESIGN_WIDTH / (1 + OVERFILL_TOLERANCE) - 1e-6);
+      expect(b.h, `${name} root box is shorter than the canvas`).toBeGreaterThanOrEqual(DESIGN_HEIGHT / (1 + OVERFILL_TOLERANCE) - 1e-6);
+    }
+  });
+
+  it('is the canvas itself, within a step, on every 16:10 screen (Round 74: fitted, not capped)', () => {
+    // Capped at 1, a 1920x1200 viewport gave a 1920x1200 root: the 1040 px column in its middle with
+    // 440 px blank either side — what the investigator saw on the tablet.
+    for (const [name, w, h] of DEVICES) {
+      if (Math.abs(w / h - DESIGN_WIDTH / DESIGN_HEIGHT) > 1e-9) continue;
+      const b = rootBox(w, h);
+      expect(Math.abs(b.w - DESIGN_WIDTH) / DESIGN_WIDTH, name).toBeLessThan(0.02);
+      expect(STIMULUS_COLUMN_PX / b.w, `${name}: the column's share of the screen`).toBeGreaterThan(0.85);
     }
   });
 });

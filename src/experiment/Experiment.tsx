@@ -54,7 +54,8 @@ import {
 } from '@/start/setupStages';
 import { CalibrationRoutine } from '@/start/CalibrationRoutine';
 import {
-  currentScale, layoutViewport, setScaleFrozen, rescalesWhileFrozen, displayMode, isInstalledDisplay, type DisplayMode,
+  currentScale, layoutViewport, setScaleFrozen, rescalesWhileFrozen, displayMode, isInstalledDisplay, screenFill,
+  type DisplayMode,
 } from '@/lib/viewportScale';
 import { ResearcherPanel } from '@/components/ResearcherPanel';
 import { NavChip } from '@/components/NavChip';
@@ -1868,7 +1869,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         >
           {!launchOk && (
             <div style={{ textAlign: 'left', marginTop: 20 }}>
-              <DisplayModeCheck mode={liveMode} scale={currentScale()} acknowledged={breakTicked}
+              <DisplayModeCheck mode={liveMode} fill={screenFill()} acknowledged={breakTicked}
                 onAcknowledge={(t) => setBreakLaunchAck(t ? breakKey : null)} />
             </div>
           )}

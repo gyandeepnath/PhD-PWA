@@ -17,6 +17,13 @@ test('a scale locked small by a floating window recovers at the next screen', as
   await page.waitForTimeout(200);
   await page.getByRole('button', { name: /Enter Research Console/ }).click();
   await page.waitForTimeout(200);
-  // The study tablet, installed: the canvas itself, so the design size.
+  // A 1152x720 viewport: the canvas itself, so the design size.
   expect(await scaleNow(page)).toBe(1);
+  // And a larger viewport is FILLED at the next screen (Round 74), not left at the canvas's size in
+  // its middle — which is what the investigator's tablet showed while the scale was capped at 1.
+  await page.setViewportSize({ width: 1920, height: 1200 });
+  await page.waitForTimeout(200);
+  await page.getByTestId('nav-home').click();
+  await page.waitForTimeout(200);
+  expect(await scaleNow(page)).toBe(1.66);
 });

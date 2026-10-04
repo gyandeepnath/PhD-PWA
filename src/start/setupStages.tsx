@@ -21,8 +21,8 @@ import { now } from '@/lib/timing';
 import { trackFieldBlockedTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { stimulusFontLoaded } from '@/lib/fonts';
 import {
-  isBelowMinimum, currentScale, freshScale, refitScale, displayMode, isInstalledDisplay,
-  DESIGN_WIDTH, DESIGN_HEIGHT, type DisplayMode,
+  isBelowMinimum, currentScale, freshScale, refitScale, displayMode, isInstalledDisplay, screenFitScale,
+  screenFill, DESIGN_WIDTH, DESIGN_HEIGHT, type DisplayMode,
 } from '@/lib/viewportScale';
 import { startFaceProbe, type FaceProbeResult, type FaceProbeStatus } from '@/screening/faceProbe';
 import type { CameraStatus } from '@/storage/types';
@@ -51,9 +51,9 @@ import type { CameraStatus } from '@/storage/types';
  */
 const shell = 'h-full w-full bg-cream px-[5%] nav-band panel-band font-sans text-[#1a1a2e] animate-fade-in overflow-y-auto';
 /*
- * Both buttons are at least --vl-nav-chip-h tall: 44 CSS px on the device whatever the display scale
- * (theme.css). Sized in design px alone they arrive smaller under a finger whenever the screen is
- * scaled down — at 0.90 with Chrome's address bar showing, py-3 text-base comes to 43 px.
+ * Both buttons are at least --vl-nav-chip-h tall: 44 CSS px on the device whenever the display is
+ * scaled down, 44 design px when it is scaled up (theme.css). Sized in design px alone they arrive
+ * smaller under a finger whenever the screen is scaled down — at 0.90, py-3 text-base comes to 43 px.
  */
 const btn = 'min-h-[var(--vl-nav-chip-h)] rounded-xl px-8 py-3 font-sans text-base font-medium text-white transition active:scale-95';
 /*
@@ -67,9 +67,10 @@ const btnBack = 'min-h-[var(--vl-nav-chip-h)] rounded-xl border border-[#bdb8ae]
  * fit (viewportScale.ts): about 0.86 on a Xiaomi Pad 6, so a 12 px label arrived at the eye as about
  * 10 px — in DM Mono, a typewriter face that reads poorly as running text. The floor is now 15 px for
  * anything read as a sentence and 14 px for the small uppercase headings, in Roboto; DM Mono is kept
- * for what it is good at, the input fields where codes and numbers are typed. Since the canvas is the
- * tablet itself (1152x720), those floors are the sizes the operator actually sees in the installed
- * app. Colours are from lib/uiPalette.ts, each at least 4.5:1 on these grounds (tests/contrast.test.ts).
+ * for what it is good at, the input fields where codes and numbers are typed. Since Round 74 the canvas
+ * is fitted to the screen in both directions, so those floors are design px — a fixed fraction of the
+ * screen's width — at whatever pixel ratio the tablet reports, and never shrunk in the installed app.
+ * Colours are from lib/uiPalette.ts, each at least 4.5:1 on these grounds (tests/contrast.test.ts).
  */
 const eyebrow = 'font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]';
 const help = 'font-sans text-[15px] leading-relaxed text-[#4a4a60]';
@@ -1056,6 +1057,11 @@ export function Consent({
 }
 
 // ---- PRE-FLIGHT CHECKLIST (researcher) ----
+/** The scale applied, the one this window supports measured fresh, and the full screen's. */
+function readScale() {
+  return { applied: currentScale(), fresh: freshScale(), full: screenFitScale() };
+}
+
 const PREFLIGHT_ITEMS = [
   'Screen brightness set to a fixed level; auto-brightness OFF',
   'Blue-light filter / Night Shift OFF',
@@ -1119,11 +1125,11 @@ export function Preflight({ onDone, onBack }: {
    * viewportScale.ts) was invisible: the check above reads the live screen, so a tablet stuck at half
    * size on a full-size screen passed silently. Now it is shown, and one tap re-fits it.
    */
-  const [scale, setScale] = useState(() => ({ applied: currentScale(), fresh: freshScale() }));
+  const [scale, setScale] = useState(readScale);
   useEffect(() => {
     const check = () => {
       setClipped(isBelowMinimum());
-      setScale({ applied: currentScale(), fresh: freshScale() });
+      setScale(readScale());
     };
     check();
     const late = window.setTimeout(check, 400);
@@ -1133,15 +1139,22 @@ export function Preflight({ onDone, onBack }: {
   const scaleLocked = scale.applied < scale.fresh - 0.02;
   const refit = () => {
     refitScale();
-    window.setTimeout(() => setScale({ applied: currentScale(), fresh: freshScale() }), 100);
+    window.setTimeout(() => setScale(readScale()), 100);
   };
+  /*
+   * How much of the full screen the canvas gets. Before Round 74 this was `applied >= 1`, against a
+   * 1152x720 viewport nobody had measured on the tablet: on a screen with more CSS pixels than that
+   * the box said "full size (100%)" while the canvas sat in the middle with a quarter of the width
+   * blank either side. Now the yardstick is this screen's own full-screen fit (screenFitScale).
+   */
+  const fill = screenFill(scale.applied, scale.full);
 
   /*
-   * Is this the installed app, full-screen? The design canvas IS the installed app's screen
-   * (1152 x 720), so that is the one launch at which every stimulus is drawn at its protocol size.
-   * In a browser tab the address bar takes about 70 px, the scale drops to 0.90 and the reading text
-   * to 19.8 px — and the bar can hide and reappear, so two sittings run in tabs need not even match
-   * each other. Nothing on the screen shows it; an operator in a hurry would never notice. So it is
+   * Is this the installed app, full-screen? The canvas is fitted to the viewport, and the installed
+   * app's viewport is the whole screen, so that is the one launch at which every stimulus is drawn at
+   * its protocol size. In a browser tab the address bar takes part of the height and every stimulus
+   * shrinks with the canvas — and the bar can hide and reappear, so two sittings run in tabs need not
+   * even match each other. Nothing on the screen shows it; an operator in a hurry would never notice. So it is
    * checked by machine, like storage and the typeface, and anything other than the installed launch
    * has to be acknowledged in writing before the sitting can go on — the choice is the operator's,
    * but it is made knowingly and recorded (display_mode, display_mode_acknowledged). The same check
@@ -1151,7 +1164,7 @@ export function Preflight({ onDone, onBack }: {
   const installed = isInstalledDisplay(mode);
   const [modeAck, setModeAck] = useState(false);
   const modeOk = installed || modeAck;
-  const fullSize = scale.applied >= 1;
+  const fullSize = fill === 1;
 
   const storageBlocks = storage?.verdict === 'blocked';
   const all = checked.every(Boolean) && !!storage && !storageBlocks && fontOk !== undefined && modeOk;
@@ -1184,35 +1197,42 @@ export function Preflight({ onDone, onBack }: {
           <p key={i} className={boxText} style={{ marginTop: 6 }}>{m}</p>
         ))}
       </div>
-      <DisplayModeCheck mode={mode} scale={scale.applied} acknowledged={modeAck} onAcknowledge={setModeAck} />
+      <DisplayModeCheck mode={mode} fill={fill} acknowledged={modeAck} onAcknowledge={setModeAck} />
 
       <div data-testid="scale-check"
         style={{ marginTop: 12, padding: '12px 14px', borderRadius: 10, border: `1px solid ${scaleLocked ? '#b3261e' : fullSize ? '#d8d4cc' : tone.warn}`, background: scaleLocked ? '#fdeeee' : fullSize ? '#fff' : `${tone.warn}12` }}>
         {/*
           This used to print "76% of design size — correct for this screen" on the study tablet in a
-          browser tab: correct only in the sense that the arithmetic fitted the screen. The canvas is
-          now the tablet, so the expected figure is 100%, and anything less is said to be less.
+          browser tab: correct only in the sense that the arithmetic fitted the screen. Then, after
+          Round 63, "full size (100%)" whenever the scale reached 1 — which on a screen with more CSS
+          pixels than the 1152 x 720 canvas meant the canvas in the middle of the screen. Now it is
+          measured against this screen's own full-screen fit, and the scale itself is shown.
         */}
         <p className={boxText} style={{ color: scaleLocked ? '#8a1c14' : '#3a3a4a' }}>
           <strong>Display size:</strong>{' '}
           {fullSize
-            ? 'full size (100%) — every stimulus is drawn at its protocol size.'
-            : `${Math.round(scale.applied * 100)}% of full size`}
-          {!fullSize && (scaleLocked
-            ? ` — this screen supports ${Math.round(scale.fresh * 100)}%.`
-            : ` — the reading text will be ${(CONFIG.READING_FONT_SIZE_PX * scale.applied).toFixed(1)} px instead of ${CONFIG.READING_FONT_SIZE_PX} px. `
+            ? `fills the screen — the ${DESIGN_WIDTH} × ${DESIGN_HEIGHT} layout is drawn at ×${scale.applied.toFixed(2)}, as the installed app draws it.`
+            : fill == null
+              ? `the ${DESIGN_WIDTH} × ${DESIGN_HEIGHT} layout is drawn at ×${scale.applied.toFixed(2)}; this browser does not report the screen size, so whether that fills the screen cannot be said.`
+              : `${Math.round(fill * 100)}% of full-screen size (×${scale.applied.toFixed(2)} where the full screen would give ×${(scale.full ?? 0).toFixed(2)})`}
+          {!fullSize && fill != null && (scaleLocked
+            ? ` — this window supports ×${scale.fresh.toFixed(2)}.`
+            : ' — every stimulus, the reading text included, is drawn that much smaller than in the installed app. '
               + (installed
-                ? `This screen is smaller than the study tablet's (${DESIGN_WIDTH} × ${DESIGN_HEIGHT}): a split-screen or floating window, or a different device.`
+                ? 'The app is not getting the whole screen: a split-screen or floating window.'
                 : mode
                   ? 'The browser\'s address bar is taking part of the screen; see above.'
                   // Not "the address bar": with no mode reported, the cause is not known.
-                  : `This screen is smaller than the study tablet's (${DESIGN_WIDTH} × ${DESIGN_HEIGHT}); the display mode is not reported (see above).`))}
+                  : 'The display mode is not reported (see above), so the cause is not known.'))}
           {' '}
           <InfoTip label="display size">
-            Every screen is laid out for the study tablet&apos;s full screen ({DESIGN_WIDTH} × {DESIGN_HEIGHT}),
-            and shrunk to fit anything smaller. The percentage is how much it is shrunk. It shrinks the
-            reading text too, so it is saved with every condition. On the study tablet, launched from
-            the home-screen icon, it reads 100%. If it is lower than this screen supports, tap Re-fit.
+            Every screen is laid out on a {DESIGN_WIDTH} × {DESIGN_HEIGHT} canvas (the tablet&apos;s
+            16:10 shape) and fitted to the screen, enlarged or shrunk, so it fills it. ×1.00 means drawn
+            at the browser&apos;s own pixel size; the number differs between devices and display-size
+            settings, and it is saved with every condition. What matters for the study is the PHYSICAL
+            size, which the ruler measurement on this screen gives. Launched from the home-screen icon
+            the layout fills the screen; in a browser tab the address bar makes it smaller. If it is
+            lower than this screen supports, tap Re-fit.
           </InfoTip>
         </p>
         {scaleLocked && (
@@ -1302,24 +1322,29 @@ export function useDisplayMode(): DisplayMode | null {
  * WHAT IT MAY CLAIM. It used to say, whenever the mode was not fullscreen or standalone, that "every
  * stimulus is drawn smaller than the protocol size" — directly above the scale box saying "full size
  * (100%) — every stimulus is drawn at its protocol size", in a tab whose address bar happened to be
- * hidden (review of Round 63). The size sentence now follows the scale actually applied. And where the
- * browser reports no mode at all it no longer says "the app is open in a browser tab": the code does
- * not know that, only that the installed launch cannot be confirmed. The acknowledgement is required
- * in every case that is not confirmed installed — at 100% too, because the bar can come back — and
- * says "may not be at their protocol size", which is true in all of them.
+ * hidden (review of Round 63). The size sentence now follows the size actually applied — since Round 74
+ * as a fraction of this screen's full-screen size (viewportScale.screenFill), because the scale alone
+ * says nothing once the canvas is fitted up as well as down. And where the browser reports no mode at
+ * all it no longer says "the app is open in a browser tab": the code does not know that, only that the
+ * installed launch cannot be confirmed. The acknowledgement is required in every case that is not
+ * confirmed installed — at full size too, because the bar can come back — and says "may not be at
+ * their protocol size", which is true in all of them.
  */
-export function DisplayModeCheck({ mode, scale, acknowledged, onAcknowledge }: {
+export function DisplayModeCheck({ mode, fill, acknowledged, onAcknowledge }: {
   mode: DisplayMode | null;
-  /** The display scale currently applied (viewportScale.currentScale). */
-  scale: number;
+  /**
+   * The applied scale as a fraction of the full screen's (viewportScale.screenFill): 1 when the canvas
+   * fills the screen, null where the browser does not report the screen.
+   */
+  fill: number | null;
   acknowledged: boolean;
   onAcknowledge: (ticked: boolean) => void;
 }) {
   const installed = isInstalledDisplay(mode);
   const warn = '#c98a22';
   const boxText = 'font-sans text-[15px] leading-relaxed text-[#3a3a4a]';
-  const smaller = scale < 1;
-  const pct = Math.round(scale * 100);
+  const smaller = fill != null && fill < 1;
+  const pct = fill == null ? null : Math.round(fill * 100);
   return (
     <div data-testid="display-mode-check"
       style={{ marginTop: 12, padding: '12px 14px', borderRadius: 10, border: `1px solid ${installed ? '#d8d4cc' : warn}`, background: installed ? '#fff' : `${warn}12` }}>
@@ -1337,13 +1362,15 @@ export function DisplayModeCheck({ mode, scale, acknowledged, onAcknowledge }: {
               ? 'The app is open in a browser tab or window, not from its home-screen icon. '
               : 'The browser did not say how the app is being displayed, so it cannot be confirmed that '
                 + 'it was opened from its home-screen icon. '}
-            {mode
-              ? (smaller
-                ? `The address bar takes part of the screen, so every stimulus is drawn smaller than the protocol size (${pct}%), and the size can change if the bar hides or reappears. `
-                : 'Every stimulus is at its protocol size on this screen at the moment, but the address bar can appear at any time, and every stimulus is then drawn smaller. ')
-              : (smaller
-                ? `Every stimulus is drawn at ${pct}% of its protocol size on this screen. `
-                : 'Every stimulus is at its protocol size on this screen at the moment. ')}
+            {fill == null
+              ? 'The browser does not report the screen size, so whether every stimulus is drawn at its full-screen size cannot be said. '
+              : mode
+                ? (smaller
+                  ? `The address bar takes part of the screen, so every stimulus is drawn smaller than in the installed app (${pct}% of full-screen size), and the size can change if the bar hides or reappears. `
+                  : 'Every stimulus is at its full-screen size on this screen at the moment, but the address bar can appear at any time, and every stimulus is then drawn smaller. ')
+                : (smaller
+                  ? `Every stimulus is drawn at ${pct}% of its full-screen size on this screen. `
+                  : 'Every stimulus is at its full-screen size on this screen at the moment. ')}
             {mode ? 'To fix it: tap ' : 'If it was not opened from the icon: tap '}
             <strong>Exit — resume later</strong>, close this {mode ? 'tab' : 'tab or window'}, open
             VisuLab from the home-screen icon and resume this sitting from the Session Manager.
@@ -1362,17 +1389,20 @@ export function DisplayModeCheck({ mode, scale, acknowledged, onAcknowledge }: {
   );
 }
 
-/** The display scale applied now, re-read when the viewport changes (the scale settles a frame later). */
-function useAppliedScale(): number {
-  const [scale, setScale] = useState(() => currentScale());
+/**
+ * The applied scale as a fraction of the full screen's (screenFill), re-read when the viewport changes
+ * (the scale settles a frame later).
+ */
+export function useScreenFill(): number | null {
+  const [fill, setFill] = useState(() => screenFill());
   useEffect(() => {
-    const check = () => setScale(currentScale());
+    const check = () => setFill(screenFill());
     const late = window.setTimeout(check, 400);
     const onResize = () => { window.setTimeout(check, 100); };
     window.addEventListener('resize', onResize);
     return () => { window.clearTimeout(late); window.removeEventListener('resize', onResize); };
   }, []);
-  return scale;
+  return fill;
 }
 
 /**
@@ -1386,7 +1416,7 @@ function useAppliedScale(): number {
  */
 export function LaunchCheck({ onContinue }: { onContinue: (acknowledged: DisplayMode | null) => void }) {
   const mode = useDisplayMode();
-  const scale = useAppliedScale();
+  const fill = useScreenFill();
   const [ack, setAck] = useState(false);
   // The mode can change under the screen; if it becomes the installed launch there is nothing to tick.
   const ok = isInstalledDisplay(mode) || ack;
@@ -1399,7 +1429,7 @@ export function LaunchCheck({ onContinue }: { onContinue: (acknowledged: Display
           Pre-flight checked it for the launch the sitting started in; a resume is a new launch, and the
           displays still to come are drawn at the size this one allows.
         </p>
-        <DisplayModeCheck mode={mode} scale={scale} acknowledged={ack} onAcknowledge={setAck} />
+        <DisplayModeCheck mode={mode} fill={fill} acknowledged={ack} onAcknowledge={setAck} />
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 20 }}>
           <button type="button" className={btn} disabled={!ok} data-testid="launch-check-continue"
             style={btnState(ok)}

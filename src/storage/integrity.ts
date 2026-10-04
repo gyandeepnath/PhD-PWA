@@ -157,7 +157,7 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
    *
    * MIN_SCALE is a clamp, so a condition at exactly that scale either did not fit the screen or —
    * before refitScale existed — had LOCKED small on a screen that could show it larger (the Xiaomi
-   * Pad 6 pilot). Either way the reading text was about half its design size, below the critical
+   * Pad 6 pilot). Either way the reading text was about half its fitted size, below the critical
    * print size for fluent reading, and those rows are not comparable with rows at a normal scale.
    * Nothing flagged a sitting that stayed at the floor throughout: the check below only notices a
    * scale that CHANGES.
@@ -193,9 +193,9 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
   /*
    * ---- every display should have run in the installed app
    *
-   * The design canvas is the installed app's full screen (1152x720 on the study tablet). In a browser
-   * tab the address bar takes about a tenth of the height, so every stimulus is drawn about 10%
-   * smaller (stimulus_scale 0.90) and can change size when the bar hides or reappears. Pre-flight asks
+   * The canvas is fitted to the viewport, and the installed app's viewport is the whole screen. In a
+   * browser tab the address bar takes part of the height, so every stimulus is drawn smaller by that
+   * fraction and can change size when the bar hides or reappears. Pre-flight asks
    * for an acknowledgement before running like that, and since Round 67 so does a resume and a break —
    * but the session row holds only pre-flight's answer, and a resume used to be asked nothing, so a
    * sitting checked as installed could be finished in a tab with the session still saying fullscreen.
