@@ -173,6 +173,29 @@ function rows(files: { filename: string; content: string }[], name: string): Rec
   return lines.map((l) => { const v = splitCsvRow(l); return Object.fromEntries(cols.map((c, i) => [c, v[i]])); });
 }
 
+describe('a display-size change between pre-flight and a condition', () => {
+  it('scales the CSS pixel by the ratio of the pixel ratios, exactly', () => {
+    // Calibrated at 2.5 (0.2055 mm per CSS px); a condition at 1.5 has CSS pixels 1.5/2.5 the size.
+    const s = { mm_per_css_px: 0.2055, device_pixel_ratio: 2.5, screen_resolution: '1152x720', viewing_distance_cm: 55 };
+    expect(sessionMmPerCssPx(s, 1.5).mm).toBeCloseTo(0.1233, 6);
+    expect(sessionMmPerCssPx(s, 2.5).mm).toBe(0.2055);
+    expect(sessionMmPerCssPx(s, null).mm).toBe(0.2055);
+    // At 1.5 the layout is fitted at 1.66, so the stimulus on the glass is the same size again.
+    expect(conditionPhysical(s, 1.66, 22, 1.5).mm_per_layout_px!).toBeCloseTo(0.2047, 4);
+  });
+
+  it('is reported by the integrity audit, naming the conditions', () => {
+    const b = buildFixtureBundle();
+    b.conditions = b.conditions.map((c, i) => ({ ...c, device_pixel_ratio: i === 3 ? 1.5 : 2.5 }));
+    const f = auditBundle(b).findings.filter((x) => x.check === 'physical_calibration_pixel_ratio');
+    expect(f).toHaveLength(1);
+    expect(f[0].refs).toEqual([b.conditions[3].condition_id]);
+    const c3 = rows(buildExportFiles(b), '02_conditions.csv')[3];
+    expect(c3.device_pixel_ratio).toBe('1.5');
+    expect(Number(c3.mm_per_layout_px)).toBeCloseTo(0.1233, 4);
+  });
+});
+
 describe('the export carries the calibration and computes from it', () => {
   it('a measured sitting: the measurement, measured sizes, and no calibration finding', () => {
     const b = buildFixtureBundle();

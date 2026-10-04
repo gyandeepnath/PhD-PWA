@@ -270,6 +270,20 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
         }
       }
     }
+    // The CSS pixel is `ratio` device pixels: a condition run at another ratio than pre-flight's was
+    // drawn with a different-sized CSS pixel. The export corrects for it; this says that it happened.
+    if (typeof s.device_pixel_ratio === 'number') {
+      const moved = conditions.filter((c) => typeof c.device_pixel_ratio === 'number'
+        && Math.abs((c.device_pixel_ratio as number) - (s.device_pixel_ratio as number)) > 1e-6);
+      if (moved.length) {
+        add('warning', 'physical_calibration_pixel_ratio',
+          `${moved.length} condition(s) ran at a device pixel ratio other than the ${s.device_pixel_ratio} `
+          + `pre-flight measured the screen at (${[...new Set(moved.map((c) => c.device_pixel_ratio))].join(', ')}) — `
+          + 'the display-size setting changed before a resume. Their physical columns are scaled by the ratio '
+          + 'of the two; their stimulus_scale and layout_viewport will differ from the other conditions too.',
+          moved.map((c) => c.condition_id));
+      }
+    }
     if (s.viewing_distance_cm != null && !isPlausibleViewingDistanceCm(s.viewing_distance_cm)) {
       add('warning', 'physical_calibration',
         `the recorded viewing distance, ${s.viewing_distance_cm} cm, is outside `

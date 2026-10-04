@@ -1096,6 +1096,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
        */
       stimulus_scale: currentScale(),
       layout_viewport: layoutViewport(),
+      // The CSS pixel's size depends on it, and the ruler calibration was taken at pre-flight's.
+      device_pixel_ratio: Number.isFinite(window.devicePixelRatio) && window.devicePixelRatio > 0 ? window.devicePixelRatio : null,
       // Per condition, because a resume can come back in a different launch (a tab, or the installed
       // app) from the one pre-flight checked; see display_mode on the session. And whether that launch
       // was acknowledged in this run of the app — false where it was installed and nothing needed it.

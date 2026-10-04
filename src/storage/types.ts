@@ -435,6 +435,13 @@ export interface ConditionRecord {
   stimulus_scale?: number;
   layout_viewport?: string;
   /**
+   * window.devicePixelRatio when this condition started (Round 74). The ruler calibration measured the
+   * CSS pixel at the ratio pre-flight saw (the session's device_pixel_ratio); if a resume came back at
+   * another ratio — a display-size change — the CSS pixel changed size with it, and the export scales
+   * the physical figures by the ratio of the two. Absent on rows from earlier builds.
+   */
+  device_pixel_ratio?: number | null;
+  /**
    * The CSS display mode when this condition started ('fullscreen'/'standalone' = the installed app;
    * 'browser'/'minimal-ui' = a tab or window). Per condition as well as per session because a sitting
    * can be resumed in a different launch from the one its pre-flight saw — the session-level value

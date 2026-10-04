@@ -355,6 +355,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       // Drawn at the scale the session's calibration was taken at (see the session below).
       stimulus_scale: 1,
       layout_viewport: '1152x720',
+      device_pixel_ratio: 2.5,
     };
   });
 

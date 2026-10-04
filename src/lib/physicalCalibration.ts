@@ -106,17 +106,27 @@ export interface SessionPhysical {
   calibration_skipped?: boolean | null;
   viewing_distance_cm?: number | null;
   screen_resolution?: string | null;
+  /** The pixel ratio pre-flight saw, where the calibration was taken. */
+  device_pixel_ratio?: number | null;
 }
 
 /**
  * Millimetres per CSS px for a sitting, and where the figure came from: the measurement when there is
  * a plausible one, else the panel fallback, else the documented constant. An implausible measurement
  * is not used — the integrity audit reports it — and the fallback is flagged as such.
+ *
+ * `conditionDpr` is the pixel ratio a condition ran at. A CSS pixel is `ratio` device pixels, so if the
+ * ratio changed after pre-flight (a display-size change before a resume), the CSS pixel changed size
+ * in the same proportion and the figure is scaled by it — exactly, since the panel's pixels did not
+ * change. Where either ratio is unknown, nothing is scaled; the integrity audit reports a change.
  */
-export function sessionMmPerCssPx(s: SessionPhysical): { mm: number; source: PhysicalSource } {
-  if (isPlausibleMmPerCssPx(s.mm_per_css_px)) return { mm: s.mm_per_css_px as number, source: 'measured' };
+export function sessionMmPerCssPx(s: SessionPhysical, conditionDpr?: number | null): { mm: number; source: PhysicalSource } {
+  const ratio = (typeof conditionDpr === 'number' && conditionDpr > 0
+    && typeof s.device_pixel_ratio === 'number' && s.device_pixel_ratio > 0)
+    ? conditionDpr / s.device_pixel_ratio : 1;
+  if (isPlausibleMmPerCssPx(s.mm_per_css_px)) return { mm: (s.mm_per_css_px as number) * ratio, source: 'measured' };
   const long = longSide(s.screen_resolution);
-  if (long != null) return { mm: STUDY_TABLET_PANEL_LONG_MM / long, source: 'assumed_study_tablet_panel' };
+  if (long != null) return { mm: (STUDY_TABLET_PANEL_LONG_MM / long) * ratio, source: 'assumed_study_tablet_panel' };
   return { mm: DOCUMENTED_MM_PER_CSS_PX, source: 'assumed_0.2055' };
 }
 
@@ -165,11 +175,13 @@ export interface ConditionPhysical {
 }
 
 /** The physical size of a condition's layout px and its reading text, from the sitting and the scale. */
-export function conditionPhysical(s: SessionPhysical, stimulusScale: number | null | undefined, readingFontPx: number): ConditionPhysical {
+export function conditionPhysical(
+  s: SessionPhysical, stimulusScale: number | null | undefined, readingFontPx: number, conditionDpr?: number | null,
+): ConditionPhysical {
   if (!(typeof stimulusScale === 'number' && stimulusScale > 0)) {
     return { mm_per_layout_px: null, reading_x_height_mm: null, reading_x_height_arcmin: null, physical_size_source: null };
   }
-  const { mm, source } = sessionMmPerCssPx(s);
+  const { mm, source } = sessionMmPerCssPx(s, conditionDpr);
   const perLayout = mm * stimulusScale;
   const xh = xHeightMm(readingFontPx, perLayout);
   const d = sessionViewingDistanceMm(s);
@@ -182,13 +194,13 @@ export function conditionPhysical(s: SessionPhysical, stimulusScale: number | nu
 }
 
 /** An RT dot's eccentricity in degrees at 55 cm and at the recorded distance, and the size's source. */
-export function trialEccentricity(s: SessionPhysical, t: Parameters<typeof trialOnsetScale>[0]): {
+export function trialEccentricity(s: SessionPhysical, t: Parameters<typeof trialOnsetScale>[0], conditionDpr?: number | null): {
   deg55: number | null; degAtDistance: number | null; source: PhysicalSource | null; scale: number | null;
 } {
   const scale = trialOnsetScale(t);
   const px = t.stim_ecc_px;
   if (scale == null || typeof px !== 'number') return { deg55: null, degAtDistance: null, source: null, scale };
-  const { mm, source } = sessionMmPerCssPx(s);
+  const { mm, source } = sessionMmPerCssPx(s, conditionDpr);
   const off = px * scale * mm;
   const d = sessionViewingDistanceMm(s);
   return {
