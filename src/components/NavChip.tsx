@@ -21,8 +21,8 @@
  *     is 44 design px (theme.css, Round 74) — it ends at 45, above the 46 px at which every
  *     condition screen's column content starts (STIMULUS_PAGE_PAD_TOP_PX). Its right end, about
  *     85 px, is past the column's left edge (56) on a 16:10 screen the canvas fills, so it has to be above the
- *     column, not beside it. With Chrome's address bar (scale 0.90) the root is 1280 wide, the column
- *     starts at 120, and the chip is beside it;
+ *     column, not beside it. On a viewport shorter than 16:10 — a tab with its address bar showing,
+ *     1152x650 at scale 0.90 — the root is 1280 wide, the column starts at 120, and the chip is beside it;
  *   - the visible OUTLINE is a 34 px box centred in that target (FACE_PX). Drawn the full 44 px it
  *     touched the top edge of the screen and sat 1 px above the passage title and the word-search
  *     target, which read as the chip resting on the stimulus page's header. The part of the target

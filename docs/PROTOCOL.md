@@ -181,8 +181,12 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
   (about 1920 across would explain it; the real figure was not measured). Sittings from those builds
   carry no ruler calibration: their physical columns are recomputed on the assumption that they ran
   on the study tablet's panel at the screen size the browser reported (`physical_size_source =
-  assumed_study_tablet_panel`). From 2.2.0 the layout fills the screen at any pixel ratio and each
-  sitting measures its own screen.
+  assumed_study_tablet_panel`). What that means is computed, not measured: had the tablet reported
+  1920x1200 CSS px (pixel ratio 1.5), the capped layout drew a CSS pixel of 0.123 mm instead of the
+  0.2055 mm the documentation stated, so the reading text's x-height was about 1.43 mm, 9.0′ at
+  55 cm — below the ~12′ critical print size — and the reaction-time rings about 2.4° and 4.8°
+  instead of 4° and 8°. From 2.2.0 the layout fills the screen at any pixel ratio and each sitting
+  measures its own screen.
 
 - **Webcam eye tracking** is lower-fidelity than IR (spatial error ~3–5°). It now samples one EAR
   reading **per FaceMesh result at ~30 fps** (the literature minimum for blink detection; an earlier
