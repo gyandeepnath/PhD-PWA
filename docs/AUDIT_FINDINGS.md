@@ -4973,3 +4973,193 @@ what the probit model's run terms now do.
 
 Verified on the commit carrying this entry: `npm run verify` green (73 files, 1242 unit tests; corpus,
 codebook, export and analysis gates pass), with R and Python both running in the analysis gate.
+
+## Round 74 — the real device: fill the screen, measure it, say which build it is
+
+After the Round 62-73 work was deployed, the investigator reported from the study tablet (Xiaomi Pad
+6, Chrome, the installed app):
+
+1. "both sides of the contents have about 25% blank space (left+right ~50%), while tasks, reaction
+   trials, comprehension, dashboards etc are only in the centre, even though back/home buttons use
+   the corners";
+2. "even though the PWA versions keep updating, the version remains the same".
+
+This round answers those two. It also adds what was needed to stop the first one from happening
+again unseen: a ruler measurement of the screen, and a box that shows what the browser reports.
+The camera reports (blink check failing on fps, the live feed in the researcher panel, the ocular
+specification) are separate work and are not in this round.
+
+**The mistake behind report 1.** Rounds 63-66 built and measured every layout against a tablet
+viewport of 1152x720 CSS px: the Xiaomi Pad 6's 2880x1800 panel at a device pixel ratio of 2.5. That
+viewport was assumed. Nobody read it off the device, and nothing on any screen showed it. That was a
+mistake, and every round from 63 to 73 carried it: the e2e suites ran at 1152x720, 1152x650 and
+1280x800, where it barely shows. `computeScale` also capped the scale at 1.0 ("the app never magnifies
+above the design canvas"). On a viewport with more CSS pixels than 1152x720, the 1152x720 canvas was
+drawn at 1.0 in the middle of the screen. The 1040 px stimulus column on a 1920 px wide viewport (pixel
+ratio 1.5) covers 54% of it, which matches the quarter blank on each side that the investigator saw.
+The corner chrome is `position: fixed` to the viewport, so it reached the corners and the content did
+not. The tablet's real viewport and pixel ratio are **still not measured**. 1920x1200 explains the
+report, but nothing confirms it. The device box below now shows the real values on the tablet.
+
+The same assumption sat under every physical figure in the documentation and the export: 0.2055 mm
+per CSS pixel (236.7 mm of panel over 1152 CSS px), the 14.9′ x-height and the 4° and 8° reaction-time
+rings. A CSS pixel's size is set by the pixel ratio. At 1.5 it is 0.123 mm, so a capped layout drew
+every stimulus about 40% smaller than stated. Computed from the panel's specification (not measured)
+for a 1920x1200 viewport:
+
+| | stated (Rounds 63-73) | at 1920x1200, capped |
+|---|---|---|
+| mm per CSS px | 0.2055 | 0.123 |
+| reading x-height | 2.39 mm, 14.9′ at 55 cm | 1.43 mm, 9.0′ |
+| RT rings | 4.0° and 8.0° | 2.4° and 4.8° |
+
+9.0′ is below the ~12′ critical print size (Legge & Bigelow 2011, ledger 47).
+
+**What changed** (commits f09fd4c, d2035dd, c3a6cab, b23301f, 22ce847, 3ba40bf, then 3d88aae and
+8ec8647 after an audit of those six):
+
+- **Fill to fit** (f09fd4c). `computeScale` fits the 16:10 canvas to the viewport in both directions.
+  It rounds to the nearest 0.02 step and never overfills by more than 1% (`OVERFILL_TOLERANCE`, which
+  replaces the snap-to-1 band), within [0.5, 3]. 3 is only a stop for very large monitors.
+  - 1152x720 gives 1.0, 1280x800 1.12, 1600x1000 1.38, 1920x1200 1.66 and 2560x1600 2.22. On a 16:10
+    screen the canvas is the screen's width within one step, at any pixel ratio.
+  - The Round 56-57 protections are unchanged: the running floor, the freeze during a condition (it
+    may shrink, never grow) and the refit between screens. A new unit test holds the freeze above 1:
+    a tab at 1920x1130 (1.56) that loses its address bar mid-reading does not grow to 1.66. That test
+    fails if either growth guard is removed.
+  - Pre-flight, the launch check and the break judge the applied scale against the screen's own
+    full-screen fit (`screenFitScale`, `screenFill`), not against 1.0.
+  - The nav chip is 44 design px above a scale of 1, so it stays a real touch target on a low pixel
+    ratio.
+- **The physical size is measured** (c3a6cab, 3ba40bf).
+  - Pre-flight draws a bar 500 design px long. The operator lays a ruler on it and types its length
+    in mm. The accepted range is shown, along with the length the study tablet should give. A reading
+    more than 10% off that is flagged, and a reading taken at another scale is refused. The operator
+    also tapes the eye-to-screen distance (prefilled 55 cm, accepts 40-80).
+  - The session records `mm_per_css_px = bar_mm / (500 x scale)`, the bar reading, the scale it was
+    taken at, the distance, the pixel ratio and `calibration_skipped`. Skipping needs a written
+    acknowledgement, as the display-mode check does, and is recorded as a deviation.
+  - The export computes these from the calibration:
+    - in 02, `mm_per_layout_px`, `reading_x_height_mm` and `reading_x_height_arcmin`. Roboto's
+      x-height of 1082/2048 em is read from the vendored font file by a test;
+    - in 08, `stim_ecc_deg_55cm`, the new `stim_ecc_deg_at_distance` and `stim_scale_at_onset` (now
+      stored on each trial). Older rows' onset scale is recovered exactly from the angle they stored;
+    - `physical_size_source` / `stim_ecc_deg_source`, which say whether the size was measured or
+      assumed. Without a calibration the size falls back to the study tablet's panel over the screen
+      width the browser reported. That figure is right on the study tablet at any pixel ratio; the
+      bare 0.2055 is used only where no screen size was recorded.
+  - A condition run at a different pixel ratio from pre-flight's has its physical columns scaled by
+    the ratio of the two.
+  - The integrity audit reports a calibration that is missing, skipped, implausible or more than 10%
+    off the panel, a distance out of range, and a change of pixel ratio.
+- **A build that names itself** (d2035dd, 3d88aae).
+  - package.json is 2.2.0. It had read 2.1.0 since the first commit, which is why "the version
+    remains the same": the stamp was `v2.1.0 · <hash>` on every deployment.
+  - `buildIdentity()` reads `VisuLab 2.2.0 · built 4 Oct 2026 09:33 UTC · e05d3c4`. The build time
+    changes on every deployment and needs no git history: CI's shallow checkout still gives
+    `rev-parse` its one commit, and `GITHUB_SHA` is the fallback. `.github/` is unchanged.
+  - The line is shown on the landing page, the session manager, pre-flight and the dashboard. The
+    dashboard also shows the build that recorded the sitting. `build_time` is exported in 01.
+  - **Check for updates** calls the registration's `update()`. The browser looks for a new worker
+    only when a page is navigated to, and an installed app reopened from recent apps never is. The
+    check applies nothing. A build it finds waits for UpdateBanner's gated **Update now**, which is
+    unchanged: offered on the landing page and in the manager only when no sitting is open in any
+    window.
+  - A waiting build is announced at the top of pre-flight (moved there this round from inside the
+    device box, where it was below the fold at 1152x720). Pre-flight has no Update button, because
+    its own sitting is open.
+- **This device** (d2035dd). Pre-flight shows a box with the viewport, the pixel ratio (and the panel
+  in device pixels), the screen, the scale and whether it fills the screen, the display mode, the
+  measured mm per CSS px and the build. The landing page shows the same in one line.
+  `device_pixel_ratio` is recorded on the session and on every condition, beside `screen_resolution`
+  and `layout_viewport`.
+- **Docs** (22ce847, 8ec8647). PROTOCOL and the operator manual cover the ruler check, the distance,
+  the device box and how to tell builds apart and update. ANALYSIS_PLAN covers the angle columns, and
+  the PROTOCOL limitation covers what Rounds 63-73 assumed. The codebook describes the scale without
+  a cap, and MASTER_BLUEPRINT gives the version.
+
+**The physical numbers now.** None is assumed in the data. Each is computed at run time from that
+sitting's ruler reading:
+- `mm_per_css_px` = bar ÷ (500 x scale);
+- per condition, mm per design px = that x `stimulus_scale` (x any pixel-ratio change);
+- the x-height and dot angles follow from that and the taped distance.
+
+The design target is the installed app on the study tablet's full screen: a design px is 1/1152 of the
+screen's width, about 0.2055 mm at any pixel ratio. The 22 px text then has an x-height of 2.39 mm,
+14.9′ at 55 cm, and the rings sit at 4° and 8°. Whether the tablet meets it is **not measured yet**.
+The first sitting's pre-flight will say, in the device box and in `mm_per_css_px`. The bar should
+measure about 103 mm on the study tablet. Fitting to the nearest step can make it up to 1% longer or
+up to one step shorter (about 1-2%), and it is shorter again if the full-screen viewport is not
+exactly 16:10.
+
+**Audit of the six D1 commits** (the agent that made them was interrupted). Each item of the task
+was checked against the diff and the running app:
+- the fit, its tests (each can still fail), the header and codebook texts and the e2e at six
+  viewports;
+- the ruler check, its unit tests, the export and integrity columns, the distance and the skip;
+- 2.2.0, the identity on all four screens, `build_time` in 01, Check for updates and the gate;
+- the device box on pre-flight and the landing page.
+
+They were correct, with three gaps, fixed here:
+- the pre-flight update notice was buried in the device box (moved, with a rendered test that fails
+  on the old placement);
+- MASTER_BLUEPRINT still read `visulab@2.1.0` (and schema v8, which has been 9 for many rounds);
+- PROTOCOL did not say what the capped layout would have drawn (computed above).
+
+The old 0.86/0.90 figures left in code comments are historical and labelled as such. The rest of the
+codebase was searched for "never magnifies", "cannot exceed 1" and similar wording.
+
+**Data consequence.**
+- New columns:
+  - 01: `build_time`, `device_pixel_ratio`, `viewing_distance_cm`, `calibration_bar_design_px`,
+    `calibration_bar_mm`, `calibration_scale`, `mm_per_css_px`, `calibration_skipped`,
+    `physical_size_source`;
+  - 02: `device_pixel_ratio`, `mm_per_layout_px`, `reading_x_height_mm`, `reading_x_height_arcmin`,
+    `physical_size_source`;
+  - 08: `stim_scale_at_onset`, `stim_ecc_deg_at_distance`, `stim_ecc_deg_source`.
+- `stim_ecc_deg_55cm` is now computed by the export. It was stored on the trial with the 0.2055
+  assumption.
+- Sittings from 2.2.0 and those before it show different stimuli on any screen that is not 1152x720
+  CSS px. Those before carry `physical_size_source = assumed_study_tablet_panel`, and their sizes
+  follow from the `screen_resolution` they recorded.
+- Pilot reading speed, comprehension and RT are not comparable in absolute terms across that line.
+  Condition contrasts within a sitting are not affected.
+
+**Decision for the investigator.** Pre-flight cannot apply a waiting build, because its sitting is
+already open. A sitting started on an old build runs to the end on it, and that is recorded. Update
+on the landing page before **New Session** (the operator manual's step 1). The other option was to let
+pre-flight reload into the new build and resume the sitting. That splits a sitting across two
+instruments (`build_changed_mid_sitting`) to save one participant's few minutes, so it was not taken.
+
+**Not done, and not measured.**
+- Nothing here was measured on the tablet: its viewport, pixel ratio, whether the installed app's
+  viewport is exactly 16:10 (Android's navigation bar), and what the bar measures there. The e2e
+  ruler reading is computed from the panel's specification.
+- Run the first pre-flight on the tablet and read the device box back. If the viewport is not 16:10,
+  the canvas binds on the shorter side and a small margin is left on the other. The box says how
+  much ("fills the screen" or a percentage), and the column is still the same in design px.
+
+**Screens looked at.** Each screen below was captured at 1920x1200 and at 1152x720 and checked by
+eye: landing, session manager, pre-flight (top, device box, ruler check), first reading page, first
+comprehension item, search, the reaction-time card, the fixation cross, a dot, and the dashboard. The
+dot is the real one: Playwright's clock held the 120 ms test-mode trial still, rather than a copy
+being drawn in its place.
+- Reading, comprehension and search columns: 1726 of 1920 CSS px (89.9%) and 1040 of 1152 (90.3%).
+- The dot: 86 CSS px at x1.66, 52 at x1.0.
+- Each layout is the same picture at both sizes. Nothing is left in the middle of the larger screen.
+- On pre-flight the "More below" cue and the researcher panel's clock chip sit over the left column
+  until it is scrolled. Both are fixed chrome from earlier rounds and are unchanged here.
+- The waiting-build notice was not captured, because the test server has no service worker. The
+  rendered unit test covers it.
+
+**Citations.** None added. Legge & Bigelow 2011 (ledger 47) is cited as before.
+
+**Synopsis (read-only, not edited).** SYNOPSIS_AdtU_Short.md 329 and SYNOPSIS_AdtU.md 341 ("a viewing
+distance of 50 to 60 cm"; typography fixed across conditions) agree with this round, and the distance
+is now taped and recorded. LITERATURE_REVIEW.md 419 ("a standardised viewing distance") is unchanged.
+No line is contradicted.
+
+Verified: `npm run verify` green on 8ec8647 (78 files, 1290 unit tests; corpus, codebook, export and
+analysis gates pass). The full e2e suite passed, 70 tests in 11.7 min, including `fillScreen` at the
+six viewports (1152x720, 1152x650, 1280x800, 1600x1000, 1920x1200, 2560x1600). The entry itself
+changes only this file.
