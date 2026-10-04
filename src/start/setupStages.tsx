@@ -1186,6 +1186,25 @@ export function Preflight({ onDone, onBack }: {
       <div style={{ width: '100%', maxWidth: 1040, margin: '0 auto' }}>
       <h1 className="font-serif text-4xl font-light">Pre-flight checklist</h1>
       <p className={`mt-2 ${help}`}>Researcher: confirm each item before starting.</p>
+      {/*
+        A NEWER BUILD IS WAITING — at the top, where it cannot be missed. It used to sit inside the
+        device box, half-way down the left column and below the fold at 1152 x 720, so an operator who
+        had not looked at the landing page could run a whole sitting without seeing it (Round 74). It
+        offers no Update button, and cannot: applying an update reloads the app in every window, and
+        this sitting is open (UpdateBanner's gate). It says so, and says which build the sitting runs on.
+      */}
+      {updateWaiting && (
+        <div data-testid="preflight-update-waiting" role="status"
+          style={{ marginTop: 14, padding: '12px 16px', borderRadius: 12, background: '#1a1a2e', color: '#fff' }}>
+          <p className="font-sans text-base" style={{ fontWeight: 600 }}>A newer build of VisuLab is installed and waiting</p>
+          <p className="font-sans text-[15px] leading-relaxed" style={{ marginTop: 4, color: '#dcdcea' }}>
+            It cannot be applied while a sitting is open — this one included — because applying it reloads
+            the app in every window. This sitting runs, and is recorded, on the build named in the
+            device box below. Apply the update from the landing page (<strong>Update now</strong>) once
+            the sitting is finished, before the next participant.
+          </p>
+        </div>
+      )}
 
       <div className="mt-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '12px 32px', alignItems: 'start' }}>
       <div>
@@ -1265,14 +1284,6 @@ export function Preflight({ onDone, onBack }: {
       <DeviceBox mmPerCssPx={cal.calibration?.mmPerCssPx ?? null}>
         <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e5e2dc' }}>
           <BuildInfo testId="preflight-build" />
-          {updateWaiting && (
-            <p data-testid="preflight-update-waiting" className={boxText} style={{ marginTop: 6 }}>
-              <strong>A newer build is installed and waiting.</strong> It cannot be applied while any
-              sitting is open, this one included — applying it reloads the app in every window. This
-              sitting runs, and is recorded, on the build named above. Apply the update from the
-              landing page once the sitting is finished.
-            </p>
-          )}
         </div>
       </DeviceBox>
       {clipped && (

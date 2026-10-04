@@ -97,10 +97,12 @@ by itself, because that would reload the app in the middle of a sitting. So:
    ready — Update now.** Tap **Update now**. The app reloads into the new build; check that the build
    line now shows the new build time.
 3. **Update now is offered only when no sitting is open** in any window — not one paused, not one
-   at pre-flight. While one is open the notice says which, and waits; finish that sitting first.
-   This is why step 1 comes before New Session. Pre-flight also says when a newer
-   build is waiting: the sitting you are starting will run, and be recorded, on the build named
-   there.
+   at pre-flight. While one is open the notice says which, and waits; finish that sitting first (a
+   practice or abandoned sitting left open also blocks it: export it if it holds anything, then
+   delete it in the Session Manager). This is why step 1 comes before New Session. If a newer build
+   is waiting when you reach pre-flight, a dark notice at the **top of pre-flight** says so: it has
+   no Update button, because this sitting is open; the sitting runs, and is recorded, on the build
+   named in pre-flight's *This device* box. Update from the landing page after it.
 4. If the notice never appears although a newer build has been published (the build line still
    shows the old time after **Check for updates** says it is downloading and you have waited a
    minute): close the app from recent apps and open it again from its icon, then repeat. Only as a
