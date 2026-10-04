@@ -9,20 +9,23 @@ import { startNewExperiment, stageNow, handleStage, throughCameraAndCalibration,
  * it is unreachable. The CVS-Q shipped 43 px over the canvas on an iPad and 106 px over on a
  * Xiaomi Pad 6, which meant sixteen items could be answered and never submitted.
  *
- * This used to walk the setup chain only, at 1152x650. Since the design canvas became the tablet
- * itself (Round 63: 1152x720, scale 1.0 installed), the tightest box is no longer the address-bar
- * viewport — at 0.90 that root is 1280x722 — but the installed app's own 720 design px, and the
- * 713 px viewport that still snaps to scale 1.0 (see SNAP_TO_ONE). So the walk now covers EVERY
- * screen of a full sitting — setup, each condition's intro cards, pages, items, ratings, the
- * reaction-time card, the break, the closing questionnaires — at all three, and checks each screen
- * as the driver meets it, before acting on it.
+ * This used to walk the setup chain only, at 1152x650. Since the design canvas became 1152x720
+ * (Round 63), the tightest box is no longer the address-bar viewport — at 0.90 that root is 1280x722
+ * — but the canvas's own 720 design px, and a viewport the scale rounds UP for, where the root box is
+ * up to 1% smaller than the canvas (OVERFILL_TOLERANCE, viewportScale.ts): 1152x713 (scale 1.0, root
+ * 1152x713) and, since the canvas is fitted up as well as down (Round 74), 1280x800 (scale 1.12, root
+ * 1143x714 — the narrowest). So the walk covers EVERY screen of a full sitting — setup, each
+ * condition's intro cards, pages, items, ratings, the reaction-time card, the break, the closing
+ * questionnaires — at all four, and checks each screen as the driver meets it, before acting on it.
+ * (e2e/fillScreen.spec.ts checks the other side: that a larger screen is FILLED.)
  *
  * Content that is legitimately long scrolls inside its own container with a "More below" cue; that
  * passes here by construction, and the reachability suite checks its controls can be scrolled to.
  */
 const VIEWPORTS = [
   { name: 'installed (1152x720)', width: 1152, height: 720 },
-  { name: 'shortest viewport that snaps to 1.0 (1152x713)', width: 1152, height: 713 },
+  { name: 'shortest viewport that rounds up to 1.0 (1152x713)', width: 1152, height: 713 },
+  { name: 'rounded up to 1.12: the narrowest root (1280x800)', width: 1280, height: 800 },
   { name: 'address bar showing (1152x650)', width: 1152, height: 650 },
 ];
 
