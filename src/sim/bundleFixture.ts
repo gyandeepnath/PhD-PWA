@@ -386,7 +386,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       consent_given: true,
       consent_time: t0 + 50_000, media_consent: { camera_metrics: true, setup_photos: false, annotation_video: false, granted_at: null },
       provenance: {
-        app_version: '2.1.0',
+        app_version: '2.2.0',
         git_hash: 'verifyhash',
         build_time: '2026-01-01T00:00:00.000Z',
         condition_def_hash: 'abcd1234',

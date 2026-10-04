@@ -236,7 +236,8 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
               <>
                 <br />
                 <span data-testid="dashboard-recorded-build">
-                  This sitting recorded by: {buildIdentity(bundle.session.provenance.app_version, bundle.session.provenance.build_time, bundle.session.provenance.git_hash)}
+                  This sitting recorded by:{' '}
+                  <span className="font-lab">{buildIdentity(bundle.session.provenance.app_version, bundle.session.provenance.build_time, bundle.session.provenance.git_hash)}</span>
                   {(bundle.session.additional_builds ?? []).length > 0 && ` — and part of it by ${(bundle.session.additional_builds ?? []).join(', ')}`}
                 </span>
               </>

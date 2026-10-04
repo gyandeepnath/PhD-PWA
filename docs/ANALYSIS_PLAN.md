@@ -288,9 +288,11 @@ that location is now a **recorded, balanced factor** in `08_reaction_trials.csv`
   fits the probit GLMM with these terms from Round 71 (§4c). From Round 73 both also carry the
   **condition-run** as a random effect, because polarity, colour and position vary only between runs
   and a run's trials are not independent evidence about them (§4c).
-- `stim_ecc_deg_55cm` assumes a 55 cm eye-to-screen distance, which is not recorded; the protocol
-  allows 50–60 cm, about ±9% in angle. Model `stim_ring` as the factor and treat the degree value as
-  descriptive.
+- `stim_ecc_deg_55cm` is the angle at the nominal 55 cm and `stim_ecc_deg_at_distance` at the
+  eye-to-screen distance tape-measured at pre-flight (Round 74; not recorded before, when the
+  protocol's 50–60 cm left about ±9% in angle). Both are computed from the sitting's ruler
+  calibration of the screen, or flagged as assumed where there is none (`stim_ecc_deg_source`).
+  Model `stim_ring` as the factor and treat the degree values as descriptive.
 - **Rows recorded before Round 66 have no location columns** (all blank): the dot then landed at a
   uniformly random point in the central part of the screen, which was not recorded. Those rows enter
   the condition-level analysis as before and must be left out of any model with a location term —
@@ -549,8 +551,11 @@ Stating these protects the thesis more than any additional analysis would.
 - **Causal mechanism for incomplete blinking.** The study measures the association between display
   appearance and blink completeness. It does not measure tear film, and no ocular-surface claim
   follows from blink data alone.
-- **Generalisation beyond the device.** `stimulus_scale` and `screen_resolution` bound this. One
-  tablet, one panel, one luminance range.
+- **Generalisation beyond the device.** One tablet, one panel, one luminance range. The physical
+  size of what was shown is measured per sitting from Round 74 (`mm_per_css_px`, `viewing_distance_cm`
+  in 01_session_info.csv; `reading_x_height_arcmin` per condition), so it can be reported in degrees
+  rather than pixels; `stimulus_scale` alone is not a size, since it depends on the device's pixel
+  ratio. Sittings before Round 74 have assumed physical sizes (`physical_size_source`).
 - **The 3-minute exposure.** Below the shortest verified precedent for this outcome. It bounds the
   effect sizes that are detectable, and the limitation belongs in the write-up rather than in a
   reviewer's report.

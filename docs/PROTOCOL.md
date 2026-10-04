@@ -49,7 +49,10 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                         session structure (single 10-condition sitting, or split 5+5)
   → CONSENT             participant: informed consent (recorded here, not pre-emptively)
   → PARTICIPANT_PROFILE demographics + vision covariates (age 18–35 per protocol, correction, self-report CVD…)
-  → PREFLIGHT           researcher: display/room configured (brightness fixed, night-shift OFF, …)
+  → PREFLIGHT           researcher: display/room configured (brightness fixed, night-shift OFF, …);
+                        the screen's physical size measured with a ruler (a 500 design-px bar →
+                        mm per CSS px) and the eye-to-screen distance tape-measured (Round 74);
+                        the device's viewport, pixel ratio, scale and build shown
   → COLOR_VISION        digital colour-vision SCREEN, not the Ishihara test (runs AFTER night-shift is off)
   → CAMERA_SETUP        webcam permission (or skip → no eye tracking)
   → CALIBRATION         centre-fixation open-eye EAR + frontal-pitch baseline (6 s), then 9-point gaze calibration
@@ -60,7 +63,11 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
   → [×10 conditions per illumination block]
         READING_TASK        intro → passage in THREE pages of near-equal length, justified, at the
                             protocol font size (22 px, line height 1.4, 1040 px column on the
-                            1152x720 canvas — Round 63), each page centred on the screen
+                            1152x720 canvas — Round 63; the canvas is fitted to the screen,
+                            enlarged or shrunk, since Round 74, so on the study tablet's full
+                            screen a design px is about 0.2055 mm and the x-height about 14.9′ at
+                            55 cm — each sitting's actual figure is computed from its ruler
+                            calibration: reading_x_height_arcmin), each page centred on the screen
                             (self-paced beyond a per-page floor); exposure +
                             eye-tracking window; reading time → words/min recorded
         → COMPREHENSION     3×4-option MCQ per passage — gist, inference, detail — one row per item (accuracy + RT);
@@ -73,8 +80,10 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                             targets by passage, recorded as targets_in_set (investigator decision —
                             no equal count is available from these texts in one screen)
         → REACTION_TIME     colour go/no-go IN the condition's display: one dot per trial at one of
-                            EIGHT FIXED LOCATIONS around the fixation cross — 2 rings (4° and 8° at
-                            55 cm; a judgement) × the 4 diagonals — each used 4 times per block, go
+                            EIGHT FIXED LOCATIONS around the fixation cross — 2 rings (designed at
+                            4° and 8° at 55 cm on the study tablet's full screen; a judgement; each
+                            trial's actual angle is computed from the sitting's ruler calibration,
+                            stim_ecc_deg_55cm / stim_ecc_deg_at_distance) × the 4 diagonals — each used 4 times per block, go
                             and no-go balanced over rings and quadrants, mirrored on alternate
                             blocks, never the same location twice in a row (Round 66; until then a
                             uniformly random, unrecorded point in the central part of the screen).
@@ -146,7 +155,10 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
    (recommended) white-screen luminance in cd/m² + locked brightness %.
 2. Obtain **consent**; complete the **profile** and **pre-flight checklist** (fix brightness, turn
    **off** auto-brightness and night-shift/blue-light filter, clean screen, ~50–60 cm distance,
-   landscape, no backlight).
+   landscape, no backlight), including the **ruler check** of the screen (measure the bar in mm) and
+   the **tape-measured viewing distance** — every physical size and visual angle in the export is
+   computed from these two (Round 74). Skipping the ruler needs a written acknowledgement and is
+   recorded as a deviation.
 3. Run **colour-vision screening**, allow the **camera**, complete **calibration**, then the
    baseline questionnaires. The participant then completes the 10 conditions of the assigned
    illumination block (median ~97 min, p95 ~118 min), closing with the end CVS-Q and NASA-TLX.
@@ -160,6 +172,17 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
    cross-check, the primary's); both open with their provenance.
 
 ## 6. Known limitations to disclose
+
+- **Physical stimulus size before version 2.2.0 (Round 74) is assumed, not measured.** Rounds 63-73
+  sized every layout for a tablet viewport of 1152x720 CSS px — the Xiaomi Pad 6 at a device pixel
+  ratio of 2.5 — that was assumed and never read off the device, and capped the scale at 1. On the
+  real tablet the investigator saw the tasks drawn in the middle of the screen with about a quarter
+  of the width blank on each side, which is what that cap does on a viewport with more CSS pixels
+  (about 1920 across would explain it; the real figure was not measured). Sittings from those builds
+  carry no ruler calibration: their physical columns are recomputed on the assumption that they ran
+  on the study tablet's panel at the screen size the browser reported (`physical_size_source =
+  assumed_study_tablet_panel`). From 2.2.0 the layout fills the screen at any pixel ratio and each
+  sitting measures its own screen.
 
 - **Webcam eye tracking** is lower-fidelity than IR (spatial error ~3–5°). It now samples one EAR
   reading **per FaceMesh result at ~30 fps** (the literature minimum for blink detection; an earlier

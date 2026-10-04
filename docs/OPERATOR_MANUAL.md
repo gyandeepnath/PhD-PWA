@@ -110,7 +110,10 @@ by itself, because that would reload the app in the middle of a sitting. So:
 **Seating**
 
 - Chair and table height fixed. Same setup for every participant.
-- Tablet in its stand at a **viewing distance of 50 to 60 cm**. Measure it; do not judge by eye.
+- Tablet in its stand at a **viewing distance of 50 to 60 cm**. Measure it with a tape, from the
+  participant's eye to the centre of the screen, seated as they will read; do not judge by eye.
+  **Type the measured distance into pre-flight** (the field starts at 55): every "at distance"
+  angle in the export uses it.
 - The participant should be able to sit comfortably without leaning in. If they lean, head-pose and
   face-size measures drift and the camera loses them.
 
@@ -179,6 +182,32 @@ CVSQ_BASELINE → BASELINE_FATIGUE → INSTRUCTIONS`
 
 Pre-flight comes **before** the colour-vision plates on purpose: a blue-light filter left on would
 invalidate the red-green plates.
+
+**The ruler check on pre-flight (version 2.2.0 onwards).** Near the bottom of pre-flight is a black
+bar with an end mark at each side. Lay a ruler (millimetres) flat on the screen along it, with the
+ruler's **zero exactly at the bar's left end**, read where the bar ends, and type that length, to
+the nearest half millimetre, into **Bar length (mm)**. Do it with the tablet in its stand and the app
+as the participant will see it — launched from its icon, full-screen — because the bar is drawn at
+the size the screen is drawn at. On the study tablet it reads about **103 mm**; the screen shows the
+figure to expect. The app works out from it how large the screen's pixels are and shows the result:
+the reading text's x-height in millimetres and in minutes of arc at the distance you typed (about
+2.4 mm and 15′ at 55 cm on the study tablet). Every physical size and visual angle in the export is
+computed from this reading, so take it on every sitting.
+
+- If the app says the length is outside the accepted range, you have most likely read centimetres
+  or started from the wrong end of the ruler: measure again.
+- If it says the length is more than 10% off the study tablet's figure, measure again; if it is
+  right, the sitting is running on a different device, and the export records it as measured.
+- If the display size changes after you typed it (the app was rotated or the address bar came
+  back), the app asks you to measure again.
+- **No ruler?** Tick *No ruler: run without the measurement*. The sitting can go on, but it is
+  recorded as a deviation (`calibration_skipped`), and every physical size in its export is then
+  an assumption, flagged as such (`physical_size_source`). Keep a 15 cm ruler and a tape measure
+  with the tablet.
+
+The *This device* box above it shows what the browser reports — viewport, pixel ratio, screen,
+layout scale, display mode — and the build. If anyone asks what the tablet actually reports, read
+it from there.
 
 **Going back, and stopping part-way through set-up.** The white button at the **top left** of every
 set-up screen is always the way out, and it always says what it does:
@@ -516,7 +545,8 @@ Print this.
 - [ ] Screen timeout off; Do Not Disturb on; aeroplane mode on
 - [ ] Landscape, fullscreen, launched from home screen
 - [ ] Landing page: **Check for updates**; if a newer build is ready, **Update now** before New Session; build line noted on the sheet
-- [ ] Viewing distance measured at 50 to 60 cm
+- [ ] Viewing distance measured at 50 to 60 cm with a tape, and typed into pre-flight
+- [ ] Pre-flight ruler check: bar measured in mm (about 103 mm on the study tablet) and typed in
 - [ ] Battery above 80 per cent or on charge
 - [ ] Launched from the home-screen icon, NOT a private window; pre-flight storage check reads ok
 

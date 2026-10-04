@@ -223,7 +223,10 @@ is a pure transition function; `Experiment.tsx` is the driver.
 ### 4.1 Reading (`ReadingTask.tsx`)
 - Passage shown at `READING_FONT_SIZE_PX=22`, line height 1.4, in a fixed `STIMULUS_COLUMN_PX=1040`
   column on the 1152x720 design canvas (Round 63; previously line height 1.6, 10% margins, on a
-  1194x834 canvas that drew the text at 0.86 on the study tablet). Three pages per passage.
+  1194x834 canvas). Since Round 74 the canvas is fitted to the screen in both directions, so it fills
+  the study tablet's screen at whatever pixel ratio the tablet reports; Rounds 63-73 assumed that
+  screen was 1152x720 CSS px and capped the scale at 1. The physical size is measured per sitting
+  (pre-flight ruler check; `reading_x_height_arcmin` per condition). Three pages per passage.
 - **Per-page minimum dwell** `READING_PAGE_MIN_MS=20 000` ms, rAF-gated; the Next button unlocks
   after the floor but the participant is **self-paced** beyond it. `reading_time_ms` is recorded and
   converted to **words/min** in export.
