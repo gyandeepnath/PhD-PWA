@@ -35,7 +35,7 @@ import { CONDITIONS, rtStimulusColours } from '@/experiment/conditions';
 import { PASSAGES, countWords } from '@/experiment/passages';
 import { computeSdt } from '@/lib/signalDetection';
 import { scoreCvsq } from '@/scales/cvsq';
-import { planRtBlock, eccentricityDeg } from '@/lib/rtLocations';
+import { planRtBlock } from '@/lib/rtLocations';
 import { CONFIG } from '@/experiment/config';
 import { ENGAGEMENT } from '@/dashboard/aggregate';
 
@@ -237,7 +237,7 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
           is_signal: p.signal, trial_category: p.signal ? 'signal' : 'noise', stimulus_color: p.color,
           stim_location_id: p.location.id, stim_ring: p.location.ring, stim_angle_deg: p.location.angleDeg,
           stim_dx_px: p.location.dx, stim_dy_px: p.location.dy, stim_ecc_px: p.location.eccPx,
-          stim_ecc_deg_55cm: eccentricityDeg(p.location.eccPx, 1),
+          stim_scale_at_onset: 1,
           accuracy, response_time_ms: rt,
         });
         if (accuracy === 'hit') { hits++; hitRts.push(rt!); } else if (accuracy === 'miss') misses++;

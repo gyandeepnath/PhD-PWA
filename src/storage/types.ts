@@ -245,8 +245,8 @@ export interface SessionRecord {
    * home-screen launch, 'browser' or 'minimal-ui' for a tab or window. null where the browser gave no
    * answer; absent on sittings from builds before it was recorded.
    *
-   * The design canvas is the installed app's full screen, so in a tab the address bar shrinks every
-   * stimulus by about a tenth — and can change it mid-sitting when the bar hides or reappears.
+   * The canvas is fitted to the viewport, so in a tab the address bar shrinks every stimulus by the
+   * fraction of the height it takes — and can change it mid-sitting when the bar hides or reappears.
    */
   display_mode?: string | null;
   /**
@@ -322,14 +322,37 @@ export interface SessionRecord {
    */
   device_pixel_ratio?: number | null;
   /**
+   * THE RULER CALIBRATION (Round 74), taken at pre-flight. The operator measures a bar drawn
+   * `calibration_bar_design_px` design px long at display scale `calibration_scale` and types its
+   * length; `mm_per_css_px` = bar_mm / (bar_design_px x scale) is the physical size of this browser's
+   * CSS pixel on this screen, and with a condition's stimulus_scale every physical size in the export
+   * follows (lib/physicalCalibration.ts). All null when the operator skipped it with the recorded
+   * acknowledgement (`calibration_skipped`); all absent on sittings from earlier builds, whose physical
+   * columns fall back to the study tablet's panel and are flagged as assumed.
+   */
+  calibration_bar_design_px?: number | null;
+  calibration_bar_mm?: number | null;
+  calibration_scale?: number | null;
+  mm_per_css_px?: number | null;
+  /** True when pre-flight's ruler check was skipped with an acknowledgement; false when measured. */
+  calibration_skipped?: boolean | null;
+  /**
+   * Eye-to-screen distance in cm, tape-measured at pre-flight with the participant seated (the field is
+   * prefilled with the protocol's nominal 55). The distance every "at distance" angle in the export
+   * uses. Absent on sittings from earlier builds — which recorded no distance at all.
+   */
+  viewing_distance_cm?: number | null;
+  /**
    * The factor the whole interface — stimuli included — was rendered at on this device.
    *
-   * The layout is authored on a fixed design canvas and scaled down to fit a smaller screen, so a
-   * shorter tablet presents the reading text at a smaller physical size and therefore a smaller
-   * visual angle. That is a real difference between devices and it must not be silent: 1 means the
-   * stimulus was presented at the design size, and anything below it means it was not. Null only
-   * for sessions recorded before this was captured — never a substituted 1, which would assert a
-   * measurement that was not made.
+   * The layout is authored on a fixed 1152x720 design canvas and, since Round 74, fitted to the
+   * viewport in both directions: this is the multiple of the browser's CSS pixel it was drawn at. It
+   * is not a physical size by itself — a CSS pixel's size depends on the device's pixel ratio — so
+   * the physical size is this times `mm_per_css_px`, measured at pre-flight. Before Round 74 it was
+   * capped at 1, and 1 was described as "the design size"; on a viewport with more CSS pixels than the
+   * canvas that was the canvas drawn unmagnified in the middle of the screen. Null only for sessions
+   * recorded before this was captured — never a substituted 1, which would assert a measurement that
+   * was not made.
    */
   stimulus_scale: number | null;
   /**
@@ -401,8 +424,9 @@ export interface ConditionRecord {
    * The session record carries a stimulus_scale too, stamped once inside beginSession. It can be
    * wrong by the time a stimulus is shown: the setup screens may be laid out in portrait or with
    * the browser's address bar up, and the scale settles at a different value once the tablet is in
-   * its final landscape state. Scaling the root scales the stimulus text, so this factor IS the
-   * visual angle the condition was run at — recorded here, where the stimulus actually happens.
+   * its final landscape state. Scaling the root scales the stimulus text, so with the session's
+   * `mm_per_css_px` this factor gives the physical size — and so the visual angle — the condition was
+   * run at; recorded here, where the stimulus actually happens.
    *
    * A value equal to MIN_SCALE means the viewport was too small for the design canvas even at the
    * smallest scale allowed, so the screens were clipped. Absent on rows written before this was
@@ -683,8 +707,16 @@ export interface ReactionTrialRecord {
   /** Distance of the dot's centre from the cross in root px (hypot of the two offsets). */
   stim_ecc_px?: number;
   /**
-   * That distance as visual angle at the nominal 55 cm: atan(px x scale x 0.2055 mm / 550 mm), with
-   * the display scale read at the dot's onset (0.2055 mm per CSS px is the study tablet at scale 1).
+   * The display scale the dot was drawn at, read at its onset (Round 74). With the sitting's ruler
+   * calibration it gives the dot's physical distance from the cross: stim_ecc_px x this x mm_per_css_px.
+   * Absent on rows from earlier builds, which stored stim_ecc_deg_55cm instead.
+   */
+  stim_scale_at_onset?: number;
+  /**
+   * STORED ONLY BY BUILDS BEFORE ROUND 74: atan(px x scale x 0.2055 mm / 550 mm), the scale read at the
+   * dot's onset and 0.2055 mm an ASSUMED size of the CSS pixel (pixel ratio 2.5). Not written any more;
+   * the export computes the column from stim_scale_at_onset and the calibration, and for these older
+   * rows recovers the scale from this value (the formula is exact), so their angle is recomputed too.
    */
   stim_ecc_deg_55cm?: number;
   stimulus_onset_time: number;

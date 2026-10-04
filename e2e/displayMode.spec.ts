@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { stageNow, startNewExperiment, driveUntil, handleStage, waitStageChange } from './helpers';
+import { stageNow, startNewExperiment, driveUntil, handleStage, waitStageChange, measureScreen } from './helpers';
 import { splitCsvRow } from '../tests/helpers/csv';
 
 /**
@@ -83,8 +83,9 @@ async function exported(page: Page, sessionId: string) {
   return { session: rows(out.s01)[0], conditions: rows(out.s02), findings: out.findings };
 }
 
-/** Pre-flight, with every box ticked but the acknowledgement. */
+/** Pre-flight, with the ruler check taken and every box ticked but the acknowledgement. */
 async function tickAllButAck(page: Page) {
+  await measureScreen(page);
   for (const box of await page.getByRole('checkbox').all()) {
     if ((await box.getAttribute('data-testid')) === 'display-mode-ack') continue;
     await box.check({ force: true });

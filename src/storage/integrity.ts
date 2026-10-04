@@ -17,6 +17,10 @@
 import { QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
 import type { SessionBundle } from './gather';
 import { MIN_SCALE } from '@/lib/viewportScale';
+import {
+  isPlausibleMmPerCssPx, isPlausibleViewingDistanceCm, longSide, sessionMmPerCssPx, MM_PER_CSS_PX_RANGE,
+  STUDY_TABLET_PANEL_LONG_MM, VIEWING_DISTANCE_CM,
+} from '@/lib/physicalCalibration';
 
 export type IntegritySeverity = 'error' | 'warning' | 'info';
 
@@ -219,6 +223,57 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
             + '(display_mode_acknowledged FALSE).'
           : ''),
         outside.map((c) => c.condition_id));
+    }
+  }
+
+  /*
+   * ---- the screen's physical size was measured, and the measurement is believable (Round 74)
+   *
+   * Every visual angle in the export rests on the millimetres per CSS pixel. Until Round 74 that was
+   * an ASSUMED 0.2055 mm (the study tablet at a pixel ratio of 2.5, never read off the device), and it
+   * was the assumption that was wrong. Pre-flight now measures it with a ruler; a sitting without the
+   * measurement — skipped with an acknowledgement, or from an earlier build — has every physical
+   * column assumed, and says so in physical_size_source. Reported, not blocking: the stimulus was
+   * still shown, and the scale and screen size that were recorded still bound what it can have been.
+   */
+  if (bundle.session) {
+    const s = bundle.session;
+    const ref = [s.session_id];
+    const fallback = sessionMmPerCssPx(s).source;
+    if (s.calibration_skipped === true) {
+      add('warning', 'physical_calibration',
+        `the ruler check of the screen's physical size was skipped at pre-flight (acknowledged). Every `
+        + `physical column of this sitting is assumed, not measured (physical_size_source = ${fallback}).`, ref);
+    } else if (s.mm_per_css_px == null && s.calibration_skipped == null) {
+      add('warning', 'physical_calibration',
+        'this sitting predates the ruler check of the screen\'s physical size (Round 74): every physical '
+        + `column is assumed, not measured (physical_size_source = ${fallback}), and no viewing distance `
+        + 'was recorded.', ref);
+    } else if (!isPlausibleMmPerCssPx(s.mm_per_css_px)) {
+      add('warning', 'physical_calibration',
+        `the ruler check gave ${s.mm_per_css_px} mm per CSS px, outside the plausible `
+        + `${MM_PER_CSS_PX_RANGE.min}-${MM_PER_CSS_PX_RANGE.max} mm (bar ${s.calibration_bar_mm} mm at scale `
+        + `${s.calibration_scale}) — probably a misread or mistyped ruler. It is not used: the physical `
+        + `columns fall back to physical_size_source = ${fallback}.`, ref);
+    } else {
+      // Measured and plausible. Does it agree with the study tablet's panel for the screen reported?
+      const long = longSide(s.screen_resolution);
+      if (long != null) {
+        const expected = STUDY_TABLET_PANEL_LONG_MM / long;
+        const off = (s.mm_per_css_px as number) / expected - 1;
+        if (Math.abs(off) > 0.1) {
+          add('warning', 'physical_calibration_matches_panel',
+            `the ruler check gave ${(s.mm_per_css_px as number).toFixed(4)} mm per CSS px; the study tablet's `
+            + `panel (${STUDY_TABLET_PANEL_LONG_MM.toFixed(1)} mm across) at the reported screen `
+            + `${s.screen_resolution} implies ${expected.toFixed(4)} (${Math.round(off * 100)}%). Either this `
+            + 'is not the study tablet, or the bar was mismeasured; the measured figure is used.', ref);
+        }
+      }
+    }
+    if (s.viewing_distance_cm != null && !isPlausibleViewingDistanceCm(s.viewing_distance_cm)) {
+      add('warning', 'physical_calibration',
+        `the recorded viewing distance, ${s.viewing_distance_cm} cm, is outside `
+        + `${VIEWING_DISTANCE_CM.min}-${VIEWING_DISTANCE_CM.max} cm; the "at distance" angles are left blank.`, ref);
     }
   }
 

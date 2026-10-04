@@ -22,7 +22,7 @@
 import { useRef, useState } from 'react';
 import { CONFIG, isE2ETimingActive } from '@/experiment/config';
 import { nonAgingDelay } from '@/lib/foreperiod';
-import { planRtBlock, eccentricityDeg, type RtLocation, type RtRing } from '@/lib/rtLocations';
+import { planRtBlock, type RtLocation, type RtRing } from '@/lib/rtLocations';
 import { currentScale } from '@/lib/viewportScale';
 import { relativeLuminance } from '@/lib/contrast';
 import { rafDelay, randInt, now } from '@/lib/timing';
@@ -49,8 +49,9 @@ export interface RawTrial {
    * Where the dot was: one of the eight fixed locations (1-4 the inner ring, 5-8 the outer, each in
    * quadrants up-right, up-left, down-left, down-right). The rest are that location spelled out, so
    * an analyst need not carry the table: ring, direction, the offset from the fixation cross in root
-   * px (+ right, + down), its length, and its visual angle at the nominal 55 cm at the display scale
-   * the dot was drawn at.
+   * px (+ right, + down), its length, and the display scale the dot was drawn at. Its visual angle is
+   * computed in the export from that scale and the sitting's ruler calibration (Round 74): the angle
+   * stored here before was the scale times an ASSUMED 0.2055 mm per CSS px.
    */
   stim_location_id: number;
   stim_ring: RtRing;
@@ -58,7 +59,7 @@ export interface RawTrial {
   stim_dx_px: number;
   stim_dy_px: number;
   stim_ecc_px: number;
-  stim_ecc_deg_55cm: number;
+  stim_scale_at_onset: number;
   stimulus_onset_time: number;
   response_time_ms: number | null;
   accuracy: RtAccuracy;
@@ -368,7 +369,7 @@ export function ReactionTimeTask({
         stim_dx_px: t.location.dx,
         stim_dy_px: t.location.dy,
         stim_ecc_px: t.location.eccPx,
-        stim_ecc_deg_55cm: eccentricityDeg(t.location.eccPx, scaleAtOnset),
+        stim_scale_at_onset: scaleAtOnset,
         stimulus_onset_time: onsetRef.current,
         response_time_ms: rt,
         accuracy,

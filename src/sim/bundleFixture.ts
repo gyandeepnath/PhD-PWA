@@ -27,7 +27,7 @@ import { scoreCvsq } from '@/scales/cvsq';
 import { computeSdt } from '@/lib/signalDetection';
 import { fnv1a } from '@/storage/export';
 import { CONFIG } from '@/experiment/config';
-import { RT_LOCATIONS, eccentricityDeg } from '@/lib/rtLocations';
+import { RT_LOCATIONS } from '@/lib/rtLocations';
 
 export const FIXTURE = {
   /** Embeds a comma and a quote on purpose: the hardest thing for a CSV writer to get right. */
@@ -229,7 +229,7 @@ function rtTrialsFor(conditionId: string, sid: string, i: number) {
       stim_dy_px: loc.dy,
       stim_ecc_px: loc.eccPx,
       // The fixture's sessions run at stimulus_scale 1.
-      stim_ecc_deg_55cm: eccentricityDeg(loc.eccPx, 1),
+      stim_scale_at_onset: 1,
       stimulus_onset_time: 1000 + t * 1500,
       response_time_ms: responded ? 320 + i + (t % 7) * 6 : null,
       accuracy: accuracy as 'hit' | 'miss' | 'false_alarm' | 'correct_rejection',
@@ -352,6 +352,9 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       passage_repeat_number: 1,
       adaptation_ms_before: i === 0 ? 0 : 60_000,
       reading_time_ms: readingMs(i),
+      // Drawn at the scale the session's calibration was taken at (see the session below).
+      stimulus_scale: 1,
+      layout_viewport: '1152x720',
     };
   });
 
@@ -391,7 +394,14 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       },
       device_type: 'Android',
       browser: 'Chrome/verify',
-      screen_resolution: '1600x2560', stimulus_scale: 1, layout_viewport: '1194x834',
+      /*
+       * A sitting as this build records one (Round 74): a 16:10 screen of 1152x720 CSS px at pixel
+       * ratio 2.5, the canvas filling it at scale 1, and a ruler reading of the 500 design-px bar that
+       * agrees with the study tablet's panel (102.75 mm = 0.2055 mm per CSS px), at 55 cm.
+       */
+      screen_resolution: '1152x720', device_pixel_ratio: 2.5, stimulus_scale: 1, layout_viewport: '1152x720',
+      calibration_bar_design_px: 500, calibration_bar_mm: 102.75, calibration_scale: 1, mm_per_css_px: 0.2055,
+      calibration_skipped: false, viewing_distance_cm: 55,
       conditions_per_session: plan.length,
       condition_offset: 0,
       session_index: 1,

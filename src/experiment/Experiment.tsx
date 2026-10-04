@@ -1378,12 +1378,21 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     case 'PREFLIGHT':
       view = (
         <Preflight
-          onDone={async ({ fontOk, displayMode, displayModeAcknowledged }) => {
+          onDone={async ({ fontOk, displayMode, displayModeAcknowledged, screen: measured }) => {
             if (displayModeAcknowledged) launchAcks.current.add(displayMode);
             if (session) {
+              const c = measured.calibration;
               const fresh = {
                 ...session, preflight_complete: true, stimulus_font_ok: fontOk,
                 display_mode: displayMode, display_mode_acknowledged: displayModeAcknowledged,
+                // The ruler check (Round 74): measured, or skipped with the recorded acknowledgement —
+                // never a substituted figure. See lib/physicalCalibration.ts.
+                calibration_bar_design_px: c?.barDesignPx ?? null,
+                calibration_bar_mm: c?.barMm ?? null,
+                calibration_scale: c?.scale ?? null,
+                mm_per_css_px: c?.mmPerCssPx ?? null,
+                calibration_skipped: c == null && measured.skipped,
+                viewing_distance_cm: measured.viewingDistanceCm,
                 // Re-read where the screen is checked, so it belongs with what pre-flight measured.
                 device_pixel_ratio: Number.isFinite(window.devicePixelRatio) && window.devicePixelRatio > 0
                   ? window.devicePixelRatio : null,

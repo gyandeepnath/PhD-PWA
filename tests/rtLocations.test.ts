@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   RT_LOCATIONS, RT_BLOCK_GO, RT_BLOCK_NOGO, RT_BALANCED_GO, RT_BALANCED_NOGO, RT_RING_ECCENTRICITY_DEG,
-  STUDY_TABLET_MM_PER_CSS_PX, NOMINAL_VIEWING_DISTANCE_MM, ringRadiusPx, eccentricityDeg, planRtBlock,
+  STUDY_TABLET_MM_PER_LAYOUT_PX, NOMINAL_VIEWING_DISTANCE_MM, ringRadiusPx, nominalEccentricityDeg, planRtBlock,
   type RtBlockPlan, type RtRing,
 } from '@/lib/rtLocations';
 import { longestRun } from '@/lib/foreperiod';
@@ -63,7 +63,9 @@ describe('the eight locations', () => {
   });
 
   it('derive their radii from the stated constants: 4 deg = 187 px, 8 deg = 376 px at 55 cm', () => {
-    expect(STUDY_TABLET_MM_PER_CSS_PX).toBe(0.2055);
+    // The study tablet's panel (236.7 mm) over the canvas's 1152 design px: per LAYOUT px, which holds
+    // at any pixel ratio once the canvas fills the screen (Round 74), not per CSS px.
+    expect(STUDY_TABLET_MM_PER_LAYOUT_PX).toBeCloseTo(0.2055, 4);
     expect(NOMINAL_VIEWING_DISTANCE_MM).toBe(550);
     expect(RT_RING_ECCENTRICITY_DEG).toEqual({ inner: 4, outer: 8 });
     expect(ringRadiusPx(4)).toBe(187);
@@ -82,13 +84,13 @@ describe('the eight locations', () => {
     }
   });
 
-  it('are at 4 and 8 deg as drawn (rounding costs at most 0.01 deg), and scale with the display', () => {
+  it('are DESIGNED at 4 and 8 deg on the study tablet\'s full screen (rounding costs at most 0.01 deg)', () => {
+    // What a sitting showed is computed in the export from its calibration and scale; see
+    // tests/physicalCalibration.test.ts.
     for (const l of RT_LOCATIONS) {
-      expect(Math.abs(eccentricityDeg(l.eccPx, 1) - RT_RING_ECCENTRICITY_DEG[l.ring])).toBeLessThan(0.011);
+      expect(Math.abs(nominalEccentricityDeg(l.eccPx) - RT_RING_ECCENTRICITY_DEG[l.ring])).toBeLessThan(0.011);
     }
-    // In a browser tab (scale 0.90) the same root px subtend less.
-    expect(eccentricityDeg(RT_LOCATIONS[4].eccPx, 0.9)).toBeLessThan(7.3);
-    expect(eccentricityDeg(0, 1)).toBe(0);
+    expect(nominalEccentricityDeg(0)).toBe(0);
   });
 
   it('keep every dot edge at least 60 px inside the 1152x720 screen', () => {

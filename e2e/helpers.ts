@@ -160,6 +160,9 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
       break;
     }
     case 'PREFLIGHT':
+      // The ruler check first (Round 74), so the skip acknowledgement is gone before the boxes are
+      // ticked: a driven sitting records a measurement, not a skipped one.
+      await measureScreen(page);
       await checkAllBoxes(page);
       await click(page, /All checks pass/);
       await waitStageChange(page, stage);
@@ -294,6 +297,23 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
       await page.waitForTimeout(100);
   }
   return false;
+}
+
+/**
+ * Pre-flight's ruler check, as an operator would read it on the study tablet. The test browser has no
+ * glass to lay a ruler on, so the reading is the one the study tablet's panel (236.7 mm across its long
+ * side) would give for the screen this browser reports: 500 design px x the scale x 236.7 mm / the
+ * screen's long side in CSS px — about 103 mm in the installed app at any pixel ratio. It agrees with
+ * the panel, so the integrity audit has nothing to say about it.
+ */
+export async function measureScreen(page: Page): Promise<void> {
+  if (!(await page.getByTestId('calibration-bar-mm').count())) return;
+  const mm = await page.evaluate(() => {
+    const scale = Number(getComputedStyle(document.documentElement).getPropertyValue('--vl-scale')) || 1;
+    return 500 * scale * (((2880 / 309) * 25.4) / Math.max(screen.width, screen.height));
+  });
+  await setInput(page, 'calibration-bar-mm', mm.toFixed(2));
+  await expect(page.getByTestId('calibration-result')).toBeVisible();
 }
 
 /** Drive the run until a target stage is reached (or completion). */

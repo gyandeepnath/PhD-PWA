@@ -43,14 +43,22 @@
  * each with the caveat recorded there on how far it transfers to this task.
  */
 import { balancedDistractors, planRuns } from './foreperiod';
+import { DESIGN_WIDTH } from './viewportScale';
+import { STUDY_TABLET_PANEL_LONG_MM } from './physicalCalibration';
 
 /**
- * Millimetres per CSS pixel on the study tablet at display scale 1 — a Xiaomi Pad 6, 2880x1800 at
- * 309 ppi and a device pixel ratio of 2.5 (manufacturer's specification, not measured here: a ruler
- * check that 1152 CSS px spans about 236.7 mm is still advised). One ROOT px is this times the
- * display scale (`stimulus_scale`).
+ * Millimetres per ROOT (design) px on the study tablet when the canvas fills its screen — the
+ * installed app on a Xiaomi Pad 6: its panel's 236.7 mm across (2880 px at 309 ppi, manufacturer's
+ * specification) over the canvas's 1152 design px, 0.2055 mm. The size the ring radii are DESIGNED
+ * for; not what any sitting is assumed to have shown.
+ *
+ * It used to be STUDY_TABLET_MM_PER_CSS_PX, "at display scale 1", which built in a device pixel ratio
+ * of 2.5 that was never read off the tablet (Round 74). Since the canvas is fitted to the screen in
+ * both directions, a design px is 1/1152 of a 16:10 screen's width at any pixel ratio, and this figure
+ * holds on the study tablet whatever ratio it reports. What a sitting actually showed is computed in
+ * the export from its own ruler calibration and stimulus_scale (lib/physicalCalibration.ts).
  */
-export const STUDY_TABLET_MM_PER_CSS_PX = 0.2055;
+export const STUDY_TABLET_MM_PER_LAYOUT_PX = STUDY_TABLET_PANEL_LONG_MM / DESIGN_WIDTH;
 
 /** The nominal viewing distance every visual angle in this codebase is quoted at (protocol: 50-60 cm). */
 export const NOMINAL_VIEWING_DISTANCE_MM = 550;
@@ -66,18 +74,23 @@ export type RtRing = keyof typeof RT_RING_ECCENTRICITY_DEG;
  */
 export const RT_DIAGONALS_DEG = [45, 135, 225, 315] as const;
 
-/** A ring radius in root px: the eccentricity at the nominal distance, at display scale 1. */
+/** A ring radius in root px: the eccentricity at the nominal distance, on the study tablet's full screen. */
 export function ringRadiusPx(eccentricityDeg: number): number {
   const mm = Math.tan((eccentricityDeg * Math.PI) / 180) * NOMINAL_VIEWING_DISTANCE_MM;
-  return Math.round(mm / STUDY_TABLET_MM_PER_CSS_PX);
+  return Math.round(mm / STUDY_TABLET_MM_PER_LAYOUT_PX);
 }
 
 /**
- * Visual angle from fixation of a point `px` root px away, at the nominal distance and the display
- * scale the screen was drawn at. Exact (arctangent), not the small-angle approximation.
+ * The DESIGNED visual angle from fixation of a point `px` root px away: on the study tablet's full
+ * screen, at the nominal 55 cm. Exact (arctangent). What a sitting showed is the export's business
+ * (stim_ecc_deg_55cm, from the sitting's calibration and the scale at the dot's onset).
+ *
+ * This replaced eccentricityDeg(px, scale) = atan(px x scale x 0.2055 / 550), which treated 0.2055 mm
+ * as the size of a CSS pixel — true only at the pixel ratio of 2.5 that was assumed for the tablet.
+ * The RT task stored that figure on every trial; it now stores the scale (stim_scale_at_onset).
  */
-export function eccentricityDeg(px: number, scale: number): number {
-  const mm = px * scale * STUDY_TABLET_MM_PER_CSS_PX;
+export function nominalEccentricityDeg(px: number): number {
+  const mm = px * STUDY_TABLET_MM_PER_LAYOUT_PX;
   return (Math.atan(mm / NOMINAL_VIEWING_DISTANCE_MM) * 180) / Math.PI;
 }
 

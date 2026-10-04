@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { stageNow, startNewExperiment, driveUntil, handleStage, setInput, waitStageChange, dbCounts } from './helpers';
+import { stageNow, startNewExperiment, driveUntil, handleStage, setInput, waitStageChange, dbCounts, measureScreen } from './helpers';
 
 /**
  * The operator's way back and way out of setup, and what each leaves in the database.
@@ -135,6 +135,7 @@ test('Back from pre-flight corrects the profile: the answers come back filled in
   expect(await stageNow(page)).toBe('PREFLIGHT');
   // Pre-flight's own way forward, beside its Back, is reachable too.
   await expect(page.getByTestId('back-to-profile')).toBeVisible();
+  await measureScreen(page);
   for (const box of await page.getByRole('checkbox').all()) await box.check();
   await tap(page, /All checks pass/);
   await waitStageChange(page, 'PREFLIGHT');

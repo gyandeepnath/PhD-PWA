@@ -26,6 +26,7 @@ import {
 } from '@/lib/viewportScale';
 import { startFaceProbe, type FaceProbeResult, type FaceProbeStatus } from '@/screening/faceProbe';
 import { DeviceBox } from '@/components/DeviceBox';
+import { ScreenCalibration, type ScreenCalibrationResult } from './ScreenCalibration';
 import { BuildInfo, useUpdateWaiting } from '@/components/BuildInfo';
 import type { CameraStatus } from '@/storage/types';
 
@@ -1084,6 +1085,8 @@ export interface PreflightResult {
    * run anyway. False when no acknowledgement was needed.
    */
   displayModeAcknowledged: boolean;
+  /** The ruler check and the viewing distance (ScreenCalibration). */
+  screen: ScreenCalibrationResult;
 }
 
 export function Preflight({ onDone, onBack }: {
@@ -1166,11 +1169,12 @@ export function Preflight({ onDone, onBack }: {
   const installed = isInstalledDisplay(mode);
   const [modeAck, setModeAck] = useState(false);
   const updateWaiting = useUpdateWaiting();
+  const [cal, setCal] = useState<ScreenCalibrationResult>({ ok: false, calibration: null, skipped: false, viewingDistanceCm: null });
   const modeOk = installed || modeAck;
   const fullSize = fill === 1;
 
   const storageBlocks = storage?.verdict === 'blocked';
-  const all = checked.every(Boolean) && !!storage && !storageBlocks && fontOk !== undefined && modeOk;
+  const all = checked.every(Boolean) && !!storage && !storageBlocks && fontOk !== undefined && modeOk && cal.ok;
   // Bright hues for borders and tints; the dark ones, each ≥4.5:1, for the words.
   const tone = { ok: '#22c97a', warn: '#c98a22', blocked: '#e64c4c', unknown: '#5a5a7a' } as const;
   const toneText = { ok: UI_TEXT.green, warn: UI_TEXT.amber, blocked: UI_TEXT.red, unknown: UI_TEXT.muted } as const;
@@ -1258,7 +1262,7 @@ export function Preflight({ onDone, onBack }: {
         the investigator can read them back, and the build is named, so a sitting's data can be matched
         to the code that collected it.
       */}
-      <DeviceBox>
+      <DeviceBox mmPerCssPx={cal.calibration?.mmPerCssPx ?? null}>
         <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e5e2dc' }}>
           <BuildInfo testId="preflight-build" />
           {updateWaiting && (
@@ -1305,11 +1309,16 @@ export function Preflight({ onDone, onBack }: {
         ))}
       </div>
       </div>
+      {/*
+        Full width, below the two columns: the bar is 500 design px, wider than either column, and a
+        bar whose end is hidden would be measured short.
+      */}
+      <ScreenCalibration scale={scale.applied} screen={typeof screen !== 'undefined' ? `${screen.width}x${screen.height}` : null} onChange={setCal} />
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 20 }}>
         {onBack && <button type="button" className={btnBack} data-testid="back-to-profile" onClick={onBack}>← Back to the profile</button>}
         <button className={btn} disabled={!all} data-testid="preflight-continue"
           style={btnState(all)}
-          onClick={() => all && onDone({ fontOk: fontOk ?? null, displayMode: mode, displayModeAcknowledged: !installed && modeAck })}>
+          onClick={() => all && onDone({ fontOk: fontOk ?? null, displayMode: mode, displayModeAcknowledged: !installed && modeAck, screen: cal })}>
           {storageBlocks ? 'Storage problem — cannot start' : 'All checks pass — continue →'}
         </button>
       </div>
