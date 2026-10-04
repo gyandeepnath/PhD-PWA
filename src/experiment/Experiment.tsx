@@ -879,6 +879,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       device_type: navigator.userAgent.includes('Android') ? 'Android' : 'Other',
       browser: navigator.userAgent.slice(0, 60),
       screen_resolution: `${screen.width}x${screen.height}`,
+      device_pixel_ratio: Number.isFinite(window.devicePixelRatio) && window.devicePixelRatio > 0 ? window.devicePixelRatio : null,
       /*
        * Visual angle is a controlled variable, and the root scaler changes it on any device
        * smaller than the design canvas. Recording the factor here is what keeps that an analysable
@@ -1383,6 +1384,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               const fresh = {
                 ...session, preflight_complete: true, stimulus_font_ok: fontOk,
                 display_mode: displayMode, display_mode_acknowledged: displayModeAcknowledged,
+                // Re-read where the screen is checked, so it belongs with what pre-flight measured.
+                device_pixel_ratio: Number.isFinite(window.devicePixelRatio) && window.devicePixelRatio > 0
+                  ? window.devicePixelRatio : null,
               };
               await put('sessions', fresh);
               setSession(fresh);

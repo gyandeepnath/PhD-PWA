@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { onUpdateWaiting, applyUpdate } from '@/lib/swUpdate';
 import { sittingsInProgress, sessionLabel } from '@/storage/gather';
-import { APP_VERSION, GIT_HASH } from '@/lib/env';
 import { isE2ETimingActive } from '@/experiment/config';
 
 /** How often the open-sitting question is re-asked while the notice is on screen. */
@@ -192,25 +191,13 @@ export function UpdateBanner() {
   );
 }
 
-/**
- * The build this tablet is actually running.
- *
- * Small and unobtrusive, but always present on the landing screen: without it, a stale cache and a
- * failed deployment are indistinguishable from the device, and distinguishing them took a full
- * round trip of screenshots.
+/*
+ * BuildStamp used to be here: a fixed "v{APP_VERSION} · {GIT_HASH}" in the landing page's corner. The
+ * version never changed and the hash does not read as one, so the investigator could not tell one
+ * deployment from the next (Round 74). The build is now named in full by components/BuildInfo.tsx —
+ * version, build time and commit — on the landing page, the session manager, pre-flight and the
+ * dashboard, with a "Check for updates" beside it.
  */
-export function BuildStamp() {
-  return (
-    <div
-      className="font-lab text-sm"
-      data-testid="build-stamp"
-      // Above the update banner while it shows (see --vl-banner-h), not under it.
-      style={{ position: 'fixed', right: 12, bottom: 'calc(10px + var(--vl-banner-h))', zIndex: 30, color: '#4a4a60', pointerEvents: 'none' }}
-    >
-      v{APP_VERSION} · {GIT_HASH}
-    </div>
-  );
-}
 
 /**
  * An unmissable mark that this tab is running with collapsed protocol timings.

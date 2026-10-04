@@ -25,6 +25,8 @@ import {
   screenFill, DESIGN_WIDTH, DESIGN_HEIGHT, type DisplayMode,
 } from '@/lib/viewportScale';
 import { startFaceProbe, type FaceProbeResult, type FaceProbeStatus } from '@/screening/faceProbe';
+import { DeviceBox } from '@/components/DeviceBox';
+import { BuildInfo, useUpdateWaiting } from '@/components/BuildInfo';
 import type { CameraStatus } from '@/storage/types';
 
 /**
@@ -1163,6 +1165,7 @@ export function Preflight({ onDone, onBack }: {
   const mode = useDisplayMode();
   const installed = isInstalledDisplay(mode);
   const [modeAck, setModeAck] = useState(false);
+  const updateWaiting = useUpdateWaiting();
   const modeOk = installed || modeAck;
   const fullSize = fill === 1;
 
@@ -1249,6 +1252,25 @@ export function Preflight({ onDone, onBack }: {
           </>
         )}
       </div>
+      {/*
+        THIS DEVICE (Round 74). Every layout from Round 63 to Round 73 was measured against a viewport
+        assumed for the tablet and never read off it. The numbers the browser reports are shown here so
+        the investigator can read them back, and the build is named, so a sitting's data can be matched
+        to the code that collected it.
+      */}
+      <DeviceBox>
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e5e2dc' }}>
+          <BuildInfo testId="preflight-build" />
+          {updateWaiting && (
+            <p data-testid="preflight-update-waiting" className={boxText} style={{ marginTop: 6 }}>
+              <strong>A newer build is installed and waiting.</strong> It cannot be applied while any
+              sitting is open, this one included — applying it reloads the app in every window. This
+              sitting runs, and is recorded, on the build named above. Apply the update from the
+              landing page once the sitting is finished.
+            </p>
+          )}
+        </div>
+      </DeviceBox>
       {clipped && (
         <div data-testid="layout-warning" style={{ marginTop: 12, padding: '12px 14px', borderRadius: 10, border: '1px solid #c98a22', background: '#c98a2212' }}>
           <p className={eyebrow} style={{ color: UI_TEXT.amber }}>Screen too small — content is being clipped</p>

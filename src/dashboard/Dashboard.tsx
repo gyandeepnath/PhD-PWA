@@ -16,6 +16,8 @@ import { N_CONDITIONS } from '@/experiment/conditions';
 import { UI_TEXT } from '@/lib/uiPalette';
 import { ScrollCue } from '@/components/ScrollCue';
 import { useDialog } from '@/components/ConfirmDialog';
+import { BuildIdentity } from '@/components/BuildInfo';
+import { buildIdentity } from '@/lib/env';
 
 type Tab = 'overview' | 'cohort' | 'reaction' | 'fatigue' | 'search' | 'eye' | 'export';
 const TABS: { id: Tab; label: string }[] = [
@@ -221,7 +223,26 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   return (
     <div data-testid="dashboard-scroll" className="screen scrollable nav-band w-full bg-cream font-sans text-[#1a1a2e]" style={{ padding: '0 3% 3%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12 }}>
-        <h1 className="font-serif text-3xl font-light">Analysis Dashboard</h1>
+        <div>
+          <h1 className="font-serif text-3xl font-light">Analysis Dashboard</h1>
+          {/*
+            Two builds can differ here, and both matter: the one drawing this page, and the one that
+            RECORDED the sitting (provenance, plus any build that took over part-way through it).
+            Round 74: the version alone never changed, so neither could be told apart from the tablet.
+          */}
+          <p className="font-sans text-[15px]" style={{ color: '#4a4a60', marginTop: 4 }}>
+            This app: <BuildIdentity testId="dashboard-build" style={{ fontSize: 15 }} />
+            {bundle?.session.provenance && (
+              <>
+                <br />
+                <span data-testid="dashboard-recorded-build">
+                  This sitting recorded by: {buildIdentity(bundle.session.provenance.app_version, bundle.session.provenance.build_time, bundle.session.provenance.git_hash)}
+                  {(bundle.session.additional_builds ?? []).length > 0 && ` — and part of it by ${(bundle.session.additional_builds ?? []).join(', ')}`}
+                </span>
+              </>
+            )}
+          </p>
+        </div>
         <select
           value={sessionId ?? ''}
           onChange={(e) => setSessionId(e.target.value)}

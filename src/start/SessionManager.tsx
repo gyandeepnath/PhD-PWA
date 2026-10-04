@@ -3,6 +3,7 @@
  * interrupted sessions, opens completed sessions in the dashboard, and manages a 30-day soft-delete
  * recycle bin (restore / permanent purge). Expired bin entries are auto-purged on mount.
  */
+import { BuildInfo } from '@/components/BuildInfo';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   revokeMediaGrant,
@@ -328,6 +329,11 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
             <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]">Research Platform</p>
             <h1 className="font-serif text-3xl font-light" style={{ marginTop: 2 }}>Session Manager</h1>
           </div>
+        </div>
+        {/* The build this tablet is running, and a check for a newer one: a sitting started here runs
+            on this build, and the notice to update can only be acted on between sittings (Round 74). */}
+        <div style={{ marginTop: 10 }}>
+          <BuildInfo testId="manager-build" />
         </div>
 
         <button onClick={onNew} className="mt-5 w-full rounded-xl py-4 font-sans text-base font-medium uppercase tracking-wide text-white transition active:scale-95" style={{ background: '#1a1a2e' }}>

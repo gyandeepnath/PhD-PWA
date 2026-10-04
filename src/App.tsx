@@ -4,7 +4,7 @@ import Experiment from '@/experiment/Experiment';
 import { LandingPage } from '@/start/LandingPage';
 import { SessionManager } from '@/start/SessionManager';
 import { LazyDashboard as Dashboard } from '@/dashboard/LazyDashboard';
-import { UpdateBanner, BuildStamp, E2EBanner } from '@/components/UpdateBanner';
+import { UpdateBanner, E2EBanner } from '@/components/UpdateBanner';
 
 /**
  * Top-level shell / router. Landing → session manager → (new or resumed experiment) → back to
@@ -47,7 +47,6 @@ function renderView(
           {/* Between-sessions screens only: applying an update reloads the app, which would cost a
               sitting if it happened mid-protocol. */}
           <UpdateBanner />
-          <BuildStamp />
         </>
       );
     case 'manager':

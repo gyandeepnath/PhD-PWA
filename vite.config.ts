@@ -3,20 +3,32 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
-// Build-time provenance: stamp the git hash so every export can be traced to a build.
+/*
+ * Build-time provenance: the version, the commit and the build time, stamped into every export and
+ * shown on screen (lib/env.ts buildIdentity). None of it needs git HISTORY, which the CI checkout does
+ * not have: `rev-parse` of the one checked-out commit works in a shallow clone, and the workflow
+ * exports that commit as GITHUB_SHA besides.
+ */
 let gitHash = 'unknown';
 try {
   gitHash = execSync('git rev-parse --short HEAD').toString().trim();
 } catch {
-  /* not a git checkout (e.g. CI tarball) — leave as 'unknown' */
+  // Not a git checkout (a source tarball). In GitHub Actions the commit is still known.
+  if (process.env.GITHUB_SHA) gitHash = process.env.GITHUB_SHA.slice(0, 7);
 }
+/*
+ * Read from package.json itself. It used to be process.env.npm_package_version, which npm sets only
+ * when the build runs through an npm script — `npx vite build` stamped 0.0.0.
+ */
+const appVersion: string = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')).version ?? '0.0.0';
 
 export default defineConfig({
   base: './',
   resolve: { alias: { '@': resolve(__dirname, 'src') } },
   define: {
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.0.0'),
+    __APP_VERSION__: JSON.stringify(appVersion),
     __GIT_HASH__: JSON.stringify(gitHash),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },

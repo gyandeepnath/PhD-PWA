@@ -311,7 +311,16 @@ export interface SessionRecord {
   additional_builds?: string[];
   device_type: string;
   browser: string;
+  /** screen.width x screen.height in CSS px at session creation (not the panel's device pixels). */
   screen_resolution: string;
+  /**
+   * window.devicePixelRatio: device pixels per CSS pixel. With screen_resolution it gives the panel
+   * in device pixels, and it is what decides the physical size of a CSS pixel — the number Rounds
+   * 63-66 assumed (2.5 on the study tablet) and never read. Read at session creation and again when
+   * pre-flight completes, where the ruler calibration is taken; a display-size change between the
+   * two shows here. Absent on sittings from builds before Round 74; null where not reported.
+   */
+  device_pixel_ratio?: number | null;
   /**
    * The factor the whole interface — stimuli included — was rendered at on this device.
    *

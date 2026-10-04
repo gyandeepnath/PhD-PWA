@@ -3,6 +3,8 @@
  * a frosted "Study Overview" card, and an entry button into the session console.
  */
 import { VisuLabLogo } from '@/components/VisuLabLogo';
+import { BuildInfo } from '@/components/BuildInfo';
+import { DeviceBox } from '@/components/DeviceBox';
 import { CONDITIONS } from '@/experiment/conditions';
 import { CONFIG } from '@/experiment/config';
 
@@ -16,8 +18,9 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
      */
     <div
       className="screen scrollable w-full bg-cream font-sans text-[#1a1a2e] animate-fade-in"
-      style={{ position: 'relative', display: 'flex', padding: '24px 7% calc(24px + var(--vl-banner-h)) 8%', gap: '6%' }}
+      style={{ position: 'relative', display: 'flex', flexDirection: 'column', padding: '24px 7% calc(16px + var(--vl-banner-h)) 8%' }}
     >
+      <div style={{ flex: '1 0 auto', display: 'flex', gap: '6%' }}>
       {/* Type on the scaled canvas: 13 px and 11 px here arrived at about 11 and 9 px on the tablet,
           the credit line in #9a968e at 2.8:1. Now 17 / 15 px and ≥4.5:1. */}
       <div style={{ flex: 1, margin: 'auto 0' }}>
@@ -70,6 +73,17 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
           Enter Research Console →
         </button>
       </div>
+      </div>
+      {/*
+        Which build, and on what screen. The build line used to be a fixed stamp in the corner reading
+        "v2.1.0 · <hash>", which never changed between deployments as far as anyone could tell; the
+        device line did not exist, so the viewport every layout assumed could not be checked from the
+        tablet (Round 74). In the page's flow, above the update notice's reserved space, not under it.
+      */}
+      <footer style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <BuildInfo auto />
+        <DeviceBox compact />
+      </footer>
     </div>
   );
 }

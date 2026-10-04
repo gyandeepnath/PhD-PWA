@@ -1,6 +1,6 @@
 {
   "name": "visulab",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "description": "VisuLab \u2014 Visual Ergonomics Experiment PWA (reconstructed, scientifically refined source)",
   "type": "module",

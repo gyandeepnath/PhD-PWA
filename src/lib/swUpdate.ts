@@ -31,6 +31,8 @@ let updateWaiting = false;
 const listeners = new Set<Listener>();
 let applyFn: ((reload: boolean) => Promise<void>) | null = null;
 let registered = false;
+/** The worker's registration, once the browser has one: what "Check for updates" asks. */
+let registration: ServiceWorkerRegistration | null = null;
 
 function announce(): void {
   for (const l of listeners) l(updateWaiting);
@@ -67,6 +69,9 @@ export async function installUpdateWatch(): Promise<void> {
         updateWaiting = true;
         announce();
       },
+      onRegisteredSW(_url: string, r: ServiceWorkerRegistration | undefined) {
+        registration = r ?? null;
+      },
     });
   } catch {
     /* No service worker in this environment; the app runs online-only. */
@@ -101,4 +106,40 @@ export async function applyUpdate(): Promise<void> {
     throw new Error('No service-worker registration to update through.');
   }
   await applyFn(true);
+}
+
+/** What a "Check for updates" tap found. */
+export type UpdateCheck =
+  /** A newer build is already installed and waiting: the update notice is up. */
+  | 'waiting'
+  /** A newer build was found and is downloading; the notice appears when it has installed. */
+  | 'installing'
+  /** The server has nothing newer than the build running now. */
+  | 'current'
+  /** No service worker here (a test server, an unsupported browser): updates cannot be checked. */
+  | 'unavailable'
+  /** The check could not reach the server — usually because the tablet is offline. */
+  | 'offline';
+
+/**
+ * Ask the server, now, whether there is a newer build — the registration's own `update()`.
+ *
+ * WHY THIS EXISTS. The browser checks for a new worker when a page is NAVIGATED to, and otherwise
+ * about once a day. An installed app that is opened from recent apps rather than relaunched is never
+ * navigated, so a tablet could sit on yesterday's build all day with nothing to say a newer one had
+ * been published. This does not apply anything: a build it finds installs and WAITS (skipWaiting is
+ * off), and the gated "Update now" in UpdateBanner is still the only way it takes over. So it is
+ * harmless to call during a sitting, which is why pre-flight offers it too.
+ */
+export async function checkForUpdate(): Promise<UpdateCheck> {
+  if (updateWaiting) return 'waiting';
+  if (!registration) return 'unavailable';
+  try {
+    await registration.update();
+  } catch {
+    return 'offline';
+  }
+  if (updateWaiting || registration.waiting) return 'waiting';
+  if (registration.installing) return 'installing';
+  return 'current';
 }

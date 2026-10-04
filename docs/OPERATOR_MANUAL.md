@@ -55,9 +55,11 @@ tablet's own camera during the reading task. Two consequences for you:
   plates.
 - Screen timeout disabled. Do Not Disturb on. Aeroplane mode on.
 - Landscape, fullscreen, launched from the home-screen icon. **This now matters for the stimulus,
-  not only for tidiness.** The screens are laid out for the tablet's own full screen (1152x720). In
-  the installed app the reading text is its protocol size, 22 px. In a browser tab the address bar
-  takes about a tenth of the height and everything is drawn about 10% smaller. Pre-flight checks how
+  not only for tidiness.** Every screen is laid out on a 16:10 canvas and, since version 2.2.0,
+  enlarged or shrunk to fill the screen it is shown on. In the installed app it fills the tablet's
+  whole screen, which is the size the protocol's stimuli are defined at. In a browser tab the address
+  bar takes part of the height and everything is drawn smaller by that fraction. Pre-flight shows
+  the fraction ("Display size", and "Layout scale" in the *This device* box). Pre-flight checks how
   the app was launched; if it is not the installed full-screen app it shows a warning you must tick
   to continue, and that tick is recorded as a protocol deviation (`display_mode_acknowledged`).
   Close the tab and open the app from its icon instead. **The same check is made again when you
@@ -68,6 +70,42 @@ tablet's own camera during the reading task. Two consequences for you:
   closes and nothing warns you at the time. Always launch from the home-screen icon. Pre-flight
   checks this and will refuse to start if it finds ephemeral storage; if it does, close the window
   and reopen the app properly rather than trying to continue.
+
+**Which build is running, and updating it**
+
+The app names its build on the landing page, the Session Manager, pre-flight and the dashboard, in
+one line:
+
+> `VisuLab 2.2.0 · built 4 Oct 2026 09:33 UTC · e05d3c4`
+
+The **version** (2.2.0) changes only when a change alters what a participant sees or what the export
+means. The **build time** (always in UTC) changes with every deployment, so it is the part that tells
+you whether the tablet has the newest build. The **commit** (seven characters) is what the export
+records as `git_hash`. The same three are in `01_session_info.csv` (`app_version`, `build_time`,
+`git_hash`), and the dashboard shows both the build drawing it and the build that recorded the sitting.
+
+How an update reaches the tablet. The installed app keeps a copy of itself so it works offline. A
+newer build is downloaded in the background and then **waits**; it never replaces the running app
+by itself, because that would reload the app in the middle of a sitting. So:
+
+1. **At the start of each study day, before New Session**, open the app from its icon (with the
+   tablet online, before switching on aeroplane mode) and stay on the landing page. It checks for a
+   newer build by itself; you can also tap **Check for updates**. It answers *This is the newest
+   build the server has*, *A newer build was found and is downloading*, or *Could not reach the
+   server*.
+2. If a newer build is ready, a dark notice appears at the bottom: **A newer version of VisuLab is
+   ready — Update now.** Tap **Update now**. The app reloads into the new build; check that the build
+   line now shows the new build time.
+3. **Update now is offered only when no sitting is open** in any window — not one paused, not one
+   at pre-flight. While one is open the notice says which, and waits; finish that sitting first.
+   This is why step 1 comes before New Session. Pre-flight also says when a newer
+   build is waiting: the sitting you are starting will run, and be recorded, on the build named
+   there.
+4. If the notice never appears although a newer build has been published (the build line still
+   shows the old time after **Check for updates** says it is downloading and you have waited a
+   minute): close the app from recent apps and open it again from its icon, then repeat. Only as a
+   last resort, and only with every sitting exported and copied off the tablet, clear the site's
+   data in Chrome's settings — that deletes every session stored on the tablet.
 
 **Seating**
 
@@ -477,6 +515,7 @@ Print this.
 - [ ] Screen cleaned; brightness fixed; auto-brightness OFF; blue-light filter OFF
 - [ ] Screen timeout off; Do Not Disturb on; aeroplane mode on
 - [ ] Landscape, fullscreen, launched from home screen
+- [ ] Landing page: **Check for updates**; if a newer build is ready, **Update now** before New Session; build line noted on the sheet
 - [ ] Viewing distance measured at 50 to 60 cm
 - [ ] Battery above 80 per cent or on charge
 - [ ] Launched from the home-screen icon, NOT a private window; pre-flight storage check reads ok
