@@ -282,18 +282,22 @@ const BASE_CONFIG = {
   // Camera.
   /**
    * Capture size REQUESTED (ideal, not exact). Kept at 1280x720 after measuring a smaller one
-   * (round 75, docs/AUDIT_FINDINGS.md), because of what the landmark models actually consume. Read
-   * from the vendored model files themselves: both face detectors take the whole frame at 128x128,
+   * (round 75, docs/AUDIT_FINDINGS.md). What the landmark models actually consume, read from the
+   * vendored model files themselves: both face detectors take the whole frame at 128x128,
    * and the landmark models take a crop around the face resized to 192x192 (legacy attention mesh) or
    * 256x256 (Face Landmarker). How wide a face is in the tablet's 1280-wide frame at the protocol's
    * ~55 cm has NOT been measured; from geometry alone (a face ~14 cm wide, a front camera with a 75-80
    * degree horizontal field, which is itself unverified) it would be roughly 200 px — about the landmark
    * input already — and a 640x480 frame would make it roughly half that, so the crop is enlarged about
-   * twofold and the eyelids, a few pixels apart, lose about half their pixels. Measured in headless
-   * Chromium (round 75, paired runs) on one portrait fed in as video: the smaller frame saved little
-   * (Face Landmarker CPU 77 vs 85 ms a frame; legacy 158 vs 166 ms), and it moved Face Landmarker's
-   * open-eye EAR on the same face from 0.198 to 0.186 — the lost detail shows up in the measurement
-   * itself. So it does not pay.
+   * twofold and the eyelids, a few pixels apart, lose about half their pixels. What was MEASURED, in
+   * headless Chromium (round 75, paired runs, one portrait fed in as video), is less one-sided: the
+   * smaller frame saved about 10% a frame (Face Landmarker CPU 77 vs 85 ms; legacy 158 vs 166 ms);
+   * frame-to-frame EAR jitter under added pixel noise was no worse (SD 1.8-2.0% of the mean against
+   * 1.9-2.1% for Face Landmarker, 1.6-1.9% against 2.3% for legacy); and the open-eye EAR itself moved
+   * (Face Landmarker 0.198 to 0.186 on the clean portrait, 0.194 to 0.190 with noise) — a different
+   * level, not shown to be a worse one. So the case for keeping 1280x720 is that a ~10% saving does not
+   * pay for changing the instrument under the study. If the tablet proves tracker-limited, 640x480 is a
+   * measured option, to be chosen and frozen before the pilot like the tracker itself.
    * The face's width in camera pixels is shown on the camera-setup screen, so the tablet's real value
    * can be read off rather than assumed.
    */
