@@ -308,9 +308,13 @@ Beside the picture, **CAMERA AND TRACKER** gives three rates and says which one 
 | *Camera delivers* N fps · W×H | Frames the camera hands to the app each second, and their size | The **camera** is the limit. Most tablet cameras slow down in dim light: add light on the face (not behind it), and close any other app that may hold the camera. |
 | *Tracker processes* N fps · M ms | Frames the face tracker gets through each second, and the time one frame takes | The **processor** is the limit: close other apps, plug in the charger and switch battery saver off, let a hot tablet cool, and use the fastest tracker (below). |
 | *Face found* N fps | Frames in which the face was found. This is the rate the blink measures are sampled at (`effective_fps`) | Seating, distance, light on the face, glare on spectacles, something in front of the face. |
-| *Face width* N px | How wide the face is in the camera's picture | Under about 150 px the eyelids have few pixels: move closer to the 50 to 60 cm range. |
+| *Face width* N px | How wide the face is in the camera's picture | The face model enlarges a crop around the face to 192 or 256 px before it finds the eyelids, so a face much narrower than that is being magnified and the lids carry few real pixels. It depends on the distance **and** on the picture size the camera gave (the *Asked for … the camera gave …* line): a small value with the participant at 50 to 60 cm means the camera gave a small picture — note both numbers for the investigator rather than moving the participant closer than the protocol distance. No minimum has been validated; this is a reading to record. |
 
-The sentence under them names the stage that is short. Below the rates is the last ten seconds of
+The sentence under them names the stage that is short. When the face is found 25 to 30 times a
+second it says so in amber — *at least 25, but below the 30 the incomplete-blink ratio is flagged
+under*: enough for the camera check, but every reading condition measured at that rate has its
+incomplete-blink ratio flagged in the data (`fps_adequate_for_ratio`). If it says that with every
+participant, tell the investigator; do not change anything to make it go away. Below the rates is the last ten seconds of
 eye openness: a white line that dips at each blink. After calibration it carries two dashed lines,
 yellow at 0.75 and red at 0.60 of this participant's open eye: a dip below yellow is counted as a
 blink, below red as a complete one.
