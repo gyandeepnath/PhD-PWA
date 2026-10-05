@@ -50,6 +50,20 @@ function duplicates<T>(items: T[], key: (t: T) => string): Map<string, number> {
   return new Map([...seen].filter(([, n]) => n > 1));
 }
 
+/**
+ * The face tracker that measured an eye-metrics row, for the one-tracker checks here and in
+ * joinIntegrity.ts. tracker_backend exists from 2.3.0 (round 75). Every camera-on row written before it
+ * was measured by the one tracker those builds had, the legacy @mediapipe/face_mesh — so a blank there
+ * is 'legacy', not "unknown". Ignoring blanks, as the checks first did, let a participant whose first
+ * sitting predates 2.3.0 and whose second ran Face Landmarker through unflagged, which is the one
+ * mixed-tracker case certain to occur in data already collected. A camera-off row was measured by
+ * nothing: null.
+ */
+export function eyeRowTracker(e: { tracker_backend?: string | null; camera_active?: boolean | null }): string | null {
+  if (e.tracker_backend) return e.tracker_backend;
+  return e.camera_active === true ? 'legacy' : null;
+}
+
 export function auditBundle(bundle: SessionBundle): IntegrityReport {
   const f: IntegrityFinding[] = [];
   const add = (severity: IntegritySeverity, check: string, detail: string, refs: string[] = []) =>
@@ -65,14 +79,16 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
    * frames gives way to the next) or by the trackers being measured again at a resumed camera setup.
    * Either way the conditions on each side were measured on different models, whose absolute
    * eye-aspect ratios differ by a few per cent. Reported per sitting; the pooled check reports it per
-   * participant across sittings.
+   * participant across sittings. A sitting started before 2.3.0 and resumed after it is the other way:
+   * its early rows carry no tracker_backend and were the legacy tracker (eyeRowTracker).
    */
-  const eyeTrackers = new Set((bundle.eyeMetrics ?? []).map((e) => e.tracker_backend).filter((t): t is string => !!t));
+  const eyeTrackers = new Set((bundle.eyeMetrics ?? []).map(eyeRowTracker).filter((t): t is string => !!t));
   if (eyeTrackers.size > 1) {
     add('warning', 'tracker_consistent',
       `Conditions in this sitting were measured on different face trackers (${[...eyeTrackers].sort().join(', ')}). `
-      + 'Compare tracker_backend in 07_eye_metrics.csv; condition contrasts across the change are confounded with the tracker.',
-      (bundle.eyeMetrics ?? []).filter((e) => e.tracker_backend).map((e) => e.condition_id));
+      + 'Compare tracker_backend in 07_eye_metrics.csv (blank on a camera-on row means the legacy tracker, before 2.3.0); '
+      + 'condition contrasts across the change are confounded with the tracker.',
+      (bundle.eyeMetrics ?? []).filter((e) => eyeRowTracker(e)).map((e) => e.condition_id));
   }
 
   /*

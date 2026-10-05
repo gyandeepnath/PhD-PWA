@@ -327,4 +327,14 @@ describe('one face tracker per sitting (round 75)', () => {
     expect(f?.detail).toMatch(/legacy, tasks-gpu/);
     expect(f?.refs.length).toBe(b.eyeMetrics.length);
   });
+
+  it('a sitting begun before 2.3.0 and resumed after it: the blank rows were the legacy tracker', () => {
+    const b = buildFixtureBundle();
+    b.eyeMetrics.forEach((e, i) => { e.camera_active = true; if (i >= 2) e.tracker_backend = 'tasks-cpu'; else delete e.tracker_backend; });
+    const f = auditBundle(b).findings.find((x) => x.check === 'tracker_consistent');
+    expect(f?.detail).toMatch(/legacy, tasks-cpu/);
+    // A camera-off row was measured by no tracker, so it neither adds one nor is referenced.
+    b.eyeMetrics.forEach((e, i) => { if (i < 2) e.camera_active = false; });
+    expect(checks(b)).not.toContain('tracker_consistent');
+  });
 });

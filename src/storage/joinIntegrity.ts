@@ -17,7 +17,7 @@
  * which are not, and why.
  */
 import type { SessionBundle } from './gather';
-import { auditBundle } from './integrity';
+import { auditBundle, eyeRowTracker } from './integrity';
 import { isConditionComplete } from './conditionStatus';
 import type { Provenance } from './types';
 import { N_ILLUMINATION_BLOCKS, ILLUMINATION_LEVELS } from '@/experiment/illumination';
@@ -294,7 +294,8 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
      * on another: a confound of tracker with condition inside the participant. Reported, not
      * repaired; a sensitivity analysis can drop or model it.
      */
-    const trackers = new Set(ordered.flatMap((b) => (b.eyeMetrics ?? []).map((e) => e.tracker_backend).filter((t): t is string => !!t)));
+    // A camera-on row with no tracker_backend predates 2.3.0 and was the legacy tracker (eyeRowTracker).
+    const trackers = new Set(ordered.flatMap((b) => (b.eyeMetrics ?? []).map(eyeRowTracker).filter((t): t is string => !!t)));
     if (trackers.size > 1) {
       add('warning', 'mixed_tracker_backends',
         `This participant's conditions were measured on more than one face tracker (${[...trackers].sort().join(', ')}). `

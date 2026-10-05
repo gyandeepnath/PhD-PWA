@@ -548,4 +548,26 @@ describe('a participant measured on more than one face tracker (round 75)', () =
     const r = checkJoin([withTracker(a, 'tasks-cpu'), withTracker(b, 'tasks-cpu')], EXPECT);
     expect(r.issues.some((i) => i.code === 'mixed_tracker_backends')).toBe(false);
   });
+  /*
+   * A sitting recorded before 2.3.0 has no tracker_backend; its camera-on rows were the legacy tracker,
+   * the only one those builds had. Ignoring the blanks let exactly the case certain to exist — a first
+   * sitting on 2.2.0, a second on Face Landmarker — through unflagged.
+   */
+  const preColumn = (b: SessionBundle, cameraOn: boolean) => {
+    (b as unknown as { eyeMetrics: Array<Record<string, unknown>> }).eyeMetrics = b.conditions.map((c) => ({ condition_id: c.condition_id, camera_active: cameraOn }));
+    return b;
+  };
+  it('counts a camera-on row from before the column as the legacy tracker', () => {
+    const [a, b] = complete('P11');
+    const r = checkJoin([preColumn(a, true), withTracker(b, 'tasks-cpu')], EXPECT);
+    expect(r.issues.find((i) => i.code === 'mixed_tracker_backends')?.detail).toMatch(/legacy, tasks-cpu/);
+    // ... and is silent when the later sitting ran legacy too.
+    const [c, d] = complete('P12');
+    expect(checkJoin([preColumn(c, true), withTracker(d, 'legacy')], EXPECT).issues.some((i) => i.code === 'mixed_tracker_backends')).toBe(false);
+  });
+  it('does not count a camera-off row as any tracker', () => {
+    const [a, b] = complete('P13');
+    const r = checkJoin([preColumn(a, false), withTracker(b, 'tasks-cpu')], EXPECT);
+    expect(r.issues.some((i) => i.code === 'mixed_tracker_backends')).toBe(false);
+  });
 });
