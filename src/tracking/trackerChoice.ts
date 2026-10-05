@@ -11,8 +11,9 @@
  * kept for that device.
  *
  * WHY KEPT PER DEVICE, NOT CHOSEN PER SITTING. The three are not the same instrument: on one still
- * portrait the legacy model's and Face Landmarker's eye-aspect ratios differed by a few per cent
- * (round 75, docs/AUDIT_FINDINGS.md). A
+ * portrait in headless Chromium their open-eye eye-aspect ratios differed by 0.3% (legacy and Face
+ * Landmarker on the CPU) to 8% (the GPU delegate, on software WebGL, against the CPU path) depending
+ * on the image (round 75, docs/AUDIT_FINDINGS.md). A
  * choice re-made every sitting could put one participant's two sittings, or the two polarities of a
  * split sitting, on different models. Once chosen, the device keeps its tracker until the operator
  * deliberately measures again, every sitting records which one ran and how it was chosen, and the

@@ -8,11 +8,13 @@
  * WHY THREE. The investigator's tablet failed the camera self-test on frame rate every time, and no
  * measurement exists of either library on that tablet (Snapdragon 870, Chrome). What WAS measured, in
  * headless Chromium on this project's build machine (round 75, docs/AUDIT_FINDINGS.md), is that the
- * ordering is not obvious: there, with software WebGL, the Tasks CPU path took about 60 ms a frame,
- * the legacy path about 120-150 ms and the Tasks GPU path about 165 ms. On a tablet with a real GPU the
- * order may well reverse. So the choice is MEASURED on the device (tracking/trackerChoice.ts), recorded
- * with every condition, and can be frozen in CONFIG.TRACKER_BACKEND for the pilot and the validation
- * sub-study, because the blink classifier's validation is only valid for the tracker it was run on.
+ * ordering is not obvious: there, with software WebGL, the Tasks CPU path took about 85 ms a frame
+ * (median), the legacy path about 165 ms and the Tasks GPU path about 325 ms, in paired runs on a
+ * machine shared with other work — the absolute figures moved by tens of per cent between runs, the
+ * order never did. On a tablet with a real GPU the order may well reverse. So the choice is MEASURED
+ * on the device (tracking/trackerChoice.ts), recorded with every condition, and can be frozen in
+ * CONFIG.TRACKER_BACKEND for the pilot and the validation sub-study, because the blink classifier's
+ * validation is only valid for the tracker it was run on.
  *
  * TWO DECISIONS THAT ARE ABOUT THE MEASUREMENT, NOT SPEED — both measured, both easy to undo by
  * accident, which is why they are spelled out here:
@@ -20,14 +22,19 @@
  *  1. Face Landmarker runs in IMAGE mode, one independent detection per camera frame — NOT the VIDEO
  *     mode its documentation recommends for video. In VIDEO mode with numFaces 1 the graph smooths
  *     landmarks over time (the wasm carries the message "Currently face landmarks smoothing only
- *     support a single face"). A step test on a still portrait (round 75) showed it: the upper-lid
- *     landmarks reached only 30% of a 2 px step on the first frame, 53% on the second and 64% on the
- *     third, and 67/87/93% of a 6 px step. An eyelid in a blink moves a few pixels per frame and the
- *     incomplete-blink ratio is decided by how deep the minimum gets, so a filter like that makes
- *     blinks shallower and pushes complete blinks toward "incomplete": a bias in the primary outcome,
- *     larger at lower frame rates. IMAGE mode applies no temporal filter — every frame is measured on
- *     its own, as the legacy solution (whose graph has no smoothing calculator) always did — and cost
- *     the same per frame in that measurement (about 60 ms against 60 ms).
+ *     support a single face"). A step test on a still portrait (round 75) showed it: shifted by 2 px,
+ *     the upper-lid landmarks moved 31% of the way on the first frame, 55% on the second and 66% on
+ *     the third, and 66/86/91% of a 6 px shift (IMAGE mode: 100% at once). An eyelid in a blink
+ *     moves a few pixels per frame and the incomplete-blink ratio is decided by how deep the minimum
+ *     gets, so a filter like that makes blinks shallower and pushes complete blinks toward
+ *     "incomplete": a bias in the primary outcome, larger at lower frame rates. IMAGE mode applies no
+ *     temporal filter — every frame is measured on its own, as the legacy solution (whose graph has no
+ *     smoothing calculator) always did. It is NOT free: it runs the face detector on every frame
+ *     instead of following the last frame's landmarks, and cost 104 against 97 ms a frame in paired
+ *     runs (92 against 77 under heavier load). That is the price of an unsmoothed blink depth; a tablet
+ *     that turns out tracker-limited is a reason to look at the GPU path, not at VIDEO mode. (The two
+ *     modes also crop the face differently, and gave different open-eye EARs on the same still
+ *     portrait: 0.198 in IMAGE mode, 0.208 in VIDEO mode.)
  *  2. The legacy solution is asked for its landmark stream ONLY. By default it also renders every
  *     input frame back out to a canvas and an ImageBitmap the app never used. See landmarkProto.ts.
  *

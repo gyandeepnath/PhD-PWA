@@ -289,10 +289,10 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
      * The tracker is chosen by measurement on the device and kept per device (trackerChoice.ts), and
      * can be frozen in config; it can still differ between a participant's sittings if the trackers
      * were measured again in between, a backend failed and fell back, or the sittings ran on two
-     * tablets. The backends are not the same instrument — absolute EAR differs between them by a few
-     * per cent — and the conditions of one sitting would then be measured on one model and the rest
-     * on another: a confound of tracker with condition inside the participant. Reported, not
-     * repaired; a sensitivity analysis can drop or model it.
+     * tablets. The backends are not the same instrument — absolute EAR differed between them by 0.3%
+     * to 8% on the one portrait measured (round 75) — and the conditions of one sitting would then be
+     * measured on one model and the rest on another: a confound of tracker with condition inside the
+     * participant. Reported, not repaired; a sensitivity analysis can drop or model it.
      */
     // A camera-on row with no tracker_backend predates 2.3.0 and was the legacy tracker (eyeRowTracker).
     const trackers = new Set(ordered.flatMap((b) => (b.eyeMetrics ?? []).map(eyeRowTracker).filter((t): t is string => !!t)));

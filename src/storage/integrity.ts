@@ -78,9 +78,10 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
    * The tracker can change inside a sitting only by failing over (a backend that throws on its first
    * frames gives way to the next) or by the trackers being measured again at a resumed camera setup.
    * Either way the conditions on each side were measured on different models, whose absolute
-   * eye-aspect ratios differ by a few per cent. Reported per sitting; the pooled check reports it per
-   * participant across sittings. A sitting started before 2.3.0 and resumed after it is the other way:
-   * its early rows carry no tracker_backend and were the legacy tracker (eyeRowTracker).
+   * eye-aspect ratios differed by 0.3% to 8% on the one portrait measured (round 75). Reported per
+   * sitting; the pooled check reports it per participant across sittings. A sitting started before
+   * 2.3.0 and resumed after it is the other way: its early rows carry no tracker_backend and were the
+   * legacy tracker (eyeRowTracker).
    */
   const eyeTrackers = new Set((bundle.eyeMetrics ?? []).map(eyeRowTracker).filter((t): t is string => !!t));
   if (eyeTrackers.size > 1) {

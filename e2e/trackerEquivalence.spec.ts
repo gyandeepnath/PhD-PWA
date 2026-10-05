@@ -14,6 +14,15 @@ import { resolve } from 'node:path';
  *
  * Both trackers are the app's own adapters (src/tracking/trackers.ts), run in this browser; the legacy
  * one runs first, which also exercises the shared-global fix in createTasks (see clearForeignEmscriptenModule).
+ *
+ * The GPU delegate is checked too (round 75 continuation). It is the same model as the CPU path but not
+ * the same arithmetic. In this headless Chromium (software WebGL) its open-eye EAR on this portrait was
+ * 0.1996 against the CPU path's 0.2044 and the legacy model's 0.2039 — 2.4% from the CPU path, where
+ * legacy and CPU were 0.3% apart — and about 8% below the CPU path on the same portrait passed through
+ * the fake camera as video (the round's benchmark). So all three are held to the same "same place"
+ * bound and their EARs are logged: the figures the audit round and the analysis plan quote. Where the
+ * browser has no usable WebGL the GPU delegate cannot start, and that is logged rather than failed:
+ * the app falls back to the CPU path there too.
  */
 const ASSETS = 'https://storage.googleapis.com/mediapipe-assets';
 const PORTRAIT_SHA256 = 'a6f11efaa834706db23f275b6115058fa87fc7f14362681e6abe14e82749de3e';
@@ -52,17 +61,25 @@ test('legacy FaceMesh and Face Landmarker put the landmarks in the same place', 
     img.src = dataUrl;
     await img.decode();
     const res: Record<string, { lm: number[][]; ear: number }> = {};
-    for (const backend of ['legacy', 'tasks-cpu'] as const) {
-      const t = await createTracker(backend);
+    let gpuError: string | null = null;
+    for (const backend of ['legacy', 'tasks-cpu', 'tasks-gpu'] as const) {
+      let t;
+      try {
+        t = await createTracker(backend);
+      } catch (err) {
+        if (backend !== 'tasks-gpu') throw err;
+        gpuError = String(err).slice(0, 200);
+        continue;
+      }
       const lm = await t.detect(img);
       t.close();
       if (!lm) throw new Error(`${backend} found no face`);
       res[backend] = { lm: lm.map((p) => [p.x, p.y]), ear: faceEar(lm, img.naturalWidth / img.naturalHeight) };
     }
-    return { res, w: img.naturalWidth, h: img.naturalHeight };
+    return { res, gpuError, w: img.naturalWidth, h: img.naturalHeight };
   }, `data:image/jpeg;base64,${jpg!.toString('base64')}`);
 
-  const { res, w, h } = out;
+  const { res, gpuError, w, h } = out;
   const px = (a: number[], b: number[]) => Math.hypot((a[0] - b[0]) * w, (a[1] - b[1]) * h);
   const median = (xs: number[]) => { const s = [...xs].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
   const faceWidthPx = (Math.max(...expected.map((p) => p[0])) - Math.min(...expected.map((p) => p[0]))) * w;
@@ -82,4 +99,17 @@ test('legacy FaceMesh and Face Landmarker put the landmarks in the same place', 
   expect(tasksVsExpected).toBeLessThan(0.02 * faceWidthPx);
   expect(legacyVsExpected).toBeLessThan(0.02 * faceWidthPx);
   expect(earGap).toBeLessThan(0.15);
+
+  const gpu = res['tasks-gpu'];
+  if (!gpu) {
+    console.log(JSON.stringify({ gpu: 'could not start', gpuError }));
+    return;
+  }
+  const gpuVsCpu = median(gpu.lm.map((p, i) => px(p, res['tasks-cpu'].lm[i])));
+  const gpuVsExpected = median(gpu.lm.map((p, i) => px(p, expected[i])));
+  const gpuEarGap = Math.abs(gpu.ear - res['tasks-cpu'].ear) / res['tasks-cpu'].ear;
+  console.log(JSON.stringify({ gpuVsCpu: gpuVsCpu.toFixed(2), gpuVsExpected: gpuVsExpected.toFixed(2), earGpu: gpu.ear.toFixed(4), gpuEarGap: gpuEarGap.toFixed(3) }));
+  expect(gpu.lm.length).toBe(478);
+  expect(gpuVsExpected).toBeLessThan(0.02 * faceWidthPx);
+  expect(gpuEarGap).toBeLessThan(0.15);
 });

@@ -285,12 +285,17 @@ const BASE_CONFIG = {
    * (round 75, docs/AUDIT_FINDINGS.md), because of what the landmark models actually consume. Read
    * from the vendored model files themselves: both face detectors take the whole frame at 128x128,
    * and the landmark models take a crop around the face resized to 192x192 (legacy attention mesh) or
-   * 256x256 (Face Landmarker). At the protocol's ~55 cm a face spans roughly 200 px of a 1280-wide
-   * frame — about the landmark input already — and half that at 640x480, where the crop is upsampled
-   * about twofold and the eyelids, a few pixels apart, lose half their pixels. The saving from the
-   * smaller frame was small (Face Landmarker CPU ~54 vs ~60 ms a frame; legacy ~113 vs ~121 ms in
-   * headless Chromium), so it does not pay for that. The face's width in camera pixels is shown on the
-   * camera-setup screen, so the tablet's real value can be read off rather than assumed.
+   * 256x256 (Face Landmarker). How wide a face is in the tablet's 1280-wide frame at the protocol's
+   * ~55 cm has NOT been measured; from geometry alone (a face ~14 cm wide, a front camera with a 75-80
+   * degree horizontal field, which is itself unverified) it would be roughly 200 px — about the landmark
+   * input already — and a 640x480 frame would make it roughly half that, so the crop is enlarged about
+   * twofold and the eyelids, a few pixels apart, lose about half their pixels. Measured in headless
+   * Chromium (round 75, paired runs) on one portrait fed in as video: the smaller frame saved little
+   * (Face Landmarker CPU 77 vs 85 ms a frame; legacy 158 vs 166 ms), and it moved Face Landmarker's
+   * open-eye EAR on the same face from 0.198 to 0.186 — the lost detail shows up in the measurement
+   * itself. So it does not pay.
+   * The face's width in camera pixels is shown on the camera-setup screen, so the tablet's real value
+   * can be read off rather than assumed.
    */
   CAMERA_WIDTH: 1280,
   CAMERA_HEIGHT: 720,

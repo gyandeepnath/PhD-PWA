@@ -472,14 +472,20 @@ These are not optional and they come first.
    separate a camera that delivered too few frames from a tracker that could not keep up. They are
    QC, not covariates: `effective_fps` remains the rate the model adjusts for.
 2b. **One instrument per participant.** `tracker_backend` (07, and 01 for the sitting) names the face
-   tracker that measured each row. The three backends are not interchangeable instruments — on one
-   still portrait their eye-aspect ratios differed by a few per cent — so a participant measured on
+   tracker that measured each row. The three backends are not interchangeable instruments — on
+   MediaPipe's test portrait in headless Chromium the open-eye EAR was 0.2039 with the legacy tracker,
+   0.2044 with Face Landmarker on the CPU and 0.1996 on the GPU delegate (software WebGL), and on the
+   same portrait passed through the fake camera as video the GPU delegate read 8% below the CPU path
+   (Round 75) — so a participant measured on
    two is flagged (`mixed_tracker_backends` in the join report; `tracker_consistent` per sitting).
    The tracker is to be frozen before the pilot (`CONFIG.TRACKER_BACKEND`); if a flag appears anyway,
    report the primary model with and without the flagged participants. From 2.3.0 EAR is computed in
-   image-plane proportions, so absolute `ear_baseline`, `open_ear_measured` and the two thresholds are
-   not comparable with sittings recorded by earlier builds (ratios to the baseline, and every blink
-   classification, are unaffected); no participant data predates the change.
+   image-plane proportions, so absolute `ear_baseline`, `open_ear_measured`, the two thresholds and
+   `calibration_ear_baseline` are not comparable with sittings recorded by earlier builds, pilot
+   sittings included (ratios to the baseline, and every blink classification, are unaffected; check
+   `app_version`). `head_roll_mean` changed the same way. A camera-on row with a blank
+   `tracker_backend` was recorded before 2.3.0 by the legacy tracker, and the two flags above count
+   it as such.
 3. **Was the participant present?** `face_presence_ratio` and `off_axis_ratio`.
 4. **Was the exposure complete?** `observed_duration_ms` against `reading_time_ms`. A large shortfall
    means every rate in that row describes only the fraction the camera saw, and the rates themselves
