@@ -188,10 +188,23 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
   instead of 4° and 8°. From 2.2.0 the layout fills the screen at any pixel ratio and each sitting
   measures its own screen.
 
-- **Webcam eye tracking** is lower-fidelity than IR (spatial error ~3–5°). It now samples one EAR
-  reading **per FaceMesh result at ~30 fps** (the literature minimum for blink detection; an earlier
-  build sampled stale landmarks on a 60 fps render loop, duplicating samples and overstating fps).
-  `effective_fps` records the true achieved rate and gates the duration-based tiers.
+- **Webcam eye tracking** is lower-fidelity than IR (spatial error ~3–5°). It samples one EAR
+  reading **per tracker result, one per camera frame the tracker processes** (the target is ~30 fps,
+  the literature minimum for blink detection; an earlier build sampled stale landmarks on a 60 fps
+  render loop, duplicating samples and overstating fps). `effective_fps` records the true achieved
+  rate and gates the duration-based tiers. From version 2.3.0 (Round 75):
+  - the **face tracker** is one of three MediaPipe backends — Face Landmarker on the GPU or CPU, or
+    the legacy FaceMesh — chosen by measurement on the tablet and **to be frozen before the pilot**,
+    because the blink classifier's validation holds only for the tracker it was run on; every
+    condition row records the backend that ran (`tracker_backend`);
+  - Face Landmarker runs **frame by frame, without temporal smoothing** (its video mode smooths
+    landmarks, which would make blinks shallower), as the legacy FaceMesh always did;
+  - each sample is stamped with the camera's **capture time** for the frame, not the time the result
+    arrived, and EAR is computed in **image-plane proportions**, so it does not depend on the camera
+    frame's shape;
+  - what the camera delivered, what the tracker processed and the time per frame are recorded per
+  condition, so a low frame rate can be attributed to the camera or the processor.
+  Nothing about the tablet's camera or tracker throughput has been measured on the device yet.
 - **Blink metrics distinguish two constructs.** For **visual/ocular fatigue (CVS — this study)** the
   markers used are a **reduced blink rate** and a **raised incomplete-blink ratio** (Portello,
   Rosenfield & Chu, *Optom Vis Sci* 2013), read with the within-task first/second-half bins and inter-blink

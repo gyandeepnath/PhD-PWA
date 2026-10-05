@@ -467,6 +467,19 @@ These are not optional and they come first.
    deletes data non-randomly with respect to a factor. (This item used to name ambient illumination
    as the independent variable; illumination is now held constant.) Run the model with and without
    them and report both.
+   **Why the rate was what it was** (from version 2.3.0, Round 75): `camera_fps_delivered`,
+   `tracker_fps`, `frames_skipped` and `process_ms_p50`/`process_ms_p95` in `07_eye_metrics.csv`
+   separate a camera that delivered too few frames from a tracker that could not keep up. They are
+   QC, not covariates: `effective_fps` remains the rate the model adjusts for.
+2b. **One instrument per participant.** `tracker_backend` (07, and 01 for the sitting) names the face
+   tracker that measured each row. The three backends are not interchangeable instruments — on one
+   still portrait their eye-aspect ratios differed by a few per cent — so a participant measured on
+   two is flagged (`mixed_tracker_backends` in the join report; `tracker_consistent` per sitting).
+   The tracker is to be frozen before the pilot (`CONFIG.TRACKER_BACKEND`); if a flag appears anyway,
+   report the primary model with and without the flagged participants. From 2.3.0 EAR is computed in
+   image-plane proportions, so absolute `ear_baseline`, `open_ear_measured` and the two thresholds are
+   not comparable with sittings recorded by earlier builds (ratios to the baseline, and every blink
+   classification, are unaffected); no participant data predates the change.
 3. **Was the participant present?** `face_presence_ratio` and `off_axis_ratio`.
 4. **Was the exposure complete?** `observed_duration_ms` against `reading_time_ms`. A large shortfall
    means every rate in that row describes only the fraction the camera saw, and the rates themselves

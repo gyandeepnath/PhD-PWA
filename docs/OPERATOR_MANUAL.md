@@ -295,6 +295,49 @@ anomaly, a colour-vision deficiency:
   ophthalmological examination.
 - Log it as an incidental finding. Do not treat, and do not reassure beyond the referral.
 
+**Camera set-up: the picture and the numbers (version 2.3.0 onwards).** *Enable camera* starts the
+camera and the face tracker the whole sitting will use — there is no separate preview camera any
+more. The picture is the tracker's own: a green box round the face and yellow points on the eyelids,
+which are the six points per eye the blink measure is computed from. If the yellow points do not sit
+on the lid margins, the blink data will not either: fix the light or the seating first.
+
+Beside the picture, **CAMERA AND TRACKER** gives three rates and says which one is short:
+
+| Line | What it means | If it is low |
+|---|---|---|
+| *Camera delivers* N fps · W×H | Frames the camera hands to the app each second, and their size | The **camera** is the limit. Most tablet cameras slow down in dim light: add light on the face (not behind it), and close any other app that may hold the camera. |
+| *Tracker processes* N fps · M ms | Frames the face tracker gets through each second, and the time one frame takes | The **processor** is the limit: close other apps, plug in the charger and switch battery saver off, let a hot tablet cool, and use the fastest tracker (below). |
+| *Face found* N fps | Frames in which the face was found. This is the rate the blink measures are sampled at (`effective_fps`) | Seating, distance, light on the face, glare on spectacles, something in front of the face. |
+| *Face width* N px | How wide the face is in the camera's picture | Under about 150 px the eyelids have few pixels: move closer to the 50 to 60 cm range. |
+
+The sentence under them names the stage that is short. Below the rates is the last ten seconds of
+eye openness: a white line that dips at each blink. After calibration it carries two dashed lines,
+yellow at 0.75 and red at 0.60 of this participant's open eye: a dip below yellow is counted as a
+blink, below red as a complete one.
+
+**The face tracker on this tablet.** There are three: Face Landmarker on the GPU, Face Landmarker on
+the CPU, and the older FaceMesh. Which is fastest depends on the tablet and has not been measured on
+the study tablet yet. The first time the camera is set up on a tablet, the app runs each for a few
+seconds on the picture (*Measuring 1 of 3…*) and keeps the fastest for that tablet; keep a face in
+view while it does. The table shows what each achieved, and the one in use is in bold. **Measure
+trackers again** repeats it — do that only at the bench, never between a participant's sittings,
+because a participant measured on two trackers is flagged in the data (the trackers are not
+interchangeable instruments). Before the pilot the investigator fixes the tracker for the study; the
+screen then says *Fixed:* and there is nothing to measure.
+
+**The camera check** after calibration (*Quick camera check*: blink when the dot flashes) shows the
+same three rates on its result screen. When it fails on frame rate it now says **which stage** was
+short — "the CAMERA delivered only …" (light), "the TRACKER processed only …, taking about M ms a
+frame" (processor), or "found the face in only some of them" (seating) — and that is the advice to
+follow. Do not lower anything to make it pass.
+
+**What to send the investigator from the tablet** the first time the new version runs (photograph
+the screens or copy the numbers): from camera set-up, the three rates, the face width, the line
+*Asked for … the camera gave … (its maximum: …)*, and the whole tracker table; from the camera check's
+result, the line under the verdict (*Camera delivered … · tracker processed …*). Do it once in the
+study room with the lights as they will be, and once more with the tablet on charge and nothing else
+open.
+
 **Calibration** establishes this participant's own open-eye baseline, gaze mapping and head
 posture. Every blink threshold is expressed as a fraction of their baseline, not a population
 default, so a rushed calibration degrades every ocular measure for the whole session. Take the time.
@@ -358,7 +401,12 @@ dot has been shown, while the results are saved.
 
 **The researcher panel** sits at the bottom left. On set-up, break and closing screens it is a dark
 chip with the sitting clock and a coloured camera dot; tap it for the full panel, which takes a
-column at the left and moves the screen's content over rather than covering it. During a display, on
+column at the left and moves the screen's content over rather than covering it. With the camera on,
+the full panel opens with the **live picture** (the same picture as camera set-up, with the eyelid
+points), the ten-second eye-openness trace and the three rates — camera, tracker, face — and then
+the blink counts. It can be opened on the calibration and camera-check screens before and after the
+dots run, which is where to look when one of them has just failed. It never shows the picture on a
+display screen: there the participant would be watching their own face. During a display, on
 the grey field, and while the calibration, the camera self-test or the colour-vision plates run, it
 is only a small square outline in that screen's own colour with a dot inside — no clock, no colour
 of its own, no words. A **filled** dot means the camera is working (or off by consent); an **empty
@@ -435,7 +483,7 @@ else a sitting produces put together.
 | No camera permission prompt at all | Page is not on a secure origin | **Stop.** The camera cannot work. See DEPLOYMENT.md section 2. Do not run the session. |
 | Permission denied by mistake | Participant or previous operator tapped Block | Site settings → allow camera → reload → resume. |
 | Face not detected at setup | Too dark, too far, backlit, camera covered | Check the lens, the distance, and that the participant is not silhouetted against a lamp. |
-| "Low frame rate" or a QC warning | Tablet under load | Close other apps, reboot, retry. Below about 25 fps the duration-based blink measures are gated off. |
+| "Low frame rate" or a QC warning | Read **which** rate is low (camera set-up, the camera check's result, or the researcher panel) | *Camera delivers* low: more light on the face, close other camera apps. *Tracker processes* low: close other apps, charge, let it cool, use the fastest tracker. *Face found* low: seating and light. Below about 25 face frames a second the duration-based blink measures are gated off. |
 | Glasses reflecting the screen | Lamp or screen reflecting off the lenses | Tilt the tablet slightly, or move the lamp. Do not ask them to remove correction. |
 | App reloads mid-session | Browser reclaimed memory, or the tablet slept | Reopen. Session Manager offers **Resume** for every session still in progress, each at its own next condition. Data already written is safe. Note the interruption. |
 | After a resume, the app asks for the camera and runs calibration again | Expected | The blink thresholds are fractions of *this participant's* own open-eye baseline, and a reload clears it. Re-running calibration is required for the resumed conditions to carry any ocular data at all. Take it at the normal pace. |
@@ -562,7 +610,8 @@ Print this.
 - [ ] Need to stop? Top-left **Exit — resume later**, never closing the app; mistyped profile → **← Back to the profile** on pre-flight
 - [ ] Clinical screening complete; any abnormality recorded and referred
 - [ ] Formal colour-vision plates administered, and the result entered in the profile form
-- [ ] Camera preview shows a face box
+- [ ] Camera preview shows a face box, and the yellow points sit on the eyelids
+- [ ] Camera set-up: camera, tracker and face rates read and noted; the sentence under them names no stage as short
 - [ ] Calibration completed unhurried
 - [ ] Baseline CVS-Q and fatigue done
 
