@@ -281,3 +281,70 @@ describe('export builder', () => {
     expect(fnv1a('hello')).not.toBe(fnv1a('hellp'));
   });
 });
+
+/*
+ * The camera pipeline columns (round 75): what the camera delivered, what the tracker processed and
+ * skipped, how long a frame took, which tracker ran and how it was chosen — per condition in 07, and
+ * for the sitting and the self-test in 01. Blank, never zero, where a row or a sitting predates them.
+ */
+describe('camera pipeline columns', () => {
+  const rows = (b: SessionBundle, file: string) => {
+    const lines = buildExportFiles(b).find((f) => f.filename === file)!.content.trim().split('\n');
+    const head = lines[0].split(',');
+    return lines.slice(1).map((l) => Object.fromEntries(l.split(',').map((c, i) => [head[i], c])));
+  };
+
+  it('07 carries each condition\'s pipeline, and leaves it blank on camera-off and older rows', () => {
+    const b = bundle();
+    Object.assign(b.eyeMetrics[0], {
+      tracker_backend: 'tasks-cpu', camera_fps_delivered: 29.6, tracker_fps: 11.2, frames_delivered: 5268,
+      frames_processed: 1994, frames_skipped: 3274, process_ms_p50: 84.9, process_ms_p95: 101.5,
+      camera_setting_width: 1280, camera_setting_height: 720, camera_setting_fps: 30,
+      frame_count_source: 'presented-frames', timestamp_source: 'capture',
+    });
+    const [a, off] = rows(b, '07_eye_metrics.csv');
+    expect(a).toMatchObject({
+      tracker_backend: 'tasks-cpu', camera_fps_delivered: '29.6', tracker_fps: '11.2', frames_delivered: '5268',
+      frames_processed: '1994', frames_skipped: '3274', process_ms_p50: '84.9', process_ms_p95: '101.5',
+      camera_setting_width: '1280', camera_setting_height: '720', camera_setting_fps: '30',
+      frame_count_source: 'presented-frames', timestamp_source: 'capture',
+    });
+    for (const c of ['tracker_backend', 'camera_fps_delivered', 'frames_skipped', 'process_ms_p50', 'timestamp_source']) {
+      expect(off[c], c).toBe('');
+    }
+  });
+
+  it('01 carries the sitting\'s tracker and camera, and the self-test\'s own counts and limiting stage', () => {
+    const b = bundle();
+    b.session.camera_pipeline = {
+      tracker_backend: 'tasks-cpu', tracker_requested: 'tasks-gpu', tracker_selection: 'measured',
+      tracker_failures: [{ backend: 'tasks-gpu', error: 'no WebGL' }],
+      tracker_trials: [
+        { backend: 'tasks-gpu', ok: false, error: 'no WebGL', initMs: null, cameraFps: null, trackerFps: null, faceFps: null, processMsP50: null, processMsP95: null, faceShare: null, earNoise: null },
+        { backend: 'tasks-cpu', ok: true, initMs: 600, cameraFps: 29.6, trackerFps: 11.2, faceFps: 11.1, processMsP50: 84.9, processMsP95: 101.5, faceShare: 0.99, earNoise: 0.01 },
+      ],
+      tracker_measured_at: 1, camera_requested: { width: 1280, height: 720, frameRate: 60 },
+      camera_settings: { width: 1280, height: 720, frameRate: 30 },
+      camera_capabilities: { width_max: 1920, height_max: 1080, frame_rate_max: 30 },
+      timestamp_source: 'capture', started_at: 1,
+    };
+    b.session.camera_selftest = {
+      cued: 5, detected: 5, extra: 0, fps: 11.1, facePresence: 0.99, pass: false, reasons: ['x'], at: 1, limit: 'tracker',
+      pipeline: { camera_fps_delivered: 29.6, tracker_fps: 11.2, frames_delivered: 560, frames_processed: 212, frames_skipped: 348, process_ms_p50: 84.9, process_ms_p95: 101.5 },
+    };
+    const [s] = rows(b, '01_session_info.csv');
+    expect(s).toMatchObject({
+      tracker_backend: 'tasks-cpu', tracker_requested: 'tasks-gpu', tracker_selection: 'measured',
+      tracker_trials: 'tasks-gpu failed; tasks-cpu 11.1/11.2/85/102', tracker_failures: 'tasks-gpu: no WebGL',
+      camera_requested: '1280x720@60', camera_setting_width: '1280', camera_setting_fps: '30', camera_cap_fps_max: '30',
+      timestamp_source: 'capture',
+      selftest_camera_fps: '29.6', selftest_tracker_fps: '11.2', selftest_process_ms_p50: '84.9',
+      selftest_frames_delivered: '560', selftest_frames_processed: '212', selftest_frames_skipped: '348', selftest_limit: 'tracker',
+    });
+    // A sitting recorded before round 75 has none of it: blanks, not zeros.
+    const [old] = rows(bundle(), '01_session_info.csv');
+    for (const c of ['tracker_backend', 'camera_setting_fps', 'selftest_camera_fps', 'selftest_frames_skipped', 'selftest_limit']) {
+      expect(old[c], c).toBe('');
+    }
+  });
+});
