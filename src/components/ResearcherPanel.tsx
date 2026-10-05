@@ -147,7 +147,20 @@ export function cameraState(p: {
     const secs = Math.round((p.s.noFaceForMs ?? 0) / 1000);
     return { text: secs >= 2 ? `No face for ${secs} s` : 'No face', level: secs >= 8 ? 'bad' : 'warn' };
   }
-  if (p.s.blinks == null) return { text: 'Face seen — blinks NOT counted (no eye baseline)', level: 'bad' };
+  /*
+   * No blink count. `blinks` is null whenever no reading exposure has run yet, so on its own it cannot
+   * say whether anything is wrong, and it used to be read as "no baseline" in red on every set-up
+   * screen: before calibration, where no baseline is expected yet (and, from round 75, the camera
+   * already runs at camera setup), and after a SUCCESSFUL calibration until the first reading — a
+   * false alarm on exactly the screens where the operator is deciding whether to go on. The baseline
+   * itself now travels with the readout, so the three cases are told apart; only the third is a
+   * problem.
+   */
+  if (p.s.blinks == null) {
+    if (p.s.baselineEar != null) return { text: 'Working — blinks are counted from the first reading', level: 'ok' };
+    if (!p.s.baselineMeasured) return { text: 'Face seen — eye baseline is measured at calibration', level: 'ok' };
+    return { text: 'Face seen — blinks NOT counted (no eye baseline)', level: 'bad' };
+  }
   return { text: 'Working', level: 'ok' };
 }
 

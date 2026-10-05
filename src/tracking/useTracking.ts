@@ -165,6 +165,12 @@ export interface LiveTrackingStats {
   /** The participant's open-eye baseline, when calibration has fitted one. */
   baselineEar: number | null;
   /**
+   * Whether calibration's baseline window has run in this sitting (since the camera's tracking hook
+   * mounted), whatever it found. Without it a missing baseline is ambiguous: expected before
+   * calibration, a problem after it. See cameraState in ResearcherPanel.tsx.
+   */
+  baselineMeasured: boolean;
+  /**
    * Effective frame rate of the last reading exposure, from the record that was written.
    *
    * This is the number that belongs beside the ratio's sampling floor; `fps` above describes
@@ -354,6 +360,8 @@ export function useTracking(): TrackingApi {
   const aggRef = useRef<EyeMetricsAggregator | null>(null);
   const calibrating = useRef<{ samples: number[]; noseFracs: number[] } | null>(null);
   const baselineEarRef = useRef<number | null>(null);
+  /** Calibration's baseline window has run (whatever it found); see LiveTrackingStats.baselineMeasured. */
+  const baselineMeasuredRef = useRef(false);
   /** Usable frames behind baselineEarRef. Carried to the record so a thin fit is distinguishable. */
   const earSamplesUsableRef = useRef(0);
   // Per-participant frontal nose fraction (pitch zero), captured during calibration.
@@ -428,7 +436,7 @@ export function useTracking(): TrackingApi {
 
   type LiveCore = Omit<LiveTrackingStats,
     'cameraFps' | 'trackerFps' | 'faceFps' | 'processMsP50' | 'processMsP95' | 'frameCountSource' | 'backend'
-    | 'captureWidth' | 'captureHeight' | 'earTrace' | 'baselineEar'>;
+    | 'captureWidth' | 'captureHeight' | 'earTrace' | 'baselineEar' | 'baselineMeasured'>;
 
   /**
    * Emit the live readout, at most LIVE_HZ times a second and only when someone is listening.
@@ -463,6 +471,7 @@ export function useTracking(): TrackingApi {
       captureWidth: v?.videoWidth || null, captureHeight: v?.videoHeight || null,
       earTrace: trace,
       baselineEar: baselineEarRef.current,
+      baselineMeasured: baselineMeasuredRef.current,
     };
     for (const fn of liveSubs.current) fn(payload);
   }, []);
@@ -1014,6 +1023,7 @@ export function useTracking(): TrackingApi {
     const fit = fitEarBaseline(cal.samples);
     baselineEarRef.current = fit.baseline;
     earSamplesUsableRef.current = fit.usable;
+    baselineMeasuredRef.current = true;
     return fit;
   }, [status]);
 

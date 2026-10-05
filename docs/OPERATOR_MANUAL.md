@@ -415,7 +415,10 @@ the grey field, and while the calibration, the camera self-test or the colour-vi
 is only a small square outline in that screen's own colour with a dot inside — no clock, no colour
 of its own, no words. A **filled** dot means the camera is working (or off by consent); an **empty
 ring** means a problem that has lasted: the camera stopped or sees black, no frames, no face for 8
-seconds, or blinks not being counted. A face lost for a moment does not change it. On the reading
+seconds, or blinks not being counted because calibration fitted no eye baseline. A face lost for a
+moment does not change it. Before calibration the panel says *eye baseline is measured at
+calibration*, and after a good calibration *blinks are counted from the first reading*; neither is a
+problem (version 2.3.0 onwards; earlier builds showed both in red as "no eye baseline"). On the reading
 pages and the grey field a tap opens a two-line strip in the bottom-left corner with the details (on
 a reading page the time it is open is recorded against the display); on the questions, the ratings,
 the word search and the reaction task it cannot be opened, because there it would sit where the

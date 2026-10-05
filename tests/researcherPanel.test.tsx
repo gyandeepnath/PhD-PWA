@@ -16,7 +16,7 @@ import type { LiveTrackingStats } from '@/tracking/useTracking';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const stats = (over: Partial<LiveTrackingStats> = {}): LiveTrackingStats => ({
-  facePresent: true, ear: 0.3, earRatio: 1, blinks: 12, incomplete: 3, blinksLive: true, faceFps: 31, cameraFps: 31, trackerFps: 31, processMsP50: 20, processMsP95: 25, frameCountSource: "presented-frames", backend: "tasks-cpu", captureWidth: 1280, captureHeight: 720, faceWidthPx: 210, faceBox: null, eyes: null, earTrace: [], baselineEar: 0.3,
+  facePresent: true, ear: 0.3, earRatio: 1, blinks: 12, incomplete: 3, blinksLive: true, faceFps: 31, cameraFps: 31, trackerFps: 31, processMsP50: 20, processMsP95: 25, frameCountSource: "presented-frames", backend: "tasks-cpu", captureWidth: 1280, captureHeight: 720, faceWidthPx: 210, faceBox: null, eyes: null, earTrace: [], baselineEar: 0.3, baselineMeasured: true,
   exposureFps: 30, faceSize: 0.2, onScreen: true, sessionBlinks: 40, gazeZone: 'cc', noFaceForMs: 0,
   luma: 120, blocked: false, ...over,
 });
@@ -82,7 +82,7 @@ describe('researcher panel', () => {
     // The longest camera state: wrapped, it made the strip three lines (71 px) and lifted it over the
     // footer's rule into the bottom of the passage.
     const m = mount({ onStimulus: true, ink: { ink: '#000000', ground: '#FFFFFF' } });
-    m.push(stats({ blinks: null }));
+    m.push(stats({ blinks: null, baselineEar: null }));
     act(() => { m.q('researcher-panel-collapsed')!.click(); });
     const strip = m.q('researcher-panel-strip')!;
     expect(strip.textContent).toMatch(/blinks NOT counted/);
@@ -113,7 +113,7 @@ describe('researcher panel', () => {
     };
     const fine = look(stats());
     const noFace = look(stats({ facePresent: false, noFaceForMs: 16_000 }));
-    const noBaseline = look(stats({ blinks: null }));
+    const noBaseline = look(stats({ blinks: null, baselineEar: null }));
     for (const l of [fine, noFace, noBaseline]) {
       expect(l.text).toBe('');                                // no clock, no "No face for 16 s"
       expect(l.colours).not.toMatch(/224, 163, 60|229, 72, 77|34, 201, 122|154, 160, 180|e0a33c|e5484d|22c97a|9aa0b4/i);
@@ -227,9 +227,25 @@ describe('camera state in words', () => {
     expect(cameraState({ ...base, cameraLost: true, s: stats() }).text).toMatch(/stopped/);
     expect(cameraState({ ...base, stale: true, s: stats() }).text).toMatch(/No frames/);
     expect(cameraState({ ...base, s: stats({ facePresent: false, noFaceForMs: 9000 }) })).toEqual({ text: 'No face for 9 s', level: 'bad' });
-    expect(cameraState({ ...base, s: stats({ blinks: null }) }).text).toMatch(/NOT counted/);
+    expect(cameraState({ ...base, s: stats({ blinks: null, baselineEar: null }) })).toEqual({ text: 'Face seen — blinks NOT counted (no eye baseline)', level: 'bad' });
     expect(cameraState({ ...base, cameraStatus: 'unavailable', s: null }).level).toBe('off');
   });
+  /*
+   * No blink count is not, by itself, a problem: `blinks` is null until the first reading exposure. It
+   * was shown as "no eye baseline" in red before calibration (where the camera now already runs) and
+   * after a successful one until the first reading. Only a calibration that ran and fitted nothing is
+   * the alarm.
+   */
+  it('raises the no-baseline alarm only after a calibration that fitted none', () => {
+    const before = cameraState({ ...base, s: stats({ blinks: null, baselineEar: null, baselineMeasured: false }) });
+    expect(before).toEqual({ text: 'Face seen — eye baseline is measured at calibration', level: 'ok' });
+    const fitted = cameraState({ ...base, s: stats({ blinks: null, baselineEar: 0.21, baselineMeasured: true }) });
+    expect(fitted).toEqual({ text: 'Working — blinks are counted from the first reading', level: 'ok' });
+    const failed = cameraState({ ...base, s: stats({ blinks: null, baselineEar: null, baselineMeasured: true }) });
+    expect(failed.level).toBe('bad');
+    expect(failed.text).toMatch(/NOT counted \(no eye baseline\)/);
+  });
+
   it('formats the clock', () => {
     expect(clock(125_000)).toBe('2:05');
     expect(clock(3_725_000)).toBe('1:02:05');
