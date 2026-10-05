@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SELF_TEST, scoreSelfTest } from '@/tracking/selfTest';
+import { SELF_TEST, scoreSelfTest, fpsReason } from '@/tracking/selfTest';
 
 const cues = [2500, 5500, 8500, 11500, 14500];
 const good = { fps: 30, facePresence: 0.98 };
@@ -67,6 +67,18 @@ describe('a low frame rate says which stage was short', () => {
     expect(why).toMatch(/camera delivered 30 frames per second but the TRACKER processed only 16/);
     expect(why).toMatch(/about 61 ms a frame \(slowest 5%: 88 ms\)/);
     expect(why).toMatch(/close other apps.*charger/i);
+  });
+
+  it('offers comparing the trackers only as bench advice, and never when the tracker is frozen', () => {
+    const p = pipe({ camera_fps_delivered: 30, tracker_fps: 16, process_ms_p50: 61, process_ms_p95: 88 });
+    const auto = fpsReason(16, p, 'tracker', false);
+    // The button's own label, and the manual's rule: at the bench, not between a participant's sittings.
+    expect(auto).toMatch(/"Measure trackers again"/);
+    expect(auto).toMatch(/at the bench/);
+    expect(auto).toMatch(/not between one participant's sittings/);
+    const frozen = fpsReason(16, p, 'tracker', true);
+    expect(frozen).not.toMatch(/Measure trackers/);
+    expect(frozen).toMatch(/close other apps.*charger/i);
   });
 
   it('the face, when frames were processed but the face was found in too few', () => {

@@ -272,6 +272,27 @@ describe('camera state in words', () => {
       m.unmount();
     });
 
+    /*
+     * The verdict under the rates never calls a rate "enough" that the primary outcome flags. It used
+     * to say "enough" at 25 face frames a second, the camera check's floor, while every reading row
+     * below 30 has its incomplete-blink ratio flagged (fps_adequate_for_ratio).
+     */
+    it('says which floor a face rate meets: the camera check\'s 25, the ratio\'s 30, or neither', () => {
+      const verdictAt = (faceFps: number) => {
+        const m = mount({ getStream: () => stream });
+        act(() => { m.q('researcher-panel-collapsed')!.click(); });
+        m.push(stats({ faceFps, cameraFps: 30, trackerFps: 30 }));
+        const t = m.q('diag-verdict')?.textContent ?? '';
+        m.unmount();
+        return t;
+      };
+      expect(verdictAt(31)).toMatch(/at or above 30/);
+      const between = verdictAt(27.4);
+      expect(between).toMatch(/27\.4 times a second: at least 25, but below the 30 the incomplete-blink ratio is flagged/);
+      expect(between).not.toMatch(/enough/);
+      expect(verdictAt(18)).toMatch(/found in only 18 frames a second/);
+    });
+
     it('is not drawn while the camera is off', () => {
       const m = mount({ getStream: () => null, cameraStatus: 'unavailable' });
       act(() => { m.q('researcher-panel-collapsed')!.click(); });

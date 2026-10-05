@@ -16,6 +16,7 @@
  */
 import { pipelineLimit, type PipelineLimit } from './pipelineStats';
 import type { PipelineWindowFields } from '@/storage/types';
+import { CONFIG } from '@/experiment/config';
 
 export const SELF_TEST = {
   CUES: 5,
@@ -56,11 +57,19 @@ const n0 = (x: number | null | undefined) => (x == null ? '—' : String(Math.ro
  * failed on frame rate every time with nobody able to say which of the two, if either, would help. The
  * camera and the tracker are now counted separately (pipelineStats.ts), so the reason names the stage
  * that was short, with its numbers, and the advice that fits it.
+ *
+ * THE TRACKER ADVICE IS NOT "SWITCH TRACKERS NOW". This screen runs inside a participant's sitting,
+ * and a participant measured on two trackers is flagged in the data (the backends are not the same
+ * instrument; trackerChoice.ts). So comparing the trackers again is advice for the bench, when the
+ * check fails this way with every participant — the rule the operator manual gives — and it is not
+ * offered at all when the tracker is frozen for the study (`trackerFrozen`, CONFIG.TRACKER_BACKEND):
+ * the camera-setup screen then has no such button.
  */
 export function fpsReason(
   faceFps: number | null,
   p: PipelineWindowFields | null,
   limit: PipelineLimit,
+  trackerFrozen: boolean = CONFIG.TRACKER_BACKEND !== 'auto',
 ): string {
   const size = p?.camera_setting_width && p?.camera_setting_height ? ` at ${p.camera_setting_width}×${p.camera_setting_height}` : '';
   const face = `${faceFps == null ? 'no measurable' : Math.round(faceFps)} face frames per second, below ${SELF_TEST.MIN_FPS}`;
@@ -72,8 +81,11 @@ export function fpsReason(
     case 'tracker':
       return `${face}: the camera delivered ${n0(p?.camera_fps_delivered)} frames per second but the TRACKER processed only ${n0(p?.tracker_fps)}, `
         + `taking about ${n0(p?.process_ms_p50)} ms a frame (slowest 5%: ${n0(p?.process_ms_p95)} ms) — the tablet's processor is the limit, not the camera. `
-        + 'Close other apps, plug in the charger and turn off battery saver, and let a hot tablet cool down; '
-        + 'on the camera-setup screen, "Measure trackers" picks the fastest tracker for this tablet';
+        + 'Close other apps, plug in the charger and turn off battery saver, and let a hot tablet cool down'
+        + (trackerFrozen
+          ? ''
+          : '. If it fails this way with every participant, compare the trackers again at the bench '
+            + '(camera setup, "Measure trackers again") — not between one participant\'s sittings');
     case 'face':
       return `${face}: the tracker processed ${n0(p?.tracker_fps)} frames per second but found the face in only some of them — `
         + 'check seating, distance, the light on the face, glare on spectacles, and that nothing covers the face';
