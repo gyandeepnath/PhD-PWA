@@ -4,6 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#F8F7F5" />
+  <!-- Connections to this app's own origin only. @mediapipe/tasks-vision (the Face Landmarker
+       tracker) posts usage metrics to Google (https://odml.pa.googleapis.com/v1/log; its README says
+       so and makes the app responsible for consent). Participants consented to numeric measures held
+       on this device, not to that, so the request is refused here, before it leaves the tablet. Every
+       asset the app needs is same-origin and precached. e2e/trackerTelemetry.spec.ts proves the block;
+       tests/pwaPolicy.test.ts keeps this line. -->
+  <meta http-equiv="Content-Security-Policy" content="connect-src 'self'" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <link rel="icon" type="image/png" href="./icon-192.png" />

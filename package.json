@@ -2,7 +2,7 @@
   "name": "visulab",
   "version": "2.2.0",
   "private": true,
-  "description": "VisuLab \u2014 Visual Ergonomics Experiment PWA (reconstructed, scientifically refined source)",
+  "description": "VisuLab — Visual Ergonomics Experiment PWA (reconstructed, scientifically refined source)",
   "type": "module",
   "engines": {
     "node": ">=20.11"
@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "@mediapipe/face_mesh": "0.4.1633559619",
+    "@mediapipe/tasks-vision": "1.0.1",
     "idb": "^8.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

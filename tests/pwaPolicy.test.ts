@@ -39,3 +39,40 @@ describe('offline precaching covers the stimulus typeface', () => {
     expect(glob).toContain('tflite');
   });
 });
+
+describe('the Face Landmarker tracker is offline and keeps its data on the device (round 75)', () => {
+  const html = readFileSync(resolve(__dirname, '..', 'index.html'), 'utf8');
+  const copy = readFileSync(resolve(__dirname, '..', 'scripts', 'copy-mediapipe.mjs'), 'utf8');
+
+  it('precaches the model bundle and the tasks-vision wasm', () => {
+    const glob = /globPatterns:\s*\[([^\]]+)\]/.exec(config)?.[1] ?? '';
+    expect(glob).toContain('task');
+    expect(config).toMatch(/includeAssets:\s*\[[^\]]*'tasks-vision\/\*\*\/\*'/);
+    // The largest file (the SIMD wasm, ~11.8 MB) must fit under the per-file precache limit.
+    expect(config).toMatch(/maximumFileSizeToCacheInBytes:\s*12 \* 1024 \* 1024/);
+  });
+
+  it('refuses every connection that is not to its own origin', () => {
+    /*
+     * @mediapipe/tasks-vision posts usage metrics to https://odml.pa.googleapis.com/v1/log. The
+     * participants consented to numeric measures kept on the device. A connect-src of 'self' alone is
+     * what refuses that request; anything wider (a host, https:, *) would let it through.
+     */
+    const csp = /<meta http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(html)?.[1] ?? '';
+    expect(csp).toMatch(/(^|;\s*)connect-src 'self'(\s*;|$)/);
+    expect(csp).not.toMatch(/googleapis|https:|\*/);
+  });
+
+  it('fetches the model at build time only, from a versioned URL, against a pinned checksum', () => {
+    expect(copy).toMatch(/face_landmarker\/float16\/1\/face_landmarker\.task/);
+    expect(copy).not.toMatch(/float16\/latest\//);
+    expect(copy).toMatch(/MODEL_SHA256 = '[0-9a-f]{64}'/);
+  });
+
+  it('nothing in the app itself names a Google host', async () => {
+    const { execFileSync } = await import('node:child_process');
+    const files = execFileSync('git', ['ls-files', 'src'], { cwd: resolve(__dirname, '..') }).toString().split('\n').filter(Boolean);
+    const hits = files.filter((f) => /googleapis\.com|storage\.googleapis/.test(readFileSync(resolve(__dirname, '..', f), 'utf8')));
+    expect(hits).toEqual([]);
+  });
+});

@@ -102,13 +102,19 @@ const REQUIRED_TRACKING = [
   ['mediapipe/face_mesh.binarypb', 1],
   ['mediapipe/face_mesh_solution_packed_assets.data', 1024 * 1024],
   ['mediapipe/face_mesh_solution_packed_assets_loader.js', 1024],
+  // Face Landmarker (round 75): the wasm loaders, the SIMD and no-SIMD binaries, and the model.
+  ['tasks-vision/vision_wasm_internal.js', 1024],
+  ['tasks-vision/vision_wasm_internal.wasm', 1024 * 1024],
+  ['tasks-vision/vision_wasm_nosimd_internal.js', 1024],
+  ['tasks-vision/vision_wasm_nosimd_internal.wasm', 1024 * 1024],
+  ['tasks-vision/face_landmarker.task', 1024 * 1024],
 ];
 for (const [file, minBytes] of REQUIRED_TRACKING) {
   const p = join(dist, file);
   if (!existsSync(p)) problems.push(`the tracking runtime is not in the bundle: ${file}`);
   else if (statSync(p).size < minBytes) problems.push(`tracking asset looks truncated: ${file} (${statSync(p).size} bytes)`);
 }
-const wasm = shipped.filter((f) => /^mediapipe\/.*\.wasm$/.test(f) && statSync(join(dist, f)).size > 1024 * 1024);
+const wasm = shipped.filter((f) => /^(mediapipe|tasks-vision)\/.*\.wasm$/.test(f) && statSync(join(dist, f)).size > 1024 * 1024);
 if (!wasm.length) problems.push('no usable MediaPipe wasm binary in the bundle');
 
 if (problems.length) {

@@ -9,6 +9,7 @@ dist/
 node_modules/
 playwright-report/
 public/mediapipe/
+public/tasks-vision/
 test-results/
 visulab-build.zip
 vite.config.d.ts

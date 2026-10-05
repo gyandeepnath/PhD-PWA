@@ -51,7 +51,7 @@ export default defineConfig({
        * produced a session's data is a matter of record rather than of inference.
        */
       registerType: 'prompt',
-      includeAssets: ['mediapipe/**/*'],
+      includeAssets: ['mediapipe/**/*', 'tasks-vision/**/*'],
       manifest: {
         name: 'VisuLab — Visual Ergonomics Experiment',
         short_name: 'VisuLab',
@@ -71,7 +71,10 @@ export default defineConfig({
         // Self-hosted MediaPipe assets must be precached for true offline use, and so must the
         // vendored fonts: the stimulus typeface is an experimental control, and a session run in
         // aeroplane mode with the font uncached renders the reading passage in a fallback face.
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,wasm,tflite,binarypb,data}'],
+        // `task` is the Face Landmarker model bundle (public/tasks-vision/, scripts/copy-mediapipe.mjs).
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,wasm,tflite,binarypb,data,task}'],
+        // The largest single file is the Face Landmarker SIMD wasm, about 11.8 MB. A file over this
+        // limit is silently left out of the precache, so copy-mediapipe.mjs fails the build first.
         maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
         // Never seize control of a page that is already running a session. Both default to true,
         // which is what made 'autoUpdate' able to swap the precache out from under a live session.
