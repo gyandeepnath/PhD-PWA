@@ -5163,3 +5163,388 @@ Verified: `npm run verify` green on 8ec8647 (78 files, 1290 unit tests; corpus, 
 analysis gates pass). The full e2e suite passed, 70 tests in 11.7 min, including `fillScreen` at the
 six viewports (1152x720, 1152x650, 1280x800, 1600x1000, 1920x1200, 2560x1600). The entry itself
 changes only this file.
+
+## Round 75 — the camera: what it delivers, what the tracker does with it, and a live picture
+
+After the Round 62-73 work was deployed, the investigator reported from the study tablet (Xiaomi Pad
+6, Chrome, the installed app):
+
+1. "the blink verification using the flashing dot fails every time, and it says the required fps is
+   not achieved; this happens during the experiments as well. Is the camera faulty?"
+2. The expanded researcher panel must also show the actual live camera feed beside the live blink,
+   presence and gaze information.
+
+This round answers those two. When blink, PERCLOS, drowsiness and gaze apply, and how they are
+stored and read (report 5), is separate work and is not in this round. Its specification (R1)
+set four rules this round follows:
+- measure first;
+- remove avoidable per-frame work before switching trackers;
+- show the live picture only on set-up screens;
+- do not raise the camera rate, skip frames or lower any frame-rate threshold to make a check pass.
+
+**Is the camera faulty?** The app could not say, and that was the defect. It had one number, the
+face-solved frame rate. Three different problems all lowered it, and each needs a different fix:
+- a camera that delivers few frames (fix the light);
+- a tracker that cannot keep up (the processor);
+- a face the tracker does not find (seating).
+
+The self-test gave the same advice for all three: "close other apps and check the light". Nothing
+about the tablet's camera or tracker has been measured yet. This round makes the app measure each
+stage on the tablet and say which one is short. The numbers to send back are at the end of this
+entry.
+
+**What changed** (commits 24fdc30, 5b4697f, 79742fd, 38c1c25, b6502ce, 787a474 and c241d21, by an
+agent that was interrupted; then d9f812a, be2b02c, 04e291a, ee94a36, a6e30c3, d114e0d, 9e80b60 and
+f42653f after an audit of those seven):
+
+- **The pipeline is counted stage by stage** (24fdc30, 38c1c25).
+  - `requestVideoFrameCallback`'s `presentedFrames` counts the frames the camera delivered. The
+    browser keeps that count while the page is busy.
+  - The meter (`pipelineStats.ts`) also counts:
+    - the frames the tracker processed;
+    - the frames in which it found a face;
+    - the frames it never looked at (delivered minus processed);
+    - the time one tracker call takes (median and 95th percentile).
+  - `track.getSettings()` and `getCapabilities()` give what the camera was set to and its maximum.
+  - EAR samples are stamped with the camera's capture time, not the time the result came back.
+- **Avoidable per-frame work is gone** (38c1c25).
+  - Picture brightness is read 4 times a second instead of on every frame (`LUMA_SAMPLE_HZ`).
+  - The legacy solution is asked for its landmark stream only. It used to render every input frame
+    back out to an ImageBitmap that nothing used.
+  - Every tracker is `close()`d when it is replaced. Neither camera setup's own face probe nor the
+    tracker ever did this before (R1 D4).
+  - Camera setup no longer opens a second camera and a second model of its own. It starts the
+    pipeline the sitting uses.
+- **Three trackers behind one interface** (79742fd, 38c1c25):
+  - MediaPipe Face Landmarker (`@mediapipe/tasks-vision` 1.0.1, pinned) on the GPU delegate;
+  - the same model on the CPU;
+  - the legacy FaceMesh.
+
+  How they are run and chosen:
+  - A tracker that cannot start, or that fails its first frames, falls back toward legacy, and the
+    failure is recorded.
+  - The first camera setup on a device runs each tracker for a few seconds on the live picture and
+    keeps the fastest for that device.
+  - `CONFIG.TRACKER_BACKEND` fixes one tracker for every device and switches the measurement off.
+  - Every sitting and every 07 row records the tracker that ran (`tracker_backend`).
+  - The integrity checks flag a sitting or a participant measured on more than one tracker.
+- **Face Landmarker is used offline.**
+  - Its wasm and the model are copied into `public/tasks-vision/` at build time and precached by
+    the service worker.
+  - The model is fetched once, at build time, from its versioned URL. It is checked against a
+    pinned SHA-256.
+  - The largest file, the SIMD wasm, is 11.76 MB, under the 12 MiB per-file precache limit. The
+    build fails if a file goes over it.
+  - The package posts usage metrics to a Google endpoint; its README makes the app responsible for
+    consent. `index.html` now carries `connect-src 'self'`, which refuses the request on the tablet.
+    `e2e/trackerTelemetry.spec.ts` proves this in a real browser.
+  - In this round's production build, that endpoint is the only Google URL in the shipped JS.
+- **EAR in image-plane proportions** (5b4697f). Landmarks are normalised per axis, so EAR was the
+  eye's aspect ratio times the frame's. Measured on one portrait in headless Chromium, the same face
+  read 0.357 at 1280x720 and 0.274 at 640x480; in image-plane proportions it reads 0.207 and 0.209.
+  Every cut is a fraction of the participant's own baseline, so classification was unaffected at a
+  fixed capture size. The absolute values were not.
+- **The self-test says which stage was short** (38c1c25, d9f812a). When face frames fall below 25 a
+  second, it names the stage with its numbers and gives advice that fits:
+  - *camera*: "the CAMERA delivered only N frames per second at WxH" — light on the face, other
+    camera apps;
+  - *tracker*: "the camera delivered N … but the TRACKER processed only M, taking about T ms a
+    frame" — other apps, charger, battery saver, heat;
+  - *face*: "found the face in only some of them" — seating, distance, glare;
+  - *undetermined*: when the browser gives no frame counter, it says that camera and tracker cannot
+    be told apart, rather than guessing.
+
+  The result screen also shows the pipeline line, on a pass too. The thresholds are unchanged: 25
+  for the self-test and the tiers, 30 for the ratio.
+- **Where the numbers are shown and stored.**
+  - Camera setup: the live picture with the face box and eyelid points; the three rates; the face's
+    width in camera pixels; the tracker; a sentence naming the short stage; and the comparison
+    table.
+  - The self-test result.
+  - The researcher card.
+  - 07_eye_metrics, per condition: `tracker_backend`, `camera_fps_delivered`, `tracker_fps`,
+    `frames_delivered`, `frames_processed`, `frames_skipped`, `process_ms_p50`, `process_ms_p95`,
+    `camera_setting_width`, `camera_setting_height`, `camera_setting_fps`, `frame_count_source` and
+    `timestamp_source`.
+  - 01_session_info: the tracker, how it was chosen, the comparison, what was asked of the camera,
+    its settings and capabilities, and the self-test's camera and tracker rates, times and limiting
+    stage.
+  - Every column is in the codebook.
+- **The live picture in the researcher card** (38c1c25; report 2 of this round). The card shows:
+  - the live picture, mirrored: a second `<video>` on the tracker's own MediaStream, with no second
+    `getUserMedia`;
+  - the face box and the six EAR points of each eye drawn over it;
+  - the last 10 s of eye openness, with dashed lines at 0.75 and 0.60 of the baseline once
+    calibration has fitted one;
+  - the camera, tracker and face rates, the blink counts and the picture's brightness.
+
+  The overlay and the trace redraw at the readout's 4 Hz, not every frame. The rules from earlier
+  rounds are unchanged:
+  - The card opens only when the operator taps it.
+  - It is drawn only on set-up, break and closing screens.
+  - On reading and the grey field the panel stays the ink-only strip.
+  - It is locked on the other display screens and not drawn at all while reaction-time trials run.
+  - Open time on a condition screen is still recorded.
+
+  It can now be opened on the calibration and self-test intro and result screens, which take its
+  column; the dots themselves still lock it. That is where the operator needs it after a failure.
+
+**Audit of the seven commits.** Each task item and each specification rule was checked against the
+diffs and the running app. The work was correct and complete apart from the gaps below, which are
+fixed here.
+
+- **The live verdict said "enough" at 25 face frames a second** (d9f812a). 25 is the self-test's
+  floor. Every reading row below 30 has its incomplete-blink ratio flagged. Between 25 and 30 it now
+  says, in amber: "at least 25, but below the 30 the incomplete-blink ratio is flagged under". It
+  shows one decimal there, so a rounded "30" cannot read as passing.
+- **The self-test's tracker advice** (d9f812a).
+  - It named a button "Measure trackers"; the button reads "Measure trackers again".
+  - It offered the button when the tracker is frozen, and there is then no such button.
+  - It suggested switching trackers inside a participant's sitting. The manual forbids that and the
+    integrity audit flags it.
+  - It is now advice for the bench, given when the check fails this way with every participant, and
+    it is left out when the tracker is frozen.
+- **Rows recorded before 2.3.0 escaped the one-tracker checks** (be2b02c). `tracker_backend` exists
+  from 2.3.0, and both checks skipped blanks. Every camera-on row before 2.3.0 came from the legacy
+  tracker, the only one those builds had. So the one mixed case certain to exist went unflagged: a
+  first sitting on 2.2.0 and a second on Face Landmarker, or a sitting resumed across the update.
+  `eyeRowTracker()` now reads a blank on a camera-on row as legacy. Two new tests fail without it.
+- **Head roll had the same unit defect as EAR** (04e291a). Roll was taken from a normalised y
+  difference over a normalised x difference, so a 5° roll read about 8.8° on a 16:9 frame. It is
+  now rescaled by the frame's aspect. Yaw (x over x) and pitch (y over y) never mixed the axes and
+  are unchanged; a test pins that.
+- **The EAR change's documentation covered `ear_baseline` only** (04e291a, a6e30c3).
+  `open_ear_measured`, `ear_threshold_used`, `ear_complete_threshold`, `calibration_ear_baseline` and
+  `head_roll_mean` now say they are image-plane from 2.3.0 and not comparable in absolute value with
+  earlier builds. ANALYSIS_PLAN's "no participant data predates the change" was removed: earlier
+  rounds refer to pilot data.
+- **Figures that were stated rather than measured** (ee94a36, a6e30c3, d114e0d). They were checked
+  against the measurements below and corrected:
+  - Face Landmarker's IMAGE mode was said to cost "the same" as VIDEO mode. It costs about 7% more.
+  - The step-test percentages did not match the stored step test.
+  - The tracker timings were from one unpaired morning run.
+  - The trackers' EAR difference was given as "a few per cent". It is 0.3% to 8%.
+  - The analysis plan quoted a VIDEO-mode EAR as Face Landmarker's.
+  - The ~200 px face width at 55 cm was not marked as a geometric estimate.
+  - The manual's "under about 150 px … move closer" rule had no basis. It would have moved a
+    participant closer than the protocol distance whenever the camera gave a small picture.
+  - A first correction read the lower EAR at 640x480 as lost detail. The noise run (below) did not
+    support that, and the comment now says what was measured.
+- **The self-test's frame counts were not exported, and no test read the new columns back**
+  (9e80b60).
+  - 07 had frames delivered, processed and skipped per condition. The self-test exported only the
+    rates. The specification asks for dropped frames with the self-test too, so 01 now has
+    `selftest_frames_delivered`, `selftest_frames_processed` and `selftest_frames_skipped`.
+  - Only the codebook gate had seen the round's 01 and 07 columns, and it checks names alone. Two
+    export tests now read them back, and check that older rows and sittings get blanks, not zeros.
+- **A false alarm on the set-up screens** (f42653f). The screenshots showed it. The panel read a
+  missing blink count as "blinks NOT counted (no eye baseline)", in red, and the collapsed chip
+  spelled it out. The count is null until the first reading, so the alarm fired in three places:
+  - before calibration, newly on camera setup too, because this round runs the real pipeline there;
+  - after a SUCCESSFUL calibration, on every set-up screen until the first reading (this predates
+    the round);
+  - when calibration really had fitted no baseline.
+
+  The readout now carries whether calibration's baseline window has run. Before it, the panel says
+  "eye baseline is measured at calibration"; with a baseline, "blinks are counted from the first
+  reading". Both are ok. Only the third case keeps the red alarm and the empty ring.
+- **The equivalence test now covers the GPU delegate** (a6e30c3). The other two trackers were
+  already tested. The GPU delegate is held to the same bound against MediaPipe's own expected
+  landmarks, and its EAR is logged.
+
+Checked and found right:
+- The live picture is never drawn on a condition screen: a unit test, an e2e test and the
+  screenshots below.
+- It uses the tracker's own stream. The e2e compares the MediaStream ids.
+- There is no Back from camera setup while the camera runs, so a camera cannot be left on behind a
+  consent screen.
+- No `fetch` exists in the app's source, so `connect-src 'self'` breaks nothing.
+- The blendshape model is not run (`outputFaceBlendshapes: false`). No new gaze column was added.
+  The existing gaze columns keep their roles; R1 (D8) re-labels them as QC, which is report 5's
+  work.
+- `CAMERA_FPS` (60, ideal), `PROCESS_EVERY_N_FRAMES` (1) and both frame-rate thresholds are
+  unchanged.
+
+**Two decisions taken on measurement, not on the documentation's advice.**
+
+1. **Face Landmarker runs in IMAGE mode, not VIDEO mode.** In VIDEO mode, with one face, the graph
+   smooths landmarks over time.
+   - In a step test on a still portrait (its output is kept with the round's scratch files), the
+     upper-lid landmarks followed a 2 px shift by 31%, 55% and 66% over the first three frames, and
+     a 6 px shift by 66%, 86% and 91%. IMAGE mode followed both at once.
+   - A filter like that makes blinks shallower and pushes complete blinks toward "incomplete". That
+     is a bias in the primary outcome, larger at lower frame rates.
+   - IMAGE mode runs the face detector on every frame. It cost 104 against 97 ms a frame in paired
+     runs (92 against 77 under heavier load).
+   - The two modes also crop the face differently. On the same still portrait the open-eye EAR was
+     0.198 (IMAGE) and 0.208 (VIDEO).
+2. **The capture size stays 1280x720.** The model files say what the trackers consume:
+   - both face detectors take the whole frame at 128x128;
+   - the landmark models take a crop around the face at 192x192 (legacy, both meshes) or 256x256
+     (Face Landmarker).
+
+   A 640x480 frame was measured:
+   - it saved about 10% a frame;
+   - EAR jitter under added pixel noise was no worse;
+   - the open-eye EAR moved by up to 6%: a different level, not shown to be a worse one.
+
+   A ~10% saving does not pay for changing the instrument under the study. If the tablet proves
+   tracker-limited, 640x480 is a measured option, to be chosen and frozen before the pilot like the
+   tracker.
+
+**Measured in this environment only.**
+- Setup: headless Chromium 1194 on this project's 4-core build machine, shared with other agents'
+  test runs (1-minute load 1.8-3.5).
+- Camera: Chromium's fake camera playing MediaPipe's test portrait, centred in a 1280x720 grey frame
+  (face about 197 px wide), at 30 fps.
+- Method: each pair was run A, B, A, B, A, B, so load fell on both sides alike. The absolute timings
+  moved by tens of per cent between runs (the legacy tracker read 127-128 ms in the interrupted
+  agent's morning run and about 166 ms tonight). The comparisons within a pair, and the order of the
+  three trackers, did not.
+- None of this says anything about the tablet's own numbers.
+
+| configuration (1280x720 unless stated) | ms per frame, median (p95) | frames processed /s | open-eye EAR |
+|---|---|---|---|
+| Face Landmarker CPU, IMAGE mode | 85 (102) | 11.2 | 0.198 |
+| Face Landmarker CPU, VIDEO mode (same pair as IMAGE: 104 vs 97) | 97 (119) | 9.9 | 0.208 |
+| Face Landmarker GPU, software WebGL | 326 (370) | 3.0 | 0.182 |
+| legacy FaceMesh, landmarks only, refine on | 166 (182) | 6.0 | 0.200 |
+| legacy FaceMesh, refine off (not adopted; R1 leaves it to a decision) | 128 (151) | 7.5 | 0.206 |
+| Face Landmarker CPU, 640x480 | 77 (96) | 12.5 | 0.186 |
+| legacy FaceMesh, 640x480 | 158 (187) | 6.1 | 0.202 |
+
+- **The camera delivered 28.4-29.7 frames a second in every paired run.** The fake camera's limit was
+  never the stage that ran short here; the tracker was, in every configuration. Whether that holds on
+  the tablet is exactly what the app now measures.
+- **No frame was ever sent to a busy tracker** (`busy` 0 in every run). R1 (D2) predicted that a
+  frame arriving while the tracker was busy would be lost, and throughput cut to the camera rate
+  divided by a whole number (15 fps for a 34 ms frame on a 30 fps camera). That does not happen:
+  both trackers run synchronously on the main thread, so the next callback after the work carries
+  the newest frame. Throughput is 1 / (time per frame); the frames that arrive meanwhile are counted
+  as `frames_skipped`.
+- **The visible picture does not slow the tracker measurably.**
+  - Face Landmarker CPU: 83.5, 82.3 and 85.2 ms with the picture against 89.3, 86.7 and 83.1 ms
+    without.
+  - Legacy: +2% to +12% in the three pairs, inside the run-to-run spread.
+  - Delivered frames were unchanged.
+  - Nothing is decoded twice: a camera MediaStream carries raw frames, and the two `<video>`
+    elements show the same frames; the second costs compositing only.
+- **Before/after the removal of avoidable work (legacy).**
+  - Before: full output, brightness on every frame, 190-199 ms.
+  - After: 172-251 ms.
+  - No difference was measurable here: at 5 frames a second, a 3.7 ms brightness read is small.
+  - The saving grows with the frame rate. At 30 frames a second, reading every frame would cost
+    about 110 ms a second against about 15 ms at 4 Hz.
+- **EAR jitter under per-frame pixel noise** (SD as a share of the mean):
+  - Face Landmarker CPU: 1.9-2.1% at 1280x720, 1.8-2.0% at 640x480;
+  - legacy: 2.3% at 1280x720, 1.6-1.9% at 640x480.
+- **The trackers on MediaPipe's own test portrait** (`e2e/trackerEquivalence.spec.ts`, a 197 px
+  wide face):
+  - the median landmark distance between legacy and Face Landmarker CPU was 2.4 px, and between the
+    GPU and CPU delegates 0.8 px;
+  - against MediaPipe's expected landmarks, legacy was 2.0 px off, CPU 1.2 px and GPU 1.5 px;
+  - the open-eye EAR was 0.2039 (legacy), 0.2044 (CPU) and 0.1996 (GPU).
+
+  The trackers put the points in the same place. They are not the same instrument: on the video
+  frames above, the GPU delegate read 8% below the CPU path.
+
+**Data consequence.**
+- Version **2.3.0**.
+- New columns:
+  - 07: the thirteen listed above;
+  - 01: `tracker_backend`, `tracker_requested`, `tracker_selection`, `tracker_trials`,
+    `tracker_failures`, `camera_requested`, `camera_setting_width/height/fps`,
+    `camera_cap_fps_max/width_max/height_max`, `timestamp_source`, `selftest_camera_fps`,
+    `selftest_tracker_fps`, `selftest_process_ms_p50/p95`, `selftest_frames_delivered/processed/skipped`
+    and `selftest_limit`.
+- Changed meaning:
+  - the absolute EAR columns and `head_roll_mean`, as above;
+  - each sample is timed from when the camera captured its frame, not from when the tracker's
+    result arrived, so the tracker's varying processing time no longer enters `effective_fps` or
+    any interval.
+- Unchanged: every blink classification at a fixed capture size, every threshold, and every ratio
+  to the baseline.
+- Rows from earlier builds carry blanks in the new columns, never zeros.
+
+**Decisions for the investigator.**
+- **Freeze the tracker before the pilot.** Read the comparison table off the tablet; the first
+  camera setup measures all three trackers. Then set `CONFIG.TRACKER_BACKEND` to the one it chose (a
+  one-line change in `src/experiment/config.ts` and a new build), and keep it for the pilot, the
+  validation sub-study and the main study. The validation is valid
+  only for the tracker it was run on, and the trackers' absolute EAR differs by up to 8%.
+- **The 30 fps ratio gate.** R1 (defect D1) found it probably unattainable on a camera listed at 30
+  fps; that listing is unverified. The researcher card will now say so live, in amber, whenever the
+  face rate is 25-30. Changing the gate is a protocol decision to pre-register before data
+  collection. This round does not change it.
+- **`refineLandmarks`** (R1 defect D6). In this environment, refine off was about 25% faster on the
+  legacy tracker and gave a different EAR level. It is unchanged, because the decision belongs with
+  the tablet's numbers.
+
+**Not done, and not measured.**
+- Nothing in this round was measured on the tablet: its camera mode, delivered rate, tracker times,
+  which tracker it picks, or whether the GPU delegate starts in its Chrome.
+- The step test and the EAR figures come from one portrait, in software. They show that the
+  trackers and modes differ, not by how much on real faces.
+- The blinks in the screenshots are not real blinks. The fake camera plays a still portrait with
+  lids painted over the eyes every 3 s, and the tracker follows them only as small dips. The e2e
+  timing also collapses calibration's 6 s baseline window to 0.4 s, too few frames for a baseline. So
+  no blink is counted there, and the self-test fails on blinks by construction. The trace's cut
+  lines and the 25-30 verdict were checked on a render with synthetic readings instead.
+- The gaze aperture cut in `gaze.ts` (0.12 of eye width, in normalised units) has the same unit
+  issue as EAR and roll. Gaze is QC, and R1 rewrites its definition (report 5's work), so it was
+  left for that rewrite rather than re-tuned here.
+
+**Screens looked at.** Each screen below was captured at 1280x800 and 1920x1200 and checked by
+eye, with a portrait video as the fake camera:
+- camera setup, while measuring and when done, with the tracker table;
+- the card on the calibration intro;
+- the self-test result, alone and with the card;
+- the card on the first set-up screen after calibration;
+- the reading intro, alone and with its strip.
+
+What they show:
+- The picture is mirrored, with the face box and the eyelid points on the lids.
+- The three rates and the face width (190 px) are there. The sentence names the tracker as the
+  limit (11 face frames a second, about 85 ms a frame here). The camera line reads "Asked for
+  1280×720 at 60 fps; the camera gave 1280×720 at 30 fps (its maximum: 30 fps)".
+- The tracker table reads GPU 3, CPU 11, legacy 5 frames a second.
+- The self-test names the TRACKER with its numbers and gives the bench-only advice.
+- On the reading screen no picture is drawn (no visible `<video>`, asserted), and the strip is text
+  in the screen's ink.
+- At 1280x800 the card is taller than the screen and scrolls; its time rows sit below the fold until
+  then.
+
+Found in them and fixed:
+- **The red "no eye baseline" chip on camera setup and the calibration intro** (f42653f). A rerun
+  shows a green chip on camera setup and "eye baseline is measured at calibration" on the
+  calibration intro.
+
+The trace's dashed 0.75 and 0.60 lines and the amber 25-30 verdict were checked on a render of those
+two components with synthetic readings, because the e2e timing cannot fit a baseline.
+
+Unchanged from earlier rounds: at 1280x800 the collapsed panel chip covers the last rows of the
+tracker table until the page is scrolled. This is the same fixed corner chrome Round 74 noted on
+pre-flight.
+
+**Citations.** None added. No source was used for a new claim; every figure above was measured
+here or read from the vendored files.
+
+**Synopsis (read-only, not edited).** These lines agree with this round:
+- SYNOPSIS_AdtU.md 377: "images are discarded immediately and never stored". The live picture is a
+  second view of the stream; nothing is stored.
+- SYNOPSIS_AdtU.md 329: "no video leaves the device". The CSP also keeps the library's usage metrics
+  on the device.
+- SYNOPSIS_AdtU.md 395: "gated on achieved frame rate". The gates are unchanged.
+
+No line is contradicted.
+
+Verified on f42653f:
+- `npm run verify` is green: 83 files, 1366 unit tests; the corpus, codebook, export (760/760) and
+  analysis gates pass.
+- The full e2e suite passed: 75 tests in 12.7 min with no retries. They include the three camera
+  diagnostics specs, the telemetry spec, the equivalence spec with the GPU delegate, and the full
+  run.
+- The production build precaches 40 assets (43.7 MB), the five Face Landmarker files among them; the
+  largest is 11.76 MB.
+
+The entry itself changes only this file.
