@@ -509,7 +509,7 @@ export function useTracking(): TrackingApi {
       }
       const agg = aggRef.current ?? selfTestAggRef.current;
       if (agg) {
-        const pose = estimateHeadPose(lm, pitchBaselineFracRef.current);
+        const pose = estimateHeadPose(lm, pitchBaselineFracRef.current, aspect);
         agg.ingest({
           t_ms: t,
           ear,

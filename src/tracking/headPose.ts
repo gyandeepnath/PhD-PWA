@@ -66,8 +66,14 @@ export function noseVerticalFraction(lm: Point[]): number | null {
  * during calibration). When supplied, pitch is measured relative to THIS person's frontal posture
  * (0° = their natural straight-ahead), removing the dominant inter-individual geometry bias. When
  * omitted, the population default (NOSE_FRONTAL_FRAC) is used — an uncalibrated proxy.
+ *
+ * `aspect` is the frame's width / height, as for faceEar (blink.ts). Landmarks are normalised per axis
+ * — x by the frame's width, y by its height — so an angle taken from a y difference over an x
+ * difference is not the image angle: on a 16:9 frame a small roll read about 1.78 times its size, and
+ * on a 4:3 frame 1.33 times. Roll is the only axis that mixes the two (yaw is x over x, pitch y over
+ * y), so it is the only one rescaled. Default 1 for callers with square coordinates.
  */
-export function estimateHeadPose(lm: Point[], pitchBaselineFrac?: number | null): HeadPose {
+export function estimateHeadPose(lm: Point[], pitchBaselineFrac?: number | null, aspect = 1): HeadPose {
   const nose = lm[HEAD_LANDMARKS.noseTip];
   const leftEar = lm[HEAD_LANDMARKS.leftEar];
   const rightEar = lm[HEAD_LANDMARKS.rightEar];
@@ -121,7 +127,8 @@ export function estimateHeadPose(lm: Point[], pitchBaselineFrac?: number | null)
   const zero = pitchBaselineFrac != null && Number.isFinite(pitchBaselineFrac) ? pitchBaselineFrac : NOSE_FRONTAL_FRAC;
   const pitch = noseFrac == null ? NaN : (zero - noseFrac) * PITCH_SCALE_DEG;
 
-  const roll = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * (180 / Math.PI);
+  const a = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  const roll = Math.atan2((rightEye.y - leftEye.y) / a, rightEye.x - leftEye.x) * (180 / Math.PI);
 
   return { pitch, yaw, roll };
 }
