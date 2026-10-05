@@ -14,7 +14,7 @@
  * or twice each.
  */
 import { describe, it, expect } from 'vitest';
-import { startFramePump, type PumpVideo, type PumpHost } from '@/tracking/framePump';
+import { startFramePump, frameTimestamp, type PumpVideo, type PumpHost } from '@/tracking/framePump';
 
 /** A display that ticks on demand, so a test can run 60 Hz against a 30 fps camera deterministically. */
 function fakeHost() {
@@ -177,5 +177,58 @@ describe('the hook uses the pump', () => {
     // The old loop: a bare rAF around fm.send, with no test that the frame was new.
     expect(src).not.toMatch(/rafRef/);
     expect(src).not.toMatch(/requestAnimationFrame\(pump\)/);
+  });
+});
+
+describe('what the pump reports about each frame (round 75)', () => {
+  /** A video that presents frames with requestVideoFrameCallback metadata, like Chrome's. */
+  function metaVideo() {
+    let cb: ((now: number, md?: { presentedFrames?: number; captureTime?: number }) => void) | null = null;
+    const video: PumpVideo = {
+      currentTime: 0,
+      requestVideoFrameCallback: (fn) => { cb = fn; return 1; },
+      cancelVideoFrameCallback: () => { cb = null; },
+    };
+    return { video, present: (now: number, presentedFrames: number, captureTime?: number) => { const f = cb; cb = null; f?.(now, { presentedFrames, captureTime }); } };
+  }
+
+  it('hands every presented frame to onPresented, including those that arrive while a send is in flight', async () => {
+    const { video, present } = metaVideo();
+    const presented: number[] = [];
+    let release: (() => void) | null = null;
+    let sends = 0;
+    const pump = startFramePump(video, async () => { sends += 1; await new Promise<void>((r) => { release = r; }); },
+      { onPresented: (m) => presented.push(m.presentedFrames!) });
+    present(0, 1); await flush();
+    present(33, 2); await flush();   // busy: not sent, but counted as delivered
+    present(66, 3); await flush();   // busy
+    expect(sends).toBe(1);
+    expect(presented).toEqual([1, 2, 3]);
+    expect(pump.busySkips).toBe(2);
+    release!(); await flush();
+    pump.stop();
+  });
+
+  it('passes the frame\'s capture time to the tracker side', async () => {
+    const { video, present } = metaVideo();
+    const seen: Array<number | undefined> = [];
+    const pump = startFramePump(video, async (m) => { seen.push(m.captureTime); });
+    present(1000, 1, 990); await flush();
+    expect(seen).toEqual([990]);
+    pump.stop();
+  });
+});
+
+describe('frameTimestamp', () => {
+  it('uses the camera\'s capture time when it is plausible', () => {
+    expect(frameTimestamp({ now: 1000, captureTime: 985 })).toEqual({ t: 985, source: 'capture' });
+    // A capture stamped a ms or two after the callback's frame-start time is real, not an error.
+    expect(frameTimestamp({ now: 1000, captureTime: 1002 })).toEqual({ t: 1002, source: 'capture' });
+  });
+  it('falls back to the callback time when the capture time is missing or on another clock', () => {
+    expect(frameTimestamp({ now: 1000 })).toEqual({ t: 1000, source: 'callback' });
+    expect(frameTimestamp({ now: 1000, captureTime: 1.7e12 })).toEqual({ t: 1000, source: 'callback' });
+    expect(frameTimestamp({ now: 5000, captureTime: 100 })).toEqual({ t: 5000, source: 'callback' });
+    expect(frameTimestamp({ now: 1000, captureTime: NaN })).toEqual({ t: 1000, source: 'callback' });
   });
 });

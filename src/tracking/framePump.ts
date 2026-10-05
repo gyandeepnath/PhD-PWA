@@ -17,24 +17,43 @@
  * were barely sampled at all. The duplicate frames carry no extra information, so the gate would
  * have been passing on evidence that did not exist.
  *
- * The file's own comments already said the right thing one level down — "one ingest per result →
- * EAR is sampled at the real FaceMesh throughput", and a note about a previous build that "ran a
- * free-running 60 fps sampler over stale landmarks, duplicating samples and overstating
- * effective_fps". That fix was applied to the ingest and not to the send, so the same defect
- * survived one layer up, underneath a comment saying it had been dealt with.
- *
  * TWO MECHANISMS. `requestVideoFrameCallback` is the API for exactly this question and fires once
  * per presented frame; it is what Chrome on the study tablets supports. Where it is missing the
  * fallback is rAF plus a `currentTime` comparison — the element's playback position only advances
  * when a new frame is presented, so an unchanged value means the frame has already been sent.
  * The fallback is strictly worse (it still wakes at refresh rate, it just does not SEND), which is
  * why it is the fallback.
+ *
+ * WHAT THE PUMP NOW ALSO REPORTS (round 75). Every callback hands over the frame's metadata:
+ * `presentedFrames`, the browser's own count of frames presented, which keeps counting while the main
+ * thread is busy and so says how many frames the CAMERA delivered whether or not the tracker saw them;
+ * and `captureTime`, when the camera took the frame. `onPresented` fires for every frame, busy or not,
+ * so the delivered count is complete; `onFrame` fires only for frames that are sent.
+ *
+ * A NOTE ON "BUSY". A frame that arrives while a send is still in flight is not sent — it is counted
+ * (`busySkips`), never queued, never sent twice. An earlier analysis (round 74, R1 D2) predicted that
+ * this throws away half the frames whenever a send outlasts one frame interval. Measured in headless
+ * Chromium (round 75) it does not happen: both trackers do their work synchronously on the main
+ * thread, so no callback can run while a frame is being processed and `busySkips` stayed 0; the
+ * frames that arrive meanwhile are presented, counted in `presentedFrames`, and the next callback
+ * after the work carries the NEWEST frame. Throughput is then 1 / (time per frame), not a quantised
+ * fraction of the camera rate. The count is kept so a device that behaves differently shows it.
  */
+
+/** What the browser reports about a presented frame (VideoFrameCallbackMetadata, the parts used). */
+export interface FrameMeta {
+  /** When the callback ran (performance.now() clock). */
+  now: number;
+  /** The browser's running count of presented frames; absent under the rAF fallback. */
+  presentedFrames?: number;
+  /** When the camera captured the frame (performance.now() clock), where the browser provides it. */
+  captureTime?: number;
+}
 
 /** The slice of HTMLVideoElement the pump needs. Narrow, so a test can supply a plain object. */
 export interface PumpVideo {
   currentTime: number;
-  requestVideoFrameCallback?: (cb: (now: number) => void) => number;
+  requestVideoFrameCallback?: (cb: (now: number, meta?: { presentedFrames?: number; captureTime?: number }) => void) => number;
   cancelVideoFrameCallback?: (handle: number) => void;
 }
 
@@ -46,6 +65,8 @@ export interface PumpHost {
 export interface FramePump {
   /** Which mechanism is driving it. Recorded in tests; useful when a device behaves oddly. */
   readonly mode: 'video-frame-callback' | 'animation-frame';
+  /** Frames that arrived while a send was still in flight, and so were not sent. */
+  readonly busySkips: number;
   stop: () => void;
 }
 
@@ -59,25 +80,36 @@ export interface FramePump {
  */
 export function startFramePump(
   video: PumpVideo,
-  onFrame: () => Promise<void>,
-  opts: { everyN?: number; host?: PumpHost } = {},
+  onFrame: (meta: FrameMeta) => Promise<void> | void,
+  opts: {
+    everyN?: number;
+    host?: PumpHost;
+    /** Called for EVERY presented frame, before the busy check: the delivered count. */
+    onPresented?: (meta: FrameMeta) => void;
+    /** The clock for the rAF fallback's metadata. */
+    clock?: () => number;
+  } = {},
 ): FramePump {
   const everyN = Math.max(1, Math.floor(opts.everyN ?? 1));
   const host = opts.host ?? (typeof window !== 'undefined' ? window : undefined);
+  const clock = opts.clock ?? (() => (typeof performance !== 'undefined' ? performance.now() : Date.now()));
   let stopped = false;
   let counter = 0;
   let handle: number | null = null;
+  let busySkips = 0;
 
   /** Guard against re-entry: a send that outlasts the next callback must not start a second one. */
   let busy = false;
 
-  const deliver = async (): Promise<void> => {
-    if (stopped || busy) return;
+  const deliver = async (meta: FrameMeta): Promise<void> => {
+    if (stopped) return;
+    try { opts.onPresented?.(meta); } catch { /* a counter must never stop the pump */ }
+    if (busy) { busySkips += 1; return; }
     counter += 1;
     if (counter % everyN !== 0) return;
     busy = true;
     try {
-      await onFrame();
+      await onFrame(meta);
     } catch {
       /* a transient frame error must not kill the pump — the next frame is 33 ms away */
     } finally {
@@ -86,14 +118,15 @@ export function startFramePump(
   };
 
   if (typeof video.requestVideoFrameCallback === 'function') {
-    const tick = () => {
+    const tick = (now: number, md?: { presentedFrames?: number; captureTime?: number }) => {
       if (stopped) return;
       handle = video.requestVideoFrameCallback!(tick);
-      void deliver();
+      void deliver({ now, presentedFrames: md?.presentedFrames, captureTime: md?.captureTime });
     };
     handle = video.requestVideoFrameCallback(tick);
     return {
       mode: 'video-frame-callback',
+      get busySkips() { return busySkips; },
       stop: () => {
         stopped = true;
         if (handle != null) video.cancelVideoFrameCallback?.(handle);
@@ -116,15 +149,36 @@ export function startFramePump(
     const t = video.currentTime;
     if (t === lastSentTime) return;
     lastSentTime = t;
-    void deliver();
+    void deliver({ now: clock() });
   };
   handle = host!.requestAnimationFrame(loop);
   return {
     mode: 'animation-frame',
+    get busySkips() { return busySkips; },
     stop: () => {
       stopped = true;
       if (handle != null) host!.cancelAnimationFrame(handle);
       handle = null;
     },
   };
+}
+
+/**
+ * The timestamp a frame's measurements belong to: when the camera captured it, where the browser says
+ * so plausibly, otherwise when the frame was handed to the page.
+ *
+ * WHY. Every EAR sample was stamped with the time its RESULT arrived. That is capture time plus the
+ * tracker's processing time, and processing time varies frame to frame (tens of milliseconds, more
+ * when the tablet is busy), so it added jitter to every interval the blink measures are built from —
+ * onsets, durations, inter-blink intervals — and lagged every sample behind the eye it describes.
+ * `captureTime` is on the same performance.now() clock. It is accepted only when it lies within the
+ * second before the callback (a browser bug that put it on another clock would otherwise move the
+ * whole series); anything else falls back to the callback time, and the source is recorded.
+ */
+export function frameTimestamp(meta: FrameMeta): { t: number; source: 'capture' | 'callback' } {
+  const c = meta.captureTime;
+  if (typeof c === 'number' && Number.isFinite(c) && c <= meta.now + 50 && c >= meta.now - 1000) {
+    return { t: c, source: 'capture' };
+  }
+  return { t: meta.now, source: 'callback' };
 }
