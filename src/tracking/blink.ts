@@ -148,10 +148,26 @@ export function eyeAspectRatio(p: Point[]): number {
  * — the same crash the pose and gaze modules were already hardened against.
  *
  * If either eye is unusable the frame is NaN: half a face is not a measurement of blink depth.
+ *
+ * `aspect` IS THE FRAME'S WIDTH / HEIGHT, and it matters (round 75). Landmarks arrive normalised to
+ * the frame: x as a fraction of its width, y of its height. On a 16:9 frame one unit of y is 0.56 of a
+ * unit of x in pixels, so a ratio of distances taken in those units is not the eye's aspect ratio —
+ * it is the eye's aspect ratio times the frame's. Measured on one portrait (headless Chromium, the
+ * same face captured at 1280x720 and 640x480): EAR in normalised units 0.357 and 0.274, a 23%
+ * "difference" from nothing but the shape of the frame; in pixel proportions 0.207 and 0.209. Every
+ * blink threshold is a fraction of the participant's own baseline, so classification was unaffected
+ * at a fixed capture size — but the exported EAR values changed with the camera mode Chrome happened
+ * to pick, and a rolled head (the eye line tilted) mixes the two unequal units, so EAR also moved with
+ * head roll. Dividing y by the aspect puts both axes in the same unit (the frame's width) and makes
+ * EAR the image-plane ratio Soukupová & Čech define. Default 1 for callers with square coordinates.
  */
-export function faceEar(landmarks: Point[]): number {
+export function faceEar(landmarks: Point[], aspect = 1): number {
   if (!Array.isArray(landmarks)) return NaN;
-  const pick = (idx: number[]) => idx.map((i) => landmarks[i]);
+  const a = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  const pick = (idx: number[]) => idx.map((i) => {
+    const p = landmarks[i];
+    return p && a !== 1 ? { x: p.x, y: p.y / a } : p;
+  });
   const left = eyeAspectRatio(pick(LEFT_EYE_EAR));
   const right = eyeAspectRatio(pick(RIGHT_EYE_EAR));
   if (!Number.isFinite(left) || !Number.isFinite(right)) return NaN;
