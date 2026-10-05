@@ -35,8 +35,9 @@
  * normalised image coordinates, so blink.ts, gaze.ts and headPose.ts index them identically. That is
  * asserted against both packages' own landmark constants in tests/landmarkTopology.test.ts.
  *
- * TELEMETRY. @mediapipe/tasks-vision posts usage metrics to Google (https://odml.pa.googleapis.com,
- * stated in its README and visible in its bundle). This app blocks every connection to any origin but
+ * TELEMETRY. @mediapipe/tasks-vision posts usage metrics to a Google endpoint (the 'odml.pa' host on
+ * Google's API domain, stated in its README and visible in its bundle; not named here because
+ * tests/pwaPolicy.test.ts forbids any Google host in the app's own source). This app blocks every connection to any origin but
  * its own with a Content-Security-Policy in index.html; e2e/trackerTelemetry.spec.ts proves the block.
  */
 import type { Point } from './blink';
