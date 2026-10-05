@@ -35,3 +35,60 @@ describe('camera self-test scoring', () => {
     expect(r.detected).toBe(0);
   });
 });
+
+/*
+ * WHY the frame rate was low (round 75). The investigator's tablet failed this test on frame rate every
+ * time and the advice was always "close other apps and check the light". The camera and the tracker
+ * are now counted separately, and the reason must name the one that was short — with its numbers —
+ * because the remedies are opposite.
+ */
+describe('a low frame rate says which stage was short', () => {
+  const blinks = cues.map((c) => c + 100);
+  const pipe = (o: Record<string, unknown>) => ({
+    camera_fps_delivered: 30, tracker_fps: 30, process_ms_p50: 20, process_ms_p95: 28,
+    camera_setting_width: 1280, camera_setting_height: 720, tracker_backend: 'tasks-cpu',
+    frame_count_source: 'presented-frames' as const, ...o,
+  });
+
+  it('the CAMERA, when it delivered fewer frames than the floor — and the advice is light, not apps', () => {
+    const r = scoreSelfTest(cues, blinks, { fps: 14, facePresence: 0.99, pipeline: pipe({ camera_fps_delivered: 15, tracker_fps: 15 }) });
+    expect(r.pass).toBe(false);
+    expect(r.limit).toBe('camera');
+    const why = r.reasons.join(' ');
+    expect(why).toMatch(/CAMERA delivered only 15 frames per second at 1280×720/);
+    expect(why).toMatch(/more light/);
+    expect(why).not.toMatch(/battery saver/);
+  });
+
+  it('the TRACKER, when the camera delivered enough — with the time per frame, and the advice is the processor', () => {
+    const r = scoreSelfTest(cues, blinks, { fps: 16, facePresence: 0.99, pipeline: pipe({ camera_fps_delivered: 30, tracker_fps: 16, process_ms_p50: 61, process_ms_p95: 88 }) });
+    expect(r.limit).toBe('tracker');
+    const why = r.reasons.join(' ');
+    expect(why).toMatch(/camera delivered 30 frames per second but the TRACKER processed only 16/);
+    expect(why).toMatch(/about 61 ms a frame \(slowest 5%: 88 ms\)/);
+    expect(why).toMatch(/close other apps.*charger/i);
+  });
+
+  it('the face, when frames were processed but the face was found in too few', () => {
+    const r = scoreSelfTest(cues, blinks, { fps: 10, facePresence: 0.95, pipeline: pipe({ camera_fps_delivered: 30, tracker_fps: 29 }) });
+    expect(r.limit).toBe('face');
+    expect(r.reasons.join(' ')).toMatch(/found the face in only some/);
+  });
+
+  it('will not blame the camera when the browser gave no frame counter', () => {
+    const r = scoreSelfTest(cues, blinks, { fps: 14, facePresence: 0.99, pipeline: pipe({ camera_fps_delivered: 15, tracker_fps: 15, frame_count_source: 'callbacks' }) });
+    expect(r.limit).toBe('undetermined');
+    expect(r.reasons.join(' ')).toMatch(/cannot be told apart/);
+  });
+
+  it('records the pipeline with the result, pass or fail, and no limit on a pass', () => {
+    const r = scoreSelfTest(cues, blinks, { fps: 29, facePresence: 0.99, pipeline: pipe({}) });
+    expect(r.pass).toBe(true);
+    expect(r.limit).toBeNull();
+    expect(r.pipeline?.tracker_backend).toBe('tasks-cpu');
+  });
+
+  it('the floor itself is unchanged: 25 face-solved frames per second', () => {
+    expect(SELF_TEST.MIN_FPS).toBe(25);
+  });
+});

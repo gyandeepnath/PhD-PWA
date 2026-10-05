@@ -67,12 +67,17 @@ describe('the stimulus typeface is served from this origin', () => {
     expect(loader).toMatch(/BASE_URL/);
     expect(loader).not.toMatch(/`\/mediapipe\//);
 
-    // And neither caller may go back to building the path itself.
-    for (const f of ['src/tracking/useTracking.ts', 'src/screening/faceProbe.ts']) {
+    // And no caller may go back to building the path itself. Since round 75 there is ONE caller:
+    // the setup-screen probe was removed (camera setup runs the real tracker), and the tracker's
+    // backends live in trackers.ts. The Face Landmarker's assets are resolved the same way.
+    for (const f of ['src/tracking/trackers.ts']) {
       const src = read(f);
       expect(src, `${f} must not resolve model assets itself`).not.toMatch(/locateFile:.*`\/mediapipe\//);
       expect(src, `${f} must go through faceMeshAssetPath`).toMatch(/faceMeshAssetPath/);
+      expect(src, `${f} must resolve Face Landmarker assets base-relative`).toMatch(/BASE_URL/);
+      expect(src).not.toMatch(/`\/tasks-vision\//);
     }
+    expect(read('src/tracking/useTracking.ts'), 'the hook must not load a model itself').not.toMatch(/loadFaceMesh|locateFile/);
   });
 
   it('blocks rather than swaps, so the face cannot change mid-passage', () => {

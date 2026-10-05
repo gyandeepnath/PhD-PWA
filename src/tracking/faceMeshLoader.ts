@@ -28,12 +28,26 @@
 /** The shape of the constructor this project uses. Narrower than the package's own typings. */
 export interface FaceMeshLike {
   setOptions: (o: Record<string, unknown>) => void;
-  onResults: (cb: (r: { multiFaceLandmarks?: Array<Array<{ x: number; y: number; z?: number }>> }) => void) => void;
-  send: (i: { image: HTMLVideoElement }) => Promise<void>;
-  close?: () => void;
+  /**
+   * Each landmark list is either decoded points (the wrapper's own listener) or the raw protobuf bytes
+   * of a NormalizedLandmarkList (a landmarks-only listener; see tracking/landmarkProto.ts).
+   */
+  onResults: (cb: (r: { multiFaceLandmarks?: Array<Array<{ x: number; y: number; z?: number }> | Uint8Array> }) => void) => void;
+  send: (i: { image: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement }) => Promise<void>;
+  initialize?: () => Promise<void>;
+  close?: () => Promise<void> | void;
 }
 
-export type FaceMeshCtor = new (cfg: { locateFile: (f: string) => string }) => FaceMeshLike;
+/**
+ * One output listener of the legacy solution: the graph streams it wants, and how each becomes a
+ * field of the result. The wrapper merges `listeners` from the caller's config over its own.
+ */
+export interface FaceMeshListenerConfig {
+  wants: string[];
+  outs: Record<string, { type: string; stream: string }>;
+}
+
+export type FaceMeshCtor = new (cfg: { locateFile: (f: string) => string; listeners?: FaceMeshListenerConfig[] }) => FaceMeshLike;
 
 /** Every place the constructor is known to end up, in the order it is worth looking. */
 type Candidate = { where: string; value: unknown };

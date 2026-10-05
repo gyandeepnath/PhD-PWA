@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { LiveTrackingStats } from '@/tracking/useTracking';
 import { setMonitorOpen } from '@/lib/hiddenTime';
 import { UI_TEXT } from '@/lib/uiPalette';
+import { LiveFeed, EarTrace, PipelineReadout } from '@/components/LiveCamera';
+import { FPS_TIER_THRESHOLD } from '@/tracking/blink';
 
 /**
  * The researcher's corner panel: live camera readout and the session clock, collapsible.
@@ -60,6 +62,15 @@ import { UI_TEXT } from '@/lib/uiPalette';
  * screen, so the screen's own content moves over and nothing is ever under the card. Overlaid, it
  * covered "All checks pass — continue" on pre-flight at every viewport, and the sliders and Continue
  * of the baseline fatigue scale.
+ *
+ * THE CARD SHOWS THE CAMERA (round 75, investigator request). When the camera is running the card
+ * opens with the live picture — a second <video> on the tracker's own stream, mirrored, with the face
+ * box and the eyelid points the blink measure is computed from drawn over it — the last ten seconds of
+ * eye openness against the 0.75 and 0.60 cuts, and the pipeline's three rates (camera delivers,
+ * tracker processes, face found) with which one is short. See LiveCamera.tsx. ONLY THE CARD: on a
+ * condition screen the panel is the ink indicator or the two-line strip above and never a picture —
+ * a participant watching their own face is not reading, searching or responding to the dots — and it
+ * is the card only where it can be opened at all (set-up screens, the break, the closing screens).
  * Nulls render as "—", never 0.
  */
 export interface ResearcherPanelProps {
@@ -89,6 +100,11 @@ export interface ResearcherPanelProps {
    * open or not, the live readout — is what it was when the block began.
    */
   hidden?: boolean;
+  /**
+   * The tracker's MediaStream, for the card's live picture; null when the camera is not running. A
+   * getter, read on every readout, so a camera restarted mid-sitting is picked up.
+   */
+  getStream?: () => MediaStream | null;
   /** When this sitting's screen time started (Date.now() ms), and the session's recorded start. */
   sittingStartedAt: number;
   sessionStartedAt: number | null;
@@ -144,7 +160,8 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
   const [open, setOpen] = useState(false);
   const lastEmit = useRef(0);
 
-  const { subscribe, onStimulus } = p;
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const { subscribe, onStimulus, getStream } = p;
   useEffect(() => subscribe((next) => {
     // Once a second on a stimulus screen; the tracker's 4 Hz elsewhere.
     const t = Date.now();
@@ -152,7 +169,9 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
     lastEmit.current = t;
     setS(next);
     setAt(t);
-  }), [subscribe, onStimulus]);
+    // Never on a stimulus screen: the picture is the card's alone (see the header).
+    if (!onStimulus) setStream(getStream?.() ?? null);
+  }), [subscribe, onStimulus, getStream]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), p.onStimulus ? 1000 : 500);
@@ -274,7 +293,7 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
         onClick={() => setOpen(false)} role="button" aria-label="Close researcher panel">
         <div style={line}>
           <span style={{ ...quietDot(9), marginRight: 6 }} />
-          {cam.text} · blinks {num(s?.blinks)} ({num(s?.incomplete)} inc) · {num(s?.fps)} fps
+          {cam.text} · blinks {num(s?.blinks)} ({num(s?.incomplete)} inc) · {num(s?.faceFps)} fps
         </div>
         <div style={line}>sitting {clock(sittingMs, false)} · condition {p.conditionsDone ?? '—'}/{p.conditionsTotal ?? '—'} · ~{p.minutesLeft ?? '—'} min left</div>
       </div>
@@ -305,12 +324,19 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, color: cam.level === 'ok' || cam.level === 'off' ? '#fff' : dotColour }} data-testid="researcher-camera-state">
         <span style={{ width: 11, height: 11, borderRadius: '50%', background: dotColour }} />{cam.text}
       </div>
+      {p.cameraStatus === 'active' && (
+        <div style={{ marginTop: 8 }} data-testid="researcher-camera">
+          <LiveFeed stream={stream} stats={s} width={PANEL_CARD_PX - 24} testid="researcher-feed" />
+          <div style={{ marginTop: 6 }}><EarTrace stats={s} width={PANEL_CARD_PX - 24} height={56} /></div>
+          <div style={{ marginTop: 6 }}><PipelineReadout stats={s} floor={FPS_TIER_THRESHOLD} compact /></div>
+        </div>
+      )}
       <div style={{ marginTop: 6 }}>
         {row('Blinks (condition)', <>{num(s?.blinks)} <span style={{ opacity: 0.85 }}>· {num(s?.incomplete)} inc.</span></>)}
         {row('Blinks (sitting)', num(s?.sessionBlinks))}
         {row('Eye open', s?.earRatio != null ? `${Math.round(s.earRatio * 100)}% of baseline` : '—')}
         {row('Gaze', s?.gazeZone ? (s.gazeZone === 'cc' ? 'centre' : s.gazeZone) : '—')}
-        {row('Frame rate', <span style={{ color: s?.fps != null && s.fps < p.fpsFloor ? '#ffd27a' : undefined }}>{num(s?.fps)} fps{s?.exposureFps != null ? ` · last ${num(s.exposureFps)}` : ''}</span>)}
+        {row('Last reading', <span style={{ color: s?.exposureFps != null && s.exposureFps < p.fpsFloor ? '#ffd27a' : undefined }}>{s?.exposureFps != null ? `${num(s.exposureFps)} face fps` : '—'}</span>)}
         {row('Brightness', s?.luma != null ? `${s.luma}/255` : '—')}
       </div>
       <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.18)' }}>

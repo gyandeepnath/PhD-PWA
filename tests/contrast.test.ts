@@ -233,6 +233,9 @@ describe('operator-screen text colours meet WCAG AA', () => {
     'src/start/LuxCheckpoint.tsx', 'src/start/CalibrationRoutine.tsx', 'src/start/BreakScreen.tsx',
     'src/start/CameraSelfTest.tsx',
     'src/components/ResearcherPanel.tsx', 'src/components/UpdateBanner.tsx',
+    // Round 75: the live camera picture, eye-openness trace and pipeline readout in the researcher
+    // card and on camera setup.
+    'src/components/LiveCamera.tsx',
     'src/components/ErrorBoundary.tsx', 'src/components/ScrollCue.tsx', 'src/components/InfoTip.tsx',
     'src/components/VisuLabLogo.tsx', 'src/components/ExperimentProgress.tsx',
     'src/screening/IshiharaTest.tsx', 'src/dashboard/Dashboard.tsx', 'src/dashboard/LazyDashboard.tsx',

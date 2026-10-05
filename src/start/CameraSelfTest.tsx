@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { now } from '@/lib/timing';
 import { isE2ETimingActive } from '@/experiment/config';
 import { SELF_TEST, scoreSelfTest, type SelfTestResult } from '@/tracking/selfTest';
+import type { SelfTestObservation } from '@/tracking/useTracking';
+import { TRACKER_LABEL, type TrackerBackend } from '@/tracking/trackers';
 
 /**
  * "Blink each time the dot flashes" — the camera self-test, run after calibration. See
@@ -13,7 +15,7 @@ import { SELF_TEST, scoreSelfTest, type SelfTestResult } from '@/tracking/selfTe
  */
 export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false }: {
   begin: () => void;
-  end: () => { blinkOnsets: number[]; fps: number | null; facePresence: number | null };
+  end: () => SelfTestObservation;
   onDone: (result: SelfTestResult) => void;
   /** True while the dot is flashing: the operator's Exit chip is withheld, as in calibration. */
   onRunning?: (running: boolean) => void;
@@ -87,7 +89,8 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false }
   }, [phase]);
 
   const shell: React.CSSProperties = {
-    position: 'fixed', inset: 0, background: '#1a1a2e', color: '#fff', display: 'flex', flexDirection: 'column',
+    // left: the column the researcher card takes when opened on the intro or the result (--vl-panel-dock).
+    position: 'fixed', inset: 0, left: 'var(--vl-panel-dock, 0px)', background: '#1a1a2e', color: '#fff', display: 'flex', flexDirection: 'column',
     alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32,
   };
   const btn: React.CSSProperties = { padding: '14px 26px', borderRadius: 12, fontSize: 16, cursor: 'pointer', fontFamily: '"DM Mono", monospace' };
@@ -126,15 +129,29 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false }
   }
 
   const r = result!;
+  const num = (x: number | null | undefined) => (x == null ? '—' : String(Math.round(x)));
   return (
     <div style={shell} data-testid="camera-selftest">
       <h1 className="font-serif" style={{ fontSize: 32, fontWeight: 300 }} data-testid="selftest-verdict">
         {r.pass ? 'The camera is working' : 'The camera check did not pass'}
       </h1>
       <p className="font-lab" style={{ fontSize: 17, color: '#dbe6f7', marginTop: 14 }}>
-        Saw {r.detected} of {r.cued} blinks · {r.fps == null ? '—' : Math.round(r.fps)} frames per second ·
+        Saw {r.detected} of {r.cued} blinks · {r.fps == null ? '—' : Math.round(r.fps)} face frames per second ·
         face in view {r.facePresence == null ? '—' : Math.round(r.facePresence * 100)}% of the time
       </p>
+      {/*
+        The three stages behind that frame rate, so a low one says which stage is short (round 75):
+        what the camera delivered, what the tracker processed and how long a frame took, and which
+        tracker ran. Shown on a pass as well — it is what the investigator reads off the tablet.
+      */}
+      {r.pipeline && (
+        <p data-testid="selftest-pipeline" className="font-lab" style={{ fontSize: 15, color: '#aab6d0', marginTop: 6, maxWidth: 680, lineHeight: 1.55 }}>
+          Camera delivered {num(r.pipeline.camera_fps_delivered)} fps
+          {r.pipeline.camera_setting_width ? ` at ${r.pipeline.camera_setting_width}×${r.pipeline.camera_setting_height}` : ''} ·
+          tracker processed {num(r.pipeline.tracker_fps)} fps, {num(r.pipeline.process_ms_p50)} ms a frame
+          (95%: {num(r.pipeline.process_ms_p95)} ms) · {r.pipeline.tracker_backend ? (TRACKER_LABEL[r.pipeline.tracker_backend as TrackerBackend] ?? r.pipeline.tracker_backend) : '—'}
+        </p>
+      )}
       {!r.pass && (
         <ul className="font-lab" style={{ fontSize: 15, color: '#ffd9d6', maxWidth: 620, marginTop: 12, textAlign: 'left', lineHeight: 1.6 }}>
           {r.reasons.map((x) => <li key={x}>• {x}</li>)}

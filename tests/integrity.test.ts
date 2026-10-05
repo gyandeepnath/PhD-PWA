@@ -310,3 +310,21 @@ describe('the report reaches the export', () => {
     expect(m.integrity.joins_sound).toBe(true);
   });
 });
+
+describe('one face tracker per sitting (round 75)', () => {
+  it('is silent when every row was measured on the same tracker, or rows predate the column', () => {
+    const b = buildFixtureBundle();
+    expect(checks(b)).not.toContain('tracker_consistent');
+    b.eyeMetrics.forEach((e) => { e.tracker_backend = 'tasks-cpu'; });
+    expect(checks(b)).not.toContain('tracker_consistent');
+  });
+
+  it('warns, naming the conditions, when the tracker changed inside the sitting', () => {
+    const b = buildFixtureBundle();
+    b.eyeMetrics.forEach((e, i) => { e.tracker_backend = i < 2 ? 'tasks-gpu' : 'legacy'; });
+    const f = auditBundle(b).findings.find((x) => x.check === 'tracker_consistent');
+    expect(f?.severity).toBe('warning');
+    expect(f?.detail).toMatch(/legacy, tasks-gpu/);
+    expect(f?.refs.length).toBe(b.eyeMetrics.length);
+  });
+});

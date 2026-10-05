@@ -11,8 +11,10 @@ data model and exports, the software architecture, the verification harness, and
 log. Paired with the complete source tree in this archive (`ALL_SOURCE.md` = every code line
 concatenated; the original files are also present under their paths).
 
-- **Version:** package `visulab@2.2.0` (2.1.0 until Round 74, which fitted the layout to the screen
-  and added the ruler calibration; the build time on screen tells deployments apart); IndexedDB schema v9 (`DB_VERSION`).
+- **Version:** package `visulab@2.3.0` (2.1.0 until Round 74, which fitted the layout to the screen
+  and added the ruler calibration; 2.2.0 in Round 74; 2.3.0 from Round 75, which measured the camera
+  pipeline, added the Face Landmarker tracker and changed EAR to image-plane proportions; the build
+  time on screen tells deployments apart); IndexedDB schema v9 (`DB_VERSION`).
 - **Commit at packaging:** branch `claude/build-review-refinement-3z0nrm` (see `CHANGELOG` section §16).
 - **Status:** 169 unit/property tests, `tsc`+`vite` production build, ESLint, a harsh stress
   harness, and 6 Playwright E2E specs — all green.

@@ -16,19 +16,19 @@ import { get, _resetForTests } from '@/storage/db';
 import type { EyeMetricsRecord } from '@/storage/types';
 
 const modelFails = vi.hoisted(() => ({ value: false }));
-vi.mock('@/tracking/faceMeshLoader', () => ({
-  faceMeshAssetPath: (f: string) => f,
-  loadFaceMesh: async () => {
-    if (modelFails.value) throw new Error('model did not load');
-    return class {
-      setOptions() {}
-      onResults() {}
-      async send() {}
-    };
+const closed = vi.hoisted(() => ({ count: 0 }));
+// The tracker backends are replaced by a fake (round 75: the hook starts them through trackers.ts,
+// with their fallback chain); everything the hook does around them is the shipped code.
+vi.mock('@/tracking/trackers', async (orig) => ({
+  ...(await orig<typeof import('@/tracking/trackers')>()),
+  startTracker: async () => {
+    if (modelFails.value) throw new Error('no face tracker could be started (legacy: model did not load)');
+    return { tracker: { backend: 'legacy', detect: async () => null, close: () => { closed.count += 1; } }, failures: [] };
   },
 }));
-vi.mock('@/tracking/framePump', () => ({
-  startFramePump: () => ({ stop: () => {} }),
+vi.mock('@/tracking/framePump', async (orig) => ({
+  ...(await orig<typeof import('@/tracking/framePump')>()),
+  startFramePump: () => ({ stop: () => {}, busySkips: 0, mode: 'video-frame-callback' }),
 }));
 
 import { useTracking } from '@/tracking/useTracking';
@@ -112,8 +112,42 @@ describe('useTracking — a camera that stops', () => {
     await act(async () => { await h.api().start(); });
     expect(h.api().status).toBe('failed');
     expect(track.stopped).toBe(true);
+    // Why, in the library's words, for the camera-setup screen.
+    expect(h.api().startError).toMatch(/model did not load/);
+    expect(h.api().pipelineInfo()).toBeNull();
     await act(async () => { track.dispatchEvent(new Event('ended')); });
     expect(h.api().cameraLostAt).toBeNull();
+    h.unmount();
+  });
+
+  it('records what the camera gave and which tracker ran, and closes the tracker when it stops', async () => {
+    const { track } = fakeCamera();
+    (track as unknown as { getSettings: () => MediaTrackSettings }).getSettings = () => ({ width: 640, height: 480, frameRate: 30 });
+    (track as unknown as { getCapabilities: () => MediaTrackCapabilities }).getCapabilities = () => ({ frameRate: { max: 30 } } as MediaTrackCapabilities);
+    const h = mount();
+    await act(async () => { await h.api().start(); });
+    const info = h.api().pipelineInfo()!;
+    expect(info.tracker_backend).toBe('legacy');
+    expect(info.camera_requested).toEqual({ width: 1280, height: 720, frameRate: 60 });
+    expect(info.camera_settings).toEqual({ width: 640, height: 480, frameRate: 30 });
+    expect(info.camera_capabilities?.frame_rate_max).toBe(30);
+    const before = closed.count;
+    act(() => { h.api().stop(); });
+    expect(closed.count).toBe(before + 1);
+    expect(track.stopped).toBe(true);
+    h.unmount();
+  });
+
+  it('a second start replaces the first pipeline instead of running beside it', async () => {
+    const { track } = fakeCamera();
+    const h = mount();
+    await act(async () => { await h.api().start(); });
+    const before = closed.count;
+    await act(async () => { await h.api().start(); });
+    // The first tracker was closed and its camera released before the second was started.
+    expect(closed.count).toBe(before + 1);
+    expect(track.stopped).toBe(true);
+    expect(h.api().status).toBe('active');
     h.unmount();
   });
 });

@@ -71,7 +71,9 @@ describe('the Face Landmarker tracker is offline and keeps its data on the devic
 
   it('nothing in the app itself names a Google host', async () => {
     const { execFileSync } = await import('node:child_process');
-    const files = execFileSync('git', ['ls-files', 'src'], { cwd: resolve(__dirname, '..') }).toString().split('\n').filter(Boolean);
+    const { existsSync } = await import('node:fs');
+    const files = execFileSync('git', ['ls-files', 'src'], { cwd: resolve(__dirname, '..') }).toString().split('\n').filter(Boolean)
+      .filter((f) => existsSync(resolve(__dirname, '..', f))); // a tracked file deleted in the working tree
     const hits = files.filter((f) => /googleapis\.com|storage\.googleapis/.test(readFileSync(resolve(__dirname, '..', f), 'utf8')));
     expect(hits).toEqual([]);
   });

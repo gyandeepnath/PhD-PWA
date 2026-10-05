@@ -12,8 +12,15 @@
  */
 import { useCallback, useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';
-import { faceEar, fitEarBaseline, EAR_TIERS, type Point } from './blink';
-import { startFramePump, type FramePump, type PumpVideo } from './framePump';
+import { faceEar, fitEarBaseline, EAR_TIERS, LEFT_EYE_EAR, RIGHT_EYE_EAR, type Point } from './blink';
+import { startFramePump, frameTimestamp, type FrameMeta, type FramePump, type PumpVideo } from './framePump';
+import { PipelineMeter, type MeterWindow, type PipelineSummary } from './pipelineStats';
+import { startTracker, createTracker, errorSummary, TRACKER_BACKENDS, type FaceTracker, type TrackerBackend } from './trackers';
+import {
+  resolveTracker, loadTrackerChoice, saveTrackerChoice, pickFastest, earNoise,
+  type TrackerTrial, type TrackerSelectionSource,
+} from './trackerChoice';
+import { APP_VERSION } from '@/lib/env';
 
 /**
  * How often the operator's live readout updates, in hertz.
@@ -41,8 +48,7 @@ import { EyeMetricsAggregator, disabledEyeMetrics } from './aggregator';
 import { put } from '@/storage/db';
 import { now } from '@/lib/timing';
 import { startLivenessCheck } from './cameraLiveness';
-import type { CameraStatus } from '@/storage/types';
-import { loadFaceMesh, faceMeshAssetPath } from './faceMeshLoader';
+import type { CameraStatus, CameraPipelineRecord, PipelineWindowFields } from '@/storage/types';
 
 /** Median of a numeric array (robust frontal-fraction estimate, ignores transient blinks/noise). */
 function medianOf(xs: number[]): number {
@@ -71,6 +77,20 @@ function faceSizeFromLandmarks(lm: Point[]): number {
   // dragging face_size_ratio toward zero on exactly the frames where detection failed. The
   // aggregator filters non-finite on ingest, so NaN is correctly dropped instead.
   return w > 0 && h > 0 ? Math.sqrt(w * h) : NaN;
+}
+
+/** The landmarks' bounding box in normalised frame coordinates; null when it has no extent. */
+function faceBoxFromLandmarks(lm: Point[]): { x: number; y: number; w: number; h: number } | null {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of lm) {
+    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const w = maxX - minX, h = maxY - minY;
+  return w > 0 && h > 0 ? { x: minX, y: minY, w, h } : null;
 }
 
 /**
@@ -106,8 +126,44 @@ export interface LiveTrackingStats {
   incomplete: number | null;
   /** True when `blinks` is the running count of a live exposure rather than a finished one. */
   blinksLive: boolean;
-  /** Achieved FaceMesh throughput over the last ~2s of the CURRENT screen. Live, not the exposure. */
-  fps: number | null;
+  /**
+   * The pipeline over the last ~2 s of the CURRENT screen (tracking/pipelineStats.ts): frames the
+   * camera delivered, frames the tracker processed, and frames in which it found a face, per second,
+   * with the time one tracker call took. `faceFps` is the rate effective_fps measures and the floor
+   * applies to; the other two say which stage is limiting it. Live, not the exposure.
+   */
+  cameraFps: number | null;
+  trackerFps: number | null;
+  faceFps: number | null;
+  processMsP50: number | null;
+  processMsP95: number | null;
+  /** How cameraFps was counted: the browser's frame counter, or one per callback (a lower bound). */
+  frameCountSource: 'presented-frames' | 'callbacks' | null;
+  /** Which tracker is running (tracking/trackers.ts); null before one has started. */
+  backend: TrackerBackend | null;
+  /** The frame size the camera actually delivers. */
+  captureWidth: number | null;
+  captureHeight: number | null;
+  /**
+   * The face's width in camera pixels. The landmark model resizes a crop around the face to 192 or 256
+   * px; a face much narrower than that is upsampled and the eyelids lose detail. See CONFIG.CAMERA_WIDTH.
+   */
+  faceWidthPx: number | null;
+  /** The face's bounding box in normalised frame coordinates (unmirrored), for the setup preview. */
+  faceBox: { x: number; y: number; w: number; h: number } | null;
+  /**
+   * The six EAR points of each eye in normalised frame coordinates (unmirrored), for the overlay on
+   * the researcher card's live picture. Null without a face.
+   */
+  eyes: { left: Point[]; right: Point[] } | null;
+  /**
+   * The last CONFIG.EAR_TRACE_MS of eye openness, one entry per processed frame: [ms before now (<= 0),
+   * EAR, or null for a frame without a face]. The researcher card draws it against 0.75 and 0.60 of
+   * the baseline — the two cuts that define a blink and a complete one.
+   */
+  earTrace: Array<[number, number | null]>;
+  /** The participant's open-eye baseline, when calibration has fitted one. */
+  baselineEar: number | null;
   /**
    * Effective frame rate of the last reading exposure, from the record that was written.
    *
@@ -135,9 +191,23 @@ interface TrackingApi {
   status: CameraStatus;
   /** Subscribe to the live readout. Returns an unsubscribe function. */
   subscribeLive: (fn: (s: LiveTrackingStats) => void) => () => void;
-  /** Request camera + init FaceMesh. Returns the resulting status. */
+  /** Request the camera and start the face tracker. Returns the resulting status. */
   start: () => Promise<CameraStatus>;
   stop: () => void;
+  /** Why the last start() failed, in the library's words; null after a successful start. */
+  startError: string | null;
+  /**
+   * What the camera and the tracker are actually running as: the backend and how it was chosen, what
+   * was asked of the camera and what it gave. Null while the camera is not running.
+   */
+  pipelineInfo: () => CameraPipelineRecord | null;
+  /**
+   * Measure every tracker backend on the live camera for a few seconds each, keep the fastest for this
+   * device, and switch to it (tracking/trackerChoice.ts). `onProgress` reports which one is running.
+   * Resolves to the trials, or null when the tracker is frozen by CONFIG.TRACKER_BACKEND or the camera
+   * is not running.
+   */
+  compareTrackers: (onProgress?: (p: { backend: TrackerBackend; index: number; total: number }) => void) => Promise<TrackerTrial[] | null>;
   /**
    * Open the dedicated open-eye baseline window for ~`ms` while the participant fixates the centre,
    * and fit the baseline from those frames alone. Resolves to the fit and the evidence behind it.
@@ -161,7 +231,7 @@ interface TrackingApi {
   beginCondition: () => void;
   /** Start and finish the camera self-test (see tracking/selfTest.ts); endSelfTest returns what it saw. */
   beginSelfTest: () => void;
-  endSelfTest: () => { blinkOnsets: number[]; fps: number | null; facePresence: number | null };
+  endSelfTest: () => SelfTestObservation;
   /** Finalise the current condition and persist an EyeMetricsRecord. */
   endCondition: (conditionId: string, sessionId: string) => Promise<void>;
   /**
@@ -176,6 +246,39 @@ interface TrackingApi {
    * picture returns. See cameraHealth.ts.
    */
   cameraBlocked: boolean;
+}
+
+/** What the self-test window saw: blinks, face coverage, and what the pipeline did meanwhile. */
+export interface SelfTestObservation {
+  blinkOnsets: number[];
+  /** Face-solved frame rate of the EAR series (the rate effective_fps measures). */
+  fps: number | null;
+  facePresence: number | null;
+  /** Camera, tracker and processing-time figures over the same window; null without a camera. */
+  pipeline: PipelineWindowFields | null;
+}
+
+/** A meter summary as the record fields stored per condition and with the self-test. */
+export function pipelineFields(
+  sum: PipelineSummary,
+  info: Pick<CameraPipelineRecord, 'tracker_backend' | 'camera_settings' | 'timestamp_source'> | null,
+): PipelineWindowFields {
+  const r1 = (x: number | null) => (x == null ? null : Math.round(x * 10) / 10);
+  return {
+    tracker_backend: info?.tracker_backend ?? null,
+    camera_fps_delivered: r1(sum.cameraFps),
+    tracker_fps: r1(sum.trackerFps),
+    frames_delivered: sum.framesDelivered,
+    frames_processed: sum.framesProcessed,
+    frames_skipped: sum.framesSkipped,
+    process_ms_p50: r1(sum.processMsP50),
+    process_ms_p95: r1(sum.processMsP95),
+    camera_setting_width: info?.camera_settings.width ?? null,
+    camera_setting_height: info?.camera_settings.height ?? null,
+    camera_setting_fps: info?.camera_settings.frameRate ?? null,
+    frame_count_source: sum.deliveredSource,
+    timestamp_source: info?.timestamp_source ?? null,
+  };
 }
 
 /**
@@ -206,6 +309,7 @@ export function useTracking(): TrackingApi {
   const [status, setStatus] = useState<CameraStatus>('unavailable');
   const [cameraLostAt, setCameraLostAt] = useState<number | null>(null);
   const [cameraBlocked, setCameraBlocked] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   /** Blinks counted in the sitting's FINISHED exposures, for the researcher panel's running total. */
   const sessionBlinksDone = useRef(0);
   const healthRef = useRef(new CameraHealth());
@@ -219,11 +323,34 @@ export function useTracking(): TrackingApi {
   /** Teardown for the stall watchdog and its visibility listener, while the camera runs. */
   const watchdogStopRef = useRef<(() => void) | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  // Tiny offscreen canvas for cheap per-frame luminance sampling (lighting QC).
+  // Tiny offscreen canvas for downsampled luminance sampling (lighting QC), read at LUMA_SAMPLE_HZ.
   const lumaCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const faceMeshRef = useRef<unknown>(null);
+  /**
+   * The last luminance reading and when it was taken. Frames between readings carry it forward to the
+   * camera-health check, which judges "black for 3 s" and so is unaffected by a 250 ms grid; the
+   * aggregator receives each reading once, so mean_face_luma is a mean of readings, not of copies.
+   */
+  const lumaHeldRef = useRef<{ t: number; mean: number; std: number } | null>(null);
+  /** The face tracker, when the camera is running. See trackers.ts. */
+  const trackerRef = useRef<FaceTracker | null>(null);
+  /** Detect calls that threw since the tracker last answered; see process(). */
+  const trackerErrorsRef = useRef(0);
+  const trackerAnsweredRef = useRef(false);
   /** The frame pump, when the camera is running. See framePump.ts. */
   const pumpRef = useRef<FramePump | null>(null);
+  /** Camera, tracker and processing-time counts. See pipelineStats.ts. */
+  const meterRef = useRef(new PipelineMeter());
+  /** The pipeline as it is running now, for the session record. */
+  const pipelineRef = useRef<CameraPipelineRecord | null>(null);
+  /** The condition's (or self-test's) stretch of the meter. */
+  const conditionWindowRef = useRef<MeterWindow | null>(null);
+  const selfTestWindowRef = useRef<MeterWindow | null>(null);
+  /** Last sample time handed out, so the series stays strictly increasing. */
+  const lastSampleTRef = useRef<number>(-Infinity);
+  /** EAR values collected while one tracker backend is being trialled; null otherwise. */
+  const trialEarsRef = useRef<number[] | null>(null);
+  /** The last EAR_TRACE_MS of [time, EAR or null], for the researcher card's trace. */
+  const earTraceRef = useRef<Array<[number, number | null]>>([]);
   const aggRef = useRef<EyeMetricsAggregator | null>(null);
   const calibrating = useRef<{ samples: number[]; noseFracs: number[] } | null>(null);
   const baselineEarRef = useRef<number | null>(null);
@@ -260,7 +387,7 @@ export function useTracking(): TrackingApi {
     }
   };
 
-  // Ingest exactly ONE sample per FaceMesh result, so the EAR series is sampled at the true
+  // Ingest exactly ONE sample per tracker result, so the EAR series is sampled at the true
   // measurement rate (not the display refresh rate). The previous build ran a free-running 60 fps
   // sampler over stale landmarks, duplicating samples and overstating effective_fps.
   /*
@@ -293,12 +420,15 @@ export function useTracking(): TrackingApi {
    */
   const lastConditionFps = useRef<number | null>(null);
   const lastLiveEmit = useRef(0);
-  const frameTimes = useRef<number[]>([]);
 
   const subscribeLive = useCallback((fn: (s: LiveTrackingStats) => void) => {
     liveSubs.current.add(fn);
     return () => { liveSubs.current.delete(fn); };
   }, []);
+
+  type LiveCore = Omit<LiveTrackingStats,
+    'cameraFps' | 'trackerFps' | 'faceFps' | 'processMsP50' | 'processMsP95' | 'frameCountSource' | 'backend'
+    | 'captureWidth' | 'captureHeight' | 'earTrace' | 'baselineEar'>;
 
   /**
    * Emit the live readout, at most LIVE_HZ times a second and only when someone is listening.
@@ -313,40 +443,58 @@ export function useTracking(): TrackingApi {
    * the monitor is hidden and the subscriber set is empty. Measured over a 3-minute condition at
    * 30 fps: 14.6 million sample scans and 5,400 array allocations, on the main thread, for a
    * readout nobody was watching — 7.5x the work of doing it at LIVE_HZ. Every millisecond spent
-   * there is a millisecond the FaceMesh pump is not running, and a dropped frame is a lost EAR
-   * sample from the series the primary outcome is counted in.
+   * there is a millisecond the tracker is not running, and a dropped frame is a lost EAR sample
+   * from the series the primary outcome is counted in.
    *
-   * Frame timing is still recorded every frame, because that is O(1) and is the fps estimate.
+   * The frame rates now come from the pipeline meter, which counts every frame in O(1).
    */
-  const emitLive = useCallback((t: number, build: () => Omit<LiveTrackingStats, 'fps'>) => {
-    // Achieved throughput over a short window, which is what the FPS gate on the primary outcome
-    // actually depends on. Cheap, so it runs unconditionally.
-    frameTimes.current.push(t);
-    while (frameTimes.current.length > 0 && t - frameTimes.current[0] > 2000) frameTimes.current.shift();
-    const span = frameTimes.current.length > 1
-      ? (frameTimes.current[frameTimes.current.length - 1] - frameTimes.current[0]) / 1000
-      : 0;
-    const fps = span > 0.5 ? (frameTimes.current.length - 1) / span : null;
-
+  const emitLive = useCallback((t: number, build: () => LiveCore) => {
     if (t - lastLiveEmit.current < 1000 / LIVE_HZ) return;
     if (liveSubs.current.size === 0) return;
     lastLiveEmit.current = t;
-    const payload: LiveTrackingStats = { ...build(), fps };
+    const m = meterRef.current.live();
+    const v = videoRef.current;
+    const trace = earTraceRef.current.map(([ts, e]): [number, number | null] => [Math.round(ts - t), e]);
+    const payload: LiveTrackingStats = {
+      ...build(),
+      cameraFps: m.cameraFps, trackerFps: m.trackerFps, faceFps: m.faceFps,
+      processMsP50: m.processMsP50, processMsP95: m.processMsP95, frameCountSource: m.deliveredSource,
+      backend: trackerRef.current?.backend ?? null,
+      captureWidth: v?.videoWidth || null, captureHeight: v?.videoHeight || null,
+      earTrace: trace,
+      baselineEar: baselineEarRef.current,
+    };
     for (const fn of liveSubs.current) fn(payload);
   }, []);
 
-  const ingestResult = useCallback((lm: Point[] | null) => {
-    const t = now();
-    lastResultAtRef.current = t;
-    const lumaStats = sampleLuma();
-    const luma = lumaStats ? lumaStats.mean : null;
+  const ingestResult = useCallback((lm: Point[] | null, t: number) => {
+    lastResultAtRef.current = now();
+    /*
+     * Brightness, read LUMA_SAMPLE_HZ times a second rather than every frame (CONFIG.LUMA_SAMPLE_HZ).
+     * `fresh` is this frame's reading when one was taken; `held` is the latest reading, which the
+     * camera-health check needs on every frame.
+     */
+    let fresh: { mean: number; std: number } | null = null;
+    const held0 = lumaHeldRef.current;
+    if (!held0 || t - held0.t >= 1000 / CONFIG.LUMA_SAMPLE_HZ || t < held0.t) {
+      fresh = sampleLuma();
+      if (fresh) lumaHeldRef.current = { t, ...fresh };
+    }
+    const held = lumaHeldRef.current;
+    const luma = held ? held.mean : null;
     // Is the camera seeing anything, and is it seeing the participant? See cameraHealth.ts.
     const health = healthRef.current;
-    if (health.observe({ t, luma, lumaStd: lumaStats ? lumaStats.std : null, face: !!(lm && lm.length > 0) })) {
+    if (health.observe({ t, luma, lumaStd: held ? held.std : null, face: !!(lm && lm.length > 0) })) {
       setCameraBlocked(health.isBlocked());
     }
+    const v = videoRef.current;
+    const aspect = v && v.videoWidth > 0 && v.videoHeight > 0 ? v.videoWidth / v.videoHeight : 1;
+    // The eye-openness trace for the researcher card: one entry per processed frame, CONFIG.EAR_TRACE_MS long.
+    const trace = earTraceRef.current;
     if (lm && lm.length > 0) {
-      const ear = faceEar(lm);
+      const ear = faceEar(lm, aspect);
+      trace.push([t, Number.isFinite(ear) ? ear : null]);
+      if (trialEarsRef.current && Number.isFinite(ear)) trialEarsRef.current.push(ear);
       if (calibrating.current) {
         calibrating.current.samples.push(ear);
         // During calibration the participant is frontal (eyes-only movement), so the nose fraction
@@ -371,12 +519,12 @@ export function useTracking(): TrackingApi {
           offAxis: isOffAxis(pose),
           facePresent: true,
           faceSize: faceSizeFromLandmarks(lm),
-          luma,
+          luma: fresh ? fresh.mean : null,
         });
       }
       emitLive(t, () => {
         const live = agg?.liveCounts(baselineEarRef.current);
-        const size = faceSizeFromLandmarks(lm);
+        const box = faceBoxFromLandmarks(lm);
         return {
           facePresent: true,
           ear: Number.isFinite(ear) ? ear : null,
@@ -385,9 +533,13 @@ export function useTracking(): TrackingApi {
           incomplete: live?.incomplete ?? lastConditionCounts.current.incomplete,
           blinksLive: live != null,
           exposureFps: lastConditionFps.current,
-          // Computed once here rather than twice: the aggregator's own ingest above needs it too,
-          // but that call is on a path that runs regardless and is not worth threading through.
-          faceSize: Number.isFinite(size) ? size : null,
+          faceSize: box ? Math.sqrt(box.w * box.h) : null,
+          faceWidthPx: box && v?.videoWidth ? Math.round(box.w * v.videoWidth) : null,
+          faceBox: box,
+          eyes: {
+            left: LEFT_EYE_EAR.map((i) => lm[i]).filter(Boolean).map((p) => ({ x: p.x, y: p.y })),
+            right: RIGHT_EYE_EAR.map((i) => lm[i]).filter(Boolean).map((p) => ({ x: p.x, y: p.y })),
+          },
           onScreen: gazeNow.isCenter,
           gazeZone: gazeNow.zone ?? null,
           sessionBlinks: sessionBlinksDone.current + (live?.blinks ?? 0),
@@ -397,6 +549,7 @@ export function useTracking(): TrackingApi {
         };
       });
     } else {
+      trace.push([t, null]);
       /*
        * No face. This MUST emit whether or not an aggregator exists.
        *
@@ -413,7 +566,7 @@ export function useTracking(): TrackingApi {
           incomplete: live?.incomplete ?? lastConditionCounts.current.incomplete,
           blinksLive: live != null,
           exposureFps: lastConditionFps.current,
-          faceSize: null, onScreen: false,
+          faceSize: null, faceWidthPx: null, faceBox: null, eyes: null, onScreen: false,
           gazeZone: null,
           sessionBlinks: sessionBlinksDone.current + (live?.blinks ?? 0),
           noFaceForMs: health.noFaceForMs(t),
@@ -422,6 +575,7 @@ export function useTracking(): TrackingApi {
         };
       });
     }
+    while (trace.length && t - trace[0][0] > CONFIG.EAR_TRACE_MS) trace.shift();
     const idleAgg = aggRef.current ?? selfTestAggRef.current;
     if (!(lm && lm.length > 0) && idleAgg) {
       idleAgg.ingest({
@@ -433,10 +587,51 @@ export function useTracking(): TrackingApi {
         offAxis: false,
         facePresent: false,
         faceSize: 0,
-        luma,
+        luma: fresh ? fresh.mean : null,
       });
     }
   }, [emitLive]);
+
+  /**
+   * One camera frame through the tracker.
+   *
+   * The frame's measurements are stamped with the time the camera CAPTURED it (framePump.ts,
+   * frameTimestamp), not the time the result came back. Strictly increasing, so a capture time that
+   * repeats or steps back by a fraction of a millisecond cannot reorder the series.
+   */
+  const fallBackRef = useRef<((reason: string) => void) | null>(null);
+  const process = useCallback(async (meta: FrameMeta) => {
+    const tracker = trackerRef.current;
+    const video = videoRef.current;
+    if (!tracker || !video) return;
+    const stamp = frameTimestamp(meta);
+    const t = Math.max(stamp.t, lastSampleTRef.current + 0.01);
+    lastSampleTRef.current = t;
+    if (pipelineRef.current && pipelineRef.current.timestamp_source == null) pipelineRef.current.timestamp_source = stamp.source;
+    const a = now();
+    let lm: Point[] | null;
+    try {
+      lm = await tracker.detect(video);
+    } catch (err) {
+      /*
+       * A tracker that throws on every frame from the start is not working, however cleanly it
+       * constructed — a GPU delegate whose WebGL context is unusable does exactly that. Ten in a row
+       * before it has ever answered moves to the next backend in the chain; after it has answered,
+       * an error is one lost frame and the stall watchdog judges anything longer.
+       */
+      trackerErrorsRef.current += 1;
+      if (!trackerAnsweredRef.current && trackerErrorsRef.current >= 10 && trackerRef.current === tracker) {
+        fallBackRef.current?.(errorSummary(err));
+      }
+      return;
+    }
+    if (trackerRef.current !== tracker) return; // switched while this frame was in flight
+    trackerAnsweredRef.current = true;
+    trackerErrorsRef.current = 0;
+    const done = now();
+    meterRef.current.processed(done, done - a, !!(lm && lm.length));
+    ingestResult(lm, t);
+  }, [ingestResult]);
 
   /*
    * THE CAMERA STOPPED, AND SOMETHING MUST SAY SO.
@@ -453,19 +648,71 @@ export function useTracking(): TrackingApi {
    * stops the sitting to offer a pause — a resume re-runs camera setup and calibration and redoes the
    * condition. Rows written while it is lost say camera_inactive_reason = 'lost'.
    */
-  const markLost = useCallback(() => {
-    if (lostRef.current) return;
-    lostRef.current = true;
+  const releasePipeline = useCallback(() => {
     watchdogStopRef.current?.();
     watchdogStopRef.current = null;
     pumpRef.current?.stop();
     pumpRef.current = null;
+    /*
+     * The tracker is CLOSED, not just dropped. Neither the pre-flight probe nor the tracker ever
+     * called close(), so every start — a resume, a retry, a camera restarted after it was lost — left
+     * another model, WebGL context and wasm heap behind on a tablet that has to run for ninety
+     * minutes (round 74, R1 D4).
+     */
+    trackerRef.current?.close();
+    trackerRef.current = null;
     const v = videoRef.current;
     if (v?.srcObject) (v.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
+    if (v) { v.srcObject = null; v.remove(); }
     videoRef.current = null;
+    pipelineRef.current = null;
+  }, []);
+
+  const markLost = useCallback(() => {
+    if (lostRef.current) return;
+    lostRef.current = true;
+    releasePipeline();
     setStatus('failed');
     setCameraLostAt(Date.now());
+  }, [releasePipeline]);
+
+  /**
+   * A tracker is about to be replaced: the stretch until the new one answers is a model loading, not
+   * a stalled camera. The stall watchdog arms only once a result has arrived (cameraLiveness.ts), so
+   * clearing the last-result time disarms it until the new tracker's first result. Loading a model
+   * the first time on a tablet (an 11 MB wasm to compile) can take longer than CAMERA_STALL_MS.
+   */
+  const holdWatchdog = () => { lastResultAtRef.current = null; };
+
+  /** Put `tracker` in charge of the frames; the previous one, if any, is closed. */
+  const installTracker = useCallback((tracker: FaceTracker) => {
+    const old = trackerRef.current;
+    trackerRef.current = tracker;
+    trackerErrorsRef.current = 0;
+    trackerAnsweredRef.current = false;
+    if (old && old !== tracker) old.close();
+    if (pipelineRef.current) pipelineRef.current.tracker_backend = tracker.backend;
   }, []);
+
+  /** The tracker failed on its first frames: record why and start the next backend in its chain. */
+  fallBackRef.current = (reason: string) => {
+    const failed = trackerRef.current;
+    const info = pipelineRef.current;
+    if (!failed || !info) return;
+    trackerRef.current = null;
+    holdWatchdog();
+    failed.close();
+    info.tracker_failures.push({ backend: failed.backend, error: `failed on its first frames: ${reason}` });
+    const next = TRACKER_BACKENDS[TRACKER_BACKENDS.indexOf(failed.backend) + 1];
+    if (!next) return; // nothing left: no results, and the stall watchdog reports the camera lost
+    void startTracker(next, null).then(({ tracker, failures }) => {
+      if (pipelineRef.current !== info) { tracker.close(); return; }
+      info.tracker_failures.push(...failures);
+      installTracker(tracker);
+    }).catch((err) => {
+      info.tracker_failures.push({ backend: next, error: errorSummary(err) });
+    });
+  };
 
   /** The start in progress, so a second call (a double tap on "continue") joins it. */
   const startingRef = useRef<Promise<CameraStatus> | null>(null);
@@ -473,16 +720,19 @@ export function useTracking(): TrackingApi {
   const startCamera = useCallback(async (): Promise<CameraStatus> => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       setStatus('unavailable');
+      setStartError('This browser has no camera API.');
       return 'unavailable';
     }
-    // A second start() in one mount must not leave the first one's watchdog running.
-    watchdogStopRef.current?.();
-    watchdogStopRef.current = null;
+    /*
+     * One pipeline at a time. A second start() in one mount — camera setup reached again on a resume —
+     * used to open a second stream and a second model beside the first, whose pump and tracker then
+     * ran on unseen for the rest of the sitting.
+     */
+    releasePipeline();
     let stream: MediaStream | null = null;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: CONFIG.CAMERA_WIDTH, height: CONFIG.CAMERA_HEIGHT, frameRate: CONFIG.CAMERA_FPS },
-      });
+      const requested = { width: CONFIG.CAMERA_WIDTH, height: CONFIG.CAMERA_HEIGHT, frameRate: CONFIG.CAMERA_FPS };
+      stream = await navigator.mediaDevices.getUserMedia({ video: { ...requested } });
       const video = document.createElement('video');
       video.srcObject = stream;
       video.muted = true;
@@ -500,16 +750,30 @@ export function useTracking(): TrackingApi {
       await video.play();
       videoRef.current = video;
 
+      /*
+       * What the camera actually gave. Nothing read this before round 75: the app asked for 1280x720
+       * at 60 fps and recorded only what the tracker achieved, so a camera that delivered 15 fps in a
+       * dim room was indistinguishable from a tracker that could not keep up.
+       */
+      const videoTrack = stream.getVideoTracks()[0];
+      const st = (videoTrack?.getSettings?.() ?? {}) as MediaTrackSettings;
+      let caps: MediaTrackCapabilities | null = null;
+      try { caps = videoTrack?.getCapabilities?.() ?? null; } catch { caps = null; }
+      const numMax = (r: unknown) => {
+        const m = (r as { max?: number } | undefined)?.max;
+        return typeof m === 'number' && Number.isFinite(m) ? m : null;
+      };
+
       /**
        * A track that ENDS mid-condition must be detected.
        *
        * Nothing listened for it. iOS hands the camera to an incoming call, a second app claims it,
-       * or the OS drops it — the track fires `ended`, fm.send() then throws into the pump's empty
-       * catch, and onResults simply stops firing. The aggregator's denominators are its own
-       * samples, so the row still reports camera_active TRUE, effective_fps ~30 and
-       * face_presence_ratio ~0.95, with an incomplete-blink ratio computed over whatever fraction
-       * of the exposure it saw. Indistinguishable from a good row — and the operator manual tells
-       * the operator to check exactly those two fields.
+       * or the OS drops it — the track fires `ended`, the tracker then throws into the pump's empty
+       * catch, and results simply stop. The aggregator's denominators are its own samples, so the
+       * row still reports camera_active TRUE, effective_fps ~30 and face_presence_ratio ~0.95, with
+       * an incomplete-blink ratio computed over whatever fraction of the exposure it saw.
+       * Indistinguishable from a good row — and the operator manual tells the operator to check
+       * exactly those two fields.
        */
       lostRef.current = false;
       setCameraLostAt(null);
@@ -528,34 +792,49 @@ export function useTracking(): TrackingApi {
           }
         });
       }
-      // Small canvas for downsampled luminance sampling (lighting QC) — cheap to read each frame.
+      // Small canvas for downsampled luminance sampling (lighting QC).
       const lumaCanvas = document.createElement('canvas');
       lumaCanvas.width = 32;
       lumaCanvas.height = 24;
       lumaCanvasRef.current = lumaCanvas;
-
-      /**
-       * Dynamic import keeps MediaPipe out of the critical path and lets the app build/run without
-       * it. The constructor is resolved through faceMeshLoader rather than read off the module
-       * namespace directly, because the package publishes onto a global under Rollup and onto the
-       * module exports under esbuild — see that file for why reading `mod.FaceMesh` here shipped a
-       * build that could not track a single blink.
-       *
-       * Asset paths are base-relative for the same class of reason: `/mediapipe/${f}` is
-       * root-absolute, so it only resolves when the app is served from `/`. This app is served
-       * from a GitHub Pages project site at `https://user.github.io/repo/`, where every wasm and
-       * model fetch would 404 — while getUserMedia still succeeds and the preview still shows a
-       * face, so the operator ticks every checklist box and the session records nothing.
-       */
-      const FaceMeshCtor = await loadFaceMesh();
-      const fm = new FaceMeshCtor({ locateFile: faceMeshAssetPath });
-      fm.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-      // One ingest per result → EAR is sampled at the real FaceMesh throughput.
-      fm.onResults((r) => ingestResult(r.multiFaceLandmarks?.[0] ?? null));
-      faceMeshRef.current = fm;
+      lumaHeldRef.current = null;
 
       /*
-       * Drive MediaPipe once per CAMERA frame.
+       * The tracker: the backend this device uses (tracking/trackerChoice.ts), started with its
+       * fallback chain (tracking/trackers.ts). Models and wasm are imported lazily and resolved
+       * base-relative, for the reasons faceMeshLoader.ts records: a root-absolute path 404s on the
+       * GitHub Pages project site while getUserMedia still succeeds and the preview still shows a face.
+       * The first frame is used as a probe only when one is already decoded.
+       */
+      const choice = resolveTracker(CONFIG.TRACKER_BACKEND, loadTrackerChoice());
+      const stored = choice.source === 'stored' ? loadTrackerChoice() : null;
+      const { tracker, failures } = await startTracker(choice.backend, video.readyState >= 2 ? video : null);
+      pipelineRef.current = {
+        tracker_backend: tracker.backend,
+        tracker_requested: choice.backend,
+        tracker_selection: choice.source,
+        tracker_failures: failures,
+        tracker_trials: stored?.trials ?? null,
+        tracker_measured_at: stored?.measuredAt ?? null,
+        camera_requested: requested,
+        camera_settings: {
+          width: typeof st.width === 'number' ? st.width : null,
+          height: typeof st.height === 'number' ? st.height : null,
+          frameRate: typeof st.frameRate === 'number' ? Math.round(st.frameRate * 10) / 10 : null,
+        },
+        camera_capabilities: caps ? {
+          width_max: numMax(caps.width), height_max: numMax(caps.height), frame_rate_max: numMax(caps.frameRate),
+        } : null,
+        timestamp_source: null,
+        started_at: Date.now(),
+      };
+      installTracker(tracker);
+      meterRef.current.resetCounter();
+      lastSampleTRef.current = -Infinity;
+      earTraceRef.current = [];
+
+      /*
+       * Drive the tracker once per CAMERA frame.
        *
        * This was requestAnimationFrame, which fires at the display's refresh rate and sent whatever
        * the video element was holding without asking whether it was new. A 30 fps camera on a 60 Hz
@@ -566,8 +845,11 @@ export function useTracking(): TrackingApi {
        */
       pumpRef.current = startFramePump(
         video as unknown as PumpVideo,
-        async () => { if (videoRef.current) await fm.send({ image: videoRef.current }); },
-        { everyN: CONFIG.PROCESS_EVERY_N_FRAMES },
+        process,
+        {
+          everyN: CONFIG.PROCESS_EVERY_N_FRAMES,
+          onPresented: (meta) => meterRef.current.delivered(meta.now, meta.presentedFrames),
+        },
       );
 
       /*
@@ -587,6 +869,7 @@ export function useTracking(): TrackingApi {
         onVisible: () => { void videoRef.current?.play().catch(() => { /* the stall check decides */ }); },
       });
 
+      setStartError(null);
       setStatus('active');
       return 'active';
     } catch (err) {
@@ -596,22 +879,19 @@ export function useTracking(): TrackingApi {
        * camera light stayed on, and when the OS later ended that track the sitting was told its
        * camera had been LOST, although it never produced a frame.
        */
-      watchdogStopRef.current?.();
-      watchdogStopRef.current = null;
-      pumpRef.current?.stop();
-      pumpRef.current = null;
       for (const t of stream?.getTracks() ?? []) {
         t.removeEventListener('ended', markLost);
         t.stop();
       }
-      videoRef.current = null;
+      releasePipeline();
       const name = (err as { name?: string })?.name ?? '';
       const denied = name === 'NotAllowedError' || name === 'PermissionDeniedError';
       const s: CameraStatus = denied ? 'denied' : 'failed';
+      setStartError(errorSummary(err, 400));
       setStatus(s);
       return s;
     }
-  }, [ingestResult, markLost]);
+  }, [process, markLost, releasePipeline, installTracker]);
 
   // One camera at a time: two concurrent starts orphaned the first one's pump and watchdog.
   const start = useCallback((): Promise<CameraStatus> => {
@@ -622,14 +902,91 @@ export function useTracking(): TrackingApi {
   }, [startCamera]);
 
   const stop = useCallback(() => {
-    watchdogStopRef.current?.();
-    watchdogStopRef.current = null;
-    pumpRef.current?.stop();
-    pumpRef.current = null;
-    const v = videoRef.current;
-    if (v?.srcObject) (v.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
-    videoRef.current = null;
+    releasePipeline();
+  }, [releasePipeline]);
+
+  const pipelineInfo = useCallback((): CameraPipelineRecord | null => {
+    const p = pipelineRef.current;
+    return p ? { ...p, tracker_failures: [...p.tracker_failures] } : null;
   }, []);
+
+  /** A comparison in progress, so a second tap joins it. */
+  const comparingRef = useRef<Promise<TrackerTrial[] | null> | null>(null);
+  const compareTrackers = useCallback((onProgress?: (p: { backend: TrackerBackend; index: number; total: number }) => void) => {
+    if (comparingRef.current) return comparingRef.current;
+    const run = async (): Promise<TrackerTrial[] | null> => {
+      const info = pipelineRef.current;
+      const video = videoRef.current;
+      if (CONFIG.TRACKER_BACKEND !== 'auto' || !info || !video) return null;
+      const trials: TrackerTrial[] = [];
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      for (let i = 0; i < TRACKER_BACKENDS.length; i++) {
+        const backend = TRACKER_BACKENDS[i];
+        onProgress?.({ backend, index: i, total: TRACKER_BACKENDS.length });
+        if (pipelineRef.current !== info) return null; // the camera stopped
+        const t0 = now();
+        let tracker: FaceTracker;
+        try {
+          // The one being measured runs ALONE: the previous tracker is closed first, so two models
+          // never compete for the main thread inside one measurement.
+          trackerRef.current?.close();
+          trackerRef.current = null;
+          holdWatchdog();
+          tracker = await createTracker(backend);
+          if (video.readyState >= 2) await tracker.detect(video);
+        } catch (err) {
+          trials.push({ backend, ok: false, error: errorSummary(err), initMs: null,
+            cameraFps: null, trackerFps: null, faceFps: null, processMsP50: null, processMsP95: null, faceShare: null, earNoise: null });
+          continue;
+        }
+        const initMs = Math.round(now() - t0);
+        if (pipelineRef.current !== info) { tracker.close(); return null; }
+        installTracker(tracker);
+        await wait(CONFIG.TRACKER_TRIAL_WARMUP_MS);
+        const win = meterRef.current.open();
+        trialEarsRef.current = [];
+        await wait(CONFIG.TRACKER_TRIAL_MS);
+        const sum = win.close();
+        const ears = trialEarsRef.current ?? [];
+        trialEarsRef.current = null;
+        const r1 = (x: number | null) => (x == null ? null : Math.round(x * 10) / 10);
+        trials.push({
+          backend, ok: true, initMs,
+          cameraFps: r1(sum.cameraFps), trackerFps: r1(sum.trackerFps), faceFps: r1(sum.faceFps),
+          processMsP50: r1(sum.processMsP50), processMsP95: r1(sum.processMsP95),
+          faceShare: sum.framesProcessed > 0 ? Math.round((sum.framesWithFace / sum.framesProcessed) * 100) / 100 : null,
+          earNoise: earNoise(ears),
+        });
+      }
+      const best = pickFastest(trials);
+      if (pipelineRef.current !== info) return null;
+      /*
+       * Start the winner — or, if none could be measured, the one that was running before, so the
+       * camera is not left with no tracker at all (the stall watchdog would then report it lost).
+       */
+      const next = best ?? info.tracker_requested;
+      if (trackerRef.current?.backend !== next) {
+        try {
+          holdWatchdog();
+          const { tracker, failures } = await startTracker(next, video.readyState >= 2 ? video : null);
+          if (pipelineRef.current !== info) { tracker.close(); return null; }
+          info.tracker_failures.push(...failures);
+          installTracker(tracker);
+        } catch (err) {
+          info.tracker_failures.push({ backend: next, error: errorSummary(err) });
+        }
+      }
+      const measuredAt = Date.now();
+      if (best) saveTrackerChoice({ backend: best, measuredAt, appVersion: APP_VERSION, trials });
+      info.tracker_requested = best ?? info.tracker_requested;
+      info.tracker_selection = 'measured' as TrackerSelectionSource;
+      info.tracker_trials = trials;
+      info.tracker_measured_at = measuredAt;
+      return trials;
+    };
+    comparingRef.current = run().finally(() => { comparingRef.current = null; });
+    return comparingRef.current;
+  }, [installTracker]);
 
   /**
    * The open-eye baseline, measured in the posture the outcome is measured in.
@@ -741,13 +1098,19 @@ export function useTracking(): TrackingApi {
   const selfTestAggRef = useRef<EyeMetricsAggregator | null>(null);
   const beginSelfTest = useCallback(() => {
     selfTestAggRef.current = new EyeMetricsAggregator();
+    selfTestWindowRef.current?.close();
+    selfTestWindowRef.current = meterRef.current.open();
   }, []);
-  const endSelfTest = useCallback(() => {
+  const endSelfTest = useCallback((): SelfTestObservation => {
     const agg = selfTestAggRef.current;
     selfTestAggRef.current = null;
-    if (!agg) return { blinkOnsets: [], fps: null, facePresence: null };
+    const win = selfTestWindowRef.current;
+    selfTestWindowRef.current = null;
+    // What the camera and the tracker did over the same seconds, so a low rate says WHY (selfTest.ts).
+    const pipeline = win ? pipelineFields(win.close(), pipelineRef.current) : null;
+    if (!agg) return { blinkOnsets: [], fps: null, facePresence: null, pipeline };
     const cov = agg.coverage();
-    return { blinkOnsets: agg.blinkEvents(baselineEarRef.current).map((e) => e.onset_ms), fps: cov.fps, facePresence: cov.facePresence };
+    return { blinkOnsets: agg.blinkEvents(baselineEarRef.current).map((e) => e.onset_ms), fps: cov.fps, facePresence: cov.facePresence, pipeline };
   }, []);
 
   const beginCondition = useCallback(() => {
@@ -755,6 +1118,8 @@ export function useTracking(): TrackingApi {
     healthRef.current.resetCounts(now());
     mutedMsRef.current = 0;
     if (mutedSinceRef.current != null) mutedSinceRef.current = now();
+    conditionWindowRef.current?.close();
+    conditionWindowRef.current = meterRef.current.open();
   }, []);
 
   /** What the camera-health monitor saw during the exposure now ending, for the eye record. */
@@ -772,6 +1137,9 @@ export function useTracking(): TrackingApi {
 
   const endCondition = useCallback(
     async (conditionId: string, sessionId: string) => {
+      const win = conditionWindowRef.current;
+      conditionWindowRef.current = null;
+      const meterSummary = win?.close() ?? null;
       if (lostRef.current || status !== 'active' || !aggRef.current) {
         // Camera-health fields stay blank here: they describe frames, and none were being measured.
         await put('eye_metrics', disabledEyeMetrics(conditionId, sessionId, lostRef.current ? 'lost' : 'not_running'));
@@ -807,7 +1175,13 @@ export function useTracking(): TrackingApi {
       // The rate the exposure ACTUALLY achieved, taken from the record that was written, not
       // recomputed — so the monitor and the export cannot disagree about it.
       lastConditionFps.current = typeof record.effective_fps === 'number' ? record.effective_fps : null;
-      await put('eye_metrics', { ...record, ...healthFields() });
+      /*
+       * What the camera and the tracker did during this exposure (round 75): frames delivered,
+       * processed and skipped, processing time, the tracker that ran and the camera's actual mode.
+       * effective_fps says how often the eye was measured; these say why it was not more often.
+       */
+      const pipeline = meterSummary ? pipelineFields(meterSummary, pipelineRef.current) : {};
+      await put('eye_metrics', { ...record, ...healthFields(), ...pipeline });
     },
     [status],
   );
@@ -828,6 +1202,7 @@ export function useTracking(): TrackingApi {
   return {
     status,
     subscribeLive, start, stop, measureEarBaseline, mediaSource,
+    startError, pipelineInfo, compareTrackers,
     beginGazeCalibration, sampleGazeTarget, endGazeCalibration,
     beginCondition, endCondition,
     beginSelfTest, endSelfTest,

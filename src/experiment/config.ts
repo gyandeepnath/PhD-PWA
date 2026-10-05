@@ -280,6 +280,18 @@ const BASE_CONFIG = {
   EAR_BASELINE_MS: 6000,
 
   // Camera.
+  /**
+   * Capture size REQUESTED (ideal, not exact). Kept at 1280x720 after measuring a smaller one
+   * (round 75, docs/AUDIT_FINDINGS.md), because of what the landmark models actually consume. Read
+   * from the vendored model files themselves: both face detectors take the whole frame at 128x128,
+   * and the landmark models take a crop around the face resized to 192x192 (legacy attention mesh) or
+   * 256x256 (Face Landmarker). At the protocol's ~55 cm a face spans roughly 200 px of a 1280-wide
+   * frame — about the landmark input already — and half that at 640x480, where the crop is upsampled
+   * about twofold and the eyelids, a few pixels apart, lose half their pixels. The saving from the
+   * smaller frame was small (Face Landmarker CPU ~54 vs ~60 ms a frame; legacy ~113 vs ~121 ms in
+   * headless Chromium), so it does not pay for that. The face's width in camera pixels is shown on the
+   * camera-setup screen, so the tablet's real value can be read off rather than assumed.
+   */
   CAMERA_WIDTH: 1280,
   CAMERA_HEIGHT: 720,
   /**
@@ -308,6 +320,32 @@ const BASE_CONFIG = {
    * never fired `ended`. Time the page spends hidden does not count.
    */
   CAMERA_STALL_MS: 5000,
+  /**
+   * Which face tracker runs (tracking/trackers.ts): 'auto' measures the three backends on the device
+   * at its first camera setup and keeps the fastest for that device (tracking/trackerChoice.ts);
+   * 'tasks-gpu', 'tasks-cpu' or 'legacy' fixes it for every device and disables the measurement.
+   *
+   * FREEZE IT BEFORE THE PILOT. The blink classifier's validation is valid only for the tracker it was
+   * run on, and the backends are not the same instrument. Once the tablet's measurements are in, set
+   * this to the backend the tablet chose and keep it for the pilot, the validation sub-study and the
+   * main study. Every condition row records the backend that actually ran (tracker_backend).
+   */
+  TRACKER_BACKEND: 'auto' as 'auto' | 'tasks-gpu' | 'tasks-cpu' | 'legacy',
+  /** How long each backend runs on the live camera when they are compared, after its warm-up. */
+  TRACKER_TRIAL_MS: 3000,
+  TRACKER_TRIAL_WARMUP_MS: 700,
+  /**
+   * How often the frame's brightness is read back for the lighting and blocked-camera checks, Hz.
+   *
+   * It was read on EVERY frame: a draw of the video into a canvas and a synchronous getImageData,
+   * which on the main thread took 3-20 ms a frame in headless Chromium (round 75) — up to a third of
+   * the time the tracker itself took — for a quantity that changes when the room light does. The
+   * blocked-camera check needs the picture dark for 3 s (cameraHealth.ts), so a 250 ms grid loses
+   * nothing it can act on.
+   */
+  LUMA_SAMPLE_HZ: 4,
+  /** How much eye-openness history the researcher card's trace shows, ms. */
+  EAR_TRACE_MS: 10_000,
   /**
    * How long a single sitting takes, as ONE string: the consent text, the landing page and the
    * session form all print this.
@@ -364,6 +402,8 @@ const E2E_OVERRIDES: Partial<typeof BASE_CONFIG> = {
   ADAPTATION_SWITCH_POLARITY_MS: 300,
   ANNOTATION_SEGMENT_MS: 400,
   EAR_BASELINE_MS: 400,
+  TRACKER_TRIAL_MS: 1500,
+  TRACKER_TRIAL_WARMUP_MS: 300,
 };
 
 export const CONFIG = isE2E() ? { ...BASE_CONFIG, ...E2E_OVERRIDES } : BASE_CONFIG;

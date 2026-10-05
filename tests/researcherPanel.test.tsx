@@ -16,7 +16,7 @@ import type { LiveTrackingStats } from '@/tracking/useTracking';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const stats = (over: Partial<LiveTrackingStats> = {}): LiveTrackingStats => ({
-  facePresent: true, ear: 0.3, earRatio: 1, blinks: 12, incomplete: 3, blinksLive: true, fps: 31,
+  facePresent: true, ear: 0.3, earRatio: 1, blinks: 12, incomplete: 3, blinksLive: true, faceFps: 31, cameraFps: 31, trackerFps: 31, processMsP50: 20, processMsP95: 25, frameCountSource: "presented-frames", backend: "tasks-cpu", captureWidth: 1280, captureHeight: 720, faceWidthPx: 210, faceBox: null, eyes: null, earTrace: [], baselineEar: 0.3,
   exposureFps: 30, faceSize: 0.2, onScreen: true, sessionBlinks: 40, gazeZone: 'cc', noFaceForMs: 0,
   luma: 120, blocked: false, ...over,
 });
@@ -235,5 +235,48 @@ describe('camera state in words', () => {
     expect(clock(3_725_000)).toBe('1:02:05');
     expect(clock(125_000, false)).toBe('2 min');
     expect(clock(null)).toBe('—');
+  });
+
+  /*
+   * The live camera picture (round 75, investigator request): in the CARD only, on the tracker's own
+   * stream, and never on a condition screen — a participant watching their own face is not doing the
+   * task.
+   */
+  describe('the live camera picture', () => {
+    const stream = { id: 'tracker-stream' } as unknown as MediaStream;
+
+    it('the card shows the tracker\'s own stream, the eye-openness trace and the pipeline rates', () => {
+      const m = mount({ getStream: () => stream });
+      act(() => { m.q('researcher-panel-collapsed')!.click(); });
+      m.push(stats());
+      expect(m.q('researcher-feed')).not.toBeNull();
+      const video = m.host.querySelector('[data-testid=researcher-feed-video]') as HTMLVideoElement;
+      expect(video.srcObject).toBe(stream);                 // the same stream, not a second camera
+      expect(video.muted).toBe(true);
+      expect(m.q('ear-trace')).not.toBeNull();
+      expect(m.q('diag-camera')?.textContent).toMatch(/31 fps · 1280×720/);
+      expect(m.q('diag-tracker')?.textContent).toMatch(/31 fps · 20 ms/);
+      expect(m.q('diag-backend')?.textContent).toMatch(/Face Landmarker \(CPU\)/);
+      m.unmount();
+    });
+
+    it('is never drawn on a condition screen, open or not', () => {
+      const m = mount({ getStream: () => stream, onStimulus: true, ink: { ink: '#000000', ground: '#ffffff' } });
+      m.push(stats());
+      expect(m.host.querySelector('video')).toBeNull();
+      act(() => { m.q('researcher-panel-collapsed')!.click(); });   // the strip
+      m.push(stats());
+      expect(m.q('researcher-panel-strip')).not.toBeNull();
+      expect(m.host.querySelector('video')).toBeNull();
+      expect(m.host.querySelector('canvas')).toBeNull();
+      m.unmount();
+    });
+
+    it('is not drawn while the camera is off', () => {
+      const m = mount({ getStream: () => null, cameraStatus: 'unavailable' });
+      act(() => { m.q('researcher-panel-collapsed')!.click(); });
+      expect(m.q('researcher-camera')).toBeNull();
+      m.unmount();
+    });
   });
 });

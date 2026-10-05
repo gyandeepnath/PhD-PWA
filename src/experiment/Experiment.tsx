@@ -114,6 +114,16 @@ const STAGE_LABEL: Record<Stage, string> = {
 
 export default function Experiment({ resume, onExit }: ExperimentProps) {
   const tracking = useTracking();
+  /** The tracker's stream, for the camera-setup preview and the researcher card's live picture. */
+  const { mediaSource: trackerMedia } = tracking;
+  const trackerStream = useCallback(() => trackerMedia()?.stream ?? null, [trackerMedia]);
+  /** The tracker as camera setup sees it: start it there, preview its own stream, measure its backends. */
+  const { status: camStatus, start: camStart, stop: camStop, startError: camError, subscribeLive: camLive,
+    pipelineInfo: camInfo, compareTrackers: camCompare } = tracking;
+  const cameraSetupTracking = useMemo(() => ({
+    status: camStatus, start: camStart, stop: camStop, startError: camError, subscribeLive: camLive,
+    stream: trackerStream, pipelineInfo: camInfo, compareTrackers: camCompare,
+  }), [camStatus, camStart, camStop, camError, camLive, trackerStream, camInfo, camCompare]);
   const [machine, setMachine] = useState<MachineState>(initialState());
   const [session, setSession] = useState<SessionRecord | null>(null);
   const [enrolment, setEnrolment] = useState(0);
@@ -1504,7 +1514,21 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
        */
       view = session?.media_consent?.camera_metrics === true ? (
         <CameraSetup
-          onAllow={async () => { await tracking.start(); advance(); }}
+          camera={cameraSetupTracking}
+          onContinue={async () => {
+            /*
+             * What the camera and the tracker are running as, kept with the sitting (round 75): the
+             * backend and how it was chosen (and the comparison, when one was run), what was asked of
+             * the camera and what it gave. Per-condition rows carry the backend too; this is the
+             * sitting-level record the export and the integrity audit read.
+             */
+            if (session) {
+              const fresh = { ...(await get('sessions', session.session_id) ?? session), camera_pipeline: tracking.pipelineInfo() } as SessionRecord;
+              await put('sessions', fresh);
+              setSession(fresh);
+            }
+            advance();
+          }}
           onSkip={() => advanceOrResume()}
           retains={{
             setupPhotos: session?.media_consent?.setup_photos === true,
@@ -1533,7 +1557,10 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             onRunning={setProcedureRunning}
             halted={portrait}
             onDone={async (r) => {
-              const fresh = { ...(await get('sessions', session.session_id) ?? session), camera_selftest: { ...r, at: Date.now() } } as SessionRecord;
+              const base = await get('sessions', session.session_id) ?? session;
+              // The pipeline record is refreshed too: a tracker that fell back since camera setup is
+              // recorded as the one that actually ran.
+              const fresh = { ...base, camera_selftest: { ...r, at: Date.now() }, camera_pipeline: tracking.pipelineInfo() ?? base.camera_pipeline ?? null } as SessionRecord;
               await put('sessions', fresh);
               setSession(fresh);
               setSelfTesting(false);
@@ -2155,8 +2182,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    * answers or the sliders or where a target could appear, and during the measured set-up procedures:
    * the calibration dots and self-test (the whole calibration stage) and the colour-vision plates.
    */
+  /*
+   * The calibration stage is locked only while a measured procedure RUNS (the dots, the flashing self-
+   * test dot; procedureRunning). Its intro and result screens are set-up screens like any other, and the
+   * operator needs the card's live picture there most: a failed calibration or self-test is the moment
+   * to look at the face, the light and the frame rates (round 75). The whole stage used to be locked.
+   */
   const panelLocked = (isInLoop(machine.stage) && machine.stage !== 'READING_TASK' && machine.stage !== 'ADAPTATION')
-    || machine.stage === 'CALIBRATION' || procedureRunning;
+    || procedureRunning;
   const calibrationDark = machine.stage === 'CALIBRATION' && tracking.status === 'active' && !!session;
   const panelInk = stageInk
     ?? (calibrationDark ? { ground: '#0a0a12', ink: '#ffffff' } : panelLocked ? { ground: '#F8F7F5', ink: UI_TEXT.ink } : null);
@@ -2176,6 +2209,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       {machine.stage !== 'SESSION_INIT' && machine.stage !== 'EXPORT_DASHBOARD' && (
         <ResearcherPanel
           subscribe={tracking.subscribeLive}
+          getStream={trackerStream}
           cameraStatus={tracking.status}
           cameraBlocked={tracking.cameraBlocked}
           cameraLost={tracking.cameraLostAt != null}

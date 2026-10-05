@@ -283,6 +283,25 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
         + 'auditable rather than silent.');
     }
 
+    /*
+     * --- one face tracker per participant (round 75) -----------------------------------------
+     *
+     * The tracker is chosen by measurement on the device and kept per device (trackerChoice.ts), and
+     * can be frozen in config; it can still differ between a participant's sittings if the trackers
+     * were measured again in between, a backend failed and fell back, or the sittings ran on two
+     * tablets. The backends are not the same instrument — absolute EAR differs between them by a few
+     * per cent — and the conditions of one sitting would then be measured on one model and the rest
+     * on another: a confound of tracker with condition inside the participant. Reported, not
+     * repaired; a sensitivity analysis can drop or model it.
+     */
+    const trackers = new Set(ordered.flatMap((b) => (b.eyeMetrics ?? []).map((e) => e.tracker_backend).filter((t): t is string => !!t)));
+    if (trackers.size > 1) {
+      add('warning', 'mixed_tracker_backends',
+        `This participant's conditions were measured on more than one face tracker (${[...trackers].sort().join(', ')}). `
+        + 'Absolute eye-aspect ratios differ between trackers, so condition contrasts within this participant are '
+        + 'confounded with the tracker for the conditions on each side. Freeze CONFIG.TRACKER_BACKEND before data collection.');
+    }
+
     const levels = ordered.map((b) => b.session.ambient_illumination_level ?? null);
     // How many illumination levels this data was collected under; see JoinExpectation.
     const nLevels = expect.illuminationLevels ?? N_ILLUMINATION_BLOCKS;

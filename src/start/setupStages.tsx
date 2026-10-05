@@ -24,11 +24,15 @@ import {
   isBelowMinimum, currentScale, freshScale, refitScale, displayMode, isInstalledDisplay, screenFitScale,
   screenFill, DESIGN_WIDTH, DESIGN_HEIGHT, type DisplayMode,
 } from '@/lib/viewportScale';
-import { startFaceProbe, type FaceProbeResult, type FaceProbeStatus } from '@/screening/faceProbe';
+import type { LiveTrackingStats } from '@/tracking/useTracking';
+import type { TrackerTrial } from '@/tracking/trackerChoice';
+import { TRACKER_LABEL, type TrackerBackend } from '@/tracking/trackers';
+import { FPS_TIER_THRESHOLD } from '@/tracking/blink';
+import { LiveFeed, EarTrace, PipelineReadout } from '@/components/LiveCamera';
 import { DeviceBox } from '@/components/DeviceBox';
 import { ScreenCalibration, type ScreenCalibrationResult } from './ScreenCalibration';
 import { BuildInfo, useUpdateWaiting } from '@/components/BuildInfo';
-import type { CameraStatus } from '@/storage/types';
+import type { CameraStatus, CameraPipelineRecord } from '@/storage/types';
 
 /**
  * The setup screens must SCROLL when they are taller than the viewport.
@@ -492,21 +496,56 @@ export function ParticipantProfile({ onSubmit, initial, onBack }: {
 }
 
 // ---- CAMERA SETUP (with live preview) ----
-const FACE_LABEL: Record<FaceProbeStatus, string> = {
+/**
+ * What camera setup needs from the tracker (tracking/useTracking.ts). Narrow, so the screen can be
+ * rendered in a test without a camera.
+ */
+export interface CameraSetupTracking {
+  status: CameraStatus;
+  start: () => Promise<CameraStatus>;
+  stop: () => void;
+  startError: string | null;
+  subscribeLive: (fn: (s: LiveTrackingStats) => void) => () => void;
+  stream: () => MediaStream | null;
+  pipelineInfo: () => CameraPipelineRecord | null;
+  compareTrackers: (onProgress?: (p: { backend: TrackerBackend; index: number; total: number }) => void) => Promise<TrackerTrial[] | null>;
+}
+
+type FaceStatus = 'loading' | 'searching' | 'detected';
+const FACE_LABEL: Record<FaceStatus, string> = {
   loading: 'Loading face tracking…',
   searching: 'No face detected yet',
   detected: 'Face detected',
-  unavailable: 'Face tracking UNAVAILABLE',
 };
-const FACE_TONE: Record<FaceProbeStatus, string> = {
+const FACE_TONE: Record<FaceStatus, string> = {
   loading: '#c98a22',
   searching: '#c98a22',
   detected: '#22c97a',
-  unavailable: '#e64c4c',
 };
 
-export function CameraSetup({ onAllow, onSkip, retains, onBack }: {
-  onAllow: () => void;
+/**
+ * Camera setup, run on THE tracker the sitting will use.
+ *
+ * The preview used to be a separate camera: its own getUserMedia stream (1280x720 at 30 fps) and its
+ * own FaceMesh "probe", pumped on requestAnimationFrame, never closed, and torn down before the real
+ * tracker started on a second stream with different settings. So the face box an operator checked
+ * here said nothing about the pipeline that then measured the participant — and the two models were
+ * left running side by side for the rest of the sitting (round 74, R1 D4). Now "Enable camera" starts
+ * the tracking pipeline itself, the preview is a second <video> on its stream, the face box and the
+ * eyelid points are the tracker's own, and the numbers below the picture are the pipeline's: what the
+ * camera delivers, what the tracker processes, in how many frames it finds the face, and which of
+ * those is the limit. "Continue" hands the running camera to calibration; nothing restarts.
+ *
+ * The tracker is chosen by measurement on this device the first time (tracking/trackerChoice.ts):
+ * each backend runs for a few seconds on this picture and the fastest is kept. The operator can
+ * measure again; the comparison is recorded with the sitting. When CONFIG.TRACKER_BACKEND freezes the
+ * tracker, there is nothing to measure and the screen says which one is fixed.
+ */
+export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
+  camera: CameraSetupTracking;
+  /** The face is centred: go on, with the camera running. */
+  onContinue: () => void;
+  /** Continue without the camera. The camera is stopped first. */
   onSkip: () => void;
   /** The photo/video grants actually in force, so the privacy notice can tell the truth. */
   retains?: { setupPhotos: boolean; annotationVideo: boolean };
@@ -516,54 +555,78 @@ export function CameraSetup({ onAllow, onSkip, retains, onBack }: {
    */
   onBack?: () => void;
 }) {
-  const [step, setStep] = useState<'notice' | 'preview' | 'denied'>('notice');
-  /** Live face detection in the preview — see startFaceProbe for why this is not cosmetic. */
-  const [face, setFace] = useState<FaceProbeResult>({ status: 'loading', box: null, ear: null, error: null });
+  const [step, setStep] = useState<'notice' | 'starting' | 'preview' | 'denied'>(
+    camera.status === 'active' ? 'preview' : 'notice');
+  const [errMsg, setErrMsg] = useState('');
+  const [live, setLive] = useState<LiveTrackingStats | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [comparing, setComparing] = useState<{ backend: TrackerBackend; index: number; total: number } | null>(null);
+  const [trials, setTrials] = useState<TrackerTrial[] | null>(null);
+  const [info, setInfo] = useState<CameraPipelineRecord | null>(null);
+  const autoMeasured = useRef(false);
 
   useEffect(() => {
-    if (step !== 'preview' || !videoRef.current) return;
-    const probe = startFaceProbe(videoRef.current, setFace);
-    return () => probe.stop();
+    if (step !== 'preview') return;
+    setStream(camera.stream());
+    setInfo(camera.pipelineInfo());
+    return camera.subscribeLive((s) => setLive(s));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
-  const [errMsg, setErrMsg] = useState('');
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
 
-  const stopPreview = () => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
+  const measure = async () => {
+    setComparing({ backend: 'tasks-gpu', index: 0, total: 3 });
+    try {
+      const t = await camera.compareTrackers((p) => setComparing(p));
+      if (t) setTrials(t);
+    } finally {
+      setComparing(null);
+      setInfo(camera.pipelineInfo());
+    }
   };
-  useEffect(() => () => stopPreview(), []);
+
+  /*
+   * First camera setup on this device, tracker not frozen: measure straight away, once. The choice is
+   * kept on the device (trackerChoice.ts), so later sittings start with it and this does not repeat.
+   */
+  useEffect(() => {
+    if (step !== 'preview' || autoMeasured.current) return;
+    const i = camera.pipelineInfo();
+    if (CONFIG.TRACKER_BACKEND === 'auto' && i?.tracker_selection === 'default') {
+      autoMeasured.current = true;
+      void measure();
+    } else if (i?.tracker_trials) {
+      setTrials(i.tracker_trials as TrackerTrial[]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   const requestCamera = async () => {
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      setErrMsg('No camera API is available on this device/browser.');
-      setStep('denied');
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, frameRate: 30 } });
-      streamRef.current = stream;
-      setStep('preview');
-      // Attach after the <video> mounts.
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          void videoRef.current.play();
-        }
-      }, 30);
-    } catch (e) {
-      const name = (e as { name?: string })?.name ?? '';
-      setErrMsg(name === 'NotAllowedError' || name === 'PermissionDeniedError'
-        ? 'Camera permission was denied. You can retry, or continue without the camera.'
-        : 'The camera could not be started. You can continue without it.');
-      setStep('denied');
-    }
+    setStep('starting');
+    const st = await camera.start();
+    if (st === 'active') { setStep('preview'); return; }
+    setErrMsg(st === 'denied'
+      ? 'Camera permission was denied. You can retry, or continue without the camera.'
+      : st === 'unavailable'
+        ? 'No camera API is available on this device/browser.'
+        : `The camera or the face tracker could not be started, so no blink, gaze or head-position data `
+          + `can be collected — the primary outcome would be empty for every condition. Check the device is `
+          + `fully set up (see DEPLOYMENT.md section 4) before running a participant.`
+          + (camera.startError ? ` Details: ${camera.startError}` : ''));
+    setStep('denied');
+  };
+
+  const faceStatus: FaceStatus = !live ? 'loading' : live.facePresent ? 'detected' : 'searching';
+  const r0 = (x: number | null | undefined) => (x == null ? '—' : String(Math.round(x)));
+  const selectionText: Record<CameraPipelineRecord['tracker_selection'], string> = {
+    config: 'fixed for the study (CONFIG.TRACKER_BACKEND)',
+    measured: 'measured on this tablet just now',
+    stored: 'measured on this tablet earlier',
+    default: 'not measured on this tablet yet',
   };
 
   return (
     <div className={shell}>
-      <div style={{ width: '100%', margin: '0 auto', maxWidth: 760 }}>
+      <div style={{ width: '100%', margin: '0 auto', maxWidth: 880 }}>
         <h1 className="font-serif text-4xl font-light">Camera setup</h1>
 
         {step === 'notice' && (
@@ -604,56 +667,91 @@ export function CameraSetup({ onAllow, onSkip, retains, onBack }: {
           </>
         )}
 
+        {step === 'starting' && (
+          <p className={`mt-4 ${help}`} data-testid="camera-starting">Starting the camera and the face tracker…</p>
+        )}
+
         {step === 'preview' && (
           <>
             <p className={`mt-3 ${help}`}>
-              Check the preview: your whole face should be centred, in frame, and well-lit.
+              Check the preview: your whole face should be centred, in frame, and well-lit. The yellow
+              points on the eyelids are what the blink measure is computed from.
             </p>
-            {/*
-              A REAL face box, drawn from FaceMesh, not a hard-coded "Camera active" chip.
-              Three documents tell the operator to check for a face box before starting; there was
-              none, and no detection at all. This also probes MediaPipe itself — the model is not
-              otherwise loaded until after the preview closes, so a device whose model files did not
-              precache passed every documented check and then collected a study with no ocular data.
-            */}
-            <div style={{ marginTop: 12, borderRadius: 16, overflow: 'hidden', background: '#000', width: 480, maxWidth: '100%', aspectRatio: '4 / 3', position: 'relative' }}>
-              <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
-              {face.box && (
-                <div
-                  data-testid="face-box"
-                  style={{
-                    position: 'absolute',
-                    // Mirrored to match the preview's scaleX(-1).
-                    left: `${(1 - face.box.x - face.box.w) * 100}%`,
-                    top: `${face.box.y * 100}%`,
-                    width: `${face.box.w * 100}%`,
-                    height: `${face.box.h * 100}%`,
-                    border: '2px solid #22c97a',
-                    borderRadius: 8,
-                    boxShadow: '0 0 0 9999px rgba(0,0,0,0.12)',
-                  }}
-                />
-              )}
-              <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.55)', borderRadius: 20, padding: '4px 10px' }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: FACE_TONE[face.status] }} />
-                <span data-testid="face-status" style={{ color: '#fff', fontFamily: 'Roboto, ui-sans-serif, sans-serif', fontSize: 15 }}>
-                  {FACE_LABEL[face.status]}
-                </span>
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start', marginTop: 12 }}>
+              <div style={{ position: 'relative', width: 480, maxWidth: '100%' }}>
+                <LiveFeed stream={stream} stats={live} width={480} testid="setup-feed" />
+                {/* The face box is drawn on the picture by LiveFeed; this element states it for tests
+                    and screen readers, from the tracker's own result. */}
+                {live?.faceBox && <span data-testid="face-box" style={{ display: 'none' }} />}
+                <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.55)', borderRadius: 20, padding: '4px 10px' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: FACE_TONE[faceStatus] }} />
+                  <span data-testid="face-status" style={{ color: '#fff', fontFamily: 'Roboto, ui-sans-serif, sans-serif', fontSize: 15 }}>
+                    {FACE_LABEL[faceStatus]}
+                  </span>
+                </div>
+              </div>
+              <div data-testid="camera-diagnostics" style={{ flex: '1 1 300px', minWidth: 280, background: '#1a1a2e', color: '#fff', borderRadius: 12, padding: '12px 14px' }}>
+                <strong style={{ fontSize: 14, letterSpacing: 0.5 }}>CAMERA AND TRACKER</strong>
+                <div style={{ marginTop: 6 }}><PipelineReadout stats={live} floor={FPS_TIER_THRESHOLD} /></div>
+                <div style={{ marginTop: 6 }}><EarTrace stats={live} width={260} height={48} /></div>
+                <div style={{ marginTop: 8, fontSize: 14, opacity: 0.85, lineHeight: 1.5 }} data-testid="camera-mode">
+                  Asked for {info ? `${info.camera_requested.width}×${info.camera_requested.height} at ${info.camera_requested.frameRate} fps` : '—'};
+                  the camera gave {info?.camera_settings.width ? `${info.camera_settings.width}×${info.camera_settings.height}` : '—'}
+                  {info?.camera_settings.frameRate ? ` at ${info.camera_settings.frameRate} fps` : ''}
+                  {info?.camera_capabilities?.frame_rate_max ? ` (its maximum: ${info.camera_capabilities.frame_rate_max} fps)` : ''}.
+                  {' '}Tracker {selectionText[info?.tracker_selection ?? 'default']}.
+                  {info?.tracker_failures.length ? ` Passed over: ${info.tracker_failures.map((f) => `${TRACKER_LABEL[f.backend as TrackerBackend] ?? f.backend} (${f.error})`).join('; ')}.` : ''}
+                </div>
               </div>
             </div>
-            {face.status === 'unavailable' && (
-              <div className="mt-3 rounded-xl border border-[#e64c4c] bg-[#fff0f0] p-3 font-sans text-base leading-relaxed" style={{ color: '#7a1010' }}>
-                The face-tracking model could not be loaded on this device, so no blink, gaze or
-                head-position data can be collected in this session — the primary outcome would be
-                empty for every condition. Check the device is fully set up (see DEPLOYMENT.md
-                section 4) before running a participant.{face.error ? ` Details: ${face.error}` : ''}
+
+            <div className="mt-4 rounded-xl border border-[#cdd8f0] bg-white p-4 font-sans text-base" data-testid="tracker-choice">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <strong>Face tracker on this tablet</strong>
+                {CONFIG.TRACKER_BACKEND === 'auto' ? (
+                  <button type="button" data-testid="tracker-measure" disabled={comparing != null}
+                    className="rounded-xl border border-[#1a1a2e] bg-white px-5 py-2 font-sans text-base text-[#1a1a2e] disabled:opacity-50"
+                    onClick={() => void measure()}>
+                    {comparing ? `Measuring ${comparing.index + 1} of ${comparing.total}: ${TRACKER_LABEL[comparing.backend]}…` : 'Measure trackers again'}
+                  </button>
+                ) : (
+                  <span data-testid="tracker-frozen">Fixed: {TRACKER_LABEL[CONFIG.TRACKER_BACKEND]}</span>
+                )}
               </div>
-            )}
+              {comparing && (
+                <p className={`mt-2 ${help}`}>Keep the face in view: each tracker runs for a few seconds on this picture.</p>
+              )}
+              {trials && (
+                <table data-testid="tracker-trials" style={{ width: '100%', marginTop: 8, fontSize: 15, borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', opacity: 0.75 }}>
+                      <th>Tracker</th><th>face fps</th><th>processed fps</th><th>ms / frame</th><th>95% ms</th><th>face in view</th><th>EAR noise</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trials.map((t) => (
+                      <tr key={t.backend} data-testid={`trial-${t.backend}`} style={{ fontWeight: info?.tracker_backend === t.backend ? 700 : 400 }}>
+                        <td>{TRACKER_LABEL[t.backend]}{info?.tracker_backend === t.backend ? ' — in use' : ''}</td>
+                        {t.ok ? (
+                          <>
+                            <td>{r0(t.faceFps)}</td><td>{r0(t.trackerFps)}</td><td>{r0(t.processMsP50)}</td><td>{r0(t.processMsP95)}</td>
+                            <td>{t.faceShare == null ? '—' : `${Math.round(t.faceShare * 100)}%`}</td>
+                            <td>{t.earNoise == null ? '—' : `${(t.earNoise * 100).toFixed(1)}%`}</td>
+                          </>
+                        ) : <td colSpan={6}>could not start: {t.error}</td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
             <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <button className={btn} style={{ background: '#1a1a2e' }} onClick={() => { stopPreview(); onAllow(); }}>
+              <button className={btn} style={{ background: '#1a1a2e' }} disabled={comparing != null} onClick={() => onContinue()}>
                 My face is centred — continue →
               </button>
-              <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" onClick={() => { stopPreview(); onSkip(); }}>
+              <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" disabled={comparing != null}
+                onClick={() => { camera.stop(); onSkip(); }}>
                 Continue without camera
               </button>
             </div>
@@ -662,7 +760,7 @@ export function CameraSetup({ onAllow, onSkip, retains, onBack }: {
 
         {step === 'denied' && (
           <>
-            <div className="mt-4 rounded-xl border border-[#f5a62366] bg-[#fff8ec] p-4 font-sans text-base leading-relaxed" style={{ color: UI_TEXT.amber }}>
+            <div data-testid="camera-start-error" className="mt-4 rounded-xl border border-[#f5a62366] bg-[#fff8ec] p-4 font-sans text-base leading-relaxed" style={{ color: UI_TEXT.amber }}>
               {errMsg}
             </div>
             <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>

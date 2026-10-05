@@ -38,9 +38,9 @@ describe('buildIdentity', () => {
 });
 
 describe('where the version and the build come from', () => {
-  it('package.json is 2.2.0 — Round 74 changed the stimulus geometry', () => {
+  it('package.json is 2.3.0 — Round 75 changed the face tracker and what the eye columns mean', () => {
     const pkg = JSON.parse(src('package.json'));
-    expect(pkg.version).toBe('2.2.0');
+    expect(pkg.version).toBe('2.3.0');
     const lock = JSON.parse(src('package-lock.json'));
     expect(lock.version).toBe(pkg.version);
     expect(lock.packages[''].version).toBe(pkg.version);

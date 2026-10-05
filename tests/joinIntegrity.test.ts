@@ -529,3 +529,23 @@ describe('the pooled join check runs the per-sitting audit', () => {
     expect(r.participants[0].excluded_by).toContain('audit_ocular_requires_consent');
   });
 });
+
+describe('a participant measured on more than one face tracker (round 75)', () => {
+  const withTracker = (b: SessionBundle, backend: string) => {
+    (b as unknown as { eyeMetrics: Array<Record<string, unknown>> }).eyeMetrics = b.conditions.map((c) => ({ condition_id: c.condition_id, tracker_backend: backend }));
+    return b;
+  };
+  it('is reported as a warning naming both trackers, without excluding the participant', () => {
+    const [a, b] = complete('P09');
+    const r = checkJoin([withTracker(a, 'tasks-gpu'), withTracker(b, 'legacy')], EXPECT);
+    const issue = r.issues.find((i) => i.code === 'mixed_tracker_backends');
+    expect(issue?.severity).toBe('warning');
+    expect(issue?.participant_id).toBe('P09');
+    expect(issue?.detail).toMatch(/legacy, tasks-gpu/);
+  });
+  it('is silent when both sittings ran on the same tracker', () => {
+    const [a, b] = complete('P10');
+    const r = checkJoin([withTracker(a, 'tasks-cpu'), withTracker(b, 'tasks-cpu')], EXPECT);
+    expect(r.issues.some((i) => i.code === 'mixed_tracker_backends')).toBe(false);
+  });
+});

@@ -59,6 +59,23 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
   const validIds = new Set(conditions.map((c) => c.condition_id));
 
   /*
+   * ---- one face tracker per sitting (round 75)
+   *
+   * The tracker can change inside a sitting only by failing over (a backend that throws on its first
+   * frames gives way to the next) or by the trackers being measured again at a resumed camera setup.
+   * Either way the conditions on each side were measured on different models, whose absolute
+   * eye-aspect ratios differ by a few per cent. Reported per sitting; the pooled check reports it per
+   * participant across sittings.
+   */
+  const eyeTrackers = new Set((bundle.eyeMetrics ?? []).map((e) => e.tracker_backend).filter((t): t is string => !!t));
+  if (eyeTrackers.size > 1) {
+    add('warning', 'tracker_consistent',
+      `Conditions in this sitting were measured on different face trackers (${[...eyeTrackers].sort().join(', ')}). `
+      + 'Compare tracker_backend in 07_eye_metrics.csv; condition contrasts across the change are confounded with the tracker.',
+      (bundle.eyeMetrics ?? []).filter((e) => e.tracker_backend).map((e) => e.condition_id));
+  }
+
+  /*
    * ---- the light-adaptation control must actually have been delivered
    *
    * `adaptation_ms_before` is what the participant saw; `adaptation_ms_planned` is what the protocol

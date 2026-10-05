@@ -263,7 +263,21 @@ export interface SessionRecord {
   camera_selftest?: {
     cued: number; detected: number; extra: number; fps: number | null; facePresence: number | null;
     pass: boolean; reasons: string[]; at: number;
+    /**
+     * What the camera and the tracker did during the test (round 75), and which stage limited the
+     * face-solved rate: 'camera' (it delivered too few frames), 'tracker' (it could not process them
+     * all), 'face' (processed, but the face was not found), 'undetermined', or null (rate met).
+     * Absent on sittings recorded before it existed.
+     */
+    pipeline?: PipelineWindowFields | null;
+    limit?: 'camera' | 'tracker' | 'face' | 'undetermined' | null;
   } | null;
+  /**
+   * The camera and face tracker this sitting ran on, as recorded when the camera last started (or when
+   * the trackers were last compared at camera setup). See tracking/useTracking.ts. Absent when the
+   * camera was not used and on sittings recorded before it existed.
+   */
+  camera_pipeline?: CameraPipelineRecord | null;
   /** Informed consent recorded. */
   consent_given: boolean;
   consent_time: number | null;
@@ -797,7 +811,69 @@ export interface BlinkBins {
   second_half_blink_rate: number | null;
 }
 
-export interface EyeMetricsRecord {
+/**
+ * What the camera and the face tracker actually ran as (tracking/useTracking.ts, round 75).
+ *
+ * Nothing about the camera was recorded before: the app asked for 1280x720 at 60 fps and stored only
+ * what the tracker achieved, so a camera that delivered 15 fps and a tracker that could not keep up
+ * with 30 left identical data.
+ */
+export interface CameraPipelineRecord {
+  /** The tracker backend that ran: Face Landmarker on the GPU or CPU, or the legacy FaceMesh. */
+  tracker_backend: 'tasks-gpu' | 'tasks-cpu' | 'legacy';
+  /** The backend that was asked for, before any fallback. */
+  tracker_requested: 'tasks-gpu' | 'tasks-cpu' | 'legacy';
+  /**
+   * How it was chosen: 'config' (frozen by CONFIG.TRACKER_BACKEND), 'measured' (compared on this
+   * device during this sitting's camera setup), 'stored' (compared on this device earlier), 'default'.
+   */
+  tracker_selection: 'config' | 'measured' | 'stored' | 'default';
+  /** Backends tried and passed over, and why (could not initialise, or failed on its first frames). */
+  tracker_failures: Array<{ backend: string; error: string }>;
+  /** The comparison the choice came from (tracking/trackerChoice.ts TrackerTrial), when there was one. */
+  tracker_trials: Array<{
+    backend: string; ok: boolean; error?: string; initMs: number | null; cameraFps: number | null;
+    trackerFps: number | null; faceFps: number | null; processMsP50: number | null; processMsP95: number | null;
+    faceShare: number | null; earNoise: number | null;
+  }> | null;
+  tracker_measured_at: number | null;
+  /** What getUserMedia was asked for (ideal values). */
+  camera_requested: { width: number; height: number; frameRate: number };
+  /** What the camera track reported it gave (MediaStreamTrack.getSettings()). */
+  camera_settings: { width: number | null; height: number | null; frameRate: number | null };
+  /** The camera's reported maxima (getCapabilities()); null where the browser does not report them. */
+  camera_capabilities: { width_max: number | null; height_max: number | null; frame_rate_max: number | null } | null;
+  /** Where EAR sample times come from: the camera's capture time, or the frame callback's time. */
+  timestamp_source: 'capture' | 'callback' | null;
+  started_at: number;
+}
+
+/**
+ * The pipeline's throughput over one stretch — a condition's exposure, or the self-test. Every field is
+ * optional: rows written before round 75 do not have them, and absent means not recorded, never zero.
+ */
+export interface PipelineWindowFields {
+  tracker_backend?: string | null;
+  /** Frames the camera delivered per second (requestVideoFrameCallback presentedFrames). */
+  camera_fps_delivered?: number | null;
+  /** Frames the tracker processed per second, with or without a face. effective_fps is the face-solved rate. */
+  tracker_fps?: number | null;
+  frames_delivered?: number | null;
+  frames_processed?: number | null;
+  /** Delivered frames the tracker never saw, because it was still working on an earlier one. */
+  frames_skipped?: number | null;
+  /** Wall time of one tracker call, median and 95th percentile, ms. */
+  process_ms_p50?: number | null;
+  process_ms_p95?: number | null;
+  camera_setting_width?: number | null;
+  camera_setting_height?: number | null;
+  camera_setting_fps?: number | null;
+  /** How frames_delivered was counted: the browser's frame counter, or one per callback (a lower bound). */
+  frame_count_source?: 'presented-frames' | 'callbacks' | null;
+  timestamp_source?: 'capture' | 'callback' | null;
+}
+
+export interface EyeMetricsRecord extends PipelineWindowFields {
   condition_id: string;
   session_id: string;
   camera_active: boolean;

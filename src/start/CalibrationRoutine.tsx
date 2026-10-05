@@ -170,7 +170,9 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
   const target = step?.kind === 'gaze_target' ? step : null;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#0a0a12', overflow: 'hidden' }}>
+    // Leaves the column the researcher card takes when the operator opens it on the intro or result
+    // (--vl-panel-dock, ResearcherPanel.tsx); the dots themselves run with the card locked shut.
+    <div style={{ position: 'fixed', inset: 0, left: 'var(--vl-panel-dock, 0px)', background: '#0a0a12', overflow: 'hidden' }}>
       {thinFit != null && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', textAlign: 'center', padding: 24 }}>
           <h1 className="font-serif" style={{ fontSize: 28, fontWeight: 300 }}>Gaze calibration is not trustworthy</h1>
