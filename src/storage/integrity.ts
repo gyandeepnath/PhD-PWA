@@ -22,6 +22,9 @@ import {
   STUDY_TABLET_PANEL_LONG_MM, VIEWING_DISTANCE_CM,
 } from '@/lib/physicalCalibration';
 
+/** Builds whose pre-flight drew the viewing-distance field holding the nominal 55 (Round 76). */
+const DISTANCE_PREFILLED_BUILDS = new Set(['2.2.0', '2.3.0']);
+
 export type IntegritySeverity = 'error' | 'warning' | 'info';
 
 export interface IntegrityFinding {
@@ -317,6 +320,20 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
           + 'of the two; their stimulus_scale and layout_viewport will differ from the other conditions too.',
           moved.map((c) => c.condition_id));
       }
+    }
+    /*
+     * Builds 2.2.0 and 2.3.0 drew the distance field already holding the nominal 55, and Continue took
+     * it untouched: on those builds a 55 is either a tape reading or nobody measuring, and nothing in the
+     * record says which. From 2.3.1 the field starts empty (Round 76). The build is the one stamped when
+     * the sitting was created, which is the one pre-flight ran on — it follows the profile directly.
+     */
+    if (s.viewing_distance_cm === VIEWING_DISTANCE_CM.nominal
+      && DISTANCE_PREFILLED_BUILDS.has(s.provenance?.app_version ?? '')) {
+      add('warning', 'physical_viewing_distance',
+        `the recorded viewing distance is ${VIEWING_DISTANCE_CM.nominal} cm on build ${s.provenance.app_version}, `
+        + `whose pre-flight field was prefilled with ${VIEWING_DISTANCE_CM.nominal}: it may be the untouched `
+        + 'default rather than a tape reading. Check the run sheet; if no distance was measured, treat the '
+        + '"at distance" angles (reading_x_height_arcmin, stim_ecc_deg_at_distance) as nominal, not measured.', ref);
     }
     if (s.viewing_distance_cm != null && !isPlausibleViewingDistanceCm(s.viewing_distance_cm)) {
       add('warning', 'physical_calibration',

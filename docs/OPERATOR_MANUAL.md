@@ -114,8 +114,10 @@ by itself, because that would reload the app in the middle of a sitting. So:
 - Chair and table height fixed. Same setup for every participant.
 - Tablet in its stand at a **viewing distance of 50 to 60 cm**. Measure it with a tape, from the
   participant's eye to the centre of the screen, seated as they will read; do not judge by eye.
-  **Type the measured distance into pre-flight** (the field starts at 55): every "at distance"
-  angle in the export uses it.
+  **Type the measured distance into pre-flight.** The field starts empty and pre-flight will not
+  continue until a distance is typed — it is never filled in for you, because a figure nobody
+  measured would be saved as the participant's distance. Every "at distance" angle in the export
+  uses it.
 - The participant should be able to sit comfortably without leaning in. If they lean, head-pose and
   face-size measures drift and the camera loses them.
 

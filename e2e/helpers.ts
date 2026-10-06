@@ -304,15 +304,17 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
  * glass to lay a ruler on, so the reading is the one the study tablet's panel (236.7 mm across its long
  * side) would give for the screen this browser reports: 500 design px x the scale x 236.7 mm / the
  * screen's long side in CSS px — about 103 mm in the installed app at any pixel ratio. It agrees with
- * the panel, so the integrity audit has nothing to say about it.
+ * the panel, so the integrity audit has nothing to say about it. The viewing distance starts empty (a
+ * prefilled 55 was saved as a measurement nobody took), so a tape reading is typed too: `distanceCm`.
  */
-export async function measureScreen(page: Page): Promise<void> {
+export async function measureScreen(page: Page, distanceCm = '55'): Promise<void> {
   if (!(await page.getByTestId('calibration-bar-mm').count())) return;
   const mm = await page.evaluate(() => {
     const scale = Number(getComputedStyle(document.documentElement).getPropertyValue('--vl-scale')) || 1;
     return 500 * scale * (((2880 / 309) * 25.4) / Math.max(screen.width, screen.height));
   });
   await setInput(page, 'calibration-bar-mm', mm.toFixed(2));
+  await setInput(page, 'viewing-distance', distanceCm);
   await expect(page.getByTestId('calibration-result')).toBeVisible();
 }
 

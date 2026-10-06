@@ -53,7 +53,13 @@ export function ScreenCalibration({ scale, screen, onChange }: {
 }) {
   const [barText, setBarText] = useState('');
   const [scaleAtEntry, setScaleAtEntry] = useState(scale);
-  const [distText, setDistText] = useState(String(VIEWING_DISTANCE_CM.nominal));
+  /*
+   * Empty, not the nominal 55. A prefilled field let an operator who never took the tape out press
+   * Continue and have 55 saved as the participant's MEASURED distance, indistinguishable in the record
+   * and the export from a real reading — the very substitution sessionViewingDistanceMm promises never
+   * to make. A distance has to be typed to be recorded.
+   */
+  const [distText, setDistText] = useState('');
   const [skipAck, setSkipAck] = useState(false);
 
   const barMm = parseNum(barText);
@@ -122,11 +128,13 @@ export function ScreenCalibration({ scale, screen, onChange }: {
         <label style={{ display: 'block', flex: '1 1 260px' }}>
           <span className="font-sans text-[15px] font-medium text-[#3a3a4a]" style={{ display: 'block' }}>Viewing distance, eye to screen (cm)</span>
           <input data-testid="viewing-distance" inputMode="decimal" value={distText}
+            placeholder={`e.g. ${VIEWING_DISTANCE_CM.nominal}`}
             onChange={(e) => setDistText(e.target.value)} style={INPUT_STYLE} />
-          <span className={boxText} style={{ display: 'block', marginTop: 4, color: distanceOk ? undefined : '#8a1c14' }}>
+          <span className={boxText}
+            style={{ display: 'block', marginTop: 4, color: distanceOk || distText.trim() === '' ? undefined : '#8a1c14' }}>
             Tape-measure from the participant&apos;s eye to the centre of the screen, seated as they will
             read. {VIEWING_DISTANCE_CM.min}–{VIEWING_DISTANCE_CM.max} cm; the protocol&apos;s nominal
-            distance is {VIEWING_DISTANCE_CM.nominal}.
+            distance is {VIEWING_DISTANCE_CM.nominal}, but type what you measure.
           </span>
         </label>
       </div>

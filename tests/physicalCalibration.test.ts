@@ -242,6 +242,20 @@ describe('the export carries the calibration and computes from it', () => {
     expect(rows(buildExportFiles(b), '02_conditions.csv')[0].reading_x_height_arcmin).toBe('');
   });
 
+  it('a 55 from a build that prefilled the field is flagged as possibly untouched; from 2.3.1 it is not', () => {
+    const at = (version: string, cm: number) => {
+      const b = buildFixtureBundle();
+      b.session = { ...b.session, viewing_distance_cm: cm, provenance: { ...b.session.provenance, app_version: version } };
+      return auditBundle(b).findings.filter((x) => x.check === 'physical_viewing_distance');
+    };
+    for (const v of ['2.2.0', '2.3.0']) {
+      expect(at(v, 55)).toHaveLength(1);
+      expect(at(v, 55)[0].detail).toMatch(/untouched default/);
+      expect(at(v, 58)).toHaveLength(0);
+    }
+    expect(at('2.3.1', 55)).toHaveLength(0);
+  });
+
   it('an implausible reading is reported and not used; one off the panel is reported and used', () => {
     const b = buildFixtureBundle();
     b.session = { ...b.session, mm_per_css_px: 2.055, calibration_bar_mm: 1027.5 };

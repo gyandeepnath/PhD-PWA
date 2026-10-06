@@ -36,18 +36,33 @@ function mount(scale = 1, screen: string | null = '1152x720') {
 }
 
 describe('ScreenCalibration', () => {
-  it('draws the bar at 500 design px and asks for it in millimetres, distance prefilled at 55', () => {
+  it('draws the bar at 500 design px and asks for it in millimetres; the distance starts empty', () => {
     const m = mount();
     expect((m.q('calibration-bar') as unknown as HTMLElement).style.width).toBe('500px');
-    expect(m.q('viewing-distance')!.value).toBe('55');
+    // Never the nominal 55 standing in for a tape reading: nothing typed, nothing recorded.
+    expect(m.q('viewing-distance')!.value).toBe('');
+    expect(m.q('viewing-distance')!.placeholder).toBe('e.g. 55');
+    expect(m.last.r!.viewingDistanceCm).toBeNull();
     expect(m.text()).toMatch(/about 102\.8 mm/);
     // Nothing measured, nothing acknowledged: no Continue.
     expect(m.last.r!.ok).toBe(false);
   });
 
+  it('a ruler reading, or the acknowledged skip, still needs a typed distance', () => {
+    const m = mount();
+    m.type('calibration-bar-mm', '102.75');
+    expect(m.last.r).toMatchObject({ ok: false, viewingDistanceCm: null });
+    const s = mount();
+    s.tick('calibration-skip-ack');
+    expect(s.last.r).toMatchObject({ ok: false, skipped: true, viewingDistanceCm: null });
+    s.type('viewing-distance', '61');
+    expect(s.last.r).toMatchObject({ ok: true, skipped: true, viewingDistanceCm: 61 });
+  });
+
   it('accepts a plausible reading and reports what follows from it', () => {
     const m = mount();
     m.type('calibration-bar-mm', '102.75');
+    m.type('viewing-distance', '55');
     expect(m.last.r).toMatchObject({ ok: true, skipped: false, viewingDistanceCm: 55 });
     expect(m.last.r!.calibration!.mmPerCssPx).toBeCloseTo(0.2055, 6);
     expect(m.q('calibration-result')!.textContent).toMatch(/14\.9′ of arc at 55 cm/);
@@ -58,6 +73,7 @@ describe('ScreenCalibration', () => {
   it('refuses a misread ruler, and offers the acknowledged skip instead', () => {
     const m = mount();
     m.type('calibration-bar-mm', '10.3');
+    m.type('viewing-distance', '55');
     expect(m.q('calibration-range-error')).not.toBeNull();
     expect(m.last.r!.ok).toBe(false);
     m.tick('calibration-skip-ack');
@@ -75,6 +91,7 @@ describe('ScreenCalibration', () => {
 
   it('a reading taken at one scale is refused once the bar is redrawn at another', () => {
     const m = mount(1.66, '1920x1200');
+    m.type('viewing-distance', '55');
     m.type('calibration-bar-mm', '102.3');
     expect(m.last.r!.calibration!.scale).toBe(1.66);
     m.render(1.56);                         // the address bar came back
@@ -88,6 +105,7 @@ describe('ScreenCalibration', () => {
   it('says when a plausible reading does not look like the study tablet', () => {
     const m = mount();
     m.type('calibration-bar-mm', '130');
+    m.type('viewing-distance', '55');
     expect(m.last.r!.ok).toBe(true);
     expect(m.q('calibration-panel-note')!.textContent).toMatch(/27% longer/);
   });

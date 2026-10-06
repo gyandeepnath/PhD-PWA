@@ -351,8 +351,9 @@ export interface SessionRecord {
   /** True when pre-flight's ruler check was skipped with an acknowledgement; false when measured. */
   calibration_skipped?: boolean | null;
   /**
-   * Eye-to-screen distance in cm, tape-measured at pre-flight with the participant seated (the field is
-   * prefilled with the protocol's nominal 55). The distance every "at distance" angle in the export
+   * Eye-to-screen distance in cm, tape-measured at pre-flight with the participant seated. The field
+   * starts empty and must be typed (Round 76); builds 2.2.0 and 2.3.0 prefilled it with the nominal 55,
+   * so a 55 from those builds may be the untouched default (integrity: physical_viewing_distance). The distance every "at distance" angle in the export
    * uses. Absent on sittings from earlier builds — which recorded no distance at all.
    */
   viewing_distance_cm?: number | null;
