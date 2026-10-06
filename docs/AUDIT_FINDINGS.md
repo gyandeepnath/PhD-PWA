@@ -5548,3 +5548,57 @@ Verified on f42653f:
   largest is 11.76 MB.
 
 The entry itself changes only this file.
+
+## Round 76 — review fixes for Round 74 (the ruler check, what is saved, what the audit says)
+
+A review of the Round 74 calibration work found four defects. Each was reproduced or checked against
+the code before it was fixed. None was rejected.
+
+1. **The viewing distance was prefilled with 55 and saved as a measurement (major).** The field
+   started at the protocol's nominal 55 cm and Continue accepted it untouched. An operator who never
+   took the tape out saved 55 as `viewing_distance_cm`, and neither the record nor the export could
+   tell that from a reading. That broke the promise in `sessionViewingDistanceMm` and in the codebook:
+   "never the nominal 55 cm standing in for one". A unit test accepted 55 without anything being
+   typed. **Fix (d24215e):** the field starts empty (placeholder "e.g. 55"), and pre-flight will not
+   continue until a distance is typed, whether the ruler reading was given or skipped. The version is
+   now **2.3.1** so the builds that prefilled the field can be named. On a 2.2.0 or 2.3.0 sitting, a
+   recorded 55 is reported by the integrity audit (`physical_viewing_distance`) as possibly the
+   untouched default. The codebook, the session type and the operator manual say so. The e2e driver
+   types the distance it "measures".
+2. **Nothing read the calibration back (minor).** Saving `calibration_skipped: false` for every
+   sitting left all 1290 unit tests green, and no e2e spec read the stored session or the export.
+   **Fix (c8d9e74):** `e2e/physicalCalibration.spec.ts` completes pre-flight twice and drives the
+   first display through its reaction-time block. Then it checks the session row and the 01, 02 and
+   08 columns:
+   - a ruler reading with a typed 62 cm at 1920x1200, pixel ratio 1.5: `measured`, mm per CSS px =
+     panel / 1920, the at-distance angles below the 55 cm ones, no audit findings;
+   - the acknowledged skip: `calibration_skipped` true, the measurement columns empty,
+     `assumed_study_tablet_panel` in 01, 02 and 08, one `physical_calibration` finding.
+
+   The skipped-as-false mutation fails it, and so does the mutation in item 4.
+3. **"Predates the ruler check" for sittings that never reached it (minor).** The calibration fields
+   are written only when pre-flight completes. A current-build sitting withdrawn at consent or the
+   profile therefore looked like a pre-Round-74 sitting, and the audit called it one. **Fix
+   (ac23113):** if `preflight_complete` is false, the audit now says that pre-flight was not
+   completed. That is true of both kinds of sitting. "Predates" is kept for sittings that completed
+   pre-flight but have no calibration fields. A unit test covers each case.
+4. **The no-ruler fallback mixed two moments (minor).** `screen_resolution` was stamped at session
+   creation, while `device_pixel_ratio` was overwritten at pre-flight. The panel fallback divides the
+   panel by the one and scales by the other. So if the display-size setting changed between the
+   profile and pre-flight, the fallback was off by the ratio of the two ratios. **Fix (91fc7bc):** the
+   two are re-read together at pre-flight. A unit test shows the coherent pair gives panel / 1920, and
+   that the straddling pair 2.2.0 and 2.3.0 could save is off by exactly 2.0/1.5. The e2e test above
+   changes the ratio from 2.0 to 1.5 between the profile and pre-flight (CDP device-metrics override)
+   and fails if the re-read is removed.
+
+**Not measured on the device.** As in Round 74, nothing here was read off the study tablet. Its
+pixel ratio and CSS screen size are still to come from the device diagnostics box.
+
+**Citations.** None added.
+
+Verified on c8d9e74:
+- `npm run verify` is green: 83 files, 1370 unit tests; the corpus, codebook, export and analysis
+  gates pass.
+- 40 e2e tests passed in these specs: physicalCalibration, displayMode, setupNavigation, fillScreen
+  (all six viewports), fullRun, edge, sessionManager, splitSession and stimulusGeometry. The full
+  suite was not re-run.
