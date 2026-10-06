@@ -5673,3 +5673,9 @@ binds there — camera, tracker, both — is what the self-test and camera setup
 the numbers are still to come from the tablet.
 
 **Citations.** None added.
+
+Verified on 4270a30 + e95103b:
+- `npm run verify` is green: 84 files, 1377 unit tests; the corpus, codebook, export and analysis
+  gates pass.
+- 6 e2e tests passed: cameraDiagnostics (all three), trackerTelemetry, trackerEquivalence and
+  fullRun. The full suite was not re-run.
