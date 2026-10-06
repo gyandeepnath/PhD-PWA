@@ -193,12 +193,41 @@ async function createTasks(delegate: 'GPU' | 'CPU'): Promise<FaceTracker> {
 }
 
 /**
+ * Whatever was thrown, as words. Not every rejection is an Error: when a tracker's wasm loader script
+ * fails to load, Emscripten and FilesetResolver reject with the script element's error EVENT, whose
+ * String() is the literal '[object Event]' — which is what the trials table, 'Passed over: …' and the
+ * export's tracker_failures used to record (round 77), losing the one fact the column exists for.
+ */
+function describeError(err: unknown): string {
+  if (err instanceof Error) return err.message || err.name;
+  if (typeof err === 'string') return err;
+  if (err && typeof err === 'object') {
+    const o = err as { type?: unknown; target?: unknown; message?: unknown };
+    if (typeof o.message === 'string' && o.message) return o.message;
+    // An Event (or anything shaped like one): say what happened and to which asset.
+    if (typeof o.type === 'string' && o.type) {
+      const t = o.target as { src?: unknown; href?: unknown } | null | undefined;
+      const url = typeof t?.src === 'string' && t.src ? t.src : typeof t?.href === 'string' && t.href ? t.href : null;
+      return `${o.type} event loading ${url ?? 'a tracker asset'}`;
+    }
+    const text = String(err);
+    if (!/^\[object \w+\]$/.test(text)) return text;
+    try {
+      const json = JSON.stringify(err);
+      if (json && json !== '{}') return json;
+    } catch { /* circular: fall through */ }
+    return `${text.slice(8, -1)} with no message`;
+  }
+  return String(err);
+}
+
+/**
  * An error as one short line. The wasm libraries put a whole Emscripten stack trace into the message,
  * which is unreadable on the camera-setup screen and bloats the export; the first line names the
  * failure.
  */
 export function errorSummary(err: unknown, max = 160): string {
-  const raw = err instanceof Error ? err.message : String(err);
+  const raw = describeError(err);
   const first = raw.split(/\n| at (?:Error|jsStackTrace|stackTrace|abort)\b/)[0].trim();
   return first.length > max ? `${first.slice(0, max - 1)}…` : first;
 }

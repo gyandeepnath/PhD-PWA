@@ -129,4 +129,25 @@ describe('errorSummary', () => {
     expect(errorSummary(e)).toBe('abort(Module.noExitRuntime has been replaced)');
     expect(errorSummary('x'.repeat(500)).length).toBe(160);
   });
+
+  it('names a failed script load instead of recording [object Event] (round 77)', async () => {
+    const { errorSummary } = await import('@/tracking/trackers');
+    // What Emscripten / FilesetResolver reject with when the loader <script> fails: its error Event.
+    const script = document.createElement('script');
+    script.src = 'https://example.test/tasks-vision/vision_wasm_internal.js';
+    const ev = new Event('error');
+    Object.defineProperty(ev, 'target', { value: script });
+    expect(errorSummary(ev)).toBe('error event loading https://example.test/tasks-vision/vision_wasm_internal.js');
+    expect(errorSummary(new Event('error'))).toBe('error event loading a tracker asset');
+  });
+
+  it('never records a bare [object …] for other non-Error values', async () => {
+    const { errorSummary } = await import('@/tracking/trackers');
+    expect(errorSummary({ message: 'wasm fetch failed' })).toBe('wasm fetch failed');
+    expect(errorSummary({ code: 3 })).toBe('{"code":3}');
+    expect(errorSummary({})).toBe('Object with no message');
+    const e = new Error('');
+    expect(errorSummary(e)).toBe('Error');
+    for (const v of [new Event('error'), {}, { code: 3 }]) expect(errorSummary(v)).not.toMatch(/\[object /);
+  });
 });
