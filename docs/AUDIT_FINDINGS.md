@@ -5602,3 +5602,74 @@ Verified on c8d9e74:
 - 40 e2e tests passed in these specs: physicalCalibration, displayMode, setupNavigation, fillScreen
   (all six viewports), fullRun, edge, sessionManager, splitSession and stimulusGeometry. The full
   suite was not re-run.
+
+## Round 77 — review fixes for Round 75 (the camera pipeline, its diagnostics, the live picture)
+
+A review of the Round 75 camera work found six defects. Each was checked against the code (and, for
+item 6, measured again) before it was fixed. None was rejected.
+
+1. **The self-test blamed the camera when the tracker was the tighter limit (major).**
+   `pipelineLimit` returned `camera` whenever the camera delivered fewer than 25 frames a second,
+   whatever the tracker did. The review counted the frames itself (Chromium fake camera, Face
+   Landmarker CPU): 20.0 delivered and 11.1 processed a second, 73 ms a call. The app's numbers agreed,
+   but its sentence said "the camera is the limit, not the processor. Give the face more light". A
+   30 fps camera would still have given about 11 processed frames, so the advice could not help — and
+   this is the investigator's own question ("is the camera faulty?"). **Fix (55216ce):** the camera
+   alone is named only while the tracker processes at least 80% of what it delivers
+   (`TRACKER_KEEPS_UP`, an engineering tolerance for the two rates' slightly different spans, not a
+   literature value). Below that, the verdict is the new level `camera_and_tracker`, with the
+   processor advice as well as the light. "Not the processor" is gone. The self-test text, the live
+   verdict in the researcher card and camera setup, the `selftest_limit` codebook entry (now
+   factor(5); earlier sittings recorded such a test as `camera`), the session type and the operator
+   manual say so. Unit tests cover camera 20 / tracker 10, camera 24 / tracker 14, the 80% boundary,
+   and no tracker result at all.
+2. **The camera-setup failure screen never showed why (minor).** `requestCamera()` read
+   `camera.startError` from the props captured when the request began, which still held null, so
+   " Details: …" never appeared — on exactly the tablet whose tracker cannot start. **Fix (ba4a0d4,
+   a2fbfc2):** the failure box reads `startError` from the current props when it renders. A jsdom
+   component test holds `startError` in React state as `useTracking` does; it fails on the old code.
+3. **A failed loader script was recorded as "[object Event]" (minor).** The wasm loaders reject with
+   the script's error Event, not an Error. `errorSummary` stringified it, so the trials table,
+   "Passed over: …" and the exported `tracker_failures` lost the reason. **Fix (c1cf9ea):** an Event
+   is described as "error event loading <script URL>"; other non-Error values give their message,
+   their JSON, or "<Type> with no message" — never a bare "[object …]". Unit tests.
+4. **The device's tracker was chosen on a measurement of nothing (minor).** When no trial saw a
+   face, `pickFastest` ranked the detector-only processing speed, and `compareTrackers` stored the
+   winner as this device's tracker for the whole study. The measurement starts the moment the preview
+   appears, before anyone checks the framing. **Fix (4270a30):** `pickFastest` ranks only trials with
+   a face in view for at least half their frames and otherwise returns null. Then nothing is stored,
+   the tracker that was running is restarted, the sitting's `tracker_selection` stays as it was
+   (`default` at a first setup, so the next setup measures again), no comparison is recorded that
+   nothing was chosen from, and the screen tells the operator to measure again with a face in view
+   (`tracker-no-face`). The fake camera shows no face, so `e2e/cameraDiagnostics.spec.ts` now expects
+   exactly that: the notice, "not measured on this tablet yet", no stored choice, selection `default`.
+   No e2e drives the with-face path (no face video fixture); the unit tests cover the ranking.
+5. **"The visible picture does not slow the tracker measurably" (Round 75) was stronger than its
+   measurement (minor).** It rested on milliseconds per tracker call. The review counted detect calls
+   independently (a `FaceLandmarker.prototype.detect` wrapper, Face Landmarker CPU, dev build,
+   CVSQ_BASELINE screen), alternating the researcher card open and closed in 8 s windows: 10.94 vs
+   11.62, 12.23 vs 12.70 and 12.07 vs 12.45 calls a second, i.e. 3-6% fewer with the card open in all
+   three pairs, while the median time per call barely moved (77.6/81.5, 72.2/71.7, 73.9/74.7 ms). The
+   cost falls between calls (rendering and compositing the card), where per-call timing cannot see it.
+   **Restated:** with the researcher card open (picture, trace and readout together, not the picture
+   alone), the time per tracker call was unchanged and the processed rate was about 3-6% lower; n = 3
+   pairs, headless Chromium on a shared machine, so plausible rather than proven. Not measured on the
+   tablet. The picture is drawn only on set-up screens and in the researcher card, never during a
+   condition's stimulus, so no condition data is affected. Round 75's text is left as written
+   (append-only); this item supersedes it.
+6. **"The app falls back to the CPU path" where WebGL is missing — it does not (minor).** Measured
+   again here (dev build, headless Chromium, `getContext('webgl'|'webgl2')` returning null): with
+   WebGL, Face Landmarker CPU and legacy both answered a frame; without it, the CPU delegate
+   constructed and its first detect threw "Cannot read properties of undefined (reading
+   'activeTexture')", and legacy failed to construct ("… (reading 'loadGraph')"). The review also saw
+   the GPU delegate fail to construct ("kGpuService"). So without WebGL no tracker starts; the chain
+   covers a GPU delegate that fails while WebGL works. **Fix (e95103b):** the comment in
+   `e2e/trackerEquivalence.spec.ts` and the header of `src/tracking/trackers.ts` say so, and the
+   operator manual tells the operator how to read those words in the Details line (item 2). Whether
+   the study tablet's Chrome ever lacks WebGL is not measured on the device.
+
+**Not measured on the device.** Nothing in this round was read off the study tablet. Which stage
+binds there — camera, tracker, both — is what the self-test and camera setup now report correctly;
+the numbers are still to come from the tablet.
+
+**Citations.** None added.
