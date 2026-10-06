@@ -60,6 +60,18 @@ describe('a low frame rate says which stage was short', () => {
     expect(why).not.toMatch(/battery saver/);
   });
 
+  it('camera AND tracker when both are short — never "not the processor" while the tracker skips frames', () => {
+    for (const [cam, trk] of [[20, 10], [24, 14]]) {
+      const r = scoreSelfTest(cues, blinks, { fps: trk, facePresence: 0.99, pipeline: pipe({ camera_fps_delivered: cam, tracker_fps: trk, process_ms_p50: 80, process_ms_p95: 110 }) });
+      expect(r.limit).toBe('camera_and_tracker');
+      const why = r.reasons.join(' ');
+      expect(why).toMatch(new RegExp(`camera delivered only ${cam} frames per second.*TRACKER processed only ${trk}`));
+      expect(why).toMatch(/BOTH the camera and the tablet's processor/);
+      expect(why).toMatch(/close other apps.*charger/i);
+      expect(why).not.toMatch(/not the processor/);
+    }
+  });
+
   it('the TRACKER, when the camera delivered enough — with the time per frame, and the advice is the processor', () => {
     const r = scoreSelfTest(cues, blinks, { fps: 16, facePresence: 0.99, pipeline: pipe({ camera_fps_delivered: 30, tracker_fps: 16, process_ms_p50: 61, process_ms_p95: 88 }) });
     expect(r.limit).toBe('tracker');

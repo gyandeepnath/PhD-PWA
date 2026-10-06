@@ -8,7 +8,7 @@
  * verdict built on them.
  */
 import { describe, it, expect } from 'vitest';
-import { PipelineMeter, pipelineLimit, quantile } from '@/tracking/pipelineStats';
+import { PipelineMeter, pipelineLimit, quantile, TRACKER_KEEPS_UP } from '@/tracking/pipelineStats';
 
 /** Drive the meter like a camera at `camFps` and a tracker taking `ms` per frame, synchronously. */
 function simulate(meter: PipelineMeter, opts: { camFps: number; ms: number; seconds: number; face?: (i: number) => boolean }) {
@@ -96,6 +96,19 @@ describe('pipelineLimit names the stage that is short', () => {
   const floor = 25;
   it('the camera, when it delivers fewer frames than the floor', () => {
     expect(pipelineLimit({ cameraFps: 15, trackerFps: 15, faceFps: 15, deliveredSource: 'presented-frames' }, floor)).toBe('camera');
+  });
+  it('camera AND tracker, when the camera is short and the tracker processes clearly fewer than it delivers', () => {
+    // Round 77: measured in the review on Chromium's fake camera — 20 delivered, 11 processed. The old
+    // rule said 'camera' and advised light, which cannot lift the processed rate above about 11.
+    expect(pipelineLimit({ cameraFps: 20, trackerFps: 10, faceFps: 10, deliveredSource: 'presented-frames' }, floor)).toBe('camera_and_tracker');
+    expect(pipelineLimit({ cameraFps: 24, trackerFps: 14, faceFps: 14, deliveredSource: 'presented-frames' }, floor)).toBe('camera_and_tracker');
+    // No tracker result at all while the camera delivers too few: both, never the camera alone.
+    expect(pipelineLimit({ cameraFps: 20, trackerFps: null, faceFps: null, deliveredSource: 'presented-frames' }, floor)).toBe('camera_and_tracker');
+  });
+  it('the camera alone only while the tracker keeps up with what it delivers', () => {
+    expect(pipelineLimit({ cameraFps: 20, trackerFps: 19, faceFps: 19, deliveredSource: 'presented-frames' }, floor)).toBe('camera');
+    expect(pipelineLimit({ cameraFps: 20, trackerFps: 20 * TRACKER_KEEPS_UP, faceFps: 16, deliveredSource: 'presented-frames' }, floor)).toBe('camera');
+    expect(pipelineLimit({ cameraFps: 20, trackerFps: 15.9, faceFps: 15.9, deliveredSource: 'presented-frames' }, floor)).toBe('camera_and_tracker');
   });
   it('the tracker, when the camera delivers enough but the tracker processes fewer', () => {
     expect(pipelineLimit({ cameraFps: 30, trackerFps: 16, faceFps: 16, deliveredSource: 'presented-frames' }, floor)).toBe('tracker');

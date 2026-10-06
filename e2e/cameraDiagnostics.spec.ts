@@ -100,7 +100,7 @@ test('the self-test result shows the pipeline and names the stage that was short
   expect(Number(pipe.camera_fps_delivered)).toBeGreaterThan(0);
   expect(Number(pipe.frames_processed)).toBeGreaterThan(0);
   expect(['tasks-gpu', 'tasks-cpu', 'legacy']).toContain(pipe.tracker_backend);
-  if (st.pass === false) expect(['camera', 'tracker', 'face', 'undetermined']).toContain(st.limit);
+  if (st.pass === false) expect(['camera', 'camera_and_tracker', 'tracker', 'face', 'undetermined']).toContain(st.limit);
 });
 
 test('the researcher card shows the live picture on set-up screens and never on a condition screen', async ({ page }) => {

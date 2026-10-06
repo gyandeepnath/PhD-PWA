@@ -75,9 +75,20 @@ export function fpsReason(
   const face = `${faceFps == null ? 'no measurable' : Math.round(faceFps)} face frames per second, below ${SELF_TEST.MIN_FPS}`;
   switch (limit) {
     case 'camera':
-      return `${face}: the CAMERA delivered only ${n0(p?.camera_fps_delivered)} frames per second${size} — the camera is the limit, not the processor. `
+      return `${face}: the CAMERA delivered only ${n0(p?.camera_fps_delivered)} frames per second${size}, and the tracker kept up with them `
+        + `(${n0(p?.tracker_fps)} processed) — the camera is the limit. `
         + 'Give the face more light (tablet cameras slow down in dim light), keep bright light behind the participant out of the picture, '
         + 'and close any other app that may be using the camera';
+    case 'camera_and_tracker':
+      // Both short: more light alone cannot lift a rate the processor caps lower still (round 77).
+      return `${face}: the camera delivered only ${n0(p?.camera_fps_delivered)} frames per second${size}, and the TRACKER processed only `
+        + `${n0(p?.tracker_fps)} of them, taking about ${n0(p?.process_ms_p50)} ms a frame (slowest 5%: ${n0(p?.process_ms_p95)} ms) — `
+        + 'BOTH the camera and the tablet\'s processor are short, and fixing the light alone will not be enough. '
+        + 'Close other apps, plug in the charger and turn off battery saver, let a hot tablet cool down, and give the face more light'
+        + (trackerFrozen
+          ? ''
+          : '. If it fails this way with every participant, compare the trackers again at the bench '
+            + '(camera setup, "Measure trackers again") — not between one participant\'s sittings');
     case 'tracker':
       return `${face}: the camera delivered ${n0(p?.camera_fps_delivered)} frames per second but the TRACKER processed only ${n0(p?.tracker_fps)}, `
         + `taking about ${n0(p?.process_ms_p50)} ms a frame (slowest 5%: ${n0(p?.process_ms_p95)} ms) — the tablet's processor is the limit, not the camera. `

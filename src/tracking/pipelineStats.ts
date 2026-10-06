@@ -179,9 +179,28 @@ export class PipelineMeter {
 }
 
 /**
+ * The share of the camera's delivered frames the tracker must process to count as keeping up with
+ * the camera. Below it, a large share of frames arrived while the tracker was still busy and were
+ * skipped, so the tracker binds whatever the camera does.
+ *
+ * WHY 0.8 AND NOT 1.0. Processed can never exceed delivered, and the two rates are measured over
+ * slightly different spans (first to last delivery vs first to last tracker result), so a tracker
+ * that keeps up still reads a few percent under the camera. 0.8 tolerates that jitter and still
+ * catches the case this exists for (round 77): a camera at 20 fps and a tracker at 11 — 55% — where
+ * the old rule said "the camera is the limit, not the processor" and advised more light, which could
+ * not have raised the processed rate above about 11. It is an engineering tolerance, not a value
+ * from the literature.
+ */
+export const TRACKER_KEEPS_UP = 0.8;
+
+/**
  * What limited the face-solved frame rate, in one word, judged against `floor` (the rate wanted).
  *
- *   'camera'  — the camera itself delivered fewer than `floor` frames per second;
+ *   'camera'  — the camera delivered fewer than `floor` frames per second AND the tracker kept up with
+ *               what it delivered (processed at least TRACKER_KEEPS_UP of it): only the camera binds;
+ *   'camera_and_tracker' — the camera delivered fewer than `floor` AND the tracker processed clearly
+ *               fewer than the camera delivered: both bind, and fixing either alone will not reach
+ *               the floor (more light cannot raise a rate the processor caps lower still);
  *   'tracker' — the camera delivered enough, but the tracker processed fewer than `floor`;
  *   'face'    — the tracker processed enough frames but found the face in fewer than `floor`;
  *   'undetermined' — the rate is low, but the browser gave no frame counter, so a low delivered count
@@ -189,10 +208,11 @@ export class PipelineMeter {
  *               tracker cannot be told apart, and saying either would be a guess;
  *   null      — the face-solved rate met the floor, or there is not enough to judge.
  *
- * Checked in that order, because each stage can only pass on what the one before it delivered: a
- * camera giving 12 fps makes the tracker's 12 fps a symptom, not a cause.
+ * Each stage can only pass on what the one before it delivered, so a tracker processing everything a
+ * 12 fps camera gives is a symptom of the camera, not a cause. But a tracker processing half of it is
+ * a cause in its own right, and naming only the camera then sends the operator after the wrong fix.
  */
-export type PipelineLimit = 'camera' | 'tracker' | 'face' | 'undetermined' | null;
+export type PipelineLimit = 'camera' | 'camera_and_tracker' | 'tracker' | 'face' | 'undetermined' | null;
 
 export function pipelineLimit(
   s: Pick<PipelineSummary, 'cameraFps' | 'trackerFps' | 'faceFps' | 'deliveredSource'>,
@@ -202,7 +222,9 @@ export function pipelineLimit(
   if (s.trackerFps == null && s.cameraFps == null) return null;
   if (s.cameraFps != null && s.cameraFps < floor) {
     // Counted one per callback, a busy main thread looks exactly like a slow camera.
-    return s.deliveredSource === 'presented-frames' ? 'camera' : 'undetermined';
+    if (s.deliveredSource !== 'presented-frames') return 'undetermined';
+    const keepsUp = s.trackerFps != null && s.trackerFps >= TRACKER_KEEPS_UP * s.cameraFps;
+    return keepsUp ? 'camera' : 'camera_and_tracker';
   }
   // Frames arrived and the tracker produced (almost) nothing from them: it is the limit.
   if (s.trackerFps == null || s.trackerFps < floor) return 'tracker';

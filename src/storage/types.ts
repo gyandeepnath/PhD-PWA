@@ -265,12 +265,13 @@ export interface SessionRecord {
     pass: boolean; reasons: string[]; at: number;
     /**
      * What the camera and the tracker did during the test (round 75), and which stage limited the
-     * face-solved rate: 'camera' (it delivered too few frames), 'tracker' (it could not process them
-     * all), 'face' (processed, but the face was not found), 'undetermined', or null (rate met).
+     * face-solved rate: 'camera' (it delivered too few frames and the tracker kept up),
+     * 'camera_and_tracker' (both short; round 77 — earlier sittings recorded that as 'camera'),
+     * 'tracker' (it could not process them all), 'face' (processed, but the face was not found), 'undetermined', or null (rate met).
      * Absent on sittings recorded before it existed.
      */
     pipeline?: PipelineWindowFields | null;
-    limit?: 'camera' | 'tracker' | 'face' | 'undetermined' | null;
+    limit?: 'camera' | 'camera_and_tracker' | 'tracker' | 'face' | 'undetermined' | null;
   } | null;
   /**
    * The camera and face tracker this sitting ran on, as recorded when the camera last started (or when

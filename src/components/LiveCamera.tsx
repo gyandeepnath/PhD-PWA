@@ -179,6 +179,7 @@ export function PipelineReadout({ stats, floor, compact = false }: {
       : ratioShort ? `face found ${s.faceFps.toFixed(1)} times a second: at least ${floor}, but below the ${FPS_RATIO_THRESHOLD} the incomplete-blink ratio is flagged under`
         : `face found ${r0(s.faceFps)} times a second: at or above ${Math.max(floor, FPS_RATIO_THRESHOLD)}`)
       : limit === 'camera' ? `the CAMERA is the limit: it delivers ${r0(s.cameraFps)} frames a second (below ${floor}) — more light on the face`
+        : limit === 'camera_and_tracker' ? `the camera AND the tracker are short: ${r0(s.cameraFps)} delivered, ${r0(s.trackerFps)} processed at ${r0(s.processMsP50)} ms — close other apps, charge the tablet, and more light`
         : limit === 'tracker' ? `the TRACKER is the limit: ${r0(s.processMsP50)} ms a frame — close other apps, charge the tablet`
           : limit === 'undetermined' ? `below ${floor} a second; this browser does not say whether the camera or the tracker is short`
             : `the face is found in only ${r0(s.faceFps)} frames a second — seating, framing, light`;

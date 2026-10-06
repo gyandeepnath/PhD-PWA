@@ -312,7 +312,11 @@ Beside the picture, **CAMERA AND TRACKER** gives three rates and says which one 
 | *Face found* N fps | Frames in which the face was found. This is the rate the blink measures are sampled at (`effective_fps`) | Seating, distance, light on the face, glare on spectacles, something in front of the face. |
 | *Face width* N px | How wide the face is in the camera's picture | The face model enlarges a crop around the face to 192 or 256 px before it finds the eyelids, so a face much narrower than that is being magnified and the lids carry few real pixels. It depends on the distance **and** on the picture size the camera gave (the *Asked for … the camera gave …* line): a small value with the participant at 50 to 60 cm means the camera gave a small picture — note both numbers for the investigator rather than moving the participant closer than the protocol distance. No minimum has been validated; this is a reading to record. |
 
-The sentence under them names the stage that is short. When the face is found 25 to 30 times a
+The sentence under them names the stage that is short. It blames the camera alone only while the
+tracker keeps up with what the camera delivers (processes at least 80% of it). When both are short —
+for example the camera at 20 and the tracker at 11 — it says *the camera AND the tracker are short*:
+more light alone will not fix that, because the tracker would still process only about 11 frames a
+second; do the processor steps as well. When the face is found 25 to 30 times a
 second it says so in amber — *at least 25, but below the 30 the incomplete-blink ratio is flagged
 under*: enough for the camera check, but every reading condition measured at that rate has its
 incomplete-blink ratio flagged in the data (`fps_adequate_for_ratio`). If it says that with every
