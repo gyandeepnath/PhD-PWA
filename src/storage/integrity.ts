@@ -281,6 +281,14 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
       add('warning', 'physical_calibration',
         `the ruler check of the screen's physical size was skipped at pre-flight (acknowledged). Every `
         + `physical column of this sitting is assumed, not measured (physical_size_source = ${fallback}).`, ref);
+    } else if (s.mm_per_css_px == null && s.calibration_skipped == null && !s.preflight_complete) {
+      // The calibration fields are written only when pre-flight completes, so a current-build sitting
+      // withdrawn or abandoned before it looks exactly like an old one. Saying it "predates" the check
+      // would be false for it; that pre-flight never finished is true of both.
+      add('warning', 'physical_calibration',
+        'pre-flight was not completed in this sitting, so no ruler check of the screen\'s physical size was '
+        + `taken and no viewing distance recorded: every physical column is assumed, not measured `
+        + `(physical_size_source = ${fallback}).`, ref);
     } else if (s.mm_per_css_px == null && s.calibration_skipped == null) {
       add('warning', 'physical_calibration',
         'this sitting predates the ruler check of the screen\'s physical size (Round 74): every physical '

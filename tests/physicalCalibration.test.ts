@@ -184,6 +184,19 @@ describe('a display-size change between pre-flight and a condition', () => {
     expect(conditionPhysical(s, 1.66, 22, 1.5).mm_per_layout_px!).toBeCloseTo(0.2047, 4);
   });
 
+  it('the panel fallback needs the screen and the ratio read together, as pre-flight now records them', () => {
+    // The study tablet created at ratio 2.0 (1440x900), its display-size setting changed, pre-flight
+    // at 1.5 (1920x1200), ruler skipped, a condition at 1.5. Its CSS pixel is panel / 1920.
+    const truth = STUDY_TABLET_PANEL_LONG_MM / 1920;
+    const coherent = { calibration_skipped: true, screen_resolution: '1920x1200', device_pixel_ratio: 1.5 };
+    expect(sessionMmPerCssPx(coherent, 1.5).mm).toBeCloseTo(truth, 9);
+    // A condition back at 2.0 after a resume: panel / 1440, exactly.
+    expect(sessionMmPerCssPx(coherent, 2.0).mm).toBeCloseTo(STUDY_TABLET_PANEL_LONG_MM / 1440, 9);
+    // What 2.2.0 and 2.3.0 saved: the creation-time screen beside the pre-flight ratio — off by 2.0/1.5.
+    const straddling = { ...coherent, screen_resolution: '1440x900' };
+    expect(sessionMmPerCssPx(straddling, 1.5).mm / truth).toBeCloseTo(2.0 / 1.5, 9);
+  });
+
   it('is reported by the integrity audit, naming the conditions', () => {
     const b = buildFixtureBundle();
     b.conditions = b.conditions.map((c, i) => ({ ...c, device_pixel_ratio: i === 3 ? 1.5 : 2.5 }));
@@ -240,6 +253,16 @@ describe('the export carries the calibration and computes from it', () => {
     expect(f).toHaveLength(1);
     expect(f[0].detail).toMatch(/predates/);
     expect(rows(buildExportFiles(b), '02_conditions.csv')[0].reading_x_height_arcmin).toBe('');
+  });
+
+  it('a sitting that never completed pre-flight is said to have missed it, not to predate it', () => {
+    const b = buildFixtureBundle();
+    const { calibration_skipped: _a, mm_per_css_px: _b, viewing_distance_cm: _c, ...early } = b.session;
+    b.session = { ...early, preflight_complete: false } as typeof b.session;
+    const f = auditBundle(b).findings.filter((x) => x.check === 'physical_calibration');
+    expect(f).toHaveLength(1);
+    expect(f[0].detail).toMatch(/pre-flight was not completed/);
+    expect(f[0].detail).not.toMatch(/predates/);
   });
 
   it('a 55 from a build that prefilled the field is flagged as possibly untouched; from 2.3.1 it is not', () => {
