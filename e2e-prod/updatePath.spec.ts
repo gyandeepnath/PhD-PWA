@@ -18,8 +18,11 @@ test.describe('update path', () => {
     await page.goto('/');
     // A version and a short git hash. Without this, "did the fix reach the tablet?" can only be
     // answered by re-running the thing that was broken.
-    const stamp = page.getByText(/^v\d+\.\d+\.\d+ · [0-9a-f]{7,}$/);
+    // Since Round 74 the line reads "VisuLab 2.3.1 · built <date time> UTC · <hash>": the build time
+    // changes on every deployment even when the version does not, which "v2.1.0 · hash" never showed.
+    const stamp = page.getByTestId('build-stamp');
     await expect(stamp, 'no build stamp on the landing screen').toHaveCount(1);
+    await expect(stamp).toHaveText(/VisuLab \d+\.\d+\.\d+ · built .+ · [0-9a-f]{7,}/);
   });
 
   test('the app registers a service worker at all', async ({ page }) => {
