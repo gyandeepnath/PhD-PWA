@@ -1405,7 +1405,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 mm_per_css_px: c?.mmPerCssPx ?? null,
                 calibration_skipped: c == null && measured.skipped,
                 viewing_distance_cm: measured.viewingDistanceCm,
-                // Re-read where the screen is checked, so it belongs with what pre-flight measured.
+                /*
+                 * Both re-read where the screen is checked, TOGETHER. The CSS screen size and the pixel
+                 * ratio move as a pair when the display-size setting changes; the panel fallback divides
+                 * the panel by the one and scales by the other (sessionMmPerCssPx), so a creation-time
+                 * screen beside a pre-flight ratio was off by the ratio of the two ratios on any sitting
+                 * whose setting changed between the profile and here.
+                 */
+                screen_resolution: `${screen.width}x${screen.height}`,
                 device_pixel_ratio: Number.isFinite(window.devicePixelRatio) && window.devicePixelRatio > 0
                   ? window.devicePixelRatio : null,
               };
