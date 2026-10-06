@@ -558,6 +558,13 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
   const [step, setStep] = useState<'notice' | 'starting' | 'preview' | 'denied'>(
     camera.status === 'active' ? 'preview' : 'notice');
   const [errMsg, setErrMsg] = useState('');
+  /*
+   * Whether the failure screen shows the library's own reason. The reason itself is read from the
+   * CURRENT props when rendering, never inside requestCamera(): there `camera` is the object captured
+   * at the render that started the request, whose startError is still the old (null) value, so the
+   * Details line never appeared (round 77) — on exactly the tablet whose tracker cannot start.
+   */
+  const [showDetails, setShowDetails] = useState(false);
   const [live, setLive] = useState<LiveTrackingStats | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [comparing, setComparing] = useState<{ backend: TrackerBackend; index: number; total: number } | null>(null);
@@ -610,8 +617,8 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
         ? 'No camera API is available on this device/browser.'
         : `The camera or the face tracker could not be started, so no blink, gaze or head-position data `
           + `can be collected — the primary outcome would be empty for every condition. Check the device is `
-          + `fully set up (see DEPLOYMENT.md section 4) before running a participant.`
-          + (camera.startError ? ` Details: ${camera.startError}` : ''));
+          + `fully set up (see DEPLOYMENT.md section 4) before running a participant.`);
+    setShowDetails(st === 'error');
     setStep('denied');
   };
 
@@ -762,10 +769,11 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
           <>
             <div data-testid="camera-start-error" className="mt-4 rounded-xl border border-[#f5a62366] bg-[#fff8ec] p-4 font-sans text-base leading-relaxed" style={{ color: UI_TEXT.amber }}>
               {errMsg}
+              {showDetails && camera.startError && <span data-testid="camera-start-details">{` Details: ${camera.startError}`}</span>}
             </div>
             <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {onBack && <button type="button" className={btnBack} data-testid="back-to-consent" onClick={onBack}>← Back to consent</button>}
-              <button className={btn} style={{ background: '#1a1a2e' }} onClick={() => { setErrMsg(''); setStep('notice'); }}>Retry</button>
+              <button className={btn} style={{ background: '#1a1a2e' }} onClick={() => { setErrMsg(''); setShowDetails(false); setStep('notice'); }}>Retry</button>
               <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" onClick={onSkip}>
                 Continue without camera
               </button>
