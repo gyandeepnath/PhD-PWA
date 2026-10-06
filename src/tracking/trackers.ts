@@ -5,6 +5,12 @@
  *   'tasks-cpu' — the same model, CPU (XNNPACK) inference.
  *   'legacy'    — the original @mediapipe/face_mesh 0.4 solution (attention mesh, refineLandmarks).
  *
+ * ALL THREE NEED WebGL. The CPU delegate infers on the CPU but still takes the image in through WebGL,
+ * and the legacy solution builds its graph on a WebGL context. With getContext('webgl'/'webgl2')
+ * returning null (round 77, headless Chromium): tasks-gpu fails to construct, tasks-cpu constructs and
+ * its first detect throws, legacy fails to construct — so the fallback chain below covers a GPU
+ * delegate that fails while WebGL works, NOT a browser without WebGL, where no tracker starts.
+ *
  * WHY THREE. The investigator's tablet failed the camera self-test on frame rate every time, and no
  * measurement exists of either library on that tablet (Snapdragon 870, Chrome). What WAS measured, in
  * headless Chromium on this project's build machine (round 75, docs/AUDIT_FINDINGS.md), is that the

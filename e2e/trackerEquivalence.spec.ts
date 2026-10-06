@@ -21,8 +21,15 @@ import { resolve } from 'node:path';
  * legacy and CPU were 0.3% apart — and about 8% below the CPU path on the same portrait passed through
  * the fake camera as video (the round's benchmark). So all three are held to the same "same place"
  * bound and their EARs are logged: the figures the audit round and the analysis plan quote. Where the
- * browser has no usable WebGL the GPU delegate cannot start, and that is logged rather than failed:
- * the app falls back to the CPU path there too.
+ * GPU delegate cannot start here it is logged rather than failed.
+ *
+ * WHAT THE FALLBACK DOES AND DOES NOT COVER (round 77, measured in headless Chromium, not on the
+ * tablet). With WebGL present, a GPU delegate that fails to construct or fails on its first frame
+ * falls back to the CPU path. WITHOUT WebGL it does not: the Tasks CPU delegate also needs WebGL to
+ * take the image in (it constructs, then its first detect throws "reading 'activeTexture'"), and the
+ * legacy solution fails to construct ("reading 'loadGraph'"), so no tracker starts at all and camera
+ * setup shows its start-failure screen. Whether the tablet's Chrome ever lacks WebGL is not measured
+ * on the device.
  */
 const ASSETS = 'https://storage.googleapis.com/mediapipe-assets';
 const PORTRAIT_SHA256 = 'a6f11efaa834706db23f275b6115058fa87fc7f14362681e6abe14e82749de3e';

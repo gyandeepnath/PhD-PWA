@@ -297,6 +297,13 @@ anomaly, a colour-vision deficiency:
   ophthalmological examination.
 - Log it as an incidental finding. Do not treat, and do not reassure beyond the referral.
 
+**If camera set-up says the camera or the face tracker could not be started**, the box ends with
+*Details: …* — the library's own words. Copy them for the investigator. Words such as
+*activeTexture*, *loadGraph* or *kGpuService* mean the browser gave the app no working WebGL: all
+three trackers need it (even the "CPU" one takes the picture in through WebGL), so none can start and
+the camera cannot be used on that browser until WebGL works (Chrome's *chrome://gpu* page shows
+whether it does). This was found in a test browser; it has not been seen on the study tablet.
+
 **Camera set-up: the picture and the numbers (version 2.3.0 onwards).** *Enable camera* starts the
 camera and the face tracker the whole sitting will use — there is no separate preview camera any
 more. The picture is the tracker's own: a green box round the face and yellow points on the eyelids,
