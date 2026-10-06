@@ -967,10 +967,11 @@ export function useTracking(): TrackingApi {
           earNoise: earNoise(ears),
         });
       }
+      // Null when none started or none saw a face: nothing to adopt (trackerChoice.ts pickFastest).
       const best = pickFastest(trials);
       if (pipelineRef.current !== info) return null;
       /*
-       * Start the winner — or, if none could be measured, the one that was running before, so the
+       * Start the winner — or, if none was measured on a face, the one that was running before, so the
        * camera is not left with no tracker at all (the stall watchdog would then report it lost).
        */
       const next = best ?? info.tracker_requested;
@@ -985,12 +986,20 @@ export function useTracking(): TrackingApi {
           info.tracker_failures.push({ backend: next, error: errorSummary(err) });
         }
       }
-      const measuredAt = Date.now();
-      if (best) saveTrackerChoice({ backend: best, measuredAt, appVersion: APP_VERSION, trials });
-      info.tracker_requested = best ?? info.tracker_requested;
-      info.tracker_selection = 'measured' as TrackerSelectionSource;
-      info.tracker_trials = trials;
-      info.tracker_measured_at = measuredAt;
+      /*
+       * Store and record a choice only when a trial measured tracking. Without one, the sitting's
+       * selection stays what it was ('default' at a first setup, so the next setup measures again),
+       * nothing is kept on the device, and the export carries no comparison it was not chosen from.
+       * The screen tells the operator to measure again with the face in view (setupStages.tsx).
+       */
+      if (best) {
+        const measuredAt = Date.now();
+        saveTrackerChoice({ backend: best, measuredAt, appVersion: APP_VERSION, trials });
+        info.tracker_requested = best;
+        info.tracker_selection = 'measured' as TrackerSelectionSource;
+        info.tracker_trials = trials;
+        info.tracker_measured_at = measuredAt;
+      }
       return trials;
     };
     comparingRef.current = run().finally(() => { comparingRef.current = null; });

@@ -45,7 +45,14 @@ test('camera setup measures the trackers and shows what the camera and the track
   for (const b of ['tasks-gpu', 'tasks-cpu', 'legacy']) {
     await expect(page.getByTestId(`trial-${b}`)).toHaveText(/\d|could not start/);
   }
-  await expect(page.getByTestId('camera-mode')).toHaveText(/measured on this tablet just now/);
+  /*
+   * The fake camera shows no face, so no trial measured TRACKING, only each model's face detector
+   * (round 77): nothing is chosen or stored, the screen says to measure again with a face in view, and
+   * the tracker stays 'not measured' so the next camera setup measures again.
+   */
+  await expect(page.getByTestId('tracker-no-face')).toBeVisible();
+  await expect(page.getByTestId('camera-mode')).toHaveText(/not measured on this tablet yet/);
+  expect(await page.evaluate(() => localStorage.getItem('visulab.tracker.choice.v1'))).toBeNull();
   // The picture is the tracker's own stream, not a second camera.
   const sameStream = await page.evaluate(() => {
     const hidden = document.querySelector('video[aria-hidden="true"]') as HTMLVideoElement | null;
@@ -60,8 +67,9 @@ test('camera setup measures the trackers and shows what the camera and the track
   const s = await sessionRecord(page);
   const p = s.camera_pipeline as Record<string, unknown>;
   expect(['tasks-gpu', 'tasks-cpu', 'legacy']).toContain(p.tracker_backend);
-  expect(p.tracker_selection).toBe('measured');
-  expect((p.tracker_trials as unknown[]).length).toBe(3);
+  // No face, so no comparison was adopted: the sitting records none rather than one of nothing.
+  expect(p.tracker_selection).toBe('default');
+  expect(p.tracker_trials).toBeNull();
   expect((p.camera_settings as { width: number }).width).toBeGreaterThan(0);
   expect(p.camera_requested).toEqual({ width: 1280, height: 720, frameRate: 60 });
 });

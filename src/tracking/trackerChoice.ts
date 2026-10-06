@@ -73,19 +73,27 @@ export type TrackerSelectionSource =
 /** Minimum share of frames with a face for a trial to count as a measurement of tracking. */
 export const MIN_TRIAL_FACE_SHARE = 0.5;
 
+/** Whether a trial measured tracking: it started, and a face was in view for at least half its frames. */
+export function trialSawFace(t: TrackerTrial): boolean {
+  return t.ok && (t.faceShare ?? 0) >= MIN_TRIAL_FACE_SHARE;
+}
+
 /**
  * The fastest backend among the trials: the most face frames solved per second, and within 1 fps of
- * that, the least time per frame (less main-thread time taken from the tasks' own timing). Trials in
- * which a face was in view for under half the frames count only if no trial had a face — otherwise a
- * backend that saw no face (and so ran only its cheap detector) would win on a measurement of nothing.
- * Null when no backend could start.
+ * that, the least time per frame (less main-thread time taken from the tasks' own timing). Only trials
+ * with a face in view for at least half their frames are ranked (trialSawFace).
+ *
+ * NULL WHEN NO TRIAL SAW A FACE, as well as when none could start. This used to fall back to ranking
+ * the processed rate of trials that saw no face, i.e. the speed of each model's cheap face DETECTOR,
+ * and the winner was then stored as this device's tracker for the whole study (round 77). The
+ * measurement runs the moment the preview appears at the first camera setup, before anyone has
+ * checked the framing, so a participant not yet in the picture chose the study's tracker on a
+ * measurement of nothing. The caller keeps the running tracker and stores nothing instead.
  */
 export function pickFastest(trials: TrackerTrial[]): TrackerBackend | null {
-  const ok = trials.filter((t) => t.ok);
-  if (!ok.length) return null;
-  const withFace = ok.filter((t) => (t.faceShare ?? 0) >= MIN_TRIAL_FACE_SHARE);
-  const pool = withFace.length ? withFace : ok;
-  const rate = (t: TrackerTrial) => (withFace.length ? t.faceFps : t.trackerFps) ?? 0;
+  const pool = trials.filter(trialSawFace);
+  if (!pool.length) return null;
+  const rate = (t: TrackerTrial) => t.faceFps ?? 0;
   const best = Math.max(...pool.map(rate));
   const near = pool.filter((t) => rate(t) >= best - 1);
   near.sort((a, b) => (a.processMsP50 ?? Infinity) - (b.processMsP50 ?? Infinity));

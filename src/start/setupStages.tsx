@@ -25,7 +25,7 @@ import {
   screenFill, DESIGN_WIDTH, DESIGN_HEIGHT, type DisplayMode,
 } from '@/lib/viewportScale';
 import type { LiveTrackingStats } from '@/tracking/useTracking';
-import type { TrackerTrial } from '@/tracking/trackerChoice';
+import { trialSawFace, MIN_TRIAL_FACE_SHARE, type TrackerTrial } from '@/tracking/trackerChoice';
 import { TRACKER_LABEL, type TrackerBackend } from '@/tracking/trackers';
 import { FPS_TIER_THRESHOLD } from '@/tracking/blink';
 import { LiveFeed, EarTrace, PipelineReadout } from '@/components/LiveCamera';
@@ -727,6 +727,18 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
               </div>
               {comparing && (
                 <p className={`mt-2 ${help}`}>Keep the face in view: each tracker runs for a few seconds on this picture.</p>
+              )}
+              {trials && trials.some((t) => t.ok) && !trials.some(trialSawFace) && !comparing && (
+                /*
+                 * No trial had the face in view for half its frames, so nothing was chosen or stored
+                 * (trackerChoice.ts pickFastest): ranking them would have ranked the face DETECTOR's
+                 * speed, and the winner would have been this tablet's tracker for the whole study.
+                 */
+                <p data-testid="tracker-no-face" className="mt-2 font-sans text-base" style={{ color: UI_TEXT.amber }}>
+                  No tracker saw a face for at least {Math.round(MIN_TRIAL_FACE_SHARE * 100)}% of its trial, so nothing was
+                  chosen or stored — the tracker in use is unchanged. Seat the participant (or yourself) in front of the
+                  camera and press <em>Measure trackers again</em>.
+                </p>
               )}
               {trials && (
                 <table data-testid="tracker-trials" style={{ width: '100%', marginTop: 8, fontSize: 15, borderCollapse: 'collapse' }}>

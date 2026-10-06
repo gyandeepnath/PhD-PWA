@@ -35,11 +35,13 @@ describe('pickFastest', () => {
     ])).toBe('legacy');
   });
 
-  it('falls back to processed frames when no trial had a face in view', () => {
+  it('chooses nothing when no trial had a face in view — a detector-only speed is not a measurement (round 77)', () => {
     expect(pickFastest([
       trial('tasks-gpu', { faceFps: 0, trackerFps: 9, faceShare: 0 }),
       trial('tasks-cpu', { faceFps: 0, trackerFps: 18, faceShare: 0 }),
-    ])).toBe('tasks-cpu');
+      trial('legacy', { faceFps: 4, trackerFps: 12, faceShare: 0.3 }),
+    ])).toBeNull();
+    expect(pickFastest([trial('tasks-cpu', { faceShare: null })])).toBeNull();
   });
 
   it('ignores backends that could not start, and returns null when none could', () => {

@@ -329,7 +329,9 @@ blink, below red as a complete one.
 the CPU, and the older FaceMesh. Which is fastest depends on the tablet and has not been measured on
 the study tablet yet. The first time the camera is set up on a tablet, the app runs each for a few
 seconds on the picture (*Measuring 1 of 3…*) and keeps the fastest for that tablet; keep a face in
-view while it does. The table shows what each achieved, and the one in use is in bold. **Measure
+view while it does. If no tracker saw a face for at least half its few seconds, nothing is kept and
+the screen says so: the tracker in use is unchanged and the next camera setup measures again — seat
+someone in front of the camera and press **Measure trackers again**. The table shows what each achieved, and the one in use is in bold. **Measure
 trackers again** repeats it — do that only at the bench, never between a participant's sittings,
 because a participant measured on two trackers is flagged in the data (the trackers are not
 interchangeable instruments). Before the pilot the investigator fixes the tracker for the study; the
@@ -337,8 +339,9 @@ screen then says *Fixed:* and there is nothing to measure.
 
 **The camera check** after calibration (*Quick camera check*: blink when the dot flashes) shows the
 same three rates on its result screen. When it fails on frame rate it now says **which stage** was
-short — "the CAMERA delivered only …" (light), "the TRACKER processed only …, taking about M ms a
-frame" (processor), or "found the face in only some of them" (seating) — and that is the advice to
+short — "the CAMERA delivered only …, and the tracker kept up" (light), "the TRACKER processed
+only …, taking about M ms a frame" (processor), "BOTH the camera and the tablet's processor are
+short" (both: light alone will not fix it), or "found the face in only some of them" (seating) — and that is the advice to
 follow. Do not lower anything to make it pass.
 
 **What to send the investigator from the tablet** the first time the new version runs (photograph
