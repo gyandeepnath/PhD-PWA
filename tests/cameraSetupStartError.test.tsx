@@ -13,7 +13,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createElement, act, useState, useCallback } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { CameraSetupTracking } from '@/start/setupStages';
-import type { CameraStatus } from '@/tracking/useTracking';
+import type { CameraStatus } from '@/storage/types';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -25,11 +25,11 @@ const REASON = "Cannot read properties of undefined (reading 'activeTexture')";
 async function render(result: CameraStatus): Promise<HTMLElement> {
   const { CameraSetup } = await import('@/start/setupStages');
   function Harness() {
-    const [status, setStatus] = useState<CameraStatus>('idle' as CameraStatus);
+    const [status, setStatus] = useState<CameraStatus>('unavailable');
     const [startError, setStartError] = useState<string | null>(null);
     const start = useCallback(async () => {
       // As useTracking: the reason goes into state, then the promise resolves with the status.
-      if (result === 'error') setStartError(REASON);
+      if (result === 'failed') setStartError(REASON);
       setStatus(result);
       return result;
     }, []);
@@ -53,7 +53,7 @@ async function render(result: CameraStatus): Promise<HTMLElement> {
 
 describe('camera setup failure screen', () => {
   it('shows the reason start() recorded, read from the current props', async () => {
-    const host = await render('error');
+    const host = await render('failed');
     const box = host.querySelector('[data-testid="camera-start-error"]');
     expect(box?.textContent).toMatch(/could not be started/);
     expect(host.querySelector('[data-testid="camera-start-details"]')?.textContent).toBe(` Details: ${REASON}`);

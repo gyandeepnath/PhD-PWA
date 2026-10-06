@@ -618,7 +618,7 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
         : `The camera or the face tracker could not be started, so no blink, gaze or head-position data `
           + `can be collected — the primary outcome would be empty for every condition. Check the device is `
           + `fully set up (see DEPLOYMENT.md section 4) before running a participant.`);
-    setShowDetails(st === 'error');
+    setShowDetails(st === 'failed');
     setStep('denied');
   };
 
