@@ -291,9 +291,23 @@ scenario('50,000 reaction trials', (b) => {
   }));
 }, (f) => (rowsOf(f, '08_reaction_trials.csv') === Math.floor(50000 / 10) * 10 ? null : 'expected 50000 trial rows'));
 
-scenario('participant id of 10,000 characters', (b) => {
+/*
+ * A code the app could not have issued (it issues at most 20 characters; lib/participantId.ts). Until
+ * Round 78 this exported, the code repeated on a few hundred rows; 07c_ear_trace.csv now repeats it
+ * on some 50,000, which no browser can hold as one string. The export refuses it by name instead —
+ * failing loudly, which is what this harness asks of a damaged bundle.
+ */
+{
+  const b = buildFixtureBundle();
   b.session.participant_id = 'x'.repeat(10000);
-});
+  let detail = 'exported a code the app cannot issue';
+  let ok = false;
+  try { buildExportFiles(b); } catch (e) {
+    detail = (e as Error).message.slice(0, 150);
+    ok = /participant code is 10000 characters long/.test(detail);
+  }
+  results.push({ scenario: 'participant id of 10,000 characters (refused by name)', status: ok ? 'OK' : 'BROKEN', detail });
+}
 scenario('every free-text field is a CSV bomb', (b) => {
   const bomb = 'a,b"c\r\nd\te';
   b.session.display_label = bomb;

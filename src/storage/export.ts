@@ -21,6 +21,7 @@ import { serialiseSessionBackup } from './backup';
 import { requiredGrant } from './media';
 import { conditionPhysical, sessionMmPerCssPx, trialEccentricity } from '@/lib/physicalCalibration';
 import { cueLag, decodeTrace, pageAt } from '@/tracking/blinkLog';
+import { PARTICIPANT_ID_MAX_LENGTH } from '@/lib/participantId';
 
 export interface ExportFile {
   filename: string;
@@ -858,6 +859,20 @@ export const CODEBOOK: Record<string, string>[] = [
 ];
 
 export function buildExportFiles(input: SessionBundle): ExportFile[] {
+  /*
+   * A participant code the app could not have issued is a damaged record (lib/participantId.ts):
+   * refused here, by name, before anything is built. It used to be written through, which was
+   * harmless while the longest file had a few hundred rows; 07c repeats the code on each of some
+   * 50,000 frames, and a code of thousands of characters then fails part-way with "Invalid string
+   * length" and no word of why (scripts/stress/pipeline.ts, Round 78).
+   */
+  const code = input.session.participant_id;
+  if (typeof code === 'string' && code.length > PARTICIPANT_ID_MAX_LENGTH) {
+    throw new Error(
+      `This sitting's participant code is ${code.length} characters long, and the app only issues codes of up to `
+      + `${PARTICIPANT_ID_MAX_LENGTH}. The record is damaged, so it is not exported. Keep the backup file and ask the investigator.`,
+    );
+  }
   beginNonFiniteCount();
   // Normalise ordering at the boundary so the export is reproducible regardless of how the bundle
   // was assembled - straight from IndexedDB, from a test fixture, or from an import. Without this

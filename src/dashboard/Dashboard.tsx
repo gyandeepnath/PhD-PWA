@@ -128,7 +128,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
        * exported_at says an export was ATTEMPTED. It cannot say more: downloadExport drives
        * `a.click()`, which returns void whether the file was written, blocked, cancelled or refused
        * for want of disk. Chrome also prompts before allowing multiple downloads from one origin,
-       * and this writes ~18 files, so a refused prompt is an ordinary outcome.
+       * and this writes ~20 files, so a refused prompt is an ordinary outcome.
        *
        * export_confirmed_at says the OPERATOR looked and the files are there. Only that releases a
        * session to the unattended thirty-day purge, because that purge destroys the only copy of

@@ -435,3 +435,18 @@ describe('01: how the pre-flight list was ticked (round 78)', () => {
     expect(cell(b)).toBe('false');
   });
 });
+
+describe('a participant code the app could not have issued (round 78)', () => {
+  it('is refused by name, before any file is built', () => {
+    const b = buildFixtureBundle();
+    b.session.participant_id = 'x'.repeat(21);
+    expect(() => buildExportFiles(b)).toThrow(/participant code is 21 characters long, and the app only issues codes of up to 20/);
+  });
+
+  it('does not touch a code of the length the app issues, whatever its characters', () => {
+    // The fixture's own code carries a comma and a quote on purpose; only the LENGTH is the guard.
+    const b = buildFixtureBundle();
+    b.session.participant_id = 'P'.repeat(20);
+    expect(buildExportFiles(b).length).toBeGreaterThan(20);
+  });
+});

@@ -33,6 +33,7 @@ import { DeviceBox } from '@/components/DeviceBox';
 import { ScreenCalibration, type ScreenCalibrationResult } from './ScreenCalibration';
 import { BuildInfo, useUpdateWaiting } from '@/components/BuildInfo';
 import { useDialog } from '@/components/ConfirmDialog';
+import { PARTICIPANT_ID_PATTERN } from '@/lib/participantId';
 import type { CameraStatus, CameraPipelineRecord } from '@/storage/types';
 
 /**
@@ -156,7 +157,7 @@ export function SessionInit({
   // Resolve the counterbalanced assignment as soon as the id is well-formed, so the researcher
   // sets the room to the ASSIGNED level before measuring rather than measuring whatever it was.
   useEffect(() => {
-    if (!/^[A-Za-z0-9_-]{1,20}$/.test(pid)) { setAssigned(null); return; }
+    if (!PARTICIPANT_ID_PATTERN.test(pid)) { setAssigned(null); return; }
     let cancelled = false;
     void resolveAssignment(pid).then((a) => { if (!cancelled) setAssigned(a); });
     return () => { cancelled = true; };
@@ -194,7 +195,7 @@ export function SessionInit({
    */
   const withdrawn = assigned?.withdrawnAt != null;
   const valid =
-    /^[A-Za-z0-9_-]{1,20}$/.test(pid) && luxEntered && (inRange || deviation.trim().length >= 3)
+    PARTICIPANT_ID_PATTERN.test(pid) && luxEntered && (inRange || deviation.trim().length >= 3)
     && repeatAcknowledged && splitAcknowledged && !withdrawn;
 
   return (
