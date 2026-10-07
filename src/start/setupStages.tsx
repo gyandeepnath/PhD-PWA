@@ -32,6 +32,7 @@ import { LiveFeed, EarTrace, PipelineReadout } from '@/components/LiveCamera';
 import { DeviceBox } from '@/components/DeviceBox';
 import { ScreenCalibration, type ScreenCalibrationResult } from './ScreenCalibration';
 import { BuildInfo, useUpdateWaiting } from '@/components/BuildInfo';
+import { useDialog } from '@/components/ConfirmDialog';
 import type { CameraStatus, CameraPipelineRecord } from '@/storage/types';
 
 /**
@@ -1183,7 +1184,7 @@ function readScale() {
   return { applied: currentScale(), fresh: freshScale(), full: screenFitScale() };
 }
 
-const PREFLIGHT_ITEMS = [
+export const PREFLIGHT_ITEMS = [
   'Screen brightness set to a fixed level; auto-brightness OFF',
   'Blue-light filter / Night Shift OFF',
   'Screen cleaned (no smudges or glare)',
@@ -1205,6 +1206,12 @@ export interface PreflightResult {
   displayModeAcknowledged: boolean;
   /** The ruler check and the viewing distance (ScreenCalibration). */
   screen: ScreenCalibrationResult;
+  /**
+   * True when the operator used "Tick all" on the room-and-device list, after confirming "I have
+   * checked each of these"; false when every item was ticked one by one. Stored as
+   * preflight_bulk_ticked (Round 78).
+   */
+  bulkTicked: boolean;
 }
 
 export function Preflight({ onDone, onBack }: {
@@ -1213,6 +1220,31 @@ export function Preflight({ onDone, onBack }: {
   onBack?: () => void;
 }) {
   const [checked, setChecked] = useState<boolean[]>(Array(PREFLIGHT_ITEMS.length).fill(false));
+  /*
+   * TICK ALL (Round 78, the investigator's request). The seven room-and-device items are checked by
+   * the researcher before every sitting, and ticking seven boxes one by one after doing so is busywork.
+   * One button ticks them all — but only after the researcher confirms, in words, that each was
+   * checked, and the sitting records that the list was ticked in one step (preflight_bulk_ticked), so
+   * an analyst can tell the two apart. It is offered for this list only: the consent screen, the
+   * participant's own answers and the single warnings that need their own acknowledgement (the
+   * display-mode warning, skipping the ruler check) are never ticked in bulk.
+   */
+  const [bulkTicked, setBulkTicked] = useState(false);
+  const dialog = useDialog();
+  const allTicked = checked.every(Boolean);
+  const tickAll = async () => {
+    const yes = await dialog.confirm({
+      title: 'Tick all the room and device checks?',
+      body: `Only if you have checked each of the ${PREFLIGHT_ITEMS.length} items on this list yourself, for this sitting. `
+        + 'The sitting records that the list was ticked in one step.',
+      confirmLabel: 'I have checked each of these',
+      cancelLabel: 'Go back',
+      testId: 'preflight-tick-all-dialog',
+    });
+    if (!yes) return;
+    setChecked(PREFLIGHT_ITEMS.map(() => true));
+    setBulkTicked(true);
+  };
   /**
    * Storage durability is checked here rather than left to the operator's judgement, because the
    * failure it guards against is invisible: in a private window every write succeeds and the whole
@@ -1430,6 +1462,14 @@ export function Preflight({ onDone, onBack }: {
       )}
       </div>
       <div className="space-y-2">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <p className={eyebrow} style={{ color: UI_TEXT.muted }}>Room and device — checked by you</p>
+          <button type="button" data-testid="preflight-tick-all" onClick={() => { void tickAll(); }} disabled={allTicked}
+            className="font-sans text-base"
+            style={{ padding: '8px 16px', minHeight: 44, borderRadius: 10, border: '1px solid #1a1a2e', background: allTicked ? '#f2f0eb' : '#fff', color: allTicked ? UI_TEXT.muted : '#1a1a2e', cursor: allTicked ? 'default' : 'pointer' }}>
+            {allTicked ? 'All ticked' : 'Tick all'}
+          </button>
+        </div>
         {PREFLIGHT_ITEMS.map((item, i) => (
           <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', minHeight: 48, borderRadius: 10, border: '1px solid #e5e2dc', background: '#fff', cursor: 'pointer' }}>
             <input type="checkbox" checked={checked[i]} onChange={(e) => { const n = [...checked]; n[i] = e.target.checked; setChecked(n); }} style={{ width: 22, height: 22, flexShrink: 0 }} />
@@ -1447,12 +1487,13 @@ export function Preflight({ onDone, onBack }: {
         {onBack && <button type="button" className={btnBack} data-testid="back-to-profile" onClick={onBack}>← Back to the profile</button>}
         <button className={btn} disabled={!all} data-testid="preflight-continue"
           style={btnState(all)}
-          onClick={() => all && onDone({ fontOk: fontOk ?? null, displayMode: mode, displayModeAcknowledged: !installed && modeAck, screen: cal })}>
+          onClick={() => all && onDone({ fontOk: fontOk ?? null, displayMode: mode, displayModeAcknowledged: !installed && modeAck, screen: cal, bulkTicked })}>
           {storageBlocks ? 'Storage problem — cannot start' : 'All checks pass — continue →'}
         </button>
       </div>
       </div>
       <ScrollCue />
+      {dialog.element}
     </div>
   );
 }

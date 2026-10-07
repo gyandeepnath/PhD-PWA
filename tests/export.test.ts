@@ -419,3 +419,19 @@ describe('07b and 07c: every blink and the eye-openness trace, kept apart from t
     }
   });
 });
+
+describe('01: how the pre-flight list was ticked (round 78)', () => {
+  const cell = (b: SessionBundle) => {
+    const lines = buildExportFiles(b).find((f) => f.filename === '01_session_info.csv')!.content.trim().split('\n');
+    const head = splitCsvRow(lines[0]);
+    return splitCsvRow(lines[1])[head.indexOf('preflight_bulk_ticked')];
+  };
+  it('says true for Tick all, false for one by one, and nothing for sittings before the button', () => {
+    const b = buildFixtureBundle();
+    expect(cell(b)).toBe('');
+    b.session.preflight_bulk_ticked = true;
+    expect(cell(b)).toBe('true');
+    b.session.preflight_bulk_ticked = false;
+    expect(cell(b)).toBe('false');
+  });
+});

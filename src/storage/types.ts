@@ -183,6 +183,12 @@ export interface SessionRecord {
   /** Pre-flight checklist fully completed. */
   preflight_complete: boolean;
   /**
+   * How the room-and-device list on the pre-flight screen was ticked (Round 78): true when the
+   * operator used "Tick all" after confirming "I have checked each of these", false when each item was
+   * ticked one by one. Absent on sittings recorded before it existed.
+   */
+  preflight_bulk_ticked?: boolean | null;
+  /**
    * When an export was last ATTEMPTED. Not evidence that any file reached the disk.
    *
    * downloadExport triggers browser downloads with `a.click()`, which returns void and reports

@@ -49,7 +49,9 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                         session structure (single 10-condition sitting, or split 5+5)
   → CONSENT             participant: informed consent (recorded here, not pre-emptively)
   → PARTICIPANT_PROFILE demographics + vision covariates (age 18–35 per protocol, correction, self-report CVD…)
-  → PREFLIGHT           researcher: display/room configured (brightness fixed, night-shift OFF, …);
+  → PREFLIGHT           researcher: display/room configured (brightness fixed, night-shift OFF, …),
+                        ticked one by one or with "Tick all" after confirming each was checked
+                        (recorded: preflight_bulk_ticked; Round 78);
                         the screen's physical size measured with a ruler (a 500 design-px bar →
                         mm per CSS px) and the eye-to-screen distance tape-measured (Round 74);
                         the device's viewport, pixel ratio, scale and build shown

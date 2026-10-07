@@ -187,6 +187,13 @@ CVSQ_BASELINE → BASELINE_FATIGUE → INSTRUCTIONS`
 Pre-flight comes **before** the colour-vision plates on purpose: a blue-light filter left on would
 invalidate the red-green plates.
 
+**Tick all (builds after 2.3.1).** The seven room-and-device items on the right of pre-flight
+(brightness, blue-light filter, screen cleaned, lux, lenses, backlight, stand) can be ticked one by
+one, or all at once with **Tick all**. Tick all asks first; answer **I have checked each of these**
+only if you have. The sitting records which way the list was ticked (`preflight_bulk_ticked` in
+`01_session_info.csv`). It does not tick the warning boxes on the left or skip the ruler check; those
+are answered one at a time.
+
 **The ruler check on pre-flight (version 2.2.0 onwards).** Near the bottom of pre-flight is a black
 bar with an end mark at each side. Lay a ruler (millimetres) flat on the screen along it, with the
 ruler's **zero exactly at the bar's left end**, read where the bar ends, and type that length, to

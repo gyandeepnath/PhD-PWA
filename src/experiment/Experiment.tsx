@@ -1390,12 +1390,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     case 'PREFLIGHT':
       view = (
         <Preflight
-          onDone={async ({ fontOk, displayMode, displayModeAcknowledged, screen: measured }) => {
+          onDone={async ({ fontOk, displayMode, displayModeAcknowledged, screen: measured, bulkTicked }) => {
             if (displayModeAcknowledged) launchAcks.current.add(displayMode);
             if (session) {
               const c = measured.calibration;
               const fresh = {
-                ...session, preflight_complete: true, stimulus_font_ok: fontOk,
+                ...session, preflight_complete: true, preflight_bulk_ticked: bulkTicked, stimulus_font_ok: fontOk,
                 display_mode: displayMode, display_mode_acknowledged: displayModeAcknowledged,
                 // The ruler check (Round 74): measured, or skipped with the recorded acknowledgement —
                 // never a substituted figure. See lib/physicalCalibration.ts.
