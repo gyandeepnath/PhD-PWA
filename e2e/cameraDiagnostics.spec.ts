@@ -23,6 +23,14 @@ async function toCameraRunning(page: Page) {
   await expect(page.getByRole('button', { name: /My face is centred/ })).toBeEnabled({ timeout: 120_000 });
 }
 
+/** Every stored blink record (the ocular_events store, Round 78). */
+async function ocularRecords(page: Page): Promise<Record<string, unknown>[]> {
+  return page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((res, rej) => { const r = indexedDB.open('VisualErgonomicsDB'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    return new Promise<Record<string, unknown>[]>((res) => { const q = db.transaction('ocular_events').objectStore('ocular_events').getAll(); q.onsuccess = () => res(q.result as Record<string, unknown>[]); });
+  });
+}
+
 /** Read the session record from IndexedDB. */
 async function sessionRecord(page: Page): Promise<Record<string, unknown>> {
   return page.evaluate(async () => {
@@ -109,6 +117,18 @@ test('the self-test result shows the pipeline and names the stage that was short
   expect(Number(pipe.frames_processed)).toBeGreaterThan(0);
   expect(['tasks-gpu', 'tasks-cpu', 'legacy']).toContain(pipe.tracker_backend);
   if (st.pass === false) expect(['camera', 'camera_and_tracker', 'tracker', 'face', 'undetermined']).toContain(st.limit);
+
+  /*
+   * The accepted attempt's blinks and trace, kept as the sitting's self-test record (Round 78): filed
+   * under the session, in no condition, with the five cue times and one trace row per processed
+   * frame. Its blinks are the ones the test scored (cued + extra).
+   */
+  const s = await sessionRecord(page);
+  const rec = (await ocularRecords(page)).find((r) => r.window === 'selftest');
+  expect(rec).toMatchObject({ record_id: `selftest:${String(s.session_id)}`, condition_id: null, session_id: s.session_id });
+  expect((rec!.cues as number[]).length).toBe(Number(st.cued));
+  expect((rec!.events as unknown[]).length).toBe(Number(st.detected) + Number(st.extra));
+  expect((rec!.trace as { frames: number }).frames).toBeGreaterThan(0);
 });
 
 test('the researcher card shows the live picture on set-up screens and never on a condition screen', async ({ page }) => {
@@ -138,4 +158,21 @@ test('the researcher card shows the live picture on set-up screens and never on 
     .filter((v) => { const r = v.getBoundingClientRect(); return r.width > 1 && r.height > 1; }).length);
   expect(visibleVideos).toBe(0);
   await expect(page.getByTestId('researcher-feed')).toHaveCount(0);
+
+  /*
+   * Read the page through: the reading window's blink record and trace are written with the
+   * condition's eye-metrics row (Round 78), under the condition, with a trace row per processed frame.
+   */
+  // Turn pages while a reading control is on screen; the stage attribute can trail the last tap while
+  // the condition's records are written, so the screen, not the attribute, says when reading is over.
+  const readingControl = page.getByRole('button', { name: /Begin reading|Next page|finished reading/i });
+  for (let i = 0; i < 20 && (await readingControl.count()) > 0; i++) {
+    await handleStage(page, 'READING_TASK');
+    await page.waitForTimeout(150);
+  }
+  await expect.poll(async () => (await ocularRecords(page)).filter((r) => r.window === 'reading').length, { timeout: 30_000 }).toBe(1);
+  const reading = (await ocularRecords(page)).find((r) => r.window === 'reading')!;
+  expect(reading.record_id).toBe(reading.condition_id);
+  expect((reading.trace as { frames: number }).frames).toBeGreaterThan(0);
+  expect(reading.pages as unknown[]).not.toHaveLength(0);
 });

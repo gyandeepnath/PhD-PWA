@@ -342,6 +342,8 @@ test('turning the tablet to portrait stops a running calibration or camera check
   await expect(page.getByTestId('selftest-start')).toBeVisible();
   const [s] = await all(page, 'sessions');
   expect(s.camera_selftest ?? null).toBeNull();
+  // Nor its blinks: the self-test's blink record (Round 78) is kept only with an accepted result.
+  expect((await dbCounts(page, ['ocular_events'])).ocular_events).toBe(0);
 });
 
 test('Pause inside a condition confirms in the condition\'s own ink; Keep going carries on, Pause and exit leaves', async ({ page }) => {
