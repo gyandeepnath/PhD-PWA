@@ -125,6 +125,19 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
 
 Progress bar tracks 9 setup steps + 10×6 measured sub-stages = **69 steps** (39 for a split sitting of five).
 
+## 2a. Decisions the investigator has confirmed (Round 78, after testing build 2.3.1)
+
+These were decided by the investigator, not by the code. Keep them unless the investigator changes
+them, and record any change here.
+
+| Topic | Decision | Where it is held |
+|---|---|---|
+| Reaction-time instructions | The wording of the reaction-time card in 2.3.1 is accepted as it is: tap as fast as you can only for a dot in the colour of the text just read; keep your eyes on the cross between dots; rest your hand just below the screen's bottom edge and tap anywhere; a short practice (6 trials) before the first display only. No change. | `src/tasks/ReactionTimeTask.tsx` |
+| Reading length | **Three pages per passage at most** is confirmed. Every passage is three pages of near-equal length at the protocol text size. | `src/experiment/passages.ts`; pinned by `tests/passages.test.ts` |
+| University name and logo | **None** on any screen, page title or install icon. The app shows only its own plain VisuLab mark. The institution appears on the consent form and the ethics paperwork, not in the app. | `src/components/VisuLabLogo.tsx`; pinned by `tests/noInstitutionName.test.ts` |
+| Researcher ticks at the start | One **Tick all** button for the pre-flight room-and-device list, after confirming "I have checked each of these". The sitting records when it was used (`preflight_bulk_ticked`). Not for consent or for the participant's own answers. | `src/start/setupStages.tsx` (Preflight) |
+| Individual blinks | Kept, in two **optional** files (`07b_blink_events.csv`, `07c_ear_trace.csv`) for checking the blink measure. The main analysis is unchanged and does not need them. | `docs/ANALYSIS_PLAN.md` §5 item 6 |
+
 ## 3. Workflow-logic cross-check — issues found & resolved
 
 Reviewing the sequence as a PhD data-collection protocol surfaced these logic flaws (all fixed):
