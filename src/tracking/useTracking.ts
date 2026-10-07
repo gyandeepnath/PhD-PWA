@@ -48,7 +48,7 @@ import { EyeMetricsAggregator, disabledEyeMetrics } from './aggregator';
 import { put, remove } from '@/storage/db';
 import { now } from '@/lib/timing';
 import { startLivenessCheck } from './cameraLiveness';
-import type { CameraStatus, CameraPipelineRecord, PipelineWindowFields } from '@/storage/types';
+import type { CameraStatus, CameraPipelineRecord, OcularEventsRecord, PipelineWindowFields } from '@/storage/types';
 
 /** Median of a numeric array (robust frontal-fraction estimate, ignores transient blinks/noise). */
 function medianOf(xs: number[]): number {
@@ -240,9 +240,19 @@ interface TrackingApi {
    * the page it began on (Round 78). Does nothing outside a condition's window.
    */
   markReadingPage: (page: number) => void;
-  /** Start and finish the camera self-test (see tracking/selfTest.ts); endSelfTest returns what it saw. */
+  /**
+   * Start and finish the camera self-test (see tracking/selfTest.ts); endSelfTest returns what it saw.
+   * Given the cue times, the test's blinks and trace are also held for saveSelfTestLog; called without
+   * them (a test stopped part-way), nothing is held.
+   */
   beginSelfTest: () => void;
-  endSelfTest: () => SelfTestObservation;
+  endSelfTest: (cueTimes?: number[]) => SelfTestObservation;
+  /**
+   * Store the last finished self-test's blinks and trace as the sitting's 'selftest' blink record
+   * (Round 78): the closed-eye reference in 07b/07c. Called when the operator accepts a result, so the
+   * record is the attempt the session's selftest_* describe. A no-op when no finished test is held.
+   */
+  saveSelfTestLog: (sessionId: string) => Promise<void>;
   /** Finalise the current condition and persist an EyeMetricsRecord. */
   endCondition: (conditionId: string, sessionId: string) => Promise<void>;
   /**
@@ -1125,21 +1135,37 @@ export function useTracking(): TrackingApi {
 
   /** A separate aggregator for the self-test, so it never mixes with a condition's exposure. */
   const selfTestAggRef = useRef<EyeMetricsAggregator | null>(null);
+  /** The last finished self-test's blink record, minus the session it is filed under (saveSelfTestLog). */
+  const selfTestLogRef = useRef<((sessionId: string) => OcularEventsRecord) | null>(null);
   const beginSelfTest = useCallback(() => {
     selfTestAggRef.current = new EyeMetricsAggregator();
     selfTestWindowRef.current?.close();
     selfTestWindowRef.current = meterRef.current.open();
+    selfTestLogRef.current = null;
   }, []);
-  const endSelfTest = useCallback((): SelfTestObservation => {
+  const endSelfTest = useCallback((cueTimes?: number[]): SelfTestObservation => {
     const agg = selfTestAggRef.current;
     selfTestAggRef.current = null;
     const win = selfTestWindowRef.current;
     selfTestWindowRef.current = null;
+    selfTestLogRef.current = null;
     // What the camera and the tracker did over the same seconds, so a low rate says WHY (selfTest.ts).
     const pipeline = win ? pipelineFields(win.close(), pipelineRef.current) : null;
     if (!agg) return { blinkOnsets: [], fps: null, facePresence: null, pipeline };
     const cov = agg.coverage();
-    return { blinkOnsets: agg.blinkEvents(baselineEarRef.current).map((e) => e.onset_ms), fps: cov.fps, facePresence: cov.facePresence, pipeline };
+    const baseline = baselineEarRef.current;
+    // Classified once: the onsets the test is scored on and the stored record are the same blinks.
+    const events = agg.blinkEvents(baseline);
+    if (cueTimes) {
+      const cues = [...cueTimes];
+      selfTestLogRef.current = (sessionId) => agg.blinkLog({ window: 'selftest', conditionId: null, sessionId, baseline, events, cues });
+    }
+    return { blinkOnsets: events.map((e) => e.onset_ms), fps: cov.fps, facePresence: cov.facePresence, pipeline };
+  }, []);
+  const saveSelfTestLog = useCallback(async (sessionId: string) => {
+    const build = selfTestLogRef.current;
+    selfTestLogRef.current = null;
+    if (build) await put('ocular_events', build(sessionId));
   }, []);
 
   /** The reading page now on screen (1-based), for the stored blink record. A no-op outside a window. */
@@ -1251,7 +1277,7 @@ export function useTracking(): TrackingApi {
     startError, pipelineInfo, compareTrackers,
     beginGazeCalibration, sampleGazeTarget, endGazeCalibration,
     beginCondition, endCondition, markReadingPage,
-    beginSelfTest, endSelfTest,
+    beginSelfTest, endSelfTest, saveSelfTestLog,
     cameraLostAt,
     cameraBlocked,
   };

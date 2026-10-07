@@ -7,9 +7,12 @@
  * BLINK BY BLINK (detection F1, complete/incomplete kappa), and a reviewer who asks "what if the
  * completeness cut were 0.55?" needs the depth of every blink — neither is possible from a total.
  *
- * WHAT IS KEPT, per reading window:
- *  - each blink: onset, end, deepest point, length in frames and ms, depth (absolute and as a fraction
- *    of the baseline), tier, the frame rate around it, the page on screen, and the rule version;
+ * WHAT IS KEPT, per reading window (and for the camera self-test's cued blinks, the closed-eye
+ * reference — see OcularEventsRecord):
+ *  - each blink: onset, end, deepest point, length in frames and ms, depth (absolute, as a fraction
+ *    of the baseline, and against the open eye just before it), each eye's own depth, the worst
+ *    sampling gap across it, the head pose at its deepest frame, tier, the frame rate around it, the
+ *    page on screen, and the rule version (R2 §G lists why each is there);
  *  - each processed frame: its capture time, whether a face was found, and each eye's EAR.
  *
  * WHAT IT IS NOT. Nothing here changes how a blink is counted. The events are the SAME array the
@@ -19,14 +22,49 @@
  *
  * STORED COMPACTLY. One text column per channel, one value per frame, rounded to what the camera can
  * resolve: time to 0.01 ms, EAR to 6 decimals (landmark noise is in the second or third). A
- * ten-condition sitting is about 1.5 MB (docs/ANALYSIS_PLAN.md §5.7 gives the measured figure).
+ * ten-condition sitting is about 1.5 MB (docs/ANALYSIS_PLAN.md §5 item 6 gives the measured figure).
  */
 import type { BlinkEventDetail, EarSample } from './blink';
-import { BLINK_RULE_VERSION } from './blink';
+import { BLINK_RULE_VERSION, EAR_TIERS } from './blink';
 import type { EarTraceColumns, OcularEventsRecord, StoredBlinkEvent } from '@/storage/types';
 
 /** How far either side of a blink's deepest sample its local frame rate is measured. */
 export const LOCAL_FPS_HALF_WINDOW_MS = 1000;
+
+/**
+ * The open eye just before a blink: the median of the open frames (at or above the registration cut)
+ * in the OPEN_PRE_WINDOW_MS before onset, given at least OPEN_PRE_MIN_FRAMES of them.
+ *
+ * WHY. Every depth in this study is a fraction of ONE baseline, fitted at calibration while the
+ * participant looked at the centre of the screen. The open-eye EAR moves with gaze (looking down a page
+ * lowers the upper lid) and with fatigue, so the same blink reads deeper against the calibration
+ * baseline at the foot of a page than at its head (R1 §3.1a). Depth against the eye's own open level
+ * a moment earlier separates the two. One second is short enough to sit at the same place on the page,
+ * long enough to hold several frames at 15 fps; five frames is the open level the R2 simulation's
+ * template fit used. It is a validation number: nothing is classified on it.
+ */
+export const OPEN_PRE_WINDOW_MS = 1000;
+export const OPEN_PRE_MIN_FRAMES = 5;
+
+/**
+ * One face-solved sample as the aggregator keeps it: the classifier's (t_ms, ear), plus each eye and
+ * the head pose of the same frame, which only the stored blink record reads.
+ */
+export interface DetailSample extends EarSample {
+  left: number | null;
+  right: number | null;
+  pitch: number | null;
+  yaw: number | null;
+}
+
+/**
+ * The key a stored blink record is filed under: the condition_id for a reading window (so a redo of the
+ * condition replaces it, as it replaces the eye-metrics row), and 'selftest:' + session_id for the
+ * camera self-test (so a retried test replaces the earlier attempt, as the session's selftest_* do).
+ */
+export function ocularRecordId(window: 'reading' | 'selftest', id: string): string {
+  return window === 'reading' ? id : `selftest:${id}`;
+}
 
 /** The trace as the aggregator collects it: one entry per processed frame, in capture order. */
 export interface TraceBuffer {
@@ -87,6 +125,88 @@ export function pageAt(marks: Array<[number, number]>, t: number): number | null
   return page;
 }
 
+/** First index whose sample is at or after `t` (the series is in capture order). */
+function lowerBound(series: EarSample[], t: number): number {
+  let lo = 0;
+  let hi = series.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (series[mid].t_ms < t) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function medianOf(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+const finiteOrNull = (x: number | null | undefined): number | null => (x != null && Number.isFinite(x) ? x : null);
+
+/**
+ * What the stored record adds to a classified blink (R2 §G), measured on the series it was found in.
+ *
+ * The frames of a blink are those from its onset sample up to the last one below the registration cut:
+ * the sample before its offset when the eye reopened, the offset sample itself when the window ended
+ * first (BlinkEventDetail.ended_by). Each field is null, never a guess, when its frames are not there.
+ */
+export function blinkDetail(series: DetailSample[], e: BlinkEventDetail, baseline: number | null): {
+  min_ear_left: number | null;
+  min_ear_right: number | null;
+  open_pre: number | null;
+  max_gap_ms: number | null;
+  pitch_at_min: number | null;
+  yaw_at_min: number | null;
+} {
+  const none = { min_ear_left: null, min_ear_right: null, open_pre: null, max_gap_ms: null, pitch_at_min: null, yaw_at_min: null };
+  const i0 = lowerBound(series, e.onset_ms);
+  const i1 = lowerBound(series, e.offset_ms);
+  if (series[i0]?.t_ms !== e.onset_ms || series[i1]?.t_ms !== e.offset_ms) return none;
+  const last = e.ended_by === 'reopened' ? i1 - 1 : i1;
+
+  let minL: number | null = null;
+  let minR: number | null = null;
+  for (let k = i0; k <= last; k++) {
+    const { left, right } = series[k];
+    if (left != null && (minL == null || left < minL)) minL = left;
+    if (right != null && (minR == null || right < minR)) minR = right;
+  }
+
+  // From the sample before onset (when there is one) to the offset sample: the descent, the minimum and
+  // the reopening are each sampled only as finely as the widest interval among these.
+  // Interval k is series[k-1] -> series[k]; starting at i0 takes in the step from the sample before
+  // onset, and a blink at the very first sample simply has no such step.
+  let gap: number | null = null;
+  for (let k = Math.max(1, i0); k <= i1; k++) {
+    const d = series[k].t_ms - series[k - 1].t_ms;
+    if (gap == null || d > gap) gap = d;
+  }
+
+  let openPre: number | null = null;
+  if (baseline != null && Number.isFinite(baseline) && baseline > 0) {
+    const cut = baseline * EAR_TIERS.partial;
+    const open: number[] = [];
+    for (let k = lowerBound(series, e.onset_ms - OPEN_PRE_WINDOW_MS); k < i0; k++) {
+      if (series[k].ear >= cut) open.push(series[k].ear);
+    }
+    if (open.length >= OPEN_PRE_MIN_FRAMES) openPre = medianOf(open);
+  }
+
+  const atMin = series[lowerBound(series, e.min_at_ms)];
+  const onMin = atMin && atMin.t_ms === e.min_at_ms ? atMin : null;
+  const r = (x: number | null | undefined, dp: number) => { const v = finiteOrNull(x); return v == null ? null : round(v, dp); };
+  return {
+    min_ear_left: r(minL, 6),
+    min_ear_right: r(minR, 6),
+    open_pre: r(openPre, 6),
+    max_gap_ms: r(gap, 2),
+    pitch_at_min: r(onMin?.pitch, 1),
+    yaw_at_min: r(onMin?.yaw, 1),
+  };
+}
+
 /** The trace as stored: comma-separated columns, one value per frame. */
 export function encodeTrace(buf: TraceBuffer, t0: number | null): EarTraceColumns {
   const n = buf.t.length;
@@ -139,39 +259,60 @@ export function decodeTrace(c: EarTraceColumns): TraceRow[] {
 /**
  * Build the stored record from what the aggregator held when the window closed.
  *
- * `events` must be the array the eye-metrics row was summarised from; `series` is the face-solved EAR
- * series they were found in (for the local frame rate).
+ * `events` must be the array the eye-metrics row was summarised from (for the self-test, the array it
+ * was scored from); `series` is the face-solved series they were found in, for the local frame rate
+ * and the per-blink detail.
  */
 export function buildOcularEventsRecord(args: {
-  conditionId: string;
+  /** Which window: a condition's reading window (the default) or the camera self-test. */
+  window?: 'reading' | 'selftest';
+  /** The condition, for a reading window; ignored for the self-test, which belongs to none. */
+  conditionId: string | null;
   sessionId: string;
   baseline: number | null;
   events: BlinkEventDetail[];
-  series: EarSample[];
+  series: DetailSample[];
   trace: TraceBuffer;
   pageMarks: Array<[number, number]>;
+  /** The self-test's cue times (performance.now()). */
+  cues?: number[];
 }): OcularEventsRecord {
   const { trace, pageMarks, series, baseline } = args;
+  const window = args.window ?? 'reading';
+  if (window === 'reading' && !args.conditionId) throw new Error('a reading-window blink record needs its condition_id');
   const t0 = trace.t.length ? trace.t[0] : pageMarks.length ? pageMarks[0][0] : null;
   const rel = (t: number) => (t0 == null ? t : round(t - t0, 2));
-  const events: StoredBlinkEvent[] = args.events.map((e) => ({
-    onset_ms: rel(e.onset_ms),
-    offset_ms: rel(e.offset_ms),
-    min_at_ms: rel(e.min_at_ms),
-    duration_ms: round(e.duration_ms, 2),
-    frames_below: e.frames_below,
-    ended_by: e.ended_by,
-    min_ear: e.min_ear,
+  const events: StoredBlinkEvent[] = args.events.map((e) => {
+    const d = blinkDetail(series, e, baseline);
     // An event exists only when a baseline did (classifyBlinks returns none without one).
-    min_ear_ratio: baseline != null && baseline > 0 ? e.min_ear / baseline : null,
-    tier: e.tier,
-    local_fps: (() => { const f = localFps(series, e.min_at_ms); return f == null ? null : round(f, 2); })(),
-    page: pageAt(pageMarks, e.onset_ms),
-  }));
-  return {
-    condition_id: args.conditionId,
+    const ratio = baseline != null && baseline > 0 ? e.min_ear / baseline : null;
+    const f = localFps(series, e.min_at_ms);
+    return {
+      onset_ms: rel(e.onset_ms),
+      offset_ms: rel(e.offset_ms),
+      min_at_ms: rel(e.min_at_ms),
+      duration_ms: round(e.duration_ms, 2),
+      frames_below: e.frames_below,
+      ended_by: e.ended_by,
+      min_ear_raw: e.min_ear,
+      min_ratio_raw: ratio,
+      min_ear_left: d.min_ear_left,
+      min_ear_right: d.min_ear_right,
+      open_pre: d.open_pre,
+      min_ratio_local_raw: d.open_pre != null && d.open_pre > 0 ? e.min_ear / d.open_pre : null,
+      max_gap_ms: d.max_gap_ms,
+      pitch_at_min: d.pitch_at_min,
+      yaw_at_min: d.yaw_at_min,
+      tier: e.tier,
+      local_fps: f == null ? null : round(f, 2),
+      page: pageAt(pageMarks, e.onset_ms),
+    };
+  });
+  const record: OcularEventsRecord = {
+    record_id: window === 'reading' ? ocularRecordId('reading', args.conditionId as string) : ocularRecordId('selftest', args.sessionId),
+    condition_id: window === 'reading' ? args.conditionId : null,
     session_id: args.sessionId,
-    window: 'reading',
+    window,
     rule_version: BLINK_RULE_VERSION,
     ear_baseline: baseline,
     start_capture_ms: t0,
@@ -179,6 +320,23 @@ export function buildOcularEventsRecord(args: {
     events,
     trace: encodeTrace(trace, t0),
   };
+  if (window === 'selftest') record.cues = (args.cues ?? []).map(rel);
+  return record;
+}
+
+/**
+ * Signed time from the nearest cue to a self-test blink's onset (ms; negative = before the cue). The
+ * self-test counts a blink for a cue when this is within SELF_TEST.WINDOW_MS (selfTest.ts); kept as a
+ * number so a reader can see how promptly the blink followed. Null without cues.
+ */
+export function cueLag(cues: number[] | undefined, onsetMs: number): number | null {
+  if (!cues || cues.length === 0) return null;
+  let best: number | null = null;
+  for (const c of cues) {
+    const d = onsetMs - c;
+    if (best == null || Math.abs(d) < Math.abs(best)) best = d;
+  }
+  return best;
 }
 
 /** Blink counts by tier, in the shape of the eye-metrics row's three count columns. */

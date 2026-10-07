@@ -34,10 +34,12 @@ const STORE_SPECS: StoreSpec[] = [
   { name: 'eye_metrics', keyPath: 'condition_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
   /*
    * Every blink of each reading window and its per-frame eye-openness trace (Round 78, schema 10):
-   * the validation record behind eye_metrics' counts. Keyed like eye_metrics, so a redo replaces it.
-   * Covered by gatherSession, the backup (RESTORE_PLAN) and purgeSession like every other store.
+   * the validation record behind eye_metrics' counts, plus one record of the camera self-test's cued
+   * blinks per sitting. Keyed on record_id (tracking/blinkLog.ts ocularRecordId): the condition_id for
+   * a reading window, so a redo replaces it like the eye-metrics row; 'selftest:' + session_id for the
+   * self-test. Covered by gatherSession, the backup (RESTORE_PLAN) and purgeSession like every other store.
    */
-  { name: 'ocular_events', keyPath: 'condition_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
+  { name: 'ocular_events', keyPath: 'record_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
   { name: 'calibration_data', keyPath: 'calibration_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
   /*
    * RESERVED AND UNWRITTEN. Nothing in the app writes this store — grep for 'system_performance_logs'

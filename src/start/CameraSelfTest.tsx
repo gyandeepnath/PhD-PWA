@@ -15,7 +15,8 @@ import { TRACKER_LABEL, type TrackerBackend } from '@/tracking/trackers';
  */
 export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false }: {
   begin: () => void;
-  end: () => SelfTestObservation;
+  /** Ends the check; given the cue times, the check's blinks are held to be stored with the result. */
+  end: (cueTimes?: number[]) => SelfTestObservation;
   onDone: (result: SelfTestResult) => void;
   /** True while the dot is flashing: the operator's Exit chip is withheld, as in calibration. */
   onRunning?: (running: boolean) => void;
@@ -76,7 +77,7 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false }
       // End only after the last cue has been shown AND its blink has had the full matching window.
       if (shown === SELF_TEST.CUES - 1 && el >= first + SELF_TEST.CUES * every + (fast ? 150 : 1500)
         && (fast || now() - cues.current[shown] >= SELF_TEST.WINDOW_MS)) {
-        const seen = end();
+        const seen = end(cues.current);
         setResult(scoreSelfTest(cues.current, seen.blinkOnsets, seen));
         setPhase('result');
         return;

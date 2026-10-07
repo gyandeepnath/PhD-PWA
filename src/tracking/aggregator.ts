@@ -17,11 +17,10 @@ import {
   computeClosureMetrics,
   interBlinkInterval,
   fitEarBaseline,
-  type EarSample,
   type BlinkEvent,
   type BlinkEventDetail,
 } from './blink';
-import { buildOcularEventsRecord, emptyTrace, type TraceBuffer } from './blinkLog';
+import { buildOcularEventsRecord, emptyTrace, type DetailSample, type TraceBuffer } from './blinkLog';
 import type { HeadPose } from './headPose';
 import type { GazeZone } from './gaze';
 import { classifyLighting } from './lighting';
@@ -62,7 +61,11 @@ function smooth(xs: number[], window = 5): number[] {
 }
 
 export class EyeMetricsAggregator {
-  private ear: EarSample[] = [];
+  /**
+   * The face-solved series every measure is computed from. Each sample also carries its frame's two
+   * eyes and head pose (blinkLog.ts DetailSample), which only the stored blink record reads.
+   */
+  private ear: DetailSample[] = [];
   private pitch: number[] = [];
   private yaw: number[] = [];
   private roll: number[] = [];
@@ -102,7 +105,13 @@ export class EyeMetricsAggregator {
     // BOTH fields, not just the EAR. A sample with a good EAR and a NaN timestamp cannot be placed
     // in the series: it has no position for the within-condition bins, no interval for the gap
     // detector, and it poisons the frame-rate estimate that now derives from these timestamps.
-    if (Number.isFinite(f.ear) && Number.isFinite(f.t_ms)) this.ear.push({ t_ms: f.t_ms, ear: f.ear });
+    if (Number.isFinite(f.ear) && Number.isFinite(f.t_ms)) {
+      const fin = (v: number | undefined) => (v != null && Number.isFinite(v) ? v : null);
+      this.ear.push({
+        t_ms: f.t_ms, ear: f.ear,
+        left: fin(f.earLeft), right: fin(f.earRight), pitch: fin(f.pose.pitch), yaw: fin(f.pose.yaw),
+      });
+    }
     if (Number.isFinite(f.pose.pitch)) this.pitch.push(f.pose.pitch);
     if (Number.isFinite(f.pose.yaw)) this.yaw.push(f.pose.yaw);
     if (Number.isFinite(f.pose.roll)) this.roll.push(f.pose.roll);
@@ -184,7 +193,7 @@ export class EyeMetricsAggregator {
    * rather than "blinks are not being counted".
    */
   /** The blink events so far, for the camera self-test; empty without a baseline. */
-  blinkEvents(baseline: number | null): BlinkEvent[] {
+  blinkEvents(baseline: number | null): BlinkEventDetail[] {
     if (baseline == null || !Number.isFinite(baseline) || baseline <= 0) return [];
     return classifyBlinks(this.ear, baseline);
   }
@@ -221,7 +230,11 @@ export class EyeMetricsAggregator {
    * The stored blink record for this window (blinkLog.ts), from the events `finalizeWithEvents`
    * returned — the same array the eye-metrics row's counts were taken from, so the two cannot differ.
    */
-  blinkLog(args: { conditionId: string; sessionId: string; baseline: number | null; events: BlinkEventDetail[] }): OcularEventsRecord {
+  blinkLog(args: {
+    conditionId: string | null; sessionId: string; baseline: number | null; events: BlinkEventDetail[];
+    /** 'selftest' for the camera self-test's record, with its cue times; a reading window otherwise. */
+    window?: 'reading' | 'selftest'; cues?: number[];
+  }): OcularEventsRecord {
     return buildOcularEventsRecord({
       ...args,
       series: this.ear,

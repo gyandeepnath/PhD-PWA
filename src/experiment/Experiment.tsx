@@ -1569,6 +1569,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               // recorded as the one that actually ran.
               const fresh = { ...base, camera_selftest: { ...r, at: Date.now() }, camera_pipeline: tracking.pipelineInfo() ?? base.camera_pipeline ?? null } as SessionRecord;
               await put('sessions', fresh);
+              // The same attempt's blinks and trace, as the sitting's closed-eye reference (07b/07c, Round 78).
+              await tracking.saveSelfTestLog(session.session_id);
               setSession(fresh);
               setSelfTesting(false);
               void captureMedia('session_start').finally(() => advanceOrResume('CALIBRATION'));

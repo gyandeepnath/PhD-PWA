@@ -188,7 +188,7 @@ export interface SessionRecord {
    * downloadExport triggers browser downloads with `a.click()`, which returns void and reports
    * nothing: a blocked download, a cancelled save dialog or a full disk are all indistinguishable
    * from success. Chrome additionally prompts before allowing multiple downloads from one origin,
-   * and an export writes about eighteen files, so a refused prompt is an ordinary outcome — not an
+   * and an export writes about twenty files, so a refused prompt is an ordinary outcome — not an
    * edge case.
    */
   exported_at?: number | null;
@@ -1009,8 +1009,15 @@ export interface EyeMetricsRecord extends PipelineWindowFields {
 }
 
 /**
- * One blink of a reading window, as stored (Round 78). Times are ms on the capture clock, relative to
- * the window's first frame (OcularEventsRecord.start_capture_ms). See tracking/blink.ts for the rules.
+ * One stored blink (Round 78). Times are ms on the capture clock, relative to the window's first frame
+ * (OcularEventsRecord.start_capture_ms). See tracking/blink.ts for the rules and tracking/blinkLog.ts
+ * for how each field is measured.
+ *
+ * The fields after `ended_by` are what checking the classifier needs (R2 §G): the blink's depth by
+ * the rule that classified it, each eye's own depth (a one-eye artefact), the open eye just before it
+ * (depth against the local open level, which follows gaze and page position), the worst sampling gap
+ * across it (a blink sampled across a dropped frame), and the head pose at its deepest frame (EAR
+ * depends on viewpoint). None of them changes how a blink is counted.
  */
 export interface StoredBlinkEvent {
   onset_ms: number;
@@ -1019,41 +1026,68 @@ export interface StoredBlinkEvent {
   duration_ms: number;
   frames_below: number;
   ended_by: 'reopened' | 'window_end';
-  min_ear: number;
-  /** min_ear / the calibration baseline the blink was classified against. */
-  min_ear_ratio: number | null;
+  /** The lowest EAR in the blink (mean of both eyes): the deepest FRAME, which is what rule blink-r1 classifies on. */
+  min_ear_raw: number;
+  /** min_ear_raw / the calibration baseline the blink was classified against. */
+  min_ratio_raw: number | null;
+  /** Each eye's own lowest EAR over the frames below the registration cut; null when that eye was never measured. */
+  min_ear_left: number | null;
+  min_ear_right: number | null;
+  /** Median EAR of the open frames (at or above the registration cut) in the 1 s before onset; null with fewer than OPEN_PRE_MIN_FRAMES. */
+  open_pre: number | null;
+  /** min_ear_raw / open_pre: depth against the eye's own open level just before the blink. */
+  min_ratio_local_raw: number | null;
+  /** Largest interval between consecutive face-solved samples from the sample before onset to the offset sample. */
+  max_gap_ms: number | null;
+  /** Head pitch and yaw (degrees, as head_pitch_mean) at the deepest frame; null when not solved there. */
+  pitch_at_min: number | null;
+  yaw_at_min: number | null;
   tier: 'full' | 'micro' | 'incomplete';
   /** Face-solved frames per second within 1 s either side of the deepest sample; null with < 2. */
   local_fps: number | null;
-  /** The reading page on screen at onset, 1-based; null when the page was not recorded. */
+  /** The reading page on screen at onset, 1-based; null when the page was not recorded (and always in the self-test). */
   page: number | null;
 }
 
 /**
- * Every blink of one reading window and the eye-openness trace it was found in (Round 78).
+ * Every blink of one measured window and the eye-openness trace it was found in (Round 78).
  *
- * Keyed by condition_id, like eye_metrics, so a redo of a condition replaces it. Written in the same
- * step as the eye-metrics row, from the same classification, so its blink counts equal that row's.
+ * Two windows are kept:
+ *  - 'reading': a condition's reading window. Written in the same step as the condition's eye-metrics
+ *    row, from the same classification, so its blink counts equal that row's.
+ *  - 'selftest': the camera self-test's cued blinks (one per sitting, the attempt the session keeps).
+ *    Deliberate blinks are complete blinks, so this is each participant's closed-eye reference: how
+ *    deep a blink they know to be complete reads on this camera, against the 0.60 completeness cut.
+ *
  * It is for VALIDATION and RE-ANALYSIS (comparing the classifier with a human coder, re-cutting a
  * threshold); the main analysis reads only 07_eye_metrics.csv.
  *
  * The trace is stored as text columns, one value per processed frame, so a ten-condition sitting
  * stays in the low megabytes in the database and in a backup (tracking/blinkLog.ts encodes and
- * decodes it; docs/ANALYSIS_PLAN.md gives the measured size).
+ * decodes it; docs/ANALYSIS_PLAN.md §5 item 6 gives the measured size).
  */
 export interface OcularEventsRecord {
-  condition_id: string;
+  /**
+   * The key (tracking/blinkLog.ts ocularRecordId): the condition_id for a reading window, so a redo of
+   * the condition replaces it as it replaces the eye-metrics row; 'selftest:' + session_id for the
+   * self-test, so a retried test replaces the earlier attempt.
+   */
+  record_id: string;
+  /** The condition whose reading window this is; null for the self-test, which belongs to no condition. */
+  condition_id: string | null;
   session_id: string;
-  /** Which part of the condition was recorded. Only the reading window is. */
-  window: 'reading';
+  /** Which window was recorded: a condition's reading window, or the camera self-test. */
+  window: 'reading' | 'selftest';
   /** tracking/blink.ts BLINK_RULE_VERSION when the blinks were classified. */
   rule_version: string;
   /** The open-eye baseline the blinks were classified against; null when there was none. */
   ear_baseline: number | null;
   /** performance.now() time of the window's first frame; null when no frame was processed. */
   start_capture_ms: number | null;
-  /** Page turns as [ms from start, page number]; page 1 is shown from the start. */
+  /** Page turns as [ms from start, page number]; page 1 is shown from the start. Empty for the self-test. */
   pages: Array<[number, number]>;
+  /** The self-test's cue times (the dot flashed), ms from start. Absent for a reading window. */
+  cues?: number[];
   events: StoredBlinkEvent[];
   trace: EarTraceColumns;
 }

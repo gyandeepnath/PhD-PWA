@@ -492,6 +492,31 @@ These are not optional and they come first.
    look entirely normal.
 5. **Careless responding.** `12_quality_flags.csv` carries straight-lining and rushed-response
    signals per condition.
+6. **Per-blink records (from schema 10, Round 78) — optional, for validation only.** The main
+   analysis does not change: it reads the per-condition totals in `07_eye_metrics.csv`, and neither
+   template reads the two files below.
+   - `07b_blink_events.csv`: one row per blink the camera counted, in each reading window and in the
+     camera self-test (`window`). It holds the blink's times, its depth by the rule that classified
+     it (`min_ear_raw`, `min_ratio_raw`), each eye's depth, the open eye just before it (`open_pre`,
+     `min_ratio_local_raw`), the widest sampling step across it (`max_gap_ms`), the head pose at its
+     deepest frame, its tier and the rule version (`rule_version`, now `blink-r1`).
+   - `07c_ear_trace.csv`: one row per processed frame of each window (time, face found, each eye's
+     EAR).
+   - **What they are for:** matching the classifier blink by blink against a human coder (detection,
+     complete/incomplete agreement); re-cutting the 0.60 completeness threshold without re-running
+     anything; and, from the self-test rows, checking per participant how deep a deliberate
+     (complete) blink reads on this camera against that cut.
+   - **Consistency check:** the integrity report (`16_integrity_report.csv`) warns when a condition's
+     07b blinks by tier differ from its 07 counts (`blink_events_match_summary`), when 07c's measured
+     frames differ from `ear_sample_count` (`ear_trace_matches_summary`), and when the self-test
+     rows differ from `selftest_detected` + `selftest_extra` (`selftest_events_match`). A warning
+     means "do not use 07b/07c for that condition"; 07 is unaffected.
+   - **Size** (measured in `tests/blinkLog.test.ts` on a synthetic sitting: ten 3-minute reading
+     windows at 30 fps, 450 blinks): about **1.7 MB per sitting** in the tablet's database and in the
+     `backup_*.json` (a backup without them is about 0.3 MB). `07c_ear_trace.csv` is the large
+     file: about 54,000 rows and 4–6 MB per sitting. A hundred sittings kept on the tablet take
+     about 170 MB. The pre-flight storage check already asks for 300 MB free before every sitting
+     (`storage/storageHealth.ts`), so it needs no change; export and back up as usual.
 
 ---
 

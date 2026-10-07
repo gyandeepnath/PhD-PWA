@@ -382,7 +382,8 @@ log(`   ${cbT.rows.length} documented columns across ${documented.size} files, a
 log('\n' + '='.repeat(104));
 log('13. FILE ORDERING — numeric prefixes must sort in the order they are emitted');
 log('='.repeat(104));
-const numbered = files.map((f) => f.filename).filter((n) => /^\d\d_/.test(n));
+// 07b and 07c (Round 78) carry a letter after the number; '_' sorts before any letter, so 07 stays first.
+const numbered = files.map((f) => f.filename).filter((n) => /^\d\d[a-z]?_/.test(n));
 const sorted = [...numbered].sort();
 eq('emitted order matches lexicographic order', numbered.join(' '), sorted.join(' '));
 log(`   ${numbered.join(' ')}`);
@@ -412,8 +413,10 @@ const KEY_MAY_BE_BLANK: Record<string, Record<string, string>> = {
   '03_fatigue_scores.csv': { condition_id: 'the session-level baseline rating belongs to no condition' },
   '16_integrity_report.csv': { condition_id: 'a session-level finding refers to no single condition' },
   '12_quality_flags.csv': { condition_id: 'not exported on this file; rows are keyed by label' },
+  '07b_blink_events.csv': { condition_id: 'the camera self-test rows (window = selftest) belong to no condition' },
+  '07c_ear_trace.csv': { condition_id: 'the camera self-test rows (window = selftest) belong to no condition' },
 };
-for (const f of files.filter((x) => /^\d\d_.*\.csv$/.test(x.filename) && x.filename !== '00_CODEBOOK.csv')) {
+for (const f of files.filter((x) => /^\d\d[a-z]?_.*\.csv$/.test(x.filename) && x.filename !== '00_CODEBOOK.csv')) {
   const t = table(f.content);
   if (t.rows.length === 0) continue;
   for (const col of KEY_COLUMNS) {

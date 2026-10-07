@@ -636,18 +636,23 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
    * analysis reads only 07_eye_metrics.csv, which this does not touch; what is affected is the
    * validation file, which should not be used for that condition until the difference is explained.
    * Silent for a sitting with no blink records at all (before schema 10, or the camera never on).
+   *
+   * The self-test's record is held to the self-test result the same way: its blinks are the ones the
+   * test scored, so they number selftest_detected + selftest_extra.
    */
   {
     const ocular = bundle.ocularEvents ?? [];
+    const reading = ocular.filter((o) => o.window !== 'selftest');
     const eyeById = new Map((bundle.eyeMetrics ?? []).map((e) => [e.condition_id, e] as const));
-    for (const o of ocular) {
-      if (!validIds.has(o.condition_id)) {
+    for (const o of reading) {
+      const cid = o.condition_id ?? '';
+      if (!validIds.has(cid)) {
         add('warning', 'blink_events_orphan',
-          `The blink record for condition "${o.condition_id}" belongs to no condition of this sitting; `
-          + 'its rows in 07b/07c join to nothing.', [o.condition_id]);
+          `The blink record for condition "${cid}" belongs to no condition of this sitting; `
+          + 'its rows in 07b/07c join to nothing.', [cid]);
         continue;
       }
-      const eye = eyeById.get(o.condition_id);
+      const eye = eyeById.get(cid);
       const n = tierCounts(o.events);
       const counted = eye && eye.blink_count_full != null && eye.blink_count_micro != null && eye.blink_count_incomplete != null
         ? { full: eye.blink_count_full, micro: eye.blink_count_micro, incomplete: eye.blink_count_incomplete }
@@ -657,25 +662,35 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
         : o.events.length === 0;
       if (!same) {
         add('warning', 'blink_events_match_summary',
-          `Condition "${o.condition_id}": 07b lists ${n.full} full, ${n.micro} micro and ${n.incomplete} incomplete `
+          `Condition "${cid}": 07b lists ${n.full} full, ${n.micro} micro and ${n.incomplete} incomplete `
           + `blinks, but 07_eye_metrics counts ${counted ? `${counted.full}, ${counted.micro} and ${counted.incomplete}` : 'none (no blink measure)'}. `
-          + 'Do not use 07b/07c for this condition; 07_eye_metrics is unaffected.', [o.condition_id]);
+          + 'Do not use 07b/07c for this condition; 07_eye_metrics is unaffected.', [cid]);
       }
       const measured = decodeTrace(o.trace).filter((f) => f.face && f.ear != null).length;
       if (eye && eye.camera_active && measured !== eye.ear_sample_count) {
         add('warning', 'ear_trace_matches_summary',
-          `Condition "${o.condition_id}": 07c has ${measured} frames with both eyes measured, but 07_eye_metrics `
-          + `counts ${eye.ear_sample_count} EAR samples. Do not use 07c for this condition.`, [o.condition_id]);
+          `Condition "${cid}": 07c has ${measured} frames with both eyes measured, but 07_eye_metrics `
+          + `counts ${eye.ear_sample_count} EAR samples. Do not use 07c for this condition.`, [cid]);
       }
     }
-    if (ocular.length) {
-      const have = new Set(ocular.map((o) => o.condition_id));
+    if (reading.length) {
+      const have = new Set(reading.map((o) => o.condition_id));
       const missing = (bundle.eyeMetrics ?? []).filter((e) => e.camera_active && validIds.has(e.condition_id) && !have.has(e.condition_id));
       if (missing.length) {
         add('warning', 'blink_events_coverage',
           `${missing.length} camera-on condition(s) have no blink record in 07b/07c (measured by a build before `
           + 'schema 10, or not saved). Their totals in 07_eye_metrics stand; only the validation rows are missing.',
           missing.slice(0, 5).map((e) => e.condition_id));
+      }
+    }
+    for (const o of ocular.filter((r) => r.window === 'selftest')) {
+      const st = bundle.session.camera_selftest;
+      const scored = st ? st.detected + st.extra : null;
+      if (scored == null || scored !== o.events.length) {
+        add('warning', 'selftest_events_match',
+          `07b lists ${o.events.length} self-test blink(s), but the self-test result in 01_session_info `
+          + `${scored == null ? 'is missing' : `scored ${scored} (${st!.detected} cued + ${st!.extra} extra)`}. `
+          + 'Do not use the self-test rows of 07b/07c; nothing else is affected.', [o.record_id]);
       }
     }
   }

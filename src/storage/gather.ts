@@ -138,7 +138,8 @@ export function normaliseBundle(b: SessionBundle): SessionBundle {
     visualSearch: [...b.visualSearch].sort(byCondition<VisualSearchRecord>((r) => r.condition_id)),
     perception: [...b.perception].sort(byCondition<DisplayPerceptionRecord>((r) => r.perception_id)),
     eyeMetrics: [...b.eyeMetrics].sort(byCondition<EyeMetricsRecord>((r) => r.condition_id)),
-    ocularEvents: [...(b.ocularEvents ?? [])].sort(byCondition<OcularEventsRecord>((r) => r.condition_id)),
+    // In condition order; the self-test record, which belongs to no condition, sorts after them.
+    ocularEvents: [...(b.ocularEvents ?? [])].sort(byCondition<OcularEventsRecord>((r) => r.record_id)),
     reactionTrials: [...b.reactionTrials].sort(
       byCondition<ReactionTrialRecord>((r) => r.trial_id, (x, y) => x.trial_number - y.trial_number),
     ),
@@ -447,7 +448,7 @@ export async function purgeSession(sessionId: string): Promise<void> {
   for (const r of bundle.perception) await remove('display_perception', r.perception_id);
   for (const r of bundle.visualSearch) await remove('visual_search', r.condition_id);
   for (const r of bundle.eyeMetrics) await remove('eye_metrics', r.condition_id);
-  for (const r of bundle.ocularEvents ?? []) await remove('ocular_events', r.condition_id);
+  for (const r of bundle.ocularEvents ?? []) await remove('ocular_events', r.record_id);
   for (const r of bundle.rtSummaries) await remove('rt_summaries', r.condition_id);
   for (const r of bundle.calibration) await remove('calibration_data', r.calibration_id);
   // Performance logs aren't part of the analysis bundle, so purge them directly by session index.
@@ -515,7 +516,7 @@ export async function purgeExpired(now = Date.now()): Promise<PurgeOutcome> {
      * exported_at was the gate, and it is stamped unconditionally after downloadExport returns —
      * but that function drives `a.click()`, which cannot report a blocked download, a cancelled
      * save dialog or a full disk. Chrome also prompts before allowing multiple downloads and an
-     * export writes about eighteen files, so a refused prompt leaves exported_at set and every file
+     * export writes about twenty files, so a refused prompt leaves exported_at set and every file
      * absent. Thirty days later this loop would destroy the only copy, unattended.
      */
     if (s.export_confirmed_at == null) {

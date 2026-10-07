@@ -7,6 +7,7 @@ import { buildExportFiles, escapeCsv, toCsv, fnv1a, CODEBOOK } from '@/storage/e
 import type { SessionBundle } from '@/storage/gather';
 import { buildFixtureBundle } from '@/sim/bundleFixture';
 import type { Provenance } from '@/storage/types';
+import { splitCsvRow } from './helpers/csv';
 
 const prov: Provenance = {
   app_version: '2.1.0', git_hash: 'abc1234', build_time: 't', condition_def_hash: 'def5678', schema_version: 6,
@@ -349,6 +350,72 @@ describe('camera pipeline columns', () => {
     const [old] = rows(bundle(), '01_session_info.csv');
     for (const c of ['tracker_backend', 'camera_setting_fps', 'selftest_camera_fps', 'selftest_frames_skipped', 'selftest_limit']) {
       expect(old[c], c).toBe('');
+    }
+  });
+});
+
+describe('07b and 07c: every blink and the eye-openness trace, kept apart from the analysis (round 78)', () => {
+  const b = buildFixtureBundle();
+  const files = buildExportFiles(b);
+  const table = (name: string) => {
+    const lines = files.find((f) => f.filename === name)!.content.trim().split('\n');
+    const head = splitCsvRow(lines[0]);
+    return lines.slice(1).map((l) => Object.fromEntries(splitCsvRow(l).map((c, i) => [head[i], c])));
+  };
+  const blinks = table('07b_blink_events.csv');
+  const trace = table('07c_ear_trace.csv');
+  const eye = table('07_eye_metrics.csv');
+
+  it('lists, per condition and tier, exactly the blinks 07_eye_metrics counts', () => {
+    for (const row of eye) {
+      const mine = blinks.filter((x) => x.condition_id === row.condition_id);
+      const n = (tier: string) => String(mine.filter((x) => x.tier === tier).length);
+      expect([n('full'), n('micro'), n('incomplete')], row.condition_id).toEqual(
+        [row.blink_count_full, row.blink_count_micro, row.blink_count_incomplete]);
+      expect(mine.every((x) => x.window === 'reading' && x.rule_version === 'blink-r1')).toBe(true);
+    }
+  });
+
+  it('has one trace row per processed frame, and its measured frames are ear_sample_count', () => {
+    expect(trace).toHaveLength(b.ocularEvents!.reduce((s, o) => s + o.trace.frames, 0));
+    for (const row of eye) {
+      const measured = trace.filter((x) => x.condition_id === row.condition_id && x.face === '1' && x.ear !== '');
+      expect(String(measured.length), row.condition_id).toBe(row.ear_sample_count);
+    }
+  });
+
+  it('keeps the self-test rows apart: no condition, window selftest, the lag from the nearest flash', () => {
+    const st = blinks.filter((x) => x.window === 'selftest');
+    expect(st).toHaveLength(6);
+    expect(st.every((x) => x.condition_id === '' && x.condition_label === '' && x.page === '')).toBe(true);
+    // Five blinks answered a flash (within the 1200 ms the test allows); one was an extra.
+    expect(st.filter((x) => Math.abs(Number(x.cue_lag_ms)) <= 1200)).toHaveLength(5);
+    expect(blinks.filter((x) => x.window === 'reading').every((x) => x.cue_lag_ms === '')).toBe(true);
+    expect(trace.filter((x) => x.window === 'selftest').every((x) => x.condition_id === '')).toBe(true);
+  });
+
+  it('documents every column, each saying the file is not needed for the main analysis', () => {
+    for (const name of ['07b_blink_events.csv', '07c_ear_trace.csv']) {
+      const head = splitCsvRow(files.find((f) => f.filename === name)!.content.split('\n')[0]);
+      for (const col of head) {
+        const entry = CODEBOOK.find((c) => c.file === name && c.column === col);
+        expect(entry, `${name}:${col}`).toBeDefined();
+        expect(entry!.description, `${name}:${col}`).toMatch(/not used by the main analysis|NOT needed for the main analysis/);
+      }
+    }
+  });
+
+  it('is read by neither analysis template, which stay on the per-condition totals', () => {
+    for (const t of ['src/analysis/analysis_template.R', 'src/analysis/analysis_template.py']) {
+      const src = readFileSync(resolve(__dirname, '..', t), 'utf8');
+      expect(src, t).not.toMatch(/07b_|07c_|blink_events|ear_trace/);
+    }
+  });
+
+  it('writes the headers alone for a sitting with no records (before schema 10, or camera off)', () => {
+    const old = buildExportFiles({ ...buildFixtureBundle(), ocularEvents: undefined });
+    for (const name of ['07b_blink_events.csv', '07c_ear_trace.csv']) {
+      expect(old.find((f) => f.filename === name)!.content.trim().split('\n'), name).toHaveLength(1);
     }
   });
 });

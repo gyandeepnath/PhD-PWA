@@ -162,7 +162,7 @@ const RESTORE_PLAN: { key: keyof BackupData; store: StoreName; keyPath: string; 
   { key: 'visualSearch', store: 'visual_search', keyPath: 'condition_id' },
   { key: 'perception', store: 'display_perception', keyPath: 'perception_id' },
   { key: 'eyeMetrics', store: 'eye_metrics', keyPath: 'condition_id' },
-  { key: 'ocularEvents', store: 'ocular_events', keyPath: 'condition_id', sinceSchema: 10 },
+  { key: 'ocularEvents', store: 'ocular_events', keyPath: 'record_id', sinceSchema: 10 },
   { key: 'reactionTrials', store: 'reaction_trials', keyPath: 'trial_id' },
   { key: 'rtSummaries', store: 'rt_summaries', keyPath: 'condition_id' },
   { key: 'calibration', store: 'calibration_data', keyPath: 'calibration_id' },

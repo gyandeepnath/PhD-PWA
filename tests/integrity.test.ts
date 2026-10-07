@@ -338,3 +338,80 @@ describe('one face tracker per sitting (round 75)', () => {
     expect(checks(b)).not.toContain('tracker_consistent');
   });
 });
+
+describe('the stored blinks are the blinks the summary counted (round 78)', () => {
+  const finding = (b: ReturnType<typeof buildFixtureBundle>, check: string) => auditBundle(b).findings.find((x) => x.check === check);
+  const blinkChecks = ['blink_events_match_summary', 'ear_trace_matches_summary', 'blink_events_orphan', 'blink_events_coverage', 'selftest_events_match'];
+
+  it('is silent for the fixture, whose records were built through the real aggregator', () => {
+    const b = buildFixtureBundle();
+    expect(b.ocularEvents!.filter((o) => o.window === 'reading')).toHaveLength(b.conditions.length);
+    expect(checks(b).filter((c) => blinkChecks.includes(c))).toEqual([]);
+  });
+
+  it('is silent for a sitting with no blink records at all (before schema 10)', () => {
+    const b = buildFixtureBundle();
+    b.ocularEvents = [];
+    expect(checks(b).filter((c) => blinkChecks.includes(c))).toEqual([]);
+  });
+
+  it('warns when a condition lists a different number of blinks than 07 counts, and names the condition', () => {
+    const b = buildFixtureBundle();
+    const o = b.ocularEvents!.find((r) => r.window === 'reading')!;
+    o.events.pop();
+    const f = finding(b, 'blink_events_match_summary');
+    expect(f?.severity).toBe('warning');
+    expect(f?.refs).toEqual([o.condition_id]);
+    expect(f?.detail).toMatch(/07_eye_metrics is unaffected/);
+  });
+
+  it('warns when a blink changed tier but the total did not', () => {
+    const b = buildFixtureBundle();
+    const o = b.ocularEvents!.find((r) => r.window === 'reading' && r.events.some((e) => e.tier === 'full'))!;
+    o.events.find((e) => e.tier === 'full')!.tier = 'incomplete';
+    expect(finding(b, 'blink_events_match_summary')?.refs).toEqual([o.condition_id]);
+  });
+
+  it('warns when the record has blinks but the row has no blink measure (no baseline)', () => {
+    const b = buildFixtureBundle();
+    const eye = b.eyeMetrics[0];
+    Object.assign(eye, { blink_count_full: null, blink_count_micro: null, blink_count_incomplete: null });
+    expect(finding(b, 'blink_events_match_summary')?.detail).toMatch(/none \(no blink measure\)/);
+  });
+
+  it('warns when the trace has a different number of measured frames than ear_sample_count', () => {
+    const b = buildFixtureBundle();
+    b.eyeMetrics[1].ear_sample_count += 1;
+    expect(finding(b, 'ear_trace_matches_summary')?.refs).toEqual([b.eyeMetrics[1].condition_id]);
+  });
+
+  it('warns about a record for a condition the sitting does not have', () => {
+    const b = buildFixtureBundle();
+    const o = b.ocularEvents![0];
+    o.condition_id = 'cond-elsewhere';
+    o.record_id = 'cond-elsewhere';
+    expect(finding(b, 'blink_events_orphan')?.refs).toEqual(['cond-elsewhere']);
+    // ...and the condition that lost its record is then reported as uncovered.
+    expect(finding(b, 'blink_events_coverage')?.refs).toEqual([b.conditions[0].condition_id]);
+  });
+
+  it('holds the self-test record to the self-test result: cued + extra blinks', () => {
+    const b = buildFixtureBundle();
+    expect(b.session.camera_selftest).toMatchObject({ detected: 5, extra: 1 });
+    b.session.camera_selftest = { ...b.session.camera_selftest!, extra: 0 };
+    expect(finding(b, 'selftest_events_match')?.detail).toMatch(/lists 6 self-test blink\(s\).*scored 5 \(5 cued \+ 0 extra\)/);
+    delete b.session.camera_selftest;
+    expect(finding(b, 'selftest_events_match')?.detail).toMatch(/is missing/);
+    // Never mistaken for a condition: it raises neither the orphan nor the coverage check.
+    expect(checks(b)).not.toContain('blink_events_orphan');
+  });
+
+  it('only ever warns: the main analysis does not read these files', () => {
+    const b = buildFixtureBundle();
+    b.ocularEvents!.forEach((o) => { o.events = []; });
+    b.eyeMetrics[0].ear_sample_count += 1;
+    const r = auditBundle(b);
+    expect(r.findings.filter((f) => blinkChecks.includes(f.check)).length).toBeGreaterThan(0);
+    expect(r.findings.filter((f) => blinkChecks.includes(f.check)).every((f) => f.severity === 'warning')).toBe(true);
+  });
+});

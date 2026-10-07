@@ -759,3 +759,69 @@ describe('a restore says what it could not restore, and what it is about to dest
     expect(res.warnings?.join(' ') ?? '').not.toMatch(/held values the backup does not/);
   });
 });
+
+describe('the per-blink records survive a backup (round 78)', () => {
+  beforeEach(clearDb);
+
+  it('restores every blink record and trace, self-test included, so 07b and 07c re-export byte for byte', async () => {
+    const original = buildFixtureBundle();
+    expect(original.ocularEvents!.length).toBe(original.conditions.length + 1);
+    const parsed = parseSessionBackup(serialiseSessionBackup(original));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.warnings.join(' ')).not.toMatch(/ocular_events/);
+    const res = await importSessionBackup(parsed.backup!);
+    expect(res.ok).toBe(true);
+    expect(res.written.ocular_events).toBe(original.ocularEvents!.length);
+
+    const restored = await gatherSession(res.sessionId!);
+    const byId = (b: typeof original) => Object.fromEntries((b.ocularEvents ?? []).map((o) => [o.record_id, o]));
+    expect(byId(restored!)).toEqual(byId(original));
+    const file = (b: typeof original, name: string) => buildExportFiles(b).find((f) => f.filename === name)!.content;
+    for (const name of ['07b_blink_events.csv', '07c_ear_trace.csv']) {
+      expect(file(restored!, name), name).toBe(file(original, name));
+    }
+  });
+
+  it('a restore over the same sitting leaves one record per window, not two', async () => {
+    const b = buildFixtureBundle();
+    const parsed = parseSessionBackup(serialiseSessionBackup(b));
+    await importSessionBackup(parsed.backup!);
+    await importSessionBackup(parsed.backup!, 'overwrite');
+    expect(await getAll('ocular_events')).toHaveLength(b.ocularEvents!.length);
+  });
+
+  it('says nothing about the missing records in a file from before schema 10, which could not have them', () => {
+    const obj = JSON.parse(serialiseSessionBackup(buildFixtureBundle())) as { data: Record<string, unknown> };
+    delete obj.data.ocularEvents;
+    (obj.data.session as { provenance: { schema_version: number } }).provenance.schema_version = 9;
+    const parsed = parseSessionBackup(withChecksum(obj as unknown as Record<string, unknown>));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.warnings.join(' ')).not.toMatch(/ocular_events/);
+  });
+
+  it('names them when a file from schema 10 on lacks them', () => {
+    const obj = JSON.parse(serialiseSessionBackup(buildFixtureBundle())) as { data: Record<string, unknown> };
+    delete obj.data.ocularEvents;
+    const parsed = parseSessionBackup(withChecksum(obj as unknown as Record<string, unknown>));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.warnings.join(' ')).toMatch(/NO ocular_events section/);
+  });
+
+  it('refuses a blink record with no record_id, which IndexedDB could not file', () => {
+    const obj = JSON.parse(serialiseSessionBackup(buildFixtureBundle())) as { data: Record<string, unknown> };
+    delete (obj.data.ocularEvents as Record<string, unknown>[])[0].record_id;
+    const parsed = parseSessionBackup(withChecksum(obj as unknown as Record<string, unknown>));
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toMatch(/ocular_events\[0\] has no record_id/);
+  });
+
+  it("refuses a reading record pointing at a condition outside the backup, which would overwrite another sitting's", () => {
+    const obj = JSON.parse(serialiseSessionBackup(buildFixtureBundle())) as { data: Record<string, unknown> };
+    const row = (obj.data.ocularEvents as Record<string, unknown>[])[0];
+    row.condition_id = 'someone-elses-condition';
+    row.record_id = 'someone-elses-condition';
+    const parsed = parseSessionBackup(withChecksum(obj as unknown as Record<string, unknown>));
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toMatch(/references condition "someone-elses-condition"/);
+  });
+});

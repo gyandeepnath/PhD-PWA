@@ -385,6 +385,43 @@ function fixtureOcularEvents(conditionIds: string[], sid: string): OcularEventsR
   return ocularMemo.records.map((o) => ({ ...o, pages: o.pages.map((p) => [...p] as [number, number]), events: o.events.map((e) => ({ ...e })), trace: { ...o.trace } }));
 }
 
+/*
+ * The camera self-test's blink record (Round 78), built the same way: five cued blinks, each a full
+ * closure 300 ms after its cue, and one extra half-way between two cues (an incomplete blink), through
+ * the real aggregator. FIXTURE_SELFTEST is the session's camera_selftest it was scored as, so the
+ * integrity check selftest_events_match holds (5 cued + 1 extra = 6 blinks).
+ */
+export const FIXTURE_SELFTEST = {
+  cued: 5, detected: 5, extra: 1, fps: 29.4, facePresence: 1, pass: true, reasons: [] as string[], at: 0,
+  pipeline: null, limit: null,
+} as const;
+function fixtureSelfTestEvents(sid: string): OcularEventsRecord {
+  const agg = new EyeMetricsAggregator();
+  const tStart = 300_000;
+  const cueAt = [2500, 5500, 8500, 11500, 14500];
+  const n = Math.round(29.4 * 17.5);
+  const ear = new Array<number>(n).fill(0.312);
+  const at = (ms: number) => Math.round(ms / FIXTURE_FRAME_MS);
+  for (const c of cueAt) [0.2, 0.09, 0.08, 0.15].forEach((v, k) => { ear[at(c + 300) + k] = v; });
+  [0.22, 0.205, 0.22].forEach((v, k) => { ear[at(10_000) + k] = v; });
+  const pose = { pitch: 0, yaw: 0, roll: 0 };
+  for (let k = 0; k < n; k++) {
+    const v = ear[k];
+    agg.ingest({
+      t_ms: tStart + k * FIXTURE_FRAME_MS, ear: v, earLeft: v + 0.002, earRight: v - 0.002,
+      pose, zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.22, luma: null,
+    });
+  }
+  const events = agg.blinkEvents(0.312);
+  if (events.length !== FIXTURE_SELFTEST.detected + FIXTURE_SELFTEST.extra) {
+    throw new Error('fixture self-test trace does not reproduce its score');
+  }
+  return agg.blinkLog({
+    window: 'selftest', conditionId: null, sessionId: sid, baseline: 0.312, events,
+    cues: cueAt.map((c) => tStart + c),
+  });
+}
+
 export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
   const { pid, sid, enrolment, block, t0 } = FIXTURE;
   const level = illuminationForBlock(enrolment, block);
@@ -458,6 +495,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       randomisation_seed: enrolment,
       condition_order: plan.map((s) => s.conditionIndex),
       preflight_complete: true, e2e_timing: false,
+      camera_selftest: { ...FIXTURE_SELFTEST, reasons: [], at: t0 + 400_000 },
       consent_given: true,
       consent_time: t0 + 50_000, media_consent: { camera_metrics: true, setup_photos: false, annotation_video: false, granted_at: null },
       provenance: {
@@ -689,7 +727,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       mean_face_luma: 120,
       lighting_quality: 'good',
     })),
-    ocularEvents: fixtureOcularEvents(conditions.map((c) => c.condition_id), sid),
+    ocularEvents: [...fixtureOcularEvents(conditions.map((c) => c.condition_id), sid), fixtureSelfTestEvents(sid)],
     reactionTrials: conditions.flatMap((c, i) => rtTrialsFor(c.condition_id, sid, i)),
     rtSummaries: conditions.map((c, i) => rtSummaryFor(c.condition_id, sid, i)),
     calibration: [
