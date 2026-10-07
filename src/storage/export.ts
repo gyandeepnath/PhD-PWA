@@ -20,6 +20,7 @@ import { auditBundle } from './integrity';
 import { serialiseSessionBackup } from './backup';
 import { requiredGrant } from './media';
 import { conditionPhysical, sessionMmPerCssPx, trialEccentricity } from '@/lib/physicalCalibration';
+import { decodeTrace, pageAt } from '@/tracking/blinkLog';
 
 export interface ExportFile {
   filename: string;
@@ -137,9 +138,11 @@ export function countOutOfDeclaredRange(
     const rows = parseCsvForRangeCheck(file.content);
     if (rows.length < 2) continue;
     const headers = rows[0];
+    // Looked up once per column, not once per cell: 07c_ear_trace.csv alone is ~50,000 rows.
+    const units = headers.map((header) => unitFor(file.filename, header));
     for (const row of rows.slice(1)) {
       headers.forEach((header, i) => {
-        const unit = unitFor(file.filename, header);
+        const unit = units[i];
         if (!unit) return;
         const raw = (row[i] ?? '').trim();
         if (raw === '') return;
@@ -816,6 +819,32 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '15_media_inventory.csv', column: 'duration_ms', type: 'number', unit: 'ms', role: 'meta', description: 'Duration for video segments; blank for photographs.' },
   { file: '15_media_inventory.csv', column: 'filename', type: 'string', unit: '-', role: 'meta', description: 'The name this capture is written under when the media files are downloaded, so an inventory row can be matched to the file on disk without relying on write order.' },
   { file: '15_media_inventory.csv', column: 'consent_setup_photos', type: 'boolean', unit: '-', role: 'meta', description: 'The setup-photograph permission in force at the moment of capture. Stored with the file so a recording is never separable from the basis on which it was taken.' },
+  { file: '07b_blink_events.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code, as in every file. 07b lists every blink the camera counted during reading, one row per blink (Round 78, schema_version 10). It is NOT needed for the main analysis, which uses the totals in 07_eye_metrics.csv; it is for validation (matching blinks against a human coder) and re-analysis (re-cutting a threshold). Empty for sittings before schema_version 10.' },
+  { file: '07b_blink_events.csv', column: 'condition_id', type: 'string', unit: '-', role: 'id', description: 'Validation file, not used by the main analysis. The condition-run the blink belongs to; joins to 07_eye_metrics.csv. For each condition, the rows here by tier equal blink_count_full, blink_count_micro and blink_count_incomplete there; the integrity report checks it (blink_events_match_summary).' },
+  { file: '07b_blink_events.csv', column: 'condition_label', type: 'string', unit: '-', role: 'id', description: 'Validation file, not used by the main analysis. Condition code (P1-P5, N1-N5), for reading the file by eye. Join on condition_id.' },
+  { file: '07b_blink_events.csv', column: 'window', type: 'factor(1)', unit: '-', role: 'meta', description: 'Validation file, not used by the main analysis. Which part of the condition the blink was measured in. Always \'reading\': the window from the \'Begin reading\' tap to the last page.' },
+  { file: '07b_blink_events.csv', column: 'blink_index', type: 'integer', unit: 'count', role: 'id', description: 'Validation file, not used by the main analysis. The blink\'s number within its condition, 1 = first, in time order.' },
+  { file: '07b_blink_events.csv', column: 'onset_ms', type: 'number', unit: 'ms', role: 'qc', description: 'Validation file, not used by the main analysis. When the blink started: the first frame below the registration cut (0.75 x ear_baseline). On the camera\'s capture clock, in ms from the first frame of the reading window (frame 1 of 07c_ear_trace.csv).' },
+  { file: '07b_blink_events.csv', column: 'offset_ms', type: 'number', unit: 'ms', role: 'qc', description: 'Validation file, not used by the main analysis. When the blink ended: the first frame back at or above the registration cut, or the last frame of the window if it never came back (ended_by). Same clock as onset_ms.' },
+  { file: '07b_blink_events.csv', column: 'min_at_ms', type: 'number', unit: 'ms', role: 'qc', description: 'Validation file, not used by the main analysis. When the eye was most closed during the blink: the frame with the lowest EAR. Same clock as onset_ms. Use it to find the blink in video.' },
+  { file: '07b_blink_events.csv', column: 'duration_ms', type: 'number', unit: 'ms', role: 'qc', description: 'Validation file, not used by the main analysis. offset_ms minus onset_ms: time below the registration cut, in whole frames. NOT a clinical blink duration (that runs from the start of closing to full reopening) and not comparable with published durations; below about 25 fps it is coarse.' },
+  { file: '07b_blink_events.csv', column: 'frames_below', type: 'integer', unit: 'count', role: 'qc', description: 'Validation file, not used by the main analysis. The blink\'s length in frames: how many frames were below the registration cut. A 1 means the blink was caught in a single frame.' },
+  { file: '07b_blink_events.csv', column: 'ended_by', type: 'factor(2)', unit: '-', role: 'qc', description: 'Validation file, not used by the main analysis. \'reopened\' when the eye came back above the cut; \'window_end\' when reading ended while the eye was still below it (the blink is counted, its end is not known).' },
+  { file: '07b_blink_events.csv', column: 'min_ear', type: 'number', unit: 'ratio', role: 'qc', description: 'Validation file, not used by the main analysis. The lowest eye-aspect ratio in the blink (mean of both eyes), as an absolute EAR.' },
+  { file: '07b_blink_events.csv', column: 'min_ear_ratio', type: 'number', unit: 'ratio', role: 'qc', description: 'Validation file, not used by the main analysis. min_ear / ear_baseline: how far the eye closed, as a fraction of this participant\'s open eye. Below 0.60 the blink is complete (tier full or micro); from 0.60 up to 0.75 it is incomplete. This is the number to re-cut if a different completeness threshold is tested.' },
+  { file: '07b_blink_events.csv', column: 'tier', type: 'factor(3)', unit: '-', role: 'qc', description: 'Validation file, not used by the main analysis. The blink\'s class: \'full\' (complete, counted in blink_count_full), \'micro\' (complete and shorter than 40 ms, counted in blink_count_micro) or \'incomplete\' (counted in blink_count_incomplete).' },
+  { file: '07b_blink_events.csv', column: 'local_fps', type: 'number', unit: 'fps', role: 'qc', description: 'Validation file, not used by the main analysis. Face-solved frames per second within 1 s either side of the blink\'s deepest frame. The condition\'s effective_fps is an average; this says how well this blink in particular was sampled. Empty when fewer than two frames fell in that span.' },
+  { file: '07b_blink_events.csv', column: 'page', type: 'integer', unit: 'count', role: 'covariate', description: 'Validation file, not used by the main analysis. The reading page on screen when the blink started (1-3), from the page-turn taps (to within one screen refresh). Empty when no page was recorded.' },
+  { file: '07b_blink_events.csv', column: 'rule_version', type: 'string', unit: '-', role: 'provenance', description: 'Validation file, not used by the main analysis. The version of the blink rules that classified this blink (tracking/blink.ts BLINK_RULE_VERSION). \'blink-r1\': registration below 0.75 x baseline, complete below 0.60 x baseline, micro if complete and under 40 ms, a blink open across a gap in the frames dropped. Rows made under different versions are not comparable.' },
+  { file: '07c_ear_trace.csv', column: 'participant_id', type: 'string', unit: '-', role: 'id', description: 'De-identified participant code, as in every file. 07c is the eye-openness trace of every reading window, one row per frame the face tracker processed (Round 78, schema_version 10). It is NOT needed for the main analysis; it is for validation and re-analysis (re-running the blink rules, checking a blink against video). Large: about 5,000 rows per condition at 30 fps. Empty for sittings before schema_version 10.' },
+  { file: '07c_ear_trace.csv', column: 'condition_id', type: 'string', unit: '-', role: 'id', description: 'Validation file, not used by the main analysis. The condition-run the frame belongs to; joins to 07_eye_metrics.csv and 07b_blink_events.csv.' },
+  { file: '07c_ear_trace.csv', column: 'frame', type: 'integer', unit: 'count', role: 'id', description: 'Validation file, not used by the main analysis. The frame\'s number within its reading window, 1 = first.' },
+  { file: '07c_ear_trace.csv', column: 't_ms', type: 'number', unit: 'ms', role: 'qc', description: 'Validation file, not used by the main analysis. When the camera captured the frame, in ms from frame 1 of the window (the same clock as the times in 07b_blink_events.csv), to 0.01 ms.' },
+  { file: '07c_ear_trace.csv', column: 'face', type: 'integer', unit: '0-1', role: 'qc', description: 'Validation file, not used by the main analysis. 1 when the tracker found a face in the frame, 0 when it did not. Frames with 0 have no EAR.' },
+  { file: '07c_ear_trace.csv', column: 'ear_left', type: 'number', unit: 'ratio', role: 'qc', description: 'Validation file, not used by the main analysis. The left eye\'s eye-aspect ratio in this frame (image-plane proportions, as ear_baseline), to 6 decimals. Empty when that eye could not be measured. \'Left\' is the eye on the left of the camera image, which is the participant\'s right eye.' },
+  { file: '07c_ear_trace.csv', column: 'ear_right', type: 'number', unit: 'ratio', role: 'qc', description: 'Validation file, not used by the main analysis. The right eye\'s eye-aspect ratio in this frame, to 6 decimals; empty when not measured. The eye on the right of the camera image (the participant\'s left).' },
+  { file: '07c_ear_trace.csv', column: 'ear', type: 'number', unit: 'ratio', role: 'qc', description: 'Validation file, not used by the main analysis. The mean of ear_left and ear_right: the value the blink rules compare with 0.75 and 0.60 x ear_baseline. Empty unless both eyes were measured; the frames with a value here are the ones counted in ear_sample_count in 07_eye_metrics.csv. Recomputed from the rounded eyes, so it can differ from the value the app used in the 7th decimal.' },
+  { file: '07c_ear_trace.csv', column: 'page', type: 'integer', unit: 'count', role: 'covariate', description: 'Validation file, not used by the main analysis. The reading page on screen when the frame was captured (1-3), from the page-turn taps. Empty when no page was recorded.' },
 ];
 
 export function buildExportFiles(input: SessionBundle): ExportFile[] {
@@ -1080,6 +1109,35 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       zone_center_ratio: e.zone_center_ratio, zone_transition_count: e.zone_transition_count,
       face_presence_ratio: e.face_presence_ratio, face_size_ratio: e.face_size_ratio, mean_face_luma: e.mean_face_luma, lighting_quality: e.lighting_quality,
     })));
+
+  /*
+   * 07b, 07c — every blink of each reading window, and the per-frame eye-openness trace (Round 78).
+   *
+   * SEPARATE FILES ON PURPOSE. The main analysis and both templates read 07_eye_metrics.csv and
+   * nothing here; these exist so the classifier can be checked blink by blink against a human coder
+   * and re-run under another threshold. The blink rows are the same blinks 07's counts were taken
+   * from (the integrity report checks it). Both files are written for every sitting, headers only
+   * where the camera was off or the sitting predates schema 10.
+   */
+  const labelOf = new Map(bundle.conditions.map((c) => [c.condition_id, c.condition_label] as const));
+  const ocular = bundle.ocularEvents ?? [];
+  csv('07b_blink_events.csv',
+    ['participant_id', 'condition_id', 'condition_label', 'window', 'blink_index', 'onset_ms', 'offset_ms', 'min_at_ms', 'duration_ms', 'frames_below', 'ended_by', 'min_ear', 'min_ear_ratio', 'tier', 'local_fps', 'page', 'rule_version'],
+    ocular.flatMap((o) => [...o.events].sort((a, b) => a.onset_ms - b.onset_ms).map((e, i) => ({
+      participant_id: pid, condition_id: o.condition_id, condition_label: labelOf.get(o.condition_id) ?? '',
+      window: o.window, blink_index: i + 1,
+      onset_ms: round(e.onset_ms, 2), offset_ms: round(e.offset_ms, 2), min_at_ms: round(e.min_at_ms, 2),
+      duration_ms: round(e.duration_ms, 2), frames_below: e.frames_below, ended_by: e.ended_by,
+      min_ear: round(e.min_ear, 6), min_ear_ratio: round(e.min_ear_ratio, 4), tier: e.tier,
+      local_fps: round(e.local_fps, 1), page: e.page ?? '', rule_version: o.rule_version,
+    }))));
+  csv('07c_ear_trace.csv',
+    ['participant_id', 'condition_id', 'frame', 't_ms', 'face', 'ear_left', 'ear_right', 'ear', 'page'],
+    ocular.flatMap((o) => decodeTrace(o.trace).map((f) => ({
+      participant_id: pid, condition_id: o.condition_id, frame: f.frame, t_ms: f.t_ms,
+      face: f.face ? 1 : 0, ear_left: f.left, ear_right: f.right, ear: round(f.ear, 7),
+      page: f.t_ms != null ? (pageAt(o.pages, f.t_ms) ?? '') : '',
+    }))));
 
   // The pixel ratio each condition ran at: the RT dots' angles scale with it (lib/physicalCalibration.ts).
   const conditionDpr = new Map(bundle.conditions.map((c) => [c.condition_id, c.device_pixel_ratio ?? null] as const));

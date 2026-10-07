@@ -507,7 +507,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       {bundle && tab === 'export' && (
         <div style={{ background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 20, maxWidth: 720 }}>
           <p className="font-sans text-base leading-relaxed text-[#4a4a60]">
-            Exports 18 CSVs, an analysis JSON, a complete session backup, a master codebook
+            Exports 20 CSVs, an analysis JSON, a complete session backup, a master codebook
             documenting every column, and a provenance manifest (app version, git hash,
             condition-definition hash, per-file checksums). Analyse with the R / Python mixed-model
             templates in <code>src/analysis/</code>. Keep the <code>backup_*.json</code>: it is what

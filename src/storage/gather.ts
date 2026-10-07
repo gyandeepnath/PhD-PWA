@@ -8,7 +8,7 @@ import type {
   SessionRecord, ParticipantRecord, ConditionRecord, FatigueRecord, CvsqRecord,
   NasaTlxRecord,
   ComprehensionRecord, VisualSearchRecord, DisplayPerceptionRecord, EyeMetricsRecord,
-  ReactionTrialRecord, RtSummaryRecord, CalibrationRecord, PerformanceLogRecord,
+  ReactionTrialRecord, RtSummaryRecord, CalibrationRecord, PerformanceLogRecord, OcularEventsRecord,
 } from './types';
 import { requiredGrant, type MediaRecord, type MediaConsent } from './media';
 
@@ -26,6 +26,12 @@ export interface SessionBundle {
   visualSearch: VisualSearchRecord[];
   perception: DisplayPerceptionRecord[];
   eyeMetrics: EyeMetricsRecord[];
+  /**
+   * Each reading window's blinks and per-frame trace (Round 78): the validation record behind
+   * eyeMetrics' counts, exported as 07b/07c. Optional because a bundle built by hand, or gathered from
+   * a sitting before schema 10, has none; absent and empty mean the same here.
+   */
+  ocularEvents?: OcularEventsRecord[];
   reactionTrials: ReactionTrialRecord[];
   rtSummaries: RtSummaryRecord[];
   calibration: CalibrationRecord[];
@@ -39,7 +45,7 @@ export async function gatherSession(sessionId: string): Promise<SessionBundle | 
 
   const [
     participant, conditions, fatigue, cvsq, tlx, media, comprehension, visualSearch, perception,
-    eyeMetrics, reactionTrials, rtSummaries, calibration,
+    eyeMetrics, ocularEvents, reactionTrials, rtSummaries, calibration,
   ] = await Promise.all([
     // Fetch by participant_id, NOT by session_id: the participant record is created once and SHARED
     // across a participant's sittings, so the 2nd+ sitting's session_id never matches it.
@@ -53,6 +59,7 @@ export async function gatherSession(sessionId: string): Promise<SessionBundle | 
     bySession<VisualSearchRecord>('visual_search'),
     bySession<DisplayPerceptionRecord>('display_perception'),
     bySession<EyeMetricsRecord>('eye_metrics'),
+    bySession<OcularEventsRecord>('ocular_events'),
     bySession<ReactionTrialRecord>('reaction_trials'),
     bySession<RtSummaryRecord>('rt_summaries'),
     bySession<CalibrationRecord>('calibration_data'),
@@ -62,7 +69,7 @@ export async function gatherSession(sessionId: string): Promise<SessionBundle | 
     session,
     participant: participant as ParticipantRecord | undefined,
     conditions, fatigue, cvsq, tlx, media, comprehension, visualSearch,
-    perception, eyeMetrics, reactionTrials, rtSummaries, calibration,
+    perception, eyeMetrics, ocularEvents, reactionTrials, rtSummaries, calibration,
   });
 }
 
@@ -131,6 +138,7 @@ export function normaliseBundle(b: SessionBundle): SessionBundle {
     visualSearch: [...b.visualSearch].sort(byCondition<VisualSearchRecord>((r) => r.condition_id)),
     perception: [...b.perception].sort(byCondition<DisplayPerceptionRecord>((r) => r.perception_id)),
     eyeMetrics: [...b.eyeMetrics].sort(byCondition<EyeMetricsRecord>((r) => r.condition_id)),
+    ocularEvents: [...(b.ocularEvents ?? [])].sort(byCondition<OcularEventsRecord>((r) => r.condition_id)),
     reactionTrials: [...b.reactionTrials].sort(
       byCondition<ReactionTrialRecord>((r) => r.trial_id, (x, y) => x.trial_number - y.trial_number),
     ),
@@ -439,6 +447,7 @@ export async function purgeSession(sessionId: string): Promise<void> {
   for (const r of bundle.perception) await remove('display_perception', r.perception_id);
   for (const r of bundle.visualSearch) await remove('visual_search', r.condition_id);
   for (const r of bundle.eyeMetrics) await remove('eye_metrics', r.condition_id);
+  for (const r of bundle.ocularEvents ?? []) await remove('ocular_events', r.condition_id);
   for (const r of bundle.rtSummaries) await remove('rt_summaries', r.condition_id);
   for (const r of bundle.calibration) await remove('calibration_data', r.calibration_id);
   // Performance logs aren't part of the analysis bundle, so purge them directly by session index.

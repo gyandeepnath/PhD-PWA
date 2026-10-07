@@ -60,6 +60,8 @@ interface BackupData {
   visualSearch: unknown[];
   perception: unknown[];
   eyeMetrics: unknown[];
+  /** Blink records and traces (Round 78, schema 10). Absent from files written before it. */
+  ocularEvents?: unknown[];
   reactionTrials: unknown[];
   rtSummaries: unknown[];
   calibration: unknown[];
@@ -144,8 +146,14 @@ function canonicalV1(data: BackupData): string {
   return JSON.stringify(ordered);
 }
 
-/** The store each collection is written back into, and the field that keys it. */
-const RESTORE_PLAN: { key: keyof BackupData; store: StoreName; keyPath: string }[] = [
+/**
+ * The store each collection is written back into, and the field that keys it.
+ *
+ * `sinceSchema` marks a collection added after backups were first written: a file from a build before
+ * that schema version cannot carry it, so its absence there is expected and not reported (see
+ * missingCollections). From that version on, absence is reported like any other.
+ */
+const RESTORE_PLAN: { key: keyof BackupData; store: StoreName; keyPath: string; sinceSchema?: number }[] = [
   { key: 'conditions', store: 'conditions', keyPath: 'condition_id' },
   { key: 'fatigue', store: 'fatigue_scores', keyPath: 'fatigue_id' },
   { key: 'cvsq', store: 'cvsq_scores', keyPath: 'cvsq_id' },
@@ -154,6 +162,7 @@ const RESTORE_PLAN: { key: keyof BackupData; store: StoreName; keyPath: string }
   { key: 'visualSearch', store: 'visual_search', keyPath: 'condition_id' },
   { key: 'perception', store: 'display_perception', keyPath: 'perception_id' },
   { key: 'eyeMetrics', store: 'eye_metrics', keyPath: 'condition_id' },
+  { key: 'ocularEvents', store: 'ocular_events', keyPath: 'condition_id', sinceSchema: 10 },
   { key: 'reactionTrials', store: 'reaction_trials', keyPath: 'trial_id' },
   { key: 'rtSummaries', store: 'rt_summaries', keyPath: 'condition_id' },
   { key: 'calibration', store: 'calibration_data', keyPath: 'calibration_id' },
@@ -174,6 +183,7 @@ export function buildSessionBackup(bundle: SessionBundle): SessionBackup {
     visualSearch: bundle.visualSearch,
     perception: bundle.perception,
     eyeMetrics: bundle.eyeMetrics,
+    ocularEvents: bundle.ocularEvents ?? [],
     reactionTrials: bundle.reactionTrials,
     rtSummaries: bundle.rtSummaries,
     calibration: bundle.calibration,
@@ -336,8 +346,10 @@ export function parseSessionBackup(text: string): ParseResult {
  * the operator is the only one who can judge whether that matters.
  */
 export function missingCollections(data: BackupData): string[] {
+  const schema = (data.session as { provenance?: { schema_version?: unknown } } | null)?.provenance?.schema_version;
+  const writtenBefore = (v: number | undefined) => v != null && typeof schema === 'number' && schema < v;
   return RESTORE_PLAN
-    .filter(({ key }) => data[key] === undefined || data[key] === null)
+    .filter(({ key, sinceSchema }) => (data[key] === undefined || data[key] === null) && !writtenBefore(sinceSchema))
     .map(({ store }) => store);
 }
 

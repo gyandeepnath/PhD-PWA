@@ -12,7 +12,7 @@
  */
 import { useCallback, useRef, useState } from 'react';
 import { CONFIG } from '@/experiment/config';
-import { faceEar, fitEarBaseline, EAR_TIERS, LEFT_EYE_EAR, RIGHT_EYE_EAR, type Point } from './blink';
+import { eyeEars, meanEar, fitEarBaseline, EAR_TIERS, LEFT_EYE_EAR, RIGHT_EYE_EAR, type Point } from './blink';
 import { startFramePump, frameTimestamp, type FrameMeta, type FramePump, type PumpVideo } from './framePump';
 import { PipelineMeter, type MeterWindow, type PipelineSummary } from './pipelineStats';
 import { startTracker, createTracker, errorSummary, TRACKER_BACKENDS, type FaceTracker, type TrackerBackend } from './trackers';
@@ -45,7 +45,7 @@ import { CameraHealth } from './cameraHealth';
 import { fitGazeCalibration, gazeQuality as gradeGaze, GAZE_TARGETS, type GazeCalibration, type GazeQuality, type GazeSample } from './gazeCalibration';
 import { v4 as uuidv4 } from 'uuid';
 import { EyeMetricsAggregator, disabledEyeMetrics } from './aggregator';
-import { put } from '@/storage/db';
+import { put, remove } from '@/storage/db';
 import { now } from '@/lib/timing';
 import { startLivenessCheck } from './cameraLiveness';
 import type { CameraStatus, CameraPipelineRecord, PipelineWindowFields } from '@/storage/types';
@@ -235,6 +235,11 @@ interface TrackingApi {
    */
   endGazeCalibration: (sessionId: string) => Promise<CalibrationOutcome>;
   beginCondition: () => void;
+  /**
+   * The reading page now on screen, 1-based (page 1 when the window opens). Each stored blink carries
+   * the page it began on (Round 78). Does nothing outside a condition's window.
+   */
+  markReadingPage: (page: number) => void;
   /** Start and finish the camera self-test (see tracking/selfTest.ts); endSelfTest returns what it saw. */
   beginSelfTest: () => void;
   endSelfTest: () => SelfTestObservation;
@@ -501,7 +506,10 @@ export function useTracking(): TrackingApi {
     // The eye-openness trace for the researcher card: one entry per processed frame, CONFIG.EAR_TRACE_MS long.
     const trace = earTraceRef.current;
     if (lm && lm.length > 0) {
-      const ear = faceEar(lm, aspect);
+      // Both eyes, then their mean: the mean is the EAR every measure uses (faceEar), and the two
+      // eyes travel only to the stored trace (Round 78).
+      const eyes = eyeEars(lm, aspect);
+      const ear = meanEar(eyes);
       trace.push([t, Number.isFinite(ear) ? ear : null]);
       if (trialEarsRef.current && Number.isFinite(ear)) trialEarsRef.current.push(ear);
       if (calibrating.current) {
@@ -522,6 +530,8 @@ export function useTracking(): TrackingApi {
         agg.ingest({
           t_ms: t,
           ear,
+          earLeft: eyes.left,
+          earRight: eyes.right,
           pose,
           zone: gazeNow.zone,
           isCenter: gazeNow.isCenter,
@@ -1132,6 +1142,11 @@ export function useTracking(): TrackingApi {
     return { blinkOnsets: agg.blinkEvents(baselineEarRef.current).map((e) => e.onset_ms), fps: cov.fps, facePresence: cov.facePresence, pipeline };
   }, []);
 
+  /** The reading page now on screen (1-based), for the stored blink record. A no-op outside a window. */
+  const markReadingPage = useCallback((page: number) => {
+    aggRef.current?.markPage(page, now());
+  }, []);
+
   const beginCondition = useCallback(() => {
     aggRef.current = new EyeMetricsAggregator();
     healthRef.current.resetCounts(now());
@@ -1162,6 +1177,12 @@ export function useTracking(): TrackingApi {
       if (lostRef.current || status !== 'active' || !aggRef.current) {
         // Camera-health fields stay blank here: they describe frames, and none were being measured.
         await put('eye_metrics', disabledEyeMetrics(conditionId, sessionId, lostRef.current ? 'lost' : 'not_running'));
+        /*
+         * A redo reuses the condition_id, so a blink record from an earlier attempt of this condition
+         * would otherwise survive beside the camera-off row that replaced its counts. Nothing was
+         * measured this time, so there is no record.
+         */
+        await remove('ocular_events', conditionId);
         return;
       }
       /*
@@ -1173,7 +1194,8 @@ export function useTracking(): TrackingApi {
       lastConditionCounts.current = { blinks: finished.blinks, incomplete: finished.incomplete };
       if (typeof finished.blinks === 'number') sessionBlinksDone.current += finished.blinks;
 
-      const record = aggRef.current.finalize({
+      const agg = aggRef.current;
+      const { record, events } = agg.finalizeWithEvents({
         conditionId,
         sessionId,
         cameraActive: true,
@@ -1201,6 +1223,11 @@ export function useTracking(): TrackingApi {
        */
       const pipeline = meterSummary ? pipelineFields(meterSummary, pipelineRef.current) : {};
       await put('eye_metrics', { ...record, ...healthFields(), ...pipeline });
+      /*
+       * Every blink of this window and its per-frame trace (Round 78), from the SAME events the row
+       * above was counted from. Written second: the row is the measurement, this is its evidence.
+       */
+      await put('ocular_events', agg.blinkLog({ conditionId, sessionId, baseline: baselineEarRef.current, events }));
     },
     [status],
   );
@@ -1223,7 +1250,7 @@ export function useTracking(): TrackingApi {
     subscribeLive, start, stop, measureEarBaseline, mediaSource,
     startError, pipelineInfo, compareTrackers,
     beginGazeCalibration, sampleGazeTarget, endGazeCalibration,
-    beginCondition, endCondition,
+    beginCondition, endCondition, markReadingPage,
     beginSelfTest, endSelfTest,
     cameraLostAt,
     cameraBlocked,

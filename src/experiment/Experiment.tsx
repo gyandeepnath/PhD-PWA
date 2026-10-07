@@ -1656,6 +1656,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
              */
             onBegin={() => {
               tracking.beginCondition();
+              // The window opens on page 1; each stored blink carries its page (Round 78).
+              tracking.markReadingPage(1);
               readingMonitor.current?.stop();
               readingMonitor.current = trackMonitorOpenTime();
               /**
@@ -1678,6 +1680,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                */
               if (annotationSteps.includes(machine.stepIndex)) void captureMedia('reading_segment', cond?.label ?? null, conditionId);
             }}
+            onPageChange={(p) => tracking.markReadingPage(p)}
             onComplete={async (r) => {
               // Close the annotation clip at the SAME instant the automated measurement window
               // closes, so a human coder and the classifier see the same footage.

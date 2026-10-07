@@ -38,6 +38,11 @@ interface Props {
   onComplete: (r: ReadingResult) => void;
   /** Fired when the participant starts reading — the true opening of the measurement window. */
   onBegin?: () => void;
+  /**
+   * Fired as the participant moves to the next page, with that page's number (2, 3, …; page 1 opens
+   * with onBegin). The stored blink record notes which page each blink began on (Round 78).
+   */
+  onPageChange?: (page: number) => void;
   /** Which display of the sitting this is, for the intro card's eyebrow. */
   display?: DisplayPosition;
 }
@@ -49,7 +54,7 @@ interface Props {
  */
 const COUNTDOWN_WIDTH_PX = 420;
 
-export function ReadingTask({ passage, background, text, onComplete, onBegin, display }: Props) {
+export function ReadingTask({ passage, background, text, onComplete, onBegin, onPageChange, display }: Props) {
   const [started, setStarted] = useState(false);
   const [page, setPage] = useState(0);
   const [unlocked, setUnlocked] = useState(false);
@@ -190,7 +195,11 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin, di
         hiddenMs: away,
         pageDwellsMs: [...pageDwells.current],
       });
-    } else setPage((p) => p + 1);
+    } else {
+      // `page` is 0-based; the next page's number as the counter shows it is page + 2.
+      onPageChange?.(page + 2);
+      setPage((p) => p + 1);
+    }
   };
 
   return (

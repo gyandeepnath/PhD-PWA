@@ -15,6 +15,7 @@
  * quietly de-duplicating would hide the upstream bug that produced the duplicate.
  */
 import { QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
+import { decodeTrace, tierCounts } from '@/tracking/blinkLog';
 import type { SessionBundle } from './gather';
 import { MIN_SCALE } from '@/lib/viewportScale';
 import {
@@ -620,6 +621,61 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
           `reaction_trials: no trial rows for ${missing.length}/${conditions.length} condition(s)` +
           (missing.length === conditions.length ? ' (the whole store is absent for this session)' : ''),
           missing.slice(0, 5).map((c) => c.condition_label));
+      }
+    }
+  }
+
+  /*
+   * ---- the stored blinks must be the blinks the summary counted (Round 78)
+   *
+   * 07b_blink_events.csv and 07c_ear_trace.csv are written in the same step as the eye-metrics row,
+   * from the same classification, so per condition and per tier the events equal blink_count_full,
+   * blink_count_micro and blink_count_incomplete, and the trace's frames with both eyes measured equal
+   * ear_sample_count. A difference means the blink file does not describe the row beside it — a
+   * record left from an earlier attempt, or a fault in writing it. WARNINGS, not errors: the main
+   * analysis reads only 07_eye_metrics.csv, which this does not touch; what is affected is the
+   * validation file, which should not be used for that condition until the difference is explained.
+   * Silent for a sitting with no blink records at all (before schema 10, or the camera never on).
+   */
+  {
+    const ocular = bundle.ocularEvents ?? [];
+    const eyeById = new Map((bundle.eyeMetrics ?? []).map((e) => [e.condition_id, e] as const));
+    for (const o of ocular) {
+      if (!validIds.has(o.condition_id)) {
+        add('warning', 'blink_events_orphan',
+          `The blink record for condition "${o.condition_id}" belongs to no condition of this sitting; `
+          + 'its rows in 07b/07c join to nothing.', [o.condition_id]);
+        continue;
+      }
+      const eye = eyeById.get(o.condition_id);
+      const n = tierCounts(o.events);
+      const counted = eye && eye.blink_count_full != null && eye.blink_count_micro != null && eye.blink_count_incomplete != null
+        ? { full: eye.blink_count_full, micro: eye.blink_count_micro, incomplete: eye.blink_count_incomplete }
+        : null;
+      const same = counted
+        ? counted.full === n.full && counted.micro === n.micro && counted.incomplete === n.incomplete
+        : o.events.length === 0;
+      if (!same) {
+        add('warning', 'blink_events_match_summary',
+          `Condition "${o.condition_id}": 07b lists ${n.full} full, ${n.micro} micro and ${n.incomplete} incomplete `
+          + `blinks, but 07_eye_metrics counts ${counted ? `${counted.full}, ${counted.micro} and ${counted.incomplete}` : 'none (no blink measure)'}. `
+          + 'Do not use 07b/07c for this condition; 07_eye_metrics is unaffected.', [o.condition_id]);
+      }
+      const measured = decodeTrace(o.trace).filter((f) => f.face && f.ear != null).length;
+      if (eye && eye.camera_active && measured !== eye.ear_sample_count) {
+        add('warning', 'ear_trace_matches_summary',
+          `Condition "${o.condition_id}": 07c has ${measured} frames with both eyes measured, but 07_eye_metrics `
+          + `counts ${eye.ear_sample_count} EAR samples. Do not use 07c for this condition.`, [o.condition_id]);
+      }
+    }
+    if (ocular.length) {
+      const have = new Set(ocular.map((o) => o.condition_id));
+      const missing = (bundle.eyeMetrics ?? []).filter((e) => e.camera_active && validIds.has(e.condition_id) && !have.has(e.condition_id));
+      if (missing.length) {
+        add('warning', 'blink_events_coverage',
+          `${missing.length} camera-on condition(s) have no blink record in 07b/07c (measured by a build before `
+          + 'schema 10, or not saved). Their totals in 07_eye_metrics stand; only the validation rows are missing.',
+          missing.slice(0, 5).map((e) => e.condition_id));
       }
     }
   }

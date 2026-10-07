@@ -19,11 +19,13 @@ import {
   fitEarBaseline,
   type EarSample,
   type BlinkEvent,
+  type BlinkEventDetail,
 } from './blink';
+import { buildOcularEventsRecord, emptyTrace, type TraceBuffer } from './blinkLog';
 import type { HeadPose } from './headPose';
 import type { GazeZone } from './gaze';
 import { classifyLighting } from './lighting';
-import type { EyeMetricsRecord } from '@/storage/types';
+import type { EyeMetricsRecord, OcularEventsRecord } from '@/storage/types';
 
 export interface FrameSample {
   t_ms: number;
@@ -36,6 +38,13 @@ export interface FrameSample {
   faceSize: number;
   /** Mean frame luminance (0-255), null when not sampled this frame. */
   luma: number | null;
+  /**
+   * Each eye's EAR (tracking/blink.ts eyeEars), for the per-frame trace (Round 78). `ear` is their
+   * mean and is what every measure here uses; these only travel to the stored trace. Optional: a
+   * caller that does not give them leaves the trace's eye columns empty.
+   */
+  earLeft?: number;
+  earRight?: number;
 }
 
 /** Simple centered-ish moving average to damp single-frame head-pose noise. */
@@ -65,10 +74,21 @@ export class EyeMetricsAggregator {
   private facesDetected = 0;
   private frameTimes: number[] = [];
   private lumas: number[] = [];
+  /** Every processed frame, face or not, for the stored trace (blinkLog.ts). */
+  private trace: TraceBuffer = emptyTrace();
+  /** Reading-page turns as [capture-clock time, 1-based page]; see markPage. */
+  private pageMarks: Array<[number, number]> = [];
 
   ingest(f: FrameSample): void {
     this.framesTotal++;
-    if (Number.isFinite(f.t_ms)) this.frameTimes.push(f.t_ms);
+    if (Number.isFinite(f.t_ms)) {
+      this.frameTimes.push(f.t_ms);
+      const eye = (v: number | undefined) => (f.facePresent && v != null && Number.isFinite(v) ? v : null);
+      this.trace.t.push(f.t_ms);
+      this.trace.face.push(f.facePresent);
+      this.trace.left.push(eye(f.earLeft));
+      this.trace.right.push(eye(f.earRight));
+    }
     if (f.luma != null && Number.isFinite(f.luma)) this.lumas.push(f.luma);
     if (!f.facePresent) return;
     this.facesDetected++;
@@ -189,8 +209,34 @@ export class EyeMetricsAggregator {
     };
   }
 
+  /**
+   * The reading page now on screen, from `t` (performance.now(), the clock frames are stamped on). Each
+   * stored blink carries the page it began on. Called with page 1 when the window opens.
+   */
+  markPage(page: number, t: number): void {
+    if (Number.isFinite(t) && Number.isInteger(page) && page > 0) this.pageMarks.push([t, page]);
+  }
+
+  /**
+   * The stored blink record for this window (blinkLog.ts), from the events `finalizeWithEvents`
+   * returned — the same array the eye-metrics row's counts were taken from, so the two cannot differ.
+   */
+  blinkLog(args: { conditionId: string; sessionId: string; baseline: number | null; events: BlinkEventDetail[] }): OcularEventsRecord {
+    return buildOcularEventsRecord({
+      ...args,
+      series: this.ear,
+      trace: this.trace,
+      pageMarks: this.pageMarks,
+    });
+  }
+
   /** Produce the record. `baselineEarValue` comes from calibration. */
-  finalize(args: {
+  finalize(args: FinalizeArgs): EyeMetricsRecord {
+    return this.finalizeWithEvents(args).record;
+  }
+
+  /** The record, and the blinks it counts (for the stored blink record; see blinkLog). */
+  finalizeWithEvents(args: {
     conditionId: string;
     sessionId: string;
     cameraActive: boolean;
@@ -203,7 +249,7 @@ export class EyeMetricsAggregator {
     headPitchCalibrated: boolean;
     /** The calibration record in force while this exposure was measured. See EyeMetricsRecord. */
     calibrationId: string | null;
-  }): EyeMetricsRecord {
+  }): { record: EyeMetricsRecord; events: BlinkEventDetail[] } {
     /**
      * Two different durations, because they answer two different questions.
      *
@@ -274,7 +320,7 @@ export class EyeMetricsAggregator {
     const absMean = (xs: number[]) => (xs.length ? mean(xs.map(Math.abs)) : 0);
     const posturalLoad = (absMean(sPitch) + absMean(sYaw) + absMean(sRoll)) / 3;
 
-    return {
+    const record: EyeMetricsRecord = {
       condition_id: args.conditionId,
       session_id: args.sessionId,
       camera_active: args.cameraActive,
@@ -376,8 +422,13 @@ export class EyeMetricsAggregator {
       mean_face_luma: this.lumas.length ? mean(this.lumas) : null,
       lighting_quality: this.lumas.length ? classifyLighting(mean(this.lumas)) : null,
     };
+    // Without a baseline no blink is counted (blink_count_* are null), so none is stored either.
+    return { record, events: blinkMeasurable ? events : [] };
   }
 }
+
+/** What `finalize` needs; see finalizeWithEvents for each field. */
+export type FinalizeArgs = Parameters<EyeMetricsAggregator['finalizeWithEvents']>[0];
 
 /** Zeroed metrics for when the camera is denied/failed (matches the original disabledMetrics). */
 /**

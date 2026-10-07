@@ -28,6 +28,9 @@ import { computeSdt } from '@/lib/signalDetection';
 import { fnv1a } from '@/storage/export';
 import { CONFIG } from '@/experiment/config';
 import { RT_LOCATIONS } from '@/lib/rtLocations';
+import { EyeMetricsAggregator } from '@/tracking/aggregator';
+import { tierCounts } from '@/tracking/blinkLog';
+import type { OcularEventsRecord } from '@/storage/types';
 
 export const FIXTURE = {
   /** Embeds a comma and a quote on purpose: the hardest thing for a CSV writer to get right. */
@@ -309,6 +312,77 @@ function rtSummaryFor(conditionId: string, sid: string, i: number) {
     criterion: sdt.criterion,
     d_prime_estimable: sdt.estimable,
   };
+}
+
+/*
+ * The blink record and eye-openness trace for each condition (Round 78), built the way the app
+ * builds them: synthetic frames through the real EyeMetricsAggregator, so the events are what
+ * classifyBlinks finds in the trace and the record is what blinkLog writes.
+ *
+ * Coherent with the eye-metrics row by construction, and checked: the frames with a face number
+ * exactly ear_sample_count, and the blinks by tier equal blink_count_full / _micro / _incomplete
+ * (the fixture throws otherwise, so a change to either side cannot leave them silently apart).
+ * Three frames without a face sit before the first blink, so the face column is exercised.
+ *
+ * Shapes (mean EAR; the eyes are 0.002 either side of it), against a 0.312 baseline whose cuts are
+ * 0.234 (registration) and 0.1872 (complete): micro = one frame at 0.15 (34 ms < 40 ms); incomplete =
+ * 0.215, 0.200, 0.215 (deepest 0.641 of baseline); full = 0.200, 0.120, 0.100, 0.180.
+ *
+ * Memoised: about 52,000 frames per sitting, deterministic, and built for every fixture call.
+ */
+export const FIXTURE_FRAME_MS = 1000 / 29.4;
+export const FIXTURE_NO_FACE_FRAMES = 3;
+let ocularMemo: { key: string; records: OcularEventsRecord[] } | null = null;
+function fixtureOcularEvents(conditionIds: string[], sid: string): OcularEventsRecord[] {
+  const key = `${sid}|${conditionIds.join(',')}`;
+  if (ocularMemo?.key !== key) {
+    ocularMemo = { key, records: conditionIds.map((conditionId, i) => {
+      const agg = new EyeMetricsAggregator();
+      const nFace = Math.round(29.4 * (readingMs(i) / 1000));
+      const tStart = 400_000 + i * 600_000;
+      const shapes = { micro: [0.15], incomplete: [0.215, 0.2, 0.215], full: [0.2, 0.12, 0.1, 0.18] } as const;
+      const tiers: (keyof typeof shapes)[] = [
+        ...Array<'micro'>(blinkMicroFor(i)).fill('micro'),
+        ...Array<'incomplete'>(blinkIncompleteFor(i)).fill('incomplete'),
+        ...Array<'full'>(blinkFullFor(i)).fill('full'),
+      ];
+      const ear = new Array<number>(nFace).fill(0.312);
+      tiers.forEach((tier, j) => {
+        const at = 40 + Math.floor((j * (nFace - 80)) / tiers.length);
+        shapes[tier].forEach((v, k) => { ear[at + k] = v; });
+      });
+      let frame = 0;
+      const t = () => tStart + (frame++) * FIXTURE_FRAME_MS;
+      const pose = { pitch: 0, yaw: 0, roll: 0 };
+      const face = (v: number) => agg.ingest({
+        t_ms: t(), ear: (v + 0.002 + (v - 0.002)) / 2, earLeft: v + 0.002, earRight: v - 0.002,
+        pose, zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.22, luma: null,
+      });
+      agg.markPage(1, tStart - 5);
+      for (let k = 0; k < nFace; k++) {
+        if (k === 20) {
+          for (let g = 0; g < FIXTURE_NO_FACE_FRAMES; g++) {
+            agg.ingest({ t_ms: t(), ear: 0, pose, zone: 'cc', isCenter: false, offAxis: false, facePresent: false, faceSize: 0, luma: null });
+          }
+        }
+        face(ear[k]);
+        if (k === Math.floor(nFace / 3)) agg.markPage(2, tStart + frame * FIXTURE_FRAME_MS);
+        if (k === Math.floor((2 * nFace) / 3)) agg.markPage(3, tStart + frame * FIXTURE_FRAME_MS);
+      }
+      const { record, events } = agg.finalizeWithEvents({
+        conditionId, sessionId: sid, cameraActive: true, baselineEarValue: 0.312,
+        earThresholdUsed: 0.234, gazeCalibrated: true, headPitchCalibrated: true, calibrationId: 'cal-1',
+      });
+      const n = tierCounts(events);
+      if (record.ear_sample_count !== nFace || n.full !== blinkFullFor(i) || n.micro !== blinkMicroFor(i)
+        || n.incomplete !== blinkIncompleteFor(i)) {
+        throw new Error(`fixture blink trace for condition ${i} does not reproduce its counts`);
+      }
+      return agg.blinkLog({ conditionId, sessionId: sid, baseline: 0.312, events });
+    }) };
+  }
+  // A copy per call, so a test that edits one bundle's records cannot reach another's.
+  return ocularMemo.records.map((o) => ({ ...o, pages: o.pages.map((p) => [...p] as [number, number]), events: o.events.map((e) => ({ ...e })), trace: { ...o.trace } }));
 }
 
 export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
@@ -615,6 +689,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       mean_face_luma: 120,
       lighting_quality: 'good',
     })),
+    ocularEvents: fixtureOcularEvents(conditions.map((c) => c.condition_id), sid),
     reactionTrials: conditions.flatMap((c, i) => rtTrialsFor(c.condition_id, sid, i)),
     rtSummaries: conditions.map((c, i) => rtSummaryFor(c.condition_id, sid, i)),
     calibration: [

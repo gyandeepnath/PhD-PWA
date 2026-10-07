@@ -66,6 +66,20 @@ export const RIGHT_EYE_EAR = [362, 385, 387, 263, 373, 380];
  * are not comparable, and the cut is part of what the outcome means.
  */
 export const EAR_TIERS = { full: 0.6, partial: 0.75, micro: 0.88 } as const;
+
+/**
+ * Names the rules `classifyBlinks` applies, so a stored blink can say which rules made it (Round 78).
+ *
+ * 'blink-r1': a blink starts at the first sample below 0.75 x the open baseline and ends at the first
+ * sample back at or above it (or at the end of the window); it is complete ('full') when its deepest
+ * sample is below 0.60 x baseline, and 'micro' when complete and shorter than 40 ms; a blink open
+ * across a sampling gap (more than max(250 ms, 4 x the median frame interval)) is dropped, not closed.
+ *
+ * Any change to those rules — a cut, the micro rule, the gap rule — must change this string, so rows
+ * made under the old and the new rules can be told apart. tests/blinkLog.test.ts pins the constants
+ * to the version: changing one without the other fails it.
+ */
+export const BLINK_RULE_VERSION = 'blink-r1';
 export const FPS_TIER_THRESHOLD = 25;
 
 /**
@@ -162,16 +176,28 @@ export function eyeAspectRatio(p: Point[]): number {
  * EAR the image-plane ratio Soukupová & Čech define. Default 1 for callers with square coordinates.
  */
 export function faceEar(landmarks: Point[], aspect = 1): number {
-  if (!Array.isArray(landmarks)) return NaN;
+  return meanEar(eyeEars(landmarks, aspect));
+}
+
+/**
+ * Each eye's EAR on its own (Round 78), so the per-frame trace can keep both. NaN for an eye whose
+ * geometry cannot support the ratio, as in eyeAspectRatio. `faceEar` is meanEar of this, so the trace
+ * and the classifier are computed from the same two numbers.
+ */
+export function eyeEars(landmarks: Point[], aspect = 1): { left: number; right: number } {
+  if (!Array.isArray(landmarks)) return { left: NaN, right: NaN };
   const a = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
   const pick = (idx: number[]) => idx.map((i) => {
     const p = landmarks[i];
     return p && a !== 1 ? { x: p.x, y: p.y / a } : p;
   });
-  const left = eyeAspectRatio(pick(LEFT_EYE_EAR));
-  const right = eyeAspectRatio(pick(RIGHT_EYE_EAR));
-  if (!Number.isFinite(left) || !Number.isFinite(right)) return NaN;
-  return (left + right) / 2;
+  return { left: eyeAspectRatio(pick(LEFT_EYE_EAR)), right: eyeAspectRatio(pick(RIGHT_EYE_EAR)) };
+}
+
+/** The classifier's EAR: the mean of both eyes, NaN when either eye is unusable (see faceEar). */
+export function meanEar(e: { left: number; right: number }): number {
+  if (!Number.isFinite(e.left) || !Number.isFinite(e.right)) return NaN;
+  return (e.left + e.right) / 2;
 }
 
 /**
@@ -228,6 +254,22 @@ export interface BlinkEvent {
   duration_ms: number;
   min_ear: number;
   tier: BlinkTier;
+}
+
+/**
+ * A blink as `classifyBlinks` found it, with what a reviewer needs to check it against video
+ * (Round 78). The extra fields describe the same run of samples the tier was decided on; nothing here
+ * changes how a blink is counted.
+ */
+export interface BlinkEventDetail extends BlinkEvent {
+  /** Time of the sample that ended the blink: the first back at or above the registration cut, or the last sample of the window. */
+  offset_ms: number;
+  /** Time of the deepest sample (the first one, if two tie). */
+  min_at_ms: number;
+  /** Samples below the registration cut: the blink's length in frames. */
+  frames_below: number;
+  /** 'reopened' when the eye came back above the cut; 'window_end' when the window ended first. */
+  ended_by: 'reopened' | 'window_end';
 }
 
 export interface EarSample {
@@ -301,7 +343,7 @@ export function observedDurationInWindow(
   return observedDurationMs(inside, gapMs);
 }
 
-export function classifyBlinks(samples: EarSample[], baseline: number | null): BlinkEvent[] {
+export function classifyBlinks(samples: EarSample[], baseline: number | null): BlinkEventDetail[] {
   if (baseline == null || !Number.isFinite(baseline) || baseline <= 0) return [];
   // Drop frames whose EAR or timestamp is not a finite number. Left in, a NaN sample never
   // satisfies the entry comparison, so the blink state machine silently skips real closures and
@@ -328,17 +370,24 @@ export function classifyBlinks(samples: EarSample[], baseline: number | null): B
    */
   const gapMs = samplingGapThreshold(samples);
 
-  const events: BlinkEvent[] = [];
+  const events: BlinkEventDetail[] = [];
   let inBlink = false;
   let onset = 0;
   let minEar = Infinity;
+  let minAt = 0;
+  let below = 0;
+  const open = (s: EarSample) => {
+    inBlink = true;
+    onset = s.t_ms;
+    minEar = s.ear;
+    minAt = s.t_ms;
+    below = 1;
+  };
 
   for (let i = 0; i < samples.length; i++) {
     const s = samples[i];
     if (!inBlink && s.ear < partialT) {
-      inBlink = true;
-      onset = s.t_ms;
-      minEar = s.ear;
+      open(s);
     } else if (inBlink) {
       // A gap since the previous sample: the face was absent, so this blink was not observed to
       // its end and cannot be measured. Abandon it.
@@ -347,14 +396,11 @@ export function classifyBlinks(samples: EarSample[], baseline: number | null): B
         inBlink = false;
         minEar = Infinity;
         // Re-test this sample as a possible fresh onset rather than skipping it.
-        if (s.ear < partialT) {
-          inBlink = true;
-          onset = s.t_ms;
-          minEar = s.ear;
-        }
+        if (s.ear < partialT) open(s);
         continue;
       }
-      minEar = Math.min(minEar, s.ear);
+      if (s.ear < minEar) { minEar = s.ear; minAt = s.t_ms; }
+      if (s.ear < partialT) below++;
       if (s.ear >= partialT || i === samples.length - 1) {
         const duration = s.t_ms - onset;
         const ratio = minEar / baseline;
@@ -363,7 +409,11 @@ export function classifyBlinks(samples: EarSample[], baseline: number | null): B
         // never fully closed ⇒ an INCOMPLETE blink (the CVS marker, Portello, Rosenfield & Chu 2013).
         const tier: BlinkTier =
           ratio < EAR_TIERS.full ? (duration < 40 ? 'micro' : 'full') : 'incomplete';
-        events.push({ onset_ms: onset, duration_ms: duration, min_ear: minEar, tier });
+        events.push({
+          onset_ms: onset, duration_ms: duration, min_ear: minEar, tier,
+          offset_ms: s.t_ms, min_at_ms: minAt, frames_below: below,
+          ended_by: s.ear >= partialT ? 'reopened' : 'window_end',
+        });
         inBlink = false;
         minEar = Infinity;
       }

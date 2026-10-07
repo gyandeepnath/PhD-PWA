@@ -526,7 +526,7 @@ else a sitting produces put together.
    during these two questionnaires, use **Exit — resume later**: Resume returns to the questionnaire
    that was not yet answered, and a questionnaire already answered is not asked again.
 2. Take the closing setup photograph if that grant was given.
-3. **Export.** Dashboard → Export. This writes 18 CSVs, an analysis JSON, a codebook, a provenance
+3. **Export.** Dashboard → Export. This writes 20 CSVs (two of them, 07b and 07c, are per-blink validation files the main analysis does not need), an analysis JSON, a codebook, a provenance
    manifest and a `backup_*.json`. If the session was consented for photographs or video, a second
    button, **Download media files**, writes the picture and video files themselves; they are not in
    the data bundle. Each is named in `15_media_inventory.csv`, so a file can always be traced back

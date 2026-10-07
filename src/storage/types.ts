@@ -1008,6 +1008,68 @@ export interface EyeMetricsRecord extends PipelineWindowFields {
   lighting_quality: 'low' | 'good' | 'overexposed' | null;
 }
 
+/**
+ * One blink of a reading window, as stored (Round 78). Times are ms on the capture clock, relative to
+ * the window's first frame (OcularEventsRecord.start_capture_ms). See tracking/blink.ts for the rules.
+ */
+export interface StoredBlinkEvent {
+  onset_ms: number;
+  offset_ms: number;
+  min_at_ms: number;
+  duration_ms: number;
+  frames_below: number;
+  ended_by: 'reopened' | 'window_end';
+  min_ear: number;
+  /** min_ear / the calibration baseline the blink was classified against. */
+  min_ear_ratio: number | null;
+  tier: 'full' | 'micro' | 'incomplete';
+  /** Face-solved frames per second within 1 s either side of the deepest sample; null with < 2. */
+  local_fps: number | null;
+  /** The reading page on screen at onset, 1-based; null when the page was not recorded. */
+  page: number | null;
+}
+
+/**
+ * Every blink of one reading window and the eye-openness trace it was found in (Round 78).
+ *
+ * Keyed by condition_id, like eye_metrics, so a redo of a condition replaces it. Written in the same
+ * step as the eye-metrics row, from the same classification, so its blink counts equal that row's.
+ * It is for VALIDATION and RE-ANALYSIS (comparing the classifier with a human coder, re-cutting a
+ * threshold); the main analysis reads only 07_eye_metrics.csv.
+ *
+ * The trace is stored as text columns, one value per processed frame, so a ten-condition sitting
+ * stays in the low megabytes in the database and in a backup (tracking/blinkLog.ts encodes and
+ * decodes it; docs/ANALYSIS_PLAN.md gives the measured size).
+ */
+export interface OcularEventsRecord {
+  condition_id: string;
+  session_id: string;
+  /** Which part of the condition was recorded. Only the reading window is. */
+  window: 'reading';
+  /** tracking/blink.ts BLINK_RULE_VERSION when the blinks were classified. */
+  rule_version: string;
+  /** The open-eye baseline the blinks were classified against; null when there was none. */
+  ear_baseline: number | null;
+  /** performance.now() time of the window's first frame; null when no frame was processed. */
+  start_capture_ms: number | null;
+  /** Page turns as [ms from start, page number]; page 1 is shown from the start. */
+  pages: Array<[number, number]>;
+  events: StoredBlinkEvent[];
+  trace: EarTraceColumns;
+}
+
+/** The per-frame trace, as comma-separated text columns of equal length (`face` is one digit per frame). */
+export interface EarTraceColumns {
+  frames: number;
+  /** ms from start, 2 decimals. */
+  t: string;
+  /** '1' when the tracker found a face in the frame, '0' when not. One character per frame, no separator. */
+  face: string;
+  /** Each eye's EAR, 6 decimals; empty where the eye could not be measured. */
+  left: string;
+  right: string;
+}
+
 export interface PerformanceLogRecord {
   log_id: string;
   session_id: string;
@@ -1098,6 +1160,7 @@ export interface StoreMap {
   reaction_trials: ReactionTrialRecord;
   rt_summaries: RtSummaryRecord;
   eye_metrics: EyeMetricsRecord;
+  ocular_events: OcularEventsRecord;
   calibration_data: CalibrationRecord;
   system_performance_logs: PerformanceLogRecord;
 }

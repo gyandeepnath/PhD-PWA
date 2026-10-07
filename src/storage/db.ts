@@ -32,6 +32,12 @@ const STORE_SPECS: StoreSpec[] = [
   { name: 'reaction_trials', keyPath: 'trial_id', indexes: [{ name: 'by_condition', keyPath: 'condition_id' }, { name: 'by_session', keyPath: 'session_id' }] },
   { name: 'rt_summaries', keyPath: 'condition_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
   { name: 'eye_metrics', keyPath: 'condition_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
+  /*
+   * Every blink of each reading window and its per-frame eye-openness trace (Round 78, schema 10):
+   * the validation record behind eye_metrics' counts. Keyed like eye_metrics, so a redo replaces it.
+   * Covered by gatherSession, the backup (RESTORE_PLAN) and purgeSession like every other store.
+   */
+  { name: 'ocular_events', keyPath: 'condition_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
   { name: 'calibration_data', keyPath: 'calibration_id', indexes: [{ name: 'by_session', keyPath: 'session_id' }] },
   /*
    * RESERVED AND UNWRITTEN. Nothing in the app writes this store — grep for 'system_performance_logs'
