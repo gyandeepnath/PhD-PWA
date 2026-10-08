@@ -30,7 +30,7 @@ import { CONFIG } from '@/experiment/config';
 import { RT_LOCATIONS } from '@/lib/rtLocations';
 import { EyeMetricsAggregator } from '@/tracking/aggregator';
 import { tierCounts } from '@/tracking/blinkLog';
-import type { OcularEventsRecord } from '@/storage/types';
+import type { EyeMetricsRecord, OcularEventsRecord } from '@/storage/types';
 
 export const FIXTURE = {
   /** Embeds a comma and a quote on purpose: the hardest thing for a CSV writer to get right. */
@@ -332,11 +332,14 @@ function rtSummaryFor(conditionId: string, sid: string, i: number) {
  */
 export const FIXTURE_FRAME_MS = 1000 / 29.4;
 export const FIXTURE_NO_FACE_FRAMES = 3;
-let ocularMemo: { key: string; records: OcularEventsRecord[] } | null = null;
+/** The fitted-minimum columns of the eye-metrics row (Round 79), as the aggregator computed them for the trace. */
+type FixtureFit = Pick<EyeMetricsRecord, 'blink_count_incomplete_fit' | 'incomplete_blink_ratio_fit' | 'blinks_not_fitted' | 'fit_exposure_ms' | 'fit_exposure_known' | 'fit_rule_version'>;
+let ocularMemo: { key: string; records: OcularEventsRecord[]; fits: FixtureFit[] } | null = null;
 function fixtureOcularEvents(conditionIds: string[], sid: string): OcularEventsRecord[] {
   const key = `${sid}|${conditionIds.join(',')}`;
   if (ocularMemo?.key !== key) {
-    ocularMemo = { key, records: conditionIds.map((conditionId, i) => {
+    const fitsOut: FixtureFit[] = [];
+    ocularMemo = { key, fits: fitsOut, records: conditionIds.map((conditionId, i) => {
       const agg = new EyeMetricsAggregator();
       const nFace = Math.round(29.4 * (readingMs(i) / 1000));
       const tStart = 400_000 + i * 600_000;
@@ -369,20 +372,33 @@ function fixtureOcularEvents(conditionIds: string[], sid: string): OcularEventsR
         if (k === Math.floor(nFace / 3)) agg.markPage(2, tStart + frame * FIXTURE_FRAME_MS);
         if (k === Math.floor((2 * nFace) / 3)) agg.markPage(3, tStart + frame * FIXTURE_FRAME_MS);
       }
-      const { record, events } = agg.finalizeWithEvents({
+      // A 30-ms exposure fixed at camera setup, so the fitted-minimum path runs as on the tablet.
+      const { record, events, fits, fitExposure } = agg.finalizeWithEvents({
         conditionId, sessionId: sid, cameraActive: true, baselineEarValue: 0.312,
         earThresholdUsed: 0.234, gazeCalibrated: true, headPitchCalibrated: true, calibrationId: 'cal-1',
+        lockedExposure100us: 300,
       });
       const n = tierCounts(events);
       if (record.ear_sample_count !== nFace || n.full !== blinkFullFor(i) || n.micro !== blinkMicroFor(i)
         || n.incomplete !== blinkIncompleteFor(i)) {
         throw new Error(`fixture blink trace for condition ${i} does not reproduce its counts`);
       }
-      return agg.blinkLog({ conditionId, sessionId: sid, baseline: 0.312, events });
+      fitsOut.push({
+        blink_count_incomplete_fit: record.blink_count_incomplete_fit, incomplete_blink_ratio_fit: record.incomplete_blink_ratio_fit,
+        blinks_not_fitted: record.blinks_not_fitted, fit_exposure_ms: record.fit_exposure_ms,
+        fit_exposure_known: record.fit_exposure_known, fit_rule_version: record.fit_rule_version,
+      });
+      return agg.blinkLog({ conditionId, sessionId: sid, baseline: 0.312, events, fits, fitExposure });
     }) };
   }
   // A copy per call, so a test that edits one bundle's records cannot reach another's.
-  return ocularMemo.records.map((o) => ({ ...o, pages: o.pages.map((p) => [...p] as [number, number]), events: o.events.map((e) => ({ ...e })), trace: { ...o.trace } }));
+  return ocularMemo!.records.map((o) => ({ ...o, pages: o.pages.map((p) => [...p] as [number, number]), events: o.events.map((e) => ({ ...e })), trace: { ...o.trace } }));
+}
+
+/** The eye-metrics row's fitted-minimum columns for condition `i`, from the same aggregator run as its blink record. */
+function fixtureFitFields(conditionIds: string[], sid: string, i: number): FixtureFit {
+  fixtureOcularEvents(conditionIds, sid);
+  return { ...ocularMemo!.fits[i] };
 }
 
 /*
@@ -707,6 +723,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       blink_count_full: blinkFullFor(i),
       blink_count_micro: blinkMicroFor(i),
       blink_count_incomplete: blinkIncompleteFor(i),
+      ...fixtureFitFields(conditions.map((x) => x.condition_id), sid, i),
       ear_baseline: 0.312,
       ear_threshold_used: 0.234, ear_complete_threshold: 0.234,
       head_pitch_mean: -3.2,

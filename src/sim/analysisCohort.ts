@@ -180,6 +180,14 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
         mean_inter_blink_interval_ms: Math.round((observed / total) * Math.exp(gaussian(rng, 0, 0.1))),
         blink_rate_full: Math.round(((total - inc - micro) / (observed / 60_000)) * 100) / 100,
         effective_fps: fps, fps_adequate_for_ratio: fps >= 24, fps_adequate_for_tiers: fps >= 20,
+        // The fitted-minimum sensitivity (Round 79), derived WITHOUT drawing from rng so every other
+        // simulated value is unchanged: a slower camera reads more blinks incomplete, and the fit
+        // takes back a share of them that grows as the rate falls below 30. The exposure counts as
+        // known on two runs in three (a camera whose fixed exposure held).
+        blink_count_incomplete_fit: Math.max(0, inc - Math.round(inc * Math.max(0, 30 - fps) * 0.01)),
+        incomplete_blink_ratio_fit: Math.round((Math.max(0, inc - Math.round(inc * Math.max(0, 30 - fps) * 0.01)) / total) * 10_000) / 10_000,
+        blinks_not_fitted: 0, fit_exposure_ms: c.session_position % 3 === 0 ? Math.round((1000 / fps) * 100) / 100 : 30,
+        fit_exposure_known: c.session_position % 3 !== 0, fit_rule_version: 'fit-r1',
         perclos_p80: Math.round(Math.max(0, 0.03 + gaussian(rng, 0, 0.015)) * 1000) / 1000,
         face_presence_ratio: Math.round(Math.min(1, 0.9 + rng() * 0.1) * 1000) / 1000,
         off_axis_ratio: Math.round(rng() * 0.15 * 1000) / 1000,

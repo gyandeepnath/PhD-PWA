@@ -20,7 +20,11 @@ import {
   type BlinkEvent,
   type BlinkEventDetail,
 } from './blink';
-import { buildOcularEventsRecord, emptyTrace, type DetailSample, type TraceBuffer } from './blinkLog';
+import {
+  buildOcularEventsRecord, emptyTrace, fitBlinks, fitExposure, fittedIncompleteCount,
+  type DetailSample, type TraceBuffer,
+} from './blinkLog';
+import { FIT_RULE_VERSION, type BlinkFit } from './blinkFit';
 import type { HeadPose } from './headPose';
 import type { GazeZone } from './gaze';
 import { classifyLighting } from './lighting';
@@ -234,6 +238,8 @@ export class EyeMetricsAggregator {
     conditionId: string | null; sessionId: string; baseline: number | null; events: BlinkEventDetail[];
     /** 'selftest' for the camera self-test's record, with its cue times; a reading window otherwise. */
     window?: 'reading' | 'selftest'; cues?: number[];
+    /** The fitted minima finalizeWithEvents computed for these events, and the exposure they assumed. */
+    fits?: Array<BlinkFit | null>; fitExposure?: { ms: number; known: boolean };
   }): OcularEventsRecord {
     return buildOcularEventsRecord({
       ...args,
@@ -262,7 +268,12 @@ export class EyeMetricsAggregator {
     headPitchCalibrated: boolean;
     /** The calibration record in force while this exposure was measured. See EyeMetricsRecord. */
     calibrationId: string | null;
-  }): { record: EyeMetricsRecord; events: BlinkEventDetail[] } {
+    /**
+     * The camera exposure fixed at camera setup, in 100 µs units, when there is one (Round 79): the
+     * fitted-minimum sensitivity assumes it. Absent or null: the exposure is not known.
+     */
+    lockedExposure100us?: number | null;
+  }): { record: EyeMetricsRecord; events: BlinkEventDetail[]; fits: Array<BlinkFit | null>; fitExposure: { ms: number; known: boolean } } {
     /**
      * Two different durations, because they answer two different questions.
      *
@@ -322,6 +333,17 @@ export class EyeMetricsAggregator {
     const closure = blinkMeasurable ? closureRaw
       : { ...closureRaw, long_closure_count: null, long_closure_total_ms: null };
     const ibi = interBlinkInterval(events);
+
+    /*
+     * The fitted-minimum SENSITIVITY (blinkFit.ts, rule fit-r1; Round 79). The same blinks, each one's
+     * depth read off a blink-shaped curve fitted through the frames around its lowest one instead of off
+     * the lowest frame: the frame-rate-independent version of the count, for a pre-registered sensitivity
+     * refit (docs/ANALYSIS_PLAN.md §5). It changes nothing above: the primary count is blink-r1's.
+     */
+    const samplingFps = observedMs >= 1000 && this.ear.length >= 2 ? ((this.ear.length - 1) / Math.round(observedMs)) * 1000 : null;
+    const exposure = fitExposure(args.lockedExposure100us, samplingFps);
+    const fits = blinkMeasurable ? fitBlinks(this.ear, events, baseline, exposure.ms) : [];
+    const fitted = fittedIncompleteCount(events, fits, baseline);
 
     const sPitch = smooth(this.pitch);
     const sYaw = smooth(this.yaw);
@@ -390,6 +412,13 @@ export class EyeMetricsAggregator {
       blink_count_micro: blink.blink_count_micro,
       blink_count_incomplete: blink.blink_count_incomplete,
 
+      blink_count_incomplete_fit: blinkMeasurable ? fitted.incomplete : null,
+      incomplete_blink_ratio_fit: blinkMeasurable && fitted.incomplete != null && events.length > 0 ? fitted.incomplete / events.length : null,
+      blinks_not_fitted: blinkMeasurable ? fitted.notFitted : null,
+      fit_exposure_ms: blinkMeasurable ? Math.round(exposure.ms * 100) / 100 : null,
+      fit_exposure_known: blinkMeasurable ? exposure.known : null,
+      fit_rule_version: FIT_RULE_VERSION,
+
       ear_baseline: args.baselineEarValue,
       ear_threshold_used: args.earThresholdUsed,
       ear_complete_threshold: args.earCompleteThreshold ?? null,
@@ -436,7 +465,7 @@ export class EyeMetricsAggregator {
       lighting_quality: this.lumas.length ? classifyLighting(mean(this.lumas)) : null,
     };
     // Without a baseline no blink is counted (blink_count_* are null), so none is stored either.
-    return { record, events: blinkMeasurable ? events : [] };
+    return { record, events: blinkMeasurable ? events : [], fits, fitExposure: exposure };
   }
 }
 

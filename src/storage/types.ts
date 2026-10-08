@@ -1050,6 +1050,21 @@ export interface EyeMetricsRecord extends PipelineWindowFields {
   blink_count_micro: number | null;
   blink_count_incomplete: number | null;
 
+  /**
+   * The fitted-minimum SENSITIVITY (tracking/blinkFit.ts, rule fit-r1; Round 79): the same blinks, each
+   * classified on its depth estimated between frames instead of its lowest frame; a blink that could not
+   * be fitted keeps its primary class (blinks_not_fitted says how many). fit_exposure_ms is the camera
+   * exposure the fit assumed, fit_exposure_known whether it was the exposure fixed at camera setup (true)
+   * or the frame interval (false). Never the primary outcome. Null without a baseline; absent before
+   * Round 79.
+   */
+  blink_count_incomplete_fit?: number | null;
+  incomplete_blink_ratio_fit?: number | null;
+  blinks_not_fitted?: number | null;
+  fit_exposure_ms?: number | null;
+  fit_exposure_known?: boolean | null;
+  fit_rule_version?: string;
+
   ear_baseline: number | null;
   /** EAR at which a blink is REGISTERED (0.75 x this participant's baseline). */
   ear_threshold_used: number | null;
@@ -1133,6 +1148,12 @@ export interface StoredBlinkEvent {
   local_fps: number | null;
   /** The reading page on screen at onset, 1-based; null when the page was not recorded (and always in the self-test). */
   page: number | null;
+  /**
+   * The fitted minimum (tracking/blinkFit.ts, rule fit-r1, Round 79) as a fraction of the baseline: the
+   * lid's deepest point estimated between frames. A sensitivity measure; nothing is classified on it. Null
+   * when the blink could not be fitted; absent on records made before Round 79 and on the self-test.
+   */
+  min_ratio_fit?: number | null;
 }
 
 /**
@@ -1176,6 +1197,14 @@ export interface OcularEventsRecord {
   cues?: number[];
   events: StoredBlinkEvent[];
   trace: EarTraceColumns;
+  /**
+   * The fitted minimum's rule (tracking/blinkFit.ts FIT_RULE_VERSION) and the camera exposure it assumed,
+   * ms — known when camera setup fixed the exposure, otherwise the frame interval (blinkLog.ts
+   * fitExposure). Absent before Round 79 and on the self-test, whose blinks are not fitted.
+   */
+  fit_rule_version?: string;
+  fit_exposure_ms?: number | null;
+  fit_exposure_known?: boolean;
 }
 
 /** The per-frame trace, as comma-separated text columns of equal length (`face` is one digit per frame). */

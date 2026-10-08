@@ -26,6 +26,7 @@
  */
 import type { BlinkEventDetail, EarSample } from './blink';
 import { BLINK_RULE_VERSION, EAR_TIERS } from './blink';
+import { fitBlinkMinimum, FIT_RULE_VERSION, type BlinkFit } from './blinkFit';
 import type { EarTraceColumns, OcularEventsRecord, StoredBlinkEvent } from '@/storage/types';
 
 /** How far either side of a blink's deepest sample its local frame rate is measured. */
@@ -207,6 +208,58 @@ export function blinkDetail(series: DetailSample[], e: BlinkEventDetail, baselin
   };
 }
 
+/**
+ * The fitted minimum (blinkFit.ts, rule fit-r1) of each blink, in the order of `events`: the lid's
+ * deepest point estimated between frames, from the frames around the lowest one and the open eye just
+ * before it (open_pre). Null for a blink that cannot be fitted (no open_pre, too few frames, a gap).
+ *
+ * A SENSITIVITY measure only (docs/ANALYSIS_PLAN.md §5): nothing is classified on it. `exposureMs` is the
+ * camera exposure the fit assumes — the fixed exposure when camera setup set one, otherwise the frame
+ * interval (see fitExposure).
+ */
+export function fitBlinks(series: DetailSample[], events: BlinkEventDetail[], baseline: number | null, exposureMs: number): Array<BlinkFit | null> {
+  return events.map((e) => {
+    const i = lowerBound(series, e.min_at_ms);
+    if (series[i]?.t_ms !== e.min_at_ms) return null;
+    const open = blinkDetail(series, e, baseline).open_pre;
+    return open == null ? null : fitBlinkMinimum(series, i, open, exposureMs);
+  });
+}
+
+/**
+ * The exposure the fitted minimum assumes, ms, and whether it is known. Known when camera setup fixed the
+ * exposure and the camera reported it (exposure_time_100us, in 100 µs units). Otherwise the frame interval
+ * at the observed rate: the exposure-limited case, which is when the camera runs slowest and the fit
+ * matters most. An assumed exposure can over- or under-correct (docs/FPS_GATE_SIMULATION.md §C), so the
+ * analysis plan reads the fitted counts of the two kinds apart.
+ */
+export function fitExposure(lockedExposure100us: number | null | undefined, samplingFps: number | null): { ms: number; known: boolean } {
+  if (lockedExposure100us != null && Number.isFinite(lockedExposure100us) && lockedExposure100us > 0) {
+    // Never longer than a frame: a camera cannot expose a frame for longer than the interval it delivers it in.
+    const ms = lockedExposure100us / 10;
+    return { ms: samplingFps != null && samplingFps > 0 ? Math.min(ms, 1000 / samplingFps) : ms, known: true };
+  }
+  return { ms: samplingFps != null && samplingFps > 0 ? 1000 / samplingFps : 0, known: false };
+}
+
+/**
+ * Incomplete blinks by the fitted minimum: a blink counts as incomplete when its fitted depth is at or
+ * above the completeness cut (0.60 x baseline), and a blink that could not be fitted keeps the class the
+ * primary rule gave it — so the count covers the same blinks as blink_count_incomplete and only the
+ * fitted ones can move. `notFitted` says how many kept their primary class.
+ */
+export function fittedIncompleteCount(events: BlinkEventDetail[], fits: Array<BlinkFit | null>, baseline: number | null): { incomplete: number | null; notFitted: number } {
+  if (baseline == null || !Number.isFinite(baseline) || baseline <= 0) return { incomplete: null, notFitted: events.length };
+  let incomplete = 0;
+  let notFitted = 0;
+  events.forEach((e, k) => {
+    const f = fits[k];
+    if (f) { if (f.min_ear / baseline >= EAR_TIERS.full) incomplete++; }
+    else { notFitted++; if (e.tier === 'incomplete') incomplete++; }
+  });
+  return { incomplete, notFitted };
+}
+
 /** The trace as stored: comma-separated columns, one value per frame. */
 export function encodeTrace(buf: TraceBuffer, t0: number | null): EarTraceColumns {
   const n = buf.t.length;
@@ -276,14 +329,18 @@ export function buildOcularEventsRecord(args: {
   pageMarks: Array<[number, number]>;
   /** The self-test's cue times (performance.now()). */
   cues?: number[];
+  /** The fitted minimum of each blink (fitBlinks), in the order of `events`, and the exposure it assumed; absent: not fitted. */
+  fits?: Array<BlinkFit | null>;
+  fitExposure?: { ms: number; known: boolean };
 }): OcularEventsRecord {
   const { trace, pageMarks, series, baseline } = args;
   const window = args.window ?? 'reading';
   if (window === 'reading' && !args.conditionId) throw new Error('a reading-window blink record needs its condition_id');
   const t0 = trace.t.length ? trace.t[0] : pageMarks.length ? pageMarks[0][0] : null;
   const rel = (t: number) => (t0 == null ? t : round(t - t0, 2));
-  const events: StoredBlinkEvent[] = args.events.map((e) => {
+  const events: StoredBlinkEvent[] = args.events.map((e, k) => {
     const d = blinkDetail(series, e, baseline);
+    const fit = args.fits?.[k] ?? null;
     // An event exists only when a baseline did (classifyBlinks returns none without one).
     const ratio = baseline != null && baseline > 0 ? e.min_ear / baseline : null;
     const f = localFps(series, e.min_at_ms);
@@ -306,6 +363,7 @@ export function buildOcularEventsRecord(args: {
       tier: e.tier,
       local_fps: f == null ? null : round(f, 2),
       page: pageAt(pageMarks, e.onset_ms),
+      ...(args.fits ? { min_ratio_fit: fit && baseline != null && baseline > 0 ? fit.min_ear / baseline : null } : {}),
     };
   });
   const record: OcularEventsRecord = {
@@ -321,6 +379,11 @@ export function buildOcularEventsRecord(args: {
     trace: encodeTrace(trace, t0),
   };
   if (window === 'selftest') record.cues = (args.cues ?? []).map(rel);
+  if (args.fits && args.fitExposure) {
+    record.fit_rule_version = FIT_RULE_VERSION;
+    record.fit_exposure_ms = round(args.fitExposure.ms, 2);
+    record.fit_exposure_known = args.fitExposure.known;
+  }
   return record;
 }
 

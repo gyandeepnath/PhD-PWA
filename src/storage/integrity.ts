@@ -16,6 +16,7 @@
  */
 import { QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
 import { decodeTrace, tierCounts } from '@/tracking/blinkLog';
+import { EAR_TIERS } from '@/tracking/blink';
 import type { SessionBundle } from './gather';
 import { MIN_SCALE } from '@/lib/viewportScale';
 import {
@@ -665,6 +666,17 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
           `Condition "${cid}": 07b lists ${n.full} full, ${n.micro} micro and ${n.incomplete} incomplete `
           + `blinks, but 07_eye_metrics counts ${counted ? `${counted.full}, ${counted.micro} and ${counted.incomplete}` : 'none (no blink measure)'}. `
           + 'Do not use 07b/07c for this condition; 07_eye_metrics is unaffected.', [cid]);
+      }
+      // The fitted-minimum sensitivity count (Round 79) is the same blinks re-judged on min_ratio_fit, an
+      // unfitted blink keeping its tier; recounted from 07b it must equal 07's blink_count_incomplete_fit.
+      if (eye && eye.blink_count_incomplete_fit != null && o.fit_rule_version) {
+        const fitted = o.events.filter((e) => (e.min_ratio_fit != null ? e.min_ratio_fit >= EAR_TIERS.full : e.tier === 'incomplete')).length;
+        if (fitted !== eye.blink_count_incomplete_fit) {
+          add('warning', 'blink_fit_matches_summary',
+            `Condition "${cid}": by 07b's min_ratio_fit ${fitted} blinks are incomplete, but 07_eye_metrics `
+            + `counts ${eye.blink_count_incomplete_fit} (blink_count_incomplete_fit). Do not use the fitted-minimum `
+            + 'columns for this condition; the primary count is unaffected.', [cid]);
+        }
       }
       const measured = decodeTrace(o.trace).filter((f) => f.face && f.ear != null).length;
       if (eye && eye.camera_active && measured !== eye.ear_sample_count) {

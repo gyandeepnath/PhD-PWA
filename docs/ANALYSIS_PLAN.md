@@ -471,6 +471,23 @@ These are not optional and they come first.
    `tracker_fps`, `frames_skipped` and `process_ms_p50`/`process_ms_p95` in `07_eye_metrics.csv`
    separate a camera that delivered too few frames from a tracker that could not keep up. They are
    QC, not covariates: `effective_fps` remains the rate the model adjusts for.
+   **The fitted-minimum sensitivity** (Round 79, rule `fit-r1`; pre-registered, never the primary).
+   The primary rule classifies each blink on its lowest sampled frame (`blink-r1`), and a slower
+   camera misses the true deepest point of more blinks, so the ratio's level rises as the frame rate
+   falls. `blink_count_incomplete_fit` (07) counts the same blinks judged instead on a depth
+   estimated between frames — a two-phase blink template, averaged over the camera exposure, fitted
+   to the frames around the lowest one (`src/tracking/blinkFit.ts`); a blink that cannot be fitted
+   keeps its primary class (`blinks_not_fitted`). In the simulation (`docs/FPS_GATE_SIMULATION.md`)
+   it removed most of the frame-rate dependence of the ratio's level when the exposure was known, and
+   did not classify individual blinks better, so it is a sensitivity analysis only. **Pre-specified
+   use:** refit the primary model with `blink_count_incomplete_fit` as the numerator (same
+   denominator, same formula), on every row that carries it and on the rows with
+   `fit_exposure_known = TRUE` (the exposure fixed at camera setup; otherwise the fit assumed the
+   frame interval, which can over- or under-correct by about 1 point). Report both beside the
+   primary. If the polarity effect is present in the primary and absent here, frame rate is the
+   likelier explanation; the primary is not replaced. Both templates run it. Rows recorded before
+   Round 79 have no fitted count and are reported as such; the fit can be recomputed for them from
+   `07c_ear_trace.csv` only if a separate script is written, which this plan does not require.
 2b. **One instrument per participant.** `tracker_backend` (07, and 01 for the sitting) names the face
    tracker that measured each row. The three backends are not interchangeable instruments — on
    MediaPipe's test portrait in headless Chromium the open-eye EAR was 0.2039 with the legacy tracker,

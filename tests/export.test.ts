@@ -456,6 +456,18 @@ describe('07b and 07c: every blink and the eye-openness trace, kept apart from t
     }
   });
 
+  it('carries the fitted-minimum sensitivity: per blink in 07b, recounted to 07, the self-test unfitted (Round 79)', () => {
+    for (const row of eye) {
+      const mine = blinks.filter((x) => x.condition_id === row.condition_id);
+      const fitted = mine.filter((x) => (x.min_ratio_fit !== '' ? Number(x.min_ratio_fit) >= 0.6 : x.tier === 'incomplete')).length;
+      expect(String(fitted), row.condition_id).toBe(row.blink_count_incomplete_fit);
+      expect(row.fit_rule_version).toBe('fit-r1');
+      expect(row.fit_exposure_known).toBe('true');
+      expect(mine.every((x) => x.fit_rule_version === 'fit-r1' && x.fit_exposure_ms === '30')).toBe(true);
+    }
+    expect(blinks.filter((x) => x.window === 'selftest').every((x) => x.min_ratio_fit === '' && x.fit_rule_version === '')).toBe(true);
+  });
+
   it('writes the headers alone for a sitting with no records (before schema 10, or camera off)', () => {
     const old = buildExportFiles({ ...buildFixtureBundle(), ocularEvents: undefined });
     for (const name of ['07b_blink_events.csv', '07c_ear_trace.csv']) {

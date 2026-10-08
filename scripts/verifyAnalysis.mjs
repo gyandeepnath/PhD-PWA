@@ -389,6 +389,10 @@ for (const { root, options } of jobs) {
       && /\[perclos\] LMM on logit\(y'\): polarity_c/.test(out), 'no PERCLOS covariate check with the compression');
   ok('the GEE says why it is not refitted for overdispersion', /\[overdispersion\] the participant-clustered sandwich/.test(out),
     'no [overdispersion] line');
+  // Round 79: the fitted-minimum sensitivity (fit-r1), on every row with it and on the known-exposure rows.
+  ok('the fitted-minimum sensitivity is refitted, all rows and exposure-known rows',
+    /fitted minimum \(fit-r1\), all rows with it\s+polarity_c -?[\d.]+/.test(out) && /fitted minimum, exposure known only\s+polarity_c -?[\d.]+/.test(out),
+    'no fitted-minimum sensitivity lines');
   // The sections docs/ANALYSIS_PLAN.md names. Absence of one means an analyst ran the file and was
   // not given an outcome the plan requires — which is how the frame-rate sensitivity went missing.
   for (const [label, needle] of [
@@ -585,6 +589,9 @@ for (const { root, options } of jobs) {
       'no PERCLOS beta-GLMM line of the expected kind');
     ok('R: the PERCLOS-adjusted refit sits in the sensitivity list', /adjusted for perclos_p80 \(synopsis §3\.9\)\s+polarity -?[\d.]+/.test(rOut),
       'no PERCLOS-adjusted sensitivity line');
+    ok('R: the fitted-minimum sensitivity is refitted, all rows and exposure-known rows',
+      /fitted minimum \(fit-r1\), all rows with it\s+polarity -?[\d.]+/.test(rOut) && /fitted minimum, exposure known only\s+polarity -?[\d.]+/.test(rOut),
+      'no fitted-minimum sensitivity lines');
     // m5: Objective 2's three models carry the primary's covariates, and the residual-hue model's
     // collinearity is printed beside its coefficients.
     ok('R: the Objective 2 models carry the primary\'s covariates, and the residual-hue model\'s collinearity is shown',

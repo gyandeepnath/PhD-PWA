@@ -1365,7 +1365,9 @@ export function useTracking(): TrackingApi {
       if (typeof finished.blinks === 'number') sessionBlinksDone.current += finished.blinks;
 
       const agg = aggRef.current;
-      const { record, events } = agg.finalizeWithEvents({
+      // The exposure fixed at camera setup, when it was (locked-v1): the fitted-minimum sensitivity assumes it.
+      const ex = pipelineRef.current?.camera_exposure ?? null;
+      const { record, events, fits, fitExposure } = agg.finalizeWithEvents({
         conditionId,
         sessionId,
         cameraActive: true,
@@ -1380,6 +1382,7 @@ export function useTracking(): TrackingApi {
         gazeCalibrated: gazeCalRef.current?.valid ?? false,
         headPitchCalibrated: pitchBaselineFracRef.current != null,
         calibrationId: calibrationIdRef.current,
+        lockedExposure100us: ex?.policy === 'locked-v1' ? ex.exposure_time_100us : null,
       });
       aggRef.current = null;
 
@@ -1397,7 +1400,7 @@ export function useTracking(): TrackingApi {
        * Every blink of this window and its per-frame trace (Round 78), from the SAME events the row
        * above was counted from. Written second: the row is the measurement, this is its evidence.
        */
-      await put('ocular_events', agg.blinkLog({ conditionId, sessionId, baseline: baselineEarRef.current, events }));
+      await put('ocular_events', agg.blinkLog({ conditionId, sessionId, baseline: baselineEarRef.current, events, fits, fitExposure }));
     },
     [status],
   );

@@ -2067,6 +2067,27 @@ if (nrow(eye) == 0) {
       cat("  every camera-on run is adequately sampled (or none is): no frame-rate refit to run.\n")
     }
 
+    # §5 item 2: the fitted-minimum sensitivity (Round 79, rule fit-r1). The same blinks, each judged on
+    # its depth estimated BETWEEN frames instead of its lowest frame (07 blink_count_incomplete_fit; the
+    # denominator is unchanged). It removes most of the frame-rate dependence of the ratio's level
+    # (docs/FPS_GATE_SIMULATION.md). Reported for every row that has it and for the rows whose camera
+    # exposure was known (fit_exposure_known), because an assumed exposure can over- or under-correct.
+    # A sensitivity, never the primary.
+    if ("blink_count_incomplete_fit" %in% names(eye) && any(is.finite(eye$blink_count_incomplete_fit))) {
+      fit_rows <- eye %>% filter(is.finite(blink_count_incomplete_fit))
+      known_n <- if ("fit_exposure_known" %in% names(fit_rows)) sum(fit_rows$fit_exposure_known %in% TRUE) else 0
+      cat(sprintf("\nfitted minimum (fit-r1): %d of %d primary rows carry it, %d with the exposure known\n",
+                  nrow(fit_rows), nrow(eye), known_n))
+      fit_change <- cbind(blink_count_incomplete_fit, blink_total - blink_count_incomplete_fit) ~ .
+      refit_fit <- function(rows) tryCatch(suppressWarnings(refit(m_primary, rows, fit_change)), error = function(err) NULL)
+      sens_line("fitted minimum (fit-r1), all rows with it", refit_fit(fit_rows))
+      if (known_n > 0 && known_n < nrow(fit_rows)) {
+        sens_line("fitted minimum, exposure known only", refit_fit(fit_rows %>% filter(fit_exposure_known %in% TRUE)))
+      }
+    } else {
+      cat("\n[fit-r1] no fitted-minimum counts in this export (sittings before Round 79): that sensitivity is not run.\n")
+    }
+
     # Without eff_fps_c: §2's own formula (m_no_fps, fitted with the H1 effect size above).
     sens_line("without the eff_fps_c covariate (§2 formula)", m_no_fps)
     sens_line("observation-level random effect (§2)", m_olre)

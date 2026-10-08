@@ -16,8 +16,9 @@ import {
 } from '@/tracking/blink';
 import {
   blinkDetail, buildOcularEventsRecord, cueLag, decodeTrace, emptyTrace, encodeTrace, localFps, ocularRecordId, pageAt,
-  tierCounts, OPEN_PRE_MIN_FRAMES, OPEN_PRE_WINDOW_MS, type DetailSample,
+  tierCounts, fitBlinks, fitExposure, fittedIncompleteCount, OPEN_PRE_MIN_FRAMES, OPEN_PRE_WINDOW_MS, type DetailSample,
 } from '@/tracking/blinkLog';
+import { FIT_RULE_VERSION, templateClosure } from '@/tracking/blinkFit';
 import { EyeMetricsAggregator } from '@/tracking/aggregator';
 
 const BASE = 0.3;
@@ -239,6 +240,83 @@ describe('the record is built from the blinks the eye-metrics row counts', () =>
     expect(() => buildOcularEventsRecord({
       conditionId: null, sessionId: 's', baseline: BASE, events: [], series: [], trace: emptyTrace(), pageMarks: [],
     })).toThrow(/condition_id/);
+  });
+});
+
+describe('the fitted-minimum sensitivity (Round 79, fit-r1)', () => {
+  /**
+   * 20 s at 24 fps with one blink of the mean shape (100/220 ms) whose true depth is 0.58 of the open
+   * eye — complete — placed so that its lowest frame reads just above the 0.60 cut: the primary rule
+   * calls it incomplete, the fit does not. No noise, so the numbers are exact.
+   */
+  function slowBlink(): DetailSample[] {
+    const out: DetailSample[] = [];
+    const dt = 1000 / 24;
+    const start = T0 + 10_000 - 0.63 * dt; // frames fall 0.63 of a frame after its start: the sampling phase that is worst for the lowest frame (tests/blinkFit.test.ts)
+    for (let k = 0; k < 480; k++) {
+      const t = T0 + k * dt;
+      let g = 0;
+      for (let i = 0; i < 200; i++) g += templateClosure(t - 40 + (40 * (i + 0.5)) / 200 - start, 100, 220);
+      const ear = BASE * (1 - 0.42 * (g / 200));
+      out.push({ t_ms: t, ear, left: ear, right: ear, pitch: 0, yaw: 0 });
+    }
+    return out;
+  }
+  const args = {
+    conditionId: 'cond-f', sessionId: 'sess-f', cameraActive: true, baselineEarValue: BASE, earThresholdUsed: BASE * 0.75,
+    gazeCalibrated: true, headPitchCalibrated: true, calibrationId: null,
+  };
+
+  it('re-judges a blink its lowest frame misread, and leaves the primary count alone', () => {
+    const agg = aggregate(slowBlink());
+    // A 40-ms exposure fixed at camera setup (400 x 100 µs).
+    const { record, events, fits, fitExposure: ex } = agg.finalizeWithEvents({ ...args, lockedExposure100us: 400 });
+    expect(events).toHaveLength(1);
+    expect(events[0].min_ear / BASE).toBeGreaterThan(0.6); // the lowest frame: incomplete
+    expect(record.blink_count_incomplete).toBe(1);          // the primary, unchanged
+    expect(ex).toEqual({ ms: 40, known: true });
+    expect(fits[0]!.min_ear / BASE).toBeCloseTo(0.58, 3);   // the fit: complete
+    expect(record).toMatchObject({
+      blink_count_incomplete_fit: 0, incomplete_blink_ratio_fit: 0, blinks_not_fitted: 0,
+      fit_exposure_ms: 40, fit_exposure_known: true, fit_rule_version: FIT_RULE_VERSION,
+    });
+    const log = agg.blinkLog({ conditionId: 'cond-f', sessionId: 'sess-f', baseline: BASE, events, fits, fitExposure: ex });
+    expect(log.events[0].min_ratio_fit).toBeCloseTo(0.58, 3);
+    expect(log).toMatchObject({ fit_rule_version: 'fit-r1', fit_exposure_ms: 40, fit_exposure_known: true });
+    // The count from the stored blinks is the row's: what the integrity report checks.
+    const recount = log.events.filter((e) => (e.min_ratio_fit != null ? e.min_ratio_fit >= EAR_TIERS.full : e.tier === 'incomplete')).length;
+    expect(recount).toBe(record.blink_count_incomplete_fit);
+  });
+
+  it('assumes the frame interval when the exposure was not fixed, and says so', () => {
+    expect(fitExposure(null, 24)).toEqual({ ms: 1000 / 24, known: false });
+    expect(fitExposure(300, 30)).toEqual({ ms: 30, known: true });
+    // Never longer than a frame: a 50-ms lock at 25 fps cannot expose for more than 40 ms.
+    expect(fitExposure(500, 25)).toEqual({ ms: 40, known: true });
+    expect(fitExposure(undefined, null)).toEqual({ ms: 0, known: false });
+    const agg = aggregate(slowBlink());
+    const { record } = agg.finalizeWithEvents(args);
+    expect(record.fit_exposure_known).toBe(false);
+    expect(record.fit_exposure_ms).toBeCloseTo(1000 / 24, 1);
+  });
+
+  it('keeps the primary class of a blink it cannot fit, and counts it', () => {
+    const s = series(); // only four frames below the cut and an irregular shape: fitted, or not, per frame window
+    const events = classifyBlinks(s, BASE);
+    // No open eye before the blink (the series is cut at onset): no fit, the tier stands.
+    const cut = s.slice(30);
+    const ev = classifyBlinks(cut, BASE);
+    const fits = fitBlinks(cut, ev, BASE, 0);
+    expect(fits).toEqual([null]);
+    expect(fittedIncompleteCount(ev, fits, BASE)).toEqual({ incomplete: ev.filter((e) => e.tier === 'incomplete').length, notFitted: 1 });
+    expect(fittedIncompleteCount(events, [null], null)).toEqual({ incomplete: null, notFitted: 1 });
+  });
+
+  it('writes nothing about a fit on a record that was not fitted (the self-test)', () => {
+    const agg = aggregate(series());
+    const log = agg.blinkLog({ window: 'selftest', conditionId: null, sessionId: 's', baseline: BASE, events: agg.blinkEvents(BASE), cues: [] });
+    expect(log.fit_rule_version).toBeUndefined();
+    expect('min_ratio_fit' in log.events[0]).toBe(false);
   });
 });
 

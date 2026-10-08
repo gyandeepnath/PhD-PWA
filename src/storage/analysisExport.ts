@@ -62,6 +62,8 @@ export const ANALYSIS_LONG_COLUMNS = [
   'passage_id', 'passage_repeat_number',
   // --- primary outcome, as counts and as a proportion -------------------------------------
   'n_incomplete', 'n_blinks_total', 'incomplete_blink_ratio',
+  // --- the fitted-minimum sensitivity (Round 79): same denominator, a numerator judged between frames
+  'n_incomplete_fit', 'fit_exposure_known',
   'blink_rate_per_min', 'observed_duration_ms', 'reading_time_ms', 'reading_speed_wpm',
   // --- secondary ocular -------------------------------------------------------------------
   'perclos_p80', 'blink_duration_mean_ms', 'mean_inter_blink_interval_ms',
@@ -313,6 +315,9 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         n_incomplete: nInc,
         n_blinks_total: nTotal,
         incomplete_blink_ratio: round(sum.incomplete_blink_ratio),
+        // Blank on camera-off rows, and where the row predates the fitted minimum (Round 79).
+        n_incomplete_fit: camOn && nTotal != null ? numOrNull(e?.blink_count_incomplete_fit) : null,
+        fit_exposure_known: camOn && nTotal != null && e?.blink_count_incomplete_fit != null ? (e.fit_exposure_known ?? null) : null,
         blink_rate_per_min: round(sum.blink_rate),
         observed_duration_ms: e?.observed_duration_ms ?? null,
         reading_time_ms: sum.reading_time_ms,

@@ -853,6 +853,31 @@ def main() -> None:
                   "pre-registered frame-rate sensitivity CANNOT be run. Do not report the "
                   "primary outcome from this bundle without it.")
 
+        # --- the fitted-minimum sensitivity (Round 79, rule fit-r1; ANALYSIS_PLAN.md §5 item 2) -------
+        # The same blinks, each judged on its depth estimated BETWEEN frames instead of its lowest frame
+        # (07 blink_count_incomplete_fit; same denominator). It removes most of the frame-rate dependence
+        # of the ratio's level (docs/FPS_GATE_SIMULATION.md). Reported for every row that has it, and
+        # for the rows whose camera exposure was known (fit_exposure_known): an assumed exposure can
+        # over- or under-correct. A sensitivity, never the primary.
+        if "blink_count_incomplete_fit" in prim.columns and prim["blink_count_incomplete_fit"].notna().any():
+            def fit_rows(rows: pd.DataFrame) -> pd.DataFrame:
+                r = rows[rows["blink_count_incomplete_fit"].notna()].copy()
+                r["blink_count_incomplete"] = r["blink_count_incomplete_fit"].astype(int)
+                return r.reset_index(drop=True)
+            fr = fit_rows(prim)
+            print(f"\nfitted minimum (fit-r1): {len(fr)} of {len(prim)} primary rows carry it, "
+                  f"{int(truthy(fr['fit_exposure_known']).sum()) if 'fit_exposure_known' in fr.columns else 0} with the exposure known")
+            if fr["polarity_c"].nunique() > 1 and fr["participant_id"].nunique() > 1:
+                sens_line("fitted minimum (fit-r1), all rows with it", fit_primary(fr))
+                if "fit_exposure_known" in fr.columns:
+                    kn = fr[truthy(fr["fit_exposure_known"])].reset_index(drop=True)
+                    if 0 < len(kn) < len(fr) and kn["polarity_c"].nunique() > 1 and kn["participant_id"].nunique() > 1:
+                        sens_line("fitted minimum, exposure known only", fit_primary(kn))
+            else:
+                print("  too few rows with the fitted minimum to refit.")
+        else:
+            print("\n[fit-r1] no fitted-minimum counts in this export (sittings before Round 79): that sensitivity is not run.")
+
         # --- engagement 'bad' runs out: a labelled sensitivity on the PRIMARY only ----------------
         if not DROP_DISENGAGED and n_bad > 0:
             sens_line("without engagement 'bad' runs", fit_primary(prim[prim["engagement_flag"].ne("bad")].reset_index(drop=True)))

@@ -341,7 +341,7 @@ describe('one face tracker per sitting (round 75)', () => {
 
 describe('the stored blinks are the blinks the summary counted (round 78)', () => {
   const finding = (b: ReturnType<typeof buildFixtureBundle>, check: string) => auditBundle(b).findings.find((x) => x.check === check);
-  const blinkChecks = ['blink_events_match_summary', 'ear_trace_matches_summary', 'blink_events_orphan', 'blink_events_coverage', 'selftest_events_match'];
+  const blinkChecks = ['blink_events_match_summary', 'ear_trace_matches_summary', 'blink_events_orphan', 'blink_events_coverage', 'selftest_events_match', 'blink_fit_matches_summary'];
 
   it('is silent for the fixture, whose records were built through the real aggregator', () => {
     const b = buildFixtureBundle();
@@ -377,6 +377,21 @@ describe('the stored blinks are the blinks the summary counted (round 78)', () =
     const eye = b.eyeMetrics[0];
     Object.assign(eye, { blink_count_full: null, blink_count_micro: null, blink_count_incomplete: null });
     expect(finding(b, 'blink_events_match_summary')?.detail).toMatch(/none \(no blink measure\)/);
+  });
+
+  it('warns when the fitted-minimum count recounted from 07b differs from 07 (Round 79)', () => {
+    const b = buildFixtureBundle();
+    const eye = b.eyeMetrics[2];
+    expect(eye.blink_count_incomplete_fit).not.toBeNull();
+    eye.blink_count_incomplete_fit = (eye.blink_count_incomplete_fit ?? 0) + 1;
+    const f = finding(b, 'blink_fit_matches_summary');
+    expect(f?.severity).toBe('warning');
+    expect(f?.refs).toEqual([eye.condition_id]);
+    expect(f?.detail).toMatch(/primary count is unaffected/);
+    // A record made before Round 79 carries no fit: nothing to compare, nothing said.
+    const old = buildFixtureBundle();
+    for (const o of old.ocularEvents!) { delete o.fit_rule_version; for (const e of o.events) delete e.min_ratio_fit; }
+    expect(checks(old)).not.toContain('blink_fit_matches_summary');
   });
 
   it('warns when the trace has a different number of measured frames than ear_sample_count', () => {
