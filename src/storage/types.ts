@@ -884,6 +884,26 @@ export interface CameraPipelineRecord {
    * when the step did not run (the camera started and setup was left another way).
    */
   camera_exposure?: ExposureOutcome | null;
+  /**
+   * The bench check, when the operator ran it at camera setup (Round 79; useTracking runCameraBench):
+   * white, grey and black under auto-exposure, then under a fixed exposure. A diagnostic of the device,
+   * not a measurement of the participant. Absent when it was not run.
+   */
+  camera_bench?: CameraBenchRecord | null;
+}
+
+/** The bench check's result: one row per ground and exposure. */
+export interface CameraBenchRecord {
+  at: number;
+  rows: Array<{
+    ground: 'white' | 'grey' | 'black';
+    exposure: 'auto' | 'fixed';
+    camera_fps: number | null; tracker_fps: number | null; face_fps: number | null; luma: number | null;
+    /** What the camera reported at the end of that ground (getSettings()). */
+    exposure_mode: string | null; exposure_time_100us: number | null; iso: number | null;
+  }>;
+  /** The exposure step run between the two halves. */
+  lock: ExposureOutcome | null;
 }
 
 /** The exposure step's result; see tracking/cameraExposure.ts. */

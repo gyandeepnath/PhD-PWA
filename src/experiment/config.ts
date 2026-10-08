@@ -326,6 +326,13 @@ const BASE_CONFIG = {
    */
   CAMERA_EXPOSURE_POLICY: 'lock' as 'lock' | 'auto',
   /**
+   * The bench check (camera setup, researcher only): each ground settles for this long, then is
+   * measured for this long — 20 s a ground, six grounds, about two minutes. An engineering choice, long
+   * enough for auto-exposure to settle and for a frame rate over hundreds of frames.
+   */
+  CAMERA_BENCH_SETTLE_MS: 5000,
+  CAMERA_BENCH_MEASURE_MS: 15000,
+  /**
    * Process every camera frame: blinks last 100-400 ms, so ~30 fps is the literature minimum for
    * valid blink detection (sub-Nyquist below ~25 fps). Raise to 2 only if a slow tablet can't keep
    * up — effective_fps records the true achieved rate and gates the duration-based tiers.

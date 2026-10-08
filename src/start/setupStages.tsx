@@ -24,7 +24,7 @@ import {
   isBelowMinimum, currentScale, freshScale, refitScale, displayMode, isInstalledDisplay, screenFitScale,
   screenFill, DESIGN_WIDTH, DESIGN_HEIGHT, type DisplayMode,
 } from '@/lib/viewportScale';
-import type { LiveTrackingStats } from '@/tracking/useTracking';
+import type { LiveTrackingStats, BenchPaint } from '@/tracking/useTracking';
 import { trialSawFace, MIN_TRIAL_FACE_SHARE, type TrackerTrial } from '@/tracking/trackerChoice';
 import { TRACKER_LABEL, type TrackerBackend } from '@/tracking/trackers';
 import { FPS_TIER_THRESHOLD } from '@/tracking/blink';
@@ -34,7 +34,7 @@ import { ScreenCalibration, type ScreenCalibrationResult } from './ScreenCalibra
 import { BuildInfo, useUpdateWaiting } from '@/components/BuildInfo';
 import { useDialog } from '@/components/ConfirmDialog';
 import { PARTICIPANT_ID_PATTERN } from '@/lib/participantId';
-import type { CameraStatus, CameraPipelineRecord, ExposureOutcome } from '@/storage/types';
+import type { CameraStatus, CameraPipelineRecord, CameraBenchRecord, ExposureOutcome } from '@/storage/types';
 
 /**
  * The setup screens must SCROLL when they are taller than the viewport.
@@ -513,6 +513,57 @@ export interface CameraSetupTracking {
   compareTrackers: (onProgress?: (p: { backend: TrackerBackend; index: number; total: number }) => void) => Promise<TrackerTrial[] | null>;
   /** Fix the camera's exposure on the grey field (tracking/cameraExposure.ts). */
   setExposure: () => Promise<ExposureOutcome | null>;
+  /** The researcher's bench check (useTracking runCameraBench). */
+  runBench: (paint: (p: BenchPaint | null) => void) => Promise<CameraBenchRecord | null>;
+}
+
+const BENCH_GROUND: Record<BenchPaint['ground'], { bg: string; ink: string; word: string }> = {
+  white: { bg: '#ffffff', ink: '#000000', word: 'white' },
+  grey: { bg: CONFIG.ADAPTATION_COLOR, ink: CONFIG.ADAPTATION_INK, word: 'grey' },
+  black: { bg: '#000000', ink: '#ffffff', word: 'black' },
+};
+
+/** The bench check's full-screen ground, with a small note for the researcher at the bottom. */
+function BenchGround({ p }: { p: BenchPaint }) {
+  const g = BENCH_GROUND[p.ground];
+  return (
+    <div data-testid="camera-bench-ground" data-ground={p.ground} style={{
+      position: 'fixed', inset: 0, zIndex: 40, background: g.bg, color: g.ink,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{ width: 14, height: 14, borderRadius: '50%', background: g.ink }} />
+      <p className="font-sans" style={{ position: 'absolute', bottom: 24, fontSize: 15, opacity: 0.8 }}>
+        {p.setting ? 'Bench check: fixing the exposure on grey…'
+          : `Bench check ${p.index + 1} of ${p.total}: ${g.word}, ${p.exposure === 'auto' ? 'automatic exposure' : 'fixed exposure'} — about 20 s`}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The bench check's result, one row per ground. Read it this way (docs/OPERATOR_MANUAL.md): if under
+ * automatic exposure the camera delivers fewer frames on black than on white, its rate follows the
+ * screen (exposure-limited); the "fixed" rows should then be the same on all three.
+ */
+function BenchTable({ b }: { b: CameraBenchRecord }) {
+  const v = (x: number | null) => (x == null ? '—' : String(Math.round(x)));
+  return (
+    <table data-testid="camera-bench-results" style={{ width: '100%', marginTop: 8, fontSize: 15, borderCollapse: 'collapse' }}>
+      <thead>
+        <tr style={{ textAlign: 'left', opacity: 0.75 }}>
+          <th>Screen</th><th>Exposure</th><th>camera fps</th><th>tracker fps</th><th>face fps</th><th>brightness</th><th>exposure time</th>
+        </tr>
+      </thead>
+      <tbody>
+        {b.rows.map((r) => (
+          <tr key={`${r.exposure}-${r.ground}`}>
+            <td>{r.ground}</td><td>{r.exposure}</td><td>{v(r.camera_fps)}</td><td>{v(r.tracker_fps)}</td><td>{v(r.face_fps)}</td>
+            <td>{v(r.luma)}</td><td>{r.exposure_time_100us == null ? '—' : `${r.exposure_time_100us / 10} ms`}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }
 
 /**
@@ -597,6 +648,20 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
   const [trials, setTrials] = useState<TrackerTrial[] | null>(null);
   const [info, setInfo] = useState<CameraPipelineRecord | null>(null);
   const autoMeasured = useRef(false);
+  const [bench, setBench] = useState<CameraBenchRecord | null>(null);
+  const [benchPaint, setBenchPaint] = useState<BenchPaint | null>(null);
+  const [benchRunning, setBenchRunning] = useState(false);
+  const runBench = async () => {
+    setBenchRunning(true);
+    try {
+      const b = await camera.runBench(setBenchPaint);
+      if (b) setBench(b);
+    } finally {
+      setBenchRunning(false);
+      setBenchPaint(null);
+      setInfo(camera.pipelineInfo());
+    }
+  };
 
   useEffect(() => {
     if (step !== 'preview') return;
@@ -796,13 +861,36 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
               )}
             </div>
 
+            {/*
+              The bench check (Round 79): researcher only, no participant needed. It tells whether the
+              camera slows down on dark screens and whether fixing the exposure stops it — the question
+              behind the tablet's 23-25 fps. About two minutes. See docs/OPERATOR_MANUAL.md.
+            */}
+            <div className="mt-4 rounded-xl border border-[#cdd8f0] bg-white p-4 font-sans text-base" data-testid="camera-bench">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <strong>Bench check (researcher, before the pilot)</strong>
+                <button type="button" data-testid="camera-bench-run" disabled={benchRunning || comparing != null}
+                  className="rounded-xl border border-[#1a1a2e] bg-white px-5 py-2 font-sans text-base text-[#1a1a2e] disabled:opacity-50"
+                  onClick={() => void runBench()}>
+                  {benchRunning ? 'Running…' : 'Run: white, grey, black (2 min)'}
+                </button>
+              </div>
+              {!bench && (
+                <p className={`mt-2 ${help}`}>
+                  Shows white, grey and black screens with automatic, then fixed, camera exposure, and
+                  measures the camera on each. Not needed with a participant.
+                </p>
+              )}
+              {bench && <BenchTable b={bench} />}
+            </div>
+
             <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {/*
                 Continue first fixes the camera's exposure on the grey field (about 10 s, the participant
                 looking at a dot), then goes on to calibration. What was done is kept with the sitting and
                 shown on the camera check's result.
               */}
-              <button className={btn} style={{ background: '#1a1a2e' }} disabled={comparing != null}
+              <button className={btn} style={{ background: '#1a1a2e' }} disabled={comparing != null || benchRunning}
                 onClick={async () => {
                   setStep('exposure');
                   try { await camera.setExposure(); } finally { onContinue(); }
@@ -818,6 +906,7 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
         )}
 
         {step === 'exposure' && <ExposureField />}
+        {benchPaint && <BenchGround p={benchPaint} />}
 
         {step === 'denied' && (
           <>

@@ -119,11 +119,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const trackerStream = useCallback(() => trackerMedia()?.stream ?? null, [trackerMedia]);
   /** The tracker as camera setup sees it: start it there, preview its own stream, measure its backends. */
   const { status: camStatus, start: camStart, stop: camStop, startError: camError, subscribeLive: camLive,
-    pipelineInfo: camInfo, compareTrackers: camCompare, setCameraExposure: camExposure } = tracking;
+    pipelineInfo: camInfo, compareTrackers: camCompare, setCameraExposure: camExposure, runCameraBench: camBench } = tracking;
   const cameraSetupTracking = useMemo(() => ({
     status: camStatus, start: camStart, stop: camStop, startError: camError, subscribeLive: camLive,
-    stream: trackerStream, pipelineInfo: camInfo, compareTrackers: camCompare, setExposure: camExposure,
-  }), [camStatus, camStart, camStop, camError, camLive, trackerStream, camInfo, camCompare, camExposure]);
+    stream: trackerStream, pipelineInfo: camInfo, compareTrackers: camCompare, setExposure: camExposure, runBench: camBench,
+  }), [camStatus, camStart, camStop, camError, camLive, trackerStream, camInfo, camCompare, camExposure, camBench]);
   const [machine, setMachine] = useState<MachineState>(initialState());
   const [session, setSession] = useState<SessionRecord | null>(null);
   const [enrolment, setEnrolment] = useState(0);

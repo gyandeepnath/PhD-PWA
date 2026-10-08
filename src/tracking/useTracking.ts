@@ -50,7 +50,7 @@ import { EyeMetricsAggregator, disabledEyeMetrics } from './aggregator';
 import { put, remove } from '@/storage/db';
 import { now } from '@/lib/timing';
 import { startLivenessCheck } from './cameraLiveness';
-import type { CameraStatus, CameraPipelineRecord, OcularEventsRecord, PipelineWindowFields } from '@/storage/types';
+import type { CameraStatus, CameraPipelineRecord, CameraBenchRecord, OcularEventsRecord, PipelineWindowFields } from '@/storage/types';
 
 /** Median of a numeric array (robust frontal-fraction estimate, ignores transient blinks/noise). */
 function medianOf(xs: number[]): number {
@@ -222,6 +222,8 @@ interface TrackingApi {
    * every later condition row; null when the camera is not running.
    */
   setCameraExposure: () => Promise<ExposureOutcome | null>;
+  /** The bench check: grounds under auto and under a fixed exposure (see runCameraBench). */
+  runCameraBench: (paint: (p: BenchPaint | null) => void) => Promise<CameraBenchRecord | null>;
   /**
    * Open the dedicated open-eye baseline window for ~`ms` while the participant fixates the centre,
    * and fit the baseline from those frames alone. Resolves to the fit and the evidence behind it.
@@ -275,6 +277,16 @@ interface TrackingApi {
    * picture returns. See cameraHealth.ts.
    */
   cameraBlocked: boolean;
+}
+
+/** What the bench check is showing now: the ground, under which exposure, and how far through it is. */
+export interface BenchPaint {
+  ground: 'white' | 'grey' | 'black';
+  exposure: 'auto' | 'fixed';
+  index: number;
+  total: number;
+  /** True while the exposure is being fixed on grey between the two halves. */
+  setting?: boolean;
 }
 
 /** What the self-test window saw: blinks, face coverage, and what the pipeline did meanwhile. */
@@ -1051,13 +1063,28 @@ export function useTracking(): TrackingApi {
    * read straight from the video four times a second, whether or not the tracker is keeping up.
    */
   const exposingRef = useRef<Promise<ExposureOutcome | null> | null>(null);
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+  /** The live video track, when the camera runs. */
+  const videoTrack = () => ((videoRef.current?.srcObject as MediaStream | null)?.getVideoTracks?.() ?? [])[0] as MediaStreamTrack | undefined;
+  /** The pipeline over `ms`, and the picture's mean brightness read four times a second meanwhile. */
+  const measureWindow = async (ms: number): Promise<{ sum: PipelineSummary; luma: number | null }> => {
+    const win = meterRef.current.open();
+    const lumas: number[] = [];
+    const t0 = now();
+    while (now() - t0 < ms) {
+      const l = sampleLuma();
+      if (l) lumas.push(l.mean);
+      await sleep(Math.min(250, Math.max(10, ms - (now() - t0))));
+    }
+    return { sum: win.close(), luma: lumas.length ? lumas.reduce((a, b) => a + b, 0) / lumas.length : null };
+  };
+
   const setCameraExposure = useCallback((): Promise<ExposureOutcome | null> => {
     if (exposingRef.current) return exposingRef.current;
     const run = async (): Promise<ExposureOutcome | null> => {
       const info = pipelineRef.current;
-      const track = ((videoRef.current?.srcObject as MediaStream | null)?.getVideoTracks?.() ?? [])[0];
+      const track = videoTrack();
       if (!info || !track) return null;
-      const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
       let outcome: ExposureOutcome;
       if (CONFIG.CAMERA_EXPOSURE_POLICY === 'auto') {
         outcome = {
@@ -1072,16 +1099,8 @@ export function useTracking(): TrackingApi {
           settings: () => (track.getSettings?.() ?? {}) as Record<string, unknown>,
           apply: (set) => track.applyConstraints({ advanced: [set as MediaTrackConstraintSet] }),
           measure: async (ms) => {
-            const win = meterRef.current.open();
-            const lumas: number[] = [];
-            const t0 = now();
-            while (now() - t0 < ms) {
-              const l = sampleLuma();
-              if (l) lumas.push(l.mean);
-              await sleep(Math.min(250, Math.max(10, ms - (now() - t0))));
-            }
-            const sum = win.close();
-            return { cameraFps: sum.cameraFps, luma: lumas.length ? lumas.reduce((a, b) => a + b, 0) / lumas.length : null };
+            const m = await measureWindow(ms);
+            return { cameraFps: m.sum.cameraFps, luma: m.luma };
           },
           wait: sleep,
           // Collapsed under the test harness, like every other protocol duration.
@@ -1096,7 +1115,60 @@ export function useTracking(): TrackingApi {
     };
     exposingRef.current = run().finally(() => { exposingRef.current = null; });
     return exposingRef.current;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * The bench check (Round 79; docs/OPERATOR_MANUAL.md): white, grey and black for 20 s each under
+   * auto-exposure, then the exposure fixed on grey and the three again. Per ground: what the camera
+   * delivered, what the tracker processed, face frames, the picture's brightness and the exposure the
+   * camera reports. It answers the one question nothing else can on the tablet: does the camera slow
+   * down on a dark screen (exposure-limited, and so polarity-linked), and does fixing the exposure stop
+   * it. `paint` tells the screen which ground to show (null when done). Exposure goes back to auto at
+   * the end; camera setup's Continue sets it again for the participant.
+   */
+  const runCameraBench = useCallback(async (paint: (p: BenchPaint | null) => void): Promise<CameraBenchRecord | null> => {
+    const info = pipelineRef.current;
+    const track = videoTrack();
+    if (!info || !track) return null;
+    const fast = isE2ETimingActive();
+    const SETTLE = fast ? 100 : CONFIG.CAMERA_BENCH_SETTLE_MS;
+    const MEASURE = fast ? 500 : CONFIG.CAMERA_BENCH_MEASURE_MS;
+    const r1 = (x: number | null) => (x == null ? null : Math.round(x * 10) / 10);
+    const rows: CameraBenchRecord['rows'] = [];
+    const grounds: BenchPaint['ground'][] = ['white', 'grey', 'black'];
+    const total = grounds.length * 2;
+    const runGrounds = async (exposure: BenchPaint['exposure'], offset: number) => {
+      for (let i = 0; i < grounds.length; i++) {
+        paint({ ground: grounds[i], exposure, index: offset + i, total });
+        await sleep(SETTLE);
+        const m = await measureWindow(MEASURE);
+        const st = (track.getSettings?.() ?? {}) as Record<string, unknown>;
+        const n = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : null);
+        rows.push({
+          ground: grounds[i], exposure,
+          camera_fps: r1(m.sum.cameraFps), tracker_fps: r1(m.sum.trackerFps), face_fps: r1(m.sum.faceFps), luma: r1(m.luma),
+          exposure_mode: typeof st.exposureMode === 'string' ? st.exposureMode : null,
+          exposure_time_100us: n(st.exposureTime), iso: n(st.iso),
+        });
+      }
+    };
+    try {
+      await runGrounds('auto', 0);
+      paint({ ground: 'grey', exposure: 'fixed', index: grounds.length, total, setting: true });
+      const lock = await setCameraExposure();
+      await runGrounds('fixed', grounds.length);
+      const record: CameraBenchRecord = { at: Date.now(), rows, lock: lock ?? null };
+      if (pipelineRef.current === info) info.camera_bench = record;
+      return record;
+    } finally {
+      paint(null);
+      // Back to auto; the participant's exposure is set at Continue, on the grey field, as always.
+      try { await track.applyConstraints({ advanced: [{ exposureMode: 'continuous' } as MediaTrackConstraintSet] }); } catch { /* recorded as auto below */ }
+      if (pipelineRef.current === info) info.camera_exposure = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setCameraExposure]);
 
   /**
    * The open-eye baseline, measured in the posture the outcome is measured in.
@@ -1346,7 +1418,7 @@ export function useTracking(): TrackingApi {
   return {
     status,
     subscribeLive, start, stop, measureEarBaseline, mediaSource,
-    startError, pipelineInfo, compareTrackers, setCameraExposure,
+    startError, pipelineInfo, compareTrackers, setCameraExposure, runCameraBench,
     beginGazeCalibration, sampleGazeTarget, endGazeCalibration,
     beginCondition, endCondition, markReadingPage,
     beginSelfTest, endSelfTest, saveSelfTestLog,

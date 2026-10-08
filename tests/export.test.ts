@@ -337,6 +337,14 @@ describe('camera pipeline columns', () => {
       camera_exposure_comp: '', camera_auto_fps: '25', camera_auto_luma: '118', camera_lock_fps_check: '29.9', camera_lock_luma: '112.5',
     });
     expect(rows(b, '07_eye_metrics.csv')[0]).toMatchObject({ camera_exposure_policy: 'locked-v1', camera_exposure_time_100us: '300', camera_iso: '800', camera_exposure_comp: '' });
+    // The bench check, when it was run, in one cell.
+    b.session.camera_pipeline.camera_bench = {
+      at: 1, lock: null, rows: [
+        { ground: 'white', exposure: 'auto', camera_fps: 30, tracker_fps: 29.6, face_fps: 0, luma: 182.4, exposure_mode: 'continuous', exposure_time_100us: null, iso: null },
+        { ground: 'black', exposure: 'fixed', camera_fps: 30, tracker_fps: 29.8, face_fps: 0, luma: 61, exposure_mode: 'manual', exposure_time_100us: 300, iso: 800 },
+      ],
+    };
+    expect(rows(b, '01_session_info.csv')[0].camera_bench).toBe('auto white 30/30/0 L182; fixed black 30/30/0 L61 30ms');
     // A sitting where the step did not run: blank, not a made-up 'auto'.
     expect(rows(bundle(), '01_session_info.csv')[0]).toMatchObject({ camera_exposure_policy: '', camera_auto_fps: '', camera_lock_fps_check: '' });
   });

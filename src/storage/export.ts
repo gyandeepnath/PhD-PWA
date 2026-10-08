@@ -6,7 +6,7 @@
 import { RATE_CORRECTION_NOTE } from '@/lib/signalDetection';
 import { CONFIG } from '@/experiment/config';
 import { normaliseBundle, sessionForExport, type SessionBundle } from './gather';
-import type { CameraPipelineRecord, ExposureOutcome, SessionRecord } from './types';
+import type { CameraBenchRecord, CameraPipelineRecord, ExposureOutcome, SessionRecord } from './types';
 import type { MediaRecord } from './media';
 import { summariseLux, LUX_CHECKPOINTS } from '@/experiment/illumination';
 import { buildConditionSummaries, ENGAGEMENT } from '@/dashboard/aggregate';
@@ -296,6 +296,7 @@ export function cameraPipelineColumns(p: CameraPipelineRecord | null): Record<st
       camera_cap_fps_max: '', camera_cap_width_max: '', camera_cap_height_max: '', timestamp_source: '',
       camera_fps_min_requested: '', camera_request_fallback: '', camera_facing: '', camera_exposure_caps: '',
       ...exposureColumns(null),
+      camera_bench: '',
     };
   }
   const n = (x: number | null | undefined, d = 0) => (x == null || !Number.isFinite(x) ? '-' : x.toFixed(d));
@@ -324,7 +325,20 @@ export function cameraPipelineColumns(p: CameraPipelineRecord | null): Record<st
     camera_facing: p.camera_settings.facingMode ?? '',
     camera_exposure_caps: exposureCapsText(p.camera_capabilities),
     ...exposureColumns(p.camera_exposure ?? null),
+    camera_bench: benchText(p.camera_bench ?? null),
   };
+}
+
+/**
+ * The bench check in one cell, one entry per ground: "auto white 30/30/0 L182 33.3ms; …" — exposure,
+ * ground, camera/tracker/face frames a second, picture brightness, and the exposure time the camera
+ * reported. Blank when it was not run.
+ */
+export function benchText(b: CameraBenchRecord | null): string {
+  if (!b) return '';
+  const v = (x: number | null) => (x == null ? '-' : String(Math.round(x)));
+  return b.rows.map((r) => `${r.exposure} ${r.ground} ${v(r.camera_fps)}/${v(r.tracker_fps)}/${v(r.face_fps)} L${v(r.luma)}`
+    + (r.exposure_time_100us == null ? '' : ` ${r.exposure_time_100us / 10}ms`)).join('; ');
 }
 
 /**
@@ -633,6 +647,7 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '01_session_info.csv', column: 'camera_auto_luma', type: 'number', unit: '0-255', role: 'qc', description: 'Mean brightness of the camera picture under auto-exposure on the grey field, over the same 2 s. The reference the fixed exposure is checked against.' },
   { file: '01_session_info.csv', column: 'camera_lock_fps_check', type: 'number', unit: 'fps', role: 'qc', description: 'Frames a second the camera delivered in the 3-s check of the fixed (or compensated) exposure — recorded whether or not it was then kept, so a reverted attempt shows what it did. Blank when nothing was tried.' },
   { file: '01_session_info.csv', column: 'camera_lock_luma', type: 'number', unit: '0-255', role: 'qc', description: 'Mean picture brightness in that 3-s check. Below 70% of camera_auto_luma the setting is not kept.' },
+  { file: '01_session_info.csv', column: 'camera_bench', type: 'string', unit: '-', role: 'provenance', description: 'The bench check, when the researcher ran it at camera setup (Round 79): white, grey and black screens for 20 s each under automatic exposure, then under a fixed exposure. One entry per screen: exposure, screen, camera/tracker/face frames a second, picture brightness (L, 0-255) and the exposure time the camera reported. A camera whose automatic-exposure rate is lower on black than on white is exposure-limited, and its rate can follow polarity; the fixed rows show whether fixing the exposure stops that. A diagnostic of the device, not a measurement of the participant. Blank when not run.' },
   { file: '01_session_info.csv', column: 'gaze_calibration_valid', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the nine-point gaze mapping met its acceptance criterion. When false, gaze columns are coarse-zone only and should not be treated as calibrated.' },
   { file: '01_session_info.csv', column: 'calibration_ear_baseline', type: 'number', unit: 'ratio', role: 'qc', description: 'Open-eye eye-aspect-ratio baseline for this participant, measured at centre fixation before the gaze targets, in the posture the reading task is performed in. Every blink threshold is expressed as a fraction of this, so it is referenced to the individual rather than a population default. Compare against open_ear_measured in 07_eye_metrics.csv for within-sitting drift. From 2.3.0 an image-plane EAR, like ear_baseline (see there): not comparable in absolute value with earlier builds.' },
   { file: '01_session_info.csv', column: 'calibration_pitch_baseline_frac', type: 'number', unit: 'ratio', role: 'qc', description: 'Frontal head-pose reference captured at calibration. Head-pose columns are relative to this when head_pitch_calibrated is true.' },
@@ -975,7 +990,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'session_status', 'withdrawn', 'withdrawn_at', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'protocol_pass', 'repeat_run_note', 'sitting_split_reason', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'build_time', 'build_changed_mid_sitting', 'session_builds', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'device_pixel_ratio', 'stimulus_scale', 'layout_viewport', 'viewing_distance_cm', 'calibration_bar_design_px', 'calibration_bar_mm', 'calibration_scale', 'mm_per_css_px', 'calibration_skipped', 'physical_size_source', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'consent_revisions', 'preflight_complete', 'preflight_bulk_ticked', 'e2e_timing', 'display_mode', 'display_mode_acknowledged', 'stimulus_font_ok', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'gaze_trust', 'gaze_targets_well_covered', 'gaze_threshold_floored', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected', 'calibration_ear_samples', 'calibration_runs', 'selftest_cued', 'selftest_detected', 'selftest_extra', 'selftest_fps', 'selftest_face_presence', 'selftest_pass', 'selftest_camera_fps', 'selftest_tracker_fps', 'selftest_process_ms_p50', 'selftest_process_ms_p95', 'selftest_frames_delivered', 'selftest_frames_processed', 'selftest_frames_skipped', 'selftest_limit', 'tracker_backend', 'tracker_requested', 'tracker_selection', 'tracker_trials', 'tracker_failures', 'camera_requested', 'camera_setting_width', 'camera_setting_height', 'camera_setting_fps', 'camera_cap_fps_max', 'camera_cap_width_max', 'camera_cap_height_max', 'timestamp_source', 'camera_fps_min_requested', 'camera_request_fallback', 'camera_facing', 'camera_exposure_caps', 'camera_exposure_policy', 'camera_exposure_reason', 'camera_exposure_time_100us', 'camera_iso', 'camera_exposure_comp', 'camera_auto_fps', 'camera_auto_luma', 'camera_lock_fps_check', 'camera_lock_luma'],
+    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'session_status', 'withdrawn', 'withdrawn_at', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'protocol_pass', 'repeat_run_note', 'sitting_split_reason', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'build_time', 'build_changed_mid_sitting', 'session_builds', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'device_pixel_ratio', 'stimulus_scale', 'layout_viewport', 'viewing_distance_cm', 'calibration_bar_design_px', 'calibration_bar_mm', 'calibration_scale', 'mm_per_css_px', 'calibration_skipped', 'physical_size_source', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'consent_revisions', 'preflight_complete', 'preflight_bulk_ticked', 'e2e_timing', 'display_mode', 'display_mode_acknowledged', 'stimulus_font_ok', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'gaze_trust', 'gaze_targets_well_covered', 'gaze_threshold_floored', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected', 'calibration_ear_samples', 'calibration_runs', 'selftest_cued', 'selftest_detected', 'selftest_extra', 'selftest_fps', 'selftest_face_presence', 'selftest_pass', 'selftest_camera_fps', 'selftest_tracker_fps', 'selftest_process_ms_p50', 'selftest_process_ms_p95', 'selftest_frames_delivered', 'selftest_frames_processed', 'selftest_frames_skipped', 'selftest_limit', 'tracker_backend', 'tracker_requested', 'tracker_selection', 'tracker_trials', 'tracker_failures', 'camera_requested', 'camera_setting_width', 'camera_setting_height', 'camera_setting_fps', 'camera_cap_fps_max', 'camera_cap_width_max', 'camera_cap_height_max', 'timestamp_source', 'camera_fps_min_requested', 'camera_request_fallback', 'camera_facing', 'camera_exposure_caps', 'camera_exposure_policy', 'camera_exposure_reason', 'camera_exposure_time_100us', 'camera_iso', 'camera_exposure_comp', 'camera_auto_fps', 'camera_auto_luma', 'camera_lock_fps_check', 'camera_lock_luma', 'camera_bench'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
       session_index: session.session_index,

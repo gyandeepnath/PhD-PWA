@@ -73,6 +73,17 @@ test('camera setup measures the trackers and shows what the camera and the track
   });
   expect(sameStream).toBe(true);
 
+  /*
+   * The researcher's bench check (Round 79): white, grey and black under automatic, then fixed,
+   * exposure; one row each, with the camera's delivered rate measured on every one.
+   */
+  await page.getByTestId('camera-bench-run').click();
+  await expect(page.getByTestId('camera-bench-ground')).toBeVisible();
+  await expect(page.getByTestId('camera-bench-results').locator('tbody tr')).toHaveCount(6, { timeout: 60_000 });
+  await expect(page.getByTestId('camera-bench-ground')).toHaveCount(0);
+  await expect(page.getByTestId('camera-bench-results')).toContainText(/white\s*auto\s*\d+/);
+  await expect(page.getByTestId('camera-bench-results')).toContainText(/black\s*fixed\s*\d+/);
+
   await page.getByRole('button', { name: /My face is centred/ }).click();
   // The exposure is set on the grey field first (Round 79), then calibration starts.
   await expect(page.getByTestId('camera-exposure-step')).toBeVisible();
@@ -92,6 +103,10 @@ test('camera setup measures the trackers and shows what the camera and the track
   expect(Number(ex.auto_fps)).toBeGreaterThan(0);
   if (ex.policy === 'auto') expect(String(ex.reason)).not.toBe('');
   expect((p.camera_capabilities as Record<string, unknown>).exposure_modes).toContain('manual');
+  // The bench rows are kept with the sitting; the bench's own lock was undone, and Continue set it again.
+  const bench = p.camera_bench as { rows: Array<{ camera_fps: number | null }> };
+  expect(bench.rows).toHaveLength(6);
+  expect(bench.rows.every((r) => (r.camera_fps ?? 0) > 0)).toBe(true);
   expect(['tasks-gpu', 'tasks-cpu', 'legacy']).toContain(p.tracker_backend);
   // No face, so no comparison was adopted: the sitting records none rather than one of nothing.
   expect(p.tracker_selection).toBe('default');
