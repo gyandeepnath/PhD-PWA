@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { get, put } from '@/storage/db';
 import { gatherSession, listSessions, type SessionBundle } from '@/storage/gather';
 import { buildConditionSummaries, baselineFatigueMean, cohortSummary, type ConditionSummary, type CohortSummary } from './aggregate';
+import { FPS_TIER_WORD } from '@/tracking/frameRateGate';
 import { buildExportFiles, downloadExport, downloadSessionMedia } from '@/storage/export';
 import { buildAnalysisDataset } from '@/storage/analysisExport';
 import { BarPanel, LinePanel, type Datum } from './charts';
@@ -325,6 +326,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                         <th style={cohortHead}>Mean of run IBRs</th>
                         <th style={cohortHead}>Blinks</th>
                         <th style={cohortHead}>Low fps</th>
+                        <th style={cohortHead}>fps off usual</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -340,6 +342,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                           <td style={cohortCell}>{c.mean_ibr == null ? '—' : c.mean_ibr.toFixed(3)}</td>
                           <td style={cohortCell}>{c.blinks_total}</td>
                           <td style={{ ...cohortCell, color: c.n_fps_inadequate > 0 ? UI_TEXT.amber : undefined }}>{c.n_fps_inadequate}</td>
+                          <td style={{ ...cohortCell, color: c.n_fps_inconsistent > 0 ? UI_TEXT.amber : undefined }}>{c.n_fps_inconsistent}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -601,7 +604,7 @@ function OcularTable({ summaries }: { summaries: ConditionSummary[] }) {
   return (
     <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 13 }}>
-        <thead><tr>{['Cond', 'Blinks', 'Min seen', 'Blink/min', 'Incomplete', 'IBI ms', 'PERCLOS80', 'PERCLOS70', 'Long-closures', 'Eff FPS'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
+        <thead><tr>{['Cond', 'Blinks', 'Min seen', 'Blink/min', 'Incomplete', 'IBI ms', 'PERCLOS80', 'PERCLOS70', 'Long-closures', 'FPS (tier)'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
         <tbody>
           {summaries.map((s) => (
             <tr key={s.condition_id}>
@@ -614,7 +617,7 @@ function OcularTable({ summaries }: { summaries: ConditionSummary[] }) {
               <td style={cohortCell}>{n(s.perclos_p80)}</td>
               <td style={cohortCell}>{n(s.perclos_p70)}</td>
               <td style={cohortCell}>{n(s.long_closure_count, 0)}</td>
-              <td style={cohortCell}>{n(s.effective_fps, 0)}{s.camera_active && !s.fps_adequate_for_tiers ? ' ⚠' : ''}</td>
+              <td style={{ ...cell, color: s.camera_active ? FLAG_COLOR[s.qc.fps] : undefined }}><FpsCell s={s} /></td>
             </tr>
           ))}
         </tbody>
@@ -686,13 +689,13 @@ function QcTable({ summaries }: { summaries: ConditionSummary[] }) {
   return (
     <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 13 }}>
-        <thead><tr>{['Cond', 'Camera', 'Eff FPS', 'Face presence', 'Off-axis', 'Lighting', 'Overall'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
+        <thead><tr>{['Cond', 'Camera', 'FPS (tier)', 'Face presence', 'Off-axis', 'Lighting', 'Overall'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
         <tbody>
           {summaries.map((s) => (
             <tr key={s.condition_id}>
               <td style={cohortCell}>{s.condition_label}</td>
               <td style={cohortCell}>{s.camera_active ? 'on' : 'off'}</td>
-              <td style={cohortCell}>{n(s.effective_fps, 0)}{s.camera_active && !s.fps_adequate_for_tiers ? ' ⚠' : ''}</td>
+              <td style={{ ...cell, color: s.camera_active ? FLAG_COLOR[s.qc.fps] : undefined }}><FpsCell s={s} /></td>
               <td style={{ ...cell, color: FLAG_COLOR[s.qc.facePresence] }}>{n(s.face_presence_ratio)}</td>
               <td style={{ ...cell, color: FLAG_COLOR[s.qc.offAxis] }}>{n(s.off_axis_ratio)}</td>
               <td style={{ ...cell, color: FLAG_COLOR[s.qc.lighting] }}>{s.lighting_quality ?? '—'}</td>
@@ -705,6 +708,22 @@ function QcTable({ summaries }: { summaries: ConditionSummary[] }) {
   );
 }
 const cell = { padding: '6px 10px', borderBottom: '1px solid #f3f1ec' } as const;
+
+/**
+ * The frame-rate gate fps-g2 in one cell: the eye's sampling rate while the face was seen, its tier
+ * (A adequate, B reduced, C too slow) and "off usual" when more than 2 fps from the sitting's median —
+ * the same rule as the export and the templates (tracking/frameRateGate.ts). It showed effective_fps
+ * with a warning sign under 25, which face loss lowered and which the tablet's 23-25 fps nearly always
+ * set off.
+ */
+function FpsCell({ s }: { s: ConditionSummary }) {
+  if (!s.camera_active) return <>—</>;
+  return (
+    <span data-testid="fps-tier" data-tier={s.fps_tier ?? ''} title={s.fps_tier ? FPS_TIER_WORD[s.fps_tier] : 'no rate'}>
+      {n(s.sampling_fps_observed, 0)} {s.fps_tier ?? ''}{s.fps_consistent === false ? ' · off usual' : ''}
+    </span>
+  );
+}
 
 function avg(xs: (number | null)[]): number | null {
   const v = xs.filter((x): x is number => x != null);

@@ -42,6 +42,7 @@ import { N_CONDITIONS } from '@/experiment/conditions';
 import { PASSAGES } from '@/experiment/passages';
 import { ANALYSIS_CODEBOOK } from './analysisCodebook';
 import { N_ILLUMINATION_BLOCKS, specFor, LUX_CHECKPOINTS } from '@/experiment/illumination';
+import { fpsConsistent, fpsTier, medianFps, rowGateVersion, samplingFpsObserved } from '@/tracking/frameRateGate';
 
 /** Illumination blocks a participant completes — ONE under the current protocol. Runs = N x this. */
 // Derived, never a literal: this used to be a hard-coded 2, which would have silently survived the
@@ -81,7 +82,8 @@ export const ANALYSIS_LONG_COLUMNS = [
   // --- session covariates -----------------------------------------------------------------
   'ambient_lux_measured', 'lux_logged_all_in_range', 'lux_complete', 'screen_luminance_cd_m2', 'stimulus_scale',
   // --- quality, for sensitivity analyses ---------------------------------------------------
-  'camera_active', 'camera_inactive_reason', 'effective_fps', 'fps_adequate_for_ratio', 'face_presence_ratio',
+  'camera_active', 'camera_inactive_reason', 'effective_fps', 'fps_adequate_for_ratio',
+  'sampling_fps_observed', 'fps_tier', 'fps_consistent', 'fps_gate_version', 'face_presence_ratio',
   'gaze_calibrated', 'gaze_trust', 'gaze_targets_well_covered',
   'qc_overall', 'e2e_timing', 'session_status', 'withdrawn', 'protocol_pass', 'repeat_run_note',
   'sitting_split_reason',
@@ -460,6 +462,12 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         // Blank, not FALSE, without a camera: FALSE claims the frame rate was measured and found
         // wanting, and the cohort view counted camera-off rows as frame-rate failures on that basis.
         fps_adequate_for_ratio: camOn ? (e?.fps_adequate_for_ratio ?? null) : null,
+        // The frame-rate gate fps-g2 (frameRateGate.ts), from the row's stored columns. fps_consistent
+        // needs all of the participant's rows, so it is filled in once every sitting is in (below).
+        ...(() => {
+          const fps = camOn ? samplingFpsObserved(e?.ear_sample_count, e?.observed_duration_ms) : null;
+          return { sampling_fps_observed: fps, fps_tier: fpsTier(fps), fps_consistent: null, fps_gate_version: e ? rowGateVersion(e) : null };
+        })(),
         face_presence_ratio: round(sum.face_presence_ratio),
         gaze_calibrated: camOn ? (e?.gaze_calibrated ?? null) : null,
         // Per ROW: the calibration this condition was measured under, not the sitting's last one.
@@ -523,6 +531,22 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
           : [ctx.exclusion, 'condition_incomplete'].filter(Boolean).join(';'),
       });
     }
+  }
+
+  /*
+   * fps_consistent: each row against its participant's median, over ALL of that participant's rows
+   * with a rate in this file — every sitting, analysable or not — so a row's flag is the same whichever
+   * set is modelled (frameRateGate.ts gateParticipant says why). The templates compute it the same way
+   * from the per-sitting files.
+   */
+  const byParticipant = new Map<string, Record<string, unknown>[]>();
+  for (const r of rows) {
+    const k = String(r.participant_id);
+    (byParticipant.get(k) ?? byParticipant.set(k, []).get(k)!).push(r);
+  }
+  for (const group of byParticipant.values()) {
+    const med = medianFps(group.map((r) => r.sampling_fps_observed as number | null));
+    for (const r of group) r.fps_consistent = fpsConsistent(r.sampling_fps_observed as number | null, med);
   }
 
   return rows;

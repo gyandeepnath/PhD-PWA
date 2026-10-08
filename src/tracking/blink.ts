@@ -80,10 +80,22 @@ export const EAR_TIERS = { full: 0.6, partial: 0.75, micro: 0.88 } as const;
  * to the version: changing one without the other fails it.
  */
 export const BLINK_RULE_VERSION = 'blink-r1';
+/**
+ * Gate g1's floor for the duration-based tiers (fps_adequate_for_tiers). SUPERSEDED from Round 79 by
+ * the frame-rate gate fps-g2 (frameRateGate.ts), which every screen, the export and the templates now
+ * apply; still written, unchanged, so analyses run on it reproduce.
+ */
 export const FPS_TIER_THRESHOLD = 25;
 
 /**
- * Frame rate below which the incomplete-blink RATIO itself is not trustworthy.
+ * Frame rate below which the incomplete-blink RATIO itself is not trustworthy — gate g1.
+ *
+ * SUPERSEDED FROM ROUND 79 by the frame-rate gate fps-g2 (frameRateGate.ts): tier A at 20 face-solved
+ * samples a second of observed time, B 15-20, C under 15, and within 2 fps of the participant's own
+ * median, from a simulation of this classifier (docs/FPS_GATE_SIMULATION.md). The 30 below was never
+ * verified, and a 30-fps tablet camera essentially never cleared it, so the flag it sets was false on
+ * nearly every row. fps_adequate_for_ratio is still written from it, unchanged, so analyses run on it
+ * reproduce; nothing decides anything on it any more. The history below is kept.
  *
  * The tier threshold above governs the duration-based measures. The ratio — the study's primary
  * outcome — was gated by nothing: a condition captured at 12 fps produced a ratio that entered the

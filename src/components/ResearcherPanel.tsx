@@ -3,7 +3,7 @@ import type { LiveTrackingStats } from '@/tracking/useTracking';
 import { setMonitorOpen } from '@/lib/hiddenTime';
 import { UI_TEXT } from '@/lib/uiPalette';
 import { LiveFeed, EarTrace, PipelineReadout } from '@/components/LiveCamera';
-import { FPS_TIER_THRESHOLD } from '@/tracking/blink';
+import { FPS_TIER_WORD, fpsTier } from '@/tracking/frameRateGate';
 
 /**
  * The researcher's corner panel: live camera readout and the session clock, collapsible.
@@ -79,7 +79,7 @@ export interface ResearcherPanelProps {
   cameraStatus: string;
   cameraBlocked: boolean;
   cameraLost: boolean;
-  /** Below this the incomplete-blink ratio is not reliably measurable. */
+  /** The frame-rate gate's adequate floor (frameRateGate.ts FPS_GATE.ADEQUATE): the last reading is amber below it. */
   fpsFloor: number;
   /** Human label of the current stage. */
   stageLabel: string;
@@ -341,7 +341,7 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
         <div style={{ marginTop: 8 }} data-testid="researcher-camera">
           <LiveFeed stream={stream} stats={s} width={PANEL_CARD_PX - 24} testid="researcher-feed" />
           <div style={{ marginTop: 6 }}><EarTrace stats={s} width={PANEL_CARD_PX - 24} height={56} /></div>
-          <div style={{ marginTop: 6 }}><PipelineReadout stats={s} floor={FPS_TIER_THRESHOLD} compact /></div>
+          <div style={{ marginTop: 6 }}><PipelineReadout stats={s} compact /></div>
         </div>
       )}
       <div style={{ marginTop: 6 }}>
@@ -349,7 +349,8 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
         {row('Blinks (sitting)', num(s?.sessionBlinks))}
         {row('Eye open', s?.earRatio != null ? `${Math.round(s.earRatio * 100)}% of baseline` : '—')}
         {row('Gaze', s?.gazeZone ? (s.gazeZone === 'cc' ? 'centre' : s.gazeZone) : '—')}
-        {row('Last reading', <span style={{ color: s?.exposureFps != null && s.exposureFps < p.fpsFloor ? '#ffd27a' : undefined }}>{s?.exposureFps != null ? `${num(s.exposureFps)} face fps` : '—'}</span>)}
+        {/* The frame-rate gate fps-g2 on the last reading (frameRateGate.ts): its rate and tier, amber below tier A. */}
+        {row('Last reading', <span data-testid="researcher-last-fps" style={{ color: s?.exposureFps != null && s.exposureFps < p.fpsFloor ? '#ffd27a' : undefined }}>{s?.exposureFps != null ? `${num(s.exposureFps)} a second · ${FPS_TIER_WORD[fpsTier(s.exposureFps)!].toLowerCase()}` : '—'}</span>)}
         {row('Brightness', s?.luma != null ? `${s.luma}/255` : '—')}
       </div>
       <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.18)' }}>

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { LiveTrackingStats } from '@/tracking/useTracking';
-import { EAR_TIERS, FPS_RATIO_THRESHOLD } from '@/tracking/blink';
+import { EAR_TIERS } from '@/tracking/blink';
+import { FPS_GATE, fpsTier } from '@/tracking/frameRateGate';
 import { TRACKER_LABEL } from '@/tracking/trackers';
 import { pipelineLimit } from '@/tracking/pipelineStats';
 
@@ -158,31 +159,33 @@ const r0 = (x: number | null | undefined) => (x == null || !Number.isFinite(x) ?
 /**
  * The pipeline in three numbers and a sentence: what the camera delivers, what the tracker processes,
  * in how many frames it finds the face — and which of the three is short of `floor`.
+ *
+ * Judged by the frame-rate gate fps-g2 (frameRateGate.ts), the one the self-test, the dashboard and the
+ * analysis apply: 20 face frames a second or more is adequate, 15-20 reduced (kept, flagged), under 15
+ * too slow. It said "below the 30 the incomplete-blink ratio is flagged under" at any rate under 30 —
+ * gate g1, which a 30-fps tablet camera essentially never cleared, so the line was always amber. The
+ * live rate here is over the last 2 s (pipelineStats.ts), from the first face frame to the last: close
+ * to, not the same as, the stored sampling_fps_observed of a whole reading window.
  */
-export function PipelineReadout({ stats, floor, compact = false }: {
+export function PipelineReadout({ stats, floor = FPS_GATE.ADEQUATE, compact = false }: {
   stats: LiveTrackingStats | null;
-  floor: number;
+  floor?: number;
   compact?: boolean;
 }) {
   const s = stats;
   const limit = s ? pipelineLimit({ cameraFps: s.cameraFps, trackerFps: s.trackerFps, faceFps: s.faceFps, deliveredSource: s.frameCountSource }, floor) : null;
-  /*
-   * Met `floor` (the camera check's 25) but not FPS_RATIO_THRESHOLD (30), below which every reading
-   * row's incomplete-blink ratio is flagged fps_adequate_for_ratio = false. This used to say "enough"
-   * here, which a 27 fps reading was not for the primary outcome. A 30 fps camera can rarely clear 30
-   * face frames a second (round 74, R1 D1), so on the tablet this line will often say so; the gate is
-   * a protocol decision, not something this screen may lower.
-   */
-  const ratioShort = s?.faceFps != null && s.faceFps >= floor && s.faceFps < FPS_RATIO_THRESHOLD;
+  const tier = fpsTier(s?.faceFps);
+  const tierText = tier === 'C' ? `too slow (under ${FPS_GATE.REDUCED})` : tier === 'B' ? `reduced (${FPS_GATE.REDUCED}–${FPS_GATE.ADEQUATE}: kept, flagged)` : null;
   const verdict = !s ? '—'
     : limit == null ? (s.faceFps == null ? '—'
-      : ratioShort ? `face found ${s.faceFps.toFixed(1)} times a second: at least ${floor}, but below the ${FPS_RATIO_THRESHOLD} the incomplete-blink ratio is flagged under`
-        : `face found ${r0(s.faceFps)} times a second: at or above ${Math.max(floor, FPS_RATIO_THRESHOLD)}`)
-      : limit === 'camera' ? `the CAMERA is the limit: it delivers ${r0(s.cameraFps)} frames a second (below ${floor}) — more light on the face`
-        : limit === 'camera_and_tracker' ? `the camera AND the tracker are short: ${r0(s.cameraFps)} delivered, ${r0(s.trackerFps)} processed at ${r0(s.processMsP50)} ms — close other apps, charge the tablet, and more light`
-        : limit === 'tracker' ? `the TRACKER is the limit: ${r0(s.processMsP50)} ms a frame — close other apps, charge the tablet`
-          : limit === 'undetermined' ? `below ${floor} a second; this browser does not say whether the camera or the tracker is short`
-            : `the face is found in only ${r0(s.faceFps)} frames a second — seating, framing, light`;
+      : tier === 'A' ? `face found ${r0(s.faceFps)} times a second — adequate (${FPS_GATE.ADEQUATE} or more)`
+        : `face found ${r0(s.faceFps)} times a second — ${tierText}`)
+      : `${tierText ? `${tierText[0].toUpperCase()}${tierText.slice(1)}. ` : ''}${
+        limit === 'camera' ? `The CAMERA is the limit: it delivers ${r0(s.cameraFps)} frames a second — more light on the face`
+          : limit === 'camera_and_tracker' ? `The camera AND the tracker are short: ${r0(s.cameraFps)} delivered, ${r0(s.trackerFps)} processed at ${r0(s.processMsP50)} ms — close other apps, charge the tablet, and more light`
+          : limit === 'tracker' ? `The TRACKER is the limit: ${r0(s.processMsP50)} ms a frame — close other apps, charge the tablet`
+            : limit === 'undetermined' ? `Below ${floor} a second; this browser does not say whether the camera or the tracker is short`
+              : `The face is found in only ${r0(s.faceFps)} frames a second — seating, framing, light`}`;
   const row = (k: string, v: React.ReactNode, testid?: string) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }} data-testid={testid}>
       <span style={{ opacity: 0.78 }}>{k}</span><span style={{ textAlign: 'right' }}>{v}</span>
@@ -195,7 +198,7 @@ export function PipelineReadout({ stats, floor, compact = false }: {
       {row('Face found', <span style={{ color: s?.faceFps != null && s.faceFps < floor ? '#ffd27a' : undefined }}>{r0(s?.faceFps)} fps</span>, 'diag-face')}
       {!compact && row('Face width', s?.faceWidthPx != null ? `${s.faceWidthPx} px of the camera picture` : '—', 'diag-face-width')}
       {row('Tracker', s?.backend ? TRACKER_LABEL[s.backend] : '—', 'diag-backend')}
-      <div data-testid="diag-verdict" style={{ marginTop: 4, fontSize: 14, color: limit || ratioShort ? '#ffd27a' : '#bfe8cf' }}>{verdict}</div>
+      <div data-testid="diag-verdict" data-tier={tier ?? ''} style={{ marginTop: 4, fontSize: 14, color: limit || (tier != null && tier !== 'A') ? '#ffd27a' : '#bfe8cf' }}>{verdict}</div>
     </div>
   );
 }

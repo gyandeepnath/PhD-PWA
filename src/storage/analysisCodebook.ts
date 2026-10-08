@@ -17,6 +17,7 @@ import { PASSAGES } from '@/experiment/passages';
 import { RATE_CORRECTION_NOTE } from '@/lib/signalDetection';
 import { CONFIG } from '@/experiment/config';
 import { ILLUMINATION, ILLUMINATION_LEVELS } from '@/experiment/illumination';
+import { FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION } from '@/tracking/frameRateGate';
 
 // The current protocol's single illumination level, for the prose below — derived, so it cannot say
 // "300 lux" after the protocol changes. See docs/ILLUMINATION_AMENDMENT.md.
@@ -230,9 +231,17 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
   { column: 'camera_inactive_reason', role: 'qc', unit: 'lost|not_running', missing: 'camera running, no eye record, or recorded before the column existed',
     description: 'Why camera_active is FALSE: lost = the camera had been running in this sitting and stopped (track ended or frames stopped); not_running = it was not running and had not been lost since this stretch of the sitting began (declined, denied, unavailable, or not restarted on a resume). A camera lost part-way through a sitting leaves the remaining rows missing for a known cause; this is what tells them apart from a participant who declined.' },
   { column: 'effective_fps', role: 'qc', unit: 'fps', missing: 'camera not running',
-    description: 'Achieved sampling rate of the EAR series — face-solved frames per second, not the camera frame rate. This is what fps_adequate_for_ratio gates on.' },
+    description: 'Achieved sampling rate of the EAR series — face-solved frames per second over the whole span, not the camera frame rate. Time without a face lowers it. It is the rate the primary model\'s eff_fps_c covariate is centred from (ANALYSIS_PLAN.md §2); the frame-rate gate judges sampling_fps_observed instead.' },
   { column: 'fps_adequate_for_ratio', role: 'qc', unit: 'boolean', missing: 'camera not running',
-    description: 'Whether the frame rate supports the primary outcome. Below the floor the sampled minimum EAR is biased UPWARD, so incomplete_blink_ratio is inflated — a directional bias, not symmetric noise. Rows are flagged and never dropped, because frame rate covaries with room brightness, which is held constant by protocol rather than manipulated: dropping them would still delete data non-randomly with respect to how well the camera saw each participant.' },
+    description: 'SUPERSEDED from Round 79 by the frame-rate gate fps-g2 (sampling_fps_observed, fps_tier, fps_consistent) and kept, unchanged, so analyses run on it reproduce. Gate g1: effective_fps >= 30. On a camera that tops out at 30 frames a second it is FALSE on nearly every row and carries little information.' },
+  { column: 'sampling_fps_observed', role: 'qc', unit: 'fps', missing: 'camera not running, or under 1 s observed',
+    description: `The frame-rate gate's measure (fps-g2; src/tracking/frameRateGate.ts): face-solved eye samples per second of OBSERVED time, (ear_sample_count - 1) / observed_duration_ms x 1000 from 07_eye_metrics.csv, to 0.01 half up. The rate at which the eye was sampled while the face was seen; face loss is counted once, in face_presence_ratio, not here as well. Computed from stored columns, so rows recorded before Round 79 have it too.` },
+  { column: 'fps_tier', role: 'qc', unit: 'A|B|C', missing: 'camera not running, or under 1 s observed',
+    description: `The frame-rate gate fps-g2 on sampling_fps_observed: A ${FPS_GATE.ADEQUATE} fps or more (adequate); B ${FPS_GATE.REDUCED} to under ${FPS_GATE.ADEQUATE} (reduced: kept, flagged); C under ${FPS_GATE.REDUCED} (too slow). PRE-REGISTERED USE (ANALYSIS_PLAN.md §5 item 2): the confirmatory ocular models use tiers A and B; refits on tier A only and on all tiers (C included) are reported beside them. Fixed by a simulation of the shipped classifier before data collection (docs/FPS_GATE_SIMULATION.md).` },
+  { column: 'fps_consistent', role: 'qc', unit: 'boolean', missing: 'camera not running, or under 1 s observed',
+    description: `The gate's second part: is this row's sampling_fps_observed within ${FPS_GATE.CONSISTENCY_BAND} fps of the participant's own median, taken over ALL of that participant's camera-on condition-runs with a rate in this file (every sitting, not only the analysable rows, so a row's flag does not depend on which set is modelled)? A slower camera reads more blinks as incomplete (at most about 0.31 points per fps between 20 and 30 fps in the simulation), so a band of ${FPS_GATE.CONSISTENCY_BAND} keeps a frame-rate-driven difference between one person's conditions under about a fifth of the planned 3-point effect. A refit on the consistent rows only is pre-registered (ANALYSIS_PLAN.md §5 item 2).` },
+  { column: 'fps_gate_version', role: 'qc', unit: '-', missing: 'camera not running',
+    description: `The frame-rate gate the app applied when the row was recorded (what the self-test and the researcher panel judged against): '${FPS_GATE_VERSION}' from Round 79, '${FPS_GATE_V1}' before. fps_tier and fps_consistent are computed under ${FPS_GATE_VERSION} for every row whatever this says; report the two kinds of row apart as well as together.` },
   { column: 'face_presence_ratio', role: 'qc', unit: '0-1', missing: 'camera not running',
     description: 'Proportion of samples with a face detected.' },
   { column: 'gaze_calibrated', role: 'qc', unit: 'boolean', missing: 'camera not running',

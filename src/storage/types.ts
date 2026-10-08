@@ -992,15 +992,25 @@ export interface EyeMetricsRecord extends PipelineWindowFields {
   camera_muted_ms?: number;
   /** Effective achieved sampling rate (frames actually processed/sec). */
   effective_fps: number | null;
-  /** True when effective_fps >= 25; gates the micro/partial blink tiers. */
+  /**
+   * True when effective_fps >= 25. Gate g1, superseded from Round 79 by fps-g2 (fps_gate_version below;
+   * tracking/frameRateGate.ts) and still written, unchanged, so analyses run on it reproduce.
+   */
   fps_adequate_for_tiers: boolean;
   /**
-   * Whether the frame rate supports the PRIMARY OUTCOME. Undersampling biases the measured minimum
-   * EAR upward and so inflates incomplete_blink_ratio; it is not symmetric noise. False does not
-   * mean the condition should be dropped — see FPS_RATIO_THRESHOLD — but it does mean the ratio
-   * carries a known directional bias and must be modelled or sensitivity-tested.
+   * Gate g1's verdict on the PRIMARY OUTCOME: effective_fps >= 30. Superseded from Round 79 by fps-g2,
+   * which judges sampling_fps_observed (computed from ear_sample_count and observed_duration_ms) against
+   * 20 / 15 fps and the participant's own median (tracking/frameRateGate.ts). Still written, unchanged,
+   * so analyses run on it reproduce; on a camera that tops out at 30 it is false on nearly every row.
    */
   fps_adequate_for_ratio: boolean;
+  /**
+   * The frame-rate gate the app applied when this row was recorded (frameRateGate.ts FPS_GATE_VERSION):
+   * 'fps-g2' from Round 79. Absent on earlier rows, which were judged under g1 (exported as 'g1-25/30').
+   * The tier itself is never stored: it is computed from ear_sample_count and observed_duration_ms
+   * wherever it is used, so old rows are re-tiered under fps-g2 without re-collection.
+   */
+  fps_gate_version?: string;
   /**
    * Milliseconds of the exposure actually observed, dropouts excluded. Compare against
    * reading_time_ms: a large shortfall means the camera stopped part-way and every rate in this row

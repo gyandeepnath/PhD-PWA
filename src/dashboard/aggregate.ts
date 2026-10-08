@@ -5,7 +5,7 @@
  */
 import type { SessionBundle } from '@/storage/gather';
 import { CONFIG } from '@/experiment/config';
-import { FPS_RATIO_THRESHOLD, FPS_TIER_THRESHOLD } from '@/tracking/blink';
+import { FPS_GATE, fpsTier, gateParticipant, type FpsTier } from '@/tracking/frameRateGate';
 import type { FatigueRecord, DisplayPerceptionRecord, ComprehensionRecord, RtSummaryRecord, EyeMetricsRecord } from '@/storage/types';
 import { PASSAGES } from '@/experiment/passages';
 import { isConditionComplete } from '@/storage/conditionStatus';
@@ -230,6 +230,16 @@ export interface ConditionSummary {
   long_closure_count: number | null;
   effective_fps: number | null;
   fps_adequate_for_tiers: boolean;
+  /**
+   * The frame-rate gate fps-g2 (tracking/frameRateGate.ts), exactly as the export and the templates
+   * apply it: the face-solved rate while the face was seen, its tier, and whether it is within 2 fps of
+   * the median of this sitting's camera-on conditions (the analysis takes the participant's median over
+   * all of their sittings, which is the same unless the sitting was split). Null with the camera off.
+   */
+  sampling_fps_observed: number | null;
+  fps_tier: FpsTier | null;
+  fps_consistent: boolean | null;
+  fps_median: number | null;
   face_presence_ratio: number | null;
   off_axis_ratio: number | null;
   zone_center_ratio: number | null;
@@ -262,8 +272,11 @@ export interface CameraVerdict {
  * templates already use; nothing new is decided here.
  */
 export function cameraVerdict(eye: EyeMetricsRecord | undefined, q: {
+  /** sampling_fps_observed: the gate's rate (fps-g2), not effective_fps. */
   facePresence: number | null; fps: number | null; lighting: 'low' | 'good' | 'overexposed' | null;
   blinks: number | null; minutes: number | null;
+  /** The gate's consistency part, and the median it was judged against; absent when not known. */
+  consistent?: boolean | null; median?: number | null;
 }): CameraVerdict {
   if (!eye || !eye.camera_active) {
     const reason = eye?.camera_inactive_reason;
@@ -282,11 +295,20 @@ export function cameraVerdict(eye: EyeMetricsRecord | undefined, q: {
       text: `The face was in view only ${q.facePresence == null ? 'an unknown share' : Math.round(q.facePresence * 100) + '%'} of the time (needs 90%)`,
     });
   }
-  if (q.fps == null || q.fps < FPS_RATIO_THRESHOLD) {
-    problems.push({
-      level: q.fps == null || q.fps < FPS_TIER_THRESHOLD ? 'bad' : 'warn',
-      text: `The camera ran at ${q.fps == null ? 'an unknown' : Math.round(q.fps)} frames per second (needs ${FPS_RATIO_THRESHOLD} for the incomplete-blink ratio)`,
-    });
+  /*
+   * The frame-rate gate fps-g2, the same one the self-test, the export and the templates apply
+   * (frameRateGate.ts). This used to call anything under 30 a problem and under 25 "bad", on
+   * effective_fps, which face loss lowers — so at the tablet's 23-25 fps nearly every condition read
+   * "Not trustworthy", which said nothing about the data. The 30 was never verified; 20 and 15 come
+   * from a simulation of the shipped classifier (docs/FPS_GATE_SIMULATION.md).
+   */
+  const tier = fpsTier(q.fps);
+  const r = q.fps == null ? null : Math.round(q.fps);
+  if (tier == null) problems.push({ level: 'bad', text: 'Frame rate unknown' });
+  else if (tier === 'C') problems.push({ level: 'bad', text: `Frame rate too low: ${r} a second (under ${FPS_GATE.REDUCED}) — blink data exploratory only` });
+  else if (tier === 'B') problems.push({ level: 'warn', text: `Frame rate reduced: ${r} a second (${FPS_GATE.ADEQUATE} is adequate) — kept, flagged` });
+  if (tier != null && q.consistent === false) {
+    problems.push({ level: 'warn', text: `Frame rate ${r} a second, more than ${FPS_GATE.CONSISTENCY_BAND} from this sitting's usual ${q.median == null ? '?' : Math.round(q.median)}` });
   }
   if (eye.open_ear_measured != null && eye.ear_baseline != null && eye.ear_baseline > 0 && eye.open_ear_measured / eye.ear_baseline < 0.85) {
     problems.push({ level: 'warn', text: `Open eyes looked ${Math.round(100 * (1 - eye.open_ear_measured / eye.ear_baseline))}% narrower than at calibration — some blinks may be counted as incomplete, or missed` });
@@ -575,13 +597,13 @@ export function conditionEngagement(args: {
   // now rather than manipulated, so it is no longer the axis at risk — but face illuminance still
   // varies with display polarity, which IS an independent variable, so the bias is not neutral.
   // Undersampling biases the sampled minimum EAR upward, so the ratio is inflated, directionally.
-  const low_fps_for_ratio = !!eye && eye.camera_active && !eye.fps_adequate_for_ratio;
-  if (low_fps_for_ratio) {
-    const fps = eye!.effective_fps;
-    reasons.push(
-      `${fps == null ? 'unknown' : fps.toFixed(1)} fps — below the ${FPS_RATIO_THRESHOLD} fps needed for the `
-      + `incomplete-blink ratio; the ratio for this condition is biased upward`,
-    );
+  // Judged by the frame-rate gate fps-g2 (frameRateGate.ts): tiers B and C only. This used to say
+  // "below the 30 fps needed ... biased upward" under a never-verified 30 that nearly every condition
+  // on the tablet missed, so it was on almost every row and told the reader nothing.
+  const gateFps = eye && eye.camera_active ? samplingFpsObservedOf(eye) : null;
+  const gateTier = eye && eye.camera_active ? fpsTier(gateFps) : null;
+  if (gateTier === 'B' || gateTier === 'C') {
+    reasons.push(`frame rate ${gateTier === 'C' ? 'too low' : 'reduced'} (${gateFps!.toFixed(1)} a second; ${FPS_GATE.ADEQUATE} is adequate)`);
   }
 
   const quality_score = Math.max(0, Math.round(score * 100) / 100);
@@ -601,10 +623,24 @@ export function baselineFatigueMean(bundle: SessionBundle): number | null {
   return b ? b.fatigue_mean : null;
 }
 
+/** sampling_fps_observed of one eye row (frameRateGate.ts), from its two stored columns. */
+function samplingFpsObservedOf(eye: EyeMetricsRecord): number | null {
+  return gateParticipant([{ cameraActive: eye.camera_active, sampleCount: eye.ear_sample_count, observedMs: eye.observed_duration_ms }])[0].fps;
+}
+
 export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary[] {
   const baseline = baselineFatigueMean(bundle);
+  /*
+   * The frame-rate gate over this sitting's conditions at once, because its consistency part compares
+   * each condition with the median of all of them — the same rows, first eye record per condition, that
+   * analysis_long.csv judges for this sitting.
+   */
+  const gate = gateParticipant(bundle.conditions.map((c) => {
+    const e = bundle.eyeMetrics.find((x) => x.condition_id === c.condition_id);
+    return { cameraActive: e?.camera_active === true, sampleCount: e?.ear_sample_count, observedMs: e?.observed_duration_ms };
+  }));
 
-  return bundle.conditions.map((c) => {
+  return bundle.conditions.map((c, ci) => {
     const rt = bundle.rtSummaries.find((r) => r.condition_id === c.condition_id);
     const fat = bundle.fatigue.find((f) => f.condition_id === c.condition_id && f.stage === 'post_condition');
     const comp = bundle.comprehension.filter((x) => x.condition_id === c.condition_id);
@@ -615,6 +651,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
     const cameraActive = eye?.camera_active ?? false;
     const facePresence = cameraActive ? (eye?.face_presence_ratio ?? null) : null;
     const fps = cameraActive ? (eye?.effective_fps ?? null) : null;
+    const g = gate[ci];
     const offAxis = cameraActive ? (eye?.off_axis_ratio ?? null) : null;
 
     /*
@@ -625,19 +662,15 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       ? flag(facePresence, ENGAGEMENT.FACE_PRESENCE_PILOT_GATE, ENGAGEMENT.FACE_PRESENCE_MIN)
       : 'warn';
     /*
-     * Judged on FPS_RATIO_THRESHOLD, not FPS_TIER_THRESHOLD.
-     *
-     * This read `flag(fps, 25, 15)`. 25 is the floor for the micro/partial TIERS; the primary
-     * outcome needs 30, and tests/ocularIntegrity.test.ts exists to assert that gap — "27 fps is
-     * fine for the tiers and not fine for the ratio". So a condition at 26-29.9 fps was flagged
-     * `good`, coloured green in the QC table, and rolled up into a `good` qc.overall, while this
-     * same file's own reason string said the ratio for that condition is biased upward. The caveat
-     * existed as prose in a different table from the green tick the operator was reading.
-     *
-     * Now: good only at or above the ratio threshold, warn between the two floors — the band where
-     * the tiers are usable and the primary outcome is not — and bad below the tier floor.
+     * The frame-rate gate fps-g2 (frameRateGate.ts), as the export and the templates apply it: good in
+     * tier A and consistent with the sitting's median, warn in tier B or when more than 2 fps from that
+     * median, bad in tier C or with no rate. It was good only at 30 on effective_fps (gate g1), which a
+     * tablet delivering 23-25 never reached: every condition was amber or red, so the colour carried no
+     * information. The same verdict as the camera-verdict line and the cohort tab.
      */
-    const fpsFlag: QcFlag = cameraActive ? flag(fps, FPS_RATIO_THRESHOLD, FPS_TIER_THRESHOLD) : 'warn';
+    const fpsFlag: QcFlag = !cameraActive ? 'warn'
+      : g.tier === 'A' ? (g.consistent === false ? 'warn' : 'good')
+        : g.tier === 'B' ? 'warn' : 'bad';
     const offAxisFlag: QcFlag = cameraActive ? flag(offAxis, 0.2, 0.4, false) : 'warn';
     // Lighting: 'good' is in range; 'low'/'overexposed' degrade blink/EAR detection → warn.
     const lightingQuality = cameraActive ? (eye?.lighting_quality ?? null) : null;
@@ -744,6 +777,10 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       long_closure_count: cameraActive ? (eye?.long_closure_count ?? null) : null,
       effective_fps: fps,
       fps_adequate_for_tiers: eye?.fps_adequate_for_tiers ?? false,
+      sampling_fps_observed: g.fps,
+      fps_tier: g.tier,
+      fps_consistent: g.consistent,
+      fps_median: cameraActive ? g.participantMedian : null,
       face_presence_ratio: facePresence,
       off_axis_ratio: offAxis,
       zone_center_ratio: cameraActive ? (eye?.zone_center_ratio ?? null) : null,
@@ -757,7 +794,10 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
         overall: worst([facePresenceFlag, fpsFlag, offAxisFlag, lightingFlag]),
       },
       observed_minutes: observedMinutes,
-      camera_verdict: cameraVerdict(eye, { facePresence, fps, lighting: lightingQuality, blinks: eng.blink_count_total, minutes: observedMinutes }),
+      camera_verdict: cameraVerdict(eye, {
+        facePresence, fps: g.fps, lighting: lightingQuality, blinks: eng.blink_count_total, minutes: observedMinutes,
+        consistent: g.consistent, median: g.participantMedian,
+      }),
     };
   });
 }
@@ -824,8 +864,10 @@ export interface CohortConditionRow {
   blinks_total: number;
   /** Incomplete blinks summed over the same rows: pooled_ibr = incomplete_total / blinks_total. */
   incomplete_total: number;
-  /** Rows whose frame rate was too low for the ratio to be trusted. */
+  /** Rows below tier A of the frame-rate gate fps-g2 (fps_tier B or C in analysis_long.csv). */
   n_fps_inadequate: number;
+  /** Rows more than 2 fps from their participant's median (fps_consistent FALSE). */
+  n_fps_inconsistent: number;
 }
 
 export interface CohortSummary {
@@ -937,7 +979,7 @@ export function cohortSummary(
       c = {
         condition_label: label, polarity: r.polarity ?? '', text_colour: r.text_colour ?? '',
         n: 0, n_unfinished: 0, n_withdrawn: 0, n_analysable: 0, n_with_outcome: 0, mean_ibr: null, pooled_ibr: null,
-        blinks_total: 0, incomplete_total: 0, n_fps_inadequate: 0,
+        blinks_total: 0, incomplete_total: 0, n_fps_inadequate: 0, n_fps_inconsistent: 0,
       };
       byCondition.set(label, c);
     }
@@ -973,9 +1015,10 @@ export function cohortSummary(
      * falling behind is still visible.
      */
     if (!inConfirmatorySet(r)) continue;
-    // fps_adequate_for_ratio is only meaningful where the camera ran at all; a blank is "unknown",
-    // which is not the same as inadequate and must not be counted as either.
-    if (r.fps_adequate_for_ratio !== '' && !isTrue(r.fps_adequate_for_ratio)) c.n_fps_inadequate++;
+    // The frame-rate gate fps-g2, as analysis_long.csv carries it. A blank tier is "no rate" (camera
+    // off, or too little observed), which is not the same as inadequate and is counted as neither.
+    if (r.fps_tier === 'B' || r.fps_tier === 'C') c.n_fps_inadequate++;
+    if (r.fps_consistent !== '' && r.fps_consistent != null && !isTrue(r.fps_consistent)) c.n_fps_inconsistent++;
 
     const denom = Number(r.n_blinks_total);
     const ratio = Number(r.incomplete_blink_ratio);

@@ -57,12 +57,24 @@ export type FpsTier = 'A' | 'B' | 'C';
 /** The tier in one word, for screens and the dashboard. */
 export const FPS_TIER_WORD: Record<FpsTier, string> = { A: 'Adequate', B: 'Reduced', C: 'Too slow' };
 
-const round2 = (x: number) => Math.round(x * 100) / 100;
+/**
+ * To 0.01, half up, written as floor(x * 100 + 0.5) / 100 so that R and Python, whose round() goes to
+ * the even neighbour at a tie, compute the same digits as here (the templates use the same expression).
+ * The tier is read off this rounded value, so a rate stored as 20.00 is tier A wherever it is re-read.
+ */
+const round2 = (x: number) => Math.floor(x * 100 + 0.5) / 100;
 
 /**
  * Face-solved samples per second of observed time, to 0.01 fps. Null when fewer than two samples or
  * under a second observed (no rate can be stated: blink.ts MIN_RATE_WINDOW_MS). Computed from the two
- * stored columns exactly as the templates compute it, so the app and the analysis agree to the digit.
+ * stored columns exactly as the templates compute it — the same operations in the same order — so the
+ * app and the analysis agree to the digit.
+ *
+ * One known approximation, stated rather than hidden: observed time leaves out each dropout (a gap
+ * longer than the classifier's gap threshold), while the sample count still counts the frame after it,
+ * so each dropout adds one sample too many. Twenty dropouts in a 3-minute window at 24 fps overstate the
+ * rate by about 0.1 fps. The number of dropouts is not stored per row, and the formula must be computable
+ * from what is.
  */
 export function samplingFpsObserved(sampleCount: number | null | undefined, observedMs: number | null | undefined): number | null {
   if (sampleCount == null || !Number.isFinite(sampleCount) || sampleCount < 2) return null;
@@ -93,6 +105,45 @@ export function medianFps(values: Array<number | null | undefined>): number | nu
 export function fpsConsistent(fps: number | null | undefined, participantMedian: number | null | undefined): boolean | null {
   if (fps == null || participantMedian == null || !Number.isFinite(fps) || !Number.isFinite(participantMedian)) return null;
   return Math.abs(fps - participantMedian) <= FPS_GATE.CONSISTENCY_BAND + 1e-9;
+}
+
+/** One condition-run under the gate. */
+export interface FpsGateRow {
+  /** sampling_fps_observed; null on a camera-off row or with too little observed. */
+  fps: number | null;
+  tier: FpsTier | null;
+  /** The participant's median over the rows passed in that have a rate. */
+  participantMedian: number | null;
+  /** fps_consistent; null when this row has no rate. */
+  consistent: boolean | null;
+}
+
+/**
+ * The whole gate over ONE participant's condition-runs: each row's rate and tier, and its consistency
+ * with that participant's median.
+ *
+ * WHICH ROWS MAKE THE MEDIAN: every camera-on condition-run of the participant that has a rate — all of
+ * them, not only those that end up modelled. A row's flag is then a fixed property of the row, the same
+ * in the confirmatory set, the sensitivity set and on the dashboard, and the median is the best estimate
+ * of what this participant's camera typically delivered. Callers pass the participant's rows from every
+ * sitting they hold: the analysis file and both templates pool all of a participant's sittings; the
+ * dashboard's session view holds one sitting, which is the same thing unless the sitting was split.
+ */
+export function gateParticipant(rows: Array<{ cameraActive: boolean; sampleCount: number | null | undefined; observedMs: number | null | undefined }>): FpsGateRow[] {
+  const fps = rows.map((r) => (r.cameraActive ? samplingFpsObserved(r.sampleCount, r.observedMs) : null));
+  const med = medianFps(fps);
+  return fps.map((f) => ({ fps: f, tier: fpsTier(f), participantMedian: med, consistent: fpsConsistent(f, med) }));
+}
+
+/**
+ * The gate the app applied, live, when a row was recorded — what the self-test and the researcher panel
+ * judged against: FPS_GATE_VERSION on rows written from Round 79, FPS_GATE_V1 on rows written before
+ * (which carry no version). Null on a camera-off row, which no gate judged. The TIER columns are always
+ * computed under fps-g2, from stored columns, whatever this says; this tells old rows from new.
+ */
+export function rowGateVersion(e: { camera_active: boolean; fps_gate_version?: string | null }): string | null {
+  if (!e.camera_active) return null;
+  return e.fps_gate_version || FPS_GATE_V1;
 }
 
 /** One line for an operator: the rate, its tier in words, and the floor it is judged against. */

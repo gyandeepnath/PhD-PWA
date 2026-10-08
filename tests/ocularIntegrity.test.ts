@@ -148,19 +148,22 @@ describe('the primary outcome carries its own frame-rate qualification', () => {
     const b = buildFixtureBundle();
     const bundle = {
       ...b,
+      // 14 face-solved samples a second while the face was seen: tier C of gate fps-g2 (Round 79),
+      // which reads the two stored columns, not effective_fps.
       eyeMetrics: b.eyeMetrics.map((e, i) =>
-        i === 0 ? { ...e, effective_fps: 14, fps_adequate_for_ratio: false } : e),
+        i === 0 ? { ...e, effective_fps: 14, fps_adequate_for_ratio: false, ear_sample_count: Math.round((14 * e.observed_duration_ms!) / 1000) + 1 } : e),
     };
     const sums = buildConditionSummaries(bundle);
     const s = sums.find((x) => x.condition_id === b.eyeMetrics[0].condition_id)!;
 
-    // Still present — dropping it would bias the sample toward the illumination level that
-    // sustains a high frame rate.
+    // Still present — dropping it silently would bias the sample toward whatever sustains a high
+    // frame rate; the templates take tier C out of the confirmatory model by a pre-registered rule
+    // and report the refit with it.
     expect(s).toBeDefined();
-    expect(s.engagement_reasons.join(' ')).toMatch(/fps/i);
-    expect(s.engagement_reasons.join(' ')).toMatch(/biased upward/i);
+    expect(s.fps_tier).toBe('C');
+    expect(s.engagement_reasons.join(' ')).toMatch(/frame rate too low \(14\.0 a second; 20 is adequate\)/);
     // Every other condition is unaffected.
-    expect(sums.filter((x) => x.engagement_reasons.some((r: string) => /fps/i.test(r)))).toHaveLength(1);
+    expect(sums.filter((x) => x.engagement_reasons.some((r: string) => /frame rate/i.test(r)))).toHaveLength(1);
   });
 });
 

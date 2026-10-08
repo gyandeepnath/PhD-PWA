@@ -13,6 +13,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { CONFIG, isE2ETimingActive } from '@/experiment/config';
 import { eyeEars, meanEar, fitEarBaseline, EAR_TIERS, LEFT_EYE_EAR, RIGHT_EYE_EAR, type Point } from './blink';
+import { samplingFpsObserved } from './frameRateGate';
 import { startFramePump, frameTimestamp, type FrameMeta, type FramePump, type PumpVideo } from './framePump';
 import { PipelineMeter, type MeterWindow, type PipelineSummary } from './pipelineStats';
 import { startTracker, createTracker, errorSummary, TRACKER_BACKENDS, type FaceTracker, type TrackerBackend } from './trackers';
@@ -173,10 +174,11 @@ export interface LiveTrackingStats {
    */
   baselineMeasured: boolean;
   /**
-   * Effective frame rate of the last reading exposure, from the record that was written.
+   * The frame-rate gate's rate (sampling_fps_observed, frameRateGate.ts) of the last reading exposure,
+   * from the record that was written: face-solved samples per second while the face was seen.
    *
-   * This is the number that belongs beside the ratio's sampling floor; `fps` above describes
-   * whatever screen is on now. Null until an exposure has completed.
+   * This is the number that belongs beside the gate's floor; `fps` above describes whatever screen is
+   * on now. Null until an exposure has completed.
    */
   exposureFps: number | null;
   /** Face bounding-box size as a fraction of the frame; a proxy for viewing distance. */
@@ -457,11 +459,11 @@ export function useTracking(): TrackingApi {
    */
   const lastConditionCounts = useRef<{ blinks: number | null; incomplete: number | null }>({ blinks: null, incomplete: null });
   /**
-   * The effective frame rate the last reading exposure actually achieved.
+   * The frame rate the last reading exposure actually achieved (the gate's rate, frameRateGate.ts).
    *
    * The live fps is measured over a 2-second trailing window, and the monitor is hidden during
    * reading — so every fps an operator could ever see described the CURRENT non-reading screen
-   * while being coloured against FPS_RATIO_THRESHOLD, a floor that means "the rate needed for the
+   * while being coloured against the ratio's floor, a floor that means "the rate needed for the
    * incomplete-blink ratio to be measurable during reading". The two screens do not even carry the
    * same per-frame cost: reading additionally runs head-pose estimation and aggregator ingest.
    * A green 34 fps on the comprehension screen therefore said nothing about the exposure it
@@ -1386,9 +1388,10 @@ export function useTracking(): TrackingApi {
       });
       aggRef.current = null;
 
-      // The rate the exposure ACTUALLY achieved, taken from the record that was written, not
-      // recomputed — so the monitor and the export cannot disagree about it.
-      lastConditionFps.current = typeof record.effective_fps === 'number' ? record.effective_fps : null;
+      // The rate the exposure ACTUALLY achieved, from the two columns of the record that was written,
+      // by the frame-rate gate's own formula (frameRateGate.ts) — so the monitor, the export and the
+      // templates cannot disagree about it or about its tier.
+      lastConditionFps.current = samplingFpsObserved(record.ear_sample_count, record.observed_duration_ms);
       /*
        * What the camera and the tracker did during this exposure (round 75): frames delivered,
        * processed and skipped, processing time, the tracker that ran and the camera's actual mode.

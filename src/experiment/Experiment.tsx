@@ -62,7 +62,7 @@ import { NavChip } from '@/components/NavChip';
 import { useDialog } from '@/components/ConfirmDialog';
 import { UI_TEXT } from '@/lib/uiPalette';
 import { CameraSelfTest } from '@/start/CameraSelfTest';
-import { FPS_RATIO_THRESHOLD } from '@/tracking/blink';
+import { FPS_GATE } from '@/tracking/frameRateGate';
 import { backTarget, operatorExitFor, EXIT_LABEL } from './navigation';
 import { displayStepLabel } from './taskSteps';
 
@@ -2225,7 +2225,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           cameraStatus={tracking.status}
           cameraBlocked={tracking.cameraBlocked}
           cameraLost={tracking.cameraLostAt != null}
-          fpsFloor={FPS_RATIO_THRESHOLD}
+          fpsFloor={FPS_GATE.ADEQUATE}
           stageLabel={STAGE_LABEL[machine.stage]}
           onStimulus={isInLoop(machine.stage)}
           locked={panelLocked}

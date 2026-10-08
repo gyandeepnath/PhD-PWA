@@ -25,7 +25,7 @@ function mount(over: Partial<ResearcherPanelProps> = {}) {
   let push: ((s: LiveTrackingStats) => void) | null = null;
   const props: ResearcherPanelProps = {
     subscribe: (fn) => { push = fn; return () => { push = null; }; },
-    cameraStatus: 'active', cameraBlocked: false, cameraLost: false, fpsFloor: 30,
+    cameraStatus: 'active', cameraBlocked: false, cameraLost: false, fpsFloor: 20,
     stageLabel: 'questions', onStimulus: false, locked: false, ink: null,
     sittingStartedAt: Date.now() - 125_000, sessionStartedAt: Date.now() - 600_000,
     stageStartedAt: Date.now() - 5_000, conditionsDone: 3, conditionsTotal: 10, minutesLeft: 49, ...over,
@@ -289,24 +289,41 @@ describe('camera state in words', () => {
     });
 
     /*
-     * The verdict under the rates never calls a rate "enough" that the primary outcome flags. It used
-     * to say "enough" at 25 face frames a second, the camera check's floor, while every reading row
-     * below 30 has its incomplete-blink ratio flagged (fps_adequate_for_ratio).
+     * The verdict under the rates is the frame-rate gate fps-g2 (Round 79; frameRateGate.ts), the one
+     * the self-test, the dashboard and the analysis apply. Under gate g1 it said "below the 30 the
+     * incomplete-blink ratio is flagged" at any rate under 30, which a 30-fps tablet camera essentially
+     * never cleared.
      */
-    it('says which floor a face rate meets: the camera check\'s 25, the ratio\'s 30, or neither', () => {
-      const verdictAt = (faceFps: number) => {
+    it('says which tier of the frame-rate gate a face rate is in: adequate at 20, reduced 15-20, too slow under 15', () => {
+      const verdictAt = (faceFps: number, cameraFps = 30) => {
         const m = mount({ getStream: () => stream });
         act(() => { m.q('researcher-panel-collapsed')!.click(); });
-        m.push(stats({ faceFps, cameraFps: 30, trackerFps: 30 }));
-        const t = m.q('diag-verdict')?.textContent ?? '';
+        m.push(stats({ faceFps, cameraFps, trackerFps: cameraFps }));
+        const el = m.q('diag-verdict');
+        const out = { text: el?.textContent ?? '', tier: el?.getAttribute('data-tier') };
         m.unmount();
-        return t;
+        return out;
       };
-      expect(verdictAt(31)).toMatch(/at or above 30/);
-      const between = verdictAt(27.4);
-      expect(between).toMatch(/27\.4 times a second: at least 25, but below the 30 the incomplete-blink ratio is flagged/);
-      expect(between).not.toMatch(/enough/);
-      expect(verdictAt(18)).toMatch(/found in only 18 frames a second/);
+      expect(verdictAt(31)).toEqual({ text: 'face found 31 times a second — adequate (20 or more)', tier: 'A' });
+      expect(verdictAt(24)).toEqual({ text: 'face found 24 times a second — adequate (20 or more)', tier: 'A' });
+      // Below 20 the stage that is short is named, after the tier.
+      const reduced = verdictAt(18);
+      expect(reduced.tier).toBe('B');
+      expect(reduced.text).toMatch(/^Reduced \(15–20: kept, flagged\)\. The face is found in only 18 frames a second/);
+      const slow = verdictAt(12, 12);
+      expect(slow.tier).toBe('C');
+      expect(slow.text).toMatch(/^Too slow \(under 15\)\. The CAMERA is the limit: it delivers 12 frames a second/);
+    });
+
+    it('shows the last reading\'s rate with its tier, amber below 20', () => {
+      const m = mount({ getStream: () => stream, fpsFloor: 20 });
+      act(() => { m.q('researcher-panel-collapsed')!.click(); });
+      m.push(stats({ exposureFps: 23.6 }));
+      expect(m.q('researcher-last-fps')?.textContent).toBe('24 a second · adequate');
+      m.push(stats({ exposureFps: 17.2 }));
+      expect(m.q('researcher-last-fps')?.textContent).toBe('17 a second · reduced');
+      expect(m.q('researcher-last-fps')?.getAttribute('style')).toMatch(/color/);
+      m.unmount();
     });
 
     it('is not drawn while the camera is off', () => {

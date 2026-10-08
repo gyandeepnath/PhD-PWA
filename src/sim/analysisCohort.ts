@@ -180,6 +180,9 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
         mean_inter_blink_interval_ms: Math.round((observed / total) * Math.exp(gaussian(rng, 0, 0.1))),
         blink_rate_full: Math.round(((total - inc - micro) / (observed / 60_000)) * 100) / 100,
         effective_fps: fps, fps_adequate_for_ratio: fps >= 24, fps_adequate_for_tiers: fps >= 20,
+        // The samples behind the row, so the frame-rate gate fps-g2 (Round 79), which reads them and
+        // observed_duration_ms, sees the rate simulated above. Derived, not drawn: rng is untouched.
+        ear_sample_count: Math.round((fps * observed) / 1000) + 1, fps_gate_version: 'fps-g2',
         // The fitted-minimum sensitivity (Round 79), derived WITHOUT drawing from rng so every other
         // simulated value is unchanged: a slower camera reads more blinks incomplete, and the fit
         // takes back a share of them that grows as the rate falls below 30. The exposure counts as

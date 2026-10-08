@@ -27,7 +27,6 @@ import {
 import type { LiveTrackingStats, BenchPaint } from '@/tracking/useTracking';
 import { trialSawFace, MIN_TRIAL_FACE_SHARE, type TrackerTrial } from '@/tracking/trackerChoice';
 import { TRACKER_LABEL, type TrackerBackend } from '@/tracking/trackers';
-import { FPS_TIER_THRESHOLD } from '@/tracking/blink';
 import { LiveFeed, EarTrace, PipelineReadout } from '@/components/LiveCamera';
 import { DeviceBox } from '@/components/DeviceBox';
 import { ScreenCalibration, type ScreenCalibrationResult } from './ScreenCalibration';
@@ -790,7 +789,7 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
               </div>
               <div data-testid="camera-diagnostics" style={{ flex: '1 1 300px', minWidth: 280, background: '#1a1a2e', color: '#fff', borderRadius: 12, padding: '12px 14px' }}>
                 <strong style={{ fontSize: 14, letterSpacing: 0.5 }}>CAMERA AND TRACKER</strong>
-                <div style={{ marginTop: 6 }}><PipelineReadout stats={live} floor={FPS_TIER_THRESHOLD} /></div>
+                <div style={{ marginTop: 6 }}><PipelineReadout stats={live} /></div>
                 <div style={{ marginTop: 6 }}><EarTrace stats={live} width={260} height={48} /></div>
                 <div style={{ marginTop: 8, fontSize: 14, opacity: 0.85, lineHeight: 1.5 }} data-testid="camera-mode">
                   {/* What was ASKED and what the camera is SET to. The browser reports the configured rate

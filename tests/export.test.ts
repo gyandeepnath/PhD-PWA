@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { FPS_RATIO_THRESHOLD, FPS_TIER_THRESHOLD } from '@/tracking/blink';
+import { FPS_GATE, samplingFpsObserved } from '@/tracking/frameRateGate';
 import { buildConditionSummaries, baselineFatigueMean, ENGAGEMENT } from '@/dashboard/aggregate';
 import { buildExportFiles, escapeCsv, toCsv, fnv1a, CODEBOOK } from '@/storage/export';
 import type { SessionBundle } from '@/storage/gather';
@@ -89,38 +89,51 @@ describe('condition aggregation', () => {
     expect(s[0].fatigue_delta).toBe(1); // 2 - 1
     expect(s[1].fatigue_delta).toBe(3); // 4 - 1
   });
-  it('flags QC: a camera fast enough for the tiers but not for the ratio is WARN, not good', () => {
+  it('flags QC by the frame-rate gate fps-g2: good in tier A, warn in B, bad in C, on the rate while the face was seen', () => {
     /*
-     * This asserted `good` at 28 fps, and in doing so encoded the defect.
-     *
-     * 28 is above FPS_TIER_THRESHOLD (25) and below FPS_RATIO_THRESHOLD (30). In that band the
-     * micro/partial tiers are usable and the PRIMARY OUTCOME is not: below the ratio floor the
-     * sampled minimum EAR is biased upward, so incomplete_blink_ratio comes out inflated — a
-     * directional bias, and aggregate.ts's own reason string says so for this very condition. The
-     * flag said good while the prose beside it said biased, and an operator reads the flag.
-     *
-     * So this now asserts warn. The camera-off case stays warn rather than bad, which is a separate
-     * and deliberate distinction: a refused camera is a valid choice, not a fault.
+     * Round 79. This asserted WARN at 28 fps under gate g1, whose good/warn line sat at 30 on
+     * effective_fps — a line a tablet delivering 23-25 fps never reached, so every condition was amber
+     * and the colour carried no information. The flag is now the same gate the export, the templates
+     * and the self-test apply (tracking/frameRateGate.ts): tier A (20 or more face-solved samples a
+     * second of observed time) is good, B (15-20) warn, C (under 15) bad. The camera-off case stays
+     * warn rather than bad, which is a separate and deliberate distinction: a refused camera is a
+     * valid choice, not a fault.
      */
     const s = buildConditionSummaries(bundle());
-    expect(s[0].qc.fps).toBe('warn'); // fps 28: fine for the tiers, not for the ratio
-    expect(s[0].qc.facePresence).toBe('good'); // .95 — the other signals are unaffected
-    expect(s[0].qc.overall).toBe('warn'); // and overall is the worst of them
+    // 5340 samples over 178 s observed: 29.99 a second, tier A — whatever effective_fps (28) says.
+    expect(s[0].sampling_fps_observed).toBe(samplingFpsObserved(5340, 178000));
+    expect(s[0].fps_tier).toBe('A');
+    expect(s[0].qc.fps).toBe('good');
+    expect(s[0].qc.overall).toBe('good');
     expect(s[1].camera_active).toBe(false);
+    expect(s[1].fps_tier).toBeNull();
     expect(s[1].qc.overall).toBe('warn'); // camera off -> warn, not bad
   });
 
-  it('calls the camera good only at or above the frame rate the primary outcome needs', () => {
-    // A tripwire on the boundary itself: the point of the change is that the good/warn line sits at
-    // FPS_RATIO_THRESHOLD, and an edit moving it back to the tier floor must fail here.
+  it('puts the good/warn line at the gate\'s 20 and the warn/bad line at 15, on sampling_fps_observed', () => {
+    // A tripwire on the boundaries: an edit moving them back to effective_fps or to 25/30 fails here.
     const at = (fps: number) => {
       const b = bundle();
-      b.eyeMetrics[0].effective_fps = fps;
+      b.eyeMetrics[0].ear_sample_count = Math.round((fps * b.eyeMetrics[0].observed_duration_ms!) / 1000) + 1;
+      b.eyeMetrics[0].effective_fps = 40; // ignored by the gate
       return buildConditionSummaries(b)[0].qc.fps;
     };
-    expect(at(FPS_RATIO_THRESHOLD)).toBe('good');
-    expect(at(FPS_RATIO_THRESHOLD - 0.1)).toBe('warn');
-    expect(at(FPS_TIER_THRESHOLD - 0.1)).toBe('bad');
+    expect(at(FPS_GATE.ADEQUATE)).toBe('good');
+    expect(at(FPS_GATE.ADEQUATE - 0.1)).toBe('warn');
+    expect(at(FPS_GATE.REDUCED)).toBe('warn');
+    expect(at(FPS_GATE.REDUCED - 0.1)).toBe('bad');
+  });
+
+  it('warns on a condition more than 2 fps from the sitting\'s median, even in tier A', () => {
+    const b = bundle();
+    // Both conditions camera-on: 24 and 29 a second; the median is 26.5, each is 2.5 away.
+    b.eyeMetrics[1] = { ...b.eyeMetrics[0], condition_id: 'B', ear_sample_count: Math.round(24 * 178) + 1 };
+    b.eyeMetrics[0] = { ...b.eyeMetrics[0], ear_sample_count: Math.round(29 * 178) + 1 };
+    const s = buildConditionSummaries(b);
+    expect(s.map((x) => x.fps_tier)).toEqual(['A', 'A']);
+    expect(s.map((x) => x.fps_consistent)).toEqual([false, false]);
+    expect(s.map((x) => x.qc.fps)).toEqual(['warn', 'warn']);
+    expect(s[0].camera_verdict.problems.join(' ')).toMatch(/more than 2 from this sitting's usual 27/);
   });
   it('calls face presence good only at the pilot gate the protocol and the R template use', () => {
     /*

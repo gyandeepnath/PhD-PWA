@@ -25,6 +25,7 @@ import {
   type DetailSample, type TraceBuffer,
 } from './blinkLog';
 import { FIT_RULE_VERSION, type BlinkFit } from './blinkFit';
+import { FPS_GATE_VERSION, samplingFpsObserved } from './frameRateGate';
 import type { HeadPose } from './headPose';
 import type { GazeZone } from './gaze';
 import { classifyLighting } from './lighting';
@@ -340,7 +341,8 @@ export class EyeMetricsAggregator {
      * the lowest frame: the frame-rate-independent version of the count, for a pre-registered sensitivity
      * refit (docs/ANALYSIS_PLAN.md §5). It changes nothing above: the primary count is blink-r1's.
      */
-    const samplingFps = observedMs >= 1000 && this.ear.length >= 2 ? ((this.ear.length - 1) / Math.round(observedMs)) * 1000 : null;
+    // The gate's own rate (frameRateGate.ts), from the two values this row stores.
+    const samplingFps = samplingFpsObserved(this.ear.length, Math.round(observedMs));
     const exposure = fitExposure(args.lockedExposure100us, samplingFps);
     const fits = blinkMeasurable ? fitBlinks(this.ear, events, baseline, exposure.ms) : [];
     const fitted = fittedIncompleteCount(events, fits, baseline);
@@ -362,6 +364,9 @@ export class EyeMetricsAggregator {
       effective_fps: fps,
       fps_adequate_for_tiers: fpsAdequateForTiers(fps),
       fps_adequate_for_ratio: fpsAdequateForRatio(fps),
+      // The gate this row is judged under (frameRateGate.ts). Its rate and tier are computed from
+      // ear_sample_count and observed_duration_ms below wherever they are used, never stored twice.
+      fps_gate_version: FPS_GATE_VERSION,
       /**
        * How much of the exposure was actually OBSERVED, and how many samples it rests on.
        *

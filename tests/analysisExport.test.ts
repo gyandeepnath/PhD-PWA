@@ -425,6 +425,8 @@ describe('a condition with no eye record says so, rather than asserting the came
     camera_active: true, blink_count_incomplete: 2, blink_count_full: 20, blink_count_micro: 1,
     effective_fps: 30, face_presence_ratio: 0.95, off_axis_ratio: 0.05, lighting_quality: 'good',
     fps_adequate_for_ratio: true, gaze_calibrated: true,
+    // What the frame-rate gate fps-g2 reads (Round 79): 30 samples a second over 3 minutes observed.
+    ear_sample_count: 5401, observed_duration_ms: 180_000,
   };
   const DISABLED_EYE = {
     camera_active: false, effective_fps: null, face_presence_ratio: null,
