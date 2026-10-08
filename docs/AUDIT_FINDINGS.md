@@ -5679,3 +5679,173 @@ Verified on 4270a30 + e95103b:
   gates pass.
 - 6 e2e tests passed: cameraDiagnostics (all three), trackerTelemetry, trackerEquivalence and
   fullRun. The full suite was not re-run.
+
+## Round 78 — keeping every blink, one "Tick all", and the investigator's decisions
+
+After testing 2.3.1 the investigator asked for three things this round covers (the frame-rate,
+gaze-calibration, typography, dashboard and slider requests are separate work):
+
+- "If saving individual blinks helps the overall quality, then do so, but I don't want to
+  over-complicate things during data analysis" (instruction 1);
+- one button "like select all" for the researcher-side ticks at the start of a sitting
+  (instruction 7);
+- the reaction-task wording is okay, three pages at most is good, no university name or logo
+  (instruction 4).
+
+### 1. Every blink and the eye-openness trace, kept apart from the analysis
+
+**What was already there (6ffc2c7).** An earlier agent was stopped by a usage limit; its work was
+verified and committed as 6ffc2c7. It keeps:
+- each reading window's blinks and its per-frame trace in a new store, `ocular_events` (schema 10);
+- the same blinks the eye-metrics row counts (`finalizeWithEvents` returns that array);
+- two export files, `07b_blink_events.csv` and `07c_ear_trace.csv`;
+- integrity checks that the blinks add up to the 07 totals;
+- a backup and restore that carry the store.
+
+The main analysis was untouched. This round checked it against the task and found four gaps:
+1. Two comments pointed at things that did not exist: `tracking/blink.ts` said
+   `tests/blinkLog.test.ts` pins the rule constants to the version, and `tracking/blinkLog.ts` cited
+   `docs/ANALYSIS_PLAN.md` §5.7 for the measured size. There was no such test and no such section.
+2. No test covered the four integrity checks, the trace's text encoding, or a backup round trip
+   carrying the records.
+3. There was no storage figure anywhere.
+4. The export gate (`scripts/verifyExport.ts`) matched only `^\d\d_` file names, so 07b and 07c were
+   outside its file-order and join-key checks.
+
+**Added (005ab45), from the research report's section G.** Each stored blink now also carries:
+- `min_ear_raw` and `min_ratio_raw`: its depth by the rule that classified it, the deepest frame.
+  These are renamed from `min_ear` and `min_ear_ratio`, so a fitted minimum can sit beside them later.
+- `min_ear_left`, `min_ear_right`: each eye's own depth, so a one-eyed dip shows.
+- `open_pre`, `min_ratio_local_raw`: the open eye in the second before onset (median of at least 5
+  open frames) and the depth against it. The open-eye EAR moves with where the eyes are on the page
+  and with fatigue, while the baseline was fixed at calibration.
+- `max_gap_ms`: the widest sampling step from the frame before onset to the offset frame. A dropped
+  frame or a lost face during the blink shows here.
+- `pitch_at_min`, `yaw_at_min`: the head pose at the deepest frame (EAR depends on viewpoint).
+
+The camera self-test's cued blinks are now kept too, as their own record (`window = selftest`, one per
+sitting, the attempt the session's `selftest_*` describe; a test stopped part-way keeps nothing).
+Deliberate blinks are complete blinks, so these rows show, per participant, how deep a blink known to
+be complete reads on this camera against the 0.60 cut. 07b gives each self-test blink its lag from
+the nearest flash (`cue_lag_ms`).
+
+The store is now keyed on `record_id`: the condition_id for a reading window, `selftest:` + session
+for the self-test. Schema 10 has not been released (2.3.1 is schema 9), so no device holds the old key.
+
+The integrity report also checks the self-test rows against the self-test score
+(`selftest_events_match`). The export gate now orders and key-checks 07b and 07c; their condition_id
+may be blank only on self-test rows.
+
+**What did not change.** `BLINK_RULE_VERSION` is still `blink-r1`; no cut, rule or threshold moved;
+`07_eye_metrics.csv` gains and loses no column, and its row is computed by the same code from the same
+samples; neither analysis template reads 07b or 07c (a test now says so). The files are optional: every codebook entry for them begins "Validation file, not used by
+the main analysis", or says the file is NOT needed for it.
+
+**Size, measured** (`tests/blinkLog.test.ts`, on a synthetic sitting: ten 3-minute reading windows at
+30 fps, 450 blinks, every decimal kept):
+- about 1.7 MB per sitting in the database and in `backup_*.json` (a backup without these records is
+  about 0.3 MB);
+- `07c_ear_trace.csv` about 54,000 rows and 4–6 MB per sitting.
+
+The test fails if the encoding grows past 2 MB a sitting. Written into ANALYSIS_PLAN §5 item 6. The
+pre-flight storage check already asks for 300 MB free per sitting, so it needs no change.
+
+**Tests added:**
+- `tests/blinkLog.test.ts` (19 tests):
+  - the rule version pinned to its rules (the cuts, the 40 ms micro rule, the gap rule);
+  - the trace codec, including a damaged column;
+  - each new field, with null rather than a guess when its frames are missing;
+  - the record built from the row's own blinks, the self-test record, and the size.
+- `tests/integrity.test.ts` (9 tests): each blink check, positive and negative, and that they only
+  ever warn.
+- `tests/backup.test.ts` (6 tests):
+  - a round trip that re-exports 07b and 07c byte for byte;
+  - one record per window after an overwrite restore;
+  - no warning for a pre-schema-10 file, a warning for a schema-10 file without the records;
+  - refusal of a record with no key or pointing at another sitting's condition.
+- `tests/export.test.ts` (6 tests): per condition and tier, 07b equals 07's counts; 07c's measured
+  frames equal `ear_sample_count`; the self-test rows; every column documented as not needed for the
+  main analysis; the templates do not read the files; headers only for a sitting without records.
+- e2e (334b311), on the fake camera: an accepted self-test leaves its record with five cues and as many
+  blinks as it scored; reading a passage leaves the condition's record; a self-test stopped by
+  rotation leaves none.
+
+**Not done, and why:**
+- `min_ear_fit`, `min_ratio_fit` and `n_samples_fit` (section G item 1) need the fitted-minimum rule
+  (`blink-r2`). The report says that rule must be checked by simulation and pre-registered before
+  data (its A2, A3); it belongs to the frame-rate work, not to this round. The `_raw` names leave room.
+- The optional `blink_events_validation.R` was not written. It needs the human coders' file, whose
+  format is not yet fixed.
+- Gaze position per blink was not stored. The gaze calibration is itself under review (instruction 2).
+  The page on screen is stored.
+- Matching to video. Blink times run from the window's first camera frame. The annotation clip starts
+  at the "Begin reading" tap, up to about a frame earlier, plus the recorder's own start-up delay. That
+  delay was not measured. A coder matching blinks to video should allow a tolerance of that order.
+
+### 2. "Tick all" on pre-flight (ec3f40d)
+
+**Where it applies.** Every checkbox in `src` was looked at. The only multi-item researcher list at
+the start of a sitting is pre-flight's seven room-and-device items. The others are not ticked in bulk:
+- the consent boxes: the participant's own choices;
+- the display-mode and skip-the-ruler acknowledgements: single warnings, each to be read;
+- the researcher card's keep-open box: a display preference.
+
+**What it does.**
+- A **Tick all** button above the list. It asks first: "Tick all the room and device checks? Only if
+  you have checked each of the 7 items on this list yourself, for this sitting."
+- The confirming button says **I have checked each of these**; **Go back** leaves the list as it was.
+- Ticking one by one still works.
+- The sitting records which way the list was ticked: `preflight_bulk_ticked` on the session and in
+  `01_session_info.csv` (true = Tick all used; false = one by one; blank = sittings before it).
+
+**Tests.** jsdom (3), e2e (2: bulk and one by one, both read back from the database and the export),
+export (1). Screenshots at 1152 × 720 and 1280 × 800 were looked at: the button sits at the head of
+the list, and reads "All ticked" (disabled) once every item is ticked.
+
+### 3. The investigator's decisions (d972fb1)
+
+Recorded in `docs/PROTOCOL.md` §2a, each with where it is held:
+- **Reaction-time wording:** accepted as in 2.3.1. Nothing changed.
+- **Three pages at most:** confirmed. Already pinned by `tests/passages.test.ts`.
+- **No university name or logo:** none was found in the app's source, pages, styles or install
+  manifest. A new test, `tests/noInstitutionName.test.ts`, keeps it so. It was checked by adding a
+  name, which made it fail. The only logo is the app's own plain mark (`VisuLabLogo.tsx`).
+
+### 4. A stress scenario the trace file broke
+
+`npm run stress` is not part of `npm run verify`, so 6ffc2c7 was committed without it. Run this round,
+one scenario failed: a participant code of 10,000 characters made the export throw "Invalid string
+length". 07c repeats the code on each of about 54,000 rows, about 540 MB of text, more than V8 holds
+as one string. Before 07c the longest file had a few hundred rows, so the same code exported.
+
+Such a code cannot come from the app: the session form has accepted only letters, digits, `-` and
+`_`, at most 20 characters, since its first runnable build (e07f7b4). It can only come from a damaged
+or hand-edited record.
+
+**Fix:**
+- The rule is now one constant, `src/lib/participantId.ts`, used by the session form.
+- The export refuses a code longer than 20 characters by name, before building anything ("This
+  sitting's participant code is N characters long, and the app only issues codes of up to 20. The
+  record is damaged …"). It no longer fails part-way with no reason.
+- Length is the only thing checked. The test fixture's own code carries a comma and a quote on
+  purpose, to test CSV escaping, and still exports.
+- The stress scenario now expects that refusal. All stress scripts pass: 29/29 scenarios, and
+  650, 26 and 1,286 checks.
+- Two unit tests in `tests/export.test.ts` cover a 21-character code (refused) and a 20-character
+  one (exported).
+
+**Not measured on the device.** Nothing here was read off the study tablet. On a real sitting it
+still needs checking:
+- that 07b has rows and 07c about (frame rate × reading seconds) rows per condition;
+- that the integrity report shows no `blink_events_*` or `selftest_events_match` warning;
+- how long the end-of-reading write takes before the questions appear (each condition now also
+  writes a blink record of about 170 KB).
+
+**Citations.** None added.
+
+Verified on 334b311:
+- `npm run verify` is green: 87 files, 1423 unit tests; the corpus, codebook, export (810 checks) and
+  analysis gates pass.
+- e2e, 32 tests passed: fullRun, edge, setupNavigation, cameraLost, cameraBlocked, displayMode,
+  physicalCalibration, preflightTickAll, cameraDiagnostics.
+- After `npm run build`, the production-bundle suite (e2e-prod, 7 tests) passed.
