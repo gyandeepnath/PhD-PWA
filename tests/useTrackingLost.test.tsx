@@ -128,8 +128,10 @@ describe('useTracking — a camera that stops', () => {
     await act(async () => { await h.api().start(); });
     const info = h.api().pipelineInfo()!;
     expect(info.tracker_backend).toBe('legacy');
-    expect(info.camera_requested).toEqual({ width: 1280, height: 720, frameRate: 60 });
-    expect(info.camera_settings).toEqual({ width: 640, height: 480, frameRate: 30 });
+    // A 30-fps mode with a floor of 30, facing the user (Round 79); this camera accepted the floor.
+    expect(info.camera_requested).toEqual({ width: 1280, height: 720, frameRate: 30, frameRateMin: 30, facingMode: 'user' });
+    expect(info.camera_request_fallback).toBeNull();
+    expect(info.camera_settings).toEqual({ width: 640, height: 480, frameRate: 30, facingMode: null });
     expect(info.camera_capabilities?.frame_rate_max).toBe(30);
     const before = closed.count;
     act(() => { h.api().stop(); });

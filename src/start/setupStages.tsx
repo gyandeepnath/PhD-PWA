@@ -704,8 +704,13 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
                 <div style={{ marginTop: 6 }}><PipelineReadout stats={live} floor={FPS_TIER_THRESHOLD} /></div>
                 <div style={{ marginTop: 6 }}><EarTrace stats={live} width={260} height={48} /></div>
                 <div style={{ marginTop: 8, fontSize: 14, opacity: 0.85, lineHeight: 1.5 }} data-testid="camera-mode">
-                  Asked for {info ? `${info.camera_requested.width}×${info.camera_requested.height} at ${info.camera_requested.frameRate} fps` : '—'};
-                  the camera gave {info?.camera_settings.width ? `${info.camera_settings.width}×${info.camera_settings.height}` : '—'}
+                  {/* What was ASKED and what the camera is SET to. The browser reports the configured rate
+                      here, not the delivered one (Chromium media_stream_video_track.cc), so the line says
+                      "set to"; what arrives is "Camera delivers" above. */}
+                  Asked for {info ? `${info.camera_requested.width}×${info.camera_requested.height} at ${info.camera_requested.frameRate} fps` : '—'}
+                  {info?.camera_requested.frameRateMin ? ` (at least ${info.camera_requested.frameRateMin})` : ''}
+                  {info?.camera_request_fallback ? ' — the camera has no mode that fast, so any rate was accepted' : ''};
+                  the camera is set to {info?.camera_settings.width ? `${info.camera_settings.width}×${info.camera_settings.height}` : '—'}
                   {info?.camera_settings.frameRate ? ` at ${info.camera_settings.frameRate} fps` : ''}
                   {info?.camera_capabilities?.frame_rate_max ? ` (its maximum: ${info.camera_capabilities.frame_rate_max} fps)` : ''}.
                   {' '}Tracker {selectionText[info?.tracker_selection ?? 'default']}.

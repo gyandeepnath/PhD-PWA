@@ -102,11 +102,10 @@ export const FPS_TIER_THRESHOLD = 25;
  * VERIFIED (see docs/LITERATURE_VALIDATION.md, claim "ear-webcam-validity"); the constant is named
  * here so that it can be moved once that reference is checked.
  *
- * The camera is requested at a higher rate than this threshold (CONFIG.CAMERA_FPS), deliberately.
- * Setting the gate equal to the requested rate would make it unsatisfiable in practice — an
- * achieved rate is essentially always a little below the requested one, so every condition in the
- * study would have been flagged and the flag would have carried no information at all. The gate has
- * to sit below what the pipeline asks for, or it is not a gate.
+ * The camera used to be requested at 60 so that the achieved rate would sit above this gate. That
+ * could not work: a frameRate constraint only chooses the camera's format, and on a camera whose
+ * formats top out at 30 a gate of 30 is unsatisfiable — every condition is flagged and the flag
+ * carries no information (Round 79; tracking/cameraRequest.ts, CONFIG.CAMERA_FPS).
  *
  * This FLAGS, it does not drop. Discarding conditions below the threshold would bias the sample
  * toward whichever devices, participants and — critically — ambient illumination levels sustain a

@@ -346,6 +346,20 @@ describe('camera pipeline columns', () => {
       selftest_camera_fps: '29.6', selftest_tracker_fps: '11.2', selftest_process_ms_p50: '84.9',
       selftest_frames_delivered: '560', selftest_frames_processed: '212', selftest_frames_skipped: '348', selftest_limit: 'tracker',
     });
+    // Recorded before Round 79: no frame-rate floor, fallback, facing or exposure controls — blank.
+    expect(s).toMatchObject({ camera_fps_min_requested: '', camera_request_fallback: '', camera_facing: '', camera_exposure_caps: '' });
+    // From Round 79: the floor that was refused, why, the facing, and what exposure control was offered.
+    b.session.camera_pipeline = {
+      ...b.session.camera_pipeline,
+      camera_requested: { width: 1280, height: 720, frameRate: 30, frameRateMin: null, facingMode: 'user' },
+      camera_request_fallback: 'OverconstrainedError: frameRate',
+      camera_settings: { width: 1280, height: 720, frameRate: 20, facingMode: 'user' },
+      camera_capabilities: { width_max: 1920, height_max: 1080, frame_rate_max: 20, exposure_modes: ['manual', 'continuous'], exposure_time_min: 1, exposure_time_max: 3000 },
+    };
+    expect(rows(b, '01_session_info.csv')[0]).toMatchObject({
+      camera_requested: '1280x720@30', camera_fps_min_requested: '', camera_request_fallback: 'OverconstrainedError: frameRate',
+      camera_facing: 'user', camera_exposure_caps: 'modes manual/continuous; time 1-3000',
+    });
     // A sitting recorded before round 75 has none of it: blanks, not zeros.
     const [old] = rows(bundle(), '01_session_info.csv');
     for (const c of ['tracker_backend', 'camera_setting_fps', 'selftest_camera_fps', 'selftest_frames_skipped', 'selftest_limit']) {

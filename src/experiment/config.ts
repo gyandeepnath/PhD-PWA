@@ -304,13 +304,19 @@ const BASE_CONFIG = {
   CAMERA_WIDTH: 1280,
   CAMERA_HEIGHT: 720,
   /**
-   * Frame rate REQUESTED from the camera. Deliberately above FPS_RATIO_THRESHOLD (30), the rate the
-   * primary outcome needs: an achieved rate always sits a little below the requested one, so asking
-   * for exactly 30 would leave every condition in the study below the gate and the gate carrying no
-   * information. Devices that cannot deliver 60 fall back to whatever they can, which is recorded
-   * per condition as effective_fps.
+   * Frame rate REQUESTED from the camera: an ideal of 30 with a floor of 30, so Chrome picks a format
+   * that can run at 30 (tracking/cameraRequest.ts). A camera with no such format refuses the floor,
+   * and the request is repeated without it; the record says so (camera_request_fallback).
+   *
+   * It was an ideal of 60 "so the achieved rate sits above the 30-fps gate". That could not work: in
+   * Chrome a frameRate constraint only chooses the camera's FORMAT, and on Android the auto-exposure
+   * frame-rate range is Chrome's choice — the one with the lowest minimum, so the camera may slow down
+   * in dim light whatever the page asks (Chromium source, docs/CITATION_VERIFICATION.md #60). On a camera
+   * whose formats top out at 30, asking for 60 changed nothing. The lever for the rate in dim light is
+   * the exposure (CAMERA_EXPOSURE_POLICY); the gate on the rate is fps-g2 (tracking/blink.ts).
    */
-  CAMERA_FPS: 60,
+  CAMERA_FPS: 30,
+  CAMERA_FPS_MIN: 30,
   /**
    * Process every camera frame: blinks last 100-400 ms, so ~30 fps is the literature minimum for
    * valid blink detection (sub-Nyquist below ~25 fps). Raise to 2 only if a slow tablet can't keep

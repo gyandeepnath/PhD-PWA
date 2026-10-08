@@ -850,12 +850,30 @@ export interface CameraPipelineRecord {
     faceShare: number | null; earNoise: number | null;
   }> | null;
   tracker_measured_at: number | null;
-  /** What getUserMedia was asked for (ideal values). */
-  camera_requested: { width: number; height: number; frameRate: number };
-  /** What the camera track reported it gave (MediaStreamTrack.getSettings()). */
-  camera_settings: { width: number | null; height: number | null; frameRate: number | null };
-  /** The camera's reported maxima (getCapabilities()); null where the browser does not report them. */
-  camera_capabilities: { width_max: number | null; height_max: number | null; frame_rate_max: number | null } | null;
+  /**
+   * What getUserMedia was asked for (tracking/cameraRequest.ts): ideal size and frame rate, and from
+   * Round 79 the frame-rate floor (null when the camera refused it and the request was repeated without
+   * it) and the facing asked for. The last two are absent on sittings recorded before Round 79, which
+   * asked for an ideal of 60 fps and no floor.
+   */
+  camera_requested: { width: number; height: number; frameRate: number; frameRateMin?: number | null; facingMode?: string | null };
+  /** Why the first camera request was repeated without its frame-rate floor; null when it was not (Round 79). */
+  camera_request_fallback?: string | null;
+  /** What the camera track reported it gave (MediaStreamTrack.getSettings()); facingMode from Round 79. */
+  camera_settings: { width: number | null; height: number | null; frameRate: number | null; facingMode?: string | null };
+  /**
+   * The camera's reported capabilities (getCapabilities()); null where the browser does not report them.
+   * From Round 79 also the exposure controls it offers (tracking/cameraExposure.ts): the exposure modes,
+   * and the exposure-time (100 µs units, as the browser reports them), ISO and exposure-compensation
+   * ranges, each null when not offered.
+   */
+  camera_capabilities: {
+    width_max: number | null; height_max: number | null; frame_rate_max: number | null;
+    exposure_modes?: string[] | null;
+    exposure_time_min?: number | null; exposure_time_max?: number | null;
+    iso_min?: number | null; iso_max?: number | null;
+    exposure_comp_min?: number | null; exposure_comp_max?: number | null; exposure_comp_step?: number | null;
+  } | null;
   /** Where EAR sample times come from: the camera's capture time, or the frame callback's time. */
   timestamp_source: 'capture' | 'callback' | null;
   started_at: number;

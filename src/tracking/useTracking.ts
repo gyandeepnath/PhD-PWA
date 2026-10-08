@@ -21,6 +21,7 @@ import {
   type TrackerTrial, type TrackerSelectionSource,
 } from './trackerChoice';
 import { APP_VERSION } from '@/lib/env';
+import { openCamera, describeCapabilities } from './cameraRequest';
 
 /**
  * How often the operator's live readout updates, in hertz.
@@ -760,8 +761,11 @@ export function useTracking(): TrackingApi {
     releasePipeline();
     let stream: MediaStream | null = null;
     try {
-      const requested = { width: CONFIG.CAMERA_WIDTH, height: CONFIG.CAMERA_HEIGHT, frameRate: CONFIG.CAMERA_FPS };
-      stream = await navigator.mediaDevices.getUserMedia({ video: { ...requested } });
+      // A 30-fps-capable format, at 1280x720 if one can; without the 30 floor only if the camera
+      // refuses it (tracking/cameraRequest.ts). What was asked, and any fallback, is recorded below.
+      const opened = await openCamera((c) => navigator.mediaDevices.getUserMedia(c));
+      stream = opened.stream;
+      const requested = opened.requested;
       const video = document.createElement('video');
       video.srcObject = stream;
       video.muted = true;
@@ -785,13 +789,6 @@ export function useTracking(): TrackingApi {
        * dim room was indistinguishable from a tracker that could not keep up.
        */
       const videoTrack = stream.getVideoTracks()[0];
-      const st = (videoTrack?.getSettings?.() ?? {}) as MediaTrackSettings;
-      let caps: MediaTrackCapabilities | null = null;
-      try { caps = videoTrack?.getCapabilities?.() ?? null; } catch { caps = null; }
-      const numMax = (r: unknown) => {
-        const m = (r as { max?: number } | undefined)?.max;
-        return typeof m === 'number' && Number.isFinite(m) ? m : null;
-      };
 
       /**
        * A track that ENDS mid-condition must be detected.
@@ -838,6 +835,15 @@ export function useTracking(): TrackingApi {
       const choice = resolveTracker(CONFIG.TRACKER_BACKEND, loadTrackerChoice());
       const stored = choice.source === 'stored' ? loadTrackerChoice() : null;
       const { tracker, failures } = await startTracker(choice.backend, video.readyState >= 2 ? video : null);
+      /*
+       * Settings and capabilities are read AFTER the tracker has started, not straight after play():
+       * Chrome fills in the exposure controls from its image-capture state, which loads asynchronously
+       * once the track is running (tracking/cameraRequest.ts describeCapabilities). Size and rate are
+       * the same either way.
+       */
+      const st = (videoTrack?.getSettings?.() ?? {}) as MediaTrackSettings;
+      let caps: MediaTrackCapabilities | null = null;
+      try { caps = videoTrack?.getCapabilities?.() ?? null; } catch { caps = null; }
       pipelineRef.current = {
         tracker_backend: tracker.backend,
         tracker_requested: choice.backend,
@@ -845,15 +851,15 @@ export function useTracking(): TrackingApi {
         tracker_failures: failures,
         tracker_trials: stored?.trials ?? null,
         tracker_measured_at: stored?.measuredAt ?? null,
-        camera_requested: requested,
+        camera_requested: { ...requested },
+        camera_request_fallback: opened.fallback,
         camera_settings: {
           width: typeof st.width === 'number' ? st.width : null,
           height: typeof st.height === 'number' ? st.height : null,
           frameRate: typeof st.frameRate === 'number' ? Math.round(st.frameRate * 10) / 10 : null,
+          facingMode: typeof st.facingMode === 'string' && st.facingMode ? st.facingMode : null,
         },
-        camera_capabilities: caps ? {
-          width_max: numMax(caps.width), height_max: numMax(caps.height), frame_rate_max: numMax(caps.frameRate),
-        } : null,
+        camera_capabilities: describeCapabilities(caps),
         timestamp_source: null,
         started_at: Date.now(),
       };

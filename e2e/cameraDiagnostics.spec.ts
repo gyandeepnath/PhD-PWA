@@ -48,7 +48,11 @@ test('camera setup measures the trackers and shows what the camera and the track
   await expect(page.getByTestId('diag-camera')).toHaveText(/Camera delivers\s*\d+ fps · \d+×\d+/);
   await expect(page.getByTestId('diag-tracker')).toHaveText(/Tracker processes\s*\d+ fps · \d+ ms/);
   await expect(page.getByTestId('diag-backend')).toHaveText(/Face Landmarker \((GPU|CPU)\)|FaceMesh \(legacy\)/);
-  await expect(page.getByTestId('camera-mode')).toHaveText(/Asked for 1280×720 at 60 fps; the camera gave \d+×\d+/);
+  /*
+   * Asked for a 30-fps mode (Round 79). Chromium's fake camera runs at 20 at most, so it refuses the
+   * floor and the request is repeated without it — the screen says so, and what the camera is SET to.
+   */
+  await expect(page.getByTestId('camera-mode')).toHaveText(/Asked for 1280×720 at 30 fps — the camera has no mode that fast, so any rate was accepted; the camera is set to \d+×\d+/);
   // The comparison: one row per backend, each measured or saying why it could not start.
   for (const b of ['tasks-gpu', 'tasks-cpu', 'legacy']) {
     await expect(page.getByTestId(`trial-${b}`)).toHaveText(/\d|could not start/);
@@ -79,7 +83,8 @@ test('camera setup measures the trackers and shows what the camera and the track
   expect(p.tracker_selection).toBe('default');
   expect(p.tracker_trials).toBeNull();
   expect((p.camera_settings as { width: number }).width).toBeGreaterThan(0);
-  expect(p.camera_requested).toEqual({ width: 1280, height: 720, frameRate: 60 });
+  expect(p.camera_requested).toEqual({ width: 1280, height: 720, frameRate: 30, frameRateMin: null, facingMode: 'user' });
+  expect(p.camera_request_fallback).toMatch(/OverconstrainedError/);
 });
 
 test('the self-test result shows the pipeline and names the stage that was short', async ({ page }) => {

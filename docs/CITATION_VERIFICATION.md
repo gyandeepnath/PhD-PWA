@@ -1313,6 +1313,58 @@ validated real-time measure" and "best PVT-lapse predictor", neither of which wa
 **Before the thesis cites it:** open the brief (ROSA P or the FDLP permanent copy) and confirm the date,
 number, the closure criterion and the claim.
 
+### 60. Chromium source code — how Chrome opens a camera on Android (cited in code, Round 79)
+**Status: NOT INDEXED IN PUBMED (software source code). Read at source: the GitHub mirror
+`chromium/chromium`, branch `main`, fetched 8 Oct 2026.** No version of Chrome on the study tablet was
+checked; the tablet's Chrome may differ in detail from `main`.
+
+Files read, and what each is cited for (quoted or paraphrased from the code as read):
+
+- `media/capture/video/android/java/src/org/chromium/media/VideoCapture.java`,
+  `getClosestFramerateRange`: *"Tries to find a range with as low of a minimum value as possible to
+  allow the camera adjust based on the lighting conditions."* Its penalty arithmetic charges a range's
+  minimum 1 per unit up to 8 fps and 4 per unit above, so a variable range (e.g. 15–30) always beats the
+  fixed range with the same maximum (30–30).
+- `media/capture/video/android/java/src/org/chromium/media/VideoCaptureCamera2.java`: `allocate()` calls
+  `getClosestFramerateRange(framerateRanges, frameRate * 1000)` with the chosen format's rate; with the
+  exposure mode FIXED (the web's `'manual'`) the capture request sets `CONTROL_AE_MODE_OFF` and
+  `SENSOR_EXPOSURE_TIME` to the last measured exposure unless an `exposureTime` is given (*"in 100
+  microsecond units"*); `SENSOR_SENSITIVITY` is set only when an `iso` is given; FIXED is offered only when
+  `CONTROL_AE_LOCK_AVAILABLE` is true.
+- `media/capture/video/android/video_capture_device_android.cc`: maps the web's `MANUAL` metering mode to
+  Android `FIXED`.
+- `third_party/blink/renderer/modules/mediastream/media_stream_constraints_util_video_device.cc`: a
+  `frameRate` constraint filters formats (`SatisfiesFrameRateConstraint` rejects a format whose native
+  rate is below `min`), and the camera is opened at the chosen format
+  (`capture_params.requested_format = candidate_format.format()`).
+- `third_party/blink/renderer/modules/mediastream/media_stream_video_track.cc`: *"the frame rate
+  returned by MediaStreamTrack.getSettings() must be the configured frame rate"* — not the delivered one.
+
+**What this licenses:** that a page cannot hold an Android camera's frame rate with `frameRate`
+constraints, that Chrome lets auto-exposure lower the rate, that exposure can be fixed through
+`exposureMode`/`exposureTime`/`iso`, and that `getSettings().frameRate` is a setting. **It does not
+license** any claim about what the study tablet's camera does: nothing was measured on it.
+
+### 61. Android camera2 API reference — auto-exposure frame-rate ranges and anti-banding (cited in code, Round 79)
+**Status: NOT INDEXED IN PUBMED (developer documentation). Read at source:
+`developer.android.com/reference/android/hardware/camera2/CaptureRequest` and `…/CameraCharacteristics`,
+fetched 8 Oct 2026.**
+
+- `CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE`: *"Range over which the auto-exposure routine can adjust
+  the capture frame rate to maintain good exposure."*
+- `CaptureRequest.CONTROL_AE_ANTIBANDING_MODE`: *"the auto-exposure routines of camera devices include
+  antibanding routines that ensure that the chosen exposure value will not cause such banding"*; and
+  *"If manual exposure control is enabled … this setting has no effect, and the application must ensure
+  it selects exposure times that do not cause banding issues."*
+- `CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES`: the list *"will always include (min,
+  max) and (max, max) where min <= 15"* (for colour sensors).
+- `CameraCharacteristics.CONTROL_AE_LOCK_AVAILABLE`: *"Devices with MANUAL_SENSOR capability or
+  BURST_CAPTURE capability will always list true."*
+
+**Not verified, and not to be cited as fact:** the mains frequency of the study site (taken as 50 Hz in
+the reasoning that a flicker-safe exposure is a whole multiple of 10 ms) — general knowledge, no standard
+was read; and every specification of the Xiaomi Pad 6's camera.
+
 ---
 
 ## UNRESOLVED — do not cite until checked
