@@ -314,9 +314,31 @@ describe('camera pipeline columns', () => {
       camera_setting_width: '1280', camera_setting_height: '720', camera_setting_fps: '30',
       frame_count_source: 'presented-frames', timestamp_source: 'capture',
     });
-    for (const c of ['tracker_backend', 'camera_fps_delivered', 'frames_skipped', 'process_ms_p50', 'timestamp_source']) {
+    for (const c of ['tracker_backend', 'camera_fps_delivered', 'frames_skipped', 'process_ms_p50', 'timestamp_source', 'camera_exposure_policy', 'camera_iso']) {
       expect(off[c], c).toBe('');
     }
+  });
+
+  it('records the camera exposure: how it was set in 01, and the one in force on each 07 row (Round 79)', () => {
+    const b = bundle();
+    Object.assign(b.eyeMetrics[0], { camera_exposure_policy: 'locked-v1', camera_exposure_time_100us: 300, camera_iso: 800, camera_exposure_comp: null });
+    b.session.camera_pipeline = {
+      tracker_backend: 'tasks-cpu', tracker_requested: 'tasks-cpu', tracker_selection: 'config', tracker_failures: [], tracker_trials: null,
+      tracker_measured_at: null, camera_requested: { width: 1280, height: 720, frameRate: 30, frameRateMin: 30, facingMode: 'user' },
+      camera_settings: { width: 1280, height: 720, frameRate: 30, facingMode: 'user' }, camera_capabilities: null,
+      timestamp_source: 'capture', started_at: 1,
+      camera_exposure: {
+        rule: 'exp-r1', policy: 'locked-v1', reason: null, exposure_time_100us: 300, iso: 800, exposure_comp: null,
+        auto_fps: 24.96, auto_luma: 118.04, lock_fps: 29.9, lock_luma: 112.5, iso_steps: 3, at: 1,
+      },
+    };
+    expect(rows(b, '01_session_info.csv')[0]).toMatchObject({
+      camera_exposure_policy: 'locked-v1', camera_exposure_reason: '', camera_exposure_time_100us: '300', camera_iso: '800',
+      camera_exposure_comp: '', camera_auto_fps: '25', camera_auto_luma: '118', camera_lock_fps_check: '29.9', camera_lock_luma: '112.5',
+    });
+    expect(rows(b, '07_eye_metrics.csv')[0]).toMatchObject({ camera_exposure_policy: 'locked-v1', camera_exposure_time_100us: '300', camera_iso: '800', camera_exposure_comp: '' });
+    // A sitting where the step did not run: blank, not a made-up 'auto'.
+    expect(rows(bundle(), '01_session_info.csv')[0]).toMatchObject({ camera_exposure_policy: '', camera_auto_fps: '', camera_lock_fps_check: '' });
   });
 
   it('01 carries the sitting\'s tracker and camera, and the self-test\'s own counts and limiting stage', () => {

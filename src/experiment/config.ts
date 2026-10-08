@@ -318,6 +318,14 @@ const BASE_CONFIG = {
   CAMERA_FPS: 30,
   CAMERA_FPS_MIN: 30,
   /**
+   * Whether camera setup fixes the camera's exposure on the grey field before calibration
+   * (tracking/cameraExposure.ts): 'lock' tries it and keeps it only if the camera stays at least as
+   * fast and the picture bright enough; 'auto' leaves auto-exposure on, recorded as such. 'lock' until
+   * the bench check on the study tablet (docs/OPERATOR_MANUAL.md) shows the tablet ignores it or is
+   * better without it — then freeze 'auto' here, before the pilot, like the tracker.
+   */
+  CAMERA_EXPOSURE_POLICY: 'lock' as 'lock' | 'auto',
+  /**
    * Process every camera frame: blinks last 100-400 ms, so ~30 fps is the literature minimum for
    * valid blink detection (sub-Nyquist below ~25 fps). Raise to 2 only if a slow tablet can't keep
    * up — effective_fps records the true achieved rate and gates the duration-based tiers.

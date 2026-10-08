@@ -36,7 +36,7 @@ async function render(result: CameraStatus): Promise<HTMLElement> {
     const camera: CameraSetupTracking = {
       status, start, stop: () => {}, startError,
       subscribeLive: () => () => {}, stream: () => null, pipelineInfo: () => null,
-      compareTrackers: async () => null,
+      compareTrackers: async () => null, setExposure: async () => null,
     };
     return createElement(CameraSetup, { camera, onContinue: () => {}, onSkip: () => {} });
   }

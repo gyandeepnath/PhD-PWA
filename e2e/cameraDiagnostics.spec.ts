@@ -74,10 +74,24 @@ test('camera setup measures the trackers and shows what the camera and the track
   expect(sameStream).toBe(true);
 
   await page.getByRole('button', { name: /My face is centred/ }).click();
-  await page.waitForFunction(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') === 'CALIBRATION');
+  // The exposure is set on the grey field first (Round 79), then calibration starts.
+  await expect(page.getByTestId('camera-exposure-step')).toBeVisible();
+  await page.waitForFunction(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') === 'CALIBRATION', null, { timeout: 30_000 });
   // Kept with the sitting: which tracker, how chosen, what the camera was asked for and gave.
   const s = await sessionRecord(page);
   const p = s.camera_pipeline as Record<string, unknown>;
+  /*
+   * What the exposure step did. Chromium's fake camera offers a manual exposure mode, so the step runs
+   * for real; whether it is kept depends on two short measurements of a 20-fps fake, so either verdict
+   * is accepted — but it must be recorded, with the frame rate measured under auto, and a reason when
+   * the camera was left on auto.
+   */
+  const ex = p.camera_exposure as Record<string, unknown>;
+  expect(ex.rule).toBe('exp-r1');
+  expect(['locked-v1', 'compensated-v1', 'auto']).toContain(ex.policy);
+  expect(Number(ex.auto_fps)).toBeGreaterThan(0);
+  if (ex.policy === 'auto') expect(String(ex.reason)).not.toBe('');
+  expect((p.camera_capabilities as Record<string, unknown>).exposure_modes).toContain('manual');
   expect(['tasks-gpu', 'tasks-cpu', 'legacy']).toContain(p.tracker_backend);
   // No face, so no comparison was adopted: the sitting records none rather than one of nothing.
   expect(p.tracker_selection).toBe('default');

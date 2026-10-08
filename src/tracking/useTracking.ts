@@ -11,7 +11,7 @@
  * truthfully (true only when the gaze fit is separable/valid).
  */
 import { useCallback, useRef, useState } from 'react';
-import { CONFIG } from '@/experiment/config';
+import { CONFIG, isE2ETimingActive } from '@/experiment/config';
 import { eyeEars, meanEar, fitEarBaseline, EAR_TIERS, LEFT_EYE_EAR, RIGHT_EYE_EAR, type Point } from './blink';
 import { startFramePump, frameTimestamp, type FrameMeta, type FramePump, type PumpVideo } from './framePump';
 import { PipelineMeter, type MeterWindow, type PipelineSummary } from './pipelineStats';
@@ -22,6 +22,7 @@ import {
 } from './trackerChoice';
 import { APP_VERSION } from '@/lib/env';
 import { openCamera, describeCapabilities } from './cameraRequest';
+import { setExposure, EXPOSURE_RULE, EXPOSURE_TIMING, type ExposureOutcome } from './cameraExposure';
 
 /**
  * How often the operator's live readout updates, in hertz.
@@ -216,6 +217,12 @@ interface TrackingApi {
    */
   compareTrackers: (onProgress?: (p: { backend: TrackerBackend; index: number; total: number }) => void) => Promise<TrackerTrial[] | null>;
   /**
+   * Fix the camera's exposure while the grey field is on screen (tracking/cameraExposure.ts), or record
+   * that it is left on auto. Resolves to what was done, which is also kept in the pipeline record and on
+   * every later condition row; null when the camera is not running.
+   */
+  setCameraExposure: () => Promise<ExposureOutcome | null>;
+  /**
    * Open the dedicated open-eye baseline window for ~`ms` while the participant fixates the centre,
    * and fit the baseline from those frames alone. Resolves to the fit and the evidence behind it.
    */
@@ -283,10 +290,16 @@ export interface SelfTestObservation {
 /** A meter summary as the record fields stored per condition and with the self-test. */
 export function pipelineFields(
   sum: PipelineSummary,
-  info: Pick<CameraPipelineRecord, 'tracker_backend' | 'camera_settings' | 'timestamp_source'> | null,
+  info: Pick<CameraPipelineRecord, 'tracker_backend' | 'camera_settings' | 'timestamp_source' | 'camera_exposure'> | null,
 ): PipelineWindowFields {
   const r1 = (x: number | null) => (x == null ? null : Math.round(x * 10) / 10);
+  // The exposure in force over the stretch (Round 79); absent when camera setup's exposure step did not run.
+  const ex = info?.camera_exposure ?? null;
   return {
+    camera_exposure_policy: ex?.policy ?? null,
+    camera_exposure_time_100us: ex?.exposure_time_100us ?? null,
+    camera_iso: ex?.iso ?? null,
+    camera_exposure_comp: ex?.exposure_comp ?? null,
     tracker_backend: info?.tracker_backend ?? null,
     camera_fps_delivered: r1(sum.cameraFps),
     tracker_fps: r1(sum.trackerFps),
@@ -1033,6 +1046,59 @@ export function useTracking(): TrackingApi {
   }, [installTracker]);
 
   /**
+   * The exposure step of camera setup (tracking/cameraExposure.ts). Frame rate and brightness are
+   * measured here: the camera's delivered rate from the pipeline meter, and the picture's mean brightness
+   * read straight from the video four times a second, whether or not the tracker is keeping up.
+   */
+  const exposingRef = useRef<Promise<ExposureOutcome | null> | null>(null);
+  const setCameraExposure = useCallback((): Promise<ExposureOutcome | null> => {
+    if (exposingRef.current) return exposingRef.current;
+    const run = async (): Promise<ExposureOutcome | null> => {
+      const info = pipelineRef.current;
+      const track = ((videoRef.current?.srcObject as MediaStream | null)?.getVideoTracks?.() ?? [])[0];
+      if (!info || !track) return null;
+      const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+      let outcome: ExposureOutcome;
+      if (CONFIG.CAMERA_EXPOSURE_POLICY === 'auto') {
+        outcome = {
+          rule: EXPOSURE_RULE, policy: 'auto', reason: 'left on auto-exposure for the study (CONFIG.CAMERA_EXPOSURE_POLICY)',
+          exposure_time_100us: null, iso: null, exposure_comp: null, auto_fps: null, auto_luma: null,
+          lock_fps: null, lock_luma: null, iso_steps: 0, at: Date.now(),
+        };
+      } else {
+        const fast = isE2ETimingActive();
+        outcome = await setExposure({
+          capabilities: () => track.getCapabilities?.() ?? null,
+          settings: () => (track.getSettings?.() ?? {}) as Record<string, unknown>,
+          apply: (set) => track.applyConstraints({ advanced: [set as MediaTrackConstraintSet] }),
+          measure: async (ms) => {
+            const win = meterRef.current.open();
+            const lumas: number[] = [];
+            const t0 = now();
+            while (now() - t0 < ms) {
+              const l = sampleLuma();
+              if (l) lumas.push(l.mean);
+              await sleep(Math.min(250, Math.max(10, ms - (now() - t0))));
+            }
+            const sum = win.close();
+            return { cameraFps: sum.cameraFps, luma: lumas.length ? lumas.reduce((a, b) => a + b, 0) / lumas.length : null };
+          },
+          wait: sleep,
+          // Collapsed under the test harness, like every other protocol duration.
+          timing: fast ? { SETTLE_MS: 200, AUTO_MS: 700, STEP_SETTLE_MS: 50, LUMA_MS: 300, VERIFY_MS: 700 } : EXPOSURE_TIMING,
+        });
+      }
+      if (pipelineRef.current !== info) return null; // the camera restarted meanwhile
+      info.camera_exposure = outcome;
+      // The exposure controls are known by now (Blink loads them after the track starts): record them.
+      try { info.camera_capabilities = describeCapabilities(track.getCapabilities?.() ?? null) ?? info.camera_capabilities; } catch { /* keep the earlier record */ }
+      return outcome;
+    };
+    exposingRef.current = run().finally(() => { exposingRef.current = null; });
+    return exposingRef.current;
+  }, []);
+
+  /**
    * The open-eye baseline, measured in the posture the outcome is measured in.
    *
    * This used to be dead code — nothing called it — while the baseline was taken from the frames of
@@ -1280,7 +1346,7 @@ export function useTracking(): TrackingApi {
   return {
     status,
     subscribeLive, start, stop, measureEarBaseline, mediaSource,
-    startError, pipelineInfo, compareTrackers,
+    startError, pipelineInfo, compareTrackers, setCameraExposure,
     beginGazeCalibration, sampleGazeTarget, endGazeCalibration,
     beginCondition, endCondition, markReadingPage,
     beginSelfTest, endSelfTest, saveSelfTestLog,

@@ -877,6 +877,40 @@ export interface CameraPipelineRecord {
   /** Where EAR sample times come from: the camera's capture time, or the frame callback's time. */
   timestamp_source: 'capture' | 'callback' | null;
   started_at: number;
+  /**
+   * How the camera's exposure was set at camera setup (tracking/cameraExposure.ts, Round 79): fixed on
+   * the grey field ('locked-v1'), auto-exposure aimed darker ('compensated-v1'), or left on auto
+   * ('auto', with why), and the frame rate and brightness before and after. Absent before Round 79 and
+   * when the step did not run (the camera started and setup was left another way).
+   */
+  camera_exposure?: ExposureOutcome | null;
+}
+
+/** The exposure step's result; see tracking/cameraExposure.ts. */
+export interface ExposureOutcome {
+  rule: 'exp-r1';
+  policy: 'auto' | 'locked-v1' | 'compensated-v1';
+  /** Why the camera was left on auto, or why compensation was used instead of a lock; null for a clean lock. */
+  reason: string | null;
+  /** The exposure time the camera reported once set, in 100 µs units; null when it did not report one. */
+  exposure_time_100us: number | null;
+  /** The ISO the page set; null when none was set (the camera's own choice applies). */
+  iso: number | null;
+  /** The exposure compensation in force, EV; null when none was set. */
+  exposure_comp: number | null;
+  /** Delivered frames a second and mean picture brightness (0-255) under auto, on the grey field. */
+  auto_fps: number | null;
+  auto_luma: number | null;
+  /**
+   * The same in the final 3-s check of the fixed (or compensated) exposure — whether or not it was then
+   * kept, so a reverted lock shows what it did (camera_lock_fps_check). Null when nothing was tried.
+   */
+  lock_fps: number | null;
+  lock_luma: number | null;
+  /** ISO raises tried. */
+  iso_steps: number;
+  /** When it was set (Date.now()). */
+  at: number;
 }
 
 /**
@@ -902,6 +936,14 @@ export interface PipelineWindowFields {
   /** How frames_delivered was counted: the browser's frame counter, or one per callback (a lower bound). */
   frame_count_source?: 'presented-frames' | 'callbacks' | null;
   timestamp_source?: 'capture' | 'callback' | null;
+  /**
+   * The camera exposure in force over this stretch (Round 79): the policy, and the exposure time
+   * (100 µs units), ISO and compensation the page set. See CameraPipelineRecord.camera_exposure.
+   */
+  camera_exposure_policy?: 'auto' | 'locked-v1' | 'compensated-v1' | null;
+  camera_exposure_time_100us?: number | null;
+  camera_iso?: number | null;
+  camera_exposure_comp?: number | null;
 }
 
 export interface EyeMetricsRecord extends PipelineWindowFields {

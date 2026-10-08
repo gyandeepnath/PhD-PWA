@@ -34,7 +34,7 @@ import { ScreenCalibration, type ScreenCalibrationResult } from './ScreenCalibra
 import { BuildInfo, useUpdateWaiting } from '@/components/BuildInfo';
 import { useDialog } from '@/components/ConfirmDialog';
 import { PARTICIPANT_ID_PATTERN } from '@/lib/participantId';
-import type { CameraStatus, CameraPipelineRecord } from '@/storage/types';
+import type { CameraStatus, CameraPipelineRecord, ExposureOutcome } from '@/storage/types';
 
 /**
  * The setup screens must SCROLL when they are taller than the viewport.
@@ -511,6 +511,30 @@ export interface CameraSetupTracking {
   stream: () => MediaStream | null;
   pipelineInfo: () => CameraPipelineRecord | null;
   compareTrackers: (onProgress?: (p: { backend: TrackerBackend; index: number; total: number }) => void) => Promise<TrackerTrial[] | null>;
+  /** Fix the camera's exposure on the grey field (tracking/cameraExposure.ts). */
+  setExposure: () => Promise<ExposureOutcome | null>;
+}
+
+/**
+ * The grey field shown while the camera's exposure is set (Round 79). The participant looks at the dot;
+ * the screen is the same #808080 as the grey field before every condition, so the exposure is fixed
+ * under the light every condition's reading starts from. Participant-facing: short, plain words.
+ */
+function ExposureField() {
+  return (
+    <div data-testid="camera-exposure-step" style={{
+      position: 'fixed', inset: 0, left: 'var(--vl-panel-dock, 0px)', zIndex: 40,
+      background: CONFIG.ADAPTATION_COLOR, color: CONFIG.ADAPTATION_INK,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32,
+    }}>
+      <div style={{ width: 14, height: 14, borderRadius: '50%', background: CONFIG.ADAPTATION_INK }} />
+      <p className="font-sans" style={{ fontSize: 20, marginTop: 28, maxWidth: 560, lineHeight: 1.5 }}>
+        Please look at the dot and keep still.
+        <br />
+        The camera is adjusting to the light. This takes about 10 seconds.
+      </p>
+    </div>
+  );
 }
 
 type FaceStatus = 'loading' | 'searching' | 'detected';
@@ -557,7 +581,7 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
    */
   onBack?: () => void;
 }) {
-  const [step, setStep] = useState<'notice' | 'starting' | 'preview' | 'denied'>(
+  const [step, setStep] = useState<'notice' | 'starting' | 'preview' | 'exposure' | 'denied'>(
     camera.status === 'active' ? 'preview' : 'notice');
   const [errMsg, setErrMsg] = useState('');
   /*
@@ -773,7 +797,16 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
             </div>
 
             <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <button className={btn} style={{ background: '#1a1a2e' }} disabled={comparing != null} onClick={() => onContinue()}>
+              {/*
+                Continue first fixes the camera's exposure on the grey field (about 10 s, the participant
+                looking at a dot), then goes on to calibration. What was done is kept with the sitting and
+                shown on the camera check's result.
+              */}
+              <button className={btn} style={{ background: '#1a1a2e' }} disabled={comparing != null}
+                onClick={async () => {
+                  setStep('exposure');
+                  try { await camera.setExposure(); } finally { onContinue(); }
+                }}>
                 My face is centred — continue →
               </button>
               <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" disabled={comparing != null}
@@ -783,6 +816,8 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
             </div>
           </>
         )}
+
+        {step === 'exposure' && <ExposureField />}
 
         {step === 'denied' && (
           <>
