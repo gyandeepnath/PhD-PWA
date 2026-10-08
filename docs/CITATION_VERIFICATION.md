@@ -1147,6 +1147,28 @@ does not describe; the templates state it as the method. The Round 62 audit also
 *Psychological Methods*) for that coding; PubMed returns no record for it, Crossref is blocked, and it
 is not cited.
 
+### 62. Nakamura et al. (2008) — blink phase durations at 1 kHz (cited in code, Round 79)
+**Status: CONFIRMED.** PMID 19157026 · no DOI in PubMed
+
+> Nakamura, Y., Matsuda, J., Suzuki, K., Toyoda, H., Hakamata, N., Shimamoto, T., & Kinoshita, S.
+> (2008). [Measurement of spontaneous blinks with a high-speed blink analyzing system]. *Nippon Ganka
+> Gakkai Zasshi, 112*(12), 1059–1067.
+
+Metadata matches PubMed (verified 8 Oct 2026). The article is in Japanese; only PubMed's **English
+abstract** was read, no full text. Verbatim: *"Eyelid movements in the primary eye position were
+recorded with an IVS camera"* at *"a 1 KHz sampling rate"*, in *"Eleven healthy male volunteers"*;
+*"Thirty-nine instances of complete lid-closure type and seventy of incomplete lid-closure type of
+spontaneous blinks were observed. The average duration of the down-phase, the up-phase, and the total
+blink were the same for both types; about 100 msec., 220 msec., and 320 msec. respectively."*
+
+Cited (Round 79: `src/tracking/blinkFit.ts`, `src/sim/fpsGate.ts`, `docs/FPS_GATE_SIMULATION.md`) for the
+MEAN down- and up-phase durations of a spontaneous blink (about 100 and 220 ms), used as the centre of
+the simulated blink durations and of the fitted-minimum template. **Not cited for:** the spread of those
+durations (the abstract gives none; the simulation's SDs are labelled assumptions), the shape of the
+lid's movement within a phase (the simulation runs a smooth and a V-shaped profile because the shape is
+not given), or anything about webcam EAR. Eleven men, primary gaze, 30-s recordings: a small sample, and
+not a reading task.
+
 ## NOT INDEXED IN PUBMED — verified against a secondary authority, or unverified
 
 PubMed indexes biomedical and life-sciences literature only. The references below fall outside

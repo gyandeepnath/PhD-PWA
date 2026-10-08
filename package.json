@@ -35,6 +35,7 @@
     "synopsis:docx": "node synopsis/build_docx.cjs synopsis/SYNOPSIS_AdtU.md synopsis/Synopsis_Gyandeep_Nath_AdtU.docx",
     "verify:bundle": "node scripts/verifyBundle.mjs",
     "frame-intervals": "tsx scripts/frameIntervals.ts",
+    "sim:fps": "tsx scripts/fpsGateSim.ts",
     "postbuild": "node scripts/verifyBundle.mjs"
   },
   "dependencies": {
