@@ -31,6 +31,41 @@ async function ocularRecords(page: Page): Promise<Record<string, unknown>[]> {
   });
 }
 
+/**
+ * Read the passage on screen through to its last page, and wait until the stage moves on.
+ *
+ * Driven by the stage and the page counter, not by whether a reading control is on screen. Neither
+ * of the two simpler signals says whether a page is left:
+ *  - each page's Next button is absent while its dwell countdown runs, so "no reading control on
+ *    screen" stopped the loop with pages still to read (the reading record was then never written);
+ *  - after the last tap the stage stays READING_TASK while the condition's records are written, with
+ *    the button still on screen but latched, so a driver that tapped it again could find it gone part
+ *    way through the tap once the stage moved on.
+ * The counter ("Page k of n") says which page is up; a tap that lands while the next page is still
+ * settling is ignored by the reading screen's latch, so each turn is retried until the counter (or,
+ * after the last page, the stage) has moved.
+ */
+async function readPassageThrough(page: Page) {
+  const stage = () => page.evaluate(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') ?? '');
+  await page.getByRole('button', { name: /Begin reading/ }).click({ force: true });
+  const counter = page.getByTestId('reading-page-counter');
+  const total = Number(/of (\d+)/.exec(await counter.innerText())?.[1]);
+  expect(total).toBeGreaterThan(0);
+  const turn = page.getByRole('button', { name: /Next page|finished reading/i });
+  for (let p = 1; p <= total; p++) {
+    const label = `Page ${p} of ${total}`;
+    await expect(counter).toHaveText(label);
+    const moved = async () => (await stage()) !== 'READING_TASK' || (await counter.innerText({ timeout: 1_000 }).catch(() => '')) !== label;
+    await expect(async () => {
+      if (await moved()) return;
+      await expect(turn).toBeEnabled({ timeout: 15_000 }); // the page's countdown
+      await turn.click({ force: true, timeout: 2_000 }).catch(() => undefined); // gone: the stage moved on
+      await expect.poll(moved, { timeout: p < total ? 2_000 : 30_000 }).toBe(true);
+    }).toPass({ timeout: 90_000 });
+  }
+  expect(await stage()).not.toBe('READING_TASK');
+}
+
 /** Read the session record from IndexedDB. */
 async function sessionRecord(page: Page): Promise<Record<string, unknown>> {
   return page.evaluate(async () => {
@@ -197,13 +232,7 @@ test('the researcher card shows the live picture on set-up screens and never on 
    * Read the page through: the reading window's blink record and trace are written with the
    * condition's eye-metrics row (Round 78), under the condition, with a trace row per processed frame.
    */
-  // Turn pages while a reading control is on screen; the stage attribute can trail the last tap while
-  // the condition's records are written, so the screen, not the attribute, says when reading is over.
-  const readingControl = page.getByRole('button', { name: /Begin reading|Next page|finished reading/i });
-  for (let i = 0; i < 20 && (await readingControl.count()) > 0; i++) {
-    await handleStage(page, 'READING_TASK');
-    await page.waitForTimeout(150);
-  }
+  await readPassageThrough(page);
   await expect.poll(async () => (await ocularRecords(page)).filter((r) => r.window === 'reading').length, { timeout: 30_000 }).toBe(1);
   const reading = (await ocularRecords(page)).find((r) => r.window === 'reading')!;
   expect(reading.record_id).toBe(reading.condition_id);
