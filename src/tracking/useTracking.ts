@@ -281,6 +281,18 @@ interface TrackingApi {
   cameraBlocked: boolean;
 }
 
+/**
+ * The shortest measuring window the collapsed test timing may use, ms.
+ *
+ * A rate needs at least two frame callbacks inside the window (pipelineStats spanRate), and no
+ * callback runs while the tracker holds the main thread. In headless Chromium, with no face in the
+ * fake camera, the tracker processed 1.7–6.4 frames a second (bench rows, Round 79), i.e. up to about
+ * 600 ms a call, so the 500-ms window first used here held one callback and recorded no camera rate
+ * on one bench row in 2 of 3 runs. 1.5 s holds at least two at that rate. On the tablet the windows
+ * are seconds long (EXPOSURE_TIMING, CONFIG.CAMERA_BENCH_MEASURE_MS) and this does not apply.
+ */
+const E2E_MEASURE_MS = 1500;
+
 /** What the bench check is showing now: the ground, under which exposure, and how far through it is. */
 export interface BenchPaint {
   ground: 'white' | 'grey' | 'black';
@@ -1115,7 +1127,7 @@ export function useTracking(): TrackingApi {
           },
           wait: sleep,
           // Collapsed under the test harness, like every other protocol duration.
-          timing: fast ? { SETTLE_MS: 200, AUTO_MS: 700, STEP_SETTLE_MS: 50, LUMA_MS: 300, VERIFY_MS: 700 } : EXPOSURE_TIMING,
+          timing: fast ? { SETTLE_MS: 200, AUTO_MS: E2E_MEASURE_MS, STEP_SETTLE_MS: 50, LUMA_MS: 300, VERIFY_MS: E2E_MEASURE_MS } : EXPOSURE_TIMING,
         });
       }
       if (pipelineRef.current !== info) return null; // the camera restarted meanwhile
@@ -1144,7 +1156,7 @@ export function useTracking(): TrackingApi {
     if (!info || !track) return null;
     const fast = isE2ETimingActive();
     const SETTLE = fast ? 100 : CONFIG.CAMERA_BENCH_SETTLE_MS;
-    const MEASURE = fast ? 500 : CONFIG.CAMERA_BENCH_MEASURE_MS;
+    const MEASURE = fast ? E2E_MEASURE_MS : CONFIG.CAMERA_BENCH_MEASURE_MS;
     const r1 = (x: number | null) => (x == null ? null : Math.round(x * 10) / 10);
     const rows: CameraBenchRecord['rows'] = [];
     const grounds: BenchPaint['ground'][] = ['white', 'grey', 'black'];
