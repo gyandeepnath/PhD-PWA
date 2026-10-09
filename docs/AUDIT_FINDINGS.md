@@ -5849,3 +5849,304 @@ Verified on 334b311:
 - e2e, 32 tests passed: fullRun, edge, setupNavigation, cameraLost, cameraBlocked, displayMode,
   physicalCalibration, preflightTickAll, cameraDiagnostics.
 - After `npm run build`, the production-bundle suite (e2e-prod, 7 tests) passed.
+
+## Round 79 — blinks at the frame rate the tablet really delivers
+
+The investigator, after testing 2.3.1 (instruction 2): "When testing the build, the frame rate, even
+with good direct lighting, was maximum 23-25 fps, so a few things were very unreliable. Plan a solid,
+reliable, accurate and scientific solution for this. [...] the calibration during the flashing-dot
+blink check could not be done properly even with proper lighting." This round covers the frame rate,
+the flashing-dot check and the external-camera question. The gaze calibration is separate work and
+was not touched.
+
+**Nothing was measured on the Xiaomi Pad 6.** The only device figure is the investigator's report (at
+most 23–25 frames a second). Every other number below is from a simulation of the app's own code,
+labelled as a model, or from a verified source.
+
+### In plain words
+
+1. **About 24 frames a second is enough to count blinks and sort them into complete and incomplete.**
+   In the simulation, at 20 or more the app found at least 98% of blinks and sorted them about as well
+   as at 30.
+2. **The real danger is a frame rate that differs between white-page and black-page conditions.** A
+   slower camera makes the incomplete-blink ratio read higher. Under automatic exposure a white page
+   can let the camera run faster than a black one. So the camera's exposure is now fixed once per
+   sitting, on the grey field, where the camera allows it.
+3. **One frame-rate gate everywhere (`fps-g2`):** 20 or more face frames a second is adequate; 15 to
+   20 is reduced (kept, flagged); under 15 is too slow (exploratory only); and a condition more than 2
+   away from the same person's usual rate is flagged. It replaces the old 30, which the tablet almost
+   never reached and which was never verified.
+4. **The flashing-dot check failed by design.** It demanded 25 frames a second over the whole check,
+   so on a 23–25 fps camera it failed whatever the participant did. It now uses the same gate, runs on
+   the grey field, and shows each flash, each criterion and a trace of the eye, so you can see what
+   went wrong before trying again.
+5. **The "fitted minimum" is a check, not the main result.** The main incomplete-blink count is
+   unchanged.
+6. **What is needed from the tablet:** run the bench check on camera setup once (about 2 minutes),
+   photograph its table, and send it with the camera check's result to the investigator
+   (OPERATOR_MANUAL §4).
+
+### 1. The camera request (3bc2466)
+
+Chrome treats `frameRate` as a filter on the camera's modes and lets Android's auto-exposure pick the
+frame-rate range with the lowest minimum (ledger #60, Chromium source; #61, Android reference). So the
+old request (ideal 60) changed nothing on a 30-fps camera. The app now asks for a 30-fps mode with a
+floor of 30, facing the participant. If the camera has no such mode, it asks again without the floor
+and records why.
+
+- Recorded in 01: `camera_fps_min_requested`, `camera_request_fallback`, `camera_facing`,
+  `camera_exposure_caps`.
+- The browser reports the rate the camera is configured for, not the rate it delivers (ledger #60).
+  Camera setup now words it so ("the camera is set to … at 30 fps"); what arrives is the "Camera
+  delivers" line above it, recorded as `camera_fps_delivered`.
+
+### 2. The exposure, fixed on the grey field (56dc131, rule `exp-r1`)
+
+*My face is centred — continue* first shows the grey field (#808080) for about 10 s. Then the app:
+
+1. measures the camera's frame rate and the picture's brightness under automatic exposure;
+2. holds the exposure automatic exposure had chosen, shortened to 30 ms if longer (`exposureTime` 300,
+   in the browser's units of 100 µs);
+3. raises the ISO step by step if the picture fell below 90% of its automatic brightness (where the
+   camera offers ISO);
+4. keeps the fixed exposure only if, over 3 s, the camera still reports it, delivers at least the
+   automatic rate (within 1 fps) and the picture is at least 70% as bright.
+
+Otherwise it tries exposure compensation (auto-exposure aimed darker, a weaker remedy), or stays
+automatic, and records why.
+
+- Recorded in 01: `camera_exposure_policy` (`locked-v1`, `compensated-v1` or `auto`),
+  `camera_exposure_reason`, the exposure time, ISO and compensation applied, and the frame rate and
+  brightness before and after. Every 07 row records the exposure in force.
+- `CONFIG.CAMERA_EXPOSURE_POLICY` can leave the exposure automatic for the whole study.
+
+**Not measured:** whether the tablet's rate is limited by exposure at all. 50 Hz mains (the reason a
+30-ms exposure is flicker-safe) is general knowledge, recorded as NOT VERIFIED in ledger #61.
+
+### 3. Telling the two possible causes apart (9e7b2f0)
+
+The same 24 fps can come from a camera slowed by its exposure (frames about 40 ms apart; the rate can
+follow the page) or a tracker skipping frames from a 30-fps camera (gaps of about 33 and 67 ms). The
+remedies differ, so there are now two checks:
+
+- **The bench check** on camera setup (researcher only, about 2 min): white, grey and black screens
+  under automatic, then fixed, exposure, with the camera measured on each (kept in 01 `camera_bench`).
+- **The frame-interval check**, `npm run frame-intervals -- <export folder>`, reads 07c and says per
+  condition which pattern the gaps show, and the white-minus-black difference.
+
+Code comments pointed at `docs/OPERATOR_MANUAL.md` for both, but the manual had neither. It now has
+both (§4), with the exposure step and the external-camera advice (20a3ff4).
+
+### 4. The simulation behind the gate (f79d9cf; `npm run sim:fps`)
+
+The shipped `classifyBlinks` and `fitEarBaseline` run on simulated blinks of known depth: 180-s reading
+windows, about 27 blinks each, 150 runs per cell, base seed 20261008.
+
+- **From a source:** mean phase durations of 100 and 220 ms (Nakamura et al. 2008, ledger #62,
+  English abstract only).
+- **Assumed, and listed in docs/FPS_GATE_SIMULATION.md:** the spreads, a smooth and a V-shaped lid,
+  70% complete / 30% incomplete, 1.5 ms timing jitter, each frame averaged over its exposure, 2–4%
+  landmark noise.
+- **The decision rules** (C1–C3) were written in the research report before the code existed.
+
+| Rule | 4 decision scenarios | All 18 (robustness) |
+|---|---|---|
+| C1 adequate floor (detection ≥ 0.98) | **20 fps** (lowest at 20: 0.984) | 22 fps (lowest at 20: 0.971) |
+| C1 reduced floor (detection ≥ 0.95) | **15 fps** (lowest simulated) | 15 fps |
+| C2 kappa at 20 vs 30 fps | at most 0.019 lower | at most 0.048 lower |
+| C3 worst slope of the ratio, 20–30 fps | 0.310 points per fps → **2-fps band** (0.62 points) | 0.310 |
+
+Other results (docs/FPS_GATE_SIMULATION.md, appendix):
+
+- **Polarity under automatic exposure** (assumed: white page 30 fps with 15 ms, black page 25 fps
+  with 40 ms): the black-page ratio reads 1.55–2.23 points higher by the lowest-frame rule. The planned
+  effect is 3 points. Under the fixed exposure this difference is zero by design.
+- **Two causes of the same 24 fps:** a tracker keeping 80% of a 30-fps camera's frames shifts the
+  ratio about as much as a camera running regularly at that mean rate (+1.7 against +1.0 points).
+- **Landmark noise:** about 0.7 points of ratio per 1% of noise, against a calibration at 3%.
+
+The one robustness scenario needing 22 fps (V-shaped lid, whole-frame exposure, 2% noise) misses only
+blinks within 0.05 of the 0.75 registration cut, a band missed in part even at 30 fps. That is
+recorded as a judgement in the simulation note. `FPS_GATE.ADEQUATE` can be set to 22 later, because
+tiers are recomputed from stored columns.
+
+**Published evidence** (ledger #63, #64):
+- Zheng et al. (2022, full text) recommend 30 fps or more, but compared only 30 with 8 frames a
+  second. At 8 the incomplete-blink proportion was 47.6% against 21.2% at 30: the same upward bias.
+- Navascues-Cornago et al. (2026, abstract only) found blink amplitude and duration agreed with a
+  500-fps reference down to 25 fps, the lowest rate they tested.
+- No verified study tested 15–25 fps for incomplete blinks, so 20 is a model result for this
+  classifier, stated as one.
+
+### 5. The fitted minimum, a recorded sensitivity (f79d9cf, fcc015c; rule `fit-r1`)
+
+Each blink's depth is also read off a blink-shaped curve fitted through the frames around its lowest
+one, with the exposure known when it was fixed.
+
+- **What it does:** with the true exposure it removed nearly all of the frame-rate shift of the
+  ratio's level (20 against 60 fps: from 3.6–6.0 points by the lowest frame to −0.4 to +1.2 fitted).
+- **What it does not do:** sort single blinks better (smooth lid, 20–30 fps: 4.7–5.6% misclassified
+  fitted, against 3.6–4.5% by the lowest frame).
+
+So:
+- the primary count stays the lowest-frame rule, `blink-r1`, unchanged;
+- the fitted depth is stored per blink in 07b (`min_ratio_fit`, `fit_rule_version`) and recounted in 07
+  (`blink_count_incomplete_fit`, `incomplete_blink_ratio_fit`, `blinks_not_fitted`, `fit_exposure_ms`,
+  `fit_exposure_known`);
+- both templates report it as a pre-registered sensitivity analysis (ANALYSIS_PLAN §5).
+
+An earlier version of the fit searched a grid that did not contain the mean blink and missed the depth
+of noise-free blinks of its own shape by up to 0.01. It now refines the grid point and recovers them
+to within 0.001.
+
+### 6. Gate `fps-g2` everywhere (15dc2d6, 16d17bb)
+
+- **What is measured:** `sampling_fps_observed` = (`ear_sample_count` − 1) / `observed_duration_ms` ×
+  1000: face-solved samples a second while the face was seen. `effective_fps` divided by the whole
+  span, so face loss lowered it and was then counted again in `face_presence_ratio`.
+- **Old rows are re-tiered** from those two stored columns. Each row records the gate the app applied
+  when it was recorded (`fps_gate_version`: `fps-g2`, or `g1-25/30` before). The g1 columns are still
+  written, unchanged.
+- **One module** (`src/tracking/frameRateGate.ts`) serves the export (07 `fps_tier`; `analysis_long`
+  also `fps_consistent`), the dashboard (flag, camera verdict, cohort counts, fps cells), the camera
+  setup readout and the researcher card. Both templates carry a line-for-line copy pinned by
+  `tests/frameRateGate.test.ts`, and the analysis gate checks it.
+- **ANALYSIS_PLAN §5 item 2** holds the pre-registrable wording: tiers A and B confirmatory, tier C
+  out (count printed by polarity); refits for tier A only, every tier, and consistent rows only; the
+  polarity differences in `sampling_fps_observed` and `mean_face_luma` checked before inference.
+
+### 7. The flashing-dot check: rule `st-r2` (4782512, 2efa718, 30141e2)
+
+**Why it failed.** Rule `st-r1` needed the face-solved rate over the whole check to be at least 25. On
+a 23–25 fps camera that fails whatever the participant does, and each moment without a face lowered
+the rate further. It also ran on a dark screen (#1a1a2e), the slowest case for automatic exposure.
+
+**The rule now.** Every criterion is a time or a share, never a number of frames:
+
+| Criterion | Needed |
+|---|---|
+| Flashes answered | 80% (4 of 5), the blink beginning within 1.2 s of its flash |
+| Face in view | 90% of the time |
+| Eye sampling rate (`sampling_fps_observed`, the same formula as a reading row) | tier B or better: 20 or more "working", 15–20 "reduced" (a pass) |
+
+The stage named for a low rate is the one short of the floor the attempt missed (15 on a fail, 20 on
+a reduced pass). The check runs on the grey field in its black ink, under the exposure fixed at camera
+setup; the flash is the dot turning from black to white.
+
+**Per-attempt feedback.** Each result shows:
+- the three criteria, with the value measured and the value needed;
+- each flash, with whether a blink was seen and when it began;
+- a trace of eye openness through the check, with the flashes, their 1.2-s windows and the counted
+  blinks marked;
+- the earlier attempts.
+
+A reduced pass names the limiting stage in one phrase and still offers another try. Reasons are
+separate items, and a tall result scrolls from its top.
+
+**In the data (01):** `selftest_rule` (`st-r1` for older sittings), `selftest_sampling_fps`,
+`selftest_fps_tier`, `selftest_verdict`, `selftest_attempts`, `selftest_ground`; the earlier attempts'
+summaries are kept in the session record. Nothing is inferred for older sittings: their new columns
+are blank. `selftest_fps` is still written, unchanged.
+
+**The simulation** (`npm run sim:selftest`; 1,000 attempts per cell; base seed 20261009). Each attempt
+goes through the shipped aggregator, classifier, baseline fit and scorer. Assumed: the blink begins
+250–900 ms after its flash, its depth is 0.05–0.40 of the open eye, and voluntary blinks have the
+spontaneous blinks' durations (no verified figure; the shorter blink is the harder case).
+
+| A participant who blinks at every flash | st-r1 passed | st-r2 passed |
+|---|---|---|
+| 24 fps, face in view (6 scenarios: 2 lid shapes × 2–4% noise) | 0.000 | 1.000 ("working") |
+| 25 fps, face in view | 0.480–0.516 (timing jitter either side of 25) | 1.000 |
+| 20 fps | 0.000 | 1.000 (0.980–0.988 "working", the rest "reduced", jitter) |
+| 15 fps | 0.000 | 0.997–0.999 ("reduced") |
+| 12 fps | 0.000 | 0.000 (every blink was seen; the rate fails) |
+| 30-fps camera, tracker keeps 80% (about 24) | 0.021–0.032 | 1.000 |
+| 24 fps, face lost for 1 s (rate while seen 24.1, over the whole check 22.7) | 0.000 | 1.000 |
+| 25 fps, face lost for 1 s | 0.001 | 1.000 |
+
+With no blinks at all (4% noise, V-shaped lid) no attempt passed at any rate under either rule.
+Every deliberate blink was found at every rate down to 12 fps with the face in view (5.00 of 5).
+
+**Pinned by tests:**
+- `tests/selfTest.test.ts` (26): the rule, the floors, the stage naming, and the rate through the
+  aggregator equal, to the digit, to what a condition row stores;
+- `tests/cameraSelfTest.test.tsx` (7): the screen on the grey field, each criterion and flash, a
+  failed attempt then attempt 2 with the first kept, a reduced pass;
+- `tests/selfTestSim.test.ts` (6);
+- `tests/export.test.ts`: the 01 columns for st-r1, st-r2 and no self-test;
+- `tests/contrast.test.ts`: the grey field's ink and progress label.
+
+### 8. Versions in the data
+
+| What | Version | Before |
+|---|---|---|
+| Blink completeness rule (primary) | `blink-r1` (unchanged) | — |
+| Fitted minimum (sensitivity) | `fit-r1` (07b, 07 `fit_rule_version`) | none |
+| Frame-rate gate | `fps-g2` (07 `fps_gate_version`) | `g1-25/30` |
+| Camera exposure | `exp-r1` (01 `camera_exposure_policy` and the policy on each 07 row) | automatic |
+| Camera self-test | `st-r2` (01 `selftest_rule`) | `st-r1` |
+
+### 9. Citations
+
+- **#60** (Chromium source code) and **#61** (Android camera2 reference) were read at source on
+  8 Oct 2026 and were not re-read this pass. Neither is indexed in PubMed, and the ledger says so.
+- **#62** (Nakamura 2008), **#63** (Zheng 2022) and **#64** (Navascues-Cornago 2026) were checked
+  against PubMed again on 9 Oct 2026, for this round: every field in the ledger matched (authors,
+  title, journal, volume, issue where PubMed gives one, pages, DOI; #62 has no DOI in PubMed). #62 and
+  #64 were read as abstracts only, #63 in full text (PMC).
+- #62 records its use in the self-test simulation, and that voluntary blinks were given spontaneous
+  durations as an assumption.
+- No other source is cited in this round. A search of every line this round added (code, docs,
+  templates, scripts) found no other author, year, DOI or PMID. The research report's external-camera
+  sources (on camera mounting and infrared light) are not cited in this round's code or docs, so no
+  ledger entry was added for them.
+
+### 10. Verification, and two test-harness defects fixed
+
+**Two defects in the end-to-end tests, found while verifying this round:**
+
+1. **The reading-window check was flaky** (`e2e/cameraDiagnostics.spec.ts`, Round 78; 5d68e0d). It
+   turned pages "while a reading control is on screen". Each page's Next button is absent while its
+   dwell countdown runs, so the loop could stop with pages unread, and the reading record was never
+   written (the review of Round 78 saw it fail 2 of 3 runs). It now reads the passage by the page
+   counter and the stage, retries a tap the reading screen's latch ignored, and waits for the stage to
+   move on after the last page. Passed 3 of 3 runs.
+2. **The bench check's test window was too short** (ee93f4e). Under the collapsed test timing each
+   ground was measured for 500 ms. A rate needs two frame callbacks in its window, and none runs while
+   the tracker holds the main thread; in headless Chromium, with no face, the tracker took up to about
+   600 ms a frame (1.7–6.4 frames a second on the bench rows). So one bench row recorded no camera
+   rate in 2 of 3 runs. The bench and the exposure step's two measurements now use 1.5 s under the
+   test harness, and 4 of 4 runs recorded a rate on every row. The tablet's windows (2–15 s) are
+   unchanged; nothing about the app's own behaviour changed.
+
+**Verified on ee93f4e** (this round's last code commit; the commit adding this round changes only
+this file):
+- `npm run verify` is green: 95 files, 1511 unit tests; the corpus, codebook, export (846/846 checks)
+  and analysis gates pass.
+- e2e without retries: the camera specs and fullRun, 9 tests passed (cameraDiagnostics 3, cameraLost
+  3, cameraBlocked 1, trackerEquivalence 1, fullRun 1). Repeated: the reading-window test 3 of 3, the
+  camera-setup test 4 of 4.
+- After `npm run build`, the production-bundle suite (e2e-prod, 7 tests) passed.
+
+### 11. Not done, and why
+
+- **Gaze calibration** (the 9-point routine, its failure screen, its dark background): separate work.
+  The calibration baseline is still taken on the dark routine.
+- **`ear_noise_open`** (landmark noise of the open eye per condition): not added. The simulation puts
+  its effect at about 0.7 points of ratio per 1% of noise, so it is worth adding before the pilot. The
+  pre-registered checks before inference name frame rate and face brightness only.
+- **`tracker_keeps_up`** (tracker rate over delivered camera rate, QC only): not added as a column.
+  07 already stores `camera_fps_delivered` and `tracker_fps`, the camera-setup readout shows both, and
+  the frame-interval check gives the same diagnosis from 07c.
+- **The live researcher card** (leaving blinks still in progress out of the live count; labelling the
+  blinks row "Last reading" outside a reading): separate work (instruction 5).
+- **The self-test trace** shows the whole 19-s check rather than the report's 10-s trace: all five
+  flashes fit, so nothing is cut off.
+- **An external camera:** not built. The manual gives the rule for when to consider one; the app has
+  no camera picker. Whether HyperOS offers a USB camera to Chrome is not verified.
+- **On the tablet:** nothing was measured, and the tablet's Chrome version was not checked against the
+  Chromium source read. Still to be seen on a real sitting:
+  - which exposure policy the camera ends on, and the bench check's six rows;
+  - the delivered and face-solved rates per condition, and whether white and black pages differ by
+    more than 2 fps;
+  - the camera check's verdict and its stage line at the tablet's real rate.
