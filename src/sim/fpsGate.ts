@@ -149,7 +149,8 @@ export function frameValue(t: number, E: number, blinks: Blink[], shape: Shape):
   return 1 - (1 - b.depth) * mean;
 }
 
-function frameTimes(p: Plan, dur: number, rng: Rng): number[] {
+/** Frame capture times over `dur` ms under plan `p`, with timing jitter (shared with the self-test simulation). */
+export function frameTimes(p: Plan, dur: number, rng: Rng): number[] {
   const out: number[] = [];
   const dt = intervalOf(p);
   let t = rng() * dt;

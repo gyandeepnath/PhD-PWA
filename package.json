@@ -36,6 +36,7 @@
     "verify:bundle": "node scripts/verifyBundle.mjs",
     "frame-intervals": "tsx scripts/frameIntervals.ts",
     "sim:fps": "tsx scripts/fpsGateSim.ts",
+    "sim:selftest": "tsx scripts/selfTestSim.ts",
     "postbuild": "node scripts/verifyBundle.mjs"
   },
   "dependencies": {
