@@ -12,8 +12,9 @@
  */
 import { useCallback, useRef, useState } from 'react';
 import { CONFIG, isE2ETimingActive } from '@/experiment/config';
-import { eyeEars, meanEar, fitEarBaseline, EAR_TIERS, LEFT_EYE_EAR, RIGHT_EYE_EAR, type Point } from './blink';
+import { eyeEars, meanEar, fitEarBaseline, LEFT_EYE_EAR, RIGHT_EYE_EAR, type Point } from './blink';
 import { samplingFpsObserved } from './frameRateGate';
+import { blinkCuts, traceBlinkMarks, type TraceBlinkMark } from './blinkCount';
 import { startFramePump, frameTimestamp, type FrameMeta, type FramePump, type PumpVideo } from './framePump';
 import { PipelineMeter, type MeterWindow, type PipelineSummary } from './pipelineStats';
 import { startTracker, createTracker, errorSummary, TRACKER_BACKENDS, type FaceTracker, type TrackerBackend } from './trackers';
@@ -165,6 +166,13 @@ export interface LiveTrackingStats {
    * the baseline — the two cuts that define a blink and a complete one.
    */
   earTrace: Array<[number, number | null]>;
+  /**
+   * The blinks counted in that trace, by the same function, baseline and cuts as the live count and the
+   * record (blinkCount.ts countBlinks, live mode): where each one's deepest frame was ([ms before now,
+   * EAR]) and whether it was complete. The graph marks these, so every dip it shows is visibly counted or
+   * not. Empty without a baseline.
+   */
+  traceBlinks: TraceBlinkMark[];
   /** The participant's open-eye baseline, when calibration has fitted one. */
   baselineEar: number | null;
   /**
@@ -500,7 +508,7 @@ export function useTracking(): TrackingApi {
 
   type LiveCore = Omit<LiveTrackingStats,
     'cameraFps' | 'trackerFps' | 'faceFps' | 'processMsP50' | 'processMsP95' | 'frameCountSource' | 'backend'
-    | 'captureWidth' | 'captureHeight' | 'earTrace' | 'baselineEar' | 'baselineMeasured'>;
+    | 'captureWidth' | 'captureHeight' | 'earTrace' | 'traceBlinks' | 'baselineEar' | 'baselineMeasured'>;
 
   /**
    * Emit the live readout, at most LIVE_HZ times a second and only when someone is listening.
@@ -527,6 +535,9 @@ export function useTracking(): TrackingApi {
     const m = meterRef.current.live();
     const v = videoRef.current;
     const trace = earTraceRef.current.map(([ts, e]): [number, number | null] => [Math.round(ts - t), e]);
+    // Classified on the trace's own capture times, then placed on the same "ms before now" axis.
+    const marks = traceBlinkMarks(earTraceRef.current, baselineEarRef.current)
+      .map((k) => ({ ...k, at: Math.round(k.at - t) }));
     const payload: LiveTrackingStats = {
       ...build(),
       cameraFps: m.cameraFps, trackerFps: m.trackerFps, faceFps: m.faceFps,
@@ -534,6 +545,7 @@ export function useTracking(): TrackingApi {
       backend: trackerRef.current?.backend ?? null,
       captureWidth: v?.videoWidth || null, captureHeight: v?.videoHeight || null,
       earTrace: trace,
+      traceBlinks: marks,
       baselineEar: baselineEarRef.current,
       baselineMeasured: baselineMeasuredRef.current,
     };
@@ -1381,16 +1393,8 @@ export function useTracking(): TrackingApi {
         await remove('ocular_events', conditionId);
         return;
       }
-      /*
-       * Retain what this exposure finished with, so the monitor can report it on the screens that
-       * follow. Read from the finalized record rather than recomputed, so the number the operator
-       * sees is the number that was written to the database.
-       */
-      const finished = aggRef.current.liveCounts(baselineEarRef.current);
-      lastConditionCounts.current = { blinks: finished.blinks, incomplete: finished.incomplete };
-      if (typeof finished.blinks === 'number') sessionBlinksDone.current += finished.blinks;
-
       const agg = aggRef.current;
+      const cuts = blinkCuts(baselineEarRef.current);
       // The exposure fixed at camera setup, when it was (locked-v1): the fitted-minimum sensitivity assumes it.
       const ex = pipelineRef.current?.camera_exposure ?? null;
       const { record, events, fits, fitExposure } = agg.finalizeWithEvents({
@@ -1403,14 +1407,26 @@ export function useTracking(): TrackingApi {
         // incomplete — while classification actually keys on 0.75 x baseline, so a reader could not
         // reproduce the classification from the CSV as the codebook promised. Both are now
         // exported: the detection threshold here, the completeness cut beside it.
-        earThresholdUsed: baselineEarRef.current != null ? baselineEarRef.current * EAR_TIERS.partial : null,
-        earCompleteThreshold: baselineEarRef.current != null ? baselineEarRef.current * EAR_TIERS.full : null,
+        // Both from blinkCuts (blinkCount.ts), the cuts the classifier applies and the live graph draws.
+        earThresholdUsed: cuts?.registration ?? null,
+        earCompleteThreshold: cuts?.complete ?? null,
         gazeCalibrated: gazeCalRef.current?.valid ?? false,
         headPitchCalibrated: pitchBaselineFracRef.current != null,
         calibrationId: calibrationIdRef.current,
         lockedExposure100us: ex?.policy === 'locked-v1' ? ex.exposure_time_100us : null,
       });
       aggRef.current = null;
+
+      /*
+       * Retain what this exposure finished with, so the monitor can report it on the screens that
+       * follow. Read from the finalized record, not from the live count: the record counts a blink the
+       * window ended inside (blink-r1), which the live count had not yet (blinkCount.ts). So the number
+       * the operator sees after the window is exactly the number written to the database.
+       */
+      const counted = [record.blink_count_full, record.blink_count_micro, record.blink_count_incomplete];
+      const total = counted.every((n) => typeof n === 'number') ? (counted as number[]).reduce((a, b) => a + b, 0) : null;
+      lastConditionCounts.current = { blinks: total, incomplete: record.blink_count_incomplete };
+      if (total != null) sessionBlinksDone.current += total;
 
       // The rate the exposure ACTUALLY achieved, from the two columns of the record that was written,
       // by the frame-rate gate's own formula (frameRateGate.ts) — so the monitor, the export and the

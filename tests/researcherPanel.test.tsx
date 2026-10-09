@@ -16,7 +16,7 @@ import type { LiveTrackingStats } from '@/tracking/useTracking';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const stats = (over: Partial<LiveTrackingStats> = {}): LiveTrackingStats => ({
-  facePresent: true, ear: 0.3, earRatio: 1, blinks: 12, incomplete: 3, blinksLive: true, faceFps: 31, cameraFps: 31, trackerFps: 31, processMsP50: 20, processMsP95: 25, frameCountSource: "presented-frames", backend: "tasks-cpu", captureWidth: 1280, captureHeight: 720, faceWidthPx: 210, faceBox: null, eyes: null, earTrace: [], baselineEar: 0.3, baselineMeasured: true,
+  facePresent: true, ear: 0.3, earRatio: 1, blinks: 12, incomplete: 3, blinksLive: true, faceFps: 31, cameraFps: 31, trackerFps: 31, processMsP50: 20, processMsP95: 25, frameCountSource: "presented-frames", backend: "tasks-cpu", captureWidth: 1280, captureHeight: 720, faceWidthPx: 210, faceBox: null, eyes: null, earTrace: [], traceBlinks: [], baselineEar: 0.3, baselineMeasured: true,
   exposureFps: 30, faceSize: 0.2, onScreen: true, sessionBlinks: 40, gazeZone: 'cc', noFaceForMs: 0,
   luma: 120, blocked: false, ...over,
 });

@@ -5,7 +5,6 @@
  */
 import { mean, stdPopulation } from '@/lib/stats';
 import {
-  classifyBlinks,
   summariseBlinks,
   blinkRatePerMinute,
   effectiveFps,
@@ -29,6 +28,7 @@ import { FPS_GATE_VERSION, samplingFpsObserved } from './frameRateGate';
 import type { HeadPose } from './headPose';
 import type { GazeZone } from './gaze';
 import { classifyLighting } from './lighting';
+import { countBlinks } from './blinkCount';
 import type { EyeMetricsRecord, OcularEventsRecord } from '@/storage/types';
 
 export interface FrameSample {
@@ -188,19 +188,9 @@ export class EyeMetricsAggregator {
     };
   }
 
-  /**
-   * Blink counts so far in this condition, for the operator's live monitor.
-   *
-   * Runs the SAME `classifyBlinks` the exported record uses, over the samples collected so far, so
-   * the number on screen is the number that will be analysed rather than a parallel approximation
-   * that could drift from it. Returns nulls when no baseline has been fitted, because without one
-   * `classifyBlinks` cannot identify a blink at all and a zero would read as "no blinks occurred"
-   * rather than "blinks are not being counted".
-   */
   /** The blink events so far, for the camera self-test; empty without a baseline. */
   blinkEvents(baseline: number | null): BlinkEventDetail[] {
-    if (baseline == null || !Number.isFinite(baseline) || baseline <= 0) return [];
-    return classifyBlinks(this.ear, baseline);
+    return countBlinks(this.ear, baseline, 'final').events;
   }
 
   /**
@@ -223,16 +213,24 @@ export class EyeMetricsAggregator {
     return this.ear;
   }
 
-  liveCounts(baseline: number | null): { blinks: number | null; incomplete: number | null } {
-    if (baseline == null || !Number.isFinite(baseline) || baseline <= 0) {
-      return { blinks: null, incomplete: null };
-    }
-    const events = classifyBlinks(this.ear, baseline);
-    return {
-      blinks: events.length,
-      // 'incomplete' is the tier the primary outcome counts; 'micro' and 'full' are the others.
-      incomplete: events.filter((e) => e.tier === 'incomplete').length,
-    };
+  /**
+   * Blink counts so far in this condition, for the operator's live monitor.
+   *
+   * Runs the SAME `classifyBlinks` the exported record uses, over the samples collected so far, so
+   * the number on screen is the number that will be analysed rather than a parallel approximation
+   * that could drift from it. Returns nulls when no baseline has been fitted, because without one
+   * `classifyBlinks` cannot identify a blink at all and a zero would read as "no blinks occurred"
+   * rather than "blinks are not being counted".
+   */
+  liveCounts(baseline: number | null): { blinks: number | null; incomplete: number | null; inProgress: boolean } {
+    /*
+     * Through countBlinks (blinkCount.ts), the one counting function the record, the live count and the
+     * live graph share. 'live' leaves out a blink still in progress at the latest frame: its depth, and so
+     * whether it is complete, is not known until the eye reopens, and counting it early made the
+     * incomplete figure tick up and back down (Round 80).
+     */
+    const c = countBlinks(this.ear, baseline, 'live');
+    return { blinks: c.blinks, incomplete: c.incomplete, inProgress: c.inProgress };
   }
 
   /**
@@ -307,7 +305,8 @@ export class EyeMetricsAggregator {
     // properly calibrated run. classifyBlinks() returns no events for a null baseline, and
     // summariseBlinks() then reports a null ratio rather than a clean-looking zero.
     const baseline = args.baselineEarValue;
-    const events = classifyBlinks(this.ear, baseline);
+    // The record's count: blink-r1 through countBlinks, the function the live count and graph share.
+    const events = countBlinks(this.ear, baseline, 'final').events;
     /*
      * NO BASELINE, NO BLINK MEASURE — not a count of zero.
      *

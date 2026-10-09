@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { LiveTrackingStats } from '@/tracking/useTracking';
-import { EAR_TIERS } from '@/tracking/blink';
+import { blinkCuts } from '@/tracking/blinkCount';
 import { FPS_GATE, fpsTier } from '@/tracking/frameRateGate';
 import { TRACKER_LABEL } from '@/tracking/trackers';
 import { pipelineLimit } from '@/tracking/pipelineStats';
@@ -101,6 +101,11 @@ export function LiveFeed({ stream, stats, width, testid = 'live-feed' }: {
  * the primary outcome: a blink registers below 0.75 of the participant's open-eye baseline, and counts
  * as complete below 0.60. Gaps are frames without a face. Before calibration there is no baseline and
  * so no cut lines — and no blink is being counted.
+ *
+ * THE SAME COUNT AS THE PANEL AND THE RECORD (Round 80). The lines are blinkCuts(baseline) and the marks
+ * are the blinks countBlinks found in this trace (blinkCount.ts): a filled dot at the deepest frame of a
+ * complete blink, a ring for an incomplete one. A dip with no mark was not counted — it stayed above the
+ * blink line, or it is still in progress. Nothing here is stored.
  */
 export function EarTrace({ stats, width, height = 64, windowMs = 10_000 }: {
   stats: LiveTrackingStats | null;
@@ -122,12 +127,13 @@ export function EarTrace({ stats, width, height = 64, windowMs = 10_000 }: {
     const top = Math.max(base != null ? base * 1.3 : 0, vals.length ? Math.max(...vals) * 1.1 : 0, 0.05);
     const X = (dt: number) => c.width * (1 + dt / windowMs);
     const Y = (e: number) => c.height * (1 - e / top);
-    if (base != null) {
-      for (const [frac, colour] of [[EAR_TIERS.partial, '#ffd27a'], [EAR_TIERS.full, '#ff8f8a']] as const) {
+    const cuts = blinkCuts(base);
+    if (cuts) {
+      for (const [cut, colour] of [[cuts.registration, '#ffd27a'], [cuts.complete, '#ff8f8a']] as const) {
         g.strokeStyle = colour;
         g.setLineDash([4, 3]);
         g.lineWidth = 1;
-        g.beginPath(); g.moveTo(0, Y(base * frac)); g.lineTo(c.width, Y(base * frac)); g.stroke();
+        g.beginPath(); g.moveTo(0, Y(cut)); g.lineTo(c.width, Y(cut)); g.stroke();
       }
       g.setLineDash([]);
     }
@@ -140,15 +146,27 @@ export function EarTrace({ stats, width, height = 64, windowMs = 10_000 }: {
       if (!pen) { g.moveTo(X(dt), Y(e)); pen = true; } else g.lineTo(X(dt), Y(e));
     }
     g.stroke();
+    // The counted blinks: filled = complete, ring = incomplete, at the deepest frame.
+    for (const k of stats?.traceBlinks ?? []) {
+      if (k.at < -windowMs) continue;
+      g.beginPath();
+      g.arc(X(k.at), Y(k.ear), 3.2, 0, Math.PI * 2);
+      if (k.complete) { g.fillStyle = '#ff8f8a'; g.fill(); } else { g.strokeStyle = '#ffd27a'; g.lineWidth = 1.6; g.stroke(); }
+    }
   }, [stats, width, height, windowMs]);
+  const marks = (stats?.traceBlinks ?? []).filter((k) => k.at >= -windowMs);
+  const nComplete = marks.filter((k) => k.complete).length;
   return (
     <div>
-      <canvas ref={ref} width={width} height={height} data-testid="ear-trace" style={{ display: 'block', width, height, borderRadius: 6 }} />
+      <canvas ref={ref} width={width} height={height} data-testid="ear-trace" data-marks={marks.length} data-complete={nComplete} style={{ display: 'block', width, height, borderRadius: 6 }} />
       <div style={{ fontSize: 14, display: 'flex', flexWrap: 'wrap', columnGap: 10, marginTop: 2, color: '#dbe6f7' }}>
         <span>eye openness, last {Math.round(windowMs / 1000)} s</span>
         {stats?.baselineEar != null
-          ? (<><span style={{ color: '#ffd27a' }}>— 0.75 blink</span><span style={{ color: '#ff8f8a' }}>— 0.60 complete</span></>)
-          : <span>no baseline yet: no blink lines</span>}
+          ? (<>
+            <span style={{ color: '#ffd27a' }}>— 0.75 blink</span><span style={{ color: '#ff8f8a' }}>— 0.60 complete</span>
+            <span data-testid="ear-trace-count">counted here: {marks.length} ({marks.length - nComplete} incomplete)</span>
+          </>)
+          : <span>no baseline yet: no blink lines, no blinks counted</span>}
       </div>
     </div>
   );
