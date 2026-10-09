@@ -184,6 +184,27 @@ export function fpsReason(
 }
 
 /**
+ * Which stage holds a REDUCED rate, in one phrase. A reduced rate passes, so it gets the stage and the
+ * first thing to try, not the full advice a fail gets (fpsReason): the numbers are on the line above it.
+ */
+export function limitShort(limit: PipelineLimit, p: PipelineWindowFields | null): string | null {
+  switch (limit) {
+    case 'camera':
+      return `the camera delivered only ${n0(p?.camera_fps_delivered)} frames a second — more light on the face`;
+    case 'camera_and_tracker':
+      return `the camera delivered ${n0(p?.camera_fps_delivered)} frames a second and the tracker processed ${n0(p?.tracker_fps)} — more light on the face, and close other apps and charge the tablet`;
+    case 'tracker':
+      return `the tracker processed only ${n0(p?.tracker_fps)} of the camera's ${n0(p?.camera_fps_delivered)} frames a second — close other apps, charge the tablet, let it cool`;
+    case 'face':
+      return 'the face was found in too few of the frames — seating, the light on the face, glare on spectacles';
+    case 'undetermined':
+      return 'this browser does not say whether the camera or the processor is short — try more light on the face first';
+    default:
+      return null;
+  }
+}
+
+/**
  * Score one attempt (rule st-r2). Each cue takes at most one blink, the nearest whose onset is within
  * WINDOW_MS of it. Passes with at least MIN_HIT_SHARE of the cues seen, the face in view MIN_FACE of the
  * time, and the eye sampled at fps-g2 tier B or better (`samplingFps`, frameRateGate.ts). Tier B passes
@@ -235,8 +256,9 @@ export function scoreSelfTest(
     reasons.push(fpsReason(rate, pipeline, limit));
   } else if (tier === 'B') {
     notes.push(`Reduced frame rate: the eye was sampled ${Math.round(rate!)} times a second (${FPS_GATE.ADEQUATE} or more is adequate). `
-      + 'The check passes and blinks are measured; a reading at this rate is kept and flagged "reduced".'
-      + (limit ? ` Why: ${fpsReason(rate, pipeline, limit, undefined, FPS_GATE.ADEQUATE)}.` : ''));
+      + 'The check passes and blinks are measured; a reading at this rate is kept and flagged "reduced".');
+    const why = limitShort(limit, pipeline);
+    if (why) notes.push(`Why: ${why}.`);
   }
   const need = minHits(cueTimes.length);
   if (detected < need) {

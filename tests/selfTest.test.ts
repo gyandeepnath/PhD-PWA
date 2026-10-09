@@ -244,7 +244,13 @@ describe('a low frame rate says which stage was short', () => {
   it('a reduced pass says which stage holds it under 20, as a note', () => {
     const r = at(18, { camera_fps_delivered: 18, tracker_fps: 18 });
     expect(r).toMatchObject({ pass: true, verdict: 'reduced', limit: 'camera', reasons: [] });
-    expect(r.notes!.join(' ')).toMatch(/Why: 18 face frames per second, below 20: the CAMERA delivered only 18/);
+    expect(r.notes).toEqual([
+      expect.stringMatching(/^Reduced frame rate: the eye was sampled 18 times a second/),
+      'Why: the camera delivered only 18 frames a second — more light on the face.',
+    ]);
+    expect(at(18, { camera_fps_delivered: 30, tracker_fps: 18 }).notes![1]).toMatch(/the tracker processed only 18 of the camera's 30 frames a second/);
+    // No pipeline measured: the note says the rate, and no stage.
+    expect(scoreSelfTest(cues, blinks, { fps: 18, samplingFps: 18, facePresence: 0.99 }).notes).toHaveLength(1);
   });
 
   it('will not blame the camera when the browser gave no frame counter', () => {

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { wcagContrastRatio, michelsonContrast, relativeLuminance, wcagLevel } from '@/lib/contrast';
 import { CONDITIONS, conditionDefinitionHash, rtStimulusColours } from '@/experiment/conditions';
 import { UI_TEXT, UI_GROUNDS, UI_FILLS_WITH_WHITE_TEXT, RETIRED_TEXT_COLOURS } from '@/lib/uiPalette';
+import { CONFIG } from '@/experiment/config';
 
 describe('WCAG relative luminance', () => {
   it('is 0 for black and 1 for white', () => {
@@ -208,6 +209,15 @@ describe('operator-screen text colours meet WCAG AA', () => {
     expect(wcagContrastRatio('#c8d8f0', '#0a0a12')).toBeGreaterThanOrEqual(4.5);
     expect(wcagContrastRatio('#c8d8f0', '#1a1a2e')).toBeGreaterThanOrEqual(4.5);
     expect(readFileSync('src/components/ExperimentProgress.tsx', 'utf8')).toMatch(/onDark \? '#c8d8f0' : '#4a4a60'/);
+  });
+
+  it('on the self-test\'s grey field (Round 79) the progress label and the screen take the grey field\'s black ink', () => {
+    // Neither of the other two label inks is legible on #808080.
+    expect(wcagContrastRatio('#4a4a60', CONFIG.ADAPTATION_COLOR)).toBeLessThan(4.5);
+    expect(wcagContrastRatio('#c8d8f0', CONFIG.ADAPTATION_COLOR)).toBeLessThan(4.5);
+    expect(wcagContrastRatio(CONFIG.ADAPTATION_INK, CONFIG.ADAPTATION_COLOR)).toBeGreaterThanOrEqual(4.5);
+    expect(readFileSync('src/components/ExperimentProgress.tsx', 'utf8')).toMatch(/color: onGrey \? CONFIG\.ADAPTATION_INK/);
+    expect(readFileSync('src/start/CameraSelfTest.tsx', 'utf8')).toMatch(/const INK = CONFIG\.ADAPTATION_INK/);
   });
 
   it('a disabled button is still legible (muted text on the disabled grey)', () => {
