@@ -3,6 +3,8 @@
  * that every place that applies it gets the same answer from the same stored columns.
  */
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION, fpsConsistent, fpsTier, gateParticipant, medianFps,
   rowGateVersion, samplingFpsObserved,
@@ -142,5 +144,34 @@ describe('one gate, one answer: the export and the analysis file agree with the 
     }
     // The tier-C row is the one far from the participant's median.
     expect(long.find((r) => r.fps_tier === 'C')!.fps_consistent).toBe('false');
+  });
+});
+
+describe('the analysis templates carry the same gate, line for line', () => {
+  const read = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8');
+  const R = read('src/analysis/analysis_template.R');
+  const PY = read('src/analysis/analysis_template.py');
+  const num = (text: string, re: RegExp) => Number(re.exec(text)?.[1]);
+
+  it('uses the same three numbers as the app', () => {
+    expect(num(R, /^FPS_GATE_ADEQUATE <- (\d+)/m)).toBe(FPS_GATE.ADEQUATE);
+    expect(num(R, /^FPS_GATE_REDUCED {2}<- (\d+)/m)).toBe(FPS_GATE.REDUCED);
+    expect(num(R, /^FPS_GATE_BAND {5}<- (\d+)/m)).toBe(FPS_GATE.CONSISTENCY_BAND);
+    expect(num(PY, /^FPS_GATE_ADEQUATE = (\d+)/m)).toBe(FPS_GATE.ADEQUATE);
+    expect(num(PY, /^FPS_GATE_REDUCED = (\d+)/m)).toBe(FPS_GATE.REDUCED);
+    expect(num(PY, /^FPS_GATE_BAND = (\d+)/m)).toBe(FPS_GATE.CONSISTENCY_BAND);
+  });
+
+  it('computes the rate with the same operations in the same order, rounding half up, and no rate under 1 s or 2 samples', () => {
+    // frameRateGate.ts: Math.floor(x * 100 + 0.5) / 100 of ((sampleCount - 1) / observedMs) * 1000.
+    for (const t of [R, PY]) {
+      expect(t).toMatch(/x <- \(\(n - 1\) \/ obs\) \* 1000|x = \(\(n - 1\) \/ obs\) \* 1000/);
+      expect(t).toMatch(/floor\(x \* 100 \+ 0\.5\) \/ 100/);
+      expect(t).toMatch(/n >= 2 & is\.finite\(obs\) & obs >= 1000|n\.ge\(2\) & obs\.ge\(1000\)/);
+      expect(t).toMatch(/FPS_GATE_BAND \+ 1e-9/);
+    }
+    // Tier C out of the confirmatory ocular models, in both.
+    expect(R).toMatch(/eye <- eye %>% filter\(!\(fps_tier %in% "C"\)\)/);
+    expect(PY).toMatch(/eye_active = eye_active\[eye_active\["fps_tier"\]\.ne\("C"\)\]/);
   });
 });

@@ -91,6 +91,46 @@ def truthy(col: pd.Series) -> pd.Series:
     return col.astype(str).str.strip().str.lower().isin(["true", "1"])
 
 
+# --- The frame-rate gate fps-g2 (ANALYSIS_PLAN.md §5 item 2) ---------------------------------------
+# ONE DEFINITION: src/tracking/frameRateGate.ts, operation for operation, as in the R template
+# (tests/frameRateGate.test.ts pins these three numbers to the app's). Computed when 07 is read, from the
+# two columns every row stores, for every row — rows recorded before the gate are re-tiered too — and
+# before any exclusion, so a participant's median is over all of their camera-on rows with a rate.
+FPS_GATE_ADEQUATE = 20  # PRE-REGISTERED (docs/FPS_GATE_SIMULATION.md): tier A at or above
+FPS_GATE_REDUCED = 15   # PRE-REGISTERED: tier B from here to ADEQUATE; tier C below
+FPS_GATE_BAND = 2       # PRE-REGISTERED: fps_consistent within this of the participant's median
+
+
+def fps_gate(d: pd.DataFrame) -> pd.DataFrame:
+    """sampling_fps_observed = (ear_sample_count - 1) / observed_duration_ms x 1000, to 0.01 half up;
+    fps_tier A/B/C on it; fps_consistent within FPS_GATE_BAND of the participant's median; and the gate
+    in force when the row was recorded (blank = g1-25/30)."""
+    d = d.copy()
+    cam = truthy(d["camera_active"])
+    n = pd.to_numeric(d["ear_sample_count"], errors="coerce")
+    obs = pd.to_numeric(d["observed_duration_ms"], errors="coerce")
+    rated = cam & n.ge(2) & obs.ge(1000)
+    x = ((n - 1) / obs) * 1000
+    fps = np.floor(x * 100 + 0.5) / 100
+    fps = fps.where(rated)
+    if "sampling_fps_observed" in d.columns:
+        stored = pd.to_numeric(d["sampling_fps_observed"], errors="coerce")
+        differs = int(((stored - fps).abs() > 0.005).sum())
+        if differs:
+            print(f"[fps-g2] {differs} row(s) carry a sampling_fps_observed that differs from the one recomputed "
+                  "from their own columns; the recomputed one is used.")
+    version = d["fps_gate_version"].astype(str) if "fps_gate_version" in d.columns else pd.Series("", index=d.index)
+    version = version.where(~version.isin(["", "nan", "None"]), "g1-25/30")
+    d["sampling_fps_observed"] = fps
+    d["fps_tier"] = np.select([fps.ge(FPS_GATE_ADEQUATE), fps.ge(FPS_GATE_REDUCED), fps.notna()], ["A", "B", "C"], default=None)
+    d["fps_tier"] = d["fps_tier"].where(fps.notna(), None)
+    d["fps_gate_version"] = version.where(cam, None)
+    d["fps_median"] = fps.groupby(d["participant_id"].astype(str)).transform("median")
+    within = (fps - d["fps_median"]).abs().le(FPS_GATE_BAND + 1e-9)
+    d["fps_consistent"] = within.astype(object).where(fps.notna() & d["fps_median"].notna(), None)
+    return d
+
+
 # Codes that mean "this participant's condition set is incomplete" and nothing else. The SENSITIVITY
 # set re-admits the finished runs of participants excluded ONLY for these (ANALYSIS_PLAN.md §1); the
 # list is the R template's COMPLETENESS_CODES, and the gate checks both files reach the same sets.
@@ -237,7 +277,7 @@ def main() -> None:
     fatigue = load("03_fatigue_scores.csv")
     comprehension = load("04_comprehension.csv")
     rt_summary = load("09_rt_summary.csv")
-    eye = load("07_eye_metrics.csv")
+    eye = fps_gate(load("07_eye_metrics.csv"))  # the frame-rate gate fps-g2, before any exclusion
     wide = load("10_wide_summary.csv")  # carries session_index + engagement_flag per condition
     participant = load("11_participant.csv", with_folder=True)  # demographics + vision covariates (age, cvd_status, ...)
     cvsq = load("13_cvsq.csv", with_folder=True)  # CVS-Q symptom questionnaire (baseline + session_end), per item
@@ -641,10 +681,17 @@ def main() -> None:
     # ===========================================================================================
     counts = ["blink_count_incomplete", "blink_count_full", "blink_count_micro"]
 
-    def primary_frame(eye_rows: pd.DataFrame, cond_rows: pd.DataFrame) -> pd.DataFrame:
+    def primary_frame(eye_rows: pd.DataFrame, cond_rows: pd.DataFrame, keep_tier_c: bool = False) -> pd.DataFrame:
         """Camera-on rows with at least one blink, and the binomial response. Shared by the
-        confirmatory fit and every sensitivity refit so they differ in their rows only."""
+        confirmatory fit and every sensitivity refit so they differ in their rows only.
+
+        THE FRAME-RATE GATE fps-g2 (ANALYSIS_PLAN.md §5 item 2, pre-registered): tier C — under 15
+        face-solved samples a second while the face was seen — is out of the confirmatory ocular models,
+        as in the R template. keep_tier_c=True builds the every-tier frame for the sensitivity refit
+        that puts it back. eff_fps_c is centred within whichever frame is built."""
         ea = eye_rows[truthy(eye_rows["camera_active"])].merge(cond_rows, on=["participant_id", "condition_id"])
+        if not keep_tier_c and "fps_tier" in ea.columns:
+            ea = ea[ea["fps_tier"].ne("C")]
         if DROP_DISENGAGED:
             ea = ea[ea["engagement_flag"].ne("bad")]
         # fps_adequate_for_ratio is deliberately NOT in the dropna subset: a row missing the
@@ -743,6 +790,15 @@ def main() -> None:
               f"{int(m.nobs)} blink rows")
 
     eye_active = eye[truthy(eye["camera_active"])].merge(cond, on=["participant_id", "condition_id"])
+    # The frame-rate gate fps-g2 for every ocular model, as in R: tier C out, counted, refitted below.
+    n_tier_c = int(eye_active["fps_tier"].eq("C").sum())
+    if n_tier_c:
+        by_pol = eye_active.loc[eye_active["fps_tier"].eq("C"), "polarity"].value_counts().sort_index()
+        print(f"\n[fps-g2] {n_tier_c} camera-on condition-run(s) are in tier C (under {FPS_GATE_REDUCED} fps) and are out of "
+              f"the confirmatory ocular models ({', '.join(f'{k}={v}' for k, v in by_pol.items())}).")
+    else:
+        print(f"\n[fps-g2] 0 camera-on condition-run(s) are in tier C (under {FPS_GATE_REDUCED} fps).")
+    eye_active = eye_active[eye_active["fps_tier"].ne("C")]
     prim = primary_frame(eye, cond) if all(c in eye.columns for c in counts) else pd.DataFrame()
     if len(prim) == 0:
         print("\n" + "#" * 64)
@@ -813,7 +869,48 @@ def main() -> None:
         sens_line("confirmatory (the primary above)", m)
         sens_line("without the eff_fps_c covariate (§2 formula)", m_no_fps)
 
-        # --- the pre-registered frame-rate sensitivity, which was ABSENT ------------------------
+        # --- THE FRAME-RATE GATE fps-g2: its three pre-registered refits (ANALYSIS_PLAN.md §5 item 2)
+        # and the polarity check. The primary above uses tiers A and B. If the effect exists only with
+        # the reduced or inconsistent rows in, a frame rate is the likelier explanation than the display.
+        prim_all = primary_frame(eye, cond, keep_tier_c=True)
+        tiers = prim_all["fps_tier"].fillna("no rate").value_counts()
+        print(f"\nframe-rate gate fps-g2 on the primary-outcome rows (A >= {FPS_GATE_ADEQUATE}, B {FPS_GATE_REDUCED}-{FPS_GATE_ADEQUATE}, "
+              f"C < {FPS_GATE_REDUCED}): A {int(tiers.get('A', 0))}, B {int(tiers.get('B', 0))}, C {int(tiers.get('C', 0))}, "
+              f"no rate {int(tiers.get('no rate', 0))}")
+        gv = prim_all["fps_gate_version"].fillna("none").value_counts()
+        print("  gate in force when recorded: " + ", ".join(f"{k}={v}" for k, v in gv.items())
+              + " (every row is tiered under fps-g2 whatever it says)")
+
+        def pol_diff(col: str) -> float:
+            if col not in prim_all.columns:
+                return float("nan")
+            w = (prim_all[prim_all[col].notna() & prim_all["polarity"].isin(["negative", "positive"])]
+                 .groupby(["participant_id", "polarity"])[col].mean().unstack())
+            if not {"negative", "positive"} <= set(w.columns):
+                return float("nan")
+            return float((w["negative"] - w["positive"]).mean())
+        d_fps, d_luma = pol_diff("sampling_fps_observed"), pol_diff("mean_face_luma")
+        print(f"  polarity check, negative minus positive, mean of each participant's own difference: "
+              f"sampling_fps_observed {d_fps:+.2f} fps (pre-registered limit {FPS_GATE_BAND}), mean_face_luma {d_luma:+.1f}")
+        if np.isfinite(d_fps) and abs(d_fps) > FPS_GATE_BAND:
+            print("  [FPS POLARITY CHECK EXCEEDED] read the consistent-only and fitted-minimum refits beside the primary.")
+
+        def refit_if(label: str, rows: pd.DataFrame, same_note: str) -> None:
+            rows = rows.reset_index(drop=True)
+            if len(rows) == len(prim):
+                print(f"  {same_note}")
+            elif len(rows) and rows["polarity_c"].nunique() > 1 and rows["participant_id"].nunique() > 1:
+                sens_line(label, fit_primary(rows))
+            else:
+                print(f"  too few rows for the refit '{label}'.")
+        refit_if("fps-g2 tier A only (reduced rows out)", prim[prim["fps_tier"].eq("A")],
+                 "no tier-B row: the tier-A-only refit is the primary itself.")
+        refit_if("fps-g2 every tier (tier C put back)", prim_all,
+                 "no tier-C row: the every-tier refit is the primary itself.")
+        refit_if("fps-g2 consistent rows only (within 2 fps)", prim[prim["fps_consistent"].eq(True)],
+                 f"every row is within {FPS_GATE_BAND} fps of its participant's median: the consistent-only refit is the primary itself.")
+
+        # --- gate g1 (superseded by fps-g2; kept so an analysis run on it reproduces) -------------
         #
         # docs/ANALYSIS_PLAN.md §5.2: "Below the frame-rate floor the sampled minimum EAR is
         # biased UPWARD, so incomplete_blink_ratio is inflated — a directional bias, not
@@ -828,30 +925,26 @@ def main() -> None:
             flag = prim["fps_adequate_for_ratio"].astype("boolean")
             adequate = flag.eq(True).fillna(False).to_numpy()
             n_low = int(flag.eq(False).fillna(False).sum())
-            print(f"\nframe-rate adequacy on the primary-outcome rows: "
+            print(f"\ngate g1 (superseded; effective_fps >= 30), frame-rate adequacy on the primary-outcome rows: "
                   f"{int(adequate.sum())} adequate, {n_low} below the floor, {int(flag.isna().sum())} unknown")
             if n_low == 0:
-                print("No rows below the frame-rate floor: the fit above is already the "
-                      "adequate-only fit, and no sensitivity comparison is needed.")
+                print("No rows below the g1 floor: the fit above is already the "
+                      "g1-adequate-only fit, and no g1 comparison is needed.")
             else:
                 ok = prim[adequate].reset_index(drop=True)
                 if len(ok) and ok["polarity_c"].nunique() > 1 and ok["participant_id"].nunique() > 1:
                     m_ok = fit_primary(ok)
                     print("\n=== PRIMARY refit, adequately-sampled conditions ONLY "
-                          "(pre-registered sensitivity) ===")
+                          "(gate g1, superseded by fps-g2; kept so an analysis run on it reproduces) ===")
                     print(m_ok.summary())
-                    sens_line("fps_adequate_for_ratio conditions only", m_ok)
+                    sens_line("g1 (superseded): fps_adequate_for_ratio conditions only", m_ok)
                     cluster_note(m_ok, "frame-rate refit")
-                    print("\nBoth fits are reported because the plan requires both. If the "
-                          "effect exists only in the pooled fit, it is a camera artefact; if "
-                          "it survives here, the frame rate is not what produced it.")
                 else:
                     print("Too few adequately-sampled rows to refit — report the pooled fit "
                           "with this count stated, and do not treat it as unqualified.")
         else:
-            print("\n[PLAN VIOLATION] fps_adequate_for_ratio is not in this export, so the "
-                  "pre-registered frame-rate sensitivity CANNOT be run. Do not report the "
-                  "primary outcome from this bundle without it.")
+            print("\n[g1] fps_adequate_for_ratio is not in this export: the superseded g1 refit is not run "
+                  "(the fps-g2 refits above are the pre-registered ones).")
 
         # --- the fitted-minimum sensitivity (Round 79, rule fit-r1; ANALYSIS_PLAN.md §5 item 2) -------
         # The same blinks, each judged on its depth estimated BETWEEN frames instead of its lowest frame

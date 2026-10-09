@@ -220,10 +220,17 @@ for (const { root, options } of jobs) {
 
   // The derived states, each a copy of a cohort with one thing changed. Why each matters is said
   // where it is checked.
-  //  - flagged: four of P001's runs below the frame-rate floor, so the sensitivity refit must fire;
+  //  - flagged: four of P001's runs below the frame-rate floor, so the sensitivity refits must fire —
+  //    under gate g1 (fps_adequate_for_ratio, superseded) and under fps-g2 (Round 79), whose tiers the
+  //    templates compute from ear_sample_count and observed_duration_ms: rows 1-2 are set to 12 face
+  //    frames a second (tier C, out of the confirmatory model), rows 3-4 to 17 (tier B, kept).
   cpSync(cohortDir, at('flagged'), { recursive: true });
   const flaggedMarked = editColumn(join(at('flagged'), 'P001', '07_eye_metrics.csv'), 'fps_adequate_for_ratio',
     (v, i) => (i <= 4 ? 'false' : v));
+  const flaggedObs = [];
+  editColumn(join(at('flagged'), 'P001', '07_eye_metrics.csv'), 'observed_duration_ms', (v) => { flaggedObs.push(Number(v)); return v; });
+  const flaggedTiered = editColumn(join(at('flagged'), 'P001', '07_eye_metrics.csv'), 'ear_sample_count',
+    (v, i) => (i <= 4 ? String(Math.round(((i <= 2 ? 12 : 17) * flaggedObs[i - 1]) / 1000) + 1) : v));
   //  - r-short: every exposure halved, and no target locations (a pre-Round-66 export);
   cpSync(cohortDir, at('r-short'), { recursive: true });
   const shortMarked = editColumn(join(at('r-short'), 'P001', '07_eye_metrics.csv'), 'observed_duration_ms',
@@ -247,6 +254,7 @@ for (const { root, options } of jobs) {
       'R:one-polarity-edited': launchR(at('one-polarity-edited')),
     } : {}),
     'Python:cohort': launchPy(cohortDir), 'Python:flagged': launchPy(at('flagged')),
+    ...(rReady ? { 'R:flagged': launchR(at('flagged')) } : {}),
     'Python:cameras-some': launchPy(at('cameras-some')), 'Python:cameras-off': launchPy(at('cameras-off')),
     'Python:one': launchPy(at('one')), 'Python:twice': launchPy(at('twice')), 'Python:no-verdict': launchPy(at('no-verdict')),
     'Python:few': launchPy(at('few')), 'Python:ten': launchPy(at('ten')), 'Python:one-polarity': launchPy(at('one-polarity')),
@@ -398,7 +406,8 @@ for (const { root, options } of jobs) {
   for (const [label, needle] of [
     ['the PRIMARY outcome is fitted', 'PRIMARY: incomplete-blink ratio'],
     ['as a binomial, not a Gaussian ratio', 'binomial GEE'],
-    ['the frame-rate sensitivity is addressed', 'frame-rate adequacy on the primary-outcome rows'],
+    ['the frame-rate sensitivity is addressed', 'frame-rate gate fps-g2 on the primary-outcome rows'],
+    ['the frame-rate gate is checked against polarity before inference', 'polarity check, negative minus positive'],
     ['the key secondary appears', 'CVS-Q'],
     ['reaction time is fitted', 'RT mixed model'],
     ['fatigue is fitted', 'Fatigue mixed model'],
@@ -410,6 +419,10 @@ for (const { root, options } of jobs) {
     ['NASA-TLX is summarised', 'NASA-TLX raw score'],
     ['the primary is also reported without the frame-rate covariate', 'without the eff_fps_c covariate'],
   ]) ok(label, out.includes(needle), `"${needle}" not in the output`);
+  // The template recomputes the gate's rate from ear_sample_count and observed_duration_ms and says when
+  // it differs from the rate the app wrote: one definition, so on the app's own export it never does.
+  ok('fps-g2: the template\'s rate agrees with the export\'s on every row', !/differs from the one recomputed/.test(out),
+    (/^\[fps-g2\][^\n]*differs[^\n]*/m.exec(out) ?? [''])[0]);
   // M6: the robust sandwich SE is too small with few clusters, and statsmodels' bias-reduced
   // correction failed outright with weights=; the primary is now fitted per blink so it can be used.
   /*
@@ -461,6 +474,21 @@ for (const { root, options } of jobs) {
   ok('and refits on the adequately-sampled rows, as the plan requires',
     `${r2.stdout}`.includes('PRIMARY refit, adequately-sampled conditions ONLY'),
     'the pre-registered sensitivity refit did not run');
+  /*
+   * The frame-rate gate fps-g2 (Round 79; ANALYSIS_PLAN.md §5 item 2), computed by the template from the
+   * two stored columns: the two tier-C rows leave the confirmatory model, counted by polarity, and the
+   * three pre-registered refits run — tier A only, every tier, consistent rows only.
+   */
+  ok('the fixture can be slowed to tiers B and C', flaggedTiered && flaggedObs.length > 4, '07_eye_metrics.csv has no ear_sample_count column');
+  ok('fps-g2: the two tier-C runs are out of the confirmatory model, and counted',
+    /\[fps-g2\] 2 camera-on condition-run\(s\) are in tier C \(under 15 fps\) and are out of the confirmatory ocular models/.test(r2.stdout),
+    (/^\[fps-g2\][^\n]*/m.exec(r2.stdout) ?? ['no [fps-g2] line'])[0]);
+  ok('fps-g2: the tier counts are reported before the refits',
+    /frame-rate gate fps-g2 on the primary-outcome rows \(A >= 20, B 15-20, C < 15\): A \d+, B 2, C 2/.test(r2.stdout),
+    (/^frame-rate gate fps-g2[^\n]*/m.exec(r2.stdout) ?? ['no tier line'])[0]);
+  for (const label of ['fps-g2 tier A only \\(reduced rows out\\)', 'fps-g2 every tier \\(tier C put back\\)', 'fps-g2 consistent rows only \\(within 2 fps\\)']) {
+    ok(`fps-g2: the refit "${label.replace(/\\/g, '')}" runs`, new RegExp(`${label}\\s+polarity_c -?[\\d.]+`).test(r2.stdout), 'no such sensitivity line');
+  }
   // =========================================================================
   // The R template.
   // =========================================================================
@@ -592,6 +620,28 @@ for (const { root, options } of jobs) {
     ok('R: the fitted-minimum sensitivity is refitted, all rows and exposure-known rows',
       /fitted minimum \(fit-r1\), all rows with it\s+polarity -?[\d.]+/.test(rOut) && /fitted minimum, exposure known only\s+polarity -?[\d.]+/.test(rOut),
       'no fitted-minimum sensitivity lines');
+    // Round 79: the frame-rate gate fps-g2 is reported in §5 before inference, with the pre-registered
+    // polarity check, and its consistent-only refit runs (this cohort's simulated rates vary by up to
+    // 9 fps within a participant, so rows outside the 2-fps band exist).
+    ok('R: §5.2 reports the frame-rate gate fps-g2 and the polarity check',
+      /5\.2 frame-rate gate fps-g2/.test(rOut) && /tier A \/ B \/ C \/ no rate:\s+\d+ \/ \d+ \/ \d+ \/ \d+/.test(rOut)
+        && /sampling_fps_observed [+-]\d+\.\d+ fps \(pre-registered limit 2\)/.test(rOut),
+      'no fps-g2 report in §5.2');
+    ok('R: the fps-g2 consistent-only refit runs', /fps-g2 consistent rows only \(within 2 fps\)\s+polarity -?[\d.]+/.test(rOut),
+      'no consistent-only refit');
+    ok('R: the fps-g2 rate agrees with the export\'s on every row', !/differs from the one recomputed/.test(rOut),
+      (/^\[fps-g2\][^\n]*differs[^\n]*/m.exec(rOut) ?? [''])[0]);
+    {
+      const rf = await RUNS['R:flagged'];
+      const fOut = `${rf.stdout}\n${rf.stderr}`;
+      ok('R (flagged): runs to completion', rf.status === 0, (rf.stderr || '').trim().split('\n').slice(-2).join(' | '));
+      ok('R (flagged): the two tier-C runs are out of the confirmatory model, and counted',
+        /\[fps-g2\] 2 camera-on condition-run\(s\) with blinks are in tier C \(under 15 fps\) and are out of the confirmatory ocular models/.test(fOut),
+        (/^\[fps-g2\][^\n]*/m.exec(fOut) ?? ['no [fps-g2] line'])[0]);
+      for (const label of ['fps-g2 tier A only \\(reduced rows out\\)', 'fps-g2 every tier \\(tier C put back\\)', 'fps-g2 consistent rows only \\(within 2 fps\\)']) {
+        ok(`R (flagged): the refit "${label.replace(/\\/g, '')}" runs`, new RegExp(`${label}\\s+polarity -?[\\d.]+`).test(fOut), 'no such sensitivity line');
+      }
+    }
     // m5: Objective 2's three models carry the primary's covariates, and the residual-hue model's
     // collinearity is printed beside its coefficients.
     ok('R: the Objective 2 models carry the primary\'s covariates, and the residual-hue model\'s collinearity is shown',

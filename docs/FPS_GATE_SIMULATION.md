@@ -116,6 +116,19 @@ or 4% moves the ratio by +0.7 or −0.65 points: about 0.7 points per 1% of nois
 by polarity would be a confound the same size as the frame-rate one, so it should be recorded per
 condition and checked between polarities before inference.
 
+## How this sits with the published evidence
+
+- **Zheng et al. (2022)** (ledger #63, full text) recommend 30 frames a second or more for
+  incomplete-blink analysis. They compared only 30 with 8 frames a second (a Keratograph 5M, not a
+  webcam); at 8 the incomplete-blink proportion was 47.6% against 21.2% at 30 in the same people —
+  the same upward bias this simulation shows, much larger at 8. No rate in between was tested, so
+  the paper neither supports nor rules out 20.
+- **Navascues-Cornago et al. (2026)** (ledger #64, abstract only) downsampled 500-fps infrared
+  recordings: blink amplitude and duration showed minimal bias down to 25 fps, the lowest rate they
+  tested; velocities did not. This project computes no blink velocity.
+- So the 20-fps floor is a model result for the shipped classifier, under the assumptions above. It is
+  stated as such, and the validation sub-study (a human coder against 07b) is what can test it.
+
 ## Limits
 
 - Phase spreads, lid shape, depth mix, noise level and jitter are assumptions; the noise is

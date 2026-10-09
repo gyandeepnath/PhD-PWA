@@ -460,13 +460,52 @@ These are not optional and they come first.
    a tight cluster at 300 lux, not a spread. This is a constancy check rather than a separation
    check — there are no levels to separate — and a sitting outside 250–350 is a protocol deviation.
    `lux_all_in_range` flags those, and `lux_complete` says whether all three checkpoints were taken.
-2. **Was the primary outcome measurable?** `fps_adequate_for_ratio`. Below the frame-rate floor the
-   sampled minimum EAR is biased **upward**, so `incomplete_blink_ratio` is inflated — a directional
-   bias, not symmetric noise. **Do not drop these rows silently:** frame rate covaries with how the
-   face is lit, and display polarity — an independent variable — changes that, so dropping them
-   deletes data non-randomly with respect to a factor. (This item used to name ambient illumination
-   as the independent variable; illumination is now held constant.) Run the model with and without
-   them and report both.
+2. **Was the primary outcome measurable? The frame-rate gate `fps-g2`** (Round 79; pre-registered
+   here before the first participant). A slower camera misses the deepest moment of more blinks, so
+   more of them read as incomplete: a directional bias, not symmetric noise.
+   - **What is measured.** `sampling_fps_observed` = (`ear_sample_count` − 1) / `observed_duration_ms`
+     × 1000, to 0.01, rounded half up: face-solved eye samples per second while the face was seen.
+     Both inputs are in every `07_eye_metrics.csv` row, so rows recorded before Round 79 are re-tiered
+     from stored columns, without re-collection. (`effective_fps` divides by the whole span, so face
+     loss lowered it and was then counted a second time in `face_presence_ratio`.)
+   - **The tiers.** **A** ≥ 20 (adequate). **B** 15 to < 20 (reduced: kept, flagged). **C** < 15
+     (too slow: exploratory).
+   - **Consistency.** `fps_consistent` is FALSE when a row's rate is more than 2 fps from the
+     participant's own median, taken over all of that participant's camera-on condition-runs with a
+     rate (every sitting, before any exclusion, so a row's flag does not depend on the set modelled).
+   - **Where the numbers come from.** A simulation of the shipped classifier, run before data
+     collection (`docs/FPS_GATE_SIMULATION.md`; `scripts/fpsGateSim.ts`, `npm run sim:fps`, base seed
+     20261008). At 20 fps it found at least 98% of blinks and classified them within 0.05 kappa of its
+     accuracy at 30 fps, in every decision scenario; at 15, at least 95%; nothing below 15 was
+     simulated. Between 20 and 30 fps the ratio moved at most 0.31 percentage points per fps, so a
+     2-fps band keeps a frame-rate-driven difference between one person's conditions under about 0.6
+     points — a fifth of the planned 3-point effect. Every assumption is listed there; the stricter
+     reading of one robustness scenario (22 fps) is recorded there as a judgement.
+   - **What the published evidence does and does not say** (`docs/CITATION_VERIFICATION.md` #63,
+     #64). Zheng et al. (2022) recommend 30 fps or more, but compared only 30 with 8 frames a second;
+     at 8 the incomplete-blink proportion roughly doubled in the same people (the same upward bias).
+     Navascues-Cornago et al. (2026) found blink amplitude and duration agreed with a 500-fps
+     reference down to 25 fps, the lowest rate they tested. No verified study tested 15–25 fps for
+     incomplete blinks, so 20 is a model result for this classifier and is reported as one.
+   - **What the analysis does.** The confirmatory ocular models use tiers A and B; **tier C is out**,
+     with its count and its split by polarity printed. Three refits are reported beside the primary:
+     tier A only; every tier (tier C put back); and `fps_consistent` rows only. The completeness rule
+     (`blink-r1`) is unchanged. Both templates do all of this (`[fps-g2]` lines, and §5.2 in R).
+   - **Checked before inference.** The within-participant mean difference between polarities
+     (negative minus positive) in `sampling_fps_observed` and in `mean_face_luma`. If the frame-rate
+     difference exceeds 2 fps, say so beside the primary and read the consistent-only refit and the
+     fitted-minimum sensitivity (below) with it.
+   - **Rows recorded under the old gate.** `fps_gate_version` names the gate the app applied when the
+     row was recorded (`fps-g2`, or `g1-25/30` before Round 79). Every row is tiered under `fps-g2`;
+     report the two kinds of row apart as well as together. The old flag `fps_adequate_for_ratio`
+     (`effective_fps` ≥ 30) is still written and its refit still printed, marked superseded: the 30
+     was never verified, and a 30-fps tablet camera essentially never cleared it.
+   - **Still open (investigator's decision, before unblinding):** whether frame rate enters the
+     primary as `eff_fps_c` (as now) or as each person's mean plus the within-person deviation.
+     Report both until decided, as §2 says for `eff_fps_c`.
+   - **Do not drop rows silently.** Frame rate covaries with how the face is lit, and display polarity
+     changes that; the tier-C exclusion is a pre-registered rule, its count is printed by polarity,
+     and the every-tier refit shows what it changed.
    **Why the rate was what it was** (from version 2.3.0, Round 75): `camera_fps_delivered`,
    `tracker_fps`, `frames_skipped` and `process_ms_p50`/`process_ms_p95` in `07_eye_metrics.csv`
    separate a camera that delivered too few frames from a tracker that could not keep up. They are

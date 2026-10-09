@@ -1169,6 +1169,51 @@ lid's movement within a phase (the simulation runs a smooth and a V-shaped profi
 not given), or anything about webcam EAR. Eleven men, primary gaze, 30-s recordings: a small sample, and
 not a reading task.
 
+### 63. Zheng et al. (2022) — 30 against 8 frames a second for incomplete blinks (cited in docs, Round 79)
+**Status: CONFIRMED.** PMID 35357395 · PMC8976934 · DOI [10.1167/tvst.11.3.38](https://doi.org/10.1167/tvst.11.3.38)
+
+> Zheng, Q., Wang, L., Wen, H., Ren, Y., Huang, S., Bai, F., Li, N., Craig, J. P., Tong, L., & Chen,
+> W. (2022). Impact of incomplete blinking analyzed using a deep learning model with the Keratograph 5M
+> in dry eye disease. *Translational Vision Science & Technology, 11*(3), 38.
+
+Metadata matches PubMed (verified 8 Oct 2026). **Full text read** (PMC). Verbatim, abstract: *"Blink
+videos of 30 frames per second (FPS) under white light, eight FPS extracted from white light videos,
+and eight FPS under infrared light were processed"*; *"The blink parameters based on 30 FPS video
+presented higher sensitivity and accuracy than those based on eight FPS"*; *"a frame rate ≥ 30 FPS is
+recommended"*. Full text, Discussion: *"Although videos of > 30 FPS were not tested in the current
+study"*; and on 8 FPS, *"It was possible that some complete blinks were misjudged as incomplete, when
+the lowest IPH was lost"*. Table 2: incomplete-blink proportion 21.19% at 30 FPS against 47.60% (8 FPS
+extracted) in the same participants.
+
+Cited (Round 79: `docs/ANALYSIS_PLAN.md` §5 item 2, `docs/FPS_GATE_SIMULATION.md`) for: (1) the
+direction of the frame-rate bias — a lower rate raises the incomplete-blink proportion, because the
+deepest frame is missed; and (2) the fact that its "≥ 30 FPS" recommendation rests on a comparison of
+**30 with 8 frames a second only** — no rate between them was tested. So it neither supports nor rules
+out 20 frames a second, which is why fps-g2's floor comes from a simulation and is stated as a model
+result. **Not cited for:** webcam or EAR measurement (it is a Keratograph 5M with a U-Net segmentation
+of the palpebral fissure, an incomplete blink defined at 30% of the maximal interpalpebral height), or
+any threshold this study uses. 50 dry-eye and 50 control participants, right eye, one-minute videos.
+
+### 64. Navascues-Cornago et al. (2026) — blink amplitude and duration down to 25 frames a second (cited in docs, Round 79)
+**Status: CONFIRMED.** PMID 41565104 · DOI [10.1016/j.jtos.2026.01.003](https://doi.org/10.1016/j.jtos.2026.01.003)
+
+> Navascues-Cornago, M., Maldonado-Codina, C., Morgan, P. B., & Read, M. L. (2026). Video frame rate
+> influences the accuracy of blink dynamics measurement. *The Ocular Surface, 40*, 22–30.
+
+Metadata matches PubMed (verified 8 Oct 2026). **Abstract only** (no PMC full text). Verbatim:
+*"Spontaneous blinks were recorded in 20 participants and reflex blinks were recorded in an additional
+10 participants using a 500 frames per second (fps) high-speed infrared camera. Videos were downsampled
+to simulate acquisition at 250, 100, 50 and 25 fps"*; *"Blink amplitude and duration showed minimal
+bias and narrow LoA across all frame rates"*; *"Maximum velocities were markedly underestimated below
+250 fps for both blink types."*
+
+Cited (Round 79: `docs/ANALYSIS_PLAN.md` §5 item 2, `docs/FPS_GATE_SIMULATION.md`) for: blink amplitude
+and duration measured from video agree with a 500-fps reference down to 25 fps (the lowest rate it
+tested), while velocities do not — so this project computes no velocity. **Not cited for:** rates below
+25 fps (not tested), webcam EAR or landmark tracking (it is a high-speed infrared camera, with frames
+dropped from the same recording, so no exposure or landmark-noise difference), or the size of the limits
+of agreement (not given in the abstract).
+
 ## NOT INDEXED IN PUBMED — verified against a secondary authority, or unverified
 
 PubMed indexes biomedical and life-sciences literature only. The references below fall outside

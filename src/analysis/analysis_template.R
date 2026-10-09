@@ -134,6 +134,46 @@ wide        <- read_export("10_wide_summary.csv")   # carries session_index per 
 participant <- read_export("11_participant.csv", with_folder = TRUE)   # demographics + vision covariates
 cvsq        <- read_export("13_cvsq.csv", with_folder = TRUE)          # CVS-Q symptom questionnaire (per item)
 
+# --- The frame-rate gate fps-g2 (ANALYSIS_PLAN.md §5 item 2) ---------------------------------
+# ONE DEFINITION. These lines are src/tracking/frameRateGate.ts, operation for operation, so the app,
+# the export and this file put every row in the same tier (tests/frameRateGate.test.ts pins the three
+# numbers below to the app's). It is computed HERE, from the two columns every 07 row stores, for every
+# row read — so rows recorded before the gate existed (fps_gate_version blank, or g1-25/30) are
+# re-tiered too — and BEFORE any exclusion: a participant's median is over all of that participant's
+# camera-on rows with a rate, so a row's flag does not depend on which set is modelled.
+#   sampling_fps_observed = (ear_sample_count - 1) / observed_duration_ms x 1000, to 0.01 half up:
+#     face-solved samples per second while the face was seen (no rate under 1 s or 2 samples);
+#   fps_tier: A at FPS_GATE_ADEQUATE or more, B from FPS_GATE_REDUCED, C below;
+#   fps_consistent: within FPS_GATE_BAND of the participant's median.
+FPS_GATE_ADEQUATE <- 20  # PRE-REGISTERED (docs/FPS_GATE_SIMULATION.md): detection >= 0.98 and kappa
+                         # within 0.05 of 30 fps in every decision scenario of the shipped classifier.
+FPS_GATE_REDUCED  <- 15  # PRE-REGISTERED: detection >= 0.95; nothing below 15 was simulated.
+FPS_GATE_BAND     <- 2   # PRE-REGISTERED: at most 0.31 points of ratio per fps between 20 and 30, so 2 fps
+                         # is at most a fifth of the planned 3-point effect.
+fps_gate <- function(d) {
+  cam <- as.character(d$camera_active) %in% c("TRUE", "true", "1")
+  n   <- suppressWarnings(as.numeric(d$ear_sample_count))
+  obs <- suppressWarnings(as.numeric(d$observed_duration_ms))
+  rated <- cam & is.finite(n) & n >= 2 & is.finite(obs) & obs >= 1000
+  x <- ((n - 1) / obs) * 1000
+  fps <- ifelse(rated, floor(x * 100 + 0.5) / 100, NA_real_)
+  stored <- if ("sampling_fps_observed" %in% names(d)) suppressWarnings(as.numeric(d$sampling_fps_observed)) else rep(NA_real_, nrow(d))
+  differs <- sum(is.finite(stored) & is.finite(fps) & abs(stored - fps) > 0.005)
+  if (differs > 0) {
+    cat(sprintf("[fps-g2] %d row(s) carry a sampling_fps_observed that differs from the one recomputed from their own columns; the recomputed one is used.\n", differs))
+  }
+  version <- if ("fps_gate_version" %in% names(d)) as.character(d$fps_gate_version) else rep(NA_character_, nrow(d))
+  d$sampling_fps_observed <- fps
+  d$fps_tier <- ifelse(is.na(fps), NA_character_,
+                       ifelse(fps >= FPS_GATE_ADEQUATE, "A", ifelse(fps >= FPS_GATE_REDUCED, "B", "C")))
+  d$fps_gate_version <- ifelse(cam, ifelse(is.na(version) | version == "", "g1-25/30", version), NA_character_)
+  med <- tapply(fps, d$participant_id, function(v) if (any(is.finite(v))) median(v, na.rm = TRUE) else NA_real_)
+  d$fps_median <- unname(med[as.character(d$participant_id)])
+  d$fps_consistent <- ifelse(is.na(fps) | is.na(d$fps_median), NA, abs(fps - d$fps_median) <= FPS_GATE_BAND + 1e-9)
+  d
+}
+eye_metrics <- fps_gate(eye_metrics)
+
 # --- The data's provenance: which builds collected it ----------------------------------------
 # Every sitting carries the build that started it (git_hash), the instrument version, the hash of the
 # locked condition table and the storage schema. Counted over every sitting read, before exclusions:
@@ -788,9 +828,43 @@ cat("    a LOGGED reading out of band:  ",
 cat("    lux_complete FALSE:            ", qc_pct(sum(!sess_qc$lux_complete, na.rm = TRUE), nrow(sess_qc)),
     " (read the two together: a sitting can be in band on the readings it took and still be missing two)\n")
 
-# --- §5.2 pointer ----------------------------------------------------------------------
-cat("\n5.2 frame-rate adequacy — reported with the primary model below, where the plan's\n")
-cat("    with-and-without refit is run. Not repeated here.\n")
+# --- §5.2 Was the primary outcome measurable? The frame-rate gate fps-g2 -------------------------
+# The tiers and the consistency flag were computed when 07 was read (fps_gate, above). Reported here,
+# before inference; the refits the plan pre-registers are in the primary's sensitivity list below.
+# THE PRE-REGISTERED POLARITY CHECK: a frame rate (or a face brightness) that differs between the
+# polarities is the one way frame rate can masquerade as the effect, because a slower camera reads more
+# blinks as incomplete. It is the mean over participants of each person's own negative-minus-positive
+# difference, so it is a within-participant quantity like the effect it guards.
+cat(sprintf("\n5.2 frame-rate gate fps-g2 (sampling_fps_observed: A >= %d, B %d to %d, C < %d; consistent within %d fps of the participant's median)\n",
+            FPS_GATE_ADEQUATE, FPS_GATE_REDUCED, FPS_GATE_ADEQUATE, FPS_GATE_REDUCED, FPS_GATE_BAND))
+if (nrow(eye) > 0) {
+  cat("    sampling_fps_observed:         ", qc_rng(eye$sampling_fps_observed), "\n")
+  tiers <- table(factor(ifelse(is.na(eye$fps_tier), "no rate", eye$fps_tier), levels = c("A", "B", "C", "no rate")))
+  cat("    tier A / B / C / no rate:      ", paste(as.integer(tiers), collapse = " / "),
+      " (C is out of the confirmatory ocular models; refits below)\n")
+  gv <- table(eye$fps_gate_version, useNA = "ifany")
+  cat("    gate in force when recorded:   ", paste(names(gv), as.integer(gv), sep = "=", collapse = ", "),
+      " (every row is tiered under fps-g2 whatever it says)\n")
+  cat("    fps_consistent FALSE:          ", qc_pct(sum(eye$fps_consistent %in% FALSE), sum(!is.na(eye$fps_consistent))), "\n")
+  by_pol_c <- eye %>% group_by(polarity) %>% summarise(n_c = sum(fps_tier %in% "C"), .groups = "drop")
+  cat("    tier C by polarity:            ", paste(by_pol_c$polarity, by_pol_c$n_c, sep = "=", collapse = ", "), "\n")
+  pol_diff <- function(col) {
+    if (!col %in% names(eye)) return(NA_real_)
+    w <- eye %>% filter(is.finite(.data[[col]]), polarity %in% c("negative", "positive")) %>%
+      group_by(participant_id, polarity) %>% summarise(v = mean(.data[[col]]), .groups = "drop") %>%
+      tidyr::pivot_wider(names_from = polarity, values_from = v)
+    if (!all(c("negative", "positive") %in% names(w))) return(NA_real_)
+    mean(w$negative - w$positive, na.rm = TRUE)
+  }
+  d_fps <- pol_diff("sampling_fps_observed")
+  d_luma <- pol_diff("mean_face_luma")
+  cat(sprintf("    polarity check, negative minus positive, mean of each participant's own difference:\n"))
+  cat(sprintf("      sampling_fps_observed %+.2f fps (pre-registered limit %d)%s\n", d_fps, FPS_GATE_BAND,
+              if (is.finite(d_fps) && abs(d_fps) > FPS_GATE_BAND) "  [FPS POLARITY CHECK EXCEEDED: read the consistent-only and fitted-minimum refits beside the primary]" else ""))
+  cat(sprintf("      mean_face_luma        %+.1f (0-255; descriptive: a brighter face under one polarity is how the rate could follow it)\n", d_luma))
+} else {
+  cat("    not computable: no camera-on condition-run in the confirmatory set.\n")
+}
 
 if (nrow(eye) == 0) {
   cat("\n5.3-5.5 not computable: no camera-on condition-run in the confirmatory set.\n")
@@ -1737,9 +1811,21 @@ if (is.null(tlx)) {
 # ===========================================================================================
 primary_failed <- FALSE
 eye <- eye %>% mutate(
-  blink_total = blink_count_incomplete + blink_count_full + blink_count_micro,
-  eff_fps_c   = as.numeric(scale(effective_fps, scale = FALSE))
+  blink_total = blink_count_incomplete + blink_count_full + blink_count_micro
 ) %>% filter(!is.na(blink_total), blink_total > 0)
+# THE FRAME-RATE GATE fps-g2 (ANALYSIS_PLAN.md §5 item 2, pre-registered): tier C — under 15 face-solved
+# samples a second while the face was seen, a rate at which the classifier was not shown to work — is
+# out of the confirmatory ocular models, and every model below that reads `eye` sees tiers A and B only.
+# NOT SILENTLY: the count and its polarity split are printed here and in §5.2, and the primary is refitted
+# with tier C put back (eye_all_tiers) in the sensitivity list. eff_fps_c is centred within each frame.
+eye_all_tiers <- eye %>% mutate(eff_fps_c = as.numeric(scale(effective_fps, scale = FALSE)))
+n_tier_c <- sum(eye$fps_tier %in% "C")
+eye <- eye %>% filter(!(fps_tier %in% "C")) %>% mutate(eff_fps_c = as.numeric(scale(effective_fps, scale = FALSE)))
+cat(sprintf("\n[fps-g2] %d camera-on condition-run(s) with blinks are in tier C (under %d fps) and are out of the confirmatory ocular models%s; %d remain.\n",
+            n_tier_c, FPS_GATE_REDUCED,
+            if (n_tier_c > 0) paste0(" (", paste(names(table(eye_all_tiers$polarity[eye_all_tiers$fps_tier %in% "C"])),
+                                                 as.integer(table(eye_all_tiers$polarity[eye_all_tiers$fps_tier %in% "C"])), sep = "=", collapse = ", "), ")") else "",
+            nrow(eye)))
 
 if (nrow(eye) == 0) {
   cat("\n################################################################\n")
@@ -2056,15 +2142,34 @@ if (nrow(eye) == 0) {
     cat("\n=== PRIMARY: sensitivity refits (polarity = positive minus negative, log-odds) ===\n")
     sens_line("confirmatory (the primary above)", m_primary)
 
-    # §5.2 frame-rate adequacy. If the effect only exists in the flagged subset, it is a camera
-    # artefact. isTRUE(any(..., na.rm = TRUE)): the bare any() errored when no value was TRUE and some
-    # were missing. The dead m_primary_fps fit that sat here is gone.
-    cat("\nframe-rate adequacy (the primary outcome's known directional bias):\n")
+    # §5.2 THE FRAME-RATE GATE fps-g2 — the three pre-registered refits (ANALYSIS_PLAN.md §5 item 2).
+    # The primary above uses tiers A and B. If the effect exists only with the reduced or the
+    # inconsistent rows in, a frame rate is the likelier explanation than the display.
+    cat("\nframe-rate adequacy, gate fps-g2 (the primary outcome's known directional bias):\n")
+    print(table(fps_tier = eye_all_tiers$fps_tier, useNA = "ifany"))
+    if (any(eye$fps_tier %in% "B")) {
+      sens_line("fps-g2 tier A only (reduced rows out)", refit_on(eye %>% filter(fps_tier %in% "A")))
+    } else {
+      cat("  no tier-B row: the tier-A-only refit is the primary itself.\n")
+    }
+    if (n_tier_c > 0) {
+      sens_line("fps-g2 every tier (tier C put back)", refit_on(eye_all_tiers))
+    } else {
+      cat("  no tier-C row: the every-tier refit is the primary itself.\n")
+    }
+    if (any(eye$fps_consistent %in% FALSE)) {
+      sens_line("fps-g2 consistent rows only (within 2 fps)", refit_on(eye %>% filter(fps_consistent %in% TRUE)))
+    } else {
+      cat("  every row is within", FPS_GATE_BAND, "fps of its participant's median: the consistent-only refit is the primary itself.\n")
+    }
+    # Gate g1, superseded by fps-g2 and kept so an analysis run on it reproduces. isTRUE(any(..., na.rm =
+    # TRUE)): the bare any() errored when no value was TRUE and some were missing.
+    cat("  gate g1 (superseded; effective_fps >= 30):\n")
     print(table(fps_adequate_for_ratio = eye$fps_adequate_for_ratio, useNA = "ifany"))
     if (isTRUE(any(eye$fps_adequate_for_ratio, na.rm = TRUE)) && !all(eye$fps_adequate_for_ratio %in% TRUE)) {
-      sens_line("fps_adequate_for_ratio conditions only", refit_on(eye %>% filter(fps_adequate_for_ratio %in% TRUE)))
+      sens_line("g1 (superseded): fps_adequate_for_ratio conditions only", refit_on(eye %>% filter(fps_adequate_for_ratio %in% TRUE)))
     } else {
-      cat("  every camera-on run is adequately sampled (or none is): no frame-rate refit to run.\n")
+      cat("  every camera-on run passes g1 (or none does): no g1 refit to run.\n")
     }
 
     # §5 item 2: the fitted-minimum sensitivity (Round 79, rule fit-r1). The same blinks, each judged on
@@ -2202,12 +2307,13 @@ if (nrow(eye) == 0) {
                               wide_all, quality_all,
                               participant_all[participant_all$sitting_folder %in% sens_folders, , drop = FALSE],
                               session_info_all[session_info_all$sitting_folder %in% sens_folders, , drop = FALSE])
+      # The same frame-rate gate as the confirmatory frame (tier C out): the two sets differ in rows only.
       eye_sens <- eye_metrics_all %>% filter(condition_id %in% sens_ids) %>%
         left_join(cond_sens, by = c("participant_id", "condition_id")) %>%
         filter(camera_active == 1) %>%
-        mutate(blink_total = blink_count_incomplete + blink_count_full + blink_count_micro,
-               eff_fps_c   = as.numeric(scale(effective_fps, scale = FALSE))) %>%
-        filter(!is.na(blink_total), blink_total > 0)
+        mutate(blink_total = blink_count_incomplete + blink_count_full + blink_count_micro) %>%
+        filter(!is.na(blink_total), blink_total > 0, !(fps_tier %in% "C")) %>%
+        mutate(eff_fps_c = as.numeric(scale(effective_fps, scale = FALSE)))
       if (DROP_DISENGAGED) eye_sens <- eye_sens %>% filter(!(engagement_flag %in% "bad"))
       m_sens <- refit_on(eye_sens)
       cat("\n=== PRIMARY refit on the SENSITIVITY SET (", n_sens_extra,
