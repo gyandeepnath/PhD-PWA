@@ -173,7 +173,8 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) whit
   → CAMERA_SETUP        webcam permission (or skip → camera_active=false; every ocular column is then
                         missing, not zero)
   → CALIBRATION         9-point gaze calibration + EAR open-eye baseline + per-person frontal-pitch
-                        baseline (head frontal → pitch zero), then the camera self-test  /
+                        baseline (head frontal → pitch zero), then the camera self-test on the
+                        grey field (rule st-r2)  /
                         positioning check if no camera
   → CVSQ_BASELINE       validated CVS-Q (16 items)
   → BASELINE_FATIGUE    5-item visual-fatigue VAS (0–10)
@@ -296,7 +297,10 @@ is a pure transition function; `Experiment.tsx` is the driver.
 
 Webcam frames → MediaPipe **FaceMesh** (468/478 landmarks) → one sample **per FaceMesh result**
 (true measurement rate, target ~30 fps; not the 60 fps render loop). `effective_fps` is recorded
-from processed-frame timestamps and **gates** the timing-dependent metrics.
+from processed-frame timestamps. From Round 79 every condition is judged by the frame-rate gate
+**fps-g2** (`frameRateGate.ts`): `sampling_fps_observed`, face-solved samples a second while the face
+was seen — tier A ≥ 20, B 15–20, C < 15 — and within 2 fps of the participant's own median
+(`docs/FPS_GATE_SIMULATION.md`). The camera self-test (rule st-r2) judges the same rate.
 
 ### 5.1 Eye-Aspect-Ratio (EAR) and blink classification (`blink.ts`)
 - **EAR** (Soukupová & Čech, 2016): for eye points p1..p6, `EAR = (‖p2−p6‖ + ‖p3−p5‖) / (2·‖p1−p4‖)`,
@@ -323,7 +327,8 @@ from processed-frame timestamps and **gates** the timing-dependent metrics.
 - **Long-closure events** (> 500 ms) — micro-sleep proxy: count + total duration.
 
 ### 5.4 Diagnostics only (sub-Nyquist below ~25 fps; JSON bundle only)
-- Blink **duration**, **micro-blink** counts/rate, per-tier counts. Gated by `fps_adequate_for_tiers`.
+- Blink **duration**, **micro-blink** counts/rate, per-tier counts. Flagged by gate g1's
+  `fps_adequate_for_tiers` (≥ 25 fps), still written; superseded from Round 79 by fps-g2's `fps_tier`.
 
 ### 5.5 Head pose (`headPose.ts`)
 - **Yaw** from nose-vs-ear-midpoint; **roll** from eye-line angle; **pitch** from the nose-tip's
@@ -495,7 +500,8 @@ fatigue + CVS-Q are re-measured each sitting (fatigue resets — documented, not
 
 ## 14. Known limitations to disclose (PhD write-up)
 1. **Webcam eye tracking is screening-grade** (spatial error ~3–5°); an IR eye-tracker is the
-   reference standard. Frame rate is recorded (`effective_fps`) and gates timing-based metrics.
+   reference standard. Frame rate is recorded and judged by gate fps-g2 (`sampling_fps_observed`,
+   `fps_tier`), set by a simulation of the shipped classifier, not by a measurement on the tablet.
 2. **Blink rate is non-monotonic w.r.t. fatigue** (drops with concentrated reading, rises with
    sleepiness) — never interpret in isolation; triangulate incomplete-blink ratio + IBI + CVS-Q +
    PERCLOS.

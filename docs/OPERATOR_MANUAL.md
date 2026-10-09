@@ -323,18 +323,20 @@ Beside the picture, **CAMERA AND TRACKER** gives three rates and says which one 
 |---|---|---|
 | *Camera delivers* N fps · W×H | Frames the camera hands to the app each second, and their size | The **camera** is the limit. Most tablet cameras slow down in dim light: add light on the face (not behind it), and close any other app that may hold the camera. |
 | *Tracker processes* N fps · M ms | Frames the face tracker gets through each second, and the time one frame takes | The **processor** is the limit: close other apps, plug in the charger and switch battery saver off, let a hot tablet cool, and use the fastest tracker (below). |
-| *Face found* N fps | Frames in which the face was found. This is the rate the blink measures are sampled at (`effective_fps`) | Seating, distance, light on the face, glare on spectacles, something in front of the face. |
+| *Face found* N fps | Frames in which the face was found. This is the rate the blink measures are sampled at (per reading, `sampling_fps_observed`) | Seating, distance, light on the face, glare on spectacles, something in front of the face. |
 | *Face width* N px | How wide the face is in the camera's picture | The face model enlarges a crop around the face to 192 or 256 px before it finds the eyelids, so a face much narrower than that is being magnified and the lids carry few real pixels. It depends on the distance **and** on the picture size the camera gave (the *Asked for … the camera gave …* line): a small value with the participant at 50 to 60 cm means the camera gave a small picture — note both numbers for the investigator rather than moving the participant closer than the protocol distance. No minimum has been validated; this is a reading to record. |
 
 The sentence under them names the stage that is short. It blames the camera alone only while the
 tracker keeps up with what the camera delivers (processes at least 80% of it). When both are short —
 for example the camera at 20 and the tracker at 11 — it says *the camera AND the tracker are short*:
 more light alone will not fix that, because the tracker would still process only about 11 frames a
-second; do the processor steps as well. When the face is found 25 to 30 times a
-second it says so in amber — *at least 25, but below the 30 the incomplete-blink ratio is flagged
-under*: enough for the camera check, but every reading condition measured at that rate has its
-incomplete-blink ratio flagged in the data (`fps_adequate_for_ratio`). If it says that with every
-participant, tell the investigator; do not change anything to make it go away. Below the rates is the last ten seconds of
+second; do the processor steps as well. It also gives the face rate's verdict under the
+**frame-rate gate** the whole study uses (from Round 79): **adequate** at 20 face frames a second or
+more (green); **reduced** at 15 to 20 (amber: blinks are measured, and a reading at that rate is kept
+and flagged); **too slow** under 15 (amber: blink data from it are exploratory only). Earlier builds
+asked for 30 here and were amber at almost every rate the tablet delivers; the 20 comes from a
+simulation of the app's own blink measure (docs/FPS_GATE_SIMULATION.md). If it says *reduced* or *too
+slow* with every participant, tell the investigator; do not change anything to make it go away. Below the rates is the last ten seconds of
 eye openness: a white line that dips at each blink. After calibration it carries two dashed lines,
 yellow at 0.75 and red at 0.60 of this participant's open eye: a dip below yellow is counted as a
 blink, below red as a complete one.
@@ -351,12 +353,34 @@ because a participant measured on two trackers is flagged in the data (the track
 interchangeable instruments). Before the pilot the investigator fixes the tracker for the study; the
 screen then says *Fixed:* and there is nothing to measure.
 
-**The camera check** after calibration (*Quick camera check*: blink when the dot flashes) shows the
-same three rates on its result screen. When it fails on frame rate it now says **which stage** was
-short — "the CAMERA delivered only …, and the tracker kept up" (light), "the TRACKER processed
-only …, taking about M ms a frame" (processor), "BOTH the camera and the tablet's processor are
-short" (both: light alone will not fix it), or "found the face in only some of them" (seating) — and that is the advice to
-follow. Do not lower anything to make it pass.
+**The camera check** after calibration (*Quick camera check*: blink when the dot flashes). From
+Round 79 it runs on the grey field — the same mid-grey as before each display — and the dot turns
+from black to white for each flash. It takes about 18 seconds. It passes when all three hold:
+
+| What is checked | Needed |
+|---|---|
+| Blinks seen | at least 4 of the 5 flashes, each blink beginning within 1.2 s of its flash |
+| Face in view | at least 90% of the time |
+| Eye sampled (face frames a second while the face was seen) | 15 or more: 20 or more is *The camera is working*; 15 to 20 is *working, at a reduced frame rate* (a pass) |
+
+The result screen shows each line with a tick or a cross, each flash with whether a blink was seen
+and when it began, and a trace of eye openness through the check with the five flashes marked
+(light bands are the 1.2 s either side of each flash). Read it this way:
+
+- **No dip at a flash**: the participant did not blink, or blinked late. Explain again and try again.
+- **A dip that does not reach the dashed line**: the blink was too shallow for the camera to count.
+  Check the light on the face and glare on spectacles.
+- **A gap in the trace**: the face was lost. Check seating, distance and that nothing is in front of
+  the camera.
+- **Too slow**: the sentence under the trace names the stage that is short — "the CAMERA delivered
+  only …" (light), "the TRACKER processed only …" (processor), "BOTH the camera and the tablet's
+  processor are short" (both: light alone will not fix it), or "found the face in only some of them"
+  (seating) — as on camera setup. Follow that advice. Do not lower anything to make it pass.
+
+*Try again* runs another attempt; the earlier ones are listed on the screen and kept with the one
+recorded. A *reduced* pass is a pass: continue, or improve the light and try again. Before Round 79
+the check failed whenever the camera ran below 25 frames a second, which on the study tablet was
+almost always: that was the rule, not the participant.
 
 **What to send the investigator from the tablet** the first time the new version runs (photograph
 the screens or copy the numbers): from camera set-up, the three rates, the face width, the line
@@ -513,7 +537,7 @@ else a sitting produces put together.
 | No camera permission prompt at all | Page is not on a secure origin | **Stop.** The camera cannot work. See DEPLOYMENT.md section 2. Do not run the session. |
 | Permission denied by mistake | Participant or previous operator tapped Block | Site settings → allow camera → reload → resume. |
 | Face not detected at setup | Too dark, too far, backlit, camera covered | Check the lens, the distance, and that the participant is not silhouetted against a lamp. |
-| "Low frame rate" or a QC warning | Read **which** rate is low (camera set-up, the camera check's result, or the researcher panel) | *Camera delivers* low: more light on the face, close other camera apps. *Tracker processes* low: close other apps, charge, let it cool, use the fastest tracker. *Face found* low: seating and light. Below about 25 face frames a second the duration-based blink measures are gated off. |
+| "Low frame rate" or a QC warning | Read **which** rate is low (camera set-up, the camera check's result, or the researcher panel) | *Camera delivers* low: more light on the face, close other camera apps. *Tracker processes* low: close other apps, charge, let it cool, use the fastest tracker. *Face found* low: seating and light. Under 20 face frames a second a reading is flagged *reduced*; under 15, *too slow* (its blink data are exploratory only). |
 | Glasses reflecting the screen | Lamp or screen reflecting off the lenses | Tilt the tablet slightly, or move the lamp. Do not ask them to remove correction. |
 | App reloads mid-session | Browser reclaimed memory, or the tablet slept | Reopen. Session Manager offers **Resume** for every session still in progress, each at its own next condition. Data already written is safe. Note the interruption. |
 | After a resume, the app asks for the camera and runs calibration again | Expected | The blink thresholds are fractions of *this participant's* own open-eye baseline, and a reload clears it. Re-running calibration is required for the resumed conditions to carry any ocular data at all. Take it at the normal pace. |

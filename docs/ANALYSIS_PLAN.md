@@ -506,6 +506,13 @@ These are not optional and they come first.
    - **Do not drop rows silently.** Frame rate covaries with how the face is lit, and display polarity
      changes that; the tier-C exclusion is a pre-registered rule, its count is printed by polarity,
      and the every-tier refit shows what it changed.
+   - **The camera self-test uses the same gate.** From Round 79 (rule `st-r2`, `selftest_rule` in
+     `01_session_info.csv`) the check after calibration judges `selftest_sampling_fps`, computed as
+     `sampling_fps_observed` is, on the grey field: at least 4 of 5 cued blinks within 1.2 s, the face
+     in view 90% of the time, and tier B or better (`selftest_verdict` working or reduced). Sittings
+     before it were scored under `st-r1` (`selftest_fps` ≥ 25 over the whole window), which a 23–25-fps
+     camera failed whatever the participant did. The self-test is a QC record that the camera saw this
+     person's deliberate blinks; no analysis rule in this plan uses it.
    **Why the rate was what it was** (from version 2.3.0, Round 75): `camera_fps_delivered`,
    `tracker_fps`, `frames_skipped` and `process_ms_p50`/`process_ms_p95` in `07_eye_metrics.csv`
    separate a camera that delivered too few frames from a tracker that could not keep up. They are

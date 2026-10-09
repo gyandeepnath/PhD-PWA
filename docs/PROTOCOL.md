@@ -207,7 +207,7 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
   reading **per tracker result, one per camera frame the tracker processes** (the target is ~30 fps,
   the literature minimum for blink detection; an earlier build sampled stale landmarks on a 60 fps
   render loop, duplicating samples and overstating fps). `effective_fps` records the true achieved
-  rate and gates the duration-based tiers. From version 2.3.0 (Round 75):
+  rate (it gated the duration-based tiers at 25 until Round 79; see `fps-g2` below). From version 2.3.0 (Round 75):
   - the **face tracker** is one of three MediaPipe backends — Face Landmarker on the GPU or CPU, or
     the legacy FaceMesh — chosen by measurement on the tablet and **to be frozen before the pilot**,
     because the blink classifier's validation holds only for the tracker it was run on; every
@@ -220,6 +220,21 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
   - what the camera delivered, what the tracker processed and the time per frame are recorded per
   condition, so a low frame rate can be attributed to the camera or the processor.
   Nothing about the tablet's camera or tracker throughput has been measured on the device yet.
+  From Round 79 (after the investigator saw at most 23–25 frames a second on the tablet):
+  - the camera is asked for a 30-fps mode, and its **exposure is fixed** on the grey field at camera
+    setup where the camera allows it (rule `exp-r1`), so white-page and black-page conditions are
+    filmed the same way;
+  - every condition is judged by one **frame-rate gate, `fps-g2`**: face-solved samples a second while
+    the face was seen (`sampling_fps_observed`) — adequate at 20 or more, reduced at 15–20 (kept,
+    flagged), too slow under 15 (exploratory) — and flagged when it differs by more than 2 from that
+    participant's own median. The values come from a simulation of the app's own blink measure
+    (`docs/FPS_GATE_SIMULATION.md`; `docs/ANALYSIS_PLAN.md` §5 item 2), not from a measurement;
+  - the **camera self-test** after calibration (blink once at each of 5 flashes) runs on the grey
+    field and judges the same rate (rule `st-r2`): at least 4 of 5 blinks seen within 1.2 s of their
+    flash, the face in view 90% of the time, and at least 15 samples a second ("working" from 20).
+    Under the old rule (`st-r1`) it demanded 25 frames a second over the whole check and so failed on
+    the tablet whatever the participant did. It remains a check that the camera sees this person's
+    deliberate blinks, not a validation of incomplete-blink classification.
 - **Blink metrics distinguish two constructs.** For **visual/ocular fatigue (CVS — this study)** the
   markers used are a **reduced blink rate** and a **raised incomplete-blink ratio** (Portello,
   Rosenfield & Chu, *Optom Vis Sci* 2013), read with the within-task first/second-half bins and inter-blink
