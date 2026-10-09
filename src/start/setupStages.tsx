@@ -28,6 +28,7 @@ import type { LiveTrackingStats, BenchPaint } from '@/tracking/useTracking';
 import { trialSawFace, MIN_TRIAL_FACE_SHARE, type TrackerTrial } from '@/tracking/trackerChoice';
 import { TRACKER_LABEL, type TrackerBackend } from '@/tracking/trackers';
 import { LiveFeed, EarTrace, PipelineReadout } from '@/components/LiveCamera';
+import { recordingLabel } from '@/tracking/measurementSchedule';
 import { DeviceBox } from '@/components/DeviceBox';
 import { ScreenCalibration, type ScreenCalibrationResult } from './ScreenCalibration';
 import { BuildInfo, useUpdateWaiting } from '@/components/BuildInfo';
@@ -789,6 +790,8 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
               </div>
               <div data-testid="camera-diagnostics" style={{ flex: '1 1 300px', minWidth: 280, background: '#1a1a2e', color: '#fff', borderRadius: 12, padding: '12px 14px' }}>
                 <strong style={{ fontSize: 14, letterSpacing: 0.5 }}>CAMERA AND TRACKER</strong>
+                {/* Nothing on this screen is kept (tracking/measurementSchedule.ts): said where it is shown. */}
+                <div data-testid="setup-recording" style={{ fontSize: 14, marginTop: 2, color: '#dbe6f7' }}>{recordingLabel(live?.recording)}</div>
                 <div style={{ marginTop: 6 }}><PipelineReadout stats={live} /></div>
                 <div style={{ marginTop: 6 }}><EarTrace stats={live} width={260} height={48} /></div>
                 <div style={{ marginTop: 8, fontSize: 14, opacity: 0.85, lineHeight: 1.5 }} data-testid="camera-mode">

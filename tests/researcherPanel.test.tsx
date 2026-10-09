@@ -16,7 +16,7 @@ import type { LiveTrackingStats } from '@/tracking/useTracking';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const stats = (over: Partial<LiveTrackingStats> = {}): LiveTrackingStats => ({
-  facePresent: true, ear: 0.3, earRatio: 1, blinks: 12, incomplete: 3, blinksLive: true, faceFps: 31, cameraFps: 31, trackerFps: 31, processMsP50: 20, processMsP95: 25, frameCountSource: "presented-frames", backend: "tasks-cpu", captureWidth: 1280, captureHeight: 720, faceWidthPx: 210, faceBox: null, eyes: null, earTrace: [], traceBlinks: [], baselineEar: 0.3, baselineMeasured: true,
+  facePresent: true, ear: 0.3, earRatio: 1, blinks: 12, incomplete: 3, blinksLive: true, faceFps: 31, cameraFps: 31, trackerFps: 31, processMsP50: 20, processMsP95: 25, frameCountSource: "presented-frames", backend: "tasks-cpu", captureWidth: 1280, captureHeight: 720, faceWidthPx: 210, faceBox: null, eyes: null, earTrace: [], traceBlinks: [], recording: null, baselineEar: 0.3, baselineMeasured: true,
   exposureFps: 30, faceSize: 0.2, onScreen: true, sessionBlinks: 40, gazeZone: 'cc', noFaceForMs: 0,
   luma: 120, blocked: false, ...over,
 });
@@ -53,9 +53,40 @@ describe('researcher panel', () => {
     expect(m.q('researcher-panel')).not.toBeNull();
     m.push(stats());
     expect(m.host.textContent).toMatch(/Working/);
-    expect(m.host.textContent).toMatch(/12\s*· 3 inc\./);
+    expect(m.host.textContent).toMatch(/12\s*· 3 incomplete/);
     expect(m.host.textContent).toMatch(/3 of 10/);
     m.unmount();
+  });
+
+  it('says whether anything is being recorded now, and whose blink count it shows (Round 80)', () => {
+    const m = mount();
+    act(() => { m.q('researcher-panel-collapsed')!.click(); });
+    // A set-up screen after a reading: nothing is kept, and the count is the last reading's.
+    m.push(stats({ recording: null, blinksLive: false }));
+    expect(m.q('researcher-recording')?.getAttribute('data-recording')).toBe('none');
+    expect(m.q('researcher-recording')?.textContent).toMatch(/^Live only — not recorded/);
+    expect(m.q('researcher-recording')?.textContent).toMatch(/Recorded only in: the reading windows, the camera check, calibration/);
+    expect(m.q('researcher-blinks')?.textContent).toMatch(/^Blinks \(last reading\)12 · 3 incomplete$/);
+    // Inside a window the card names it, and the count is the running one.
+    m.push(stats({ recording: 'reading', blinksLive: true }));
+    expect(m.q('researcher-recording')?.textContent).toBe('● Recording: reading window');
+    expect(m.q('researcher-blinks')?.textContent).toMatch(/^Blinks \(this reading\)/);
+    m.push(stats({ recording: 'baseline', blinksLive: false }));
+    expect(m.q('researcher-recording')?.textContent).toBe('● Recording: open-eye baseline');
+    m.unmount();
+  });
+
+  it('the strip says it too: recording on a reading page, not recorded on the grey field', () => {
+    const m = mount({ onStimulus: true, ink: { ink: '#000000', ground: '#FFFFFF' } });
+    m.push(stats({ recording: 'reading', blinksLive: true }));
+    act(() => { m.q('researcher-panel-collapsed')!.click(); });
+    expect(m.q('researcher-panel-strip')!.children[0].textContent).toMatch(/^Recording · blinks 12 \(3 inc\) · 31 fps$/);
+    m.unmount();
+    const g = mount({ onStimulus: true, ink: { ink: '#000000', ground: '#808080' } });
+    g.push(stats({ recording: null, blinksLive: false }));
+    act(() => { g.q('researcher-panel-collapsed')!.click(); });
+    expect(g.q('researcher-panel-strip')!.children[0].textContent).toMatch(/^Not recorded · last reading 12 \(3 inc\) · 31 fps$/);
+    g.unmount();
   });
 
   it('closes when a condition screen starts, unless kept open — and reports open time only on condition screens', () => {

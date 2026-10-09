@@ -4,6 +4,7 @@ import { setMonitorOpen } from '@/lib/hiddenTime';
 import { UI_TEXT } from '@/lib/uiPalette';
 import { LiveFeed, EarTrace, PipelineReadout } from '@/components/LiveCamera';
 import { FPS_TIER_WORD, fpsTier } from '@/tracking/frameRateGate';
+import { MEASURE, recordingLabel, recordingShort } from '@/tracking/measurementSchedule';
 
 /**
  * The researcher's corner panel: live camera readout and the session clock, collapsible.
@@ -14,8 +15,9 @@ import { FPS_TIER_WORD, fpsTier } from '@/tracking/frameRateGate';
  * and live at any time.
  *
  *   COLLAPSED — a status dot and the sitting's elapsed time. Tap to open.
- *   OPEN      — camera: state in words, face in view, blinks this condition (incomplete in brackets),
- *               blinks this sitting, eye openness, gaze zone, frame rate, picture brightness;
+ *   OPEN      — camera: state in words, WHETHER ANYTHING IS BEING RECORDED NOW, blinks this reading or
+ *               the last one (incomplete beside), blinks this sitting, eye openness, gaze zone, eye
+ *               sampling rate of the last reading, picture brightness;
  *               time: this sitting, since the session began (includes pauses), this screen,
  *               conditions done, and an estimate of time left.
  *
@@ -72,6 +74,13 @@ import { FPS_TIER_WORD, fpsTier } from '@/tracking/frameRateGate';
  * a participant watching their own face is not reading, searching or responding to the dots — and it
  * is the card only where it can be opened at all (set-up screens, the break, the closing screens).
  * Nulls render as "—", never 0.
+ *
+ * RECORDING OR LIVE ONLY (Round 80, investigator instruction 5). The tracker runs on every screen from
+ * camera setup on, but its frames are kept only in a reading window, the camera check and calibration's
+ * two steps (tracking/measurementSchedule.ts). The card and the strip say which: "Recording: reading
+ * window", or "Live only — not recorded". And the blink row says whose count it is: "this reading" while
+ * one runs (a blink is counted when the eye reopens, blinkCount.ts), "last reading" on the screens after
+ * it, where it is the count the record holds. It used to read "Blinks (condition)" in both cases.
  */
 export interface ResearcherPanelProps {
   subscribe: (fn: (s: LiveTrackingStats) => void) => () => void;
@@ -306,7 +315,8 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
         onClick={() => setOpen(false)} role="button" aria-label="Close researcher panel">
         <div style={line}>
           <span style={{ ...quietDot(9), marginRight: 6 }} />
-          {cam.text} · blinks {num(s?.blinks)} ({num(s?.incomplete)} inc) · {num(s?.faceFps)} fps
+          {cam.level === 'ok' ? recordingShort(s?.recording) : cam.text}
+          {' · '}{s?.blinksLive === false && s.blinks != null ? 'last reading ' : 'blinks '}{num(s?.blinks)} ({num(s?.incomplete)} inc) · {num(s?.faceFps)} fps
         </div>
         <div style={line}>sitting {clock(sittingMs, false)} · condition {p.conditionsDone ?? '—'}/{p.conditionsTotal ?? '—'} · ~{p.minutesLeft ?? '—'} min left</div>
       </div>
@@ -338,6 +348,14 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
         <span style={{ width: 11, height: 11, borderRadius: '50%', background: dotColour }} />{cam.text}
       </div>
       {p.cameraStatus === 'active' && (
+        <div data-testid="researcher-recording" data-recording={s?.recording ?? 'none'} style={{ marginTop: 4, fontSize: 14, lineHeight: 1.4 }}>
+          <div style={{ fontWeight: 600, color: s?.recording ? '#ffb3ae' : '#dbe6f7' }}>
+            {s?.recording ? '● ' : ''}{recordingLabel(s?.recording)}
+          </div>
+          {!s?.recording && <div style={{ opacity: 0.8 }}>Recorded only in: the reading windows, the camera check, calibration.</div>}
+        </div>
+      )}
+      {p.cameraStatus === 'active' && (
         <div style={{ marginTop: 8 }} data-testid="researcher-camera">
           <LiveFeed stream={stream} stats={s} width={PANEL_CARD_PX - 24} testid="researcher-feed" />
           <div style={{ marginTop: 6 }}><EarTrace stats={s} width={PANEL_CARD_PX - 24} height={56} /></div>
@@ -345,13 +363,15 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
         </div>
       )}
       <div style={{ marginTop: 6 }}>
-        {row('Blinks (condition)', <>{num(s?.blinks)} <span style={{ opacity: 0.85 }}>· {num(s?.incomplete)} inc.</span></>)}
-        {row('Blinks (sitting)', num(s?.sessionBlinks))}
-        {row('Eye open', s?.earRatio != null ? `${Math.round(s.earRatio * 100)}% of baseline` : '—')}
+        {/* Whose count: the reading running now, or the last one (the record's count). */}
+        {row(s?.blinksLive ? `${MEASURE.blinks.name} (this reading)` : `${MEASURE.blinks.name} (last reading)`,
+          <>{num(s?.blinks)} <span style={{ opacity: 0.85 }}>· {num(s?.incomplete)} incomplete</span></>, 'researcher-blinks')}
+        {row(`${MEASURE.blinks.name} (sitting)`, num(s?.sessionBlinks))}
+        {row(MEASURE.eyeOpenness.name, s?.earRatio != null ? `${Math.round(s.earRatio * 100)}% of baseline` : '—')}
         {row('Gaze', s?.gazeZone ? (s.gazeZone === 'cc' ? 'centre' : s.gazeZone) : '—')}
         {/* The frame-rate gate fps-g2 on the last reading (frameRateGate.ts): its rate and tier, amber below tier A. */}
-        {row('Last reading', <span data-testid="researcher-last-fps" style={{ color: s?.exposureFps != null && s.exposureFps < p.fpsFloor ? '#ffd27a' : undefined }}>{s?.exposureFps != null ? `${num(s.exposureFps)} a second · ${FPS_TIER_WORD[fpsTier(s.exposureFps)!].toLowerCase()}` : '—'}</span>)}
-        {row('Brightness', s?.luma != null ? `${s.luma}/255` : '—')}
+        {row(`${MEASURE.samplingRate.name} (last reading)`, <span data-testid="researcher-last-fps" style={{ color: s?.exposureFps != null && s.exposureFps < p.fpsFloor ? '#ffd27a' : undefined }}>{s?.exposureFps != null ? `${num(s.exposureFps)} a second · ${FPS_TIER_WORD[fpsTier(s.exposureFps)!].toLowerCase()}` : '—'}</span>)}
+        {row(MEASURE.pictureBrightness.name, s?.luma != null ? `${s.luma}/255` : '—')}
       </div>
       <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.18)' }}>
         {row('This sitting', clock(sittingMs), 'researcher-clock')}

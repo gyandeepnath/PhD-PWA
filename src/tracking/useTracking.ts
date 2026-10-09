@@ -15,6 +15,7 @@ import { CONFIG, isE2ETimingActive } from '@/experiment/config';
 import { eyeEars, meanEar, fitEarBaseline, LEFT_EYE_EAR, RIGHT_EYE_EAR, type Point } from './blink';
 import { samplingFpsObserved } from './frameRateGate';
 import { blinkCuts, traceBlinkMarks, type TraceBlinkMark } from './blinkCount';
+import type { RecordingWindow } from './measurementSchedule';
 import { startFramePump, frameTimestamp, type FrameMeta, type FramePump, type PumpVideo } from './framePump';
 import { PipelineMeter, type MeterWindow, type PipelineSummary } from './pipelineStats';
 import { startTracker, createTracker, errorSummary, TRACKER_BACKENDS, type FaceTracker, type TrackerBackend } from './trackers';
@@ -130,6 +131,13 @@ export interface LiveTrackingStats {
   incomplete: number | null;
   /** True when `blinks` is the running count of a live exposure rather than a finished one. */
   blinksLive: boolean;
+  /**
+   * Where this frame went: the window that KEEPS frames, open now — a reading, the camera check, or one
+   * of calibration's two steps — or null when nothing is being kept and the readout is live only
+   * (measurementSchedule.ts). Read from the same references that route each frame, so the label cannot
+   * say "recording" while the frames are being discarded, or the other way round.
+   */
+  recording: RecordingWindow | null;
   /**
    * The pipeline over the last ~2 s of the CURRENT screen (tracking/pipelineStats.ts): frames the
    * camera delivered, frames the tracker processed, and frames in which it found a face, per second,
@@ -508,7 +516,7 @@ export function useTracking(): TrackingApi {
 
   type LiveCore = Omit<LiveTrackingStats,
     'cameraFps' | 'trackerFps' | 'faceFps' | 'processMsP50' | 'processMsP95' | 'frameCountSource' | 'backend'
-    | 'captureWidth' | 'captureHeight' | 'earTrace' | 'traceBlinks' | 'baselineEar' | 'baselineMeasured'>;
+    | 'captureWidth' | 'captureHeight' | 'earTrace' | 'traceBlinks' | 'baselineEar' | 'baselineMeasured' | 'recording'>;
 
   /**
    * Emit the live readout, at most LIVE_HZ times a second and only when someone is listening.
@@ -546,6 +554,12 @@ export function useTracking(): TrackingApi {
       captureWidth: v?.videoWidth || null, captureHeight: v?.videoHeight || null,
       earTrace: trace,
       traceBlinks: marks,
+      // The window keeping frames now (LiveTrackingStats.recording), from the refs ingestResult routes by.
+      recording: aggRef.current ? 'reading'
+        : selfTestAggRef.current ? 'selftest'
+          : calibrating.current ? 'baseline'
+            : gazeCollectingTarget.current ? 'gaze_check'
+              : null,
       baselineEar: baselineEarRef.current,
       baselineMeasured: baselineMeasuredRef.current,
     };
