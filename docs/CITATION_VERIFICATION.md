@@ -1162,7 +1162,7 @@ spontaneous blinks were observed. The average duration of the down-phase, the up
 blink were the same for both types; about 100 msec., 220 msec., and 320 msec. respectively."*
 
 Cited (Round 79: `src/tracking/blinkFit.ts`, `src/sim/fpsGate.ts`, `src/sim/selfTestSim.ts`,
-`docs/FPS_GATE_SIMULATION.md`) for the MEAN down- and up-phase durations of a spontaneous blink (about
+`docs/FPS_GATE_SIMULATION.md`, `docs/AUDIT_FINDINGS.md` Round 79) for the MEAN down- and up-phase durations of a spontaneous blink (about
 100 and 220 ms), used as the centre of the simulated blink durations and of the fitted-minimum template.
 **Not cited for:** the duration of a deliberate blink — the self-test simulation gives its cued,
 voluntary blinks these spontaneous durations as a stated assumption, because no verified figure for
@@ -1179,7 +1179,7 @@ not a reading task.
 > W. (2022). Impact of incomplete blinking analyzed using a deep learning model with the Keratograph 5M
 > in dry eye disease. *Translational Vision Science & Technology, 11*(3), 38.
 
-Metadata matches PubMed (verified 8 Oct 2026). **Full text read** (PMC). Verbatim, abstract: *"Blink
+Metadata matches PubMed (verified 8 Oct 2026; re-checked 9 Oct 2026, unchanged). **Full text read** (PMC). Verbatim, abstract: *"Blink
 videos of 30 frames per second (FPS) under white light, eight FPS extracted from white light videos,
 and eight FPS under infrared light were processed"*; *"The blink parameters based on 30 FPS video
 presented higher sensitivity and accuracy than those based on eight FPS"*; *"a frame rate ≥ 30 FPS is
@@ -1188,7 +1188,7 @@ study"*; and on 8 FPS, *"It was possible that some complete blinks were misjudge
 the lowest IPH was lost"*. Table 2: incomplete-blink proportion 21.19% at 30 FPS against 47.60% (8 FPS
 extracted) in the same participants.
 
-Cited (Round 79: `docs/ANALYSIS_PLAN.md` §5 item 2, `docs/FPS_GATE_SIMULATION.md`) for: (1) the
+Cited (Round 79: `docs/ANALYSIS_PLAN.md` §5 item 2, `docs/FPS_GATE_SIMULATION.md`, `docs/AUDIT_FINDINGS.md` Round 79) for: (1) the
 direction of the frame-rate bias — a lower rate raises the incomplete-blink proportion, because the
 deepest frame is missed; and (2) the fact that its "≥ 30 FPS" recommendation rests on a comparison of
 **30 with 8 frames a second only** — no rate between them was tested. So it neither supports nor rules
@@ -1203,14 +1203,14 @@ any threshold this study uses. 50 dry-eye and 50 control participants, right eye
 > Navascues-Cornago, M., Maldonado-Codina, C., Morgan, P. B., & Read, M. L. (2026). Video frame rate
 > influences the accuracy of blink dynamics measurement. *The Ocular Surface, 40*, 22–30.
 
-Metadata matches PubMed (verified 8 Oct 2026). **Abstract only** (no PMC full text). Verbatim:
+Metadata matches PubMed (verified 8 Oct 2026; re-checked 9 Oct 2026, unchanged). **Abstract only** (no PMC full text). Verbatim:
 *"Spontaneous blinks were recorded in 20 participants and reflex blinks were recorded in an additional
 10 participants using a 500 frames per second (fps) high-speed infrared camera. Videos were downsampled
 to simulate acquisition at 250, 100, 50 and 25 fps"*; *"Blink amplitude and duration showed minimal
 bias and narrow LoA across all frame rates"*; *"Maximum velocities were markedly underestimated below
 250 fps for both blink types."*
 
-Cited (Round 79: `docs/ANALYSIS_PLAN.md` §5 item 2, `docs/FPS_GATE_SIMULATION.md`) for: blink amplitude
+Cited (Round 79: `docs/ANALYSIS_PLAN.md` §5 item 2, `docs/FPS_GATE_SIMULATION.md`, `docs/AUDIT_FINDINGS.md` Round 79) for: blink amplitude
 and duration measured from video agree with a 500-fps reference down to 25 fps (the lowest rate it
 tested), while velocities do not — so this project computes no velocity. **Not cited for:** rates below
 25 fps (not tested), webcam EAR or landmark tracking (it is a high-speed infrared camera, with frames

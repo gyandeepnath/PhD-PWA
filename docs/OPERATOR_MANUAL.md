@@ -353,6 +353,43 @@ because a participant measured on two trackers is flagged in the data (the track
 interchangeable instruments). Before the pilot the investigator fixes the tracker for the study; the
 screen then says *Fixed:* and there is nothing to measure.
 
+**Fixing the camera's exposure (every sitting, from Round 79).** *My face is centred — continue*
+first shows the grey field with a dot for about 10 seconds: the participant looks at the dot and keeps
+still. Under automatic exposure a tablet camera can run slower on a dark page than on a light one,
+and the frame rate changes the blink measure, so the app fixes the exposure here, under the light
+every condition starts from. It keeps the fixed exposure only if the camera stays as fast (within 1
+frame a second) and the picture at least 70% as bright as under automatic exposure; otherwise it goes back to
+automatic exposure and records why. There is nothing to do. The camera check's result says which
+(*exposure fixed (30 ms)* or *automatic exposure*).
+
+**The bench check (researcher only, before the pilot).** On camera setup, *Run: white, grey, black
+(2 min)* shows white, grey and black screens for about 20 seconds each, first under automatic and then
+under fixed exposure, and gives one row per screen: camera fps, tracker fps, face fps, brightness and
+exposure time. No participant is needed. Read it this way:
+
+- **Automatic rows:** if the camera delivers fewer frames on black than on white, its rate follows
+  the screen (it is limited by its exposure). That is the reason the exposure is fixed.
+- **Fixed rows:** these should be the same on all three screens.
+- **Camera about 30 but tracker about 24 on every screen:** the processor is the limit, not the light.
+
+Photograph the table for the investigator. Run it again after a change of tablet, room lighting or
+Chrome version. Nothing about the study tablet's camera has been measured yet.
+
+**The frame-interval check (investigator, on an export).** On a computer with the project,
+`npm run frame-intervals -- <export folder>` reads `07c_ear_trace.csv` and says, per condition,
+whether the gaps between frames are mostly about 40 ms (the camera itself runs at about 25: limited by
+exposure) or a mix of about 33 and 67 ms (the camera runs at 30 and the tracker skips frames), and how
+much the white-page and black-page conditions differ. It only reads; nothing is changed.
+
+**An external camera.** Use the tablet's front camera. The app always asks for the camera facing the
+participant and has no camera picker, so a USB camera would not be used without a change to the app.
+Consider one only if, with the exposure fixed, the front camera cannot give 20 or more face frames a
+second, or gives white-page and black-page conditions rates more than 2 apart. Whether the Xiaomi Pad
+6 offers a USB camera to Chrome at all is not verified (test: plug one in and see whether a second
+camera appears). It goes through the same browser camera path, so it would not by itself avoid the
+exposure problem, and a different camera changes the protocol and the consent: tell the investigator,
+who would notify the ethics committee.
+
 **The camera check** after calibration (*Quick camera check*: blink when the dot flashes). From
 Round 79 it runs on the grey field — the same mid-grey as before each display — and the dot turns
 from black to white for each flash. It takes about 18 seconds. It passes when all three hold:
