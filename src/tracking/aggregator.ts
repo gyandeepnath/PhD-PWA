@@ -203,12 +203,24 @@ export class EyeMetricsAggregator {
     return classifyBlinks(this.ear, baseline);
   }
 
-  /** Frames with a face / frames seen, and the achieved rate of face-solved frames. */
-  coverage(): { facePresence: number | null; fps: number | null } {
+  /**
+   * Frames with a face / frames seen, and two rates of face-solved frames: `fps` over the whole span
+   * (effective_fps, face loss included — what self-test rule st-r1 judged) and `samplingFps`, the
+   * frame-rate gate's rate while the face was seen (fps-g2, frameRateGate.ts). `samplingFps` is computed
+   * from the same two values, in the same way, as a condition's stored sampling_fps_observed, so the
+   * self-test judges exactly the quantity every reading row is tiered on.
+   */
+  coverage(): { facePresence: number | null; fps: number | null; samplingFps: number | null } {
     return {
       facePresence: this.framesTotal > 0 ? this.facesDetected / this.framesTotal : null,
       fps: effectiveFps(this.ear.map((e) => e.t_ms)),
+      samplingFps: samplingFpsObserved(this.ear.length, Math.round(observedDurationMs(this.ear))),
     };
+  }
+
+  /** The face-solved samples so far (time, mean EAR), for the self-test's result trace. Read-only. */
+  earSamples(): ReadonlyArray<{ t_ms: number; ear: number }> {
+    return this.ear;
   }
 
   liveCounts(baseline: number | null): { blinks: number | null; incomplete: number | null } {

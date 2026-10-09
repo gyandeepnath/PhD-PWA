@@ -410,6 +410,10 @@ function fixtureFitFields(conditionIds: string[], sid: string, i: number): Fixtu
 export const FIXTURE_SELFTEST = {
   cued: 5, detected: 5, extra: 1, fps: 29.4, facePresence: 1, pass: true, reasons: [] as string[], at: 0,
   pipeline: null, limit: null,
+  // Scored under rule st-r2 (Round 79): the gate's rate, its tier, the verdict, each flash's lag to its
+  // blink, on the grey field, at the first attempt.
+  rule: 'st-r2', samplingFps: 29.4, tier: 'A', verdict: 'working', notes: [] as string[],
+  cueLags: [300, 300, 300, 300, 300], ground: '#808080', attempt: 1, earlier: [],
 } as const;
 function fixtureSelfTestEvents(sid: string): OcularEventsRecord {
   const agg = new EyeMetricsAggregator();
@@ -429,7 +433,8 @@ function fixtureSelfTestEvents(sid: string): OcularEventsRecord {
     });
   }
   const events = agg.blinkEvents(0.312);
-  if (events.length !== FIXTURE_SELFTEST.detected + FIXTURE_SELFTEST.extra) {
+  if (events.length !== FIXTURE_SELFTEST.detected + FIXTURE_SELFTEST.extra
+    || agg.coverage().samplingFps !== FIXTURE_SELFTEST.samplingFps) {
     throw new Error('fixture self-test trace does not reproduce its score');
   }
   return agg.blinkLog({
@@ -511,7 +516,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       randomisation_seed: enrolment,
       condition_order: plan.map((s) => s.conditionIndex),
       preflight_complete: true, e2e_timing: false,
-      camera_selftest: { ...FIXTURE_SELFTEST, reasons: [], at: t0 + 400_000 },
+      camera_selftest: { ...FIXTURE_SELFTEST, reasons: [], notes: [], cueLags: [...FIXTURE_SELFTEST.cueLags], earlier: [], at: t0 + 400_000 },
       consent_given: true,
       consent_time: t0 + 50_000, media_consent: { camera_metrics: true, setup_photos: false, annotation_video: false, granted_at: null },
       provenance: {

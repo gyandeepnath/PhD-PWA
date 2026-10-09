@@ -294,11 +294,20 @@ export interface BenchPaint {
 /** What the self-test window saw: blinks, face coverage, and what the pipeline did meanwhile. */
 export interface SelfTestObservation {
   blinkOnsets: number[];
-  /** Face-solved frame rate of the EAR series (the rate effective_fps measures). */
+  /** Face-solved frame rate over the whole window, face loss included (effective_fps; rule st-r1). */
   fps: number | null;
+  /** The frame-rate gate's rate (fps-g2): face-solved samples per second while the face was seen (st-r2). */
+  samplingFps: number | null;
   facePresence: number | null;
   /** Camera, tracker and processing-time figures over the same window; null without a camera. */
   pipeline: PipelineWindowFields | null;
+  /**
+   * The eye-openness samples the test was scored on (capture time, mean EAR) and the open-eye baseline
+   * they were classified against, for the result screen's trace. Shown, never stored here: the stored
+   * trace is the 'selftest' record of 07c. Empty and null when there was no aggregator or baseline.
+   */
+  trace: ReadonlyArray<{ t_ms: number; ear: number }>;
+  baseline: number | null;
 }
 
 /** A meter summary as the record fields stored per condition and with the self-test. */
@@ -1297,7 +1306,7 @@ export function useTracking(): TrackingApi {
     selfTestLogRef.current = null;
     // What the camera and the tracker did over the same seconds, so a low rate says WHY (selfTest.ts).
     const pipeline = win ? pipelineFields(win.close(), pipelineRef.current) : null;
-    if (!agg) return { blinkOnsets: [], fps: null, facePresence: null, pipeline };
+    if (!agg) return { blinkOnsets: [], fps: null, samplingFps: null, facePresence: null, pipeline, trace: [], baseline: null };
     const cov = agg.coverage();
     const baseline = baselineEarRef.current;
     // Classified once: the onsets the test is scored on and the stored record are the same blinks.
@@ -1306,7 +1315,10 @@ export function useTracking(): TrackingApi {
       const cues = [...cueTimes];
       selfTestLogRef.current = (sessionId) => agg.blinkLog({ window: 'selftest', conditionId: null, sessionId, baseline, events, cues });
     }
-    return { blinkOnsets: events.map((e) => e.onset_ms), fps: cov.fps, facePresence: cov.facePresence, pipeline };
+    return {
+      blinkOnsets: events.map((e) => e.onset_ms), fps: cov.fps, samplingFps: cov.samplingFps, facePresence: cov.facePresence, pipeline,
+      trace: agg.earSamples().map((x) => ({ t_ms: x.t_ms, ear: x.ear })), baseline,
+    };
   }, []);
   const saveSelfTestLog = useCallback(async (sessionId: string) => {
     const build = selfTestLogRef.current;

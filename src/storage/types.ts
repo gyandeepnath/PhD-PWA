@@ -278,6 +278,22 @@ export interface SessionRecord {
      */
     pipeline?: PipelineWindowFields | null;
     limit?: 'camera' | 'camera_and_tracker' | 'tracker' | 'face' | 'undetermined' | null;
+    /**
+     * Round 79 (rule 'st-r2', tracking/selfTest.ts SELF_TEST_RULE). Absent on sittings scored before it,
+     * whose rule was st-r1: 4 of 5 flashes, face 90%, `fps` (the whole window's face-solved rate) >= 25.
+     * st-r2 judges `samplingFps` by the frame-rate gate fps-g2 (`tier`; a reduced pass at tier B is
+     * `verdict` 'reduced'), records each flash's lag to its blink (`cueLags`, ms, null = not seen), the
+     * ground it was shown on, and which attempt of this run of the check it was, with the earlier ones.
+     */
+    rule?: string;
+    samplingFps?: number | null;
+    tier?: 'A' | 'B' | 'C' | null;
+    verdict?: 'working' | 'reduced' | 'failed';
+    notes?: string[];
+    cueLags?: Array<number | null>;
+    ground?: string;
+    attempt?: number;
+    earlier?: Array<{ verdict: 'working' | 'reduced' | 'failed'; cued: number; detected: number; samplingFps: number | null; facePresence: number | null }>;
   } | null;
   /**
    * The camera and face tracker this sitting ran on, as recorded when the camera last started (or when

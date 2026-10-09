@@ -409,6 +409,30 @@ describe('camera pipeline columns', () => {
       expect(old[c], c).toBe('');
     }
   });
+
+  it('01 names the self-test\'s rule: st-r2\'s rate, tier, verdict, attempts and ground; st-r1 for older sittings, nothing inferred (Round 79)', () => {
+    const b = bundle();
+    // Recorded before Round 79: scored under st-r1, with none of st-r2's fields.
+    b.session.camera_selftest = { cued: 5, detected: 5, extra: 0, fps: 23.6, facePresence: 0.99, pass: false, reasons: ['x'], at: 1, limit: 'camera' };
+    expect(rows(b, '01_session_info.csv')[0]).toMatchObject({
+      selftest_rule: 'st-r1', selftest_fps: '23.6', selftest_pass: 'false',
+      selftest_sampling_fps: '', selftest_fps_tier: '', selftest_verdict: '', selftest_attempts: '', selftest_ground: '',
+    });
+    // The same camera under st-r2: judged by the gate's rate, a pass, at the second attempt.
+    b.session.camera_selftest = {
+      ...b.session.camera_selftest, rule: 'st-r2', pass: true, reasons: [], limit: null, samplingFps: 24.04, tier: 'A', verdict: 'working',
+      cueLags: [310, 280, null, 300, 350], ground: '#808080', attempt: 2,
+      earlier: [{ verdict: 'failed', cued: 5, detected: 2, samplingFps: 23.9, facePresence: 0.62 }],
+    };
+    expect(rows(b, '01_session_info.csv')[0]).toMatchObject({
+      selftest_rule: 'st-r2', selftest_fps: '23.6', selftest_pass: 'true', selftest_sampling_fps: '24.04',
+      selftest_fps_tier: 'A', selftest_verdict: 'working', selftest_attempts: '2', selftest_ground: '#808080', selftest_limit: '',
+    });
+    // No self-test at all (camera declined): every column blank.
+    delete b.session.camera_selftest;
+    const none = rows(b, '01_session_info.csv')[0];
+    for (const c of ['selftest_rule', 'selftest_sampling_fps', 'selftest_verdict', 'selftest_attempts']) expect(none[c], c).toBe('');
+  });
 });
 
 describe('07b and 07c: every blink and the eye-openness trace, kept apart from the analysis (round 78)', () => {
