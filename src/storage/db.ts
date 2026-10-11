@@ -176,6 +176,31 @@ function getDB(): Promise<IDBPDatabase> {
       _dbPromise = null;
     },
     upgrade(db, _oldVersion, _newVersion, tx) {
+      /*
+       * Re-key ocular_events if an earlier build created it under the wrong key (schema 11; see
+       * schemaEnums.ts). Build 6ffc2c7 keyed it on condition_id; every build since keys it on
+       * record_id. A store's key path cannot be changed in place, so the rows are read, the store is
+       * dropped and recreated, and every row is written back with its record_id — a reading record's
+       * is its condition_id (ocularRecordId), the only kind 6ffc2c7 could have written. Runs inside
+       * this version-change transaction, so a failure aborts the whole upgrade and leaves the old
+       * database intact rather than half-migrated.
+       */
+      if (db.objectStoreNames.contains('ocular_events')) {
+        const existing = tx.objectStore('ocular_events');
+        if (existing.keyPath !== 'record_id') {
+          const spec = STORE_SPECS.find((s) => s.name === 'ocular_events')!;
+          void existing.getAll().then((rows) => {
+            db.deleteObjectStore('ocular_events');
+            const store = db.createObjectStore('ocular_events', { keyPath: spec.keyPath });
+            for (const idx of spec.indexes ?? []) store.createIndex(idx.name, idx.keyPath);
+            for (const row of rows as Record<string, unknown>[]) {
+              const recordId = row.record_id
+                ?? (row.window === 'selftest' ? `selftest:${String(row.session_id)}` : row.condition_id);
+              void store.put({ ...row, record_id: recordId });
+            }
+          });
+        }
+      }
       // Additive: create any store that does not yet exist (covers fresh installs and
       // forward-migration from an older version that lacks the v6 stores).
       for (const spec of STORE_SPECS) {

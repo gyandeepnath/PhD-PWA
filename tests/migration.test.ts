@@ -127,3 +127,41 @@ describe('upgrading a device that already holds a study', () => {
     expect(again!.reactionTrials).toHaveLength(b.reactionTrials.length);
   });
 });
+
+/*
+ * Schema 11. Build 6ffc2c7 — deployed — created ocular_events keyed on condition_id; the next build
+ * keyed it on record_id without bumping the version. A device that opened 6ffc2c7 kept the old key,
+ * and writing the camera self-test's record (no condition_id) then failed on every camera sitting.
+ */
+describe('re-keying the blink records written by build 6ffc2c7', () => {
+  beforeEach(() => freshDb());
+
+  async function seedSchema10WithOldKey(): Promise<void> {
+    const db = await openDB(DB_NAME, 10, {
+      upgrade(d) {
+        d.createObjectStore('ocular_events', { keyPath: 'condition_id' }).createIndex('by_session', 'session_id');
+        d.createObjectStore('meta', { keyPath: 'key' });
+      },
+    });
+    await db.put('ocular_events', { condition_id: 'cond-A-0', session_id: 'sess-A', window: 'reading', events: [], marker: 'kept' });
+    db.close();
+  }
+
+  it('rebuilds the store under record_id and carries the old reading record across', async () => {
+    await seedSchema10WithOldKey();
+    const rows = await getAll('ocular_events');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ record_id: 'cond-A-0', condition_id: 'cond-A-0', marker: 'kept' });
+    const raw = await openDB(DB_NAME, DB_VERSION);
+    expect(raw.transaction('ocular_events').objectStore('ocular_events').keyPath).toBe('record_id');
+    raw.close();
+  });
+
+  it('accepts a self-test record afterwards, which the old key refused', async () => {
+    await seedSchema10WithOldKey();
+    await getAll('ocular_events');
+    await put('ocular_events', { record_id: 'selftest:sess-A', session_id: 'sess-A', window: 'selftest' } as never);
+    const rows = await getAllByIndex('ocular_events', 'by_session', 'sess-A');
+    expect(rows.map((r) => (r as { record_id: string }).record_id).sort()).toEqual(['cond-A-0', 'selftest:sess-A']);
+  });
+});
