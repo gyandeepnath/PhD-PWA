@@ -469,7 +469,7 @@ calibration spoils the blink measures for the whole sitting. Take the time. It r
    - *Eyes found · steady* — all is well.
 
    It runs at least 6 seconds, then on until it has 30 good frames, and stops at 12 seconds
-   whatever it has. The step row at the foot of the screen ticks it when it is done.
+   whatever it has. The step row at the foot of the screen ticks it (*eyes at rest*) when it is done.
 2. **Three dots along a line: the gaze check.** The dot moves to the middle, the left end and the
    right end of a line of text. Head still, eyes only; nothing to touch. Each dot is shown for 1.5
    seconds. If the eyes were not found often enough at a dot, that dot alone is shown again (*Once
@@ -480,7 +480,7 @@ calibration spoils the blink measures for the whole sitting. Take the time. It r
 | Screen | What it means | What to do |
 |---|---|---|
 | *No eye baseline* | No blink can be counted in this sitting without it. The reason is on the screen: no frames, a face in under half the frames, the eyes not measured (glare, spectacles, half-closed eyes), or too few frames. | Fix the cause (light, seating, glare) and press **Try the eye baseline again**. **Continue without blink measures** is allowed, but only as a deliberate choice. |
-| *Gaze check incomplete* | Only the on-screen ratio — a quality check — is affected. The baseline was measured and every blink is counted. The tick row shows which dot fell short. | Press **Repeat the gaze check** (the three dots only), or **Continue**. |
+| *Gaze check incomplete* | Only the on-screen ratio — a quality check — is affected. The baseline was measured and every blink is counted. The reason is on the screen: a dot where the eyes were not found often enough (✗ on the tick row), or, with every dot ticked, eyes that did not move far enough between the two ends of the line (the head turned instead, or the eyes did not follow the dot). | Press **Repeat the gaze check** (the three dots only), or **Continue**. |
 
 The old calibration (nine tap targets on a dark screen) failed in good light on the study tablet: at
 55 cm the eye moves only a few camera pixels between targets, and the vertical direction almost never
