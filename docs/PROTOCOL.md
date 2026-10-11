@@ -57,8 +57,10 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                         the device's viewport, pixel ratio, scale and build shown
   → COLOR_VISION        digital colour-vision SCREEN, not the Ishihara test (runs AFTER night-shift is off)
   → CAMERA_SETUP        webcam permission (or skip → no eye tracking)
-  → CALIBRATION         centre-fixation open-eye EAR + frontal-pitch baseline (6 s), then 9-point gaze calibration
-                          (head frontal during calibration → pitch zero) / positioning check
+  → CALIBRATION         on the grey field (Round 80): centre-fixation open-eye EAR + frontal-pitch baseline
+                          (at least 6 s, on until 30 usable frames, at most 12 s; rule cal-r2), then a
+                          three-dot gaze check across a reading line (rule gaze-r2) / positioning check;
+                          then the camera self-test (st-r2)
   → CVSQ_BASELINE       CVS-Q (16 items), validated habitual frame — see the CVS-Q note below
   → BASELINE_FATIGUE    5-item VAS baseline
   → INSTRUCTIONS        participant overview of the per-condition tasks
@@ -137,6 +139,31 @@ them, and record any change here.
 | University name and logo | **None** on any screen, page title or install icon. The app shows only its own plain VisuLab mark. The institution appears on the consent form and the ethics paperwork, not in the app. | `src/components/VisuLabLogo.tsx`; pinned by `tests/noInstitutionName.test.ts` |
 | Researcher ticks at the start | One **Tick all** button for the pre-flight room-and-device list, after confirming "I have checked each of these". The sitting records when it was used (`preflight_bulk_ticked`). Not for consent or for the participant's own answers. | `src/start/setupStages.tsx` (Preflight) |
 | Individual blinks | Kept, in two **optional** files (`07b_blink_events.csv`, `07c_ear_trace.csv`) for checking the blink measure. The main analysis is unchanged and does not need them. | `docs/ANALYSIS_PLAN.md` §5 item 6 |
+
+## 2b. What is measured, and when (Round 80)
+
+The camera runs from camera setup to the end of the sitting; its frames are **kept only in four
+windows** — calibration's two steps (the open-eye baseline, the gaze check), the camera self-test, and
+each reading window (from the "Begin reading" tap to the last page's Next). The researcher panel says
+which window is open ("Recording: reading window", …) or "Live only — not recorded". The live blink
+count, the live graph and the stored record use the same classifier (`blink-r1`), the same baseline
+and the same two cuts (`tracking/blinkCount.ts`).
+
+<!-- measurement-schedule:start (generated from src/tracking/measurementSchedule.ts; tests/measurementSchedule.test.ts checks this copy) -->
+| Measure | How often | When | Kept in | Shown live |
+|---|---|---|---|---|
+| Eye openness, face found, head position, iris position | Continuously | Every frame the tracker processes, from camera setup to the end of the sitting | Only in the 4 windows below that the panel marks "Recording"; on every other screen shown live and discarded | Card: picture, last-10-s graph, eye openness, on screen now; panel says "Live only — not recorded" outside them |
+| Picture brightness | Continuously | 4 times a second | Mean per reading window (07 mean_face_luma) | Card |
+| Camera health | Continuously | Every frame: picture black or covered, camera muted, no face | Totals per reading window (07) | Panel dot and words; notices that stop the sitting |
+| Ruler, viewing distance, camera mode, fixed exposure, tracker, bench check (if run) | Once per sitting | Pre-flight and camera setup | 01_session_info | On those screens |
+| Open-eye baseline and head-pitch zero | Once per sitting | Calibration, centre dot on the grey field: at least 6 s, on until 30 usable frames, at most 12 s; again on a retry or a resume | Calibration record; 01 calibration_ear_baseline | Panel: "Recording: open-eye baseline"; calibration screen: eyes found / steady / done |
+| Gaze check | Once per sitting | After the baseline: 3 dots across a reading line, each sampled 1 s after 0.5 s to settle; a short dot is shown again (up to 3 times in all) | Calibration record; 01 gaze_calibration_valid | Panel: "Recording: gaze check"; calibration screen: a tick per dot |
+| Camera check | Once per sitting | After calibration: about 18 s, 5 flashes on the grey field | 01 selftest_*; its blinks and frames in 07b and 07c (window = selftest) | Panel: "Recording: camera check"; result screen: each flash, the trace |
+| Blinks (start, end, depth, complete or incomplete, page) | Each blink | The reading window only: from the "Begin reading" tap to the last page's Next | 07b, one row per blink; 07c, every frame's eye openness | Panel: "Recording: reading window"; blinks this reading, incomplete beside (a blink is counted when the eye reopens) |
+| Incomplete-blink ratio, Blink rate, Inter-blink interval, PERCLOS, Long closures, Eye sampling rate, Face in view, On-screen ratio, Head position | Each reading window | Summarised when the last page is turned | 07_eye_metrics, one row per condition | Panel "last reading" on the screens after it |
+| Questions, ratings, fatigue scale, word search, reaction task, grey field, breaks | Not measured | The camera keeps running | Not kept | Panel: "Live only — not recorded" |
+| Live picture, last-10-s graph and its blink marks, live frame rates | Live only | While the researcher card is open (4 updates a second) | Never kept | Card |
+<!-- measurement-schedule:end -->
 
 ## 3. Workflow-logic cross-check — issues found & resolved
 
@@ -246,8 +273,19 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
   triangulate the blink markers with the subjective CVS-Q. Blink **duration** and the micro/partial
   tiers are sub-Nyquist below ~25 fps and flagged as diagnostics only. Webcam EAR is a
   **screening-grade** proxy; an IR eye-tracker remains the reference standard for definitive data.
-- **Gaze** is only meaningful when calibration was valid (`gaze_calibrated:true`); otherwise treat
-  as a gross head-movement proxy.
+- **Gaze is a quality check only** (Round 80, rule `gaze-r2`). A three-dot check across a reading
+  line fits the range of horizontal iris offset between the line's two ends; `on_screen_ratio` (07) is
+  the share of open-eye frames with the head not turned away and the offset inside that range
+  (widened to about the screen edge plus 3°). A blink is neither on nor off screen. It answers "was the
+  participant looking at the tablet?" and nothing finer: at 55 cm the iris moves a few camera pixels
+  across the screen. It is blank when the gaze check did not pass (`gaze_calibrated` FALSE). The
+  nine-point zone columns (`gaze_deviation_ratio`, `zone_center_ratio`, `zone_transition_count`,
+  rule `gaze-r1`) are deprecated and blank on new rows; they measured page layout more than attention
+  and counted blinks as looking away.
+- **The open-eye baseline** (Round 80, rule `cal-r2`) is taken on the grey field, under the exposure
+  fixed at camera setup, instead of on a dark screen: at least 6 s, on until 30 usable frames, at most
+  12 s. The 30-frame floor and both blink cuts are unchanged. Because the ground changed, a cal-r2
+  baseline is not assumed equal to a cal-r1 one (`calibration_rule_version` in 01).
 - **Head pitch** (`head_pitch_mean`) is reported relative to each participant's own frontal posture,
   captured at calibration (`head_pitch_calibrated:true`; baseline fraction in `01_session_info.csv`).
   This removes inter-individual face-geometry bias so 0° = that person's straight-ahead. The deg-per-

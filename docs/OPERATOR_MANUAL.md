@@ -29,6 +29,33 @@ tablet's own camera during the reading task. Two consequences for you:
 - **The reading task is the measurement window.** Do not interrupt it, do not talk during it, and
   do not let the participant stop early.
 
+### What the camera measures, and when (Round 80)
+
+The camera runs from camera setup to the end of the sitting, but its frames are **kept only in four
+windows**: the open-eye baseline and the gaze check (calibration), the camera check, and each reading
+window. Everywhere else the researcher panel shows the camera live and nothing is stored. The panel
+says which, in words: *Recording: reading window* (or *camera check*, *open-eye baseline*, *gaze
+check*), or *Live only — not recorded*. The blink count on the panel is the same count the data will
+hold: the live graph, the live count and the stored record use one classifier, one baseline and the
+same two lines (0.75 and 0.60 of the open eye). A blink is counted when the eye reopens, so the count
+rises just after each blink, never during it.
+
+<!-- measurement-schedule:start (generated from src/tracking/measurementSchedule.ts; tests/measurementSchedule.test.ts checks this copy) -->
+| Measure | How often | When | Kept in | Shown live |
+|---|---|---|---|---|
+| Eye openness, face found, head position, iris position | Continuously | Every frame the tracker processes, from camera setup to the end of the sitting | Only in the 4 windows below that the panel marks "Recording"; on every other screen shown live and discarded | Card: picture, last-10-s graph, eye openness, on screen now; panel says "Live only — not recorded" outside them |
+| Picture brightness | Continuously | 4 times a second | Mean per reading window (07 mean_face_luma) | Card |
+| Camera health | Continuously | Every frame: picture black or covered, camera muted, no face | Totals per reading window (07) | Panel dot and words; notices that stop the sitting |
+| Ruler, viewing distance, camera mode, fixed exposure, tracker, bench check (if run) | Once per sitting | Pre-flight and camera setup | 01_session_info | On those screens |
+| Open-eye baseline and head-pitch zero | Once per sitting | Calibration, centre dot on the grey field: at least 6 s, on until 30 usable frames, at most 12 s; again on a retry or a resume | Calibration record; 01 calibration_ear_baseline | Panel: "Recording: open-eye baseline"; calibration screen: eyes found / steady / done |
+| Gaze check | Once per sitting | After the baseline: 3 dots across a reading line, each sampled 1 s after 0.5 s to settle; a short dot is shown again (up to 3 times in all) | Calibration record; 01 gaze_calibration_valid | Panel: "Recording: gaze check"; calibration screen: a tick per dot |
+| Camera check | Once per sitting | After calibration: about 18 s, 5 flashes on the grey field | 01 selftest_*; its blinks and frames in 07b and 07c (window = selftest) | Panel: "Recording: camera check"; result screen: each flash, the trace |
+| Blinks (start, end, depth, complete or incomplete, page) | Each blink | The reading window only: from the "Begin reading" tap to the last page's Next | 07b, one row per blink; 07c, every frame's eye openness | Panel: "Recording: reading window"; blinks this reading, incomplete beside (a blink is counted when the eye reopens) |
+| Incomplete-blink ratio, Blink rate, Inter-blink interval, PERCLOS, Long closures, Eye sampling rate, Face in view, On-screen ratio, Head position | Each reading window | Summarised when the last page is turned | 07_eye_metrics, one row per condition | Panel "last reading" on the screens after it |
+| Questions, ratings, fatigue scale, word search, reaction task, grey field, breaks | Not measured | The camera keeps running | Not kept | Panel: "Live only — not recorded" |
+| Live picture, last-10-s graph and its blink marks, live frame rates | Live only | While the researcher card is open (4 updates a second) | Never kept | Card |
+<!-- measurement-schedule:end -->
+
 ---
 
 ## 2. Before the participant arrives
@@ -426,27 +453,43 @@ result, the line under the verdict (*Camera delivered … · tracker processed �
 study room with the lights as they will be, and once more with the tablet on charge and nothing else
 open.
 
-**Calibration** establishes this participant's own open-eye baseline, gaze mapping and head
-posture. Every blink threshold is expressed as a fraction of their baseline, not a population
-default, so a rushed calibration degrades every ocular measure for the whole session. Take the time.
+**Calibration** (from Round 80, rules `cal-r2` and `gaze-r2`) measures this participant's own
+open eye, the head's straight-ahead position, and where the eyes point at the two ends of a line of
+text. Every blink line is a fraction of the open-eye baseline, not a population default, so a rushed
+calibration spoils the blink measures for the whole sitting. Take the time. It runs on the grey field
+(the same mid-grey as before each display), in two steps:
 
-It runs in two parts, and the first one matters more than it looks:
+1. **The centre dot: the eye at rest.** The participant looks straight at it, sits as they will sit
+   to read, and blinks normally. Do not ask them to hold their eyes open — the measure is designed
+   around normal blinking, and a forced stare gives a wider eye than they will ever read with. Under
+   the dot the screen says how it is going:
+   - *Looking for the eyes…* — no face yet: check seating and framing;
+   - *Face found · the eyes are not clear yet* — usually glare on spectacles or a lamp behind;
+   - *Eyes found · hold still* — the eyes are found in fewer than half the camera's frames;
+   - *Eyes found · steady* — all is well.
 
-1. **A single dot in the centre, six seconds.** The participant looks straight at it, sits as they
-   will sit to read, and blinks normally. Do not ask them to hold their eyes open — the measure is
-   designed around normal blinking, and a forced stare gives a wider eye than they will ever read
-   with. This window alone sets the open-eye baseline, so posture here is the posture the whole
-   sitting is scored against: seated square to the tablet, head level, eyes on the dot, not above
-   or below it.
-2. **The nine targets.** Head still, eyes only. These fit the gaze mapping and nothing else.
+   It runs at least 6 seconds, then on until it has 30 good frames, and stops at 12 seconds
+   whatever it has. The step row at the foot of the screen ticks it when it is done.
+2. **Three dots along a line: the gaze check.** The dot moves to the middle, the left end and the
+   right end of a line of text. Head still, eyes only; nothing to touch. Each dot is shown for 1.5
+   seconds. If the eyes were not found often enough at a dot, that dot alone is shown again (*Once
+   more — look at the dot*), up to three times. Each dot gets a tick.
 
-If the screen reports that the gaze mapping fitted but no open-eye baseline could be measured, it is
-almost always glare across the lid margin — spectacles, a window or a lamp behind the tablet. Move
-the light or the tablet and retry before continuing.
+**If a step falls short, the screen says why and repeats only that step.**
+
+| Screen | What it means | What to do |
+|---|---|---|
+| *No eye baseline* | No blink can be counted in this sitting without it. The reason is on the screen: no frames, a face in under half the frames, the eyes not measured (glare, spectacles, half-closed eyes), or too few frames. | Fix the cause (light, seating, glare) and press **Try the eye baseline again**. **Continue without blink measures** is allowed, but only as a deliberate choice. |
+| *Gaze check incomplete* | Only the on-screen ratio — a quality check — is affected. The baseline was measured and every blink is counted. The tick row shows which dot fell short. | Press **Repeat the gaze check** (the three dots only), or **Continue**. |
+
+The old calibration (nine tap targets on a dark screen) failed in good light on the study tablet: at
+55 cm the eye moves only a few camera pixels between targets, and the vertical direction almost never
+passed. Its failure screen also said the primary outcome would be empty when only the gaze part had
+failed. That is gone.
 
 **If the tablet is turned to portrait while the dots are running**, or while the camera-check dot is
 flashing, the app **stops that step** and keeps nothing from it: with the tablet on its side the
-camera sees the face turned through 90 degrees. The dark screen says so. Turn the tablet back; the
+camera sees the face turned through 90 degrees. The screen says so. Turn the tablet back; the
 step's start screen returns with a note, and you press **Begin calibration** (or **Start**) to run it
 again from the beginning. On the other set-up screens, turning the tablet loses nothing.
 
@@ -490,9 +533,12 @@ dot has been shown, while the results are saved.
 **The researcher panel** sits at the bottom left. On set-up, break and closing screens it is a dark
 chip with the sitting clock and a coloured camera dot; tap it for the full panel, which takes a
 column at the left and moves the screen's content over rather than covering it. With the camera on,
-the full panel opens with the **live picture** (the same picture as camera set-up, with the eyelid
-points), the ten-second eye-openness trace and the three rates — camera, tracker, face — and then
-the blink counts. It can be opened on the calibration and camera-check screens before and after the
+the full panel opens with whether anything is being recorded now (*Recording: …* or *Live only — not
+recorded*; see §1), the **live picture** (the same picture as camera set-up, with the eyelid points),
+the ten-second eye-openness trace and the three rates — camera, tracker, eye sampling — and then the
+blink counts: *this reading* while one runs, *last reading* on the screens after it (the count the
+data hold). *On screen now* says whether this frame passes the gaze check's test (— with no passed
+gaze check, or the eyes closed). It can be opened on the calibration and camera-check screens before and after the
 dots run, which is where to look when one of them has just failed. It never shows the picture on a
 display screen: there the participant would be watching their own face. During a display, on
 the grey field, and while the calibration, the camera self-test or the colour-vision plates run, it

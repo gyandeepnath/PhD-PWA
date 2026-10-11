@@ -21,6 +21,17 @@
  *     docs/PROTOCOL.md. tests/measurementSchedule.test.ts fails if either document's copy differs from
  *     this, or if a recording window the code can open has no row here.
  */
+import { CONFIG } from '@/experiment/config';
+import { MIN_EAR_BASELINE_SAMPLES } from './blink';
+import { GAZE_DOTS, GAZE_DOT_ATTEMPTS, GAZE_DOT_SAMPLE_MS, GAZE_DOT_SETTLE_MS } from './calibrationSequence';
+import { SELF_TEST } from './selfTest';
+
+/**
+ * How often the researcher's live readout updates, in hertz (useTracking.ts emitLive). Here, not in the
+ * hook, because the schedule states it.
+ */
+export const LIVE_READOUT_HZ = 4;
+
 /** One name per measure, and where it is stored. Panel, dashboard and docs use `name`. */
 export const MEASURE = {
   eyeOpenness: { name: 'Eye openness', column: 'ear (07c); ear_baseline (07)', note: 'eye-aspect ratio (EAR); live as % of the open-eye baseline' },
@@ -70,4 +81,133 @@ export function recordingLabel(w: RecordingWindow | null | undefined): string {
  */
 export function recordingShort(w: RecordingWindow | null | undefined): string {
   return w ? 'Recording' : 'Not recorded';
+}
+
+/** How often, in the schedule's words. */
+export type Cadence = 'Continuously' | 'Each blink' | 'Each reading window' | 'Once per sitting' | 'Live only' | 'Not measured';
+
+export interface ScheduleRow {
+  measure: string;
+  cadence: Cadence;
+  /** When exactly, in a few words. */
+  when: string;
+  /** Where it is kept; "Not kept" when it is not. */
+  kept: string;
+  /** What the researcher sees of it while it happens. */
+  live: string;
+  /** The recording window(s) that keep it, for the test that ties the code's windows to this table. */
+  windows?: RecordingWindow[];
+}
+
+const s1 = (ms: number) => `${Math.round(ms / 100) / 10} s`;
+/** How many windows keep frames: every RECORDING_LABEL but 'none'. */
+const RECORDING_WINDOWS = Object.keys(RECORDING_LABEL).length - 1;
+
+/**
+ * The schedule, in the order a sitting meets it. Every number is read from the code that applies it.
+ * It is rendered into the docs by the unit tests, where CONFIG has the protocol's timings (the e2e
+ * harness's shortened ones apply only under ?e2e in a browser).
+ */
+export function measurementSchedule(): ScheduleRow[] {
+  const selfTestS = Math.round((SELF_TEST.FIRST_CUE_MS + SELF_TEST.CUES * SELF_TEST.CUE_EVERY_MS) / 1000);
+  return [
+    {
+      measure: `${MEASURE.eyeOpenness.name}, face found, head position, iris position`,
+      cadence: 'Continuously',
+      when: 'Every frame the tracker processes, from camera setup to the end of the sitting',
+      kept: `Only in the ${RECORDING_WINDOWS} windows below that the panel marks "Recording"; on every other screen shown live and discarded`,
+      live: `Card: picture, last-10-s graph, eye openness, on screen now; panel says "${RECORDING_LABEL.none}" outside them`,
+    },
+    {
+      measure: MEASURE.pictureBrightness.name,
+      cadence: 'Continuously',
+      when: `${CONFIG.LUMA_SAMPLE_HZ} times a second`,
+      kept: 'Mean per reading window (07 mean_face_luma)',
+      live: 'Card',
+      windows: ['reading'],
+    },
+    {
+      measure: MEASURE.cameraHealth.name,
+      cadence: 'Continuously',
+      when: 'Every frame: picture black or covered, camera muted, no face',
+      kept: 'Totals per reading window (07)',
+      live: 'Panel dot and words; notices that stop the sitting',
+      windows: ['reading'],
+    },
+    {
+      measure: 'Ruler, viewing distance, camera mode, fixed exposure, tracker, bench check (if run)',
+      cadence: 'Once per sitting',
+      when: 'Pre-flight and camera setup',
+      kept: '01_session_info',
+      live: 'On those screens',
+    },
+    {
+      measure: `${MEASURE.openEyeBaseline.name} and head-pitch zero`,
+      cadence: 'Once per sitting',
+      when: `Calibration, centre dot on the grey field: at least ${s1(CONFIG.EAR_BASELINE_MS)}, on until ${MIN_EAR_BASELINE_SAMPLES} usable frames, at most ${s1(CONFIG.EAR_BASELINE_MAX_MS)}; again on a retry or a resume`,
+      kept: 'Calibration record; 01 calibration_ear_baseline',
+      live: `Panel: "${RECORDING_LABEL.baseline}"; calibration screen: eyes found / steady / done`,
+      windows: ['baseline'],
+    },
+    {
+      measure: MEASURE.gazeCheck.name,
+      cadence: 'Once per sitting',
+      when: `After the baseline: ${GAZE_DOTS.length} dots across a reading line, each sampled ${s1(GAZE_DOT_SAMPLE_MS)} after ${s1(GAZE_DOT_SETTLE_MS)} to settle; a short dot is shown again (up to ${GAZE_DOT_ATTEMPTS} times in all)`,
+      kept: 'Calibration record; 01 gaze_calibration_valid',
+      live: `Panel: "${RECORDING_LABEL.gaze_check}"; calibration screen: a tick per dot`,
+      windows: ['gaze_check'],
+    },
+    {
+      measure: MEASURE.cameraCheck.name,
+      cadence: 'Once per sitting',
+      when: `After calibration: about ${selfTestS} s, ${SELF_TEST.CUES} flashes on the grey field`,
+      kept: '01 selftest_*; its blinks and frames in 07b and 07c (window = selftest)',
+      live: `Panel: "${RECORDING_LABEL.selftest}"; result screen: each flash, the trace`,
+      windows: ['selftest'],
+    },
+    {
+      measure: `${MEASURE.blinks.name} (start, end, depth, complete or incomplete, page)`,
+      cadence: 'Each blink',
+      when: 'The reading window only: from the "Begin reading" tap to the last page\'s Next',
+      kept: '07b, one row per blink; 07c, every frame\'s eye openness',
+      live: `Panel: "${RECORDING_LABEL.reading}"; blinks this reading, incomplete beside (a blink is counted when the eye reopens)`,
+      windows: ['reading'],
+    },
+    {
+      measure: [
+        MEASURE.incompleteRatio.name, MEASURE.blinkRate.name, MEASURE.interBlinkInterval.name, MEASURE.perclos.name,
+        MEASURE.longClosures.name, MEASURE.samplingRate.name, MEASURE.faceInView.name, MEASURE.onScreen.name,
+        MEASURE.headPosition.name,
+      ].join(', '),
+      cadence: 'Each reading window',
+      when: 'Summarised when the last page is turned',
+      kept: '07_eye_metrics, one row per condition',
+      live: 'Panel "last reading" on the screens after it',
+      windows: ['reading'],
+    },
+    {
+      measure: 'Questions, ratings, fatigue scale, word search, reaction task, grey field, breaks',
+      cadence: 'Not measured',
+      when: 'The camera keeps running',
+      kept: 'Not kept',
+      live: `Panel: "${RECORDING_LABEL.none}"`,
+    },
+    {
+      measure: 'Live picture, last-10-s graph and its blink marks, live frame rates',
+      cadence: 'Live only',
+      when: `While the researcher card is open (${LIVE_READOUT_HZ} updates a second)`,
+      kept: 'Never kept',
+      live: 'Card',
+    },
+  ];
+}
+
+/** The schedule as the Markdown table both documents carry, verbatim. */
+export function scheduleMarkdown(rows: ScheduleRow[] = measurementSchedule()): string {
+  const cell = (x: string) => x.replace(/\|/g, '\\|');
+  return [
+    '| Measure | How often | When | Kept in | Shown live |',
+    '|---|---|---|---|---|',
+    ...rows.map((r) => `| ${cell(r.measure)} | ${r.cadence} | ${cell(r.when)} | ${cell(r.kept)} | ${cell(r.live)} |`),
+  ].join('\n');
 }

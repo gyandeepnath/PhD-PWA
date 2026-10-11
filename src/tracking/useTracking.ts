@@ -15,7 +15,7 @@ import { CONFIG, isE2ETimingActive } from '@/experiment/config';
 import { eyeEars, meanEar, fitEarBaseline, LEFT_EYE_EAR, RIGHT_EYE_EAR, type Point } from './blink';
 import { samplingFpsObserved } from './frameRateGate';
 import { blinkCuts, traceBlinkMarks, type TraceBlinkMark } from './blinkCount';
-import type { RecordingWindow } from './measurementSchedule';
+import { LIVE_READOUT_HZ, type RecordingWindow } from './measurementSchedule';
 import { startFramePump, frameTimestamp, type FrameMeta, type FramePump, type PumpVideo } from './framePump';
 import { PipelineMeter, type MeterWindow, type PipelineSummary } from './pipelineStats';
 import { startTracker, createTracker, errorSummary, TRACKER_BACKENDS, type FaceTracker, type TrackerBackend } from './trackers';
@@ -42,7 +42,7 @@ import { setExposure, EXPOSURE_RULE, EXPOSURE_TIMING, type ExposureOutcome } fro
  * emitLive now takes a thunk and invokes it only after both the rate check and the
  * zero-subscriber check pass.
  */
-const LIVE_HZ = 4;
+const LIVE_HZ = LIVE_READOUT_HZ;
 import { estimateHeadPose, isOffAxis, noseVerticalFraction } from './headPose';
 import { estimateGaze } from './gaze';
 import { lumaStatsFromRGBA } from './lighting';

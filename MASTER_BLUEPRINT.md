@@ -172,9 +172,10 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) whit
   → COLOR_VISION        digital Ishihara screening (AFTER night-shift is off)
   → CAMERA_SETUP        webcam permission (or skip → camera_active=false; every ocular column is then
                         missing, not zero)
-  → CALIBRATION         9-point gaze calibration + EAR open-eye baseline + per-person frontal-pitch
-                        baseline (head frontal → pitch zero), then the camera self-test on the
-                        grey field (rule st-r2)  /
+  → CALIBRATION         on the grey field: EAR open-eye baseline + per-person frontal-pitch baseline
+                        (head frontal → pitch zero; rule cal-r2: at least 6 s, until 30 usable
+                        frames, at most 12 s), a three-dot gaze check (rule gaze-r2), then the
+                        camera self-test (rule st-r2)  /
                         positioning check if no camera
   → CVSQ_BASELINE       validated CVS-Q (16 items)
   → BASELINE_FATIGUE    5-item visual-fatigue VAS (0–10)
@@ -341,11 +342,17 @@ was seen — tier A ≥ 20, B 15–20, C < 15 — and within 2 fps of the partic
 - Off-axis thresholds raised to pitch ≥ 20°, yaw ≥ 15° (> 2× typical webcam error); continuous means
   are preferred over the dichotomised flag.
 
-### 5.6 Gaze (`gaze.ts`, `gazeCalibration.ts`)
-- Real **9-point calibration**: neutral bias (h0,v0) from the centre target + per-axis thresholds
-  (midpoint between centre spread and edge offset). `gaze_calibrated` is **true only when the fit is
-  separable**; otherwise gaze is honestly reported as a gross head-movement proxy.
-- Derived: zone-centre ratio, gaze-deviation ratio, zone-transition count.
+### 5.6 Gaze (`gaze.ts`, `gazeCalibration.ts`) — a quality check only
+- **Three-dot gaze check, rule `gaze-r2` (Round 80)**: the middle and two ends of a mid-height reading
+  line, each settled 0.5 s and sampled 1 s, needing half the frames the camera delivered, a short dot
+  shown again on its own (up to 3 times). The two ends must separate from the middle (1.5 x its
+  scatter, on opposite sides); they give a range of horizontal iris offset, widened to about the
+  screen edge plus 3 degrees. `gaze_calibrated` is **true only when the check passed**.
+- Derived: `on_screen_ratio` (07) — open-eye frames with the head not off-axis and the offset in the
+  range; a blink is neither on nor off screen. QC, never an outcome.
+- The nine-point fit (`gaze-r1`) and its zone columns are gone from the routine; the columns are kept,
+  deprecated, blank on new rows. Vertical iris offset is not used (about 1.5 camera pixels across the
+  screen at 55 cm, read against the lids).
 
 ### 5.7 Other QC
 - **Face presence ratio**, **face size** (landmark bounding-box geometric-mean extent — a

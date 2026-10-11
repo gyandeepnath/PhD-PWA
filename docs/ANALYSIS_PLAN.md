@@ -580,6 +580,27 @@ These are not optional and they come first.
      file: about 54,000 rows and 4–6 MB per sitting. A hundred sittings kept on the tablet take
      about 170 MB. The pre-flight storage check already asks for 300 MB free before every sitting
      (`storage/storageHealth.ts`), so it needs no change; export and back up as usual.
+7. **The calibration rules (Round 80).** Both are versioned in the data; nothing in the primary
+   outcome's definition changed.
+   - **The open-eye baseline, rule `cal-r2`** (01 `calibration_rule_version`; `cal-r1` before). The
+     baseline is still the 90th percentile of the centre-fixation window and still needs 30 usable
+     frames; the blink cuts are still 0.75 and 0.60 of it. What changed is the window: it runs on the
+     grey field (#808080, under the exposure fixed at camera setup) instead of a dark screen, for at
+     least 6 s and on until 30 usable frames, at most 12 s, instead of a fixed 6 s. Why: the dark
+     screen lit the face as no reading condition does and is the slowest case for an automatically
+     exposed camera, and on the study tablet the fixed window failed in good light (investigator's
+     report). Because the ground changed, absolute `calibration_ear_baseline` and `ear_baseline` are
+     not compared across the two rules; ratios to each participant's own baseline, and every blink
+     classification, are unaffected in kind. **Pre-specified:** if any `cal-r1` sitting is ever
+     pooled with study data, report the primary with and without those sittings.
+   - **Gaze, rule `gaze-r2`** (07 and 01 `gaze_rule_version`; `gaze-r1` before). The nine-point
+     mapping is replaced by a three-dot check, and the gaze columns by one quality index,
+     `on_screen_ratio` (§ PROTOCOL 6). **No hypothesis and no analysis rule uses gaze.**
+     `on_screen_ratio` is reported descriptively (by condition and polarity) as a check that the
+     participant was looking at the tablet; it is not a covariate and not an exclusion rule, and no
+     threshold for it is set here. The deprecated zone columns (`gaze_deviation_ratio`,
+     `zone_center_ratio`, `zone_transition_count`) are blank on `gaze-r2` rows, and neither template
+     reads them.
 
 ---
 
