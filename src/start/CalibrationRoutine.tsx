@@ -1,39 +1,51 @@
 /**
- * Camera calibration routine (camera-active path).
+ * Camera calibration routine (camera-active path), rules cal-r2 and gaze-r2 (Round 80).
  *
- * Two windows, in this order, driven by calibrationSequence():
+ * Two steps, in this order, driven by calibrationSequence(), both on the grey field in its black ink:
  *
- *   1. OPEN-EYE BASELINE. A centre fixation dot, six seconds, participant blinking normally. This
- *      is the only window the EAR baseline is fitted from, and it is first because the posture it
- *      measures — looking straight at the screen — is the posture the reading task is performed in.
- *      It used to be taken from the nine-point frames below, a third of which are spent looking up
- *      at the top row of targets with the lid raised and the fissure wide; the baseline is a 90th
- *      percentile, so it settled on exactly those frames, and both blink thresholds are fractions
- *      of it. See calibrationSequence.ts for what that did to the primary outcome.
+ *   1. OPEN-EYE BASELINE. A centre dot; the participant looks at it and blinks normally. This is the
+ *      only window the EAR baseline is fitted from, and it is first because the posture it measures —
+ *      looking straight at the screen — is the posture the reading task is performed in. It runs at
+ *      least 6 s, then on until 30 usable frames, at most 12 s (cal-r2), and says while it runs whether
+ *      the eyes are found, whether they are being measured steadily, and when it is done.
  *
- *   2. NINE-POINT GAZE. A target at each of 9 screen positions; the participant fixates and taps,
- *      and the tracker samples iris offset during a short dwell. The fit is computed after the last
- *      target and a CalibrationRecord is stored.
+ *   2. GAZE CHECK. Three dots across a mid-height reading line — its middle and its two ends. Each is
+ *      shown 0.5 s to settle and sampled 1 s; a dot that collects too few open-eye frames is shown
+ *      again on its own (up to 3 times in all). A tick per dot. The fit gives the on-screen range
+ *      (gazeCalibration.ts): a QUALITY CHECK, not an outcome.
  *
- * Either half can fail on its own and the screen says which. Continuing anyway remains available,
- * because a participant who is already in the room and cannot be calibrated still yields every
- * non-ocular measure — but it has to be a deliberate choice, so it is a separate button.
+ * Each step fails on its own, says why, and is repeated on its own:
+ *   - no baseline: the screen names the reason (no frames, no face, the eyes not measured, too few
+ *     frames) with its evidence. "Try the eye baseline again" repeats that step (and then the gaze
+ *     check); "Continue without blink measures" is a separate, deliberate button, because a
+ *     participant who is already in the room and cannot be calibrated still yields every non-ocular
+ *     measure;
+ *   - gaze check incomplete: a calm notice — it affects only the quality index, and blinks are
+ *     measured normally. "Repeat the gaze check" repeats the three dots alone; "Continue" goes on.
+ *
+ * It used to be nine tap targets on a dark ground, judged against an assumed 30 fps, with one bar for
+ * both axes and a failure screen that said the primary outcome would be empty when only the gaze fit
+ * had failed (Round 78 research report R2, C1). See gazeCalibration.ts and calibrationSequence.ts.
  */
 import { useEffect, useRef, useState } from 'react';
-import { calibrationSequence, STEP_SETTLE_MS, type CalibrationStep } from '@/tracking/calibrationSequence';
-import type { CalibrationOutcome } from '@/tracking/useTracking';
+import {
+  calibrationSequence, CALIBRATION_GROUND, CALIBRATION_INK, GAZE_DOTS, STEP_SETTLE_MS,
+  type BaselineProgress, type BaselineResult, type EarBaselineStep, type EyeState, type GazeDotStep,
+} from '@/tracking/calibrationSequence';
+import type { GazeDotId } from '@/tracking/gazeCalibration';
+import type { CalibrationOutcome, GazeDotResult } from '@/tracking/useTracking';
 import { InfoTip } from '@/components/InfoTip';
 
 interface Props {
   sessionId: string;
-  measureEarBaseline: (ms: number) => Promise<{ baseline: number | null; usable: number }>;
+  measureEarBaseline: (step: Pick<EarBaselineStep, 'ms' | 'maxMs' | 'minSamples'>, onProgress?: (p: BaselineProgress) => void) => Promise<BaselineResult>;
   beginGazeCalibration: () => void;
-  sampleGazeTarget: (targetId: string, ms: number) => Promise<void>;
-  endGazeCalibration: (sessionId: string) => Promise<CalibrationOutcome>;
+  sampleGazeTarget: (dot: GazeDotId, ms: number, onProgress?: (p: { eyes: EyeState; steady: boolean }) => void) => Promise<GazeDotResult>;
+  endGazeCalibration: (sessionId: string, opts?: { gazeRun?: boolean; baselineAttempts?: number }) => Promise<CalibrationOutcome>;
   onDone: () => void;
   /**
-   * True from "Begin calibration" until the fit is reported. The operator's Exit chip is withheld
-   * meanwhile: it would sit in the top-left corner, where a gaze target appears, and leaving
+   * True from "Begin calibration" until the result is reported. The operator's Exit chip is withheld
+   * meanwhile: it would sit in the top-left corner, near where a gaze dot appears, and leaving
    * mid-calibration is a restart anyway (experiment/navigation.ts).
    */
   onRunning?: (running: boolean) => void;
@@ -50,16 +62,66 @@ interface Props {
   halted?: boolean;
 }
 
+type Phase =
+  | { kind: 'intro' }
+  | { kind: 'baseline'; progress: BaselineProgress | null }
+  | { kind: 'gaze'; dot: GazeDotId; attempt: number; sampling: boolean; eyes: EyeState | null }
+  | { kind: 'no_baseline'; result: BaselineResult }
+  | { kind: 'gaze_incomplete'; outcome: CalibrationOutcome }
+  | { kind: 'error'; message: string };
+
+/** Each dot's state on the tick row: not yet shown, being shown, collected enough, or short after its retries. */
+type DotMark = 'todo' | 'now' | 'done' | 'short';
+
+const INK = CALIBRATION_INK;
+const DOT_LABEL: Record<GazeDotId, string> = { centre: 'middle', left: 'left', right: 'right' };
+
+const secs = (ms: number) => `${Math.round(ms / 100) / 10} s`;
+
+/** Why the baseline window gave no baseline, in a sentence the operator can act on, with its evidence. */
+export function baselineReasonText(r: BaselineResult, needed: number): string {
+  const facePct = r.frames > 0 ? Math.round((100 * r.faceFrames) / r.frames) : 0;
+  switch (r.reason) {
+    case 'no_frames':
+      return `The tracker produced no frames in the ${secs(r.ms)} window. The camera or the tracker stopped: check the picture in the researcher card.`;
+    case 'no_face':
+      return `A face was found in only ${facePct}% of the ${r.frames} frames in ${secs(r.ms)}. Check the seating and framing: the whole face in the picture, at about 55 cm.`;
+    case 'eyes_not_measured':
+      return `A face was found, but the eyes could be measured in only ${r.usable} of its ${r.faceFrames} frames. Usually glare (spectacles, a window or a lamp behind the tablet), or the eyes half-closed.`;
+    case 'too_few_frames':
+      return `Only ${r.usable} usable frames in ${secs(r.ms)}; the baseline needs ${needed}. The camera delivered too few frames: more light on the face, and close other apps.`;
+    default:
+      return `No baseline could be fitted (${r.usable} usable frames; ${needed} needed).`;
+  }
+}
+
+/** Why the gaze check fell short, in a sentence. */
+export function gazeReasonText(o: CalibrationOutcome): string {
+  const g = o.gaze;
+  if (!g) return 'The gaze check was not run.';
+  if (g.reason === 'too_few_samples') {
+    const dots = g.shortDots.map((d) => DOT_LABEL[d]).join(' and ');
+    return `The eyes were not found often enough at the ${dots} dot${g.shortDots.length === 1 ? '' : 's'}, even after showing ${g.shortDots.length === 1 ? 'it' : 'them'} again.`;
+  }
+  return 'The eyes did not move far enough between the dots to tell the left end of the line from the right. Ask the participant to keep the head still and move only the eyes.';
+}
+
+/** The live state of the step in words: eyes found, steady, done. */
+function eyesText(eyes: EyeState | null, steady: boolean): string {
+  if (eyes === 'found') return steady ? 'Eyes found · steady' : 'Eyes found · hold still';
+  if (eyes === 'face_only') return 'Face found · the eyes are not clear yet';
+  return 'Looking for the eyes…';
+}
+
 export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCalibration, sampleGazeTarget, endGazeCalibration, onDone, onRunning, halted = false }: Props) {
   const STEPS = calibrationSequence();
-  /** -1 = intro; otherwise the index into STEPS currently running. */
-  const [idx, setIdx] = useState(-1);
+  const baselineStep = STEPS.find((s): s is EarBaselineStep => s.kind === 'ear_baseline')!;
+  const dotSteps = STEPS.filter((s): s is GazeDotStep => s.kind === 'gaze_dot');
+  const [phase, setPhase] = useState<Phase>({ kind: 'intro' });
   const [busy, setBusy] = useState(false);
-  /** Calibration ran but produced no usable fit. Null while there is nothing to report. */
-  const [poorFit, setPoorFit] = useState<CalibrationOutcome | null>(null);
-  const [thinFit, setThinFit] = useState<CalibrationOutcome | null>(null);
-  /** Calibration threw. Null while there is no error. */
-  const [failure, setFailure] = useState<string | null>(null);
+  const [marks, setMarks] = useState<Record<GazeDotId, DotMark>>({ centre: 'todo', left: 'todo', right: 'todo' });
+  /** How many times the baseline window has run since Begin; recorded with the calibration. */
+  const baselineAttempts = useRef(0);
 
   /*
    * The routine is async and outlives its screen if the screen is replaced mid-run — the camera being
@@ -81,7 +143,7 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
    * the stopped run has actually let go of the tracker.
    */
   const run = useRef(0);
-  /** The sampling half is under way: the part a rotation invalidates. The fit after it is not. */
+  /** A step is sampling: the part a rotation invalidates. The fit after it is not. */
   const sampling = useRef(false);
   /** A run was stopped by a rotation; said on the start screen, which is where it begins again. */
   const [stoppedByRotation, setStoppedByRotation] = useState(false);
@@ -92,211 +154,267 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
     setStoppedByRotation(true);
   }, [halted]);
 
-  const start = async () => {
-    const mine = ++run.current;
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  /** Run the gaze check's three dots, then write the record and report. `mine` is the run it belongs to. */
+  const gazeCheck = async (mine: number): Promise<void> => {
     const current = () => mounted.current && run.current === mine;
-    // A stopped run hands back to the start screen only once its last step has closed.
-    const abandon = () => { if (mounted.current) { setIdx(-1); setBusy(false); } };
-    setStoppedByRotation(false);
-    setPoorFit(null);
-    setFailure(null);
-    setBusy(true);
-    sampling.current = true;
-    for (let i = 0; i < STEPS.length; i++) {
-      const step = STEPS[i];
-      setIdx(i);
-      await new Promise((r) => setTimeout(r, STEP_SETTLE_MS)); // let the participant settle on what just appeared
-      if (!current()) { abandon(); return; }
-      if (step.kind === 'ear_baseline') {
-        await measureEarBaseline(step.ms);
+    const abandon = () => { if (mounted.current) { setPhase({ kind: 'intro' }); setBusy(false); } };
+    beginGazeCalibration();
+    setMarks({ centre: 'todo', left: 'todo', right: 'todo' });
+    for (const d of dotSteps) {
+      let enough = false;
+      for (let attempt = 1; attempt <= d.attempts && !enough; attempt++) {
+        setMarks((m) => ({ ...m, [d.id]: 'now' }));
+        setPhase({ kind: 'gaze', dot: d.id, attempt, sampling: false, eyes: null });
+        await wait(d.settleMs); // the eye arrives at the dot; these frames are not kept
         if (!current()) { abandon(); return; }
-        beginGazeCalibration();
-      } else {
-        await sampleGazeTarget(step.id, step.ms);
+        setPhase({ kind: 'gaze', dot: d.id, attempt, sampling: true, eyes: null });
+        const r = await sampleGazeTarget(d.id, d.ms, (p) => {
+          if (mounted.current && run.current === mine) setPhase({ kind: 'gaze', dot: d.id, attempt, sampling: true, eyes: p.eyes });
+        });
         if (!current()) { abandon(); return; }
+        enough = r.enough;
       }
+      setMarks((m) => ({ ...m, [d.id]: enough ? 'done' : 'short' }));
     }
     sampling.current = false;
-    /**
-     * The result of calibration is REPORTED, not discarded.
-     *
-     * The return value was thrown away and the routine advanced regardless. Every blink threshold
-     * in the study is a fraction of this participant's own open-eye EAR baseline, so a calibration
-     * that produced no baseline means the primary outcome is null for the entire sitting — and the
-     * operator learned that only at export, if at all, by which time the participant has gone home.
-     * A rejection was worse: the promise never resolved, onDone never fired, and the operator was
-     * stranded on a 9/9 target screen with no control at all.
-     */
+    await finish({ gazeRun: true });
+  };
+
+  /**
+   * Write the calibration record and report. The result of calibration is REPORTED, not discarded: a
+   * rejection used to strand the operator on the last target with no control at all, and a missing
+   * baseline was learned of only at export.
+   */
+  const finish = async (opts: { gazeRun: boolean }): Promise<void> => {
     if (!mounted.current) return;
     let outcome: CalibrationOutcome;
     try {
-      outcome = await endGazeCalibration(sessionId);
+      outcome = await endGazeCalibration(sessionId, { ...opts, baselineAttempts: baselineAttempts.current });
     } catch (err) {
       if (!mounted.current) return;
-      setFailure(err instanceof Error ? err.message : String(err));
+      setPhase({ kind: 'error', message: err instanceof Error ? err.message : String(err) });
       setBusy(false);
       return;
     }
     if (!mounted.current) return;
     setBusy(false);
+    if (!opts.gazeRun) { onDone(); return; }
     /*
-     * BOTH halves must succeed, and the missing one must be named.
-     *
-     * This used to branch on a single boolean that carried the GAZE verdict alone, while the copy
-     * below already told the operator that continuing without an open-eye baseline empties the
-     * primary outcome. So the one failure the screen exists to prevent was the one it could not
-     * detect: a clean nine-of-nine gaze fit with no EAR baseline advanced silently.
+     * A gaze check that fell short is a NOTICE, not a failure screen. It affects only the on-screen
+     * ratio, a quality index; the baseline was measured and every blink is counted. The red screen
+     * used to say the ocular measures "including the primary outcome" would be empty here (R2, C1.6).
      */
-    if (!outcome.gazeValid || outcome.earBaseline == null) { setFailure(null); setPoorFit(outcome); return; }
-    /*
-     * A CALIBRATION CAN PASS AND STILL BE WORTH NOTHING.
-     *
-     * The screen above fires on failure. Nothing fired when the fit was technically valid but rested
-     * on almost no evidence — six of nine targets each contributing a single solved frame satisfies
-     * the acceptance rule, and the operator was shown exactly what a clean nine-of-nine run showed
-     * them: nothing. The sitting then exported as gaze_calibration_valid. That is the difference
-     * between a calibration and a gesture, and it was invisible at the only moment it could be acted
-     * on — while the participant is still in the chair and the routine can be re-run.
-     *
-     * This is a WARNING, not a gate. The mapping did fit and its thresholds may be serviceable, so
-     * the decision stays with the operator; what changes is that they get to make it.
-     */
-    if (outcome.gazeQuality.trust === 'thin') { setFailure(null); setThinFit(outcome); return; }
+    if (!outcome.gazeValid) { setPhase({ kind: 'gaze_incomplete', outcome }); return; }
     onDone();
   };
 
-  const step: CalibrationStep | null =
-    idx >= 0 && !stoppedByRotation && poorFit == null && thinFit == null && failure == null ? STEPS[idx] : null;
-  const target = step?.kind === 'gaze_target' ? step : null;
+  /** The baseline window, then the gaze check. A retry from the no-baseline screen starts here too. */
+  const start = async () => {
+    const mine = ++run.current;
+    const current = () => mounted.current && run.current === mine;
+    // A stopped run hands back to the start screen only once its last step has closed.
+    const abandon = () => { if (mounted.current) { setPhase({ kind: 'intro' }); setBusy(false); } };
+    setStoppedByRotation(false);
+    setBusy(true);
+    sampling.current = true;
+    setPhase({ kind: 'baseline', progress: null });
+    await wait(STEP_SETTLE_MS); // let the participant settle on the dot that just appeared
+    if (!current()) { abandon(); return; }
+    baselineAttempts.current += 1;
+    const result = await measureEarBaseline(baselineStep, (p) => {
+      if (mounted.current && run.current === mine) setPhase({ kind: 'baseline', progress: p });
+    });
+    if (!mounted.current) return;
+    if (!current()) { abandon(); return; }
+    if (result.baseline == null) {
+      // Stop here and say why: no point asking the eyes to move when they could not be measured still.
+      sampling.current = false;
+      setBusy(false);
+      setPhase({ kind: 'no_baseline', result });
+      return;
+    }
+    await gazeCheck(mine);
+  };
+
+  /** Repeat only the three dots, keeping the baseline already measured. */
+  const repeatGaze = async () => {
+    const mine = ++run.current;
+    setStoppedByRotation(false);
+    setBusy(true);
+    sampling.current = true;
+    await gazeCheck(mine);
+  };
+
+  const continueWithout = async () => {
+    setBusy(true);
+    await finish({ gazeRun: false });
+  };
+
+  const beginAgain = () => { baselineAttempts.current = 0; void start(); };
+
+  // ---- the screen ----
+  const btn: React.CSSProperties = { padding: '14px 28px', borderRadius: 12, fontSize: 16, cursor: 'pointer' };
+  const primary: React.CSSProperties = { ...btn, background: INK, color: '#ffffff', border: 'none' };
+  const secondary: React.CSSProperties = { ...btn, background: 'transparent', color: INK, border: `1px solid ${INK}` };
+  const centred: React.CSSProperties = { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 24, overflowY: 'auto' };
+  const para: React.CSSProperties = { fontSize: 17, maxWidth: 680, marginTop: 12, lineHeight: 1.6 };
+  /** The fixation dot: black on the grey field, with a white ring so its edge is crisp. */
+  const dotStyle = (size: number): React.CSSProperties => ({ width: size, height: size, borderRadius: '50%', background: INK, border: '3px solid #ffffff', boxSizing: 'content-box' });
+
+  const showIntro = phase.kind === 'intro' || stoppedByRotation;
 
   return (
     // Leaves the column the researcher card takes when the operator opens it on the intro or result
     // (--vl-panel-dock, ResearcherPanel.tsx); the dots themselves run with the card locked shut.
-    <div style={{ position: 'fixed', inset: 0, left: 'var(--vl-panel-dock, 0px)', background: '#0a0a12', overflow: 'hidden' }}>
-      {thinFit != null && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', textAlign: 'center', padding: 24 }}>
-          <h1 className="font-serif" style={{ fontSize: 28, fontWeight: 300 }}>Gaze calibration is not trustworthy</h1>
-          <p className="font-lab" style={{ fontSize: 17, color: '#f0d8c8', maxWidth: 680, marginTop: 12, lineHeight: 1.6 }}>
-            It passed the acceptance rule, but only just. {thinFit.gazeQuality.covered} of{' '}
-            {thinFit.gazeQuality.total} targets registered at all, and only{' '}
-            {thinFit.gazeQuality.wellCovered} of {thinFit.gazeQuality.total} were tracked through
-            even half their dwell. The median covered target contributed{' '}
-            {thinFit.gazeQuality.medianSamples} usable readings where a fully tracked dwell would
-            give about {thinFit.gazeQuality.expectedSamples}.
-          </p>
-          <p className="font-lab" style={{ fontSize: 17, color: '#c8d8f0', maxWidth: 680, marginTop: 12, lineHeight: 1.6 }}>
-            A fit from that little evidence is a guess with a threshold attached. Gaze zones for this
-            sitting would be reported as calibrated measurements when they are closer to noise.
-            Usually it is the camera: the face too far away or off to one side, the eyes in shadow,
-            or spectacle glare across the lid margin. Re-running it costs about fifteen seconds.
-          </p>
-          <p className="font-lab" style={{ fontSize: 15, color: '#b8c4dc', maxWidth: 680, marginTop: 12, lineHeight: 1.6 }}>
-            This does NOT affect the primary outcome. Blink thresholds come from the open-eye
-            baseline, which was measured successfully. Only the gaze measures are at stake.
-          </p>
-          <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button onClick={() => { setThinFit(null); start(); }} className="font-lab" data-testid="calibration-retry-thin" style={{ background: '#1f5fbf', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 28px', fontSize: 16, cursor: 'pointer' }}>
-              Re-run calibration →
-            </button>
-            <button onClick={() => { setThinFit(null); onDone(); }} className="font-lab" data-testid="calibration-accept-thin" style={{ background: 'transparent', color: '#c8d8f0', border: '1px solid #6a7490', borderRadius: 12, padding: '14px 28px', fontSize: 16, cursor: 'pointer' }}>
-              Accept and continue
-            </button>
-          </div>
-        </div>
-      )}
-      {(poorFit != null || failure != null) && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', textAlign: 'center', padding: 24 }}>
-          <h1 className="font-serif" style={{ fontSize: 28, fontWeight: 300 }}>Calibration did not succeed</h1>
-          <p className="font-lab" style={{ fontSize: 17, color: '#f0d8c8', maxWidth: 680, marginTop: 12, lineHeight: 1.6 }}>
-            {failure != null
-              ? `Calibration failed: ${failure}`
-              : poorFit != null && poorFit.earBaseline == null && poorFit.gazeValid
-                ? `The gaze mapping fitted, but no open-eye baseline could be measured `
-                  + `(${poorFit.earSamplesUsable} usable frames). This is usually glare on the lid `
-                  + `margin \u2014 spectacles, a window or a lamp behind the tablet.`
-                : poorFit != null && poorFit.earBaseline != null
-                  ? 'The open-eye baseline was measured, but not enough targets were detected to fit '
-                    + 'this participant\u2019s gaze.'
-                  : 'Not enough targets were detected to fit this participant\u2019s gaze and open-eye baseline.'}
-          </p>
-          <p className="font-lab" style={{ fontSize: 17, color: '#c8d8f0', maxWidth: 680, marginTop: 12, lineHeight: 1.6 }}>
-            Every blink threshold is a fraction of this participant’s own open-eye baseline, so
-            continuing without one means the ocular measures — including the primary outcome — will
-            be empty for this whole sitting. Check the lighting, the distance and that the face is
-            not backlit, then try again. Continuing anyway is a valid choice; it must be a deliberate
-            one.
-          </p>
-          <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button onClick={start} className="font-lab" data-testid="calibration-retry" style={{ background: '#1f5fbf', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 28px', fontSize: 16, cursor: 'pointer' }}>
-              Try calibration again →
-            </button>
-            <button onClick={onDone} className="font-lab" data-testid="calibration-continue-anyway" style={{ background: 'transparent', color: '#c8d8f0', border: '1px solid #6a7490', borderRadius: 12, padding: '14px 28px', fontSize: 16, cursor: 'pointer' }}>
-              Continue without ocular measures
-            </button>
-          </div>
-        </div>
-      )}
-      {(idx === -1 || stoppedByRotation) && poorFit == null && failure == null && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', textAlign: 'center', padding: 24 }}>
-          <h1 className="font-serif" style={{ fontSize: 34, fontWeight: 300, display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div data-testid="calibration-routine" data-ground={CALIBRATION_GROUND} data-phase={showIntro ? 'intro' : phase.kind}
+      style={{ position: 'fixed', inset: 0, left: 'var(--vl-panel-dock, 0px)', background: CALIBRATION_GROUND, color: INK, overflow: 'hidden' }}>
+      {showIntro && (
+        <div style={centred}>
+          <h1 className="font-serif" style={{ fontSize: 34, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 10 }}>
             Eye calibration
-            <InfoTip label="eye calibration" tone="dark">
-              Two steps. The centre dot measures how open this participant&apos;s eyes are at rest;
-              every blink threshold is a fraction of that. The nine dots then fit a mapping from eye
-              position to screen areas, used for the gaze-zone measures. If too few targets are
-              detected, this screen says which part failed and offers a retry.
+            <InfoTip label="eye calibration">
+              Two steps on the grey field. The centre dot measures how open this participant&apos;s eyes
+              are at rest: at least 6 seconds, longer if the eyes are not found steadily, at most 12.
+              Every blink line is a fraction of it. The three dots then check where the eyes point at the
+              two ends of a line of text, for the on-screen ratio — a quality check only. A step that
+              falls short says why, and can be repeated on its own.
             </InfoTip>
           </h1>
           {stoppedByRotation && (
-            <p data-testid="calibration-stopped" className="font-sans" style={{ fontSize: 17, color: '#ffd9a8', maxWidth: 600, marginTop: 12, lineHeight: 1.55 }}>
+            <p data-testid="calibration-stopped" className="font-sans" style={{ fontSize: 17, fontWeight: 500, maxWidth: 600, marginTop: 12, lineHeight: 1.55 }}>
               The calibration was stopped when the tablet turned to portrait, and nothing from it is kept.
               Begin it again from the start.
             </p>
           )}
-          <p className="font-lab" style={{ fontSize: 17, color: '#c8d8f0', maxWidth: 600, marginTop: 12, lineHeight: 1.6 }}>
-            First, a dot in the centre of the screen: look straight at it and blink as you normally
-            would. Then the dot will appear at nine positions in turn — look directly at each one
-            and tap it. Keep your head still throughout and move only your eyes.
+          <p className="font-lab" style={{ ...para, maxWidth: 600 }}>
+            First, look at the dot in the middle of the screen and blink as you normally would. Then the
+            dot moves along a line: the middle, the left end, the right end. Look at it each time — you do
+            not need to touch it. Keep your head still and move only your eyes.
           </p>
-          <button onClick={start} disabled={busy} data-testid="calibration-begin" className="font-lab" style={{ marginTop: 24, background: '#1f5fbf', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 28px', fontSize: 16, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+          <button onClick={beginAgain} disabled={busy} data-testid="calibration-begin" className="font-lab" style={{ ...primary, marginTop: 24, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1 }}>
             {busy ? 'Stopping…' : 'Begin calibration →'}
           </button>
         </div>
       )}
-      {step?.kind === 'ear_baseline' && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+
+      {!showIntro && phase.kind === 'baseline' && (
+        <div style={{ ...centred, padding: 0 }}>
           {/* A fixation dot, not a tap target: this window measures the eye at rest, looking straight
               ahead. Nothing is asked of the participant except to look and to blink normally. */}
+          <div data-testid="calibration-fixation" style={dotStyle(18)} />
+          <BaselineStatus progress={phase.progress} />
+        </div>
+      )}
+
+      {!showIntro && phase.kind === 'gaze' && (
+        <>
           <div
-            data-testid="calibration-fixation"
-            style={{ width: 18, height: 18, borderRadius: '50%', background: '#4f8ef7', border: '3px solid #fff', boxShadow: '0 0 18px #4f8ef7' }}
+            data-testid="calibration-gaze-dot"
+            data-dot={phase.dot}
+            aria-label={`gaze dot ${phase.dot}`}
+            style={{
+              ...dotStyle(22), position: 'absolute', top: 'calc(50% - 14px)',
+              left: `calc(50% + ${GAZE_DOTS.find((d) => d.id === phase.dot)!.dx}px - 14px)`,
+            }}
           />
-          <p className="font-lab" style={{ fontSize: 14, color: '#c8d8f0', maxWidth: 420, marginTop: 28, lineHeight: 1.6, textAlign: 'center' }}>
-            Look at the dot and blink normally.
+          {phase.attempt > 1 && (
+            <p className="font-lab" style={{ position: 'absolute', left: 0, right: 0, top: 'calc(50% + 34px)', textAlign: 'center', fontSize: 15 }}>
+              Once more — look at the dot
+            </p>
+          )}
+        </>
+      )}
+
+      {/* Drawn while the participant looks at the dots, at the foot of the screen: the tick per dot. It
+          stays on the gaze-check notice, where it shows which dot fell short. */}
+      {!showIntro && (phase.kind === 'gaze' || phase.kind === 'baseline' || phase.kind === 'gaze_incomplete') && (
+        <div data-testid="calibration-steps" style={{ position: 'absolute', bottom: 18, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 16, fontFamily: '"DM Mono", monospace', fontSize: 14 }}>
+          <span data-testid="calibration-step-baseline" data-state={phase.kind === 'baseline' ? 'now' : 'done'}>
+            {phase.kind === 'baseline' ? '●' : '✓'} centre, eyes at rest
+          </span>
+          {dotSteps.map((d) => (
+            <span key={d.id} data-testid={`calibration-step-${d.id}`} data-state={marks[d.id]}>
+              {marks[d.id] === 'done' ? '✓' : marks[d.id] === 'short' ? '✗' : marks[d.id] === 'now' ? '●' : '○'} {DOT_LABEL[d.id]}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {!showIntro && phase.kind === 'no_baseline' && (
+        <div style={centred} data-testid="calibration-no-baseline" data-reason={phase.result.reason ?? ''}>
+          <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 400 }}>No eye baseline</h1>
+          <p className="font-lab" data-testid="calibration-reason" style={{ ...para, fontWeight: 500 }}>
+            {baselineReasonText(phase.result, baselineStep.minSamples)}
           </p>
+          <p className="font-lab" style={para}>
+            Every blink line is a fraction of this baseline, so without it no blink is counted in this
+            sitting — the primary outcome included. Fix the cause and try again. Continuing without it
+            is allowed, but it must be a deliberate choice.
+          </p>
+          <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button onClick={() => { void start(); }} disabled={busy} className="font-lab" data-testid="calibration-retry" style={primary}>
+              Try the eye baseline again →
+            </button>
+            <button onClick={() => { void continueWithout(); }} disabled={busy} className="font-lab" data-testid="calibration-continue-anyway" style={secondary}>
+              Continue without blink measures
+            </button>
+          </div>
         </div>
       )}
-      {target && (
-        <button
-          aria-label={`target ${target.id}`}
-          onClick={() => { /* tap is confirmation; sampling is time-based */ }}
-          style={{
-            position: 'absolute',
-            left: `calc(${target.x * 100}% - 18px)`,
-            top: `calc(${target.y * 100}% - 18px)`,
-            width: 36, height: 36, borderRadius: '50%',
-            background: '#4f8ef7', border: '3px solid #fff', cursor: 'pointer',
-            boxShadow: '0 0 18px #4f8ef7',
-          }}
-        />
-      )}
-      {/* Drawn while the participant fixates the targets, so it is part of the procedure and keeps its
-          original size; the setup-screen type floor does not apply to it. */}
-      {idx >= 0 && step != null && (
-        <div style={{ position: 'absolute', bottom: 16, left: 0, right: 0, textAlign: 'center', color: '#c8d8f0', fontFamily: '"DM Mono", monospace', fontSize: 12 }}>
-          {idx + 1} / {STEPS.length}
+
+      {!showIntro && phase.kind === 'gaze_incomplete' && (
+        <div style={centred} data-testid="calibration-gaze-incomplete" data-reason={phase.outcome.gaze?.reason ?? ''}>
+          <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 400 }}>Gaze check incomplete</h1>
+          <p className="font-lab" data-testid="calibration-reason" style={{ ...para, fontWeight: 500 }}>{gazeReasonText(phase.outcome)}</p>
+          <p className="font-lab" style={para}>
+            This affects only a quality index (the on-screen ratio). The eye baseline was measured, and
+            blinks are measured normally.
+          </p>
+          <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button onClick={() => { void repeatGaze(); }} disabled={busy} className="font-lab" data-testid="calibration-retry-thin" style={primary}>
+              Repeat the gaze check →
+            </button>
+            <button onClick={onDone} disabled={busy} className="font-lab" data-testid="calibration-accept-thin" style={secondary}>
+              Continue
+            </button>
+          </div>
         </div>
       )}
+
+      {!showIntro && phase.kind === 'error' && (
+        <div style={centred}>
+          <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 400 }}>Calibration could not be saved</h1>
+          <p className="font-lab" style={para}>Calibration failed: {phase.message}</p>
+          <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button onClick={beginAgain} className="font-lab" data-testid="calibration-retry" style={primary}>Try calibration again →</button>
+            <button onClick={onDone} className="font-lab" data-testid="calibration-continue-anyway" style={secondary}>Continue without blink measures</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Under the centre dot while the baseline window runs: eyes found, steady, done — and the frames so
+ * far. Small and close under the dot, so reading it does not move the eye far from where it is measured.
+ */
+function BaselineStatus({ progress: p }: { progress: BaselineProgress | null }) {
+  const timeShare = p ? Math.min(1, p.elapsedMs / p.minMs) : 0;
+  const framesShare = p ? Math.min(1, p.usable / p.needed) : 0;
+  return (
+    <div data-testid="calibration-baseline-status" data-eyes={p?.eyes ?? 'searching'} data-steady={p?.steady ? 'true' : 'false'}
+      className="font-lab" style={{ marginTop: 22, fontSize: 15, lineHeight: 1.5, textAlign: 'center' }}>
+      <div>Look at the dot and blink normally.</div>
+      <div data-testid="calibration-eyes" style={{ fontWeight: 600, marginTop: 4 }}>{eyesText(p?.eyes ?? null, p?.steady ?? false)}</div>
+      <div style={{ width: 220, height: 5, margin: '8px auto 0', background: 'rgba(0,0,0,0.22)', borderRadius: 3 }}>
+        <div style={{ width: `${Math.round(100 * Math.min(timeShare, framesShare))}%`, height: '100%', background: '#000000', borderRadius: 3 }} />
+      </div>
+      <div style={{ fontSize: 14, marginTop: 4 }}>
+        {p ? `${p.usable} usable frames (needs ${p.needed}) · ${Math.floor(p.elapsedMs / 1000)} of at least ${Math.round(p.minMs / 1000)} s` : 'Starting…'}
+      </div>
     </div>
   );
 }

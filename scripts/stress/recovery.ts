@@ -109,7 +109,7 @@ function frame(t_ms: number, ear: number, facePresent = true): FrameSample {
   return {
     t_ms, ear,
     pose: { pitch: Math.sin(t_ms / 5000) * 3, yaw: Math.cos(t_ms / 7000) * 2, roll: 0.4 },
-    zone: 'cc', isCenter: true, offAxis: false,
+    offAxis: false,
     facePresent, faceSize: 0.22, luma: 120,
   };
 }

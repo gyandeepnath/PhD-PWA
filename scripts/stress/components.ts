@@ -160,19 +160,21 @@ for (const len of [0, 4, 400, 4001]) {
 }
 
 // ---------------------------------------------------------------- gaze calibration
-console.log('4. GAZE CALIBRATION');
-const zones = ['tl', 'tc', 'tr', 'ml', 'cc', 'mr', 'bl', 'bc', 'br'];
-const calCases: Record<string, { h: number; v: number }[]>[] = [
+console.log('4. GAZE CHECK (gaze-r2)');
+const calCases: Array<Partial<Record<GC.GazeDotId, number[]>>> = [
   {},
-  { tl: [] },
-  { tl: [{ h: NaN, v: NaN }], cc: [{ h: 0, v: 0 }] },
-  { cc: Array.from({ length: 50 }, () => ({ h: 0, v: 0 })) },
-  Object.fromEntries(zones.map((k, i) => [k, Array.from({ length: 20 }, () => ({ h: (i % 3) - 1, v: Math.floor(i / 3) - 1 }))])),
-  { cc: [{ h: 1e9, v: -1e9 }] },
+  { left: [] },
+  { left: [NaN], centre: [0] },
+  { centre: Array.from({ length: 50 }, () => 0) },
+  { centre: Array.from({ length: 20 }, () => 0), left: Array.from({ length: 20 }, () => -0.2), right: Array.from({ length: 20 }, () => 0.2) },
+  { centre: [1e9], left: [-1e9], right: [Infinity] },
 ];
 for (const raw of calCases) {
-  try { probeAll('fitGazeCalibration', GC.fitGazeCalibration(raw as never)); }
-  catch (e) { check('fitGazeCalibration does not throw', false, (e as Error).message.slice(0, 80)); }
+  try {
+    const fit = GC.fitGazeCheck(raw, { centre: 1, left: 1, right: 1 });
+    probeAll('fitGazeCheck', fit);
+    check('onScreenFrame(NaN) has no verdict', GC.onScreenFrame(NaN, false, fit.range) === null, String(GC.onScreenFrame(NaN, false, fit.range)));
+  } catch (e) { check('fitGazeCheck does not throw', false, (e as Error).message.slice(0, 80)); }
 }
 
 // ---------------------------------------------------------------- timing

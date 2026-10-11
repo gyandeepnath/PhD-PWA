@@ -22,9 +22,12 @@
  * fixation, in its own window, before the eye is asked to move. Expressing the routine as a list of
  * steps is what lets that ordering be asserted rather than hoped for — the screen iterates this
  * array, so a test that reads it is reading what the participant will actually be taken through.
+ *
+ * Since Round 80 the routine is the baseline window (rule cal-r2) and a three-dot gaze check (rule
+ * gaze-r2, gazeCalibration.ts), both on the grey field; the nine targets are gone.
  */
 import { CONFIG } from '@/experiment/config';
-import { GAZE_TARGETS, GAZE_DWELL_MS, type GazeDotId } from './gazeCalibration';
+import type { GazeDotId } from './gazeCalibration';
 import { MIN_EAR_BASELINE_SAMPLES } from './blink';
 import { STIMULUS_COLUMN_PX } from '@/lib/viewportScale';
 
@@ -184,31 +187,28 @@ export interface BaselineResult extends BaselineCounts {
   reason: BaselineFailure | null;
 }
 
-/** One of the nine gaze targets. Contributes iris offset only; contributes NO EAR sample. */
-export interface GazeTargetStep {
-  kind: 'gaze_target';
-  id: string;
-  x: number;
-  y: number;
+/**
+ * One of the gaze check's three dots (gaze-r2). Contributes horizontal iris offset only, and NO EAR
+ * sample: the baseline window is closed before the first dot appears.
+ */
+export interface GazeDotStep {
+  kind: 'gaze_dot';
+  id: GazeDotId;
+  /** Root px from the screen's centre, on its middle row. */
+  dx: number;
+  /** Shown, not sampled. */
+  settleMs: number;
+  /** Sampled. */
   ms: number;
+  /** Times the dot may be shown in all, when it comes out short. */
+  attempts: number;
 }
 
-export type CalibrationStep = EarBaselineStep | GazeTargetStep;
-
-/*
- * GAZE_DWELL_MS lives in gazeCalibration.ts and is re-exported here, where it used to be defined.
- *
- * It moved because gazeQuality() needs it — the expected sample count for a target is its dwell
- * times the achieved frame rate — and importing it from here created a cycle: this module already
- * imports GAZE_TARGETS from there. Both uses sit inside function bodies so the cycle happened to
- * work, which is exactly the kind of thing that stops working after a bundler reorders modules.
- * The dwell is a property of the gaze calibration, so it belongs with it.
- */
-export { GAZE_DWELL_MS } from './gazeCalibration';
+export type CalibrationStep = EarBaselineStep | GazeDotStep;
 
 /**
- * Pause after a step appears, before sampling starts, so the participant is looking at the thing
- * being measured rather than at where it used to be.
+ * Pause after the centre dot appears, before the baseline window opens, so the participant is
+ * looking at it. (A gaze dot has its own, longer settle: GAZE_DOT_SETTLE_MS.)
  *
  * Named rather than inline because the feasibility model has to be able to add it up. See
  * `calibrationMachineMs()`.
@@ -216,7 +216,9 @@ export { GAZE_DWELL_MS } from './gazeCalibration';
 export const STEP_SETTLE_MS = 250;
 
 /**
- * How long the routine occupies the tablet, excluding anything the participant or operator does.
+ * How long the routine occupies the tablet at the least, excluding anything the participant or
+ * operator does: the baseline window at its least time, and each dot shown once. A window that runs on
+ * for its frames, or a dot shown again, adds to it.
  *
  * The feasibility model used to carry calibration as a hardcoded 150-second guess, under a file
  * header claiming "every app-controlled duration is read from the real CONFIG". That was true of
@@ -226,12 +228,16 @@ export const STEP_SETTLE_MS = 250;
  * automatically, and a future change to either constant cannot silently desynchronise them.
  */
 export function calibrationMachineMs(): number {
-  return calibrationSequence().reduce((total, step) => total + STEP_SETTLE_MS + step.ms, 0);
+  return calibrationSequence().reduce(
+    (total, step) => total + (step.kind === 'ear_baseline' ? STEP_SETTLE_MS : step.settleMs) + step.ms, 0);
 }
 
 export function calibrationSequence(): CalibrationStep[] {
   return [
     { kind: 'ear_baseline', ms: CONFIG.EAR_BASELINE_MS, maxMs: CONFIG.EAR_BASELINE_MAX_MS, minSamples: MIN_EAR_BASELINE_SAMPLES },
-    ...GAZE_TARGETS.map((t) => ({ kind: 'gaze_target' as const, id: t.id, x: t.x, y: t.y, ms: GAZE_DWELL_MS })),
+    ...GAZE_DOTS.map((d) => ({
+      kind: 'gaze_dot' as const, id: d.id, dx: d.dx,
+      settleMs: GAZE_DOT_SETTLE_MS, ms: GAZE_DOT_SAMPLE_MS, attempts: GAZE_DOT_ATTEMPTS,
+    })),
   ];
 }

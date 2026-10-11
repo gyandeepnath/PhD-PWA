@@ -15,9 +15,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  calibrationSequence, calibrationMachineMs, GAZE_DWELL_MS, STEP_SETTLE_MS,
+  calibrationSequence, calibrationMachineMs, STEP_SETTLE_MS, GAZE_DOTS, GAZE_DOT_SETTLE_MS, GAZE_DOT_SAMPLE_MS,
 } from '@/tracking/calibrationSequence';
-import { GAZE_TARGETS } from '@/tracking/gazeCalibration';
 import {
   baselineEar, classifyBlinks, fitEarBaseline, EAR_TIERS,
   FPS_RATIO_THRESHOLD, MIN_EAR_BASELINE_SAMPLES, type EarSample,
@@ -36,10 +35,10 @@ describe('calibration sequence', () => {
     expect(STEPS.filter((s) => s.kind === 'ear_baseline')).toHaveLength(1);
   });
 
-  it('still presents all nine gaze targets, and none of them is an EAR window', () => {
-    const targets = STEPS.filter((s) => s.kind === 'gaze_target');
-    expect(targets.map((t) => (t as { id: string }).id)).toEqual(GAZE_TARGETS.map((t) => t.id));
-    expect(targets.every((t) => t.kind === 'gaze_target')).toBe(true);
+  it('then presents the three gaze dots, none of them an EAR window', () => {
+    const dots = STEPS.filter((s) => s.kind === 'gaze_dot');
+    expect(dots.map((t) => (t as { id: string }).id)).toEqual(GAZE_DOTS.map((t) => t.id));
+    expect(STEPS).toHaveLength(1 + GAZE_DOTS.length);
   });
 
   it('holds the baseline window long enough that a camera solving a fraction of its frames still fits one', () => {
@@ -50,12 +49,13 @@ describe('calibration sequence', () => {
     expect(framesAtGateRate / MIN_EAR_BASELINE_SAMPLES).toBeGreaterThanOrEqual(4);
   });
 
-  it('keeps the gaze dwell long enough to fixate', () => {
-    expect(GAZE_DWELL_MS).toBeGreaterThanOrEqual(500);
+  it('gives each gaze dot time to settle, then a sampled second', () => {
+    expect(GAZE_DOT_SETTLE_MS).toBeGreaterThanOrEqual(500);
+    expect(GAZE_DOT_SAMPLE_MS).toBeGreaterThanOrEqual(1000);
   });
 });
 
-describe('the nine-point routine does not feed the baseline', () => {
+describe('the gaze check does not feed the baseline', () => {
   const src = readFileSync('src/tracking/useTracking.ts', 'utf8');
   /** Body of a top-level `const NAME = useCallback(...)` in the hook, up to its closing `}, [`. */
   const bodyOf = (name: string): string => {
@@ -150,7 +150,7 @@ describe('within-sitting drift is visible in the export', () => {
   const frame = (t_ms: number, ear: number): FrameSample => ({
     t_ms, ear,
     pose: { pitch: 1, yaw: 2, roll: 0.5 },
-    zone: 'cc', isCenter: true, offAxis: false,
+    offAxis: false,
     facePresent: true, faceSize: 0.22, luma: 120,
   });
 
@@ -199,17 +199,13 @@ describe('calibration duration is derived, not restated', () => {
   const timingModel = readFileSync('scripts/lib/timingModel.ts', 'utf8');
 
   it('sums the real sequence, including the settle before each step', () => {
-    const steps = calibrationSequence();
-    const expected = steps.reduce((t, s) => t + STEP_SETTLE_MS + s.ms, 0);
-    expect(calibrationMachineMs()).toBe(expected);
-    // One EAR window plus nine gaze targets, each preceded by a settle.
-    expect(calibrationMachineMs()).toBe(10 * STEP_SETTLE_MS + CONFIG.EAR_BASELINE_MS + 9 * GAZE_DWELL_MS);
+    // The baseline window at its least time after its settle, plus each dot shown once.
+    expect(calibrationMachineMs()).toBe(STEP_SETTLE_MS + CONFIG.EAR_BASELINE_MS + GAZE_DOTS.length * (GAZE_DOT_SETTLE_MS + GAZE_DOT_SAMPLE_MS));
   });
 
   it('moves when the protocol moves — the property the hardcoded number did not have', () => {
     // The baseline window is the thing that was added and missed. It must be inside the total.
-    expect(calibrationMachineMs()).toBeGreaterThan(9 * (STEP_SETTLE_MS + GAZE_DWELL_MS));
-    expect(calibrationMachineMs() - 9 * (STEP_SETTLE_MS + GAZE_DWELL_MS))
+    expect(calibrationMachineMs() - GAZE_DOTS.length * (GAZE_DOT_SETTLE_MS + GAZE_DOT_SAMPLE_MS))
       .toBe(CONFIG.EAR_BASELINE_MS + STEP_SETTLE_MS);
   });
 
@@ -222,6 +218,7 @@ describe('calibration duration is derived, not restated', () => {
   it('the screen uses the same settle constant the model adds up', () => {
     // An inline 250 in the component would desynchronise it from the model again.
     const routine = readFileSync('src/start/CalibrationRoutine.tsx', 'utf8');
-    expect(routine).toMatch(/setTimeout\(r, STEP_SETTLE_MS\)/);
+    expect(routine).toMatch(/await wait\(STEP_SETTLE_MS\)/);
+    expect(routine).toMatch(/await wait\(d\.settleMs\)/);
   });
 });

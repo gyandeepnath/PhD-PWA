@@ -15,8 +15,7 @@ import { illuminationOrderFor, illuminationForBlock, N_ILLUMINATION_BLOCKS } fro
 import { computeSdt } from '@/lib/signalDetection';
 import { classifyBlinks, summariseBlinks, effectiveFps, baselineEar, type EarSample, type Point } from '@/tracking/blink';
 import { estimateHeadPose, HEAD_LANDMARKS } from '@/tracking/headPose';
-import { fitGazeCalibration, gazeQuality, GAZE_TARGETS, MIN_SAMPLES_PER_TARGET } from '@/tracking/gazeCalibration';
-import { DEFAULT_GAZE_THRESHOLD } from '@/tracking/gaze';
+import { fitGazeCheck, gazeCheckTrust, onScreenFrame, type GazeDotId } from '@/tracking/gazeCalibration';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { buildExportFiles } from '@/storage/export';
 import { wcagContrastRatio } from '@/lib/contrast';
@@ -141,40 +140,31 @@ export function runFuzz(iterations: number, seed = 1): FuzzFailure[] {
       effectiveFps(samples.map((s) => s.t_ms));
     });
 
-    // 4) Gaze calibration with random/degenerate samples.
+    // 4) The gaze check (gaze-r2) with random/degenerate samples.
     guard('gaze', i, () => {
-      const byTarget: Record<string, { h: number; v: number }[]> = {};
-      for (const t of GAZE_TARGETS) {
-        const k = randInt(rng, 0, 3);
-        byTarget[t.id] = Array.from({ length: k }, () => ({ h: maybeWeird(rng) / 10, v: maybeWeird(rng) / 10 }));
+      const ids: GazeDotId[] = ['centre', 'left', 'right'];
+      const raw: Partial<Record<GazeDotId, number[]>> = {};
+      const need: Partial<Record<GazeDotId, number>> = {};
+      for (const id of ids) {
+        const k = randInt(rng, 0, 20);
+        raw[id] = Array.from({ length: k }, () => maybeWeird(rng) / 10);
+        need[id] = randInt(rng, 1, 15);
       }
-      const cal = fitGazeCalibration(byTarget);
-      if (!Number.isFinite(cal.hThreshold) || cal.hThreshold <= 0) fail('gaze', i, `hThreshold ${cal.hThreshold}`);
-
-      /*
-       * The assertion above is TRUE BY CONSTRUCTION and was the only one here.
-       * fitGazeCalibration returns Math.max(0.06, ...) on the valid path and a positive constant on
-       * the invalid one, with non-finite inputs mapped to 0 before either — so no input can falsify
-       * it. Meanwhile the failure mode gazeCalibration.ts documents at length went unchecked: `valid`
-       * exported TRUE while a threshold sat at its unfitted floor, which made every gaze zone in
-       * that sitting a guess presented as a measurement.
-       *
-       * These can fail, and are what the file's own comments say matter.
-       */
-      // A valid fit must have FITTED both axes, not left one at the default floor.
-      if (cal.valid && (cal.hThreshold === DEFAULT_GAZE_THRESHOLD || cal.vThreshold === DEFAULT_GAZE_THRESHOLD))
-        fail('gaze', i, 'valid fit left an axis at the unfitted default threshold');
-      // An invalid fit must not advertise coverage it does not have.
-      const counted = Object.values(cal.samplesPerTarget).filter((n) => n >= MIN_SAMPLES_PER_TARGET).length;
-      if (counted !== cal.targetsWithSamples)
-        fail('gaze', i, `targetsWithSamples ${cal.targetsWithSamples} disagrees with samplesPerTarget ${counted}`);
-      // Every target must be accounted for, including the ones that produced nothing.
-      if (Object.keys(cal.samplesPerTarget).length !== GAZE_TARGETS.length)
-        fail('gaze', i, `samplesPerTarget covers ${Object.keys(cal.samplesPerTarget).length} of ${GAZE_TARGETS.length} targets`);
-      // The trust verdict must never call a rejected fit merely thin.
-      const q = gazeQuality(cal);
-      if (!cal.valid && q.trust !== 'unusable') fail('gaze', i, `invalid fit graded ${q.trust}`);
-      if (q.wellCovered > q.covered) fail('gaze', i, `wellCovered ${q.wellCovered} exceeds covered ${q.covered}`);
+      const fit = fitGazeCheck(raw, need);
+      // A passed check has a finite, ordered range; a failed one has none, and says why.
+      if (fit.valid && !(fit.range && Number.isFinite(fit.range.lo) && Number.isFinite(fit.range.hi) && fit.range.lo < fit.range.hi))
+        fail('gaze', i, `valid check with range ${JSON.stringify(fit.range)}`);
+      if (!fit.valid && (fit.range != null || fit.reason == null)) fail('gaze', i, 'failed check carries a range or no reason');
+      // The counts are of usable (finite) samples, the ones the verdict was judged on.
+      for (const id of ids) {
+        const finite = (raw[id] ?? []).filter((x) => Number.isFinite(x)).length;
+        if (fit.samplesPerDot[id] !== finite) fail('gaze', i, `${id}: ${fit.samplesPerDot[id]} counted, ${finite} finite`);
+      }
+      // A dot short of its need fails the check.
+      if (fit.valid && ids.some((id) => fit.samplesPerDot[id] < (need[id] ?? 1))) fail('gaze', i, 'valid with a short dot');
+      if (gazeCheckTrust(fit) === 'good' && !fit.valid) fail('gaze', i, 'failed check graded good');
+      // A closed eye is never on or off screen.
+      if (onScreenFrame(NaN, rng() < 0.5, fit.range) !== null) fail('gaze', i, 'a NaN offset got a verdict');
     });
 
     // 5) Aggregation + export on a partial/sparse bundle (missing records, empty conditions).

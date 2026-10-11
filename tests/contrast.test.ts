@@ -204,20 +204,16 @@ describe('operator-screen text colours meet WCAG AA', () => {
     }
   });
 
-  it('the progress label is legible on the dark calibration and camera self-test screens too', () => {
-    // It sits above both overlays; in #4a4a60 it was about 2:1 there. It takes #c8d8f0 on them.
-    expect(wcagContrastRatio('#c8d8f0', '#0a0a12')).toBeGreaterThanOrEqual(4.5);
-    expect(wcagContrastRatio('#c8d8f0', '#1a1a2e')).toBeGreaterThanOrEqual(4.5);
-    expect(readFileSync('src/components/ExperimentProgress.tsx', 'utf8')).toMatch(/onDark \? '#c8d8f0' : '#4a4a60'/);
-  });
-
-  it('on the self-test\'s grey field (Round 79) the progress label and the screen take the grey field\'s black ink', () => {
+  it('on the calibration stage\'s grey field (Round 79 self-test, Round 80 routine) the progress label and the screens take the grey field\'s black ink', () => {
     // Neither of the other two label inks is legible on #808080.
     expect(wcagContrastRatio('#4a4a60', CONFIG.ADAPTATION_COLOR)).toBeLessThan(4.5);
     expect(wcagContrastRatio('#c8d8f0', CONFIG.ADAPTATION_COLOR)).toBeLessThan(4.5);
     expect(wcagContrastRatio(CONFIG.ADAPTATION_INK, CONFIG.ADAPTATION_COLOR)).toBeGreaterThanOrEqual(4.5);
     expect(readFileSync('src/components/ExperimentProgress.tsx', 'utf8')).toMatch(/color: onGrey \? CONFIG\.ADAPTATION_INK/);
     expect(readFileSync('src/start/CameraSelfTest.tsx', 'utf8')).toMatch(/const INK = CONFIG\.ADAPTATION_INK/);
+    expect(readFileSync('src/start/CalibrationRoutine.tsx', 'utf8')).toMatch(/const INK = CALIBRATION_INK/);
+    // The whole stage, routine and self-test alike, is drawn on grey (Experiment.tsx).
+    expect(readFileSync('src/experiment/Experiment.tsx', 'utf8')).toMatch(/onGrey=\{calibrationGrey\}/);
   });
 
   it('a disabled button is still legible (muted text on the disabled grey)', () => {
@@ -281,12 +277,12 @@ describe('operator-screen text colours meet WCAG AA', () => {
    * string). A size chosen by a variable is not seen here; ResearcherPanel picks its setup-screen
    * sizes that way, keeping its compact in-loop sizes on condition screens.
    *
-   * Exempt, because they are drawn during a condition or the measurement procedure and keep their
-   * original size: the researcher strip under the reading passage and the calibration step counter.
+   * Exempt, because it is drawn during a condition and keeps its original size: the researcher strip
+   * under the reading passage. (The calibration step counter was exempt at 12 px; since Round 80 the
+   * routine's step row is 14 px like everything else.)
    */
   const SIZE_EXEMPT: Array<[string, RegExp]> = [
     ['src/components/ResearcherPanel.tsx', /researcher-panel-strip/],
-    ['src/start/CalibrationRoutine.tsx', /\{idx \+ 1\} \/ \{STEPS\.length\}|textAlign: 'center', color: '#c8d8f0', fontFamily: '"DM Mono", monospace', fontSize: 12 \}/],
   ];
   const sizesOn = (line: string): number[] => {
     const out: number[] = [];

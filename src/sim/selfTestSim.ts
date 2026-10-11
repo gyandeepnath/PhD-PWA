@@ -111,7 +111,7 @@ export function runSelfTestScenario(sc: SelfTestScenario, cells: SelfTestCell[])
       for (const t of frameTimes(cell.plan, CHECK_MS, rng)) {
         const face = a.lossAt == null || t < a.lossAt || t >= a.lossAt + sc.faceLossMs;
         const ear = OPEN_EAR * frameValue(t, E, a.blinks, sc.shape) * (1 + sc.sigma * gaussian(rng));
-        agg.ingest({ t_ms: t, ear, earLeft: ear, earRight: ear, pose, zone: 'cc', isCenter: true, offAxis: false, facePresent: face, faceSize: 0.2, luma: null });
+        agg.ingest({ t_ms: t, ear, earLeft: ear, earRight: ear, pose, offAxis: false, facePresent: face, faceSize: 0.2, luma: null });
       }
       const cov = agg.coverage();
       const r = scoreSelfTest(a.cues, agg.blinkEvents(B).map((e) => e.onset_ms), cov);

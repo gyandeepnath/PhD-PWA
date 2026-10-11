@@ -2202,15 +2202,15 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    */
   const panelLocked = (isInLoop(machine.stage) && machine.stage !== 'READING_TASK' && machine.stage !== 'ADAPTATION')
     || procedureRunning;
-  const calibrationDark = machine.stage === 'CALIBRATION' && tracking.status === 'active' && !!session;
   /*
-   * The camera self-test, which follows the calibration routine in the same stage, runs on the grey
-   * field from Round 79 (CameraSelfTest.tsx): the panel and the progress label take its ink there.
+   * The whole calibration stage — the calibration routine (Round 80, rule cal-r2) and the camera
+   * self-test after it (Round 79) — runs on the grey field: the panel and the progress label take its
+   * ink there. The routine used to run on a dark ground (#0a0a12) in white.
    */
-  const selfTestGrey = calibrationDark && selfTesting;
+  const calibrationGrey = machine.stage === 'CALIBRATION' && tracking.status === 'active' && !!session;
   const panelInk = stageInk
-    ?? (selfTestGrey ? { ground: CONFIG.ADAPTATION_COLOR, ink: CONFIG.ADAPTATION_INK }
-      : calibrationDark ? { ground: '#0a0a12', ink: '#ffffff' } : panelLocked ? { ground: '#F8F7F5', ink: UI_TEXT.ink } : null);
+    ?? (calibrationGrey ? { ground: CONFIG.ADAPTATION_COLOR, ink: CONFIG.ADAPTATION_INK }
+      : panelLocked ? { ground: '#F8F7F5', ink: UI_TEXT.ink } : null);
 
   return (
     // --vl-panel-dock is the column the researcher card takes while it is open on a set-up or closing
@@ -2254,8 +2254,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           nextDisplay={nextDisplay}
           displayTotal={nextDisplay != null ? nConditions : undefined}
           timeRemainingMin={timeRemainingMin}
-          onDark={calibrationDark && !selfTestGrey}
-          onGrey={selfTestGrey}
+          onGrey={calibrationGrey}
         />
       )}
       {/* If the device has no wake-lock API, the operator has to know: the manual's fallback

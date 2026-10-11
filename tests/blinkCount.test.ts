@@ -43,7 +43,7 @@ function series(): EarSample[] {
 function aggregatorOf(s: EarSample[]): EyeMetricsAggregator {
   const agg = new EyeMetricsAggregator();
   for (const x of s) {
-    agg.ingest({ t_ms: x.t_ms, ear: x.ear, pose: { pitch: 0, yaw: 0, roll: 0 }, zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.2, luma: null });
+    agg.ingest({ t_ms: x.t_ms, ear: x.ear, pose: { pitch: 0, yaw: 0, roll: 0 }, offAxis: false, facePresent: true, faceSize: 0.2, luma: null });
   }
   return agg;
 }

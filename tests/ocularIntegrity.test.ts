@@ -195,7 +195,7 @@ describe('within-condition bins are computed on the condition clock, not the pag
         t_ms: t,
         ear: deep ? BASE * 0.5 : BASE,
         pose: { pitch: 0, yaw: 0, roll: 0 },
-        zone: 'cc' as const, isCenter: true, offAxis: false,
+        offAxis: false,
         facePresent: true, faceSize: 0.3, luma: 120,
       });
     }

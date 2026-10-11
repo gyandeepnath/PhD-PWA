@@ -84,7 +84,7 @@ export const ANALYSIS_LONG_COLUMNS = [
   // --- quality, for sensitivity analyses ---------------------------------------------------
   'camera_active', 'camera_inactive_reason', 'effective_fps', 'fps_adequate_for_ratio',
   'sampling_fps_observed', 'fps_tier', 'fps_consistent', 'fps_gate_version', 'face_presence_ratio',
-  'gaze_calibrated', 'gaze_trust', 'gaze_targets_well_covered',
+  'gaze_calibrated', 'gaze_trust', 'gaze_targets_well_covered', 'on_screen_ratio',
   'qc_overall', 'e2e_timing', 'session_status', 'withdrawn', 'protocol_pass', 'repeat_run_note',
   'sitting_split_reason',
   // --- was this row a finished, first-attempt, uninterrupted run? -------------------------------
@@ -473,6 +473,8 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         // Per ROW: the calibration this condition was measured under, not the sitting's last one.
         gaze_trust: rowCalibration?.gaze_trust ?? null,
         gaze_targets_well_covered: rowCalibration?.gaze_targets_well_covered ?? null,
+        // A quality check (gaze-r2), never an outcome; null without a passed gaze check and before Round 80.
+        on_screen_ratio: camOn ? round(e?.on_screen_ratio ?? null) : null,
         qc_overall: e ? sum.qc.overall : null,
         /*
          * Why this sitting was split, repeated on its rows. Session-level, and here for the same

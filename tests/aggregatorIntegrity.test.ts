@@ -11,7 +11,7 @@ import { EyeMetricsAggregator, type FrameSample } from '@/tracking/aggregator';
 const frame = (t_ms: number, ear: number, over: Partial<FrameSample> = {}): FrameSample => ({
   t_ms, ear,
   pose: { pitch: 1, yaw: 2, roll: 0.5 },
-  zone: 'cc', isCenter: true, offAxis: false,
+  offAxis: false,
   facePresent: true, faceSize: 0.22, luma: 120,
   ...over,
 });

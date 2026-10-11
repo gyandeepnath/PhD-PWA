@@ -26,8 +26,8 @@ import {
 import { FIT_RULE_VERSION, type BlinkFit } from './blinkFit';
 import { FPS_GATE_VERSION, samplingFpsObserved } from './frameRateGate';
 import type { HeadPose } from './headPose';
-import type { GazeZone } from './gaze';
 import { classifyLighting } from './lighting';
+import { GAZE_RULE } from './gazeCalibration';
 import { countBlinks } from './blinkCount';
 import type { EyeMetricsRecord, OcularEventsRecord } from '@/storage/types';
 
@@ -35,9 +35,13 @@ export interface FrameSample {
   t_ms: number;
   ear: number;
   pose: HeadPose;
-  zone: GazeZone;
-  isCenter: boolean;
   offAxis: boolean;
+  /**
+   * The frame's on-screen verdict (gazeCalibration.ts onScreenFrame): true, false, or null when not
+   * measurable (eye closed, no passed gaze check). Absent counts as null. Replaces the nine-point gaze
+   * zone (Round 80).
+   */
+  onScreen?: boolean | null;
   facePresent: boolean;
   faceSize: number;
   /** Mean frame luminance (0-255), null when not sampled this frame. */
@@ -74,8 +78,9 @@ export class EyeMetricsAggregator {
   private pitch: number[] = [];
   private yaw: number[] = [];
   private roll: number[] = [];
-  private zones: GazeZone[] = [];
-  private centerCount = 0;
+  /** Frames with an on-screen verdict, and those on screen (on_screen_ratio). */
+  private onScreenMeasured = 0;
+  private onScreenYes = 0;
   private offAxisCount = 0;
   private faceSizes: number[] = [];
   private framesTotal = 0;
@@ -120,16 +125,12 @@ export class EyeMetricsAggregator {
     if (Number.isFinite(f.pose.pitch)) this.pitch.push(f.pose.pitch);
     if (Number.isFinite(f.pose.yaw)) this.yaw.push(f.pose.yaw);
     if (Number.isFinite(f.pose.roll)) this.roll.push(f.pose.roll);
-    this.zones.push(f.zone);
-    if (f.isCenter) this.centerCount++;
+    if (f.onScreen != null) {
+      this.onScreenMeasured++;
+      if (f.onScreen) this.onScreenYes++;
+    }
     if (f.offAxis) this.offAxisCount++;
     if (Number.isFinite(f.faceSize)) this.faceSizes.push(f.faceSize);
-  }
-
-  private zoneTransitions(): number {
-    let t = 0;
-    for (let i = 1; i < this.zones.length; i++) if (this.zones[i] !== this.zones[i - 1]) t++;
-    return t;
   }
 
   /**
@@ -460,19 +461,21 @@ export class EyeMetricsAggregator {
       gaze_calibrated: args.gazeCalibrated,
       calibration_id: args.calibrationId,
       camera_inactive_reason: args.cameraActive ? null : 'not_running',
-      /**
-       * Null when no face was ever found. These three were 0, and 0 is not "unknown" for any of
-       * them — it is the BEST possible value. gaze_deviation_ratio 0 reads as "gaze never left the
-       * reading region", and it is documented as a dv whose only caveat is gaze_calibrated, not
-       * camera_active, so an analyst following the codebook would include those rows. Worse, 0 and
-       * 0 for gaze_deviation_ratio and zone_center_ratio are mutually contradictory: the first is
-       * defined as one minus the second.
+      /*
+       * The nine-point zones are not measured from Round 80 (gaze-r2 fits no zones): null, never 0. Zero
+       * is the BEST value of gaze_deviation_ratio ("gaze never left the reading region"), so writing it
+       * for a measure that was not taken would be a fabricated result.
        */
-      gaze_deviation_ratio:
-        this.facesDetected > 0 ? 1 - this.centerCount / this.facesDetected : null,
-      zone_center_ratio:
-        this.facesDetected > 0 ? this.centerCount / this.facesDetected : null,
-      zone_transition_count: this.zoneTransitions(),
+      gaze_deviation_ratio: null,
+      zone_center_ratio: null,
+      zone_transition_count: null,
+      /*
+       * Of the frames with a verdict — open eye, a passed gaze check — the share on screen. A blink
+       * gives no verdict, so it is neither on nor off screen: the nine-point zones counted it as looking
+       * away, which tied the gaze columns to the blink outcome (round 74 research report R1, D7).
+       */
+      on_screen_ratio: this.onScreenMeasured > 0 ? this.onScreenYes / this.onScreenMeasured : null,
+      gaze_rule_version: GAZE_RULE,
 
       face_presence_ratio: this.framesTotal > 0 ? this.facesDetected / this.framesTotal : null,
       face_size_ratio: this.faceSizes.length ? mean(this.faceSizes) : null,
@@ -551,7 +554,9 @@ export function disabledEyeMetrics(
     calibration_id: null,
     gaze_deviation_ratio: null,
     zone_center_ratio: null,
-    zone_transition_count: 0,
+    zone_transition_count: null,
+    on_screen_ratio: null,
+    gaze_rule_version: GAZE_RULE,
     face_presence_ratio: null,
     face_size_ratio: null,
     mean_face_luma: null,

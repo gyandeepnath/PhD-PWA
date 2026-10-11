@@ -1,6 +1,10 @@
 /**
  * Gaze-zone estimation from iris landmarks.
  *
+ * Since Round 80 only the horizontal offset `h` is used, by the three-dot gaze check and the on-screen
+ * test (gazeCalibration.ts, rule gaze-r2). The 3x3 zone and its thresholds below were the nine-point
+ * routine's (gaze-r1); they are computed but no longer stored.
+ *
  * IMPORTANT: gaze is only meaningful with genuine per-participant calibration. The original
  * 9-point "calibration" stored hardcoded zeros and never fitted thresholds, so its gaze-zone data
  * was uncalibrated noise. Here, thresholds are explicit inputs: when a real calibration produced

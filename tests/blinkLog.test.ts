@@ -185,12 +185,12 @@ function aggregate(s: DetailSample[]) {
   agg.markPage(1, T0 - 5);
   s.forEach((x, k) => {
     if (k === 10) {
-      agg.ingest({ t_ms: x.t_ms - 20, ear: NaN, pose: { pitch: 0, yaw: 0, roll: 0 }, zone: 'cc', isCenter: false, offAxis: false, facePresent: false, faceSize: 0, luma: null });
+      agg.ingest({ t_ms: x.t_ms - 20, ear: NaN, pose: { pitch: 0, yaw: 0, roll: 0 }, offAxis: false, facePresent: false, faceSize: 0, luma: null });
     }
     if (k === 20) agg.markPage(2, x.t_ms);
     agg.ingest({
       t_ms: x.t_ms, ear: x.ear, earLeft: x.left ?? undefined, earRight: x.right ?? undefined,
-      pose: { pitch: x.pitch ?? 0, yaw: x.yaw ?? 0, roll: 0 }, zone: 'cc', isCenter: true, offAxis: false,
+      pose: { pitch: x.pitch ?? 0, yaw: x.yaw ?? 0, roll: 0 }, offAxis: false,
       facePresent: true, faceSize: 0.2, luma: null,
     });
   });
@@ -341,7 +341,7 @@ describe('the stored size docs/ANALYSIS_PLAN.md states', () => {
         agg.ingest({
           t_ms: t0 + k * (1000 / 30) + rnd() * 2, ear: face ? ear : NaN,
           earLeft: face ? ear + (rnd() - 0.5) * 0.01 : undefined, earRight: face ? ear - (rnd() - 0.5) * 0.01 : undefined,
-          pose: { pitch: rnd() * 10, yaw: rnd() * 5, roll: 0 }, zone: 'cc', isCenter: true, offAxis: false,
+          pose: { pitch: rnd() * 10, yaw: rnd() * 5, roll: 0 }, offAxis: false,
           facePresent: face, faceSize: 0.2, luma: null,
         });
       }

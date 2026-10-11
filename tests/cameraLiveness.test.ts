@@ -194,8 +194,10 @@ describe('the rest of the camera-lost path', () => {
   it('a replaced calibration routine cannot advance the stage afterwards', () => {
     const routine = readFileSync('src/start/CalibrationRoutine.tsx', 'utf8');
     expect(routine).toMatch(/useEffect\(\(\) => \(\) => \{ mounted\.current = false; \}, \[\]\)/);
-    const body = routine.slice(routine.indexOf('const start = async'), routine.indexOf('onDone();'));
+    // finish() is the only path that reports (onDone) after an await: it checks before and after.
+    const body = routine.slice(routine.indexOf('const finish = async'), routine.indexOf('/** The baseline window, then the gaze check.'));
     expect((body.match(/if \(!mounted\.current\) return;/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    expect(body).toMatch(/onDone\(\)/);
   });
   it('a lost camera discards the clip of the run it was filming', () => {
     expect(experimentSrc).toMatch(/if \(tracking\.cameraLostAt != null\) annotationRecording\.current\?\.finish\(false\);/);

@@ -1122,9 +1122,25 @@ export interface EyeMetricsRecord extends PipelineWindowFields {
    * storage/calibrationLookup.ts for how those are resolved.
    */
   calibration_id?: string | null;
+  /**
+   * DEPRECATED: the nine-point gaze zones (rule gaze-r1, to Round 79). Null on every row measured under
+   * the three-dot gaze check (gaze_rule_version 'gaze-r2'), which fits no zones. Kept so older rows
+   * still export what they recorded. zone_transition_count was 0, not null, on a camera-off row; from
+   * Round 80 it is null there too.
+   */
   gaze_deviation_ratio: number | null;
   zone_center_ratio: number | null;
-  zone_transition_count: number;
+  zone_transition_count: number | null;
+  /**
+   * The share of measurable frames in which the participant was looking at the tablet (gaze-r2,
+   * tracking/gazeCalibration.ts onScreenFrame): open-eye face frames with the head not turned away
+   * (off-axis rule) and the horizontal iris offset inside the range the gaze check fitted. A QUALITY
+   * CHECK, never an outcome. Null when the gaze check did not pass, or no frame was measurable. Absent
+   * on rows written before Round 80.
+   */
+  on_screen_ratio?: number | null;
+  /** The gaze rule this row's gaze columns follow; absent before Round 80 (the nine-point gaze-r1). */
+  gaze_rule_version?: 'gaze-r2';
 
   face_presence_ratio: number | null;
   face_size_ratio: number | null;
@@ -1269,7 +1285,10 @@ export interface PerformanceLogRecord {
 export interface CalibrationRecord {
   calibration_id: string;
   session_id: string;
-  /** True only when real per-participant gaze mapping was fitted (vs positioning check). */
+  /**
+   * True only when the gaze part passed: under gaze-r2 the three-dot check gave an on-screen range; under
+   * gaze-r1 the nine-point mapping was valid. Exported as gaze_calibration_valid.
+   */
   is_real_calibration: boolean;
   /** Per-target detection success. */
   targets_detected: number;
@@ -1318,6 +1337,41 @@ export interface CalibrationRecord {
    * sitting and the one that governed the second.
    */
   calibrated_at?: number;
+  /**
+   * The rule the baseline window ran under (tracking/calibrationSequence.ts). Absent on records written
+   * before Round 80, all of which were 'cal-r1' (a fixed 6-s window on #0a0a12); the export says so.
+   */
+  calibration_rule?: 'cal-r2';
+  /** The ground the calibration steps ran on (cal-r2: the grey field, #808080). */
+  calibration_ground?: string;
+  /** How long the baseline window ran, ms (cal-r2: from its 6-s least to its 12-s most). */
+  ear_baseline_ms?: number | null;
+  /** Processed frames in the baseline window, and those with a face: the evidence behind its reason. */
+  ear_baseline_frames?: number | null;
+  ear_baseline_face_frames?: number | null;
+  /** Why the window gave no baseline (calibrationSequence.ts BaselineFailure); null when it gave one. */
+  ear_baseline_reason?: 'no_frames' | 'no_face' | 'eyes_not_measured' | 'too_few_frames' | null;
+  /** How many times the routine ran the baseline window since Begin, up to this record (a retry repeats only it). */
+  ear_baseline_attempts?: number | null;
+  /**
+   * The gaze check (rule gaze-r2): the median horizontal iris offset at each of the three dots, the
+   * centre's spread, the on-screen range fitted from them, how often each dot was shown, and why the
+   * check failed. Absent on gaze-r1 records, whose nine-point fields are the ones above.
+   * samples_per_target, targets_detected and targets_total count the three dots under gaze-r2.
+   */
+  gaze_rule?: 'gaze-r2';
+  gaze_check?: {
+    h_centre: number | null;
+    h_left: number | null;
+    h_right: number | null;
+    centre_spread: number | null;
+    range_lo: number | null;
+    range_hi: number | null;
+    needed_per_dot: Record<string, number>;
+    attempts_per_dot: Record<string, number>;
+    reason: 'too_few_samples' | 'not_separable' | 'not_run' | null;
+    short_dots: string[];
+  } | null;
 }
 
 /** Maps store names to their record types for type-safe DB access. */

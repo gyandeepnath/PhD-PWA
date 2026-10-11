@@ -168,7 +168,7 @@ describe('eye metrics aggregator', () => {
       agg.ingest({
         t_ms: t, ear: 0.3,
         pose: { pitch: 2, yaw: 1, roll: 0 },
-        zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.2, luma: 130,
+        offAxis: false, facePresent: true, faceSize: 0.2, luma: 130,
       });
     }
     const rec = agg.finalize({
@@ -176,7 +176,9 @@ describe('eye metrics aggregator', () => {
       baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, headPitchCalibrated: false, calibrationId: null,
     });
     expect(rec.face_presence_ratio).toBeCloseTo(1, 2);
-    expect(rec.zone_center_ratio).toBeCloseTo(1, 2);
+    // No gaze check passed (and no frame carried a verdict): no on-screen ratio, and no gaze-r1 zones.
+    expect(rec.on_screen_ratio).toBeNull();
+    expect(rec.zone_center_ratio).toBeNull();
     expect(rec.blink_rate).toBe(0); // no dips => no blinks
     expect(rec.effective_fps).toBeGreaterThan(25);
     expect(rec.fps_adequate_for_tiers).toBe(true);
@@ -188,13 +190,13 @@ describe('eye metrics aggregator', () => {
   it('flags low lighting and leaves it null when no luma was sampled', () => {
     const dim = new EyeMetricsAggregator();
     for (let t = 0; t <= 1000; t += 33) {
-      dim.ingest({ t_ms: t, ear: 0.3, pose: { pitch: 0, yaw: 0, roll: 0 }, zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.2, luma: 30 });
+      dim.ingest({ t_ms: t, ear: 0.3, pose: { pitch: 0, yaw: 0, roll: 0 }, offAxis: false, facePresent: true, faceSize: 0.2, luma: 30 });
     }
     expect(dim.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, headPitchCalibrated: false, calibrationId: null }).lighting_quality).toBe('low');
 
     const noLuma = new EyeMetricsAggregator();
     for (let t = 0; t <= 1000; t += 33) {
-      noLuma.ingest({ t_ms: t, ear: 0.3, pose: { pitch: 0, yaw: 0, roll: 0 }, zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.2, luma: null });
+      noLuma.ingest({ t_ms: t, ear: 0.3, pose: { pitch: 0, yaw: 0, roll: 0 }, offAxis: false, facePresent: true, faceSize: 0.2, luma: null });
     }
     const rec = noLuma.finalize({ conditionId: 'C', sessionId: 'S', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.18, gazeCalibrated: false, headPitchCalibrated: false, calibrationId: null });
     expect(rec.mean_face_luma).toBeNull();
@@ -206,7 +208,7 @@ describe('eye metrics aggregator', () => {
     for (let t = 0; t < 10; t++) {
       agg.ingest({
         t_ms: t * 33, ear: 0, pose: { pitch: 0, yaw: 0, roll: 0 },
-        zone: 'cc', isCenter: false, offAxis: false, facePresent: t < 5, faceSize: 0, luma: null,
+        offAxis: false, facePresent: t < 5, faceSize: 0, luma: null,
       });
     }
     const rec = agg.finalize({

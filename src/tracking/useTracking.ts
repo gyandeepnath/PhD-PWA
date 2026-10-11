@@ -5,10 +5,10 @@
  * denied/unavailable or MediaPipe fails to load, the experiment continues with camera_active=false
  * and disabled (zeroed) eye metrics. Per-condition aggregation is driven by beginCondition/endCondition.
  *
- * Calibration collects EAR samples to fit a real per-participant baseline AND a real per-participant
- * gaze mapping (tap targets → fitted iris-offset thresholds, used by estimateGaze at runtime). The
- * original build's "calibration" stored hardcoded zeros — see gaze.ts. gaze_calibrated is reported
- * truthfully (true only when the gaze fit is separable/valid).
+ * Calibration collects EAR samples to fit a real per-participant open-eye baseline (rule cal-r2) AND
+ * runs a three-dot gaze check (rule gaze-r2) whose range gives every later frame an on-screen verdict
+ * (gazeCalibration.ts). The original build's "calibration" stored hardcoded zeros — see gaze.ts.
+ * gaze_calibrated is reported truthfully (true only when the gaze check passed).
  */
 import { useCallback, useRef, useState } from 'react';
 import { CONFIG, isE2ETimingActive } from '@/experiment/config';
@@ -47,7 +47,8 @@ import { estimateHeadPose, isOffAxis, noseVerticalFraction } from './headPose';
 import { estimateGaze } from './gaze';
 import { lumaStatsFromRGBA } from './lighting';
 import { CameraHealth } from './cameraHealth';
-import { fitGazeCalibration, gazeQuality as gradeGaze, GAZE_TARGETS, type GazeCalibration, type GazeQuality, type GazeSample } from './gazeCalibration';
+import { fitGazeCheck, gazeCheckTrust, onScreenFrame, GAZE_RULE, type GazeCheckFit, type GazeDotId, type GazeTrust } from './gazeCalibration';
+import { baselineFailure, baselineWindowDone, eyeState, gazeDotNeeded, CALIBRATION_RULE, CALIBRATION_GROUND, GAZE_DOTS, type BaselineProgress, type BaselineResult, type EarBaselineStep, type EyeState } from './calibrationSequence';
 import { v4 as uuidv4 } from 'uuid';
 import { EyeMetricsAggregator, disabledEyeMetrics } from './aggregator';
 import { put, remove } from '@/storage/db';
@@ -199,12 +200,14 @@ export interface LiveTrackingStats {
   exposureFps: number | null;
   /** Face bounding-box size as a fraction of the frame; a proxy for viewing distance. */
   faceSize: number | null;
-  /** Whether gaze is currently in the central zone. */
-  onScreen: boolean;
+  /**
+   * Whether this frame is on screen by the gaze check's test (gazeCalibration.ts onScreenFrame, the
+   * one the reading window's on_screen_ratio counts); null with no passed gaze check, a closed eye or
+   * no face.
+   */
+  onScreen: boolean | null;
   /** Blinks counted across the sitting so far: every finished exposure plus the live one. */
   sessionBlinks: number | null;
-  /** The 3x3 gaze zone this frame ('cc' is centre); null with no face. */
-  gazeZone: string | null;
   /** How long the face has been missing right now, ms (0 with a face, or when the feed is blocked). */
   noFaceForMs: number;
   /** Mean frame luminance 0-255; near 0 means the camera sees nothing. */
@@ -243,25 +246,33 @@ interface TrackingApi {
   /** The bench check: grounds under auto and under a fixed exposure (see runCameraBench). */
   runCameraBench: (paint: (p: BenchPaint | null) => void) => Promise<CameraBenchRecord | null>;
   /**
-   * Open the dedicated open-eye baseline window for ~`ms` while the participant fixates the centre,
-   * and fit the baseline from those frames alone. Resolves to the fit and the evidence behind it.
+   * Open the dedicated open-eye baseline window while the participant fixates the centre (rule cal-r2:
+   * at least `step.ms`, then until `step.minSamples` usable frames, at most `step.maxMs`), report how it
+   * is going to `onProgress` a few times a second, and fit the baseline from those frames alone.
+   * Resolves to the fit, the evidence behind it and, when there is no baseline, the reason.
    */
-  measureEarBaseline: (ms: number) => Promise<{ baseline: number | null; usable: number }>;
+  measureEarBaseline: (step: Pick<EarBaselineStep, 'ms' | 'maxMs' | 'minSamples'>, onProgress?: (p: BaselineProgress) => void) => Promise<BaselineResult>;
   /** Live video element + stream for CONSENTED capture; null when the camera is not running. */
   mediaSource: () => { video: HTMLVideoElement; stream: MediaStream } | null;
   /**
-   * Begin gaze calibration: reset the gaze sample pool. Opens NO EAR window — the nine targets move
-   * the eye through three vertical postures, and frames taken there do not describe the open eye at
-   * the reading posture. See calibrationSequence.ts.
+   * Begin the gaze check (rule gaze-r2): reset its sample pool. Opens NO EAR window — the baseline is
+   * the centre fixation's alone. See calibrationSequence.ts.
    */
   beginGazeCalibration: () => void;
-  /** Sample iris offset for a calibration target for ~`ms` while the participant fixates it. */
-  sampleGazeTarget: (targetId: string, ms: number) => Promise<void>;
   /**
-   * Fit the gaze mapping, persist a CalibrationRecord carrying it together with the baseline
-   * measured earlier by measureEarBaseline, and report both verdicts.
+   * Sample one gaze dot's horizontal iris offset for `ms` while the participant looks at it, replacing
+   * whatever an earlier showing of the same dot collected. Resolves to the open-eye frames it got and
+   * the number it needed (gazeDotNeeded, from the camera's measured rate); `onProgress` hears whether
+   * the eyes are found meanwhile.
    */
-  endGazeCalibration: (sessionId: string) => Promise<CalibrationOutcome>;
+  sampleGazeTarget: (dot: GazeDotId, ms: number, onProgress?: (p: { eyes: EyeState; steady: boolean }) => void) => Promise<GazeDotResult>;
+  /**
+   * Fit the gaze check, persist a CalibrationRecord carrying it together with the baseline measured
+   * earlier by measureEarBaseline, and report both verdicts. With `gazeRun` false (the operator went on
+   * without a baseline) the gaze check is recorded as not run. `baselineAttempts`: how many times the
+   * routine ran the baseline window since Begin, for the record.
+   */
+  endGazeCalibration: (sessionId: string, opts?: { gazeRun?: boolean; baselineAttempts?: number }) => Promise<CalibrationOutcome>;
   beginCondition: () => void;
   /**
    * The reading page now on screen, 1-based (page 1 when the window opens). Each stored blink carries
@@ -367,6 +378,9 @@ export function pipelineFields(
   };
 }
 
+/** One showing of a gaze dot: the open-eye frames it collected, and how many it needed. */
+export interface GazeDotResult { dot: GazeDotId; samples: number; needed: number; enough: boolean }
+
 /**
  * What a calibration actually established.
  *
@@ -374,21 +388,18 @@ export function pipelineFields(
  * on — whether this participant has an open-eye EAR baseline — had no way of reaching the caller.
  */
 export interface CalibrationOutcome {
-  /** The nine-point gaze mapping met its acceptance criterion. */
+  /** The gaze check (gaze-r2) gave an on-screen range. */
   gazeValid: boolean;
   /** The participant's open-eye EAR baseline, or null if none could be fitted. */
   earBaseline: number | null;
   /** How many frames of the routine yielded a usable EAR. Distinguishes a thin fit from a solid one. */
   earSamplesUsable: number;
-  /**
-   * How much evidence the gaze fit actually rests on.
-   *
-   * gazeValid is one boolean over a deliberately lenient bar, and it hid the distinction that
-   * matters: nine targets with two dozen samples each, and six targets with a single frame each,
-   * both produced `true` and both showed the operator nothing. This carries the counts so a
-   * calibration that barely happened can be told apart from one that did.
-   */
-  gazeQuality: GazeQuality;
+  /** The gaze check's fit: each dot's offset and samples, and why it failed; null when it was not run. */
+  gaze: GazeCheckFit | null;
+  /** gaze_trust: 'good' for a passed check, 'unusable' otherwise (gaze-r2 has no 'thin'). */
+  gazeTrust: GazeTrust;
+  /** The baseline window behind earBaseline: how long it ran, what it saw, why it fell short. */
+  baseline: BaselineResult | null;
 }
 
 export function useTracking(): TrackingApi {
@@ -438,7 +449,16 @@ export function useTracking(): TrackingApi {
   /** The last EAR_TRACE_MS of [time, EAR or null], for the researcher card's trace. */
   const earTraceRef = useRef<Array<[number, number | null]>>([]);
   const aggRef = useRef<EyeMetricsAggregator | null>(null);
-  const calibrating = useRef<{ samples: number[]; noseFracs: number[] } | null>(null);
+  /**
+   * The baseline window while it is open: its EAR samples and pitch fractions, and the counts and capture
+   * times its live state and its failure reason are read from (calibrationSequence.ts).
+   */
+  const calibrating = useRef<{
+    samples: number[]; noseFracs: number[];
+    frames: number; faceFrames: number; faceTimes: number[]; usableTimes: number[];
+  } | null>(null);
+  /** The last baseline window's length, counts and reason, for the calibration record. */
+  const baselineResultRef = useRef<BaselineResult | null>(null);
   const baselineEarRef = useRef<number | null>(null);
   /** Calibration's baseline window has run (whatever it found); see LiveTrackingStats.baselineMeasured. */
   const baselineMeasuredRef = useRef(false);
@@ -446,18 +466,26 @@ export function useTracking(): TrackingApi {
   const earSamplesUsableRef = useRef(0);
   // Per-participant frontal nose fraction (pitch zero), captured during calibration.
   const pitchBaselineFracRef = useRef<number | null>(null);
-  // Gaze calibration state.
-  const gazeCalRef = useRef<GazeCalibration | null>(null);
+  // The gaze check (gaze-r2): its fit, in force from the moment it is written, and its sample pool.
+  const gazeCalRef = useRef<GazeCheckFit | null>(null);
   /** The calibration record written by the last completed calibration of THIS mount; null before one. */
   const calibrationIdRef = useRef<string | null>(null);
-  const gazeSamplesRef = useRef<Record<string, GazeSample[]>>({});
-  const gazeCollectingTarget = useRef<string | null>(null);
+  /** Horizontal iris offset per dot, open-eye frames only (NaN kept out by fitGazeCheck). */
+  const gazeSamplesRef = useRef<Partial<Record<GazeDotId, number[]>>>({});
+  /** Each dot's need at its last showing, and how many times it was shown. */
+  const gazeNeededRef = useRef<Partial<Record<GazeDotId, number>>>({});
+  const gazeAttemptsRef = useRef<Partial<Record<GazeDotId, number>>>({});
+  const gazeCollectingTarget = useRef<GazeDotId | null>(null);
+  /** Capture times of the dot's face frames and open-eye frames, for its live state. */
+  const gazeTimesRef = useRef<{ face: number[]; usable: number[] }>({ face: [], usable: [] });
 
-  const gazeFor = (lm: Point[]) => {
-    const c = gazeCalRef.current;
-    return c
-      ? estimateGaze(lm, c.hThreshold, c.vThreshold, c.h0, c.v0)
-      : estimateGaze(lm);
+  /**
+   * The frame's horizontal iris offset and its on-screen verdict. estimateGaze is called without
+   * thresholds: only its offset is used (its 3x3 zone was gaze-r1's, and is not stored any more).
+   */
+  const gazeFor = (lm: Point[], offAxis: boolean) => {
+    const g = estimateGaze(lm);
+    return { h: g.h, onScreen: onScreenFrame(g.h, offAxis, gazeCalRef.current?.range ?? null) };
   };
 
   /** Mean and spread of luminance of the current video frame (0-255), null if unavailable. */
@@ -586,6 +614,11 @@ export function useTracking(): TrackingApi {
     if (health.observe({ t, luma, lumaStd: held ? held.std : null, face: !!(lm && lm.length > 0) })) {
       setCameraBlocked(health.isBlocked());
     }
+    // The baseline window counts every frame, with a face or not: its failure reason needs all three.
+    if (calibrating.current) {
+      calibrating.current.frames++;
+      if (lm && lm.length > 0) { calibrating.current.faceFrames++; calibrating.current.faceTimes.push(t); }
+    }
     const v = videoRef.current;
     const aspect = v && v.videoWidth > 0 && v.videoHeight > 0 ? v.videoWidth / v.videoHeight : 1;
     // The eye-openness trace for the researcher card: one entry per processed frame, CONFIG.EAR_TRACE_MS long.
@@ -599,28 +632,33 @@ export function useTracking(): TrackingApi {
       if (trialEarsRef.current && Number.isFinite(ear)) trialEarsRef.current.push(ear);
       if (calibrating.current) {
         calibrating.current.samples.push(ear);
+        if (Number.isFinite(ear) && ear > 0) calibrating.current.usableTimes.push(t);
         // During calibration the participant is frontal (eyes-only movement), so the nose fraction
         // here defines their personal pitch zero.
         const frac = noseVerticalFraction(lm);
         if (frac != null) calibrating.current.noseFracs.push(frac);
       }
-      const gazeNow = gazeFor(lm);
+      const pose = estimateHeadPose(lm, pitchBaselineFracRef.current, aspect);
+      const offAxis = isOffAxis(pose);
+      const gazeNow = gazeFor(lm, offAxis);
       if (gazeCollectingTarget.current) {
         const id = gazeCollectingTarget.current;
-        (gazeSamplesRef.current[id] ??= []).push({ h: gazeNow.h, v: gazeNow.v });
+        gazeTimesRef.current.face.push(t);
+        if (Number.isFinite(gazeNow.h)) {
+          (gazeSamplesRef.current[id] ??= []).push(gazeNow.h);
+          gazeTimesRef.current.usable.push(t);
+        }
       }
       const agg = aggRef.current ?? selfTestAggRef.current;
       if (agg) {
-        const pose = estimateHeadPose(lm, pitchBaselineFracRef.current, aspect);
         agg.ingest({
           t_ms: t,
           ear,
           earLeft: eyes.left,
           earRight: eyes.right,
           pose,
-          zone: gazeNow.zone,
-          isCenter: gazeNow.isCenter,
-          offAxis: isOffAxis(pose),
+          onScreen: gazeNow.onScreen,
+          offAxis,
           facePresent: true,
           faceSize: faceSizeFromLandmarks(lm),
           luma: fresh ? fresh.mean : null,
@@ -644,8 +682,7 @@ export function useTracking(): TrackingApi {
             left: LEFT_EYE_EAR.map((i) => lm[i]).filter(Boolean).map((p) => ({ x: p.x, y: p.y })),
             right: RIGHT_EYE_EAR.map((i) => lm[i]).filter(Boolean).map((p) => ({ x: p.x, y: p.y })),
           },
-          onScreen: gazeNow.isCenter,
-          gazeZone: gazeNow.zone ?? null,
+          onScreen: gazeNow.onScreen,
           sessionBlinks: sessionBlinksDone.current + (live?.blinks ?? 0),
           noFaceForMs: 0,
           luma: luma != null ? Math.round(luma) : null,
@@ -670,8 +707,7 @@ export function useTracking(): TrackingApi {
           incomplete: live?.incomplete ?? lastConditionCounts.current.incomplete,
           blinksLive: live != null,
           exposureFps: lastConditionFps.current,
-          faceSize: null, faceWidthPx: null, faceBox: null, eyes: null, onScreen: false,
-          gazeZone: null,
+          faceSize: null, faceWidthPx: null, faceBox: null, eyes: null, onScreen: null,
           sessionBlinks: sessionBlinksDone.current + (live?.blinks ?? 0),
           noFaceForMs: health.noFaceForMs(t),
           luma: luma != null ? Math.round(luma) : null,
@@ -686,8 +722,6 @@ export function useTracking(): TrackingApi {
         t_ms: t,
         ear: 0,
         pose: { pitch: 0, yaw: 0, roll: 0 },
-        zone: 'cc',
-        isCenter: false,
         offAxis: false,
         facePresent: false,
         faceSize: 0,
@@ -1231,99 +1265,156 @@ export function useTracking(): TrackingApi {
    * Head pitch zero is captured from the same window for the same reason: it defines "frontal" for
    * this participant, and the nine-point routine is the one moment the head is least likely to be.
    */
-  const measureEarBaseline = useCallback(async (ms: number): Promise<{ baseline: number | null; usable: number }> => {
+  const measureEarBaseline = useCallback(async (
+    step: Pick<EarBaselineStep, 'ms' | 'maxMs' | 'minSamples'>,
+    onProgress?: (p: BaselineProgress) => void,
+  ): Promise<BaselineResult> => {
     if (status !== 'active') {
       baselineEarRef.current = null;
       earSamplesUsableRef.current = 0;
-      return { baseline: null, usable: 0 };
+      const none: BaselineResult = { baseline: null, usable: 0, frames: 0, faceFrames: 0, ms: 0, reason: 'no_frames' };
+      baselineResultRef.current = none;
+      return none;
     }
-    calibrating.current = { samples: [], noseFracs: [] };
-    await new Promise((r) => setTimeout(r, ms));
-    const cal = calibrating.current ?? { samples: [], noseFracs: [] };
+    calibrating.current = { samples: [], noseFracs: [], frames: 0, faceFrames: 0, faceTimes: [], usableTimes: [] };
+    const began = now();
+    /*
+     * Polled a few times a second, not timed once: the window closes when baselineWindowDone says so
+     * (cal-r2), and the screen is told meanwhile whether the eyes are found and steady. The usable count
+     * here is the fit's own (finite and positive EAR), so "done" on the screen and the fit below agree.
+     */
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 1000 / LIVE_HZ));
+      const c = calibrating.current;
+      if (!c) break;
+      const elapsedMs = now() - began;
+      const usable = c.usableTimes.length;
+      if (onProgress) {
+        const state = eyeState({ now: now(), faceTimes: c.faceTimes, usableTimes: c.usableTimes, deliveredFps: meterRef.current.live().cameraFps });
+        onProgress({ elapsedMs, usable, needed: step.minSamples, minMs: step.ms, maxMs: step.maxMs, ...state });
+      }
+      if (baselineWindowDone(elapsedMs, usable, step)) break;
+    }
+    const cal = calibrating.current ?? { samples: [], noseFracs: [], frames: 0, faceFrames: 0, faceTimes: [], usableTimes: [] };
     calibrating.current = null;
     if (cal.noseFracs.length >= 10) pitchBaselineFracRef.current = medianOf(cal.noseFracs);
     const fit = fitEarBaseline(cal.samples);
     baselineEarRef.current = fit.baseline;
     earSamplesUsableRef.current = fit.usable;
     baselineMeasuredRef.current = true;
-    return fit;
+    const counts = { frames: cal.frames, faceFrames: cal.faceFrames, usable: fit.usable };
+    const result: BaselineResult = { ...counts, baseline: fit.baseline, ms: Math.round(now() - began), reason: fit.baseline == null ? baselineFailure(counts, step.minSamples) : null };
+    baselineResultRef.current = result;
+    return result;
   }, [status]);
 
   const beginGazeCalibration = useCallback(() => {
     /*
-     * No EAR window is opened here, and that omission is the point. See calibrationSequence.ts:
-     * frames taken while the participant looks at the top row of targets have a wider palpebral
-     * fissure than frames taken while they read, and the baseline is a high percentile of whatever
-     * pool it is given.
+     * No EAR window is opened here, and that omission is the point. See calibrationSequence.ts: the
+     * baseline is the centre fixation's alone, and the gaze dots move the eye to the ends of a line.
      */
     gazeSamplesRef.current = {};
+    gazeNeededRef.current = {};
+    gazeAttemptsRef.current = {};
     gazeCalRef.current = null;
   }, []);
 
-  const sampleGazeTarget = useCallback(async (targetId: string, ms: number): Promise<void> => {
-    gazeCollectingTarget.current = targetId;
-    await new Promise((r) => setTimeout(r, ms));
+  const sampleGazeTarget = useCallback(async (
+    dot: GazeDotId, ms: number, onProgress?: (p: { eyes: EyeState; steady: boolean }) => void,
+  ): Promise<GazeDotResult> => {
+    // A dot shown again replaces its earlier showing: the frames kept are the ones it was judged on.
+    gazeSamplesRef.current[dot] = [];
+    gazeAttemptsRef.current[dot] = (gazeAttemptsRef.current[dot] ?? 0) + 1;
+    gazeTimesRef.current = { face: [], usable: [] };
+    gazeCollectingTarget.current = dot;
+    const began = now();
+    while (now() - began < ms) {
+      await new Promise((r) => setTimeout(r, Math.min(1000 / LIVE_HZ, Math.max(1, ms - (now() - began)))));
+      onProgress?.(eyeState({ now: now(), faceTimes: gazeTimesRef.current.face, usableTimes: gazeTimesRef.current.usable, deliveredFps: meterRef.current.live().cameraFps }));
+    }
     gazeCollectingTarget.current = null;
+    // What this second needed, from the rate the camera delivered in it (gazeDotNeeded).
+    const needed = gazeDotNeeded(meterRef.current.live().cameraFps);
+    gazeNeededRef.current[dot] = needed;
+    const samples = gazeSamplesRef.current[dot]?.length ?? 0;
+    return { dot, samples, needed, enough: samples >= needed };
   }, []);
 
-  const endGazeCalibration = useCallback(async (sessionId: string): Promise<CalibrationOutcome> => {
+  const endGazeCalibration = useCallback(async (sessionId: string, opts?: { gazeRun?: boolean; baselineAttempts?: number }): Promise<CalibrationOutcome> => {
+    const gazeRun = opts?.gazeRun ?? true;
     /*
      * THE BASELINE IS NOT FITTED HERE. It was, and that was the defect.
      *
      * Every frame of the nine-point routine was pushed into one pool and this function took the
-     * 90th percentile of it. Three of the nine targets sit at y = 0.1: looking up lifts the upper
+     * 90th percentile of it. Three of the nine targets sat at y = 0.1: looking up lifts the upper
      * lid, widens the fissure and raises EAR, and a 90th percentile is exactly the statistic that
      * finds those frames. The baseline came out above the participant's straight-ahead open eye,
      * both blink thresholds scale with it (0.75 onset, 0.60 complete), and an incomplete blink —
-     * the study's primary outcome — passes below an inflated complete threshold and is counted as
+     * the study's primary outcome — passed below an inflated complete threshold and was counted as
      * complete. One-directional, on the primary outcome, and in the direction that makes a real
      * effect look null.
      *
-     * measureEarBaseline now owns the baseline, from its own centre-fixation window taken before
-     * the eye is asked to move. This function reads what it established and records it, so the
-     * gaze fit and the baseline can fail independently and be reported independently.
+     * measureEarBaseline owns the baseline, from its own centre-fixation window taken before the eye
+     * is asked to move. This function reads what it established and records it, so the gaze check and
+     * the baseline can fail independently and be reported independently.
      *
      * (An earlier fix here counted USABLE frames rather than raw ones: faceEar returns NaN for a
      * degenerate landmark solve, so a `>= 10` raw check was satisfied by three hundred NaNs. That
      * floor lives in fitEarBaseline and still applies — it is applied in measureEarBaseline.)
      */
     calibrating.current = null;
+    gazeCollectingTarget.current = null;
     const earBaseline = baselineEarRef.current;
     const earSamplesUsable = earSamplesUsableRef.current;
 
-    const cal = fitGazeCalibration(gazeSamplesRef.current);
-    gazeCalRef.current = cal;
-    /*
-     * Taken from the fit, not recounted here. Recounting here is what produced the defect: this
-     * line filtered on `a.length > 0` over the RAW samples, while fitGazeCalibration decides
-     * validity after dropping non-finite ones. A target that returned nothing but NaN was therefore
-     * exported as "detected" in the QC column and simultaneously excluded from the calibration —
-     * and the QC column is exactly what an analyst reads to decide whether a sitting's gaze data
-     * can be trusted. It overstated coverage in the only case where it mattered.
-     */
-    const targetsDetected = cal.targetsWithSamples;
-    const quality = gradeGaze(cal);
+    const fit = gazeRun ? fitGazeCheck(gazeSamplesRef.current, gazeNeededRef.current) : null;
+    // The range is in force for every frame from here on (on_screen_ratio), and only a passed one.
+    gazeCalRef.current = fit;
+    const trust = fit ? gazeCheckTrust(fit) : 'unusable';
+    const ids = GAZE_DOTS.map((d) => d.id);
+    const dotsWith = fit ? ids.filter((id) => !fit.shortDots.includes(id)).length : 0;
     const calibrationId = uuidv4();
     await put('calibration_data', {
       calibration_id: calibrationId,
       session_id: sessionId,
-      is_real_calibration: cal.valid,
-      targets_detected: targetsDetected,
-      targets_total: GAZE_TARGETS.length,
-      samples_per_target: cal.samplesPerTarget,
-      gaze_trust: quality.trust,
-      gaze_targets_well_covered: quality.wellCovered,
-      gaze_threshold_floored: cal.thresholdFloored,
+      is_real_calibration: fit?.valid ?? false,
+      // Under gaze-r2 these count the three dots: a dot is "detected" when it reached its need.
+      targets_detected: dotsWith,
+      targets_total: ids.length,
+      samples_per_target: fit ? { ...fit.samplesPerDot } : Object.fromEntries(ids.map((id) => [id, 0])),
+      gaze_trust: trust,
+      gaze_targets_well_covered: dotsWith,
+      gaze_threshold_floored: null,
       ear_baseline: earBaseline,
-      gaze_h_threshold: cal.valid ? cal.hThreshold : null,
-      gaze_v_threshold: cal.valid ? cal.vThreshold : null,
+      gaze_h_threshold: null,
+      gaze_v_threshold: null,
       pitch_baseline_frac: pitchBaselineFracRef.current,
       ear_samples_usable: earSamplesUsable,
       calibrated_at: Date.now(),
+      calibration_rule: CALIBRATION_RULE,
+      calibration_ground: CALIBRATION_GROUND,
+      ear_baseline_ms: baselineResultRef.current?.ms ?? null,
+      ear_baseline_frames: baselineResultRef.current?.frames ?? null,
+      ear_baseline_face_frames: baselineResultRef.current?.faceFrames ?? null,
+      ear_baseline_reason: baselineResultRef.current?.reason ?? null,
+      ear_baseline_attempts: opts?.baselineAttempts ?? null,
+      gaze_rule: GAZE_RULE,
+      gaze_check: {
+        h_centre: fit?.hCentre ?? null,
+        h_left: fit?.hLeft ?? null,
+        h_right: fit?.hRight ?? null,
+        centre_spread: fit?.centreSpread ?? null,
+        range_lo: fit?.range?.lo ?? null,
+        range_hi: fit?.range?.hi ?? null,
+        needed_per_dot: { ...gazeNeededRef.current } as Record<string, number>,
+        attempts_per_dot: { ...gazeAttemptsRef.current } as Record<string, number>,
+        reason: fit ? fit.reason : 'not_run',
+        short_dots: fit ? [...fit.shortDots] : [],
+      },
     });
     // Every exposure measured from here on is measured under THIS record; see EyeMetricsRecord.
     calibrationIdRef.current = calibrationId;
-    return { gazeValid: cal.valid, earBaseline, earSamplesUsable, gazeQuality: quality };
+    return { gazeValid: fit?.valid ?? false, earBaseline, earSamplesUsable, gaze: fit, gazeTrust: trust, baseline: baselineResultRef.current };
   }, []);
 
   /** A separate aggregator for the self-test, so it never mixes with a condition's exposure. */

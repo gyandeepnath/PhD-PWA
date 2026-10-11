@@ -135,7 +135,7 @@ describe('the self-test\'s rate, through the aggregator that measures it', () =>
       const into = cues.map((c) => t - (c + 300)).find((x) => x >= 0 && x < 300);
       const ear = into == null ? BASE : BASE * (into < 100 ? 1 - 0.85 * (into / 100) : 0.15 + 0.85 * ((into - 100) / 200));
       const face = !(lost && t >= lost[0] && t < lost[1]);
-      agg.ingest({ t_ms: t, ear, earLeft: ear, earRight: ear, pose, zone: 'cc', isCenter: true, offAxis: false, facePresent: face, faceSize: 0.2, luma: null });
+      agg.ingest({ t_ms: t, ear, earLeft: ear, earRight: ear, pose, offAxis: false, facePresent: face, faceSize: 0.2, luma: null });
     }
     return agg;
   }

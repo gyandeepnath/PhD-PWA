@@ -64,7 +64,7 @@ describe('sampling_fps_observed', () => {
     // 25 fps while the face is seen; the face is lost for 10 s in the middle of a 100-s window.
     const agg = new EyeMetricsAggregator();
     const t0 = 1_000;
-    const base = { pose: { pitch: 0, yaw: 0, roll: 0 }, zone: 'cc' as const, isCenter: true, offAxis: false, faceSize: 0.3, luma: null };
+    const base = { pose: { pitch: 0, yaw: 0, roll: 0 }, offAxis: false, faceSize: 0.3, luma: null };
     for (let t = 0; t <= 100_000; t += 40) {
       const lost = t > 45_000 && t < 55_000;
       agg.ingest({ ...base, t_ms: t0 + t, ear: lost ? Number.NaN : 0.3, facePresent: !lost });

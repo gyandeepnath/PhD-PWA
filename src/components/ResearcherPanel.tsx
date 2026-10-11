@@ -16,7 +16,7 @@ import { MEASURE, recordingLabel, recordingShort } from '@/tracking/measurementS
  *
  *   COLLAPSED — a status dot and the sitting's elapsed time. Tap to open.
  *   OPEN      — camera: state in words, WHETHER ANYTHING IS BEING RECORDED NOW, blinks this reading or
- *               the last one (incomplete beside), blinks this sitting, eye openness, gaze zone, eye
+ *               the last one (incomplete beside), blinks this sitting, eye openness, on screen now, eye
  *               sampling rate of the last reading, picture brightness;
  *               time: this sitting, since the session began (includes pauses), this screen,
  *               conditions done, and an estimate of time left.
@@ -368,7 +368,9 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
           <>{num(s?.blinks)} <span style={{ opacity: 0.85 }}>· {num(s?.incomplete)} incomplete</span></>, 'researcher-blinks')}
         {row(`${MEASURE.blinks.name} (sitting)`, num(s?.sessionBlinks))}
         {row(MEASURE.eyeOpenness.name, s?.earRatio != null ? `${Math.round(s.earRatio * 100)}% of baseline` : '—')}
-        {row('Gaze', s?.gazeZone ? (s.gazeZone === 'cc' ? 'centre' : s.gazeZone) : '—')}
+        {/* The gaze check's test on this frame (gaze-r2): "—" with no passed gaze check or the eye closed. */}
+        {/* The per-frame test behind the reading window's MEASURE.onScreen (on_screen_ratio). */}
+        {row('On screen now', s?.onScreen == null ? '—' : s.onScreen ? 'yes' : 'no', 'researcher-on-screen')}
         {/* The frame-rate gate fps-g2 on the last reading (frameRateGate.ts): its rate and tier, amber below tier A. */}
         {row(`${MEASURE.samplingRate.name} (last reading)`, <span data-testid="researcher-last-fps" style={{ color: s?.exposureFps != null && s.exposureFps < p.fpsFloor ? '#ffd27a' : undefined }}>{s?.exposureFps != null ? `${num(s.exposureFps)} a second · ${FPS_TIER_WORD[fpsTier(s.exposureFps)!].toLowerCase()}` : '—'}</span>)}
         {row(MEASURE.pictureBrightness.name, s?.luma != null ? `${s.luma}/255` : '—')}

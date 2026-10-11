@@ -359,13 +359,13 @@ function fixtureOcularEvents(conditionIds: string[], sid: string): OcularEventsR
       const pose = { pitch: 0, yaw: 0, roll: 0 };
       const face = (v: number) => agg.ingest({
         t_ms: t(), ear: (v + 0.002 + (v - 0.002)) / 2, earLeft: v + 0.002, earRight: v - 0.002,
-        pose, zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.22, luma: null,
+        pose, offAxis: false, facePresent: true, faceSize: 0.22, luma: null,
       });
       agg.markPage(1, tStart - 5);
       for (let k = 0; k < nFace; k++) {
         if (k === 20) {
           for (let g = 0; g < FIXTURE_NO_FACE_FRAMES; g++) {
-            agg.ingest({ t_ms: t(), ear: 0, pose, zone: 'cc', isCenter: false, offAxis: false, facePresent: false, faceSize: 0, luma: null });
+            agg.ingest({ t_ms: t(), ear: 0, pose, offAxis: false, facePresent: false, faceSize: 0, luma: null });
           }
         }
         face(ear[k]);
@@ -429,7 +429,7 @@ function fixtureSelfTestEvents(sid: string): OcularEventsRecord {
     const v = ear[k];
     agg.ingest({
       t_ms: tStart + k * FIXTURE_FRAME_MS, ear: v, earLeft: v + 0.002, earRight: v - 0.002,
-      pose, zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.22, luma: null,
+      pose, offAxis: false, facePresent: true, faceSize: 0.22, luma: null,
     });
   }
   const events = agg.blinkEvents(0.312);
@@ -741,9 +741,12 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       off_axis_ratio: 0.04,
       gaze_calibrated: true,
       calibration_id: 'cal-1',
-      gaze_deviation_ratio: 0.05,
-      zone_center_ratio: 0.95,
-      zone_transition_count: 12,
+      // The three-dot gaze check (gaze-r2, Round 80): an on-screen ratio, and no nine-point zones.
+      on_screen_ratio: 0.93,
+      gaze_rule_version: 'gaze-r2' as const,
+      gaze_deviation_ratio: null,
+      zone_center_ratio: null,
+      zone_transition_count: null,
       face_presence_ratio: 0.97,
       face_size_ratio: 0.22,
       mean_face_luma: 120,
@@ -757,12 +760,33 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
         calibration_id: 'cal-1',
         session_id: sid,
         is_real_calibration: true,
-        targets_detected: 9,
-        targets_total: 9,
+        // Rules cal-r2 and gaze-r2 (Round 80): the baseline window on the grey field, and three dots.
+        targets_detected: 3,
+        targets_total: 3,
+        samples_per_target: { centre: 22, left: 21, right: 23 },
+        gaze_trust: 'good',
+        gaze_targets_well_covered: 3,
+        gaze_threshold_floored: null,
         ear_baseline: 0.312,
-        gaze_h_threshold: 0.08,
-        gaze_v_threshold: 0.06,
+        ear_samples_usable: 141,
+        gaze_h_threshold: null,
+        gaze_v_threshold: null,
         pitch_baseline_frac: 0.481,
+        calibration_rule: 'cal-r2',
+        calibration_ground: '#808080',
+        ear_baseline_ms: 6012,
+        ear_baseline_frames: 146,
+        ear_baseline_face_frames: 145,
+        ear_baseline_reason: null,
+        ear_baseline_attempts: 1,
+        gaze_rule: 'gaze-r2',
+        gaze_check: {
+          h_centre: 0.04, h_left: -0.08, h_right: 0.16, centre_spread: 0.012,
+          range_lo: -0.1244, range_hi: 0.2044,
+          needed_per_dot: { centre: 12, left: 12, right: 12 },
+          attempts_per_dot: { centre: 1, left: 1, right: 1 },
+          reason: null, short_dots: [],
+        },
       },
     ],
   };

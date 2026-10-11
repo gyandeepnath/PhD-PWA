@@ -341,7 +341,7 @@ describe('an open-eye baseline is only accepted when frames actually solved', ()
 describe('within-condition half rates exclude dropouts', () => {
   const frame = (t_ms: number, ear: number): FrameSample => ({
     t_ms, ear, pose: { pitch: 1, yaw: 2, roll: 0.5 },
-    zone: 'cc', isCenter: true, offAxis: false, facePresent: true, faceSize: 0.22, luma: 120,
+    offAxis: false, facePresent: true, faceSize: 0.22, luma: 120,
   });
 
   /** 180 s at 30 fps, a true and CONSTANT 15 blinks/min, with two 20 s dropouts. */

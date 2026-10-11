@@ -18,7 +18,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { CONDITIONS, N_CONDITIONS } from '@/experiment/conditions';
-import { GAZE_TARGETS } from '@/tracking/gazeCalibration';
+import { GAZE_DOTS } from '@/tracking/calibrationSequence';
 import { CVSQ_ITEMS } from '@/scales/cvsq';
 import { CODEBOOK } from '@/storage/export';
 import { ANALYSIS_CODEBOOK } from '@/storage/analysisCodebook';
@@ -45,8 +45,8 @@ describe('the design is what the prose says it is', () => {
     }
   });
 
-  it('has nine calibration targets and sixteen CVS-Q items', () => {
-    expect(GAZE_TARGETS).toHaveLength(9);
+  it('has three gaze-check dots and sixteen CVS-Q items', () => {
+    expect(GAZE_DOTS).toHaveLength(3);
     expect(CVSQ_ITEMS).toHaveLength(16);
   });
 });
@@ -54,7 +54,8 @@ describe('the design is what the prose says it is', () => {
 describe('codebook prose naming a design count still matches that count', () => {
   const cases: [RegExp, () => number, number, string][] = [
     [/\bten conditions\b/i, () => N_CONDITIONS, 10, 'N_CONDITIONS'],
-    [/\bnine (?:calibration )?targets\b/i, () => GAZE_TARGETS.length, 9, 'GAZE_TARGETS.length'],
+    // "nine targets" is the gaze-r1 routine, which the codebook still describes for older sittings.
+    [/\bthree (?:gaze )?dots\b/i, () => GAZE_DOTS.length, 3, 'GAZE_DOTS.length'],
     [/\bsixteen items\b/i, () => CVSQ_ITEMS.length, 16, 'CVSQ_ITEMS.length'],
     [/\bfive levels\b/i, () => new Set(CONDITIONS.map((c) => c.colorName)).size, 5, 'distinct colorName'],
   ];
