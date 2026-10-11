@@ -6150,3 +6150,285 @@ this file):
   - the delivered and face-solved rates per condition, and whether white and black pages differ by
     more than 2 fps;
   - the camera check's verdict and its stage line at the tablet's real rate.
+
+## Round 80 — a calibration that waits for the eyes, a three-dot gaze check, and one account of what is measured when
+
+The investigator, after testing 2.3.1:
+
+- instruction 2: "I feel the gaze tracker and calibration is not acting properly, and the calibration
+  during the flashing-dot blink check could not be done properly even with proper lighting";
+- instruction 5: "The blink measurements and other data like the live graph are good
+  implementations, but they are inconsistent and need refinement and calibration: when blinks are
+  measured, what is measured, what is continuously measured, what is measured time to time, etc."
+
+Round 79 dealt with the frame rate and the flashing-dot check. This round deals with the calibration,
+the gaze measure, the live readout and the names of the measures.
+
+**Nothing was measured on the Xiaomi Pad 6.** The only device figure is still the investigator's
+report (at most 23–25 frames a second, in good light). The screenshots and end-to-end runs below are
+headless Chromium on this machine with a synthetic face, at 11–16 frames a second; they show what the
+screens do, not how the tablet's camera behaves.
+
+### In plain words
+
+1. **The eye calibration now waits for the eyes.** It runs on the grey field, at least 6 seconds, and
+   carries on until it has the 30 good frames it has always needed (at most 12 seconds). Under the dot
+   it says *Looking for the eyes…*, *Eyes found · hold still* or *Eyes found · steady*. If it ends
+   without a baseline, it says why and repeats only that step. The 30-frame floor and both blink lines
+   (0.75 and 0.60 of the open eye) are unchanged.
+2. **The nine gaze targets are gone.** At 55 cm the eye moves only a few camera pixels across the
+   screen, too little for nine zones. Three dots along a line of text (middle, left end, right end)
+   now answer one question: *was the participant looking at the tablet?* The answer is the
+   **on-screen ratio**, a quality check only. No hypothesis and no analysis rule uses it.
+3. **A gaze check that falls short no longer looks like a failure.** It is a calm notice: blinks are
+   measured normally. Only the three dots are repeated.
+4. **The live count, the live graph and the saved data now count blinks the same way** (one shared
+   piece of code). The live count simply waits until the eye reopens before it counts a blink.
+5. **The researcher card says whether anything is being recorded right now**: *Recording: reading
+   window* (or camera check, open-eye baseline, gaze check), or *Live only — not recorded*.
+6. **One table says what is measured, when, and where it is kept.** It is in the operator manual
+   (section 1) and the protocol (2b), and both copies are printed from the app's own code, so they
+   cannot drift apart.
+7. **Each measure has one name** on the card, the camera screens, the dashboard, the export codebook
+   and the manual (for example *Eye sampling rate*, *Face in view*, *On-screen ratio*).
+
+### 1. One blink count (bf15bf6)
+
+The live count, the card's ten-second graph and the saved record were computed in three places.
+`src/tracking/blinkCount.ts` now serves all three:
+
+- `blinkCuts(baseline)` gives the two lines (0.75 and 0.60 of the baseline). The graph draws them, the
+  classifier applies them, and 07 records them (`ear_threshold_used`, `ear_complete_threshold`).
+- `countBlinks(samples, baseline, 'final' | 'live')` runs the blink rule `blink-r1` (unchanged).
+  - *final* (the record): every blink, including one the window ended inside.
+  - *live* (the card): leaves out the blink still in progress, so the incomplete count never ticks up
+    and back down while the lid is moving.
+- The graph marks each counted blink at its deepest frame (filled = complete, ring = incomplete).
+- After a reading, the card shows the record's count, labelled *last reading*.
+
+Pinned by `tests/blinkCount.test.ts` (8 tests), including: once the eye reopens, live and record agree.
+
+### 2. The card says what is being recorded (fd7d1f5)
+
+The tracker runs on every screen from camera setup on, but frames are kept only in four windows: the
+reading window, the camera check, and calibration's two steps. The card, the strip and the camera
+setup screen print which window is open, read from the same references that decide where each frame
+goes (`LiveTrackingStats.recording`; labels in `src/tracking/measurementSchedule.ts`).
+
+### 3. The open-eye baseline: rule `cal-r2` (bf774d6, ede09fe, 0b50bbc)
+
+**Why it changed.** Under `cal-r1` the window was a fixed 6 s on a dark screen (#0a0a12). On the
+tablet it failed in good light (investigator's report). It gave no sign while it ran, and its only
+failure message was a frame count. The dark screen was also the one screen in the sitting that lit the
+face least, and the slowest case for a camera on automatic exposure.
+
+**The rule now** (`src/tracking/calibrationSequence.ts`):
+
+| | `cal-r1` (to Round 79) | `cal-r2` (from Round 80) |
+|---|---|---|
+| Ground | dark (#0a0a12) | grey field (#808080), under the exposure fixed at camera setup |
+| Length | 6 s, fixed | at least 6 s, then on until 30 usable frames, at most 12 s |
+| Usable frames needed | 30 | 30 (unchanged) |
+| Baseline statistic | 90th percentile of the window | the same |
+| Blink lines | 0.75 and 0.60 of the baseline | the same |
+| While it runs | nothing | eyes found / steady, frames so far, seconds so far |
+| Without a baseline | "N usable frames" | the reason (below), and only this step is repeated |
+
+*Steady* means a usable eye in at least half the frames the camera delivered in the last second (the
+measured rate; 30 is assumed only before a rate is known). Half is a judgement, chosen to be lenient;
+it only decides the words on the screen. Whether a baseline is kept is decided by the 30-frame floor
+alone.
+
+**The four reasons**, in the order to check them: `no_frames` (the tracker produced nothing),
+`no_face` (a face in under half the frames), `eyes_not_measured` (a face, but a usable eye in under
+half of its frames: glare, spectacles, half-closed eyes), `too_few_frames` (face and eyes, but under 30
+usable frames in 12 s).
+
+**Every attempt is recorded** (0b50bbc), a missing baseline too, so 01 `calibration_runs` still counts
+attempts.
+
+**In the data (01):** `calibration_rule_version` (`cal-r1` for older sittings: their records carry no
+rule, and every one of them ran the fixed window), `calibration_ground`, `calibration_baseline_ms`,
+`calibration_baseline_reason`. Fields an older record never had stay blank; nothing is filled in.
+
+**Analysis** (ANALYSIS_PLAN §5 item 7): because the ground changed, absolute baseline values are not
+compared across the two rules. If any `cal-r1` sitting is ever pooled with study data, the primary is
+reported with and without those sittings.
+
+### 4. The gaze check: rule `gaze-r2` (bf774d6, ede09fe)
+
+**Why the nine points went** (`src/tracking/gazeCalibration.ts`):
+
+- gaze is a quality check in this study, never an outcome (round 74 research report R1, D8);
+- at 55 cm the iris moves about 2.4 camera pixels horizontally and 1.5 vertically between the outer
+  targets: the size of the tracker's own jitter (round 78 research report R2, C1; **a model** from the
+  geometry and a face about 200 camera pixels wide, **not measured on the tablet**);
+- the fit needed both directions to separate, so the vertical direction failed it in good light;
+- each target had 800 ms, judged against an assumed 30 fps, with no retry of a single target;
+- the zone columns counted a blink as looking away, which tied them to the blink outcome (R1, D7).
+
+**The check now:**
+
+| Step | Rule |
+|---|---|
+| Dots | middle, left end, right end of a mid-height line of text (half the 1040-px reading column either side) |
+| Each dot | 0.5 s to settle (frames not kept), then 1 s sampled |
+| Enough frames | half the frames the camera delivered in that second, measured at the time |
+| A short dot | shown again on its own, up to 3 times in all |
+| Pass | both ends on opposite sides of the middle, each more than 1.5 times the middle dot's scatter away |
+| On-screen range | the two ends, widened by 0.37 of the half-range each side (about the screen edge plus 3°) |
+
+The 0.37 is derived from the tablet's geometry in a test: at 55 cm the dots are 11.0° out and the
+screen edge 12.1°; edge plus 3° is 15.1°, and sin 15.1° / sin 11.0° = 1.37. At 50 and 60 cm the same
+rule gives 0.34 and 0.40.
+
+**The on-screen ratio (07 `on_screen_ratio`).** Of the reading-window frames with a face and an open
+eye, the share with the head not turned away (the existing off-axis rule) and the horizontal iris
+offset inside the range. A closed eye gives no verdict: a blink is neither on nor off screen. It can
+only under-count looking away. Blank when the gaze check did not pass.
+
+**Old columns.** `gaze_deviation_ratio`, `zone_center_ratio` and `zone_transition_count` are kept,
+marked DEPRECATED in the codebook (role `qc`, no longer `dv`), filled on older rows as recorded, and
+blank on new rows. Blank, never 0: 0 is the best value of `gaze_deviation_ratio`, so writing it for a
+measure not taken would be a made-up result. One caveat stays in the codebook: camera-off rows from
+before this round carry `zone_transition_count` 0, which was not a measurement. The full nine-point
+calibration record (thresholds, samples per target) is kept in the backup JSON, and each sitting's
+`git_hash` names the build that computed it.
+
+**In the data:** 01 `gaze_rule_version` and `gaze_check_reason` (`too_few_samples`, `not_separable`,
+`not_run`); 07 `on_screen_ratio` and `gaze_rule_version`; analysis_long `on_screen_ratio`. 01
+`gaze_calibration_valid`, `gaze_trust`, `gaze_targets_well_covered` and `calibration_targets_detected`
+are read with `gaze_rule_version` (their codebook entries say how). Under `gaze-r2` there is no *thin*
+trust: a dot short of frames is shown again instead.
+
+**Analysis** (ANALYSIS_PLAN §5 item 7): `on_screen_ratio` is reported descriptively by condition and
+polarity. It is not a covariate and not an exclusion rule, and no threshold is set for it. Neither
+template reads the deprecated zone columns.
+
+### 5. The measurement schedule (c3e4c44)
+
+`measurementSchedule()` (`src/tracking/measurementSchedule.ts`) lists every measure by how often it is
+taken, when exactly, where it is kept and what the card shows. Every timing in it is read from the
+code that applies it. `tests/measurementSchedule.test.ts` fails if the copy in the operator manual or
+the protocol differs from the code, if a recording window has no row, or if the card's live rate is
+not the table's. In short:
+
+| How often | What |
+|---|---|
+| Continuously (every processed frame) | eye openness, face found, head position, iris position; picture brightness 4 times a second; camera health |
+| Each blink | start, end, depth, complete or incomplete, page (07b; every frame's eye openness in 07c) — in the reading window only |
+| Each reading window | the 07 row: incomplete-blink ratio, blink rate, inter-blink interval, PERCLOS, long closures, eye sampling rate, face in view, on-screen ratio, head position |
+| Once per sitting | ruler, distance, camera mode and exposure, tracker; the open-eye baseline; the gaze check; the camera check |
+| Live only, never kept | the picture, the ten-second graph and its marks, the live frame rates |
+| Not measured | questionnaires, ratings, word search, reaction task, grey field, breaks (the camera keeps running; nothing is kept) |
+
+### 6. One name per measure (f68b73e)
+
+The face-solved rate was called *Face found*, *FPS (tier)*, *Low fps*, *face fps* and *Frame rate* on
+different screens, while the card and the data called it the eye sampling rate. All screens now take
+their words from one table (`MEASURE`). Each export column with a screen name carries that name at the
+end of its codebook entry. Tests fail on a retired label on those screens, on a named column that is
+not documented, and on a column named twice.
+
+### 7. Found while verifying this round, and fixed
+
+1. **No test exported a record from before this round** (59f9a02). One now does: an old record is
+   named `cal-r1` / `gaze-r1`, its zone columns come out as recorded, and the fields it never had stay
+   blank. A new record is `cal-r2` / `gaze-r2`, with `on_screen_ratio` and blank zone columns. The
+   test also checks the codebook calls the zone columns deprecated, and that neither template, the
+   dashboard nor analysis_long reads a removed gaze field.
+2. **The tick row named one place twice** (e8ead1e): *centre, eyes at rest* and then *middle* for the
+   first gaze dot. The baseline step is now *eyes at rest*.
+3. **"55" and "cm." on two lines** in the no-face reason (e8ead1e). Units now stay with their numbers.
+4. **Three ticks above "Gaze check incomplete"** looked contradictory when every dot had collected
+   enough frames but the eyes did not move far enough (e72671c). The reason now begins *Every dot was
+   seen, but…*, and the manual names both reasons (f08f542).
+5. **Cut off at the bottom of the screen, with nothing to say so** (1a7600b): the open researcher card
+   (it is taller than the screen) and a failed camera check's result, whose *Try again* and *Continue
+   anyway* were below the edge. A scroll box shows no scrollbar on a tablet. Both now show
+   *More below ↓*.
+6. **"Blink duration and the micro/partial tiers need 25 frames a second"** on the dashboard and in
+   the protocol (47b39fb). The 25 is the old floor for the duration-based measures (blink duration
+   and the micro-blink tier, `fps_adequate_for_tiers`, still written). There is no "partial" tier, and
+   the incomplete-blink ratio follows `fps-g2` (adequate from 20). Read beside the eye sampling
+   rate's tier on the same screen, the old wording contradicted it. Both now name which measures need
+   25.
+
+Also in this round's range, from a separate fix: 7ad5784 (schema 11), which rebuilds the
+blink-record store on devices that had opened build 6ffc2c7.
+
+### 8. Versions in the data
+
+| What | Version | Before |
+|---|---|---|
+| Open-eye baseline window | `cal-r2` (01 `calibration_rule_version`) | `cal-r1` |
+| Gaze check | `gaze-r2` (01 and 07 `gaze_rule_version`) | `gaze-r1` (nine points) |
+| Blink rule | `blink-r1` (unchanged) | — |
+| Frame-rate gate | `fps-g2` (unchanged this round) | `g1-25/30` |
+
+### 9. Citations
+
+- No new source is cited in this round. A search of every line the round added (code, docs,
+  templates) found two author–year citations, both already in the ledger, on a line of the
+  dashboard's note under the eye charts that this round re-worded:
+  - **#2 Portello, Rosenfield & Chu (2013)**: checked against PubMed again on 11 Oct 2026 (PMID
+    23538437). Authors, title, journal, volume 90, issue 5, pages 482–487 and DOI matched the ledger.
+    The abstract supports the use made of it: symptoms correlated with the percentage of incomplete
+    blinks (p = 0.002), and the conclusion links CVS symptoms with a reduced blink rate. Abstract only.
+  - **#49 Dinges & Grace (1998)**: status unchanged (not indexed in PubMed; the brief was not opened),
+    and the note still says so.
+- The round's numbers about the eye's movement in camera pixels (2.4 and 1.5) are labelled as a model
+  from research report R2, not as a measurement or a published figure.
+
+### 10. Verification
+
+**Verified at 47b39fb** (this round's last code commit; the commit adding this round changes only
+this file):
+
+- `npm run verify` is green: 99 files, 1541 unit tests (1537 at f68b73e, plus the 4 old-row export
+  tests); the corpus, codebook, export (854/854 checks) and analysis gates pass.
+
+**End-to-end, no retries:**
+
+- On the implementation as it stood (f68b73e): the camera specs and fullRun, 12 passed
+  (cameraDiagnostics 3, cameraLost 3, cameraBlocked 1, trackerEquivalence 1, trackerTelemetry 1,
+  physicalCalibration 2, fullRun 1).
+- At 47b39fb, after this pass's screen fixes: the same specs plus setupNavigation (11), allScreensFit
+  (7) and dashboardTabs (1), 31 passed.
+- After `npm run build`, the production-bundle suite (e2e-prod, 7 tests) passed, at both points.
+
+**Screenshots at 1920 × 1200** (the study tablet's 16:10 shape), full protocol timing, in
+`scratchpad/round78/i2b_shots/` (not in the repository). The camera was MediaPipe's own test portrait
+drawn into a canvas stream at 30 fps: eyes painted shut for 170 ms every 3.5 s, and, for the gaze
+check, the middle of each eye moved 5 source pixels towards the dot on screen. Seen:
+
+- calibration: the start screen (with the card open), *Looking for the eyes…*, *Eyes found · steady*,
+  each gaze dot with its tick row;
+- the gaze check **passed** with the moving eyes and **failed as `not_separable`** with still eyes;
+- with no face (the browser's fake camera): *No eye baseline* with "A face was found in only 0% of the
+  83 frames in 12.2 s…";
+- the camera check: start, running, and a failed result (the synthetic blinks were not timed to the
+  flashes, and this machine delivered 13–16 frames a second);
+- the card on calibration, on the camera check's result and on the eye-symptom questionnaire, all
+  *Live only — not recorded*; the strip during reading, *Recording · blinks 3 (0 inc)*.
+
+Headless Chromium here processed 11–16 frames a second. That says nothing about the tablet.
+
+### 11. Not done, and why
+
+- **Seen in the screenshots, left for a separate decision:**
+  - With the researcher card open on the eye-symptom questionnaire, the card takes a column on the
+    left, and the questionnaire's labels are squeezed under its answer buttons ("Burning",
+    "Tearing"). The same happens at the tablet's proportions. Fixing it changes a participant
+    screen's layout, so it was not done here. Until then, keep the card closed on the questionnaires.
+  - The camera check (rule `st-r2`, Round 79) counts a blink that **began up to 1.2 s before** a
+    flash as answering it ("blink 0.9 s before"). A blink before the cue cannot be a response to it.
+    Changing the window is a rule change (`st-r3`), with its own simulation and version, so it is
+    raised for the investigator rather than changed here.
+- **Not measured on the tablet:**
+  - whether the baseline window now finishes in good light at 23–25 fps (at 24 fps it needs about
+    1.3 s of usable frames, inside its 6-s minimum, if the eyes are found in most frames);
+  - whether real eyes move far enough for the gaze check to pass at 55 cm (the 2.4-pixel figure is a
+    model), and how often it ends `not_separable`;
+  - typical values of `on_screen_ratio`;
+  - whether the baseline taken on the grey field differs from one taken on the dark screen.
