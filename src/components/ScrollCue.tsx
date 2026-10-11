@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react';
  * scroll container and shows only while there is more content below. Operator- and participant-facing
  * setup screens only; never on a stimulus screen, which must not scroll.
  */
-export function ScrollCue({ gutter = false }: {
+export function ScrollCue({ gutter = false, tone = 'dark' }: {
   /**
    * Sit in the right-hand margin instead of bottom-centre. For a screen whose text runs in a centred
    * column (consent): centred, the pill covered a line of the text under it at any scroll position.
@@ -17,6 +17,11 @@ export function ScrollCue({ gutter = false }: {
    * reserves a gutter of that width — the CVS-Q, where centred it covered the last row's answers.
    */
   gutter?: boolean | number;
+  /**
+   * 'light' for a scroll box on a dark ground — the researcher card — where the dark pill would vanish
+   * into the card behind it.
+   */
+  tone?: 'dark' | 'light';
 } = {}) {
   const ref = useRef<HTMLDivElement>(null);
   const [more, setMore] = useState(false);
@@ -59,7 +64,8 @@ export function ScrollCue({ gutter = false }: {
           style={{
             position: 'absolute', bottom: 10,
             ...(gutter ? { right: -(typeof gutter === 'number' ? gutter : 48) } : { left: '50%', transform: 'translateX(-50%)' }),
-            padding: '6px 14px', borderRadius: 999, background: '#1a1a2e', color: '#fff',
+            padding: '6px 14px', borderRadius: 999,
+            background: tone === 'light' ? '#ffffff' : '#1a1a2e', color: tone === 'light' ? '#1a1a2e' : '#fff',
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)', whiteSpace: 'nowrap',
           }}
         >

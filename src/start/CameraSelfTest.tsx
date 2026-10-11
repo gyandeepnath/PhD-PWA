@@ -8,6 +8,7 @@ import { FPS_GATE } from '@/tracking/frameRateGate';
 import { EAR_TIERS, MIN_GAP_MS } from '@/tracking/blink';
 import type { SelfTestObservation } from '@/tracking/useTracking';
 import { TRACKER_LABEL, type TrackerBackend } from '@/tracking/trackers';
+import { ScrollCue } from '@/components/ScrollCue';
 
 /**
  * "Blink each time the dot flashes" — the camera self-test, run after calibration. See
@@ -135,6 +136,10 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false }
     }}>
       <div style={{ margin: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', maxWidth: '100%' }}>
         {children}
+        {/* A failed result is taller than the tablet's screen, and its Try again / Continue anyway sat
+            below the edge with nothing to say so: a scroll box shows no scrollbar on a tablet (round 80
+            screenshots at the study tablet's proportions). */}
+        <ScrollCue />
       </div>
     </div>
   );

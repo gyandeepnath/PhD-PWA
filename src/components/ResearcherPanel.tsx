@@ -5,6 +5,7 @@ import { UI_TEXT } from '@/lib/uiPalette';
 import { LiveFeed, EarTrace, PipelineReadout } from '@/components/LiveCamera';
 import { FPS_TIER_WORD, fpsTier } from '@/tracking/frameRateGate';
 import { MEASURE, recordingLabel, recordingShort } from '@/tracking/measurementSchedule';
+import { ScrollCue } from '@/components/ScrollCue';
 
 /**
  * The researcher's corner panel: live camera readout and the session clock, collapsible.
@@ -386,6 +387,10 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
         <input type="checkbox" checked={keepOpen} onChange={(e) => { setKeepOpen(e.target.checked); writeKeepOpen(e.target.checked); }} style={{ width: 18, height: 18 }} />
         Keep open during tasks (recorded)
       </label>
+      {/* The card is taller than the screen at the study tablet's proportions (it scrolls, from the
+          picture down to the clock), and a scroll box shows no scrollbar on a tablet: cut mid-line at
+          the screen's edge it read as cropped (round 80 screenshots). */}
+      <ScrollCue tone="light" />
     </div>
   );
 }
