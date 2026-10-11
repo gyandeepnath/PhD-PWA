@@ -196,7 +196,7 @@ describe('the rest of the camera-lost path', () => {
     expect(routine).toMatch(/useEffect\(\(\) => \(\) => \{ mounted\.current = false; \}, \[\]\)/);
     // finish() is the only path that reports (onDone) after an await: it checks before and after.
     const body = routine.slice(routine.indexOf('const finish = async'), routine.indexOf('/** The baseline window, then the gaze check.'));
-    expect((body.match(/if \(!mounted\.current\) return;/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    expect((body.match(/if \(!mounted\.current\) return(?: null)?;/g) ?? []).length).toBeGreaterThanOrEqual(3);
     expect(body).toMatch(/onDone\(\)/);
   });
   it('a lost camera discards the clip of the run it was filming', () => {

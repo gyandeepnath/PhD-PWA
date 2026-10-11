@@ -120,12 +120,15 @@ describe('the calibration screen', () => {
     expect(m.q('calibration-reason')!.textContent).toBe(baselineReasonText(NO_FACE, 30));
     expect(m.q('calibration-reason')!.textContent).toMatch(/A face was found in only 20% of the 150 frames/);
     expect(m.calls.dots).toEqual([]); // the dots are not shown without a baseline
+    // The attempt is on record before the operator decides: no baseline, the gaze check not run.
+    expect(m.calls.end).toEqual([{ gazeRun: false, baselineAttempts: 1 }]);
     await m.click('calibration-retry');
     await m.run(6400);
     expect(m.calls.baseline).toBe(2);
+    expect(m.calls.end).toEqual([{ gazeRun: false, baselineAttempts: 1 }, { gazeRun: false, baselineAttempts: 2 }]);
     await m.click('calibration-continue-anyway');
     await m.run(100);
-    expect(m.calls.end).toEqual([{ gazeRun: false, baselineAttempts: 2 }]);
+    expect(m.calls.end).toHaveLength(2);
     expect(m.calls.done).toBe(1);
     m.unmount();
   });

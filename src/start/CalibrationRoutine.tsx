@@ -185,29 +185,32 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
   /**
    * Write the calibration record and report. The result of calibration is REPORTED, not discarded: a
    * rejection used to strand the operator on the last target with no control at all, and a missing
-   * baseline was learned of only at export.
+   * baseline was learned of only at export. Every completed attempt writes its record — a missing
+   * baseline too, with its reason — so 01 calibration_runs counts the attempts and the last record
+   * is the one the sitting went on with.
    */
-  const finish = async (opts: { gazeRun: boolean }): Promise<void> => {
-    if (!mounted.current) return;
+  const finish = async (opts: { gazeRun: boolean }): Promise<CalibrationOutcome | null> => {
+    if (!mounted.current) return null;
     let outcome: CalibrationOutcome;
     try {
       outcome = await endGazeCalibration(sessionId, { ...opts, baselineAttempts: baselineAttempts.current });
     } catch (err) {
-      if (!mounted.current) return;
+      if (!mounted.current) return null;
       setPhase({ kind: 'error', message: err instanceof Error ? err.message : String(err) });
       setBusy(false);
-      return;
+      return null;
     }
-    if (!mounted.current) return;
+    if (!mounted.current) return null;
     setBusy(false);
-    if (!opts.gazeRun) { onDone(); return; }
+    if (!opts.gazeRun) return outcome;
     /*
      * A gaze check that fell short is a NOTICE, not a failure screen. It affects only the on-screen
      * ratio, a quality index; the baseline was measured and every blink is counted. The red screen
      * used to say the ocular measures "including the primary outcome" would be empty here (R2, C1.6).
      */
-    if (!outcome.gazeValid) { setPhase({ kind: 'gaze_incomplete', outcome }); return; }
+    if (!outcome.gazeValid) { setPhase({ kind: 'gaze_incomplete', outcome }); return outcome; }
     onDone();
+    return outcome;
   };
 
   /** The baseline window, then the gaze check. A retry from the no-baseline screen starts here too. */
@@ -230,8 +233,9 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
     if (!current()) { abandon(); return; }
     if (result.baseline == null) {
       // Stop here and say why: no point asking the eyes to move when they could not be measured still.
+      // The attempt is recorded (no baseline, its reason, the gaze check not run) before it is shown.
       sampling.current = false;
-      setBusy(false);
+      if (await finish({ gazeRun: false }) == null) return;
       setPhase({ kind: 'no_baseline', result });
       return;
     }
@@ -247,10 +251,6 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
     await gazeCheck(mine);
   };
 
-  const continueWithout = async () => {
-    setBusy(true);
-    await finish({ gazeRun: false });
-  };
 
   const beginAgain = () => { baselineAttempts.current = 0; void start(); };
 
@@ -357,7 +357,7 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
             <button onClick={() => { void start(); }} disabled={busy} className="font-lab" data-testid="calibration-retry" style={primary}>
               Try the eye baseline again →
             </button>
-            <button onClick={() => { void continueWithout(); }} disabled={busy} className="font-lab" data-testid="calibration-continue-anyway" style={secondary}>
+            <button onClick={onDone} disabled={busy} className="font-lab" data-testid="calibration-continue-anyway" style={secondary}>
               Continue without blink measures
             </button>
           </div>
