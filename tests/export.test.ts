@@ -6,6 +6,7 @@ import { buildConditionSummaries, baselineFatigueMean, ENGAGEMENT } from '@/dash
 import { buildExportFiles, escapeCsv, toCsv, fnv1a, CODEBOOK } from '@/storage/export';
 import type { SessionBundle } from '@/storage/gather';
 import { buildFixtureBundle } from '@/sim/bundleFixture';
+import { ANALYSIS_LONG_COLUMNS } from '@/storage/analysisExport';
 import type { Provenance } from '@/storage/types';
 import { splitCsvRow } from './helpers/csv';
 
@@ -541,5 +542,74 @@ describe('a participant code the app could not have issued (round 78)', () => {
     const b = buildFixtureBundle();
     b.session.participant_id = 'P'.repeat(20);
     expect(buildExportFiles(b).length).toBeGreaterThan(20);
+  });
+});
+
+/*
+ * Round 80 replaced the nine-point gaze routine (gaze-r1) with a three-dot check (gaze-r2) and the fixed
+ * baseline window (cal-r1) with one that waits for the eyes (cal-r2). Sittings recorded before it must
+ * still export what they recorded, named for the rule they ran under; sittings after it must not carry
+ * a zone value that was never measured. The old-style records here are the ones builds before Round 80
+ * wrote: no rule fields, a nine-point calibration, the zone columns filled.
+ */
+describe('old gaze and calibration rows stay readable (round 80)', () => {
+  const table = (files: ReturnType<typeof buildExportFiles>, name: string) => {
+    const lines = files.find((f) => f.filename === name)!.content.trim().split('\n');
+    const head = splitCsvRow(lines[0]);
+    return lines.slice(1).map((l) => Object.fromEntries(splitCsvRow(l).map((v, i) => [head[i], v])));
+  };
+
+  it('names a record from before Round 80 cal-r1 / gaze-r1 and keeps its zone columns as recorded', () => {
+    const files = buildExportFiles(bundle());
+    const s = table(files, '01_session_info.csv')[0];
+    expect(s.calibration_rule_version).toBe('cal-r1');
+    expect(s.gaze_rule_version).toBe('gaze-r1');
+    // Not recorded then, so blank: never filled in from what the code of the time is believed to have done.
+    expect(s.calibration_ground).toBe('');
+    expect(s.calibration_baseline_ms).toBe('');
+    expect(s.calibration_baseline_reason).toBe('');
+    expect(s.gaze_check_reason).toBe('');
+    expect(s.calibration_targets_detected).toBe('9');
+    const eye = table(files, '07_eye_metrics.csv');
+    const on = eye.find((r) => r.condition_id === 'A')!;
+    expect(on.gaze_rule_version).toBe('gaze-r1');
+    expect(on.on_screen_ratio).toBe('');
+    expect([on.gaze_deviation_ratio, on.zone_center_ratio, on.zone_transition_count]).toEqual(['0.2', '0.8', '5']);
+    const off = eye.find((r) => r.condition_id === 'B')!;
+    expect(off.gaze_rule_version).toBe('');
+    expect(off.on_screen_ratio).toBe('');
+  });
+
+  it('writes cal-r2 / gaze-r2 rows with the on-screen ratio and the zone columns blank', () => {
+    const files = buildExportFiles(buildFixtureBundle());
+    const s = table(files, '01_session_info.csv')[0];
+    expect(s.calibration_rule_version).toBe('cal-r2');
+    expect(s.gaze_rule_version).toBe('gaze-r2');
+    expect(s.calibration_ground).toBe('#808080');
+    expect(s.calibration_targets_detected).toBe('3');
+    for (const r of table(files, '07_eye_metrics.csv').filter((x) => x.camera_active === 'true')) {
+      expect(r.gaze_rule_version, r.condition_id).toBe('gaze-r2');
+      expect(r.on_screen_ratio, r.condition_id).toBe('0.93');
+      expect([r.gaze_deviation_ratio, r.zone_center_ratio, r.zone_transition_count], r.condition_id).toEqual(['', '', '']);
+    }
+  });
+
+  it('marks the nine-point zone columns deprecated in the codebook, and no longer as outcomes', () => {
+    for (const column of ['gaze_deviation_ratio', 'zone_center_ratio', 'zone_transition_count']) {
+      const entry = CODEBOOK.find((c) => c.file === '07_eye_metrics.csv' && c.column === column)!;
+      expect(entry.description, column).toMatch(/^DEPRECATED \(gaze-r1 only/);
+      expect(entry.role, column).not.toBe('dv');
+    }
+    const onScreen = CODEBOOK.find((c) => c.file === '07_eye_metrics.csv' && c.column === 'on_screen_ratio')!;
+    expect(onScreen.role).toBe('qc');
+    expect(onScreen.description).toMatch(/never an outcome/);
+  });
+
+  it('leaves no analysis template, dashboard or analysis dataset reading a removed gaze field', () => {
+    const removed = /\b(gaze_deviation_ratio|zone_center_ratio|zone_transition_count|gaze_threshold_floored|gaze_h_threshold|gaze_v_threshold)\b/;
+    for (const p of ['src/analysis/analysis_template.R', 'src/analysis/analysis_template.py', 'src/dashboard/aggregate.ts', 'src/dashboard/Dashboard.tsx']) {
+      expect(readFileSync(resolve(__dirname, '..', p), 'utf8'), p).not.toMatch(removed);
+    }
+    expect(ANALYSIS_LONG_COLUMNS.filter((c) => removed.test(c))).toEqual([]);
   });
 });
