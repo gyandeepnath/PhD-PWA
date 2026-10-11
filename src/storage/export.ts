@@ -974,20 +974,49 @@ export const CODEBOOK: Record<string, string>[] = CODEBOOK_ROWS.map((r) => {
   return name ? { ...r, description: `${r.description} On screen: "${name}".` } : r;
 });
 
+/**
+ * buildExportFiles' refusal of a participant code the app could not have issued (lib/participantId.ts).
+ * A type of its own so the dashboard can tell it from a fault and say, in its own dialog, what the
+ * operator can still do: save the sitting's backup file (backupExportFile), which keeps every record
+ * and repeats the code only once (Round 81).
+ */
+export class DamagedParticipantCodeError extends Error {
+  constructor(readonly codeLength: number) {
+    super(
+      `This sitting's participant code is ${codeLength} characters long, and the app only issues codes of up to `
+      + `${PARTICIPANT_ID_MAX_LENGTH}. The record has been changed or damaged, so the data files are not written.`,
+    );
+    this.name = 'DamagedParticipantCodeError';
+  }
+}
+
+/**
+ * The sitting's complete backup, as every export carries it (backup_*.json), and on its own when the
+ * data files are refused. The same function both ways, so the two are the same bytes.
+ */
+export function backupExportFile(input: SessionBundle): ExportFile {
+  const bundle = normaliseBundle(input);
+  const { session } = bundle;
+  return {
+    filename: `backup_${safeFilePart(session.participant_id)}_${session.session_id.slice(0, 8)}.json`,
+    content: serialiseSessionBackup(bundle),
+    mime: 'application/json',
+  };
+}
+
 export function buildExportFiles(input: SessionBundle): ExportFile[] {
   /*
    * A participant code the app could not have issued is a damaged record (lib/participantId.ts):
    * refused here, by name, before anything is built. It used to be written through, which was
    * harmless while the longest file had a few hundred rows; 07c repeats the code on each of some
    * 50,000 frames, and a code of thousands of characters then fails part-way with "Invalid string
-   * length" and no word of why (scripts/stress/pipeline.ts, Round 78).
+   * length" and no word of why (scripts/stress/pipeline.ts, Round 78). The session form has accepted
+   * at most 20 characters since the first runnable build (e07f7b4), so 25 is as sure a sign of damage
+   * as 10,000; the dashboard still offers the backup file (DamagedParticipantCodeError).
    */
   const code = input.session.participant_id;
   if (typeof code === 'string' && code.length > PARTICIPANT_ID_MAX_LENGTH) {
-    throw new Error(
-      `This sitting's participant code is ${code.length} characters long, and the app only issues codes of up to `
-      + `${PARTICIPANT_ID_MAX_LENGTH}. The record is damaged, so it is not exported. Keep the backup file and ask the investigator.`,
-    );
+    throw new DamagedParticipantCodeError(code.length);
   }
   beginNonFiniteCount();
   // Normalise ordering at the boundary so the export is reproducible regardless of how the bundle
@@ -1531,11 +1560,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
   // Complete backup. The analysis JSON above is deliberately partial (reaction trials appear only
   // as a count), so it cannot restore a session. This artefact can, and every export carries one so
   // that a tablet failing later never costs a session that was already exported once.
-  files.push({
-    filename: `backup_${safeFilePart(pid)}_${session.session_id.slice(0, 8)}.json`,
-    content: serialiseSessionBackup(bundle),
-    mime: 'application/json',
-  });
+  files.push(backupExportFile(bundle));
 
   /*
    * Computed over the files as written, not from the records, so it sees exactly what the analyst

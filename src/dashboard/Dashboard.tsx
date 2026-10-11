@@ -10,7 +10,7 @@ import { gatherSession, listSessions, type SessionBundle } from '@/storage/gathe
 import { buildConditionSummaries, baselineFatigueMean, cohortSummary, type ConditionSummary, type CohortSummary } from './aggregate';
 import { MEASURE } from '@/tracking/measurementSchedule';
 import { FPS_GATE, FPS_TIER_WORD } from '@/tracking/frameRateGate';
-import { buildExportFiles, downloadExport, downloadSessionMedia } from '@/storage/export';
+import { backupExportFile, buildExportFiles, DamagedParticipantCodeError, downloadExport, downloadSessionMedia } from '@/storage/export';
 import { buildAnalysisDataset } from '@/storage/analysisExport';
 import { BarPanel, LinePanel, type Datum } from './charts';
 import type { SessionRecord } from '@/storage/types';
@@ -122,7 +122,14 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
     if (!bundle) return;
     setExporting(true);
     try {
-      const files = buildExportFiles(bundle);
+      let files;
+      try {
+        files = buildExportFiles(bundle);
+      } catch (e) {
+        if (!(e instanceof DamagedParticipantCodeError)) throw e;
+        await offerBackupOnly(e);
+        return;
+      }
       await downloadExport(files);
 
       /*
@@ -161,6 +168,36 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
         if (again) await put('sessions', { ...again, export_confirmed_at: Date.now() }, { evenWhenFull: true });
       }
     } finally { setExporting(false); }
+  };
+
+  /*
+   * The data files are refused for a participant code the app could not have issued (Round 81). That
+   * refusal used to surface only as the red "Something failed in the background" banner, and named a
+   * backup file nothing had written. The operator is now told, in plain words, what happened and what
+   * can still be done: the backup file keeps every record and is written on its own. The sitting is
+   * not marked exported, so it stays protected from automatic deletion.
+   */
+  const offerBackupOnly = async (e: DamagedParticipantCodeError) => {
+    if (!bundle) return;
+    const save = await dialog.confirm({
+      title: 'The data files were not written',
+      body: `This sitting's participant code is ${e.codeLength} characters long. The app only gives codes of up to 20, `
+        + 'so the record has been changed or damaged since it was made.\n\n'
+        + 'You can still save the backup file. It keeps every measurement of this sitting. Send it to the '
+        + 'investigator with a note of what happened.\n\n'
+        + 'This sitting stays on the tablet and will not be deleted automatically.',
+      confirmLabel: 'Save the backup file',
+      cancelLabel: 'Close',
+      testId: 'export-refused-dialog',
+    });
+    if (!save) return;
+    const file = backupExportFile(bundle);
+    await downloadExport([file]);
+    await dialog.alert({
+      title: 'Backup file sent to your downloads',
+      body: `${file.filename}\n\nCheck that it arrived, then send it to the investigator.`,
+      confirmLabel: 'Done',
+    });
   };
 
   /**

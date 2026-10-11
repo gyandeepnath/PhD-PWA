@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { FPS_GATE, samplingFpsObserved } from '@/tracking/frameRateGate';
 import { buildConditionSummaries, baselineFatigueMean, ENGAGEMENT } from '@/dashboard/aggregate';
-import { buildExportFiles, escapeCsv, toCsv, fnv1a, CODEBOOK } from '@/storage/export';
+import { backupExportFile, buildExportFiles, DamagedParticipantCodeError, escapeCsv, toCsv, fnv1a, CODEBOOK } from '@/storage/export';
+import { parseSessionBackup } from '@/storage/backup';
 import type { SessionBundle } from '@/storage/gather';
 import { buildFixtureBundle } from '@/sim/bundleFixture';
 import { ANALYSIS_LONG_COLUMNS } from '@/storage/analysisExport';
@@ -535,6 +536,22 @@ describe('a participant code the app could not have issued (round 78)', () => {
     const b = buildFixtureBundle();
     b.session.participant_id = 'x'.repeat(21);
     expect(() => buildExportFiles(b)).toThrow(/participant code is 21 characters long, and the app only issues codes of up to 20/);
+    expect(() => buildExportFiles(b)).toThrow(DamagedParticipantCodeError);
+  });
+
+  /*
+   * Round 81. The refusal used to leave the operator with nothing: the backup is written only inside
+   * the export. backupExportFile is offered on its own, and it is the very file every export carries.
+   */
+  it('still gives the backup file, the same bytes an export carries, and it restores', () => {
+    const b = buildFixtureBundle();
+    const inExport = buildExportFiles(b).find((f) => f.filename.startsWith('backup_'))!;
+    expect(backupExportFile(b)).toEqual(inExport);
+    b.session.participant_id = 'x'.repeat(25);
+    if (b.participant) b.participant.participant_id = b.session.participant_id;
+    const alone = backupExportFile(b);
+    expect(alone.filename).toMatch(/^backup_x+_/);
+    expect(parseSessionBackup(String(alone.content)).ok).toBe(true);
   });
 
   it('does not touch a code of the length the app issues, whatever its characters', () => {
