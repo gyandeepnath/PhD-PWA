@@ -824,4 +824,65 @@ describe('the per-blink records survive a backup (round 78)', () => {
     expect(parsed.ok).toBe(false);
     expect(parsed.error).toMatch(/references condition "someone-elses-condition"/);
   });
+
+  /*
+   * Round 81. The store is keyed on record_id, so a row whose own condition_id passes the check above
+   * but whose record_id names something else would overwrite another sitting's record (A, B) or file a
+   * second record for one window (C). Each of these passed parseSessionBackup before.
+   */
+  const ocularRows = (obj: { data: Record<string, unknown> }) => obj.data.ocularEvents as Record<string, unknown>[];
+  const parseEdited = (edit: (rows: Record<string, unknown>[]) => void) => {
+    const obj = JSON.parse(serialiseSessionBackup(buildFixtureBundle())) as { data: Record<string, unknown> };
+    edit(ocularRows(obj));
+    return parseSessionBackup(withChecksum(obj as unknown as Record<string, unknown>));
+  };
+  const reading = (rows: Record<string, unknown>[]) => rows.find((r) => r.window === 'reading')!;
+  const selftest = (rows: Record<string, unknown>[]) => rows.find((r) => r.window === 'selftest')!;
+
+  it('A: refuses a reading record filed under a condition other than its own', () => {
+    const parsed = parseEdited((rows) => { reading(rows).record_id = 'another-sittings-condition-uuid'; });
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toMatch(/is filed as "another-sittings-condition-uuid" but its own ids give/);
+  });
+
+  it("B: refuses the camera check's record filed under another sitting", () => {
+    const parsed = parseEdited((rows) => { selftest(rows).record_id = 'selftest:some-other-session'; });
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toMatch(/is filed as "selftest:some-other-session"/);
+  });
+
+  it("C: refuses the camera check's record filed under a condition", () => {
+    const parsed = parseEdited((rows) => { selftest(rows).record_id = 'some-foreign-condition-id'; });
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toMatch(/is filed as "some-foreign-condition-id"/);
+  });
+
+  it("refuses a camera check's record that names a condition, and a window this build does not know", () => {
+    const named = parseEdited((rows) => {
+      const s = selftest(rows);
+      s.condition_id = reading(rows).condition_id;
+    });
+    expect(named.ok).toBe(false);
+    expect(named.error).toMatch(/camera check.s record but names condition/);
+    const odd = parseEdited((rows) => { reading(rows).window = 'search'; });
+    expect(odd.ok).toBe(false);
+    expect(odd.error).toMatch(/window "search"/);
+  });
+
+  it('files a reading record from build 6ffc2c7 (schema 10, no record_id) under its condition, and restores it', async () => {
+    const obj = JSON.parse(serialiseSessionBackup(buildFixtureBundle())) as { data: Record<string, unknown> };
+    (obj.data.session as { provenance: { schema_version: number } }).provenance.schema_version = 10;
+    // 6ffc2c7 wrote reading records only, without record_id.
+    obj.data.ocularEvents = ocularRows(obj).filter((r) => r.window === 'reading').map((r) => {
+      const { record_id: _id, ...rest } = r;
+      return rest;
+    });
+    const parsed = parseSessionBackup(withChecksum(obj as unknown as Record<string, unknown>));
+    expect(parsed.ok, parsed.error).toBe(true);
+    const res = await importSessionBackup(parsed.backup!);
+    expect(res.ok, res.error).toBe(true);
+    const stored = (await getAll('ocular_events')) as Array<{ record_id: string; condition_id: string }>;
+    expect(stored.length).toBe(ocularRows(obj).length);
+    for (const r of stored) expect(r.record_id).toBe(r.condition_id);
+  });
 });

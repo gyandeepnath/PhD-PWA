@@ -26,6 +26,7 @@
 import { get, getAll, getAllByIndex, put, ensureEnrolmentAtLeast, MAX_PLAUSIBLE_ENROLMENT } from './db';
 import { purgeSession, sessionForExport } from './gather';
 import { fnv1a } from './export';
+import { ocularRecordId } from '@/tracking/blinkLog';
 import type { SessionBundle } from './gather';
 import type { StoreName, StoreMap } from './types';
 
@@ -253,6 +254,7 @@ export function parseSessionBackup(text: string): ParseResult {
   if (!session?.session_id) {
     return { ok: false, warnings, error: 'The backup has no session record, so there is nothing to restore.' };
   }
+  fileOldBlinkRecords(b.data as BackupData);
   const problems = validateStructure(
     b.data as BackupData,
     session.session_id,
@@ -353,6 +355,30 @@ export function missingCollections(data: BackupData): string[] {
     .map(({ store }) => store);
 }
 
+/**
+ * Give a blink record written by build 6ffc2c7 the record_id every later build files it under.
+ *
+ * 6ffc2c7 (live on the site for about eleven hours on 7-8 October 2026) keyed ocular_events on
+ * condition_id and wrote reading records with no record_id; schema 11 re-keys such rows on the device
+ * (db.ts upgrade). A backup exported from that build carries them too, and the restore used to refuse
+ * the whole file as damaged ("ocular_events[0] has no record_id"). Only a record of that exact shape is
+ * filed: a reading window with its condition_id, in a file from schema 10 or earlier. Its record_id is
+ * then its condition_id, as ocularRecordId gives and as the device migration does. A record missing it
+ * in any other file is still refused, as damage. Runs after the checksum, which covers the file as
+ * written.
+ */
+export function fileOldBlinkRecords(data: BackupData): void {
+  const schema = (data.session as { provenance?: { schema_version?: unknown } } | null)?.provenance?.schema_version;
+  if (typeof schema !== 'number' || schema > 10 || !Array.isArray(data.ocularEvents)) return;
+  for (const row of data.ocularEvents) {
+    const r = row as Record<string, unknown> | null;
+    if (!r || typeof r !== 'object' || r.record_id !== undefined) continue;
+    if (r.window === 'reading' && typeof r.condition_id === 'string' && r.condition_id !== '') {
+      r.record_id = ocularRecordId('reading', r.condition_id);
+    }
+  }
+}
+
 /** Top-level data keys this build does not know how to restore. Also silent before now. */
 export function unknownCollections(data: BackupData): string[] {
   const known = new Set<string>([...RESTORE_PLAN.map((r) => String(r.key)), 'session', 'participant', 'media']);
@@ -442,6 +468,42 @@ function validateStructure(data: BackupData, sessionId: string, participantId: s
         }
       }
     }
+  }
+
+  /*
+   * A blink record's record_id must be the one its own window and ids give (Round 81).
+   *
+   * ocular_events is keyed on record_id, not on condition_id, so the condition check above does not
+   * protect it: a row whose condition_id is this sitting's own but whose record_id names another
+   * sitting's condition would be put() over THAT sitting's record, and a second reading row for one
+   * condition under a different record_id would sit beside the first, so 07b would list every blink
+   * of that condition twice. The self-test's record is filed under this sitting's id and no condition.
+   * Each of these passes every other check; this is the guard eye_metrics gets from being keyed on
+   * condition_id.
+   */
+  if (Array.isArray(data.ocularEvents)) {
+    data.ocularEvents.forEach((row, i) => {
+      const r = row as Record<string, unknown> | null;
+      if (!r || typeof r !== 'object' || typeof r.record_id !== 'string' || r.record_id === '') return;
+      if (r.window !== 'reading' && r.window !== 'selftest') {
+        problems.push(`ocular_events[${i}] is for window "${String(r.window)}"; this build knows only "reading" and "selftest".`);
+        return;
+      }
+      if (r.window === 'selftest' && r.condition_id != null) {
+        problems.push(`ocular_events[${i}] is the camera check's record but names condition "${String(r.condition_id)}"; the camera check belongs to no condition.`);
+        return;
+      }
+      if (r.window === 'reading' && typeof r.condition_id !== 'string') return; // reported above as a missing condition
+      const expected = r.window === 'reading'
+        ? ocularRecordId('reading', r.condition_id as string)
+        : ocularRecordId('selftest', sessionId);
+      if (r.record_id !== expected) {
+        problems.push(
+          `ocular_events[${i}] is filed as "${r.record_id}" but its own ids give "${expected}". `
+          + 'It would overwrite another sitting’s blink record, or sit beside this one’s as a duplicate.',
+        );
+      }
+    });
   }
 
   // The media inventory is written through its own path, but the same two rules apply to it.
