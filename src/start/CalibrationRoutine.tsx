@@ -104,7 +104,7 @@ export function gazeReasonText(o: CalibrationOutcome): string {
     const dots = g.shortDots.map((d) => DOT_LABEL[d]).join(' and ');
     return `The eyes were not found often enough at the ${dots} dot${g.shortDots.length === 1 ? '' : 's'}, even after showing ${g.shortDots.length === 1 ? 'it' : 'them'} again.`;
   }
-  return 'The eyes did not move far enough between the dots to tell the left end of the line from the right. Ask the participant to keep the head still and move only the eyes.';
+  return 'Every dot was seen, but the eyes did not move far enough between them to tell the left end of the line from the right. Ask the participant to keep the head still and move only the eyes.';
 }
 
 /** The live state of the step in words: eyes found, steady, done. */
