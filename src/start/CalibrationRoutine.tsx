@@ -76,7 +76,8 @@ type DotMark = 'todo' | 'now' | 'done' | 'short';
 const INK = CALIBRATION_INK;
 const DOT_LABEL: Record<GazeDotId, string> = { centre: 'middle', left: 'left', right: 'right' };
 
-const secs = (ms: number) => `${Math.round(ms / 100) / 10} s`;
+/** A duration in seconds, its unit held to the number (a no-break space) so a wrapped line never starts "s.". */
+const secs = (ms: number) => `${Math.round(ms / 100) / 10}\u00a0s`;
 
 /** Why the baseline window gave no baseline, in a sentence the operator can act on, with its evidence. */
 export function baselineReasonText(r: BaselineResult, needed: number): string {
@@ -85,7 +86,7 @@ export function baselineReasonText(r: BaselineResult, needed: number): string {
     case 'no_frames':
       return `The tracker produced no frames in the ${secs(r.ms)} window. The camera or the tracker stopped: check the picture in the researcher card.`;
     case 'no_face':
-      return `A face was found in only ${facePct}% of the ${r.frames} frames in ${secs(r.ms)}. Check the seating and framing: the whole face in the picture, at about 55 cm.`;
+      return `A face was found in only ${facePct}% of the ${r.frames} frames in ${secs(r.ms)}. Check the seating and framing: the whole face in the picture, at about 55\u00a0cm.`;
     case 'eyes_not_measured':
       return `A face was found, but the eyes could be measured in only ${r.usable} of its ${r.faceFrames} frames. Usually glare (spectacles, a window or a lamp behind the tablet), or the eyes half-closed.`;
     case 'too_few_frames':
@@ -332,7 +333,9 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
       {!showIntro && (phase.kind === 'gaze' || phase.kind === 'baseline' || phase.kind === 'gaze_incomplete') && (
         <div data-testid="calibration-steps" style={{ position: 'absolute', bottom: 18, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 16, fontFamily: '"DM Mono", monospace', fontSize: 14 }}>
           <span data-testid="calibration-step-baseline" data-state={phase.kind === 'baseline' ? 'now' : 'done'}>
-            {phase.kind === 'baseline' ? '●' : '✓'} centre, eyes at rest
+            {/* Not "centre": the first gaze dot is in the same place and is called "middle", and the two
+                names for one place read as two places on the tick row. */}
+            {phase.kind === 'baseline' ? '●' : '✓'} eyes at rest
           </span>
           {dotSteps.map((d) => (
             <span key={d.id} data-testid={`calibration-step-${d.id}`} data-state={marks[d.id]}>
