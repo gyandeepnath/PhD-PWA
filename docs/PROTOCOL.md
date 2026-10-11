@@ -270,8 +270,10 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
   Grace, FHWA tech brief 1998 — metadata corroborated only; the brief was not opened, see
   CITATION_VERIFICATION #49). Blink rate is **non-monotonic** w.r.t. fatigue (drops with
   concentration/reading, rises with sleepiness) — never read "higher = more fatigued" in isolation;
-  triangulate the blink markers with the subjective CVS-Q. Blink **duration** and the micro/partial
-  tiers are sub-Nyquist below ~25 fps and flagged as diagnostics only. Webcam EAR is a
+  triangulate the blink markers with the subjective CVS-Q. Blink **duration** and the micro-blink
+  tier are sub-Nyquist below ~25 fps and flagged as diagnostics only (`fps_adequate_for_tiers`); the
+  blink counts and the incomplete-blink ratio follow the frame-rate gate `fps-g2` (adequate from 20
+  face frames a second, a simulation result: docs/FPS_GATE_SIMULATION.md). Webcam EAR is a
   **screening-grade** proxy; an IR eye-tracker remains the reference standard for definitive data.
 - **Gaze is a quality check only** (Round 80, rule `gaze-r2`). A three-dot check across a reading
   line fits the range of horizontal iris offset between the line's two ends; `on_screen_ratio` (07) is
