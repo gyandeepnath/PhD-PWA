@@ -29,7 +29,7 @@ describe('camera verdict', () => {
     expect(v.level).toBe('bad');
     expect(v.problems[0]).toMatch(/covered or dark for 40 s/);
     expect(v.problems.join(' ')).toMatch(/85% of the time/);
-    expect(v.problems.join(' ')).toMatch(/Frame rate reduced: 17 a second \(20 is adequate\)/);
+    expect(v.problems.join(' ')).toMatch(/Eye sampling rate reduced: 17 a second \(20 is adequate\)/);
     expect(v.problems.join(' ')).toMatch(/Only 8 blinks/);
     expect(v.headline).toMatch(/^Not trustworthy/);
   });
@@ -43,11 +43,11 @@ describe('camera verdict', () => {
     expect(cameraVerdict(eye, { ...fine, fps: 19.9 }).level).toBe('warn');
     const low = cameraVerdict(eye, { ...fine, fps: 12 });
     expect(low.level).toBe('bad');
-    expect(low.problems).toEqual(['Frame rate too low: 12 a second (under 15) — blink data exploratory only']);
-    expect(cameraVerdict(eye, { ...fine, fps: null }).problems).toEqual(['Frame rate unknown']);
+    expect(low.problems).toEqual(['Eye sampling rate too low: 12 a second (under 15) — blink data exploratory only']);
+    expect(cameraVerdict(eye, { ...fine, fps: null }).problems).toEqual(['Eye sampling rate unknown']);
     const off = cameraVerdict(eye, { ...fine, fps: 24, consistent: false, median: 28.5 });
     expect(off.level).toBe('warn');
-    expect(off.problems).toEqual(["Frame rate 24 a second, more than 2 from this sitting's usual 29"]);
+    expect(off.problems).toEqual(["Eye sampling rate 24 a second, more than 2 from this sitting's usual 29"]);
   });
 
   it('warns when the open eye has narrowed well below its calibrated size', () => {

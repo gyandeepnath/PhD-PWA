@@ -4,6 +4,7 @@ import { blinkCuts } from '@/tracking/blinkCount';
 import { FPS_GATE, fpsTier } from '@/tracking/frameRateGate';
 import { TRACKER_LABEL } from '@/tracking/trackers';
 import { pipelineLimit } from '@/tracking/pipelineStats';
+import { MEASURE } from '@/tracking/measurementSchedule';
 
 /**
  * The live camera picture and what the tracker makes of it — for the operator, on set-up screens only.
@@ -176,7 +177,8 @@ const r0 = (x: number | null | undefined) => (x == null || !Number.isFinite(x) ?
 
 /**
  * The pipeline in three numbers and a sentence: what the camera delivers, what the tracker processes,
- * in how many frames it finds the face — and which of the three is short of `floor`.
+ * in how many frames it finds the face (the eye's sampling rate, named as everywhere else by
+ * MEASURE.samplingRate) — and which of the three is short of `floor`.
  *
  * Judged by the frame-rate gate fps-g2 (frameRateGate.ts), the one the self-test, the dashboard and the
  * analysis apply: 20 face frames a second or more is adequate, 15-20 reduced (kept, flagged), under 15
@@ -196,8 +198,8 @@ export function PipelineReadout({ stats, floor = FPS_GATE.ADEQUATE, compact = fa
   const tierText = tier === 'C' ? `too slow (under ${FPS_GATE.REDUCED})` : tier === 'B' ? `reduced (${FPS_GATE.REDUCED}–${FPS_GATE.ADEQUATE}: kept, flagged)` : null;
   const verdict = !s ? '—'
     : limit == null ? (s.faceFps == null ? '—'
-      : tier === 'A' ? `face found ${r0(s.faceFps)} times a second — adequate (${FPS_GATE.ADEQUATE} or more)`
-        : `face found ${r0(s.faceFps)} times a second — ${tierText}`)
+      : tier === 'A' ? `eye sampled ${r0(s.faceFps)} times a second — adequate (${FPS_GATE.ADEQUATE} or more)`
+        : `eye sampled ${r0(s.faceFps)} times a second — ${tierText}`)
       : `${tierText ? `${tierText[0].toUpperCase()}${tierText.slice(1)}. ` : ''}${
         limit === 'camera' ? `The CAMERA is the limit: it delivers ${r0(s.cameraFps)} frames a second — more light on the face`
           : limit === 'camera_and_tracker' ? `The camera AND the tracker are short: ${r0(s.cameraFps)} delivered, ${r0(s.trackerFps)} processed at ${r0(s.processMsP50)} ms — close other apps, charge the tablet, and more light`
@@ -213,7 +215,8 @@ export function PipelineReadout({ stats, floor = FPS_GATE.ADEQUATE, compact = fa
     <div data-testid="pipeline-readout" style={{ fontSize: compact ? 14 : 15, lineHeight: 1.45 }}>
       {row('Camera delivers', <>{r0(s?.cameraFps)} fps{s?.captureWidth ? ` · ${s.captureWidth}×${s.captureHeight}` : ''}</>, 'diag-camera')}
       {row('Tracker processes', <>{r0(s?.trackerFps)} fps · {r0(s?.processMsP50)} ms{!compact && <> (95%: {r0(s?.processMsP95)} ms)</>}</>, 'diag-tracker')}
-      {row('Face found', <span style={{ color: s?.faceFps != null && s.faceFps < floor ? '#ffd27a' : undefined }}>{r0(s?.faceFps)} fps</span>, 'diag-face')}
+      {/* Frames with the face found, a second: the eye's sampling rate (MEASURE.samplingRate; per reading, sampling_fps_observed). */}
+      {row(MEASURE.samplingRate.name, <span style={{ color: s?.faceFps != null && s.faceFps < floor ? '#ffd27a' : undefined }}>{r0(s?.faceFps)} fps</span>, 'diag-face')}
       {!compact && row('Face width', s?.faceWidthPx != null ? `${s.faceWidthPx} px of the camera picture` : '—', 'diag-face-width')}
       {row('Tracker', s?.backend ? TRACKER_LABEL[s.backend] : '—', 'diag-backend')}
       <div data-testid="diag-verdict" data-tier={tier ?? ''} style={{ marginTop: 4, fontSize: 14, color: limit || (tier != null && tier !== 'A') ? '#ffd27a' : '#bfe8cf' }}>{verdict}</div>

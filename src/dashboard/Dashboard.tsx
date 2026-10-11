@@ -8,7 +8,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { get, put } from '@/storage/db';
 import { gatherSession, listSessions, type SessionBundle } from '@/storage/gather';
 import { buildConditionSummaries, baselineFatigueMean, cohortSummary, type ConditionSummary, type CohortSummary } from './aggregate';
-import { FPS_TIER_WORD } from '@/tracking/frameRateGate';
+import { MEASURE } from '@/tracking/measurementSchedule';
+import { FPS_GATE, FPS_TIER_WORD } from '@/tracking/frameRateGate';
 import { buildExportFiles, downloadExport, downloadSessionMedia } from '@/storage/export';
 import { buildAnalysisDataset } from '@/storage/analysisExport';
 import { BarPanel, LinePanel, type Datum } from './charts';
@@ -322,11 +323,11 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                         <th style={cohortHead}>n</th>
                         <th style={cohortHead}>Analysable</th>
                         <th style={cohortHead}>With outcome</th>
-                        <th style={cohortHead}>Pooled IBR</th>
-                        <th style={cohortHead}>Mean of run IBRs</th>
+                        <th style={cohortHead}>{MEASURE.incompleteRatio.name} (pooled)</th>
+                        <th style={cohortHead}>{MEASURE.incompleteRatio.name} (mean of runs)</th>
                         <th style={cohortHead}>Blinks</th>
-                        <th style={cohortHead}>Low fps</th>
-                        <th style={cohortHead}>fps off usual</th>
+                        <th style={cohortHead}>{MEASURE.samplingRate.name} under {FPS_GATE.ADEQUATE}</th>
+                        <th style={cohortHead}>{MEASURE.samplingRate.name} off usual</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -350,8 +351,8 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                 </div>
                 <p className="font-sans text-[15px] leading-relaxed text-[#4a4a60]" style={{ marginTop: 6 }}>
                   “Blinks” is the denominator the ratio actually rests on — ten rows of four blinks is
-                  not ten measurements. “Pooled IBR” is incomplete blinks over all blinks in those rows,
-                  the quantity the binomial model weights by; “Mean of run IBRs” counts every run once
+                  not ten measurements. “Pooled” is incomplete blinks over all blinks in those rows,
+                  the quantity the binomial model weights by; “mean of runs” counts every run once
                   however few blinks it had, so the two differ when blink counts vary. “With outcome”
                   below n means rows where no blink was counted at all; a condition where that is
                   common is broken, not merely noisy. “Analysable” and the outcome columns cover the
@@ -496,14 +497,14 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       {bundle && tab === 'eye' && (
         <Grid>
           <CameraVerdictPanel summaries={summaries} />
-          <BarPanel title="Blink rate per condition" unit="/min" data={bar(summaries, 'blink_rate')} color="#4f8ef7" />
-          <BarPanel title="Incomplete-blink ratio (CVS marker)" data={bar(summaries, 'incomplete_blink_ratio')} color="#e07b39" />
-          <BarPanel title="PERCLOS P80 (drowsiness)" data={bar(summaries, 'perclos_p80')} color="#e64c4c" />
+          <BarPanel title={`${MEASURE.blinkRate.name} per condition`} unit="/min" data={bar(summaries, 'blink_rate')} color="#4f8ef7" />
+          <BarPanel title={`${MEASURE.incompleteRatio.name} (CVS marker)`} data={bar(summaries, 'incomplete_blink_ratio')} color="#e07b39" />
+          <BarPanel title={`${MEASURE.perclos.name} P80 (drowsiness)`} data={bar(summaries, 'perclos_p80')} color="#e64c4c" />
           <BarPanel title="Engagement quality score" data={summaries.map((s) => ({ label: s.condition_label, value: s.quality_score, flag: s.engagement }))} />
           <OcularTable summaries={summaries} />
           <EngagementTable summaries={summaries} />
           <QcTable summaries={summaries} />
-          <Caveat text="What these numbers mean. For visual fatigue (this study) the markers used are a LOWER blink rate and a HIGHER share of incomplete blinks (Portello, Rosenfield & Chu 2013), read with the first/second-half bins and the gap between blinks. PERCLOS counts time with the eyes mostly closed; it tracks drowsiness, so in an awake participant it is small and a value near zero is not a fault (PERCLOS: Dinges & Grace 1998, FHWA tech brief — metadata only, not yet read at source). Blink rate goes DOWN with concentrated reading and UP with sleepiness, so never read 'higher = more tired' on its own. Blink duration and the micro/partial tiers need 25 fps or more (see effective fps). Gaze zones mean something only when gaze calibration passed. A webcam is a screening-grade measure; an infrared eye-tracker is the reference standard." />
+          <Caveat text="What these numbers mean. For visual fatigue (this study) the markers used are a LOWER blink rate and a HIGHER share of incomplete blinks (Portello, Rosenfield & Chu 2013), read with the first/second-half bins and the gap between blinks. PERCLOS counts time with the eyes mostly closed; it tracks drowsiness, so in an awake participant it is small and a value near zero is not a fault (PERCLOS: Dinges & Grace 1998, FHWA tech brief — metadata only, not yet read at source). Blink rate goes DOWN with concentrated reading and UP with sleepiness, so never read 'higher = more tired' on its own. Blink duration and the micro/partial tiers need 25 frames a second or more (see the eye sampling rate). The on-screen ratio is a quality check of whether the participant looked at the tablet, and needs a passed gaze check. A webcam is a screening-grade measure; an infrared eye-tracker is the reference standard." />
         </Grid>
       )}
 
@@ -604,7 +605,7 @@ function OcularTable({ summaries }: { summaries: ConditionSummary[] }) {
   return (
     <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 13 }}>
-        <thead><tr>{['Cond', 'Blinks', 'Min seen', 'Blink/min', 'Incomplete', 'IBI ms', 'PERCLOS80', 'PERCLOS70', 'Long-closures', 'FPS (tier)'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
+        <thead><tr>{['Cond', MEASURE.blinks.name, 'Minutes seen', `${MEASURE.blinkRate.name} /min`, MEASURE.incompleteRatio.name, `${MEASURE.interBlinkInterval.name} ms`, `${MEASURE.perclos.name} P80`, `${MEASURE.perclos.name} P70`, MEASURE.longClosures.name, `${MEASURE.samplingRate.name} (tier)`].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
         <tbody>
           {summaries.map((s) => (
             <tr key={s.condition_id}>
@@ -689,7 +690,7 @@ function QcTable({ summaries }: { summaries: ConditionSummary[] }) {
   return (
     <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 13 }}>
-        <thead><tr>{['Cond', 'Camera', 'FPS (tier)', 'Face presence', 'Off-axis', 'Lighting', 'Overall'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
+        <thead><tr>{['Cond', 'Camera', `${MEASURE.samplingRate.name} (tier)`, MEASURE.faceInView.name, MEASURE.headTurnedAway.name, MEASURE.onScreen.name, MEASURE.lighting.name, 'Overall'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
         <tbody>
           {summaries.map((s) => (
             <tr key={s.condition_id}>
@@ -698,6 +699,8 @@ function QcTable({ summaries }: { summaries: ConditionSummary[] }) {
               <td style={{ ...cell, color: s.camera_active ? FLAG_COLOR[s.qc.fps] : undefined }}><FpsCell s={s} /></td>
               <td style={{ ...cell, color: FLAG_COLOR[s.qc.facePresence] }}>{n(s.face_presence_ratio)}</td>
               <td style={{ ...cell, color: FLAG_COLOR[s.qc.offAxis] }}>{n(s.off_axis_ratio)}</td>
+              {/* A quality check only (gaze-r2); no flag of its own, and — without a passed gaze check. */}
+              <td style={cohortCell} data-testid="on-screen-ratio">{n(s.on_screen_ratio)}</td>
               <td style={{ ...cell, color: FLAG_COLOR[s.qc.lighting] }}>{s.lighting_quality ?? '—'}</td>
               <td style={{ ...cell, fontWeight: 700, color: FLAG_COLOR[s.qc.overall] }}>{s.qc.overall}</td>
             </tr>

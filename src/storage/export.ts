@@ -24,6 +24,7 @@ import { cueLag, decodeTrace, pageAt } from '@/tracking/blinkLog';
 import { FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION, fpsTier, rowGateVersion, samplingFpsObserved } from '@/tracking/frameRateGate';
 import { SELF_TEST_RULE_V1 } from '@/tracking/selfTest';
 import { CALIBRATION_RULE_BEFORE } from '@/tracking/calibrationSequence';
+import { screenName } from '@/tracking/measurementSchedule';
 import { GAZE_RULE_BEFORE } from '@/tracking/gazeCalibration';
 import { PARTICIPANT_ID_MAX_LENGTH } from '@/lib/participantId';
 
@@ -380,7 +381,7 @@ export function exposureCapsText(c: CameraPipelineRecord['camera_capabilities'])
   return parts.join('; ');
 }
 
-export const CODEBOOK: Record<string, string>[] = [
+const CODEBOOK_ROWS: Record<string, string>[] = [
   // ---- 00_condition_reference.csv
   { file: '00_condition_reference.csv', column: 'condition_label', type: 'string', unit: '-', role: 'id', description: 'Condition code. P1-P5 positive polarity, N1-N5 negative. Synopsis Table 3.4.' },
   { file: '00_condition_reference.csv', column: 'color_name', type: 'factor(5)', unit: '-', role: 'iv', description: 'Text-colour factor: achromatic | blue | red | yellow | green. Same 5 levels in both polarities, which is what makes polarity x colour estimable.' },
@@ -963,6 +964,15 @@ export const CODEBOOK: Record<string, string>[] = [
   { file: '07c_ear_trace.csv', column: 'ear', type: 'number', unit: 'ratio', role: 'qc', description: 'Validation file, not used by the main analysis. The mean of ear_left and ear_right: the value the blink rules compare with 0.75 and 0.60 x ear_baseline. Empty unless both eyes were measured; in a reading window the frames with a value here are the ones counted in ear_sample_count in 07_eye_metrics.csv. Recomputed from the rounded eyes, so it can differ from the value the app used in the 7th decimal.' },
   { file: '07c_ear_trace.csv', column: 'page', type: 'integer', unit: 'count', role: 'covariate', description: 'Validation file, not used by the main analysis. The reading page on screen when the frame was captured (1-3), from the page-turn taps. Empty when no page was recorded, and for the self-test.' },
 ];
+
+/**
+ * The codebook, each measure's column carrying the name the researcher panel, the dashboard and the
+ * docs give it (tracking/measurementSchedule.ts MEASURE_COLUMNS): one name per measure everywhere.
+ */
+export const CODEBOOK: Record<string, string>[] = CODEBOOK_ROWS.map((r) => {
+  const name = screenName(r.file, r.column);
+  return name ? { ...r, description: `${r.description} On screen: "${name}".` } : r;
+});
 
 export function buildExportFiles(input: SessionBundle): ExportFile[] {
   /*

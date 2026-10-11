@@ -350,14 +350,14 @@ Beside the picture, **CAMERA AND TRACKER** gives three rates and says which one 
 |---|---|---|
 | *Camera delivers* N fps · W×H | Frames the camera hands to the app each second, and their size | The **camera** is the limit. Most tablet cameras slow down in dim light: add light on the face (not behind it), and close any other app that may hold the camera. |
 | *Tracker processes* N fps · M ms | Frames the face tracker gets through each second, and the time one frame takes | The **processor** is the limit: close other apps, plug in the charger and switch battery saver off, let a hot tablet cool, and use the fastest tracker (below). |
-| *Face found* N fps | Frames in which the face was found. This is the rate the blink measures are sampled at (per reading, `sampling_fps_observed`) | Seating, distance, light on the face, glare on spectacles, something in front of the face. |
+| *Eye sampling rate* N fps | Frames in which the face was found, a second: the rate the blink measures are sampled at (per reading, `sampling_fps_observed`; the same name on the panel, the camera check and the dashboard) | Seating, distance, light on the face, glare on spectacles, something in front of the face. |
 | *Face width* N px | How wide the face is in the camera's picture | The face model enlarges a crop around the face to 192 or 256 px before it finds the eyelids, so a face much narrower than that is being magnified and the lids carry few real pixels. It depends on the distance **and** on the picture size the camera gave (the *Asked for … the camera gave …* line): a small value with the participant at 50 to 60 cm means the camera gave a small picture — note both numbers for the investigator rather than moving the participant closer than the protocol distance. No minimum has been validated; this is a reading to record. |
 
 The sentence under them names the stage that is short. It blames the camera alone only while the
 tracker keeps up with what the camera delivers (processes at least 80% of it). When both are short —
 for example the camera at 20 and the tracker at 11 — it says *the camera AND the tracker are short*:
 more light alone will not fix that, because the tracker would still process only about 11 frames a
-second; do the processor steps as well. It also gives the face rate's verdict under the
+second; do the processor steps as well. It also gives the eye sampling rate's verdict under the
 **frame-rate gate** the whole study uses (from Round 79): **adequate** at 20 face frames a second or
 more (green); **reduced** at 15 to 20 (amber: blinks are measured, and a reading at that rate is kept
 and flagged); **too slow** under 15 (amber: blink data from it are exploratory only). Earlier builds
@@ -391,7 +391,7 @@ automatic exposure and records why. There is nothing to do. The camera check's r
 
 **The bench check (researcher only, before the pilot).** On camera setup, *Run: white, grey, black
 (2 min)* shows white, grey and black screens for about 20 seconds each, first under automatic and then
-under fixed exposure, and gives one row per screen: camera fps, tracker fps, face fps, brightness and
+under fixed exposure, and gives one row per screen: camera fps, tracker fps, eye sampling fps, brightness and
 exposure time. No participant is needed. Read it this way:
 
 - **Automatic rows:** if the camera delivers fewer frames on black than on white, its rate follows
@@ -620,7 +620,7 @@ else a sitting produces put together.
 | No camera permission prompt at all | Page is not on a secure origin | **Stop.** The camera cannot work. See DEPLOYMENT.md section 2. Do not run the session. |
 | Permission denied by mistake | Participant or previous operator tapped Block | Site settings → allow camera → reload → resume. |
 | Face not detected at setup | Too dark, too far, backlit, camera covered | Check the lens, the distance, and that the participant is not silhouetted against a lamp. |
-| "Low frame rate" or a QC warning | Read **which** rate is low (camera set-up, the camera check's result, or the researcher panel) | *Camera delivers* low: more light on the face, close other camera apps. *Tracker processes* low: close other apps, charge, let it cool, use the fastest tracker. *Face found* low: seating and light. Under 20 face frames a second a reading is flagged *reduced*; under 15, *too slow* (its blink data are exploratory only). |
+| "Low frame rate" or a QC warning | Read **which** rate is low (camera set-up, the camera check's result, or the researcher panel) | *Camera delivers* low: more light on the face, close other camera apps. *Tracker processes* low: close other apps, charge, let it cool, use the fastest tracker. *Eye sampling rate* low (the face found in too few frames): seating and light. Under 20 face frames a second a reading is flagged *reduced*; under 15, *too slow* (its blink data are exploratory only). |
 | Glasses reflecting the screen | Lamp or screen reflecting off the lenses | Tilt the tablet slightly, or move the lamp. Do not ask them to remove correction. |
 | App reloads mid-session | Browser reclaimed memory, or the tablet slept | Reopen. Session Manager offers **Resume** for every session still in progress, each at its own next condition. Data already written is safe. Note the interruption. |
 | After a resume, the app asks for the camera and runs calibration again | Expected | The blink thresholds are fractions of *this participant's* own open-eye baseline, and a reload clears it. Re-running calibration is required for the resumed conditions to carry any ocular data at all. Take it at the normal pace. |
@@ -748,7 +748,7 @@ Print this.
 - [ ] Clinical screening complete; any abnormality recorded and referred
 - [ ] Formal colour-vision plates administered, and the result entered in the profile form
 - [ ] Camera preview shows a face box, and the yellow points sit on the eyelids
-- [ ] Camera set-up: camera, tracker and face rates read and noted; the sentence under them names no stage as short
+- [ ] Camera set-up: camera, tracker and eye sampling rates read and noted; the sentence under them names no stage as short
 - [ ] Calibration completed unhurried
 - [ ] Baseline CVS-Q and fatigue done
 

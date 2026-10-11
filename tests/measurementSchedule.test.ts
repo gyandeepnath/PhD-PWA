@@ -80,3 +80,45 @@ describe('the measurement schedule (Round 80)', () => {
     }
   });
 });
+
+describe('one name per measure on every screen (Round 80)', () => {
+  // The labels each measure used to carry somewhere, now spelled by MEASURE: the same quantity read
+  // "Face found", "FPS", "face fps" or "effective fps" depending on the screen.
+  const RETIRED = ["'Face found'", "'FPS (tier)'", "'Face presence'", "'Blink/min'", "'IBI ms'", "'Long-closures'", 'Pooled IBR', 'Low fps', '>face fps<', "row('Gaze'"];
+  const SCREENS = ['src/components/ResearcherPanel.tsx', 'src/components/LiveCamera.tsx', 'src/dashboard/Dashboard.tsx', 'src/start/setupStages.tsx'];
+
+  it('the panel, the camera readout, the dashboard and camera setup use none of the retired labels', () => {
+    for (const f of SCREENS) {
+      const src = readFileSync(f, 'utf8');
+      for (const r of RETIRED) expect(src.includes(r), `${f} still says ${r}`).toBe(false);
+    }
+  });
+
+  it('they take the names from the one table', () => {
+    expect(readFileSync('src/components/LiveCamera.tsx', 'utf8')).toMatch(/row\(MEASURE\.samplingRate\.name,/);
+    const dash = readFileSync('src/dashboard/Dashboard.tsx', 'utf8');
+    for (const k of ['samplingRate', 'faceInView', 'headTurnedAway', 'onScreen', 'blinkRate', 'incompleteRatio', 'interBlinkInterval', 'longClosures']) {
+      expect(dash, k).toContain(`MEASURE.${k}.name`);
+    }
+    expect(readFileSync('src/components/ResearcherPanel.tsx', 'utf8')).toMatch(/MEASURE\.samplingRate\.name/);
+  });
+});
+
+describe('the export says which column each on-screen name is (Round 80)', () => {
+  it('every named column is a documented export column, and carries its name', async () => {
+    const { MEASURE_COLUMNS, screenName } = await import('@/tracking/measurementSchedule');
+    const { CODEBOOK } = await import('@/storage/export');
+    for (const [k, cols] of Object.entries(MEASURE_COLUMNS) as Array<[keyof typeof MEASURE, string[]]>) {
+      for (const fc of cols) {
+        const [file, column] = fc.split(':');
+        const row = CODEBOOK.find((r) => r.file === file && r.column === column);
+        expect(row, fc).toBeTruthy();
+        expect(row!.description, fc).toContain(`On screen: "${MEASURE[k].name}".`);
+        expect(screenName(file, column)).toBe(MEASURE[k].name);
+      }
+    }
+    // One name per column: no column is claimed twice.
+    const all = Object.values(MEASURE_COLUMNS).flat();
+    expect(new Set(all).size).toBe(all.length);
+  });
+});

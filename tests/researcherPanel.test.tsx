@@ -335,8 +335,8 @@ describe('camera state in words', () => {
         m.unmount();
         return out;
       };
-      expect(verdictAt(31)).toEqual({ text: 'face found 31 times a second — adequate (20 or more)', tier: 'A' });
-      expect(verdictAt(24)).toEqual({ text: 'face found 24 times a second — adequate (20 or more)', tier: 'A' });
+      expect(verdictAt(31)).toEqual({ text: 'eye sampled 31 times a second — adequate (20 or more)', tier: 'A' });
+      expect(verdictAt(24)).toEqual({ text: 'eye sampled 24 times a second — adequate (20 or more)', tier: 'A' });
       // Below 20 the stage that is short is named, after the tier.
       const reduced = verdictAt(18);
       expect(reduced.tier).toBe('B');

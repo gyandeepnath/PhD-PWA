@@ -3,6 +3,7 @@
  * records into one row per condition (ordered by serial position). Used by both the dashboard
  * charts/tables and the wide-format CSV, so the numbers are guaranteed consistent.
  */
+import { MEASURE } from '@/tracking/measurementSchedule';
 import type { SessionBundle } from '@/storage/gather';
 import { CONFIG } from '@/experiment/config';
 import { FPS_GATE, fpsTier, gateParticipant, type FpsTier } from '@/tracking/frameRateGate';
@@ -242,7 +243,8 @@ export interface ConditionSummary {
   fps_median: number | null;
   face_presence_ratio: number | null;
   off_axis_ratio: number | null;
-  zone_center_ratio: number | null;
+  /** 07 on_screen_ratio (gaze-r2): a quality check, null without a passed gaze check or before Round 80. */
+  on_screen_ratio: number | null;
   mean_face_luma: number | null;
   lighting_quality: 'low' | 'good' | 'overexposed' | null;
   qc: { facePresence: QcFlag; fps: QcFlag; offAxis: QcFlag; lighting: QcFlag; overall: QcFlag };
@@ -304,11 +306,11 @@ export function cameraVerdict(eye: EyeMetricsRecord | undefined, q: {
    */
   const tier = fpsTier(q.fps);
   const r = q.fps == null ? null : Math.round(q.fps);
-  if (tier == null) problems.push({ level: 'bad', text: 'Frame rate unknown' });
-  else if (tier === 'C') problems.push({ level: 'bad', text: `Frame rate too low: ${r} a second (under ${FPS_GATE.REDUCED}) — blink data exploratory only` });
-  else if (tier === 'B') problems.push({ level: 'warn', text: `Frame rate reduced: ${r} a second (${FPS_GATE.ADEQUATE} is adequate) — kept, flagged` });
+  if (tier == null) problems.push({ level: 'bad', text: `${MEASURE.samplingRate.name} unknown` });
+  else if (tier === 'C') problems.push({ level: 'bad', text: `${MEASURE.samplingRate.name} too low: ${r} a second (under ${FPS_GATE.REDUCED}) — blink data exploratory only` });
+  else if (tier === 'B') problems.push({ level: 'warn', text: `${MEASURE.samplingRate.name} reduced: ${r} a second (${FPS_GATE.ADEQUATE} is adequate) — kept, flagged` });
   if (tier != null && q.consistent === false) {
-    problems.push({ level: 'warn', text: `Frame rate ${r} a second, more than ${FPS_GATE.CONSISTENCY_BAND} from this sitting's usual ${q.median == null ? '?' : Math.round(q.median)}` });
+    problems.push({ level: 'warn', text: `${MEASURE.samplingRate.name} ${r} a second, more than ${FPS_GATE.CONSISTENCY_BAND} from this sitting's usual ${q.median == null ? '?' : Math.round(q.median)}` });
   }
   if (eye.open_ear_measured != null && eye.ear_baseline != null && eye.ear_baseline > 0 && eye.open_ear_measured / eye.ear_baseline < 0.85) {
     problems.push({ level: 'warn', text: `Open eyes looked ${Math.round(100 * (1 - eye.open_ear_measured / eye.ear_baseline))}% narrower than at calibration — some blinks may be counted as incomplete, or missed` });
@@ -783,7 +785,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       fps_median: cameraActive ? g.participantMedian : null,
       face_presence_ratio: facePresence,
       off_axis_ratio: offAxis,
-      zone_center_ratio: cameraActive ? (eye?.zone_center_ratio ?? null) : null,
+      on_screen_ratio: cameraActive ? (eye?.on_screen_ratio ?? null) : null,
       mean_face_luma: cameraActive ? (eye?.mean_face_luma ?? null) : null,
       lighting_quality: lightingQuality,
       qc: {

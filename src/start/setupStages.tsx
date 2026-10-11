@@ -551,7 +551,7 @@ function BenchTable({ b }: { b: CameraBenchRecord }) {
     <table data-testid="camera-bench-results" style={{ width: '100%', marginTop: 8, fontSize: 15, borderCollapse: 'collapse' }}>
       <thead>
         <tr style={{ textAlign: 'left', opacity: 0.75 }}>
-          <th>Screen</th><th>Exposure</th><th>camera fps</th><th>tracker fps</th><th>face fps</th><th>brightness</th><th>exposure time</th>
+          <th>Screen</th><th>Exposure</th><th>camera fps</th><th>tracker fps</th><th>eye sampling fps</th><th>brightness</th><th>exposure time</th>
         </tr>
       </thead>
       <tbody>
@@ -842,7 +842,7 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
                 <table data-testid="tracker-trials" style={{ width: '100%', marginTop: 8, fontSize: 15, borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ textAlign: 'left', opacity: 0.75 }}>
-                      <th>Tracker</th><th>face fps</th><th>processed fps</th><th>ms / frame</th><th>95% ms</th><th>face in view</th><th>EAR noise</th>
+                      <th>Tracker</th><th>eye sampling fps</th><th>processed fps</th><th>ms / frame</th><th>95% ms</th><th>face in view</th><th>EAR noise</th>
                     </tr>
                   </thead>
                   <tbody>

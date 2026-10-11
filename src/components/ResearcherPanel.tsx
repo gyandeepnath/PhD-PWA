@@ -69,7 +69,7 @@ import { MEASURE, recordingLabel, recordingShort } from '@/tracking/measurementS
  * opens with the live picture — a second <video> on the tracker's own stream, mirrored, with the face
  * box and the eyelid points the blink measure is computed from drawn over it — the last ten seconds of
  * eye openness against the 0.75 and 0.60 cuts, and the pipeline's three rates (camera delivers,
- * tracker processes, face found) with which one is short. See LiveCamera.tsx. ONLY THE CARD: on a
+ * tracker processes, eye sampling rate) with which one is short. See LiveCamera.tsx. ONLY THE CARD: on a
  * condition screen the panel is the ink indicator or the two-line strip above and never a picture —
  * a participant watching their own face is not reading, searching or responding to the dots — and it
  * is the card only where it can be opened at all (set-up screens, the break, the closing screens).

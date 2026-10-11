@@ -46,6 +46,8 @@ export const MEASURE = {
   faceInView: { name: 'Face in view', column: 'face_presence_ratio (07)', note: 'share of frames with a face' },
   onScreen: { name: 'On-screen ratio', column: 'on_screen_ratio (07)', note: 'quality check only: share of open-eye frames looking at the tablet' },
   headPosition: { name: 'Head position', column: 'head_pitch_mean, head_yaw_mean, off_axis_ratio (07)', note: '' },
+  headTurnedAway: { name: 'Head turned away', column: 'off_axis_ratio (07)', note: 'share of face frames with the head beyond 20 degrees pitch or 15 yaw' },
+  lighting: { name: 'Lighting', column: 'lighting_quality (07)', note: 'picture brightness sorted into low, good, overexposed' },
   pictureBrightness: { name: 'Picture brightness', column: 'mean_face_luma (07)', note: '0-255' },
   cameraHealth: { name: 'Camera health', column: 'camera_blocked_ms, camera_muted_ms, no_face_longest_ms, no_face_episodes (07)', note: 'covered, muted or no face' },
   openEyeBaseline: { name: 'Open-eye baseline', column: 'calibration_ear_baseline (01); ear_baseline (07)', note: 'every blink line is a fraction of it' },
@@ -54,6 +56,42 @@ export const MEASURE = {
 } as const;
 
 export type MeasureKey = keyof typeof MEASURE;
+
+/**
+ * The export columns each name belongs to, as "file:column", one name per column. The codebook
+ * (storage/export.ts) adds the name to each of these columns' descriptions, so an analyst reading
+ * 07_eye_metrics.csv knows which column the panel's "Eye sampling rate" or the dashboard's "Face in
+ * view" is. tests/measurementSchedule.test.ts checks every one is a documented column.
+ */
+export const MEASURE_COLUMNS: Partial<Record<MeasureKey, string[]>> = {
+  eyeOpenness: ['07c_ear_trace.csv:ear'],
+  incompleteBlinks: ['07_eye_metrics.csv:blink_count_incomplete'],
+  incompleteRatio: ['07_eye_metrics.csv:incomplete_blink_ratio'],
+  blinkRate: ['07_eye_metrics.csv:blink_rate'],
+  interBlinkInterval: ['07_eye_metrics.csv:mean_inter_blink_interval_ms'],
+  perclos: ['07_eye_metrics.csv:perclos_p80', '07_eye_metrics.csv:perclos_p70'],
+  longClosures: ['07_eye_metrics.csv:long_closure_count'],
+  samplingRate: ['07_eye_metrics.csv:sampling_fps_observed', '07_eye_metrics.csv:fps_tier', '01_session_info.csv:selftest_sampling_fps'],
+  faceInView: ['07_eye_metrics.csv:face_presence_ratio'],
+  onScreen: ['07_eye_metrics.csv:on_screen_ratio'],
+  headPosition: ['07_eye_metrics.csv:head_pitch_mean', '07_eye_metrics.csv:head_yaw_mean'],
+  headTurnedAway: ['07_eye_metrics.csv:off_axis_ratio'],
+  lighting: ['07_eye_metrics.csv:lighting_quality'],
+  pictureBrightness: ['07_eye_metrics.csv:mean_face_luma'],
+  cameraHealth: ['07_eye_metrics.csv:camera_blocked_ms', '07_eye_metrics.csv:camera_muted_ms', '07_eye_metrics.csv:no_face_longest_ms', '07_eye_metrics.csv:no_face_episodes'],
+  openEyeBaseline: ['01_session_info.csv:calibration_ear_baseline', '07_eye_metrics.csv:ear_baseline'],
+  gazeCheck: ['01_session_info.csv:gaze_calibration_valid'],
+  cameraCheck: ['01_session_info.csv:selftest_verdict'],
+};
+
+/** The on-screen name of an export column, or null when MEASURE does not name it. */
+export function screenName(file: string, column: string): string | null {
+  const key = `${file}:${column}`;
+  for (const [k, cols] of Object.entries(MEASURE_COLUMNS) as Array<[MeasureKey, string[]]>) {
+    if (cols.includes(key)) return MEASURE[k].name;
+  }
+  return null;
+}
 
 /**
  * A stretch in which the tracker's frames are KEPT. Outside all of them the frames are shown live and
