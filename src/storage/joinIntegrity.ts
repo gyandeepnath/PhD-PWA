@@ -215,7 +215,9 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
     // Never dropped, and never merged: an unattributable session gets a key of its own so it
     // reaches the participant loop, the join report and the long rows like any other.
     const pid = realPid || unresolvedParticipantKey(b.session.session_id);
-    for (const f of auditBundle(b).findings) {
+    // Errors only, so the blink-record checks (warnings about 07b/07c, which this dataset does not
+    // carry) are skipped rather than run and discarded on every sitting (Round 81).
+    for (const f of auditBundle(b, { blinkRecords: false }).findings) {
       if (f.severity !== 'error') continue;
       const blocking = BLOCKING_AUDIT_CHECKS.has(f.check);
       const code = `audit_${f.check}`;

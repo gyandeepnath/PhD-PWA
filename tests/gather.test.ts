@@ -52,6 +52,20 @@ describe('gather → aggregate → export integration (fake IndexedDB)', () => {
     expect(bundle!.fatigue.find((f) => f.stage === 'baseline')?.fatigue_mean).toBe(1);
   });
 
+  it('leaves out the blink records when asked, and nothing else (Round 81)', async () => {
+    await seed();
+    await put('ocular_events', {
+      record_id: 'A', condition_id: 'A', session_id: 'S1', window: 'reading', rule_version: 'blink-r1',
+      ear_baseline: 0.3, start_capture_ms: 0, pages: [], events: [],
+      trace: { frames: 0, t: '', face: '', left: '', right: '' },
+    });
+    const full = (await gatherSession('S1'))!;
+    const lean = (await gatherSession('S1', { blinkRecords: false }))!;
+    expect(full.ocularEvents).toHaveLength(1);
+    expect(lean.ocularEvents).toEqual([]);
+    expect({ ...lean, ocularEvents: full.ocularEvents }).toEqual(full);
+  });
+
   it('returns null for a missing session', async () => {
     expect(await gatherSession('nope')).toBeNull();
   });

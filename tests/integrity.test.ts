@@ -429,4 +429,26 @@ describe('the stored blinks are the blinks the summary counted (round 78)', () =
     expect(r.findings.filter((f) => blinkChecks.includes(f.check)).length).toBeGreaterThan(0);
     expect(r.findings.filter((f) => blinkChecks.includes(f.check)).every((f) => f.severity === 'warning')).toBe(true);
   });
+
+  /*
+   * Round 81. The pooled analysis set keeps only errors, so it skips this section (blinkRecords:
+   * false). That is safe only while the section raises nothing but warnings: on a sitting damaged in
+   * every way the section looks for AND in ways other sections treat as errors, the errors with and
+   * without it must be the same list.
+   */
+  it('can be skipped without losing an error: the errors are the same with and without it', () => {
+    const b = buildFixtureBundle();
+    b.ocularEvents!.forEach((o) => { o.events = []; });
+    b.ocularEvents![0].condition_id = 'cond-elsewhere';
+    b.eyeMetrics[1].ear_sample_count += 1;
+    b.session.camera_selftest = { ...b.session.camera_selftest!, extra: 9 };
+    b.eyeMetrics[2].calibration_id = 'no-such-calibration';
+    const full = auditBundle(b);
+    const skipped = auditBundle(b, { blinkRecords: false });
+    expect(full.findings.filter((f) => blinkChecks.includes(f.check)).length).toBeGreaterThanOrEqual(4);
+    expect(skipped.findings.filter((f) => blinkChecks.includes(f.check))).toEqual([]);
+    const errors = (r: typeof full) => r.findings.filter((f) => f.severity === 'error');
+    expect(errors(full).length).toBeGreaterThan(0);
+    expect(errors(skipped)).toEqual(errors(full));
+  });
 });

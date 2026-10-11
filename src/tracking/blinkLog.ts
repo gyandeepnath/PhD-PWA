@@ -310,6 +310,27 @@ export function decodeTrace(c: EarTraceColumns): TraceRow[] {
 }
 
 /**
+ * How many of a stored trace's frames had a face and both eyes measured: the count decodeTrace gives
+ * for `face && ear != null`, which is what the eye-metrics row calls ear_sample_count.
+ *
+ * Counted from the text columns directly. decodeTrace builds one object per frame — about 5,000 per
+ * condition — and the integrity audit runs on every sitting each time the dashboard opens, where only
+ * this number is needed (Round 81). tests/blinkLog.test.ts holds the two counts equal.
+ */
+export function measuredFrames(c: EarTraceColumns): number {
+  const n = c.frames;
+  if (!(n > 0)) return 0;
+  const l = c.left.split(',');
+  const r = c.right.split(',');
+  const eye = (s: string | undefined) => s !== undefined && s !== '' && Number.isFinite(Number(s));
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    if (c.face[i] === '1' && eye(l[i]) && eye(r[i])) k++;
+  }
+  return k;
+}
+
+/**
  * Build the stored record from what the aggregator held when the window closed.
  *
  * `events` must be the array the eye-metrics row was summarised from (for the self-test, the array it

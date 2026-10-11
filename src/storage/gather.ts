@@ -37,7 +37,15 @@ export interface SessionBundle {
   calibration: CalibrationRecord[];
 }
 
-export async function gatherSession(sessionId: string): Promise<SessionBundle | null> {
+/**
+ * Everything one sitting holds, from every store.
+ *
+ * `blinkRecords: false` leaves out ocular_events — about 1.7 MB a sitting — for a caller that never
+ * reads it: the dashboard's cohort view and the pooled analysis set, which gather EVERY sitting on the
+ * device each time and use none of 07b/07c (Round 81). The per-sitting export, the backup and
+ * purgeSession gather everything, the default.
+ */
+export async function gatherSession(sessionId: string, opts: { blinkRecords?: boolean } = {}): Promise<SessionBundle | null> {
   const session = await get('sessions', sessionId);
   if (!session) return null;
   const bySession = <T>(store: Parameters<typeof getAllByIndex>[0]) =>
@@ -59,7 +67,7 @@ export async function gatherSession(sessionId: string): Promise<SessionBundle | 
     bySession<VisualSearchRecord>('visual_search'),
     bySession<DisplayPerceptionRecord>('display_perception'),
     bySession<EyeMetricsRecord>('eye_metrics'),
-    bySession<OcularEventsRecord>('ocular_events'),
+    opts.blinkRecords === false ? Promise.resolve(undefined) : bySession<OcularEventsRecord>('ocular_events'),
     bySession<ReactionTrialRecord>('reaction_trials'),
     bySession<RtSummaryRecord>('rt_summaries'),
     bySession<CalibrationRecord>('calibration_data'),

@@ -88,7 +88,8 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
     (async () => {
       const bundles = [];
       for (const s of sessions) {
-        const b = await gatherSession(s.session_id);
+        // Without the blink records: the cohort view reads none of them (Round 81).
+        const b = await gatherSession(s.session_id, { blinkRecords: false });
         if (cancelled) return;
         if (b) bundles.push(b);
       }
@@ -181,7 +182,8 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
     setExporting(true);
     try {
       const sessions = await listSessions();
-      const bundles = (await Promise.all(sessions.map((x) => gatherSession(x.session_id))))
+      // The pooled set carries no 07b/07c, so the blink records are not read (Round 81).
+      const bundles = (await Promise.all(sessions.map((x) => gatherSession(x.session_id, { blinkRecords: false }))))
         .filter((b): b is SessionBundle => b != null);
       const dataset = buildAnalysisDataset(bundles);
       setAnalysisSummary(

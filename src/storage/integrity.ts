@@ -15,7 +15,7 @@
  * quietly de-duplicating would hide the upstream bug that produced the duplicate.
  */
 import { QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
-import { decodeTrace, tierCounts } from '@/tracking/blinkLog';
+import { measuredFrames, tierCounts } from '@/tracking/blinkLog';
 import { EAR_TIERS } from '@/tracking/blink';
 import type { SessionBundle } from './gather';
 import { MIN_SCALE } from '@/lib/viewportScale';
@@ -69,7 +69,19 @@ export function eyeRowTracker(e: { tracker_backend?: string | null; camera_activ
   return e.camera_active === true ? 'legacy' : null;
 }
 
-export function auditBundle(bundle: SessionBundle): IntegrityReport {
+export interface AuditOptions {
+  /**
+   * Check the stored blink records against the rows beside them (the section headed "the stored blinks
+   * must be the blinks the summary counted"). Default true. Every finding that section can raise is a
+   * WARNING about 07b/07c alone, so a caller that keeps only errors — the pooled analysis set
+   * (joinIntegrity), which is built for the dashboard's cohort view each time it opens — passes false
+   * and does not pay for reading every trace (Round 81). tests/integrity.test.ts holds the section to
+   * warnings, so skipping it can never hide an error.
+   */
+  blinkRecords?: boolean;
+}
+
+export function auditBundle(bundle: SessionBundle, opts: AuditOptions = {}): IntegrityReport {
   const f: IntegrityFinding[] = [];
   const add = (severity: IntegritySeverity, check: string, detail: string, refs: string[] = []) =>
     f.push({ severity, check, detail, refs });
@@ -641,7 +653,7 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
    * The self-test's record is held to the self-test result the same way: its blinks are the ones the
    * test scored, so they number selftest_detected + selftest_extra.
    */
-  {
+  if (opts.blinkRecords !== false) {
     const ocular = bundle.ocularEvents ?? [];
     const reading = ocular.filter((o) => o.window !== 'selftest');
     const eyeById = new Map((bundle.eyeMetrics ?? []).map((e) => [e.condition_id, e] as const));
@@ -678,7 +690,7 @@ export function auditBundle(bundle: SessionBundle): IntegrityReport {
             + 'columns for this condition; the primary count is unaffected.', [cid]);
         }
       }
-      const measured = decodeTrace(o.trace).filter((f) => f.face && f.ear != null).length;
+      const measured = measuredFrames(o.trace);
       if (eye && eye.camera_active && measured !== eye.ear_sample_count) {
         add('warning', 'ear_trace_matches_summary',
           `Condition "${cid}": 07c has ${measured} frames with both eyes measured, but 07_eye_metrics `

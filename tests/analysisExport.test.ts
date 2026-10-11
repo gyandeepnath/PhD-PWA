@@ -769,3 +769,21 @@ describe('pooled columns that described the sitting instead of the row, or said 
     expect(CODEBOOK.find((c) => c.column === 'fatigue_delta')!.unit).toBe('-10-10');
   });
 });
+
+/*
+ * Round 81. The dashboard's cohort view and the pooled download gather every sitting WITHOUT its
+ * blink records (gatherSession blinkRecords: false), because the pooled set uses none of them. This
+ * holds that true: the same sittings with and without their records give the same files, byte for byte.
+ */
+describe('the pooled set does not depend on the blink records', () => {
+  it('writes the same files whether or not the sittings carry them', async () => {
+    const { buildFixtureBundle } = await import('@/sim/bundleFixture');
+    const withRecords = buildFixtureBundle();
+    expect(withRecords.ocularEvents!.length).toBeGreaterThan(0);
+    const without = { ...withRecords, ocularEvents: [] };
+    // The manifest's exported_at is the clock, not the data.
+    const files = (b: SessionBundle) => buildAnalysisDataset([b]).files
+      .map((f) => [f.filename, String(f.content).replace(/"exported_at": "[^"]*"/, '')]);
+    expect(files(without)).toEqual(files(withRecords));
+  });
+});

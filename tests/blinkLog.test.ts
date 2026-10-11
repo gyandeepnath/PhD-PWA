@@ -15,7 +15,7 @@ import {
   BLINK_RULE_VERSION, EAR_TIERS, GAP_MULTIPLE, MIN_GAP_MS, classifyBlinks, type EarSample,
 } from '@/tracking/blink';
 import {
-  blinkDetail, buildOcularEventsRecord, cueLag, decodeTrace, emptyTrace, encodeTrace, localFps, ocularRecordId, pageAt,
+  blinkDetail, buildOcularEventsRecord, cueLag, decodeTrace, emptyTrace, encodeTrace, localFps, measuredFrames, ocularRecordId, pageAt,
   tierCounts, fitBlinks, fitExposure, fittedIncompleteCount, OPEN_PRE_MIN_FRAMES, OPEN_PRE_WINDOW_MS, type DetailSample,
 } from '@/tracking/blinkLog';
 import { FIT_RULE_VERSION, templateClosure } from '@/tracking/blinkFit';
@@ -81,6 +81,23 @@ describe('the trace is stored compactly and read back frame for frame', () => {
   it('a short column yields nulls for the missing frames instead of shifting values onto the wrong frame', () => {
     const rows = decodeTrace({ frames: 3, t: '0,40,80', face: '111', left: '0.3,0.2', right: '0.3,0.2,0.3' });
     expect(rows[2]).toMatchObject({ frame: 3, t_ms: 80, left: null, right: 0.3, ear: null });
+  });
+
+  /*
+   * Round 81: the integrity audit counts measured frames without decoding the trace. The count must
+   * be exactly decodeTrace's, on every kind of column decodeTrace handles.
+   */
+  it('counts measured frames exactly as decoding the trace does, without decoding it', () => {
+    const decoded = (c: Parameters<typeof decodeTrace>[0]) => decodeTrace(c).filter((f) => f.face && f.ear != null).length;
+    const cases: Parameters<typeof decodeTrace>[0][] = [
+      { frames: 4, t: '0,1,2,3', face: '1011', left: '0.3,,0.25,0.2', right: '0.29,,,0.21' },
+      { frames: 3, t: '0,40,80', face: '111', left: '0.3,0.2', right: '0.3,0.2,0.3' },
+      { frames: 3, t: '0,40,80', face: '11', left: '0.3,abc,0.2', right: '0.3,0.2,Infinity' },
+      { frames: 0, t: '', face: '', left: '', right: '' },
+      { frames: 2, t: '0,1', face: '10', left: '0.3,0.3', right: '0.3,0.3' },
+    ];
+    for (const c of cases) expect(measuredFrames(c), JSON.stringify(c)).toBe(decoded(c));
+    expect(measuredFrames(cases[0])).toBe(2);
   });
 });
 
