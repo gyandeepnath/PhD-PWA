@@ -278,6 +278,15 @@ const BASE_CONFIG = {
    * safe, and a window with no blinks in it would not represent the reading task anyway.
    */
   EAR_BASELINE_MS: 6000,
+  /**
+   * The most the baseline window runs (rule cal-r2, tracking/calibrationSequence.ts). Past
+   * EAR_BASELINE_MS it carries on only until MIN_EAR_BASELINE_SAMPLES usable frames have been taken, so a
+   * camera that loses the face for a few seconds still fits a baseline from six seconds or more of open
+   * eye rather than failing at a fixed six. Twelve seconds is a judgement: it gives up when fewer than
+   * about 2.5 usable frames a second arrive, a tenth of the tablet's reported rate, which no amount of
+   * waiting would make a sound baseline. The floor itself is not lowered.
+   */
+  EAR_BASELINE_MAX_MS: 12000,
 
   // Camera.
   /**
@@ -432,6 +441,7 @@ const E2E_OVERRIDES: Partial<typeof BASE_CONFIG> = {
   ADAPTATION_SWITCH_POLARITY_MS: 300,
   ANNOTATION_SEGMENT_MS: 400,
   EAR_BASELINE_MS: 400,
+  EAR_BASELINE_MAX_MS: 800,
   TRACKER_TRIAL_MS: 1500,
   TRACKER_TRIAL_WARMUP_MS: 300,
 };
