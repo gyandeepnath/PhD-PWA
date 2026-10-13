@@ -195,6 +195,8 @@ export interface ConditionSummary {
   engagement: QcFlag;
   quality_score: number;
   engagement_reasons: string[];
+  /** The same signals with short labels, for the dashboard (EngagementSignal). */
+  engagement_signals: EngagementSignal[];
   /** Individual careless-responding signals (also exported in the quality-flags CSV). */
   careless_straight_lined: boolean;
   careless_rushed_fatigue: boolean;
@@ -368,10 +370,26 @@ function flag(value: number | null, good: number, warn: number, higherIsBetter =
 const worst = (flags: QcFlag[]): QcFlag =>
   flags.includes('bad') ? 'bad' : flags.includes('warn') ? 'warn' : 'good';
 
+/**
+ * One fired signal, as the dashboard lists it: a few words, the full sentence behind a tap, and what it
+ * cost the score (0 for a signal that is reported and not penalised). The full sentences are `reasons`,
+ * written to 12_quality_flags.csv unchanged; the short words exist because ten of those sentences side
+ * by side were what the investigator called paragraphs.
+ */
+export interface EngagementSignal {
+  short: string;
+  detail: string;
+  penalty: number;
+  /** 'eye': a property of the camera's view, shown with the eye-data verdict rather than here. */
+  kind: 'engagement' | 'eye';
+}
+
 export interface EngagementResult {
   engagement: QcFlag;
   quality_score: number;
   reasons: string[];
+  /** The same signals as `reasons`, in the same order, each with a short label. */
+  signals: EngagementSignal[];
   /** Blinks captured in the condition; null when the camera was inactive. */
   blink_count_total: number | null;
   /** True when too few blinks were captured for the incomplete-blink ratio to be precise. */
@@ -442,8 +460,15 @@ export function conditionEngagement(args: {
     condition_portrait_ms, condition_notice_ms, word_count, fatigue, perception, comprehension, rt, eye,
   } = args;
   const reasons: string[] = [];
+  const signals: EngagementSignal[] = [];
   let score = 1;
-  const penalise = (amount: number, reason: string) => { score -= amount; reasons.push(reason); };
+  const penalise = (amount: number, reason: string, short: string) => {
+    score -= amount; reasons.push(reason); signals.push({ short, detail: reason, penalty: amount, kind: 'engagement' });
+  };
+  const report = (reason: string, short: string, kind: EngagementSignal['kind']) => {
+    reasons.push(reason); signals.push({ short, detail: reason, penalty: 0, kind });
+  };
+  const secs = (ms: number) => `${Math.round(ms / 1000)} s`;
 
   /**
    * Reading skim, judged PER PAGE rather than over the whole passage.
@@ -464,16 +489,16 @@ export function conditionEngagement(args: {
     && reading_min_page_dwell_ms < CONFIG.READING_PAGE_MIN_MS + ENGAGEMENT.PAGE_UNLOCK_GRACE_MS;
   const reading_skim = wholePassageSkim || pageWaitedOut;
   if (wholePassageSkim) {
-    penalise(ENGAGEMENT_PENALTY.READING_SKIM, `reading skimmed (${Math.round(reading_time_ms!)}ms < ${Math.round(skimFloorMs!)}ms floor)`);
+    penalise(ENGAGEMENT_PENALTY.READING_SKIM, `reading skimmed (${Math.round(reading_time_ms!)}ms < ${Math.round(skimFloorMs!)}ms floor)`, 'Read too fast');
   } else if (pageWaitedOut) {
-    penalise(ENGAGEMENT_PENALTY.READING_SKIM, `a page was advanced ${Math.round(reading_min_page_dwell_ms! - CONFIG.READING_PAGE_MIN_MS)}ms after its unlock — waited out, not read`);
+    penalise(ENGAGEMENT_PENALTY.READING_SKIM, `a page was advanced ${Math.round(reading_min_page_dwell_ms! - CONFIG.READING_PAGE_MIN_MS)}ms after its unlock — waited out, not read`, 'A page waited out, not read');
   }
 
   // Time the app spent hidden during the passage: the participant was not looking at the stimulus,
   // and if it is large the ocular measures for this condition cover a window that includes it.
   const reading_interrupted = reading_hidden_ms != null && reading_hidden_ms > ENGAGEMENT.READING_HIDDEN_MAX_MS;
   if (reading_interrupted) {
-    penalise(ENGAGEMENT_PENALTY.INTERRUPTED, `app was hidden for ${Math.round(reading_hidden_ms! / 1000)}s during reading`);
+    penalise(ENGAGEMENT_PENALTY.INTERRUPTED, `app was hidden for ${Math.round(reading_hidden_ms! / 1000)}s during reading`, `App hidden in reading, ${secs(reading_hidden_ms!)}`);
   }
 
   /*
@@ -507,13 +532,13 @@ export function conditionEngagement(args: {
     && condition_notice_ms > ENGAGEMENT.CONDITION_HIDDEN_MAX_MS;
   const condition_interrupted = hiddenTooLong || rotatedTooLong || noticeTooLong;
   if (hiddenTooLong && !reading_interrupted) {
-    penalise(ENGAGEMENT_PENALTY.INTERRUPTED, `app was hidden for ${Math.round(condition_hidden_ms! / 1000)}s during this condition, outside the passage`);
+    penalise(ENGAGEMENT_PENALTY.INTERRUPTED, `app was hidden for ${Math.round(condition_hidden_ms! / 1000)}s during this condition, outside the passage`, `App hidden, ${secs(condition_hidden_ms!)}`);
   }
   if (rotatedTooLong) {
-    penalise(ENGAGEMENT_PENALTY.INTERRUPTED, `tablet was in portrait for ${Math.round(condition_portrait_ms! / 1000)}s during this condition — the task could not be answered while the overlay was up`);
+    penalise(ENGAGEMENT_PENALTY.INTERRUPTED, `tablet was in portrait for ${Math.round(condition_portrait_ms! / 1000)}s during this condition — the task could not be answered while the overlay was up`, `Tablet in portrait, ${secs(condition_portrait_ms!)}`);
   }
   if (noticeTooLong) {
-    penalise(ENGAGEMENT_PENALTY.INTERRUPTED, `a notice (camera lost or blocked, or the Pause confirmation) covered the task for ${Math.round(condition_notice_ms! / 1000)}s during this condition`);
+    penalise(ENGAGEMENT_PENALTY.INTERRUPTED, `a notice (camera lost or blocked, or the Pause confirmation) covered the task for ${Math.round(condition_notice_ms! / 1000)}s during this condition`, `A notice covered the task, ${secs(condition_notice_ms!)}`);
   }
 
   // RT block disengagement: COMMISSION errors only — see ENGAGEMENT.RT_FALSE_ALARM_MAX for why
@@ -564,27 +589,30 @@ export function conditionEngagement(args: {
           + 'response fell inside the anticipation cutoff, which is what rhythmic tapping produces'
         // Reached only via rtRatesHigh, which requires a non-null false_alarm_rate.
         : `reaction-time block shows disengagement — tapped ${Math.round(Number(rt!.false_alarm_rate) * 100)}% of the no-go dots`,
+      rtRanButScoredNothing ? 'Reaction block: no trial scored' : `Tapped ${Math.round(Number(rt!.false_alarm_rate) * 100)}% of no-go dots`,
     );
   } else if (rtDisengagementSignal) {
-    reasons.push(
+    report(
       rtRanButScoredNothing
         ? 'the reaction-time block scored no trial at all, but the app was hidden during this '
           + 'condition — a throttled block can produce the same signature, so this cannot be read '
           + 'as disengagement'
         : 'reaction-time error rates are high, but the app was hidden during this condition — the '
           + 'timers are throttled while hidden, so this cannot be read as disengagement',
+      'Reaction errors, but the task was interrupted',
+      'engagement',
     );
   }
 
   // Rushed questionnaires.
   const careless_rushed_fatigue = !!fatigue && fatigue.response_time_ms != null && fatigue.response_time_ms < ENGAGEMENT.FATIGUE_RUSHED_MS;
-  if (careless_rushed_fatigue) penalise(ENGAGEMENT_PENALTY.RUSHED_FATIGUE, `fatigue scale rushed (${Math.round(fatigue!.response_time_ms!)}ms)`);
+  if (careless_rushed_fatigue) penalise(ENGAGEMENT_PENALTY.RUSHED_FATIGUE, `fatigue scale rushed (${Math.round(fatigue!.response_time_ms!)}ms)`, `Fatigue scale rushed, ${(fatigue!.response_time_ms! / 1000).toFixed(1)} s`);
   const careless_rushed_perception = !!perception && perception.response_time_ms != null && perception.response_time_ms < ENGAGEMENT.PERCEPTION_RUSHED_MS;
-  if (careless_rushed_perception) penalise(ENGAGEMENT_PENALTY.RUSHED_PERCEPTION, `perception rating rushed (${Math.round(perception!.response_time_ms!)}ms)`);
+  if (careless_rushed_perception) penalise(ENGAGEMENT_PENALTY.RUSHED_PERCEPTION, `perception rating rushed (${Math.round(perception!.response_time_ms!)}ms)`, `Display rating rushed, ${(perception!.response_time_ms! / 1000).toFixed(1)} s`);
 
   // Straight-lined fatigue ratings.
   const careless_straight_lined = isStraightLined(fatigue);
-  if (careless_straight_lined) penalise(ENGAGEMENT_PENALTY.STRAIGHT_LINED, 'fatigue ratings straight-lined (all five identical)');
+  if (careless_straight_lined) penalise(ENGAGEMENT_PENALTY.STRAIGHT_LINED, 'fatigue ratings straight-lined (all five identical)', 'Fatigue ratings all the same');
 
   // Comprehension miss (weak on its own). With three items per passage a single slip is not
   // evidence of disengagement, so the flag fires only at or below chance, which for three
@@ -592,7 +620,7 @@ export function conditionEngagement(args: {
   const compAnswered = comprehension?.length ?? 0;
   const compCorrect = comprehension?.filter((x) => x.is_correct).length ?? 0;
   const comprehension_wrong = compAnswered > 0 && compCorrect / compAnswered < 0.5;
-  if (comprehension_wrong) penalise(ENGAGEMENT_PENALTY.COMPREHENSION_BELOW_CHANCE, `comprehension below chance (${compCorrect}/${compAnswered})`);
+  if (comprehension_wrong) penalise(ENGAGEMENT_PENALTY.COMPREHENSION_BELOW_CHANCE, `comprehension below chance (${compCorrect}/${compAnswered})`, `Comprehension ${compCorrect} of ${compAnswered}`);
 
   // Camera: participant turned away for a large share of the condition.
   // Null face presence means no face was ever found; that is not "low presence", it is no
@@ -601,7 +629,7 @@ export function conditionEngagement(args: {
     && eye.face_presence_ratio < ENGAGEMENT.FACE_PRESENCE_MIN;
   // Raised from 0.1: at 0.1 a condition whose face was found in a third of frames still scored 0.9
   // and passed as "good", so the pre-registered drop-disengaged filter did not remove it.
-  if (low_face_presence) penalise(ENGAGEMENT_PENALTY.LOW_FACE_PRESENCE, `low face presence (${Math.round((eye!.face_presence_ratio as number) * 100)}%)`);
+  if (low_face_presence) penalise(ENGAGEMENT_PENALTY.LOW_FACE_PRESENCE, `low face presence (${Math.round((eye!.face_presence_ratio as number) * 100)}%)`, `Face in view only ${Math.round((eye!.face_presence_ratio as number) * 100)}%`);
 
   // Too few blinks for the PRIMARY outcome to mean anything in this condition. Flagged rather than
   // dropped: the run's other measures are still valid, and silently discarding it would bias the
@@ -617,7 +645,7 @@ export function conditionEngagement(args: {
   const insufficient_blinks = !!eye && eye.camera_active && blinkCount != null
     && blinkCount < ENGAGEMENT.MIN_BLINKS_FOR_RATIO;
   if (insufficient_blinks) {
-    reasons.push(`only ${blinkCount} blinks captured — incomplete-blink ratio is imprecise (need >= ${ENGAGEMENT.MIN_BLINKS_FOR_RATIO})`);
+    report(`only ${blinkCount} blinks captured — incomplete-blink ratio is imprecise (need >= ${ENGAGEMENT.MIN_BLINKS_FOR_RATIO})`, `Few blinks (${blinkCount})`, 'eye');
   }
 
   // Frame rate too low for the PRIMARY OUTCOME. Reported, not penalised and not dropped: a low
@@ -633,14 +661,14 @@ export function conditionEngagement(args: {
   const gateFps = eye && eye.camera_active ? samplingFpsObservedOf(eye) : null;
   const gateTier = eye && eye.camera_active ? fpsTier(gateFps) : null;
   if (gateTier === 'B' || gateTier === 'C') {
-    reasons.push(`frame rate ${gateTier === 'C' ? 'too low' : 'reduced'} (${gateFps!.toFixed(1)} a second; ${FPS_GATE.ADEQUATE} is adequate)`);
+    report(`frame rate ${gateTier === 'C' ? 'too low' : 'reduced'} (${gateFps!.toFixed(1)} a second; ${FPS_GATE.ADEQUATE} is adequate)`, `Eye sampling rate ${gateTier === 'C' ? 'too slow' : 'reduced'}`, 'eye');
   }
 
   const quality_score = Math.max(0, Math.round(score * 100) / 100);
   const engagement: QcFlag = quality_score >= ENGAGEMENT.QUALITY_GOOD ? 'good' : quality_score >= ENGAGEMENT.QUALITY_WARN ? 'warn' : 'bad';
 
   return {
-    engagement, quality_score, reasons,
+    engagement, quality_score, reasons, signals,
     blink_count_total: blinkCount, insufficient_blinks,
     careless_straight_lined, careless_rushed_fatigue, careless_rushed_perception,
     reading_skim, reading_interrupted, condition_interrupted,
@@ -760,6 +788,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       engagement: eng.engagement,
       quality_score: eng.quality_score,
       engagement_reasons: eng.reasons,
+      engagement_signals: eng.signals,
       blink_count_total: eng.blink_count_total,
       insufficient_blinks: eng.insufficient_blinks,
       careless_straight_lined: eng.careless_straight_lined,

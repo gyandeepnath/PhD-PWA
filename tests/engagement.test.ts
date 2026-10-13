@@ -69,6 +69,23 @@ describe('conditionEngagement', () => {
     expect(e.engagement).toBe('bad');
   });
 
+  it('gives every signal a short label beside the unchanged full sentence (Round 82)', () => {
+    const e = conditionEngagement({
+      reading_time_ms: 1000, word_count: 280,
+      rt: rt({ false_alarm_rate: 0.5 }),
+      fatigue: fatigue({ eye_strain: 3, dryness: 3, blur: 3, burning: 3, headache: 3, response_time_ms: 500 }),
+      comprehension: comprehension(false),
+    });
+    // One signal per reason, in order, the detail being the exported sentence itself.
+    expect(e.signals.map((x) => x.detail)).toEqual(e.reasons);
+    expect(e.signals.map((x) => x.short)).toEqual([
+      'Read too fast', 'Tapped 50% of no-go dots', 'Fatigue scale rushed, 0.5 s', 'Fatigue ratings all the same', 'Comprehension 0 of 1',
+    ]);
+    expect(e.signals.map((x) => x.penalty)).toEqual([0.3, 0.3, 0.2, 0.1, 0.1]);
+    // Each label is a few words: the point of having one.
+    for (const x of e.signals) expect(x.short.length).toBeLessThanOrEqual(40);
+  });
+
   it('does not call a participant disengaged for MISSING a hard-to-see go-dot', () => {
     /*
      * The go-target is the condition's own text colour, so in yellow-on-white (2.39:1) a participant
