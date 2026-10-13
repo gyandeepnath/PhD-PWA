@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  SELF_TEST, SELF_TEST_RULE, SELF_TEST_RULE_V1, scoreSelfTest, fpsReason, minHits, attemptSummary,
+  SELF_TEST, SELF_TEST_RULE, SELF_TEST_RULE_V1, scoreSelfTest, matchCues, fpsReason, minHits, attemptSummary,
 } from '@/tracking/selfTest';
 import { FPS_GATE, samplingFpsObserved } from '@/tracking/frameRateGate';
 import { CONFIG } from '@/experiment/config';
@@ -54,6 +54,33 @@ describe('camera self-test scoring (rule st-r2)', () => {
   it('ignores blinks just outside the matching window, and counts one exactly at its edge', () => {
     expect(scoreSelfTest([5000], [5000 + SELF_TEST.WINDOW_MS + 1], good).detected).toBe(0);
     expect(scoreSelfTest([5000], [5000 - SELF_TEST.WINDOW_MS], good).detected).toBe(1);
+  });
+});
+
+describe('which blink each flash took (matchCues, what 07b cue_matched exports)', () => {
+  it('counts ONE blink per flash, the nearest: a second blink inside the same window is an extra', () => {
+    // The review's case (Round 81): blinks 242.6 ms before and 1190.7 ms after one flash. Both lags are
+    // inside 1200 ms, but the flash takes only the nearer; the other is an extra.
+    const flash = 14525.4;
+    const blinks = [flash - 242.6, flash + 1190.7];
+    expect(matchCues([flash], blinks)).toEqual([0]);
+    expect(scoreSelfTest([flash], blinks, good)).toMatchObject({ detected: 1, extra: 1 });
+  });
+
+  it('is the matching scoreSelfTest counts: its hits are the blinks matchCues returns', () => {
+    const onsets = [2700, 2900, 5400, 9900, 11550, 14000, 16000];
+    const taken = matchCues(cues, onsets);
+    expect(taken).toEqual([0, 2, -1, 4, 5]);
+    const r = scoreSelfTest(cues, onsets, good);
+    expect(r.detected).toBe(taken.filter((i) => i >= 0).length);
+    expect(r.extra).toBe(onsets.length - r.detected);
+    expect(r.cueLags).toEqual(taken.map((i, k) => (i >= 0 ? Math.round(onsets[i] - cues[k]) : null)));
+  });
+
+  it('takes the flashes in the order shown when their windows overlap (the collapsed test timings)', () => {
+    // Flashes 150 ms apart: the first flash takes the blink nearest to it, though it is nearer the second.
+    expect(matchCues([0, 150], [140])).toEqual([0, -1]);
+    expect(matchCues([0, 150], [140, 300])).toEqual([0, 1]);
   });
 });
 

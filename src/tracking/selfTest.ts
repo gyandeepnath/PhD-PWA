@@ -4,10 +4,11 @@
  *
  * WHY. The investigator asked how to know the blink measurement works. Nothing answered that until the
  * export was opened, after the participant had gone. Now, right after calibration, the participant blinks
- * once each time a dot flashes; blinks the tracker found near a cue are hits, the rest extras. With the
- * frame rate and how much of the time a face was in view, that is a verdict an operator can act on:
- * reseat the participant, fix the light, or accept and continue — and the result is exported with the
- * sitting (selftest_* in 01_session_info.csv) either way.
+ * once each time a dot flashes; each flash counts the one blink nearest to it within 1.2 s as its hit
+ * (matchCues), and every other blink is an extra. With the frame rate and how much of the time a face
+ * was in view, that is a verdict an operator can act on: reseat the participant, fix the light, or
+ * accept and continue — and the result is exported with the sitting (selftest_* in
+ * 01_session_info.csv) either way.
  *
  * The pass rule is an ENGINEERING check that the pipeline sees deliberate blinks, not a validation of the
  * incomplete-blink classifier (which no retrieved study has validated for this method; see
@@ -205,19 +206,25 @@ export function limitShort(limit: PipelineLimit, p: PipelineWindowFields | null)
 }
 
 /**
- * Score one attempt (rule st-r2). Each cue takes at most one blink, the nearest whose onset is within
- * WINDOW_MS of it. Passes with at least MIN_HIT_SHARE of the cues seen, the face in view MIN_FACE of the
- * time, and the eye sampled at fps-g2 tier B or better (`samplingFps`, frameRateGate.ts). Tier B passes
- * as "reduced", with a note naming the stage that holds the rate; tier C, or no rate, fails.
+ * Which blink each flash took — the matching the test is scored on, unchanged since the first rule
+ * (st-r1 and st-r2 alike). The flashes are taken in the order they were shown; each takes the blink
+ * whose onset is nearest to it, within WINDOW_MS either side, among the blinks no earlier flash took
+ * (an exact tie goes to the earlier blink). So a flash counts ONE blink at most, and a second blink
+ * near the same flash is an extra even when it is within WINDOW_MS of it. Every blink no flash took is
+ * an extra. Returns, for each cue in order, the index into `blinkOnsets` of its blink, or -1.
+ *
+ * At the real timing (a flash every CUE_EVERY_MS, 3 s, against a window of 1.2 s either side) a blink
+ * is within the window of one flash at most, so this is simply: for each flash, the nearest blink
+ * within 1.2 s of it. The order matters only when two flashes come closer than twice the window: the
+ * collapsed timings of the test harness, or a screen that stalled for over 0.6 s and delayed a flash
+ * (a late frame delays a flash, never skips it).
+ *
+ * One function for the score and for the export (07b_blink_events.csv cue_matched), so the file marks
+ * exactly the blinks that made selftest_detected.
  */
-export function scoreSelfTest(
-  cueTimes: number[],
-  blinkOnsets: number[],
-  coverage: { fps: number | null; samplingFps: number | null; facePresence: number | null; pipeline?: PipelineWindowFields | null },
-): SelfTestResult {
+export function matchCues(cueTimes: number[], blinkOnsets: number[]): number[] {
   const used = new Set<number>();
-  const cueLags: Array<number | null> = [];
-  for (const c of cueTimes) {
+  return cueTimes.map((c) => {
     let best = -1;
     let bestD = Infinity;
     blinkOnsets.forEach((b, i) => {
@@ -225,10 +232,25 @@ export function scoreSelfTest(
       if (!used.has(i) && d <= SELF_TEST.WINDOW_MS && d < bestD) { best = i; bestD = d; }
     });
     if (best >= 0) used.add(best);
-    cueLags.push(best >= 0 ? Math.round(blinkOnsets[best] - c) : null);
-  }
-  const detected = used.size;
-  const extra = blinkOnsets.length - used.size;
+    return best;
+  });
+}
+
+/**
+ * Score one attempt (rule st-r2). Each cue takes at most one blink (matchCues). Passes with at least
+ * MIN_HIT_SHARE of the cues seen, the face in view MIN_FACE of the time, and the eye sampled at fps-g2
+ * tier B or better (`samplingFps`, frameRateGate.ts). Tier B passes as "reduced", with a note naming
+ * the stage that holds the rate; tier C, or no rate, fails.
+ */
+export function scoreSelfTest(
+  cueTimes: number[],
+  blinkOnsets: number[],
+  coverage: { fps: number | null; samplingFps: number | null; facePresence: number | null; pipeline?: PipelineWindowFields | null },
+): SelfTestResult {
+  const matched = matchCues(cueTimes, blinkOnsets);
+  const cueLags = matched.map((i, k) => (i >= 0 ? Math.round(blinkOnsets[i] - cueTimes[k]) : null));
+  const detected = matched.filter((i) => i >= 0).length;
+  const extra = blinkOnsets.length - detected;
   const reasons: string[] = [];
   const notes: string[] = [];
   if (coverage.facePresence == null || coverage.facePresence < SELF_TEST.MIN_FACE) {

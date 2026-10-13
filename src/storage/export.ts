@@ -20,7 +20,7 @@ import { auditBundle } from './integrity';
 import { serialiseSessionBackup } from './backup';
 import { requiredGrant } from './media';
 import { conditionPhysical, sessionMmPerCssPx, trialEccentricity } from '@/lib/physicalCalibration';
-import { cueLag, decodeTrace, pageAt } from '@/tracking/blinkLog';
+import { cueLag, cueMatched, decodeTrace, pageAt } from '@/tracking/blinkLog';
 import { FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION, fpsTier, rowGateVersion, samplingFpsObserved } from '@/tracking/frameRateGate';
 import { SELF_TEST_RULE_V1 } from '@/tracking/selfTest';
 import { CALIBRATION_RULE_BEFORE } from '@/tracking/calibrationSequence';
@@ -616,8 +616,8 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '01_session_info.csv', column: 'hours_since_sleep_session', type: 'float', unit: 'hours', role: 'covariate', description: 'Hours since waking, at THIS sitting. Per-sitting for the same reason as caffeine_today_session. Bears on blink rate and on the drowsiness covariates.' },
   { file: '01_session_info.csv', column: 'calibration_runs', type: 'integer', unit: 'count', role: 'qc', description: 'How many calibration records this sitting holds. More than one means calibration was retried within the routine or re-run on a resume; it does not by itself mean the sitting was interrupted. The calibration_* and gaze_* columns of this file describe the LAST one only. Which one governed each condition is calibration_id in 07_eye_metrics.csv, and per-condition ear_baseline there is what each condition actually used.' },
   { file: '01_session_info.csv', column: 'selftest_cued', type: 'integer', unit: 'count', role: 'qc', description: 'Camera self-test, run after calibration: how many times the dot flashed for the participant to blink (5). Blank when the camera was not used or the sitting predates the test. The last attempt is recorded.' },
-  { file: '01_session_info.csv', column: 'selftest_detected', type: 'integer', unit: 'count', role: 'qc', description: 'How many of those cued blinks the tracker found within 1.2 s of the cue. The pass rule needs 4 of 5. An engineering check that the camera sees this participant\'s blinks — deliberate blinks are complete and slow — not a validation of incomplete-blink classification.' },
-  { file: '01_session_info.csv', column: 'selftest_extra', type: 'integer', unit: 'count', role: 'qc', description: 'Blinks found during the self-test that matched no cue: spontaneous blinks, or false detections. Many extras with few hits suggests an unstable eye signal.' },
+  { file: '01_session_info.csv', column: 'selftest_detected', type: 'integer', unit: 'count', role: 'qc', description: 'How many of the flashes the tracker found a blink for. Each flash counts one blink at most, the nearest within 1.2 s either side (cue_matched = TRUE in 07b_blink_events.csv). The pass rule needs 4 of 5. An engineering check that the camera sees this participant\'s blinks — deliberate blinks are complete and slow — not a validation of incomplete-blink classification.' },
+  { file: '01_session_info.csv', column: 'selftest_extra', type: 'integer', unit: 'count', role: 'qc', description: 'Blinks found during the self-test that no flash counted (cue_matched = FALSE in 07b_blink_events.csv): spontaneous blinks, a second blink after the same flash, or false detections. Many extras with few hits suggests an unstable eye signal.' },
   { file: '01_session_info.csv', column: 'selftest_fps', type: 'number', unit: 'fps', role: 'qc', description: 'Face-solved frame rate during the self-test over the whole window, time without a face included (computed as effective_fps is). Under rule st-r1 (sittings before Round 79) below 25 failed the test. From st-r2 the test judges selftest_sampling_fps instead; this column is still written, unchanged, so older and newer sittings can be compared.' },
   { file: '01_session_info.csv', column: 'selftest_face_presence', type: 'number', unit: '0-1', role: 'qc', description: 'Share of self-test frames with a face in view. Below 0.9 fails the test.' },
   { file: '01_session_info.csv', column: 'selftest_pass', type: 'boolean', unit: '-', role: 'qc', description: 'The self-test verdict shown to the operator. TRUE for a pass: from st-r2, selftest_verdict working or reduced. FALSE means the operator chose "continue anyway": treat every blink measure of this sitting with caution and read the other selftest_ columns for why.' },
@@ -948,7 +948,9 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '07b_blink_events.csv', column: 'yaw_at_min', type: 'number', unit: 'degrees', role: 'qc', description: 'Validation file, not used by the main analysis. Head yaw at the deepest frame, as head_yaw_mean. See pitch_at_min.' },
   { file: '07b_blink_events.csv', column: 'tier', type: 'factor(3)', unit: '-', role: 'qc', description: 'Validation file, not used by the main analysis. The blink\'s class: \'full\' (complete, counted in blink_count_full), \'micro\' (complete and shorter than 40 ms, counted in blink_count_micro) or \'incomplete\' (counted in blink_count_incomplete). Self-test rows are classified by the same rules and counted in no condition.' },
   { file: '07b_blink_events.csv', column: 'page', type: 'integer', unit: 'count', role: 'covariate', description: 'Validation file, not used by the main analysis. The reading page on screen when the blink started (1-3), from the page-turn taps (to within one screen refresh). Empty when no page was recorded, and for the self-test.' },
-  { file: '07b_blink_events.csv', column: 'cue_lag_ms', type: 'number', unit: 'ms', role: 'qc', description: 'Validation file, not used by the main analysis. Self-test rows only: onset_ms minus the time of the nearest flash of the dot (negative = the blink began before it). The self-test counted a blink for a flash when this was within 1200 ms either side; the rest were extras. Blank for reading rows.' },
+  { file: '07b_blink_events.csv', column: 'cue_lag_ms', type: 'number', unit: 'ms', role: 'qc', description: 'Validation file, not used by the main analysis. Self-test rows only: onset_ms minus the time of the nearest flash of the dot (negative = the blink began before it): how promptly the blink followed. A lag within 1200 ms does NOT mean the test counted the blink: each flash counts one blink only, so a second blink near the same flash is an extra. Which blinks were counted is cue_matched. Blank for reading rows.' },
+  { file: '07b_blink_events.csv', column: 'cue_matched', type: 'boolean', unit: '-', role: 'qc', description: 'Validation file, not used by the main analysis. Self-test rows only: TRUE for a blink that a flash counted, FALSE for an extra. The test\'s own rule (the same under st-r1 and st-r2): one blink per flash, the nearest within 1200 ms either side; the flashes are taken in the order shown, and a blink one flash has counted cannot count for another. The TRUE rows number selftest_detected and the FALSE rows selftest_extra in 01_session_info.csv; the integrity report checks it (selftest_events_match). Blank for reading rows.' },
+  { file: '07b_blink_events.csv', column: 'cue_times_ms', type: 'string', unit: 'ms', role: 'qc', description: 'Validation file, not used by the main analysis. Self-test rows only: the time of every flash of the attempt, in order, separated by "; ", on the same clock as onset_ms (ms from frame 1 of the self-test in 07c_ear_trace.csv). The same on every self-test row. With onset_ms it lets the matching behind cue_matched be re-run, flashes that no blink answered included. Blank for reading rows.' },
   { file: '07b_blink_events.csv', column: 'rule_version', type: 'string', unit: '-', role: 'provenance', description: 'Validation file, not used by the main analysis. The version of the blink rules that classified this blink (tracking/blink.ts BLINK_RULE_VERSION). \'blink-r1\': registration below 0.75 x baseline, complete when the deepest frame is below 0.60 x baseline, micro if complete and under 40 ms, a blink open across a gap in the frames dropped. Rows made under different versions are not comparable.' },
   { file: '07b_blink_events.csv', column: 'min_ratio_fit', type: 'number', unit: 'ratio', role: 'qc', description: 'Validation file, not used by the main analysis. The fitted minimum (Round 79, rule fit-r1) as a fraction of ear_baseline: the blink\'s deepest point estimated between frames, from a blink-shaped curve fitted through the frames around the lowest one (compare min_ratio_raw, the lowest frame itself). At or above 0.60 the blink counts as incomplete in blink_count_incomplete_fit (07). Nothing is classified on it. Empty when the blink could not be fitted, for the self-test, and before Round 79.' },
   { file: '07b_blink_events.csv', column: 'fit_exposure_ms', type: 'number', unit: 'ms', role: 'provenance', description: 'Validation file, not used by the main analysis. The camera exposure the fitted minimum assumed for this window (fit_exposure_known in 07 says whether it was the fixed exposure or the frame interval).' },
@@ -1331,8 +1333,13 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
     ['participant_id', 'condition_id', 'condition_label', 'window', 'blink_index', 'onset_ms', 'offset_ms', 'min_at_ms',
       'duration_ms', 'frames_below', 'ended_by', 'max_gap_ms', 'local_fps', 'min_ear_raw', 'min_ratio_raw',
       'min_ear_left', 'min_ear_right', 'open_pre', 'min_ratio_local_raw', 'pitch_at_min', 'yaw_at_min',
-      'tier', 'page', 'cue_lag_ms', 'rule_version', 'min_ratio_fit', 'fit_exposure_ms', 'fit_rule_version'],
-    ocular.flatMap((o) => [...o.events].sort((a, b) => a.onset_ms - b.onset_ms).map((e, i) => ({
+      'tier', 'page', 'cue_lag_ms', 'cue_matched', 'cue_times_ms', 'rule_version', 'min_ratio_fit', 'fit_exposure_ms', 'fit_rule_version'],
+    ocular.flatMap((o) => {
+      // The self-test's own matching (selfTest.ts matchCues), so cue_matched marks the blinks that made
+      // selftest_detected; and every flash time, so a reader can re-run it from this file alone.
+      const matched = cueMatched(o);
+      const cueTimes = o.window === 'selftest' && o.cues?.length ? o.cues.map((c) => String(round(c, 2))).join('; ') : '';
+      return [...o.events].sort((a, b) => a.onset_ms - b.onset_ms).map((e, i) => ({
       participant_id: pid, condition_id: o.condition_id ?? '',
       condition_label: o.condition_id ? (labelOf.get(o.condition_id) ?? '') : '',
       window: o.window, blink_index: i + 1,
@@ -1345,10 +1352,13 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       pitch_at_min: round(e.pitch_at_min, 1), yaw_at_min: round(e.yaw_at_min, 1),
       tier: e.tier, page: e.page ?? '',
       cue_lag_ms: o.window === 'selftest' ? round(cueLag(o.cues, e.onset_ms), 1) : '',
+      cue_matched: matched ? matched[i] : '',
+      cue_times_ms: cueTimes,
       rule_version: o.rule_version,
       // The fitted minimum (Round 79): blank on the self-test, whose blinks are not fitted, and before.
       min_ratio_fit: round(e.min_ratio_fit, 4), fit_exposure_ms: o.fit_exposure_ms ?? '', fit_rule_version: o.fit_rule_version ?? '',
-    }))));
+      }));
+    }));
   csv('07c_ear_trace.csv',
     ['participant_id', 'condition_id', 'window', 'frame', 't_ms', 'face', 'ear_left', 'ear_right', 'ear', 'page'],
     ocular.flatMap((o) => decodeTrace(o.trace).map((f) => ({

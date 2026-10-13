@@ -434,6 +434,8 @@ and when it began, and a trace of eye openness through the check with the five f
 - **No dip at a flash**: the participant did not blink, or blinked late. Explain again and try again.
 - **A dip that does not reach the dashed line**: the blink was too shallow for the camera to count.
   Check the light on the face and glare on spectacles.
+- **Two dips in one band**: each flash counts one blink, the one nearest to it; the other is an
+  extra. Nothing to fix unless extras are many.
 - **A gap in the trace**: the face was lost. Check seating, distance and that nothing is in front of
   the camera.
 - **Too slow**: the sentence under the trace names the stage that is short — "the CAMERA delivered

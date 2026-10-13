@@ -27,6 +27,7 @@
 import type { BlinkEventDetail, EarSample } from './blink';
 import { BLINK_RULE_VERSION, EAR_TIERS } from './blink';
 import { fitBlinkMinimum, FIT_RULE_VERSION, type BlinkFit } from './blinkFit';
+import { matchCues } from './selfTest';
 import type { EarTraceColumns, OcularEventsRecord, StoredBlinkEvent } from '@/storage/types';
 
 /** How far either side of a blink's deepest sample its local frame rate is measured. */
@@ -409,9 +410,12 @@ export function buildOcularEventsRecord(args: {
 }
 
 /**
- * Signed time from the nearest cue to a self-test blink's onset (ms; negative = before the cue). The
- * self-test counts a blink for a cue when this is within SELF_TEST.WINDOW_MS (selfTest.ts); kept as a
- * number so a reader can see how promptly the blink followed. Null without cues.
+ * Signed time from the nearest cue to a self-test blink's onset (ms; negative = before the cue), kept as
+ * a number so a reader can see how promptly the blink followed. Null without cues.
+ *
+ * NOT the test's count. A lag within SELF_TEST.WINDOW_MS does not make a blink a hit: each flash counts
+ * one blink, the nearest (selfTest.ts matchCues), so a second blink near the same flash is an extra with
+ * a lag inside the window. Which blinks the test counted is 07b's cue_matched, from matchCues itself.
  */
 export function cueLag(cues: number[] | undefined, onsetMs: number): number | null {
   if (!cues || cues.length === 0) return null;
@@ -421,6 +425,23 @@ export function cueLag(cues: number[] | undefined, onsetMs: number): number | nu
     if (best == null || Math.abs(d) < Math.abs(best)) best = d;
   }
   return best;
+}
+
+/**
+ * Whether each blink of a self-test record is one a flash took — the test's own matching
+ * (selfTest.ts matchCues), run on the record's stored flash and blink times — for the blinks in onset
+ * order, the order 07b lists them in. The TRUE ones are the blinks that made selftest_detected. Null
+ * for a reading record, and for a self-test record with no flash times.
+ *
+ * The stored times are rounded to 0.01 ms and the test ran on the unrounded ones, so the two could
+ * disagree only for a blink within 0.01 ms of the 1.2 s edge or of a tie; the integrity report holds
+ * the count to selftest_detected (selftest_events_match), so such a case would not pass unseen.
+ */
+export function cueMatched(record: Pick<OcularEventsRecord, 'window' | 'cues' | 'events'>): boolean[] | null {
+  if (record.window !== 'selftest' || !record.cues || record.cues.length === 0) return null;
+  const onsets = record.events.map((e) => e.onset_ms).sort((a, b) => a - b);
+  const taken = new Set(matchCues(record.cues, onsets));
+  return onsets.map((_, i) => taken.has(i));
 }
 
 /** Blink counts by tier, in the shape of the eye-metrics row's three count columns. */

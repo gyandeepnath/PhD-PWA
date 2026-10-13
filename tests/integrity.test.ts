@@ -421,6 +421,19 @@ describe('the stored blinks are the blinks the summary counted (round 78)', () =
     expect(checks(b)).not.toContain('blink_events_orphan');
   });
 
+  it('re-runs the test\'s own matching on the stored times: it must count selftest_detected (round 81)', () => {
+    // The same 6 blinks, but scored as 4 hits + 2 extras: the total agrees, the matching does not.
+    const b = buildFixtureBundle();
+    b.session.camera_selftest = { ...b.session.camera_selftest!, detected: 4, extra: 2 };
+    const f = finding(b, 'selftest_events_match');
+    expect(f?.severity).toBe('warning');
+    expect(f?.detail).toMatch(/finds a blink for 5 of 5 flashes, but the self-test result in 01_session_info is 4 of 5/);
+    // A flash time lost from the record is caught the same way.
+    const c = buildFixtureBundle();
+    c.ocularEvents!.find((o) => o.window === 'selftest')!.cues!.pop();
+    expect(finding(c, 'selftest_events_match')?.detail).toMatch(/4 of 4 flashes/);
+  });
+
   it('only ever warns: the main analysis does not read these files', () => {
     const b = buildFixtureBundle();
     b.ocularEvents!.forEach((o) => { o.events = []; });

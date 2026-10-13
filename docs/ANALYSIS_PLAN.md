@@ -562,7 +562,9 @@ These are not optional and they come first.
      camera self-test (`window`). It holds the blink's times, its depth by the rule that classified
      it (`min_ear_raw`, `min_ratio_raw`), each eye's depth, the open eye just before it (`open_pre`,
      `min_ratio_local_raw`), the widest sampling step across it (`max_gap_ms`), the head pose at its
-     deepest frame, its tier and the rule version (`rule_version`, now `blink-r1`).
+     deepest frame, its tier and the rule version (`rule_version`, now `blink-r1`). Self-test rows
+     also say which blinks the test counted (`cue_matched`: one blink per flash, the nearest within
+     1.2 s) and give every flash time (`cue_times_ms`), so the count can be re-run from the file.
    - `07c_ear_trace.csv`: one row per processed frame of each window (time, face found, each eye's
      EAR).
    - **What they are for:** matching the classifier blink by blink against a human coder (detection,
@@ -572,7 +574,8 @@ These are not optional and they come first.
    - **Consistency check:** the integrity report (`16_integrity_report.csv`) warns when a condition's
      07b blinks by tier differ from its 07 counts (`blink_events_match_summary`), when 07c's measured
      frames differ from `ear_sample_count` (`ear_trace_matches_summary`), and when the self-test
-     rows differ from `selftest_detected` + `selftest_extra` (`selftest_events_match`). A warning
+     rows differ from `selftest_detected` + `selftest_extra`, or their `cue_matched` count from
+     `selftest_detected` (`selftest_events_match`). A warning
      means "do not use 07b/07c for that condition"; 07 is unaffected.
    - **Size** (measured in `tests/blinkLog.test.ts` on a synthetic sitting: ten 3-minute reading
      windows at 30 fps, 450 blinks): about **1.7 MB per sitting** in the tablet's database and in the

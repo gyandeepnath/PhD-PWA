@@ -15,7 +15,7 @@
  * quietly de-duplicating would hide the upstream bug that produced the duplicate.
  */
 import { QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
-import { measuredFrames, tierCounts } from '@/tracking/blinkLog';
+import { cueMatched, measuredFrames, tierCounts } from '@/tracking/blinkLog';
 import { EAR_TIERS } from '@/tracking/blink';
 import type { SessionBundle } from './gather';
 import { MIN_SCALE } from '@/lib/viewportScale';
@@ -651,7 +651,8 @@ export function auditBundle(bundle: SessionBundle, opts: AuditOptions = {}): Int
    * Silent for a sitting with no blink records at all (before schema 10, or the camera never on).
    *
    * The self-test's record is held to the self-test result the same way: its blinks are the ones the
-   * test scored, so they number selftest_detected + selftest_extra.
+   * test scored, so they number selftest_detected + selftest_extra; and the test's own matching, re-run
+   * on the stored flash and blink times (07b cue_matched), marks selftest_detected of them.
    */
   if (opts.blinkRecords !== false) {
     const ocular = bundle.ocularEvents ?? [];
@@ -715,6 +716,16 @@ export function auditBundle(bundle: SessionBundle, opts: AuditOptions = {}): Int
           `07b lists ${o.events.length} self-test blink(s), but the self-test result in 01_session_info `
           + `${scored == null ? 'is missing' : `scored ${scored} (${st!.detected} cued + ${st!.extra} extra)`}. `
           + 'Do not use the self-test rows of 07b/07c; nothing else is affected.', [o.record_id]);
+        continue;
+      }
+      const matched = cueMatched(o);
+      const hits = matched ? matched.filter(Boolean).length : null;
+      const flashes = o.cues?.length ?? 0;
+      if (hits != null && (hits !== st!.detected || flashes !== st!.cued)) {
+        add('warning', 'selftest_events_match',
+          `Re-run on the times 07b stores (cue_matched, cue_times_ms), the test's matching finds a blink for `
+          + `${hits} of ${flashes} flashes, but the self-test result in 01_session_info is ${st!.detected} of `
+          + `${st!.cued}. Do not use the self-test rows of 07b/07c; nothing else is affected.`, [o.record_id]);
       }
     }
   }

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { FPS_GATE, samplingFpsObserved } from '@/tracking/frameRateGate';
+import { matchCues } from '@/tracking/selfTest';
 import { buildConditionSummaries, baselineFatigueMean, ENGAGEMENT } from '@/dashboard/aggregate';
 import { backupExportFile, buildExportFiles, DamagedParticipantCodeError, escapeCsv, toCsv, fnv1a, CODEBOOK } from '@/storage/export';
 import { parseSessionBackup } from '@/storage/backup';
@@ -475,6 +476,39 @@ describe('07b and 07c: every blink and the eye-openness trace, kept apart from t
     expect(st.filter((x) => Math.abs(Number(x.cue_lag_ms)) <= 1200)).toHaveLength(5);
     expect(blinks.filter((x) => x.window === 'reading').every((x) => x.cue_lag_ms === '')).toBe(true);
     expect(trace.filter((x) => x.window === 'selftest').every((x) => x.condition_id === '')).toBe(true);
+  });
+
+  it('marks the blinks the self-test counted (cue_matched), and gives every flash time to re-run it', () => {
+    const st = blinks.filter((x) => x.window === 'selftest');
+    const session = table('01_session_info.csv')[0];
+    expect(st.filter((x) => x.cue_matched === 'true')).toHaveLength(Number(session.selftest_detected));
+    expect(st.filter((x) => x.cue_matched === 'false')).toHaveLength(Number(session.selftest_extra));
+    // One list of flash times, on every self-test row, on onset_ms's clock: re-running the test's own
+    // matching on the file alone gives cue_matched back.
+    expect(new Set(st.map((x) => x.cue_times_ms)).size).toBe(1);
+    const flashes = st[0].cue_times_ms.split(';').map(Number);
+    expect(flashes).toHaveLength(Number(session.selftest_cued));
+    const taken = new Set(matchCues(flashes, st.map((x) => Number(x.onset_ms))));
+    expect(st.map((_, i) => String(taken.has(i)))).toEqual(st.map((x) => x.cue_matched));
+    const reading = blinks.filter((x) => x.window === 'reading');
+    expect(reading.every((x) => x.cue_matched === '' && x.cue_times_ms === '')).toBe(true);
+  });
+
+  it('marks a second blink after the same flash as an extra, though its lag is inside 1200 ms (round 81)', () => {
+    // The review's case: the codebook said a blink within 1200 ms of a flash was counted. The test counts
+    // one per flash, the nearest; a later blink near the same flash is an extra.
+    const b2 = buildFixtureBundle();
+    const rec = b2.ocularEvents!.find((o) => o.window === 'selftest')!;
+    const first = [...rec.events].sort((x, y) => x.onset_ms - y.onset_ms)[0];
+    const flash = rec.cues![0];
+    rec.events.push({ ...first, onset_ms: flash + 1190, offset_ms: flash + 1260, min_at_ms: flash + 1225 });
+    const lines = buildExportFiles(b2).find((f) => f.filename === '07b_blink_events.csv')!.content.trim().split('\n');
+    const head = splitCsvRow(lines[0]);
+    const rows = lines.slice(1).map((l) => Object.fromEntries(splitCsvRow(l).map((c, i) => [head[i], c])));
+    const late = rows.find((x) => x.window === 'selftest' && Number(x.onset_ms) === flash + 1190)!;
+    expect(Number(late.cue_lag_ms)).toBe(1190);
+    expect(late.cue_matched).toBe('false');
+    expect(rows.filter((x) => x.window === 'selftest' && x.cue_matched === 'true')).toHaveLength(5);
   });
 
   it('documents every column, each saying the file is not needed for the main analysis', () => {
