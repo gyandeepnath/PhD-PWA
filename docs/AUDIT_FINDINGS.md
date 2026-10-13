@@ -6432,3 +6432,133 @@ Headless Chromium here processed 11–16 frames a second. That says nothing abou
     model), and how often it ends `not_separable`;
   - typical values of `on_screen_ratio`;
   - whether the baseline taken on the grey field differs from one taken on the dark screen.
+
+## Round 81 — review fixes for Round 78 (the kept blinks, the camera check's rows, the backup)
+
+A review of Round 78 (every blink kept, 07b/07c, the camera check's record, *Tick all*) confirmed one
+blocker, one major and five minor findings. All seven are fixed. No blink rule, cut or pass rule
+changed: `blink-r1`, `st-r2` and `fps-g2` are as they were.
+
+**Nothing here was measured on the Xiaomi Pad 6.** The sizes and timings below are from this machine.
+
+### In plain words
+
+1. **A build with a storage fault was on the live site.** Build 6ffc2c7 set up the blink store one
+   way; the next build expected another. A tablet that opened 6ffc2c7 could then not save the camera
+   check, and stopped when the check was accepted. Fixed from build 7ad5784 (dates below).
+2. **The camera check's rows in 07b now say which blinks it counted** (`cue_matched`) and give the
+   time of every flash (`cue_times_ms`). Each flash counts one blink, the nearest within 1.2 s; the
+   codebook used to read as if every blink within 1.2 s counted.
+3. **A damaged participant code now gets a plain message**, and the backup file can still be saved.
+4. **A backup that would overwrite another sitting's blink record is refused.**
+5. **The dashboard's cohort view no longer reads every sitting's blink records** (it never used them).
+6. **One set of measured sizes**: the blink records are about 1.7 MB a sitting; a full export about
+   6 MB.
+
+### 1. Which builds were live, and when (corrects Round 78)
+
+Round 78 said "Schema 10 has not been released … so no device holds the old key". That was wrong.
+From the repository's GitHub Actions deploy runs (read on 13 Oct 2026; times UTC, when each deploy
+finished):
+
+| Build (shown on the landing screen) | Live from | Blink store | On a tablet that had opened 6ffc2c7 |
+|---|---|---|---|
+| 2be8100 and earlier | — | none (schema 9) | — |
+| **6ffc2c7** | 7 Oct, 19:38 | keyed on `condition_id` (schema 10) | — |
+| ff5adf4, 9e7b2f0, f79d9cf, fcc015c, 15dc2d6, 16d17bb, 20a3ff4 | 8 Oct, 06:32 → 11 Oct, 06:22 | keyed on `record_id`, still schema 10, no migration | **camera check could not be saved**; the sitting stopped when it was accepted |
+| 7ad5784 and later | 11 Oct, 06:22 | schema 11: the store is rebuilt and every row kept | fixed |
+
+All of these call themselves 2.3.1; the build code on the landing screen tells them apart.
+
+**What it means for data.** Only a tablet that opened the app between 7 Oct 19:38 and 8 Oct 06:32
+UTC was affected. On it, from 8 to 11 October, accepting the camera check raised the red
+"Something failed in the background" banner; a second tap went on without the camera check's blink
+rows (the reading windows' rows were saved). Such a sitting's `selftest_*` summary in 01 stands; only
+its self-test rows in 07b/07c are missing. Whether any study sitting was recorded on such a tablet is
+not known here; the investigator can check by build code and date.
+
+Fixed by 7ad5784 (schema 11: the store is rebuilt under `record_id` and every row written back, inside
+the upgrade; two migration tests open a schema-10 store keyed on `condition_id`), and by cec6879: a
+backup exported from 6ffc2c7, whose reading rows have no `record_id`, is restored with each filed under
+its `condition_id`, as the device migration does. Such a row in any later file is still refused.
+
+### 2. The fixes
+
+| # | Finding | Fix | Commit |
+|---|---|---|---|
+| 1 | Blocker: the store's key changed without a schema bump | Schema 11 rebuilds it (section 1) | 7ad5784 |
+| 2 | Major: the e2e reading-window check stopped turning pages during each page's countdown (3 of 3 runs failed with retries off) | It reads by the page counter and the stage, waiting out each countdown | 5d68e0d |
+| 3 | A backup row filed under another sitting's id passed every check and was then written over that sitting's record | The restore refuses a row whose `record_id` is not the one its own window and ids give; the review's three cases are tests | cec6879 |
+| 4 | The pooled set and the cohort view decoded every blink trace for checks that only warn, then kept only errors | `auditBundle(…, { blinkRecords: false })` from `joinIntegrity`; `gatherSession` leaves the records out for the cohort view and the pooled download; frames are counted from the text columns | 66912ea |
+| 5 | The refusal of an over-long participant code showed only the red banner, and asked for a backup nothing had written | A dialog says what happened and offers **Save the backup file**; the sitting is not marked exported, so it is not purged | ede3bd9 |
+| 6 | The 07b codebook said a blink within 1200 ms of a flash was counted; the test counts one per flash | `cue_matched` and `cue_times_ms` (below) | 526f7ec |
+| 7 | The size figures disagreed (1.5 MB, 1.7 MB, 0.3 MB) | One measured table (below) | baf5476 |
+
+**Finding 4, timed again for this round** (60 fixture sittings with their blink records,
+`buildAnalysisDataset`, three runs, this machine): 1183–1464 ms at cec6879, before the fix; 43–62 ms
+at baf5476. The pooled files are byte-identical with and without the records (a test).
+
+**Finding 5, the 20-character limit kept.** The review noted that 20 refuses codes far shorter than
+the 10,000-character code that broke the export. The participant form has accepted at most 20
+characters since the first runnable build (e07f7b4, `{1,20}`), so a longer code did not come from the
+app, and the backup is still offered.
+
+**Finding 6, what the self-test counts.** The matching is unchanged since the first rule (`st-r1` and
+`st-r2` alike) and is now one function, `matchCues` (`tracking/selfTest.ts`), used by the score and by
+the export. The flashes are taken in the order shown; each takes the blink nearest to it within
+1.2 s either side that no earlier flash took. At the real timing (a flash every 3 s) a blink is within
+1.2 s of one flash at most, so this is simply "the nearest blink within 1.2 s of each flash". In the
+review's run, blinks at −242.6 ms and +1190.7 ms from one flash both had `cue_lag_ms` inside 1200 ms;
+the test counted the first and called the second an extra. 07b now has:
+
+- `cue_matched`: TRUE for the blinks a flash counted (they number `selftest_detected`), FALSE for
+  extras;
+- `cue_times_ms`: every flash time, on the same clock as `onset_ms`, so the matching can be re-run
+  from the file alone, unanswered flashes included.
+
+`cue_lag_ms` keeps its meaning (lag from the nearest flash); its entry, `selftest_detected` and
+`selftest_extra` now describe the real rule. The integrity report re-runs the matching on the stored
+times and warns if it does not give `selftest_detected` of `selftest_cued` (`selftest_events_match`).
+The stored times are rounded to 0.01 ms, so the re-run could differ from the test only for a blink
+within 0.01 ms of the 1.2-s edge; that warning would show it.
+
+**Finding 7, the sizes, measured** (ANALYSIS_PLAN §5 item 6). One ten-condition sitting: the export
+fixture's, each reading window's record built as the tablet makes it (three minutes at 30 fps, EAR
+noise in every stored decimal, 3% of frames without a face, 450 blinks), plus the camera check's
+record. `tests/blinkLog.test.ts` measures each figure and fails if any drifts.
+
+| What | With the blink records | Without |
+|---|---|---|
+| The blink records, as stored | about 1.7 MB (1,674,099 bytes) | — |
+| `backup_*.json` | about 2.1 MB (2,061,902 bytes) | about 0.26 MB (260,658 bytes) |
+| `07c_ear_trace.csv` | 54,515 rows, about 3.8 MB | — |
+| The whole export | about 6.2 MB | about 0.55 MB |
+
+The review's 1.72 MB backup was the fixture's own records, whose EAR is noise-free and encodes shorter.
+The tablet's database stores the same values in its own format; its size on the tablet was not
+measured.
+
+### 3. Checks run
+
+- `npm run verify` (lint, types, 1,559 unit tests, corpus, codebook, export gate, analysis
+  gate): green.
+- End-to-end, retries off, one worker: `exportRefused` (1), `fullRun` (1), `cameraDiagnostics` (3,
+  including the reading-window record): 5 passed.
+- After `npm run build`, the production-bundle suite (e2e-prod, 7 tests): passed.
+
+### 4. Versions in the data
+
+No rule changed. `DB_VERSION` is 11 (7ad5784). 07b gains two columns; `blink-r1`, `st-r2`, `fit-r1`
+and `fps-g2` are unchanged.
+
+### 5. Citations
+
+None added. No author–year citation was added to code or docs in this round.
+
+### 6. Not done, and why
+
+- **Not known here:** whether any study sitting was recorded on a tablet that had opened 6ffc2c7
+  (section 1). The investigator can check the build code and date of each sitting (`git_hash`,
+  `session_builds` in 01).
+- **Not measured on the tablet:** the database's own size, and how long the cohort view takes to open
+  there.
