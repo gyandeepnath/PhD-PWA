@@ -136,7 +136,9 @@ describe('condition aggregation', () => {
     expect(s.map((x) => x.fps_tier)).toEqual(['A', 'A']);
     expect(s.map((x) => x.fps_consistent)).toEqual([false, false]);
     expect(s.map((x) => x.qc.fps)).toEqual(['warn', 'warn']);
-    expect(s[0].camera_verdict.problems.join(' ')).toMatch(/more than 2 from this sitting's usual 27/);
+    expect(s[0].camera_verdict.problems.join(' ')).toMatch(/more than 2 from the usual 26\.5/);
+    // Flagged, kept: the consistent-rows re-fit leaves it out (rule rel-r1).
+    expect(s.map((x) => x.camera_verdict.reliability)).toEqual(['usable', 'usable']);
   });
   it('calls face presence good only at the pilot gate the protocol and the R template use', () => {
     /*

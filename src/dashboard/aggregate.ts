@@ -3,10 +3,12 @@
  * records into one row per condition (ordered by serial position). Used by both the dashboard
  * charts/tables and the wide-format CSV, so the numbers are guaranteed consistent.
  */
-import { MEASURE } from '@/tracking/measurementSchedule';
 import type { SessionBundle } from '@/storage/gather';
 import { CONFIG } from '@/experiment/config';
 import { FPS_GATE, fpsTier, gateParticipant, type FpsTier } from '@/tracking/frameRateGate';
+import {
+  ocularReliability, reliabilityHeadline, type Reliability, type ReliabilityCheck, type ReliabilityResult,
+} from '@/tracking/ocularReliability';
 import type { FatigueRecord, DisplayPerceptionRecord, ComprehensionRecord, RtSummaryRecord, EyeMetricsRecord } from '@/storage/types';
 import { PASSAGES } from '@/experiment/passages';
 import { isConditionComplete } from '@/storage/conditionStatus';
@@ -243,35 +245,67 @@ export interface ConditionSummary {
   fps_median: number | null;
   face_presence_ratio: number | null;
   off_axis_ratio: number | null;
+  /** 07 observed_duration_ms: the time the camera saw the face, dropouts excluded; null when camera off. */
+  observed_duration_ms: number | null;
+  /** 07 camera_blocked_ms: the feed black and flat (lens covered); null when camera off or not recorded. */
+  camera_blocked_ms: number | null;
+  /** 07 open_ear_measured / ear_baseline: the open eye here against calibration; null when either is missing. */
+  open_eye_vs_baseline: number | null;
   /** 07 on_screen_ratio (gaze-r2): a quality check, null without a passed gaze check or before Round 80. */
   on_screen_ratio: number | null;
   mean_face_luma: number | null;
   lighting_quality: 'low' | 'good' | 'overexposed' | null;
+  /**
+   * The older per-signal flags and their worst, `qc_overall` in 10_wide_summary.csv and analysis_long.csv.
+   * EXPORT ONLY since Round 82, and computed exactly as before so analyses run on the column reproduce:
+   * the dashboard shows the reliability verdict (camera_verdict, rule rel-r1) instead, which follows the
+   * analysis's own checks. These thresholds were not the templates' (a face in view under 50% was "bad"
+   * here and an ordinary confirmatory row there), so the two must not be shown side by side.
+   */
   qc: { facePresence: QcFlag; fps: QcFlag; offAxis: QcFlag; lighting: QcFlag; overall: QcFlag };
   /** Minutes of the exposure the camera actually observed (dropouts excluded); null when camera off. */
   observed_minutes: number | null;
-  /** "Is the camera working?" for this condition, in plain words. See cameraVerdict. */
+  /** "Is the blink data reliable?" for this condition: rule rel-r1, in plain words. See cameraVerdict. */
   camera_verdict: CameraVerdict;
 }
 
+/** Something worth knowing about a condition's eye data that no analysis rule uses. */
+export interface EyeNote {
+  key: 'few_blinks' | 'covered' | 'narrower_eye' | 'lighting';
+  text: string;
+}
+
 export interface CameraVerdict {
+  /** good / warn / bad: the reliability verdict's good / usable / not usable, for colouring. */
   level: QcFlag;
-  /** One line an operator can read at a glance. */
+  /** The verdict, rule rel-r1 (tracking/ocularReliability.ts). */
+  reliability: Reliability;
+  /** One line an operator can read at a glance: the verdict and its first reason. */
   headline: string;
-  /** Every problem found, most serious first; empty when working. */
+  /** Every check the verdict was read from, in a fixed order, passed or not. */
+  checks: ReliabilityCheck[];
+  /** The checks that failed or flagged, fails first, in words; empty when good. */
   problems: string[];
+  /** Notes beside the verdict (few blinks, light, a covered camera, a narrower eye); never change it. */
+  notes: EyeNote[];
+  /** The full result, for the export's columns. */
+  result: ReliabilityResult;
 }
 
 /**
- * Plain-language answer to "is the camera measuring blinks?" for one condition.
+ * Plain-language answer to "is this condition's blink data reliable?" for one condition.
  *
  * The investigator's question after the first real participant was whether the small blink numbers
- * meant the camera was not working. The numbers alone cannot say: a low blink rate is both what a
- * broken pipeline and an absorbed reader produce. What CAN be said is whether the conditions for a
- * trustworthy count held — camera on, not covered, eye calibration present, face in view, frame rate,
- * the open eye still near its calibrated size, enough blinks for a ratio, usable light. Each failed
- * condition becomes one sentence. Thresholds are the ones the rest of this file and the analysis
- * templates already use; nothing new is decided here.
+ * meant the camera was not working, and after testing 2.3.1, why most conditions read "bad". The
+ * numbers alone cannot say: a low blink rate is both what a broken pipeline and an absorbed reader
+ * produce. What CAN be said is whether the row passes the checks the analysis applies to it, and that
+ * is the verdict (rule rel-r1, tracking/ocularReliability.ts): good, usable (kept, left out of one
+ * pre-planned re-check), not usable (not in the eye-data models). Until Round 82 this function had
+ * thresholds of its own — "Not trustworthy" for a face in view under 80% or a camera covered for 30 s,
+ * neither of which the analysis excludes — so its red crosses did not mean what the analysis would do.
+ *
+ * What is worth knowing and no analysis rule uses comes back as NOTES, beside the verdict and never in
+ * it: few blinks, a covered camera, an open eye narrower than at calibration, the light.
  */
 export function cameraVerdict(eye: EyeMetricsRecord | undefined, q: {
   /** sampling_fps_observed: the gate's rate (fps-g2), not effective_fps. */
@@ -279,55 +313,49 @@ export function cameraVerdict(eye: EyeMetricsRecord | undefined, q: {
   blinks: number | null; minutes: number | null;
   /** The gate's consistency part, and the median it was judged against; absent when not known. */
   consistent?: boolean | null; median?: number | null;
+  /** off_axis_ratio and reading_time_ms, for the §5.3 and §5.4 checks; absent when not known. */
+  offAxis?: number | null; readingMs?: number | null;
 }): CameraVerdict {
-  if (!eye || !eye.camera_active) {
-    const reason = eye?.camera_inactive_reason;
-    const headline = reason === 'lost' ? 'Camera stopped during this condition — no blink data'
-      : reason === 'not_running' ? 'Camera was not running — no blink data'
-      : 'Camera not used for this condition — no blink data';
-    return { level: 'bad', headline, problems: [headline] };
-  }
-  const problems: { level: QcFlag; text: string }[] = [];
-  if (eye.ear_baseline == null) problems.push({ level: 'bad', text: 'No eye calibration, so blinks could not be told apart from open eyes' });
-  const blockedS = (eye.camera_blocked_ms ?? 0) / 1000;
-  if (blockedS >= 5) problems.push({ level: blockedS >= 30 ? 'bad' : 'warn', text: `The camera was covered or dark for ${Math.round(blockedS)} s` });
-  if (q.facePresence == null || q.facePresence < ENGAGEMENT.FACE_PRESENCE_PILOT_GATE) {
-    problems.push({
-      level: q.facePresence == null || q.facePresence < 0.8 ? 'bad' : 'warn',
-      text: `The face was in view only ${q.facePresence == null ? 'an unknown share' : Math.round(q.facePresence * 100) + '%'} of the time (needs 90%)`,
-    });
-  }
-  /*
-   * The frame-rate gate fps-g2, the same one the self-test, the export and the templates apply
-   * (frameRateGate.ts). This used to call anything under 30 a problem and under 25 "bad", on
-   * effective_fps, which face loss lowers — so at the tablet's 23-25 fps nearly every condition read
-   * "Not trustworthy", which said nothing about the data. The 30 was never verified; 20 and 15 come
-   * from a simulation of the shipped classifier (docs/FPS_GATE_SIMULATION.md).
-   */
-  const tier = fpsTier(q.fps);
-  const r = q.fps == null ? null : Math.round(q.fps);
-  if (tier == null) problems.push({ level: 'bad', text: `${MEASURE.samplingRate.name} unknown` });
-  else if (tier === 'C') problems.push({ level: 'bad', text: `${MEASURE.samplingRate.name} too low: ${r} a second (under ${FPS_GATE.REDUCED}) — blink data exploratory only` });
-  else if (tier === 'B') problems.push({ level: 'warn', text: `${MEASURE.samplingRate.name} reduced: ${r} a second (${FPS_GATE.ADEQUATE} is adequate) — kept, flagged` });
-  if (tier != null && q.consistent === false) {
-    problems.push({ level: 'warn', text: `${MEASURE.samplingRate.name} ${r} a second, more than ${FPS_GATE.CONSISTENCY_BAND} from this sitting's usual ${q.median == null ? '?' : Math.round(q.median)}` });
-  }
-  if (eye.open_ear_measured != null && eye.ear_baseline != null && eye.ear_baseline > 0 && eye.open_ear_measured / eye.ear_baseline < 0.85) {
-    problems.push({ level: 'warn', text: `Open eyes looked ${Math.round(100 * (1 - eye.open_ear_measured / eye.ear_baseline))}% narrower than at calibration — some blinks may be counted as incomplete, or missed` });
-  }
-  if (q.blinks != null && q.blinks < ENGAGEMENT.MIN_BLINKS_FOR_RATIO) {
-    problems.push({ level: 'warn', text: `Only ${q.blinks} blinks were seen — too few for the incomplete-blink ratio to mean much (needs ${ENGAGEMENT.MIN_BLINKS_FOR_RATIO})` });
-  }
-  if (q.lighting && q.lighting !== 'good') problems.push({ level: 'warn', text: q.lighting === 'low' ? 'The face was too dimly lit' : 'The face was over-lit (glare)' });
+  const cameraOn = !!eye && eye.camera_active;
+  const result = ocularReliability({
+    hasEyeRecord: !!eye,
+    cameraActive: cameraOn,
+    cameraInactiveReason: eye?.camera_inactive_reason ?? null,
+    blinkTotal: q.blinks,
+    hasBaseline: eye ? eye.ear_baseline != null : null,
+    fps: q.fps,
+    fpsConsistent: q.consistent ?? null,
+    fpsMedian: q.median ?? null,
+    facePresence: q.facePresence,
+    offAxis: q.offAxis ?? null,
+    observedMs: cameraOn ? (eye!.observed_duration_ms ?? null) : null,
+    readingMs: q.readingMs ?? null,
+  });
 
-  const level = worst(problems.map((p) => p.level));
+  const notes: EyeNote[] = [];
+  if (cameraOn) {
+    if (q.blinks != null && q.blinks > 0 && q.blinks < ENGAGEMENT.MIN_BLINKS_FOR_RATIO) {
+      notes.push({ key: 'few_blinks', text: `Only ${q.blinks} blinks: the ratio is imprecise (${ENGAGEMENT.MIN_BLINKS_FOR_RATIO} or more is steadier). The analysis weights each run by its blinks.` });
+    }
+    const blockedS = (eye!.camera_blocked_ms ?? 0) / 1000;
+    if (blockedS >= 5) notes.push({ key: 'covered', text: `Camera covered or dark for ${Math.round(blockedS)} s; that time is not counted as seen.` });
+    if (eye!.open_ear_measured != null && eye!.ear_baseline != null && eye!.ear_baseline > 0 && eye!.open_ear_measured / eye!.ear_baseline < 0.85) {
+      notes.push({ key: 'narrower_eye', text: `Open eye ${Math.round(100 * (1 - eye!.open_ear_measured / eye!.ear_baseline))}% narrower than at calibration: some blinks may read as incomplete, or be missed.` });
+    }
+    if (q.lighting && q.lighting !== 'good') notes.push({ key: 'lighting', text: q.lighting === 'low' ? 'Face dimly lit.' : 'Face over-lit (glare).' });
+  }
+
   const rate = q.blinks != null && q.minutes ? q.blinks / q.minutes : null;
-  const seen = q.blinks == null ? 'no blink count' : `${q.blinks} blinks in ${q.minutes == null ? '?' : q.minutes.toFixed(1)} min${rate == null ? '' : ` (${rate.toFixed(1)} per min)`}`;
-  const ordered = [...problems.filter((p) => p.level === 'bad'), ...problems.filter((p) => p.level !== 'bad')].map((p) => p.text);
+  const seen = q.blinks == null ? 'no blink count' : `${q.blinks} blinks in ${q.minutes == null ? '?' : q.minutes.toFixed(1)} min${rate == null ? '' : ` (${rate.toFixed(1)} a minute)`}`;
+  const wrong = [...result.checks.filter((c) => c.status === 'fail'), ...result.checks.filter((c) => c.status === 'flag')];
   return {
-    level,
-    headline: level === 'good' ? `Working: ${seen}` : `${level === 'bad' ? 'Not trustworthy' : 'Usable with care'}: ${seen}`,
-    problems: ordered,
+    level: result.reliability === 'good' ? 'good' : result.reliability === 'usable' ? 'warn' : 'bad',
+    reliability: result.reliability,
+    headline: reliabilityHeadline(result, seen),
+    checks: result.checks,
+    problems: wrong.map((c) => c.phrase),
+    notes,
+    result,
   };
 }
 
@@ -785,6 +813,10 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       fps_median: cameraActive ? g.participantMedian : null,
       face_presence_ratio: facePresence,
       off_axis_ratio: offAxis,
+      observed_duration_ms: cameraActive ? (eye?.observed_duration_ms ?? null) : null,
+      camera_blocked_ms: cameraActive ? (eye?.camera_blocked_ms ?? null) : null,
+      open_eye_vs_baseline: cameraActive && eye?.open_ear_measured != null && eye.ear_baseline != null && eye.ear_baseline > 0
+        ? eye.open_ear_measured / eye.ear_baseline : null,
       on_screen_ratio: cameraActive ? (eye?.on_screen_ratio ?? null) : null,
       mean_face_luma: cameraActive ? (eye?.mean_face_luma ?? null) : null,
       lighting_quality: lightingQuality,
@@ -798,7 +830,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       observed_minutes: observedMinutes,
       camera_verdict: cameraVerdict(eye, {
         facePresence, fps: g.fps, lighting: lightingQuality, blinks: eng.blink_count_total, minutes: observedMinutes,
-        consistent: g.consistent, median: g.participantMedian,
+        consistent: g.consistent, median: g.participantMedian, offAxis, readingMs: c.reading_time_ms,
       }),
     };
   });
