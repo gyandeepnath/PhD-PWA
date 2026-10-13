@@ -165,4 +165,21 @@ describe('the cohort tab counts the rows the analysis templates model, and says 
     expect(s.conditions[0].pooled_ibr).toBeCloseTo(31 / 70);
     expect(s.conditions[0].incomplete_total).toBe(31);
   });
+
+  it('counts the reliability verdict per condition, and the §5.3-5.4 flags the R template counts (Round 82)', () => {
+    const bundles = cohort(3);
+    // P002's first reading: the face in view 80% of the time (usable); P003's second: camera off.
+    bundles[1].eyeMetrics[0].face_presence_ratio = 0.8;
+    Object.assign(bundles[2].eyeMetrics[1], { camera_active: false });
+    const ds = buildAnalysisDataset(bundles);
+    const s = cohortSummary(ds.files, ds.integrity, N_CONDITIONS);
+    const totals = s.conditions.reduce((a, c) => ({ g: a.g + c.n_good, u: a.u + c.n_usable, n: a.n + c.n_not_usable }), { g: 0, u: 0, n: 0 });
+    expect(totals.g + totals.u + totals.n).toBe(s.confirmatory.rows);
+    expect(totals.u).toBeGreaterThanOrEqual(1);
+    expect(totals.n).toBeGreaterThanOrEqual(1);
+    // The camera-off row is not in the §5 frame; the 80% row is in it, and flagged.
+    expect(s.qcChecks.of).toBe(s.confirmatory.rows - 1);
+    expect(s.qcChecks.flagged).toBe(1);
+  });
 });
+

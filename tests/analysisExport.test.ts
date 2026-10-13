@@ -461,6 +461,39 @@ describe('a condition with no eye record says so, rather than asserting the came
     expect(measured.qc_overall).toBe('good');
     expect(measured.n_blinks_total).toBe('23');
   });
+
+  /*
+   * Round 82: the reliability verdict (rule rel-r1) the dashboard shows, read off this file's own
+   * columns. The no-record, camera-off and measured rows each get it, with its codes and its rule.
+   */
+  it('carries the reliability verdict, its codes and its rule on every row', () => {
+    const rows = rowsWithEye({ 0: ACTIVE_EYE, 3: DISABLED_EYE });
+    const at = (pos: string) => rows.find((r) => r.session_position === pos)!;
+    // The camera saw all 180 s of the 180-s reading, at 30 a second, the face in view 95% of it.
+    const measured = at('0');
+    expect(measured.reading_time_ms).toBe('180000');
+    expect(measured.ocular_reliability).toBe('good');
+    expect(measured.ocular_reliability_checks).toBe('');
+    expect(at('3').ocular_reliability).toBe('not_usable');
+    expect(at('3').ocular_reliability_checks).toBe('camera_off');
+    expect(at('5').ocular_reliability).toBe('not_usable');
+    expect(at('5').ocular_reliability_checks).toBe('no_eye_record');
+    expect(rows.every((r) => r.reliability_rule_version === 'rel-r1')).toBe(true);
+    expect(ANALYSIS_LONG_COLUMNS).toEqual(expect.arrayContaining(['ocular_reliability', 'ocular_reliability_checks', 'reliability_rule_version']));
+  });
+
+  it('judges the rate\'s consistency against the participant\'s usual over every sitting, as the file does', () => {
+    // Two camera-on rows at 30 and 24 samples a second: the median is 27, each 3 away, so both are
+    // usable for consistency alone (fps_off_usual), whatever else holds.
+    const slow = { ...ACTIVE_EYE, ear_sample_count: 4321 };
+    const rows = rowsWithEye({ 0: ACTIVE_EYE, 1: slow });
+    for (const pos of ['0', '1']) {
+      const r = rows.find((x) => x.session_position === pos)!;
+      expect(r.fps_consistent).toBe('false');
+      expect(r.ocular_reliability).toBe('usable');
+      expect(r.ocular_reliability_checks.split(';')).toContain('fps_off_usual');
+    }
+  });
 });
 
 describe('a session with no participant id gets a grouping level of its own', () => {

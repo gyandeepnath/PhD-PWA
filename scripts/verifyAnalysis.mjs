@@ -193,14 +193,26 @@ for (const { root, options } of jobs) {
   mkdirSync(root + '/_pooled', { recursive: true });
   for (const f of ds.files) writeFileSync(root + '/_pooled/' + f.filename, f.content);
   const s = cohortSummary(ds.files, ds.integrity, N_CONDITIONS);
-  writeFileSync(root + '.expected.json', JSON.stringify({ confirmatory: s.confirmatory, sensitivity: s.sensitivity }));
+  writeFileSync(root + '.expected.json', JSON.stringify({ confirmatory: s.confirmatory, sensitivity: s.sensitivity, qcChecks: s.qcChecks }));
+  // The r-short state below halves P001's observed_duration_ms in the per-sitting files; the same edit
+  // on the bundles gives the dashboard's count of §5.3-5.4 flags (rule rel-r1) for the same rows.
+  if (root.endsWith('/cohort')) {
+    for (const b of bundles) {
+      if (b.session.participant_id !== 'P001') continue;
+      for (const e of b.eyeMetrics) if (e.observed_duration_ms != null) e.observed_duration_ms = Math.round(e.observed_duration_ms / 2);
+    }
+    const short = buildAnalysisDataset(bundles);
+    writeFileSync(root + '.rshort.json', JSON.stringify(cohortSummary(short.files, short.integrity, N_CONDITIONS).qcChecks));
+  }
 }
 `);
   const at = (name) => join(dir, name);
   const jobsFile = join(dir, 'cohorts.json');
   writeFileSync(jobsFile, JSON.stringify(Object.entries(COHORTS).map(([name, options]) => ({ root: at(name), options }))));
   execFileSync('npx', ['tsx', cohortDumper, jobsFile], { stdio: 'pipe' });
-  const expected = JSON.parse(readFileSync(`${at('cohort')}.expected.json`, 'utf8'));
+  const expectedAll = JSON.parse(readFileSync(`${at('cohort')}.expected.json`, 'utf8'));
+  // The two sets the templates print, compared whole below; the §5 counts are checked on their own.
+  const expected = { confirmatory: expectedAll.confirmatory, sensitivity: expectedAll.sensitivity };
   const cohortDir = at('cohort');
 
   /** Rewrite one column of a per-sitting CSV in place. The export quotes no field these edits touch. */
@@ -849,6 +861,12 @@ for (const { root, options } of jobs) {
     ok('R: the modelling frame is one row per participant x condition of the CONFIRMATORY set',
       frameRows != null && Number(frameRows[1]) === expected.confirmatory.rows,
       `expected ${expected.confirmatory.rows} rows, got ${frameRows ? frameRows[1] : 'no match'}`);
+    // Round 82: the dashboard's reliability verdict (rule rel-r1) reads the §5.3-5.4 checks off
+    // analysis_long.csv; R applies them to its own frame. The same rows must be flagged.
+    const rQc = /rows failing at least one §5 check:\s*(\d+)\/(\d+)/.exec(rOut);
+    ok('R: its §5 checks flag the rows the dashboard\'s reliability verdict flags',
+      rQc != null && Number(rQc[1]) === expectedAll.qcChecks.flagged && Number(rQc[2]) === expectedAll.qcChecks.of,
+      `R ${rQc ? `${rQc[1]}/${rQc[2]}` : 'no match'}, dashboard ${expectedAll.qcChecks.flagged}/${expectedAll.qcChecks.of}`);
 
     // The pre-registered coding. Treatment contrasts made the printed polarity row the effect in
     // ACHROMATIC TEXT ONLY, while the plan states H1's falsification rule on the average effect.
@@ -889,6 +907,12 @@ for (const { root, options } of jobs) {
       ok('R: the flagged rows are counted as failing a §5 check',
         /rows failing at least one §5 check:\s*10\//.test(shortOut),
         'the combined qc_clean flag did not pick them up');
+      // ... and the dashboard's reliability verdict, given the same truncation, flags the same rows.
+      const dashShort = JSON.parse(readFileSync(`${cohortDir}.rshort.json`, 'utf8'));
+      const rShortQc = /rows failing at least one §5 check:\s*(\d+)\/(\d+)/.exec(shortOut);
+      ok('R and the dashboard\'s reliability verdict flag the same truncated rows',
+        rShortQc != null && Number(rShortQc[1]) === dashShort.flagged && Number(rShortQc[2]) === dashShort.of,
+        `R ${rShortQc ? `${rShortQc[1]}/${rShortQc[2]}` : 'no match'}, dashboard ${dashShort.flagged}/${dashShort.of}`);
     }
   }
 

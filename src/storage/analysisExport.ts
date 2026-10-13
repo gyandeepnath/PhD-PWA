@@ -43,6 +43,7 @@ import { PASSAGES } from '@/experiment/passages';
 import { ANALYSIS_CODEBOOK } from './analysisCodebook';
 import { N_ILLUMINATION_BLOCKS, specFor, LUX_CHECKPOINTS } from '@/experiment/illumination';
 import { fpsConsistent, fpsTier, medianFps, rowGateVersion, samplingFpsObserved } from '@/tracking/frameRateGate';
+import { ocularReliability } from '@/tracking/ocularReliability';
 
 /** Illumination blocks a participant completes — ONE under the current protocol. Runs = N x this. */
 // Derived, never a literal: this used to be a hard-coded 2, which would have silently survived the
@@ -85,7 +86,7 @@ export const ANALYSIS_LONG_COLUMNS = [
   'camera_active', 'camera_inactive_reason', 'effective_fps', 'fps_adequate_for_ratio',
   'sampling_fps_observed', 'fps_tier', 'fps_consistent', 'fps_gate_version', 'face_presence_ratio',
   'gaze_calibrated', 'gaze_trust', 'gaze_targets_well_covered', 'on_screen_ratio',
-  'qc_overall', 'e2e_timing', 'session_status', 'withdrawn', 'protocol_pass', 'repeat_run_note',
+  'qc_overall', 'ocular_reliability', 'ocular_reliability_checks', 'reliability_rule_version', 'e2e_timing', 'session_status', 'withdrawn', 'protocol_pass', 'repeat_run_note',
   'sitting_split_reason',
   // --- was this row a finished, first-attempt, uninterrupted run? -------------------------------
   'condition_complete', 'attempt_number', 'condition_interrupted',
@@ -549,6 +550,31 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
   for (const group of byParticipant.values()) {
     const med = medianFps(group.map((r) => r.sampling_fps_observed as number | null));
     for (const r of group) r.fps_consistent = fpsConsistent(r.sampling_fps_observed as number | null, med);
+  }
+
+  /*
+   * The reliability verdict, rule rel-r1 (tracking/ocularReliability.ts): good, usable or not_usable,
+   * the codes of the checks behind it, and the rule. Read off THIS FILE'S OWN COLUMNS, after
+   * fps_consistent (which it needs), so it can be recomputed from the row and says what the dashboard
+   * says. It decides nothing: the templates apply their own filters, and this names the ones a row meets.
+   */
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  for (const r of rows) {
+    const v = ocularReliability({
+      hasEyeRecord: r.camera_active != null,
+      cameraActive: r.camera_active === true,
+      cameraInactiveReason: (r.camera_inactive_reason as 'lost' | 'not_running' | null) ?? null,
+      blinkTotal: num(r.n_blinks_total),
+      fps: num(r.sampling_fps_observed),
+      fpsConsistent: typeof r.fps_consistent === 'boolean' ? r.fps_consistent : null,
+      facePresence: num(r.face_presence_ratio),
+      offAxis: num(r.off_axis_ratio),
+      observedMs: num(r.observed_duration_ms),
+      readingMs: num(r.reading_time_ms),
+    });
+    r.ocular_reliability = v.reliability;
+    r.ocular_reliability_checks = v.codes;
+    r.reliability_rule_version = v.rule_version;
   }
 
   return rows;

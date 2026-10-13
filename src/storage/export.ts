@@ -22,6 +22,7 @@ import { requiredGrant } from './media';
 import { conditionPhysical, sessionMmPerCssPx, trialEccentricity } from '@/lib/physicalCalibration';
 import { cueLag, cueMatched, decodeTrace, pageAt } from '@/tracking/blinkLog';
 import { FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION, fpsTier, rowGateVersion, samplingFpsObserved } from '@/tracking/frameRateGate';
+import { RELIABILITY_GATES, RELIABILITY_RULE_VERSION } from '@/tracking/ocularReliability';
 import { SELF_TEST_RULE_V1 } from '@/tracking/selfTest';
 import { CALIBRATION_RULE_BEFORE } from '@/tracking/calibrationSequence';
 import { screenName } from '@/tracking/measurementSchedule';
@@ -841,7 +842,10 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '10_wide_summary.csv', column: 'effective_fps', type: 'number', unit: 'fps', role: 'qc', description: "Achieved sampling rate of the EAR series (face-solved frames), not the camera's frame rate. See 07_eye_metrics.csv. Duration-based ocular measures are unreliable below about 25; check this before modelling them." },
   { file: '10_wide_summary.csv', column: 'face_presence_ratio', type: 'number', unit: '0-1', role: 'qc', description: 'Proportion of the condition with a face detected. Low values mean the ocular row rests on little data. '
     + `Same measure and same pilot gate (>= ${FACE_PRESENCE_PILOT_GATE_PCT}%) as the 07_eye_metrics.csv column of this name.` },
-  { file: '10_wide_summary.csv', column: 'qc_overall', type: 'string', unit: '-', role: 'qc', description: 'Overall quality verdict for the condition-run: good, warn or bad. Use it to define the sensitivity analysis, not to delete rows silently.' },
+  { file: '10_wide_summary.csv', column: 'qc_overall', type: 'string', unit: '-', role: 'qc', description: 'SUPERSEDED from Round 82 by ocular_reliability (rule rel-r1) and kept, computed as before, so analyses run on it reproduce: good, warn or bad, the worst of the dashboard\'s older per-signal flags, whose thresholds were not the analysis templates\'. Neither template reads it.' },
+  { file: '10_wide_summary.csv', column: 'ocular_reliability', type: 'factor(3)', unit: '-', role: 'qc', description: `Is this condition's blink data reliable? good, usable or not_usable: the verdict the dashboard shows, rule ${RELIABILITY_RULE_VERSION}, read off the analysis's own checks. not_usable = not in the confirmatory eye-data models (camera off, no blink counted, or eye sampling rate tier C); usable = modelled, and left out of one pre-registered re-fit (tier B, a rate off the usual, face in view under ${RELIABILITY_GATES.FACE_IN_VIEW_MIN}, head turned away over ${RELIABILITY_GATES.HEAD_TURNED_AWAY_MAX}, or the camera seeing under ${RELIABILITY_GATES.EXPOSURE_MIN_FRAC} of the reading); good = no check flags it. The rate's consistency is judged against THIS SITTING's usual rate; analysis_long.csv judges it against the participant's over every sitting, which differs only for a split sitting. See analysis_long.csv's codebook for every code.` },
+  { file: '10_wide_summary.csv', column: 'ocular_reliability_checks', type: 'string', unit: '-', role: 'qc', description: "The checks behind ocular_reliability that failed or flagged, failures first, ';'-separated (no_eye_record, camera_off, blinks_not_counted, zero_blinks, fps_tier_C; fps_tier_B, fps_off_usual, fps_unknown, face_in_view, head_turned_away, exposure_short). Blank when every check passed." },
+  { file: '10_wide_summary.csv', column: 'reliability_rule_version', type: 'string', unit: '-', role: 'qc', description: `The rule the reliability columns were computed under: '${RELIABILITY_RULE_VERSION}' from Round 82. Computed at export from stored columns.` },
   { file: '11_participant.csv', column: 'enrolment_number', type: 'integer', unit: '1-n', role: 'id', description: 'Sequential enrolment index. Drives the counterbalancing row assignment and the illumination order, so it is not an arbitrary identifier and must not be reshuffled.' },
   { file: '11_participant.csv', column: 'age', type: 'integer', unit: 'years', role: 'covariate', description: 'Age at enrolment. The sample is delimited to 18 to 35.' },
   { file: '11_participant.csv', column: 'gender', type: 'string', unit: '-', role: 'covariate', description: 'Self-reported gender.' },
@@ -1400,7 +1404,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 10 — wide one-row-per-condition summary (joined)
   csv('10_wide_summary.csv',
-    ['participant_id', 'session_index', 'condition_id', 'condition_complete', 'attempt_number', 'condition_label', 'session_position', 'polarity', 'color_name', 'wcag_contrast_ratio', 'below_wcag_aa', 'passage_id', 'mean_rt_hits_ms', 'd_prime', 'd_prime_se', 'criterion', 'fatigue_mean', 'fatigue_delta', 'comprehension_correct', 'search_time_ms', 'search_termination', 'search_accuracy', 'search_efficiency', 'comfort_score', 'clarity_score', 'blink_rate', 'blink_rate_full', 'effective_fps', 'face_presence_ratio', 'qc_overall', 'engagement_flag', 'quality_score'],
+    ['participant_id', 'session_index', 'condition_id', 'condition_complete', 'attempt_number', 'condition_label', 'session_position', 'polarity', 'color_name', 'wcag_contrast_ratio', 'below_wcag_aa', 'passage_id', 'mean_rt_hits_ms', 'd_prime', 'd_prime_se', 'criterion', 'fatigue_mean', 'fatigue_delta', 'comprehension_correct', 'search_time_ms', 'search_termination', 'search_accuracy', 'search_efficiency', 'comfort_score', 'clarity_score', 'blink_rate', 'blink_rate_full', 'effective_fps', 'face_presence_ratio', 'qc_overall', 'ocular_reliability', 'ocular_reliability_checks', 'reliability_rule_version', 'engagement_flag', 'quality_score'],
     summaries.map((s) => ({
       participant_id: pid, session_index: session.session_index,
       condition_complete: s.condition_complete, attempt_number: s.attempt_number,
@@ -1421,6 +1425,10 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       search_accuracy: s.search_accuracy, search_efficiency: s.search_efficiency, comfort_score: s.comfort_score,
       clarity_score: s.clarity_score, blink_rate: s.blink_rate, blink_rate_full: s.blink_rate_full,
       effective_fps: s.effective_fps, face_presence_ratio: s.face_presence_ratio, qc_overall: s.qc.overall,
+      // Rule rel-r1, as the dashboard shows it (this sitting's own usual rate for the consistency check).
+      ocular_reliability: s.camera_verdict.result.reliability,
+      ocular_reliability_checks: s.camera_verdict.result.codes,
+      reliability_rule_version: s.camera_verdict.result.rule_version,
       engagement_flag: s.engagement, quality_score: s.quality_score,
     })));
 

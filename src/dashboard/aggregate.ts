@@ -902,6 +902,13 @@ export interface CohortConditionRow {
   n_fps_inadequate: number;
   /** Rows more than 2 fps from their participant's median (fps_consistent FALSE). */
   n_fps_inconsistent: number;
+  /**
+   * The confirmatory rows by ocular_reliability (rule rel-r1), as analysis_long.csv carries it: the same
+   * verdict, from the same columns, as the per-sitting tabs show.
+   */
+  n_good: number;
+  n_usable: number;
+  n_not_usable: number;
 }
 
 export interface CohortSummary {
@@ -926,6 +933,12 @@ export interface CohortSummary {
   /** The smallest and largest condition n — an early warning that one is falling behind. */
   minConditionN: number;
   maxConditionN: number;
+  /**
+   * Camera-on confirmatory rows, and how many of them a §5.3–5.4 check flags (face in view, head turned
+   * away, the reading seen). The R template prints the same count ("rows failing at least one §5
+   * check"), and the analysis gate holds the two equal on the same cohort.
+   */
+  qcChecks: { flagged: number; of: number };
 }
 
 /** Minimal RFC-4180 reader. The pooled file is written by toCsv, which quotes and doubles quotes. */
@@ -1003,6 +1016,8 @@ export function cohortSummary(
   const rows = long ? readCsv(long.content) : [];
 
   const byCondition = new Map<string, CohortConditionRow>();
+  let qcFlagged = 0;
+  let qcOf = 0;
   const positionBalance: Record<string, number[]> = {};
   const exclusionCounts = new Map<string, number>();
 
@@ -1014,6 +1029,7 @@ export function cohortSummary(
         condition_label: label, polarity: r.polarity ?? '', text_colour: r.text_colour ?? '',
         n: 0, n_unfinished: 0, n_withdrawn: 0, n_analysable: 0, n_with_outcome: 0, mean_ibr: null, pooled_ibr: null,
         blinks_total: 0, incomplete_total: 0, n_fps_inadequate: 0, n_fps_inconsistent: 0,
+        n_good: 0, n_usable: 0, n_not_usable: 0,
       };
       byCondition.set(label, c);
     }
@@ -1053,6 +1069,13 @@ export function cohortSummary(
     // off, or too little observed), which is not the same as inadequate and is counted as neither.
     if (r.fps_tier === 'B' || r.fps_tier === 'C') c.n_fps_inadequate++;
     if (r.fps_consistent !== '' && r.fps_consistent != null && !isTrue(r.fps_consistent)) c.n_fps_inconsistent++;
+    if (r.ocular_reliability === 'good') c.n_good++;
+    else if (r.ocular_reliability === 'usable') c.n_usable++;
+    else if (r.ocular_reliability === 'not_usable') c.n_not_usable++;
+    if (isTrue(r.camera_active)) {
+      qcOf++;
+      if (QC_CHECK_CODES.some((k) => (r.ocular_reliability_checks ?? '').split(';').includes(k))) qcFlagged++;
+    }
 
     const denom = Number(r.n_blinks_total);
     const ratio = Number(r.incomplete_blink_ratio);
@@ -1101,5 +1124,9 @@ export function cohortSummary(
     issues: integrity.issues,
     minConditionN: ns.length ? Math.min(...ns) : 0,
     maxConditionN: ns.length ? Math.max(...ns) : 0,
+    qcChecks: { flagged: qcFlagged, of: qcOf },
   };
 }
+
+/** The ocular_reliability_checks codes of the R template's §5.3–5.4 checks, which its qc_clean combines. */
+const QC_CHECK_CODES = ['face_in_view', 'head_turned_away', 'exposure_short'];

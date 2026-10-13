@@ -18,6 +18,7 @@ import { RATE_CORRECTION_NOTE } from '@/lib/signalDetection';
 import { CONFIG } from '@/experiment/config';
 import { ILLUMINATION, ILLUMINATION_LEVELS } from '@/experiment/illumination';
 import { FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION } from '@/tracking/frameRateGate';
+import { RELIABILITY_GATES, RELIABILITY_RULE_VERSION } from '@/tracking/ocularReliability';
 
 // The current protocol's single illumination level, for the prose below — derived, so it cannot say
 // "300 lux" after the protocol changes. See docs/ILLUMINATION_AMENDMENT.md.
@@ -255,7 +256,13 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
   { column: 'sitting_split_reason', role: 'covariate', missing: 'single sitting, or not recorded', unit: '-',
     description: "Why the researcher split this participant's conditions across two sittings; blank for a single sitting. READ IT BEFORE POOLING. The structure is an operator choice made per participant, so if splits were granted because someone looked tired then fatigue exposure varies between people for a reason correlated with the outcome — which makes this a covariate rather than a free choice. A logistical reason is harmless; a clinical one is not, and only the recorded text distinguishes them." },
   { column: 'qc_overall', role: 'qc', unit: 'good|warn|bad', missing: 'no eye record',
-    description: 'Worst of the per-signal quality flags. Use for a pre-registered sensitivity analysis, not as a silent filter.' },
+    description: 'SUPERSEDED from Round 82 by ocular_reliability (rule rel-r1) and kept, computed as before, so analyses run on it reproduce. Worst of the dashboard\'s older per-signal flags, whose thresholds were not the templates\' (a face in view under 50% was bad here and an ordinary confirmatory row there). Neither template reads it.' },
+  { column: 'ocular_reliability', role: 'qc', unit: 'good|usable|not_usable', missing: 'never empty',
+    description: `Is this row's blink data reliable? The verdict the dashboard shows (Good, Usable, Not usable), rule ${RELIABILITY_RULE_VERSION}, read off this file's own columns and the analysis's own checks; it introduces no rule. not_usable: the row is not in the confirmatory eye-data models — no eye record or the camera off, no blink counted (n_blinks_total blank or 0: without an open-eye baseline nothing is counted), or fps_tier C. usable: modelled, and left out of one pre-registered re-fit — fps_tier B, fps_consistent FALSE, or a §5.3-5.4 check (face_presence_ratio under ${RELIABILITY_GATES.FACE_IN_VIEW_MIN}, the protocol's pilot gate; off_axis_ratio over ${RELIABILITY_GATES.HEAD_TURNED_AWAY_MAX} or observed_duration_ms / reading_time_ms under ${RELIABILITY_GATES.EXPOSURE_MIN_FRAC}, the R template's analyst defaults; each a strict inequality, as R applies it). good: modelled, and no check flags it. Few blinks, the light and a covered camera are shown beside it on the dashboard as notes and never change it. Describes the eye data only; whether the participant is analysable is \`analysable\`. ANALYSIS_PLAN.md §5.` },
+  { column: 'ocular_reliability_checks', role: 'qc', unit: 'text', missing: 'every check passed (ocular_reliability good)',
+    description: "The checks behind ocular_reliability that failed or flagged, failures first, ';'-separated: no_eye_record, camera_off, blinks_not_counted, zero_blinks, fps_tier_C (not usable); fps_tier_B, fps_off_usual, fps_unknown (the camera on but under a second or two samples observed), face_in_view, head_turned_away, exposure_short (usable)." },
+  { column: 'reliability_rule_version', role: 'qc', unit: '-', missing: 'never empty',
+    description: `The rule ocular_reliability and ocular_reliability_checks were computed under: '${RELIABILITY_RULE_VERSION}' from Round 82. Computed when the file is written, from stored columns, so every row of one file is under one rule; a change to any check, threshold or word changes this string.` },
   { column: 'e2e_timing', role: 'qc', unit: 'boolean', missing: 'not recorded on this session',
     description: 'TRUE marks a test-harness session run with collapsed timing constants — a 150 ms reading floor instead of 20 s. Such a row is a test artefact and must never be pooled with collected data. Exported rather than filtered so the exclusion is yours and is visible; filter on it before any analysis.' },
   { column: 'session_status', role: 'qc', unit: 'in_progress|complete', missing: 'never empty',
