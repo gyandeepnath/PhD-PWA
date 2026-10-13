@@ -22,7 +22,8 @@
  *
  * STORED COMPACTLY. One text column per channel, one value per frame, rounded to what the camera can
  * resolve: time to 0.01 ms, EAR to 6 decimals (landmark noise is in the second or third). A
- * ten-condition sitting is about 1.5 MB (docs/ANALYSIS_PLAN.md §5 item 6 gives the measured figure).
+ * ten-condition sitting's records are about 1.7 MB (measured: docs/ANALYSIS_PLAN.md §5 item 6, which
+ * also gives the backup and export sizes; tests/blinkLog.test.ts fails if they drift).
  */
 import type { BlinkEventDetail, EarSample } from './blink';
 import { BLINK_RULE_VERSION, EAR_TIERS } from './blink';

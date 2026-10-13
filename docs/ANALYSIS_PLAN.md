@@ -577,12 +577,23 @@ These are not optional and they come first.
      rows differ from `selftest_detected` + `selftest_extra`, or their `cue_matched` count from
      `selftest_detected` (`selftest_events_match`). A warning
      means "do not use 07b/07c for that condition"; 07 is unaffected.
-   - **Size** (measured in `tests/blinkLog.test.ts` on a synthetic sitting: ten 3-minute reading
-     windows at 30 fps, 450 blinks): about **1.7 MB per sitting** in the tablet's database and in the
-     `backup_*.json` (a backup without them is about 0.3 MB). `07c_ear_trace.csv` is the large
-     file: about 54,000 rows and 4–6 MB per sitting. A hundred sittings kept on the tablet take
-     about 170 MB. The pre-flight storage check already asks for 300 MB free before every sitting
-     (`storage/storageHealth.ts`), so it needs no change; export and back up as usual.
+   - **Size**, measured on one ten-condition sitting (Round 81; `tests/blinkLog.test.ts` fails if
+     any figure here drifts): the export fixture's sitting, each reading window's record built as the
+     tablet makes it — three minutes at 30 fps, EAR noise in every stored decimal, 3% of frames
+     without a face, 450 blinks in all — plus the camera check's record.
+
+     | What | With the blink records | Without |
+     |---|---|---|
+     | The blink records themselves, as stored | about **1.7 MB** | — |
+     | `backup_*.json` | about 2.1 MB | about 0.26 MB |
+     | `07c_ear_trace.csv` (the large file) | about 54,500 rows, 3.8 MB | — |
+     | The whole export | about 6.2 MB | about 0.55 MB |
+
+     The sizes are of the text the app stores and writes. The tablet's database keeps the same values
+     in its own format; its size on the tablet was not measured. A hundred sittings kept on the tablet
+     hold about 170 MB of blink records. The pre-flight storage check already asks for 300 MB free
+     before every sitting (`storage/storageHealth.ts`), so it needs no change; export and back up as
+     usual.
 7. **The calibration rules (Round 80).** Both are versioned in the data; nothing in the primary
    outcome's definition changed.
    - **The open-eye baseline, rule `cal-r2`** (01 `calibration_rule_version`; `cal-r1` before). The

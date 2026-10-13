@@ -20,6 +20,8 @@ import {
 } from '@/tracking/blinkLog';
 import { FIT_RULE_VERSION, templateClosure } from '@/tracking/blinkFit';
 import { EyeMetricsAggregator } from '@/tracking/aggregator';
+import { buildFixtureBundle } from '@/sim/bundleFixture';
+import { backupExportFile, buildExportFiles } from '@/storage/export';
 
 const BASE = 0.3;
 const STEP = 40;
@@ -339,17 +341,25 @@ describe('the fitted-minimum sensitivity (Round 79, fit-r1)', () => {
 
 describe('the stored size docs/ANALYSIS_PLAN.md states', () => {
   /*
-   * §5 item 6 tells the investigator what these records cost: about 1.7 MB per ten-condition sitting.
-   * Measured here on a synthetic sitting the way the app stores it — ten 3-minute reading windows at
-   * 30 fps, EAR noise in every decimal kept, 3% of frames without a face, a blink every 4 s — so the
-   * figure in the document cannot drift from the encoding without this failing.
+   * §5 item 6 tells the investigator what these records cost, and every other place that gives a size
+   * (tracking/blinkLog.ts, storage/gather.ts, the operator manual) quotes it: about 1.7 MB of blink
+   * records per ten-condition sitting; backup_*.json about 2.1 MB with them and 0.26 MB without;
+   * 07c_ear_trace.csv about 54,500 rows and 3.8 MB; the whole export about 6.2 MB (0.55 MB without).
+   *
+   * Measured here on one sitting, the way the app stores and exports it: the export fixture's sitting,
+   * each reading window's record rebuilt as the tablet would make it — three minutes at 30 fps, EAR
+   * noise in every stored decimal, 3% of frames without a face, a blink every 4 s (450 in all) — beside
+   * the fixture's camera-check record. (The fixture's own records hold a noise-free EAR, which encodes
+   * shorter, so they would understate the size.) A figure in the documents cannot drift from the
+   * encoding, or from what the backup and the export carry, without one of these failing.
    */
-  it('is under 2 MB per sitting in the database and in a backup', () => {
+  const MB = 1e6;
+  const bytes = (s: string) => new TextEncoder().encode(s).length;
+  const sitting = () => {
+    const b = buildFixtureBundle();
     let seed = 7;
     const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
-    let bytes = 0;
-    let blinks = 0;
-    for (let c = 0; c < 10; c++) {
+    const reading = b.conditions.map((cond, c) => {
       const agg = new EyeMetricsAggregator();
       const t0 = 600_000 + c * 400_000;
       for (let k = 0; k < 180 * 30; k++) {
@@ -362,17 +372,46 @@ describe('the stored size docs/ANALYSIS_PLAN.md states', () => {
           facePresent: face, faceSize: 0.2, luma: null,
         });
       }
-      const id = `00000000-0000-4000-8000-00000000000${c}`;
       const { events } = agg.finalizeWithEvents({
-        conditionId: id, sessionId: 's', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.225,
-        gazeCalibrated: true, headPitchCalibrated: true, calibrationId: null,
+        conditionId: cond.condition_id, sessionId: b.session.session_id, cameraActive: true, baselineEarValue: 0.3,
+        earThresholdUsed: 0.225, gazeCalibrated: true, headPitchCalibrated: true, calibrationId: null,
       });
-      const rec = agg.blinkLog({ conditionId: id, sessionId: 's', baseline: 0.3, events });
-      blinks += rec.events.length;
-      bytes += JSON.stringify(rec).length;
-    }
-    expect(blinks).toBe(450);
-    expect(bytes).toBeGreaterThan(1.5e6);
-    expect(bytes).toBeLessThan(2e6);
+      return agg.blinkLog({ conditionId: cond.condition_id, sessionId: b.session.session_id, baseline: 0.3, events });
+    });
+    b.ocularEvents = [...reading, ...(b.ocularEvents ?? []).filter((o) => o.window === 'selftest')];
+    return b;
+  };
+  const b = sitting();
+  const none = buildFixtureBundle();
+  none.ocularEvents = [];
+
+  it('is about 1.7 MB of blink records per sitting, as stored', () => {
+    const reading = b.ocularEvents!.filter((o) => o.window === 'reading');
+    expect(reading).toHaveLength(10);
+    expect(reading.reduce((n, o) => n + o.events.length, 0)).toBe(450);
+    const stored = b.ocularEvents!.reduce((n, o) => n + bytes(JSON.stringify(o)), 0);
+    expect(stored).toBeGreaterThan(1.6 * MB);
+    expect(stored).toBeLessThan(1.8 * MB);
+  });
+
+  it('makes a backup of about 2.1 MB with them and 0.26 MB without', () => {
+    const withRecords = bytes(backupExportFile(b).content);
+    const without = bytes(backupExportFile(none).content);
+    expect(withRecords).toBeGreaterThan(1.95 * MB);
+    expect(withRecords).toBeLessThan(2.25 * MB);
+    expect(without).toBeGreaterThan(0.2 * MB);
+    expect(without).toBeLessThan(0.32 * MB);
+  });
+
+  it('exports a 07c of about 54,500 rows and 3.8 MB, and about 6.2 MB in all (0.55 MB without)', () => {
+    const files = buildExportFiles(b);
+    const trace = files.find((f) => f.filename === '07c_ear_trace.csv')!.content;
+    expect(trace.split('\n').length - 1).toBe(54_000 + b.ocularEvents!.find((o) => o.window === 'selftest')!.trace.frames);
+    expect(bytes(trace)).toBeGreaterThan(3.6 * MB);
+    expect(bytes(trace)).toBeLessThan(4.0 * MB);
+    const total = (fs: { content: string }[]) => fs.reduce((n, f) => n + bytes(f.content), 0);
+    expect(total(files)).toBeGreaterThan(5.9 * MB);
+    expect(total(files)).toBeLessThan(6.5 * MB);
+    expect(total(buildExportFiles(none))).toBeLessThan(0.7 * MB);
   });
 });

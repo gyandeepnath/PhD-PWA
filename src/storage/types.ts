@@ -1211,9 +1211,9 @@ export interface StoredBlinkEvent {
  * It is for VALIDATION and RE-ANALYSIS (comparing the classifier with a human coder, re-cutting a
  * threshold); the main analysis reads only 07_eye_metrics.csv.
  *
- * The trace is stored as text columns, one value per processed frame, so a ten-condition sitting
- * stays in the low megabytes in the database and in a backup (tracking/blinkLog.ts encodes and
- * decodes it; docs/ANALYSIS_PLAN.md §5 item 6 gives the measured size).
+ * The trace is stored as text columns, one value per processed frame, so a ten-condition sitting's
+ * records are about 1.7 MB (tracking/blinkLog.ts encodes and decodes it; docs/ANALYSIS_PLAN.md §5
+ * item 6 gives the measured sizes, of the records, the backup and the export).
  */
 export interface OcularEventsRecord {
   /**
