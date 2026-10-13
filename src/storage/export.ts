@@ -1340,23 +1340,23 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       const matched = cueMatched(o);
       const cueTimes = o.window === 'selftest' && o.cues?.length ? o.cues.map((c) => String(round(c, 2))).join('; ') : '';
       return [...o.events].sort((a, b) => a.onset_ms - b.onset_ms).map((e, i) => ({
-      participant_id: pid, condition_id: o.condition_id ?? '',
-      condition_label: o.condition_id ? (labelOf.get(o.condition_id) ?? '') : '',
-      window: o.window, blink_index: i + 1,
-      onset_ms: round(e.onset_ms, 2), offset_ms: round(e.offset_ms, 2), min_at_ms: round(e.min_at_ms, 2),
-      duration_ms: round(e.duration_ms, 2), frames_below: e.frames_below, ended_by: e.ended_by,
-      max_gap_ms: round(e.max_gap_ms, 2), local_fps: round(e.local_fps, 1),
-      min_ear_raw: round(e.min_ear_raw, 6), min_ratio_raw: round(e.min_ratio_raw, 4),
-      min_ear_left: round(e.min_ear_left, 6), min_ear_right: round(e.min_ear_right, 6),
-      open_pre: round(e.open_pre, 6), min_ratio_local_raw: round(e.min_ratio_local_raw, 4),
-      pitch_at_min: round(e.pitch_at_min, 1), yaw_at_min: round(e.yaw_at_min, 1),
-      tier: e.tier, page: e.page ?? '',
-      cue_lag_ms: o.window === 'selftest' ? round(cueLag(o.cues, e.onset_ms), 1) : '',
-      cue_matched: matched ? matched[i] : '',
-      cue_times_ms: cueTimes,
-      rule_version: o.rule_version,
-      // The fitted minimum (Round 79): blank on the self-test, whose blinks are not fitted, and before.
-      min_ratio_fit: round(e.min_ratio_fit, 4), fit_exposure_ms: o.fit_exposure_ms ?? '', fit_rule_version: o.fit_rule_version ?? '',
+        participant_id: pid, condition_id: o.condition_id ?? '',
+        condition_label: o.condition_id ? (labelOf.get(o.condition_id) ?? '') : '',
+        window: o.window, blink_index: i + 1,
+        onset_ms: round(e.onset_ms, 2), offset_ms: round(e.offset_ms, 2), min_at_ms: round(e.min_at_ms, 2),
+        duration_ms: round(e.duration_ms, 2), frames_below: e.frames_below, ended_by: e.ended_by,
+        max_gap_ms: round(e.max_gap_ms, 2), local_fps: round(e.local_fps, 1),
+        min_ear_raw: round(e.min_ear_raw, 6), min_ratio_raw: round(e.min_ratio_raw, 4),
+        min_ear_left: round(e.min_ear_left, 6), min_ear_right: round(e.min_ear_right, 6),
+        open_pre: round(e.open_pre, 6), min_ratio_local_raw: round(e.min_ratio_local_raw, 4),
+        pitch_at_min: round(e.pitch_at_min, 1), yaw_at_min: round(e.yaw_at_min, 1),
+        tier: e.tier, page: e.page ?? '',
+        cue_lag_ms: o.window === 'selftest' ? round(cueLag(o.cues, e.onset_ms), 1) : '',
+        cue_matched: matched ? matched[i] : '',
+        cue_times_ms: cueTimes,
+        rule_version: o.rule_version,
+        // The fitted minimum (Round 79): blank on the self-test, whose blinks are not fitted, and before.
+        min_ratio_fit: round(e.min_ratio_fit, 4), fit_exposure_ms: o.fit_exposure_ms ?? '', fit_rule_version: o.fit_rule_version ?? '',
       }));
     }));
   csv('07c_ear_trace.csv',
