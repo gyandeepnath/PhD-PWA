@@ -89,7 +89,36 @@ export interface TraceBlinkMark {
   complete: boolean;
 }
 
-/** The marks for the blinks `countBlinks` finds in a trace, live mode (a blink in progress is not marked). */
-export function traceBlinkMarks(trace: ReadonlyArray<readonly [number, number | null]>, baseline: number | null | undefined): TraceBlinkMark[] {
-  return countBlinks(traceSamples(trace), baseline, 'live').events.map((e) => ({ at: e.min_at_ms, ear: e.min_ear, complete: e.tier !== 'incomplete' }));
+/**
+ * How much more trace is kept than the graph draws, ms (Round 82). The graph shows the last
+ * CONFIG.EAR_TRACE_MS; the blinks are classified over this much more, so a blink the graph's left edge
+ * cuts through is classified whole — with its true deepest frame — and not as the shallower remainder
+ * that is left in view. A second is about three times a spontaneous blink (Nakamura et al. 2008: about
+ * 100 ms down and 220 ms up, 320 ms in all; ledger #62). A closure longer than the lead is not marked
+ * rather than marked wrongly (below).
+ */
+export const TRACE_LEAD_MS = 1000;
+
+/**
+ * The marks for the blinks `countBlinks` finds in a trace, live mode (a blink in progress is not marked),
+ * that the graph draws: those whose deepest frame is at or after `drawnFromMs` (the graph's left edge,
+ * on the trace's clock; everything when omitted).
+ *
+ * THE LEFT EDGE (Round 82). The trace is trimmed from the left as time passes, and a blink already under
+ * way at its first sample would be classified on what is left of it — reopened there, with the depth of
+ * its visible remainder — so a complete blink could be marked incomplete for a moment, against the
+ * count and the record. So the classification runs over TRACE_LEAD_MS more than is drawn, and a blink in
+ * progress at the very first sample kept (its start, and so its depth, is not in the trace) is not
+ * marked at all: an unmarked dip, never a wrong mark.
+ */
+export function traceBlinkMarks(
+  trace: ReadonlyArray<readonly [number, number | null]>,
+  baseline: number | null | undefined,
+  drawnFromMs: number = -Infinity,
+): TraceBlinkMark[] {
+  const samples = traceSamples(trace);
+  const first = samples.length ? samples[0].t_ms : Infinity;
+  return countBlinks(samples, baseline, 'live').events
+    .filter((e) => e.onset_ms > first && e.min_at_ms >= drawnFromMs)
+    .map((e) => ({ at: e.min_at_ms, ear: e.min_ear, complete: e.tier !== 'incomplete' }));
 }

@@ -1172,6 +1172,8 @@ blink were the same for both types; about 100 msec., 220 msec., and 320 msec. re
 Cited (Round 79: `src/tracking/blinkFit.ts`, `src/sim/fpsGate.ts`, `src/sim/selfTestSim.ts`,
 `docs/FPS_GATE_SIMULATION.md`, `docs/AUDIT_FINDINGS.md` Round 79) for the MEAN down- and up-phase durations of a spontaneous blink (about
 100 and 220 ms), used as the centre of the simulated blink durations and of the fitted-minimum template.
+Also (Round 82) `src/tracking/blinkCount.ts`, for the same means and the 320-ms total, as the reason a
+1-s lead before the live graph's left edge holds a whole spontaneous blink.
 **Not cited for:** the duration of a deliberate blink — the self-test simulation gives its cued,
 voluntary blinks these spontaneous durations as a stated assumption, because no verified figure for
 voluntary blinks was found (the abstract measures spontaneous blinks only); the spread of those

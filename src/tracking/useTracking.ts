@@ -14,7 +14,7 @@ import { useCallback, useRef, useState } from 'react';
 import { CONFIG, isE2ETimingActive } from '@/experiment/config';
 import { eyeEars, meanEar, fitEarBaseline, LEFT_EYE_EAR, RIGHT_EYE_EAR, type Point } from './blink';
 import { samplingFpsObserved } from './frameRateGate';
-import { blinkCuts, traceBlinkMarks, type TraceBlinkMark } from './blinkCount';
+import { blinkCuts, traceBlinkMarks, TRACE_LEAD_MS, type TraceBlinkMark } from './blinkCount';
 import { LIVE_READOUT_HZ, type RecordingWindow } from './measurementSchedule';
 import { startFramePump, frameTimestamp, type FrameMeta, type FramePump, type PumpVideo } from './framePump';
 import { PipelineMeter, type MeterWindow, type PipelineSummary } from './pipelineStats';
@@ -450,7 +450,7 @@ export function useTracking(): TrackingApi {
   const lastSampleTRef = useRef<number>(-Infinity);
   /** EAR values collected while one tracker backend is being trialled; null otherwise. */
   const trialEarsRef = useRef<number[] | null>(null);
-  /** The last EAR_TRACE_MS of [time, EAR or null], for the researcher card's trace. */
+  /** The last EAR_TRACE_MS + TRACE_LEAD_MS of [time, EAR or null]; the card draws the last EAR_TRACE_MS. */
   const earTraceRef = useRef<Array<[number, number | null]>>([]);
   const aggRef = useRef<EyeMetricsAggregator | null>(null);
   /**
@@ -574,9 +574,11 @@ export function useTracking(): TrackingApi {
     lastLiveEmit.current = t;
     const m = meterRef.current.live();
     const v = videoRef.current;
-    const trace = earTraceRef.current.map(([ts, e]): [number, number | null] => [Math.round(ts - t), e]);
-    // Classified on the trace's own capture times, then placed on the same "ms before now" axis.
-    const marks = traceBlinkMarks(earTraceRef.current, baselineEarRef.current)
+    // The buffer holds TRACE_LEAD_MS more than the graph draws (blinkCount.ts): only the drawn part is sent.
+    const from = t - CONFIG.EAR_TRACE_MS;
+    const trace = earTraceRef.current.filter(([ts]) => ts >= from).map(([ts, e]): [number, number | null] => [Math.round(ts - t), e]);
+    // Classified on the whole buffer's capture times, then placed on the same "ms before now" axis.
+    const marks = traceBlinkMarks(earTraceRef.current, baselineEarRef.current, from)
       .map((k) => ({ ...k, at: Math.round(k.at - t) }));
     const payload: LiveTrackingStats = {
       ...build(),
@@ -719,7 +721,8 @@ export function useTracking(): TrackingApi {
         };
       });
     }
-    while (trace.length && t - trace[0][0] > CONFIG.EAR_TRACE_MS) trace.shift();
+    // Kept TRACE_LEAD_MS longer than drawn, so a blink the graph's left edge cuts is classified whole.
+    while (trace.length && t - trace[0][0] > CONFIG.EAR_TRACE_MS + TRACE_LEAD_MS) trace.shift();
     const idleAgg = aggRef.current ?? selfTestAggRef.current;
     if (!(lm && lm.length > 0) && idleAgg) {
       idleAgg.ingest({

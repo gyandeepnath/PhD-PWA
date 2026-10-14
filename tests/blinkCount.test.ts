@@ -7,7 +7,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { blinkCuts, countBlinks, traceBlinkMarks, traceSamples } from '@/tracking/blinkCount';
+import { blinkCuts, countBlinks, traceBlinkMarks, traceSamples, TRACE_LEAD_MS } from '@/tracking/blinkCount';
+import { CONFIG } from '@/experiment/config';
 import { classifyBlinks, EAR_TIERS, type EarSample } from '@/tracking/blink';
 import { EyeMetricsAggregator } from '@/tracking/aggregator';
 
@@ -141,6 +142,40 @@ describe('the live graph', () => {
     expect(traceBlinkMarks(trace, null)).toEqual([]);
   });
 
+  /*
+   * Round 82, the review's case: the graph's left edge passes through a complete blink. Classified on
+   * what was left in view, it was reopened at the first sample with the depth of its remainder and
+   * marked incomplete — for a blink the count and the record call complete.
+   */
+  it('never marks a blink the left edge cuts by its remainder: classified whole from the lead, or not marked', () => {
+    // 24 fps, open 0.30, one complete blink whose deepest frame (0.06) is at t = 1000.
+    const full: Array<[number, number | null]> = [];
+    for (let t = 0; t <= 11_000; t += DT) {
+      const d = Math.abs(t - 1000);
+      full.push([t, d < 150 ? 0.30 - 0.24 * (1 - d / 150) : 0.30]);
+    }
+    const record = countBlinks(traceSamples(full), BASE, 'final').events;
+    expect(record.map((e) => e.tier)).toEqual(['full']);
+    // The old way: a trace that begins 50 ms after the deepest frame marked the blink incomplete.
+    const cut = full.filter(([t]) => t >= 1050);
+    expect(countBlinks(traceSamples(cut), BASE, 'live').events.map((e) => e.tier)).toEqual(['incomplete']);
+    // Now: a blink in progress at the trace's first sample is not marked at all.
+    expect(traceBlinkMarks(cut, BASE)).toEqual([]);
+    // With the lead kept, the same blink is classified whole: complete, at its true depth — drawn while
+    // its deepest frame is inside the graph, and not once the edge has passed it.
+    const marks = traceBlinkMarks(full, BASE, 900);
+    expect(marks).toHaveLength(1);
+    expect(marks[0]).toMatchObject({ complete: true });
+    expect(marks[0].ear).toBeCloseTo(record[0].min_ear, 9);
+    expect(traceBlinkMarks(full, BASE, 1050)).toEqual([]);
+    // The buffer is a second longer than the graph, and the hook sends only the drawn part.
+    expect(TRACE_LEAD_MS).toBe(1000);
+    const hook = readFileSync('src/tracking/useTracking.ts', 'utf8');
+    expect(hook).toMatch(/t - trace\[0\]\[0\] > CONFIG\.EAR_TRACE_MS \+ TRACE_LEAD_MS/);
+    expect(hook).toMatch(/const from = t - CONFIG\.EAR_TRACE_MS;/);
+    expect(CONFIG.EAR_TRACE_MS).toBeGreaterThan(TRACE_LEAD_MS);
+  });
+
   it('draws its lines from blinkCuts, and the record’s thresholds come from blinkCuts', () => {
     const card = readFileSync('src/components/LiveCamera.tsx', 'utf8');
     expect(card).toMatch(/blinkCuts\(base\)/);
@@ -148,7 +183,7 @@ describe('the live graph', () => {
     const hook = readFileSync('src/tracking/useTracking.ts', 'utf8');
     expect(hook).toMatch(/earThresholdUsed: cuts\?\.registration/);
     expect(hook).toMatch(/earCompleteThreshold: cuts\?\.complete/);
-    expect(hook).toMatch(/traceBlinkMarks\(earTraceRef\.current, baselineEarRef\.current\)/);
+    expect(hook).toMatch(/traceBlinkMarks\(earTraceRef\.current, baselineEarRef\.current, from\)/);
     // The panel's count after a window is the record's, not a recount.
     expect(hook).toMatch(/lastConditionCounts\.current = \{ blinks: total, incomplete: record\.blink_count_incomplete \}/);
   });
