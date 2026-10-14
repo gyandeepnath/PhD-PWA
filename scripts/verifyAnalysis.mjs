@@ -861,7 +861,7 @@ for (const { root, options } of jobs) {
     ok('R: the modelling frame is one row per participant x condition of the CONFIRMATORY set',
       frameRows != null && Number(frameRows[1]) === expected.confirmatory.rows,
       `expected ${expected.confirmatory.rows} rows, got ${frameRows ? frameRows[1] : 'no match'}`);
-    // Round 82: the dashboard's reliability verdict (rule rel-r1) reads the §5.3-5.4 checks off
+    // Round 83: the dashboard's reliability verdict (rule rel-r1) reads the §5.3-5.4 checks off
     // analysis_long.csv; R applies them to its own frame. The same rows must be flagged.
     const rQc = /rows failing at least one §5 check:\s*(\d+)\/(\d+)/.exec(rOut);
     ok('R: its §5 checks flag the rows the dashboard\'s reliability verdict flags',

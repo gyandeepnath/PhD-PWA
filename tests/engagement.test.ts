@@ -69,7 +69,7 @@ describe('conditionEngagement', () => {
     expect(e.engagement).toBe('bad');
   });
 
-  it('gives every signal a short label beside the unchanged full sentence (Round 82)', () => {
+  it('gives every signal a short label beside the unchanged full sentence (Round 83)', () => {
     const e = conditionEngagement({
       reading_time_ms: 1000, word_count: 280,
       rt: rt({ false_alarm_rate: 0.5 }),

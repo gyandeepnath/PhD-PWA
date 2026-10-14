@@ -1,6 +1,6 @@
 /**
  * "Is the blink data reliable?" — the dashboard's plain-language verdict per condition, rule rel-r1
- * (Round 82): good, usable or not usable, read off the analysis's own checks, with notes beside it.
+ * (Round 83): good, usable or not usable, read off the analysis's own checks, with notes beside it.
  */
 import { describe, it, expect } from 'vitest';
 import { buildConditionSummaries, cameraVerdict } from '@/dashboard/aggregate';

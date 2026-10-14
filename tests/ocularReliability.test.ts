@@ -1,5 +1,5 @@
 /**
- * Rule rel-r1 (Round 82): the dashboard's and the export's reliability verdict, read off the analysis's
+ * Rule rel-r1 (Round 83): the dashboard's and the export's reliability verdict, read off the analysis's
  * own checks. Pinned here: the thresholds against analysis_template.R, the mapping to the three words,
  * the codes the export writes, and the version string.
  */

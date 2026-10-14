@@ -289,7 +289,7 @@ describe('export builder', () => {
     expect(lines.length).toBe(3); // header + 2
     expect(lines[0]).toContain('wcag_contrast_ratio');
     expect(lines[0]).toContain('qc_overall');
-    // Round 82: the dashboard's reliability verdict beside it, with its codes and its rule.
+    // Round 83: the dashboard's reliability verdict beside it, with its codes and its rule.
     for (const c of ['ocular_reliability', 'ocular_reliability_checks', 'reliability_rule_version']) expect(lines[0]).toContain(c);
     expect(lines[1]).toContain('rel-r1');
   });

@@ -166,7 +166,7 @@ describe('the cohort tab counts the rows the analysis templates model, and says 
     expect(s.conditions[0].incomplete_total).toBe(31);
   });
 
-  it('counts the reliability verdict per condition, and the §5.3-5.4 flags the R template counts (Round 82)', () => {
+  it('counts the reliability verdict per condition, and the §5.3-5.4 flags the R template counts (Round 83)', () => {
     const bundles = cohort(3);
     // P002's first reading: the face in view 80% of the time (usable); P003's second: camera off.
     bundles[1].eyeMetrics[0].face_presence_ratio = 0.8;

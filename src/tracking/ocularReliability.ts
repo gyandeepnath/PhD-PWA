@@ -1,5 +1,5 @@
 /**
- * Is this condition's blink data reliable? One verdict, rule rel-r1 (Round 82), read off the checks the
+ * Is this condition's blink data reliable? One verdict, rule rel-r1 (Round 83), read off the checks the
  * analysis itself applies — nothing new is decided here.
  *
  * WHY. The dashboard judged blink data by its own thresholds, which were not the analysis's: a face in

@@ -259,7 +259,7 @@ export interface ConditionSummary {
   lighting_quality: 'low' | 'good' | 'overexposed' | null;
   /**
    * The older per-signal flags and their worst, `qc_overall` in 10_wide_summary.csv and analysis_long.csv.
-   * EXPORT ONLY since Round 82, and computed exactly as before so analyses run on the column reproduce:
+   * EXPORT ONLY since Round 83, and computed exactly as before so analyses run on the column reproduce:
    * the dashboard shows the reliability verdict (camera_verdict, rule rel-r1) instead, which follows the
    * analysis's own checks. These thresholds were not the templates' (a face in view under 50% was "bad"
    * here and an ordinary confirmatory row there), so the two must not be shown side by side.
@@ -302,7 +302,7 @@ export interface CameraVerdict {
  * numbers alone cannot say: a low blink rate is both what a broken pipeline and an absorbed reader
  * produce. What CAN be said is whether the row passes the checks the analysis applies to it, and that
  * is the verdict (rule rel-r1, tracking/ocularReliability.ts): good, usable (kept, left out of one
- * pre-planned re-check), not usable (not in the eye-data models). Until Round 82 this function had
+ * pre-planned re-check), not usable (not in the eye-data models). Until Round 83 this function had
  * thresholds of its own — "Not trustworthy" for a face in view under 80% or a camera covered for 30 s,
  * neither of which the analysis excludes — so its red crosses did not mean what the analysis would do.
  *

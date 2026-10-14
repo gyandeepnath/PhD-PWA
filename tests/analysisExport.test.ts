@@ -463,7 +463,7 @@ describe('a condition with no eye record says so, rather than asserting the came
   });
 
   /*
-   * Round 82: the reliability verdict (rule rel-r1) the dashboard shows, read off this file's own
+   * Round 83: the reliability verdict (rule rel-r1) the dashboard shows, read off this file's own
    * columns. The no-record, camera-off and measured rows each get it, with its codes and its rule.
    */
   it('carries the reliability verdict, its codes and its rule on every row', () => {
