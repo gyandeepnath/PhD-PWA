@@ -240,13 +240,21 @@ export function ocularReliability(x: ReliabilityInput): ReliabilityResult {
 }
 
 /**
+ * Why a condition is not good, in one phrase: the first failed check, else the first flagged one, and how
+ * many more there are. Null when every check passed. The dashboard prints it under the verdict, so the
+ * verdict's word is not repeated here.
+ */
+export function reliabilityReason(res: ReliabilityResult): string | null {
+  const wrong = [...res.checks.filter((c) => c.status === 'fail'), ...res.checks.filter((c) => c.status === 'flag')];
+  if (!wrong.length) return null;
+  return `${wrong[0].phrase}${wrong.length > 1 ? ` (+${wrong.length - 1} more)` : ''}`;
+}
+
+/**
  * One plain sentence for a condition: the verdict, then the first reason (and how many more), or what was
  * seen when nothing is wrong. `seen` is e.g. "38 blinks in 2.9 min".
  */
 export function reliabilityHeadline(res: ReliabilityResult, seen: string): string {
-  const wrong = [...res.checks.filter((c) => c.status === 'fail'), ...res.checks.filter((c) => c.status === 'flag')];
-  if (!wrong.length) return `${RELIABILITY_WORD.good}: ${seen}, every check passed`;
-  const first = wrong[0].phrase;
-  const more = wrong.length > 1 ? ` (+${wrong.length - 1} more)` : '';
-  return `${RELIABILITY_WORD[res.reliability]}: ${first}${more}`;
+  const reason = reliabilityReason(res);
+  return reason == null ? `${RELIABILITY_WORD.good}: ${seen}, every check passed` : `${RELIABILITY_WORD[res.reliability]}: ${reason}`;
 }

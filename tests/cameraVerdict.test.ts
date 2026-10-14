@@ -85,6 +85,17 @@ describe('camera verdict (rule rel-r1)', () => {
     expect(v.notes[0].text).toMatch(/^Only 8 blinks/);
     expect(v.notes[1].text).toMatch(/covered or dark for 40 s/);
     expect(v.notes[2].text).toMatch(/20% narrower/);
+    // The dashboard prints the short words beside the verdict; the sentences sit behind Details.
+    expect(v.notes.map((n) => n.short)).toEqual(['few blinks (8)', 'camera covered 40 s', 'open eye 20% narrower', 'face dimly lit']);
+    expect(v.reason).toBeNull();
+    expect(cameraVerdict(eye, { ...fine, lighting: 'overexposed', readingMs: null }).notes.find((n) => n.key === 'lighting')!.short).toBe('face over-lit');
+  });
+
+  it('gives the reason without the verdict\'s word, for the line under the verdict', () => {
+    const v = cameraVerdict(fixtureEye(), { ...fine, facePresence: 0.84 });
+    expect(v.reliability).toBe('usable');
+    expect(v.reason).toBe('face in view 84% (90% needed)');
+    expect(v.headline).toBe(`Usable: ${v.reason}`);
   });
 
   it('is attached to every condition summary', () => {

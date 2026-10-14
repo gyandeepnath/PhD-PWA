@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  ocularReliability, reliabilityHeadline, RELIABILITY_GATES, RELIABILITY_RULE_VERSION, RELIABILITY_WORD,
+  ocularReliability, reliabilityHeadline, reliabilityReason, RELIABILITY_GATES, RELIABILITY_RULE_VERSION, RELIABILITY_WORD,
   type ReliabilityInput,
 } from '@/tracking/ocularReliability';
 import { ENGAGEMENT } from '@/dashboard/aggregate';
@@ -97,6 +97,10 @@ describe('the verdict', () => {
     const v = ocularReliability({ ...ok, fps: 12, fpsConsistent: false, facePresence: 0.5, blinkTotal: 0 });
     expect(v.codes).toBe('zero_blinks;fps_tier_C;fps_off_usual;face_in_view');
     expect(reliabilityHeadline(v, 'x')).toBe('Not usable: no blinks were counted (+3 more)');
+    // The dashboard prints the reason under the verdict's own word, so the reason does not repeat it.
+    expect(reliabilityReason(v)).toBe('no blinks were counted (+3 more)');
+    expect(reliabilityReason(ocularReliability(ok))).toBeNull();
+    expect(reliabilityHeadline(ocularReliability(ok), '38 blinks in 2.9 min')).toBe('Good: 38 blinks in 2.9 min, every check passed');
   });
 
   it('names each gate and what the analysis does, so a reader can find the rule', () => {

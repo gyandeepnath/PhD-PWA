@@ -7,7 +7,7 @@ import type { SessionBundle } from '@/storage/gather';
 import { CONFIG } from '@/experiment/config';
 import { FPS_GATE, fpsTier, gateParticipant, type FpsTier } from '@/tracking/frameRateGate';
 import {
-  ocularReliability, reliabilityHeadline, type Reliability, type ReliabilityCheck, type ReliabilityResult,
+  ocularReliability, reliabilityHeadline, reliabilityReason, type Reliability, type ReliabilityCheck, type ReliabilityResult,
 } from '@/tracking/ocularReliability';
 import type { FatigueRecord, DisplayPerceptionRecord, ComprehensionRecord, RtSummaryRecord, EyeMetricsRecord } from '@/storage/types';
 import { PASSAGES } from '@/experiment/passages';
@@ -274,6 +274,9 @@ export interface ConditionSummary {
 /** Something worth knowing about a condition's eye data that no analysis rule uses. */
 export interface EyeNote {
   key: 'few_blinks' | 'covered' | 'narrower_eye' | 'lighting';
+  /** A few words, printed beside the verdict on the dashboard. */
+  short: string;
+  /** The full sentence, behind Details. */
   text: string;
 }
 
@@ -284,6 +287,8 @@ export interface CameraVerdict {
   reliability: Reliability;
   /** One line an operator can read at a glance: the verdict and its first reason. */
   headline: string;
+  /** The first reason alone (and how many more), without the verdict's word; null when good. */
+  reason: string | null;
   /** Every check the verdict was read from, in a fixed order, passed or not. */
   checks: ReliabilityCheck[];
   /** The checks that failed or flagged, fails first, in words; empty when good. */
@@ -337,14 +342,19 @@ export function cameraVerdict(eye: EyeMetricsRecord | undefined, q: {
   const notes: EyeNote[] = [];
   if (cameraOn) {
     if (q.blinks != null && q.blinks > 0 && q.blinks < ENGAGEMENT.MIN_BLINKS_FOR_RATIO) {
-      notes.push({ key: 'few_blinks', text: `Only ${q.blinks} blinks: the ratio is imprecise (${ENGAGEMENT.MIN_BLINKS_FOR_RATIO} or more is steadier). The analysis weights each run by its blinks.` });
+      notes.push({ key: 'few_blinks', short: `few blinks (${q.blinks})`, text: `Only ${q.blinks} blinks: the ratio is imprecise (${ENGAGEMENT.MIN_BLINKS_FOR_RATIO} or more is steadier). The analysis weights each run by its blinks.` });
     }
     const blockedS = (eye!.camera_blocked_ms ?? 0) / 1000;
-    if (blockedS >= 5) notes.push({ key: 'covered', text: `Camera covered or dark for ${Math.round(blockedS)} s; that time is not counted as seen.` });
+    if (blockedS >= 5) notes.push({ key: 'covered', short: `camera covered ${Math.round(blockedS)} s`, text: `Camera covered or dark for ${Math.round(blockedS)} s; that time is not counted as seen.` });
     if (eye!.open_ear_measured != null && eye!.ear_baseline != null && eye!.ear_baseline > 0 && eye!.open_ear_measured / eye!.ear_baseline < 0.85) {
-      notes.push({ key: 'narrower_eye', text: `Open eye ${Math.round(100 * (1 - eye!.open_ear_measured / eye!.ear_baseline))}% narrower than at calibration: some blinks may read as incomplete, or be missed.` });
+      const narrower = Math.round(100 * (1 - eye!.open_ear_measured / eye!.ear_baseline));
+      notes.push({ key: 'narrower_eye', short: `open eye ${narrower}% narrower`, text: `Open eye ${narrower}% narrower than at calibration: some blinks may read as incomplete, or be missed.` });
     }
-    if (q.lighting && q.lighting !== 'good') notes.push({ key: 'lighting', text: q.lighting === 'low' ? 'Face dimly lit.' : 'Face over-lit (glare).' });
+    if (q.lighting && q.lighting !== 'good') {
+      notes.push(q.lighting === 'low'
+        ? { key: 'lighting', short: 'face dimly lit', text: 'Face dimly lit.' }
+        : { key: 'lighting', short: 'face over-lit', text: 'Face over-lit (glare).' });
+    }
   }
 
   const rate = q.blinks != null && q.minutes ? q.blinks / q.minutes : null;
@@ -354,6 +364,7 @@ export function cameraVerdict(eye: EyeMetricsRecord | undefined, q: {
     level: result.reliability === 'good' ? 'good' : result.reliability === 'usable' ? 'warn' : 'bad',
     reliability: result.reliability,
     headline: reliabilityHeadline(result, seen),
+    reason: reliabilityReason(result),
     checks: result.checks,
     problems: wrong.map((c) => c.phrase),
     notes,
