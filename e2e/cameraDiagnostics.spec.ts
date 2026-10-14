@@ -116,8 +116,14 @@ test('camera setup measures the trackers and shows what the camera and the track
   await expect(page.getByTestId('camera-bench-ground')).toBeVisible();
   await expect(page.getByTestId('camera-bench-results').locator('tbody tr')).toHaveCount(6, { timeout: 60_000 });
   await expect(page.getByTestId('camera-bench-ground')).toHaveCount(0);
-  await expect(page.getByTestId('camera-bench-results')).toContainText(/white\s*auto\s*\d+/);
-  await expect(page.getByTestId('camera-bench-results')).toContainText(/black\s*fixed\s*\d+/);
+  await expect(page.getByTestId('camera-bench-results')).toContainText(/white\s*automatic\s*\d+/);
+  /*
+   * The second half is named by what the exposure step achieved (Round 82): fixed with its time,
+   * compensated, or "automatic (not fixed)" with the reason under the table — never "fixed" by default.
+   */
+  await expect(page.getByTestId('camera-bench-results')).toContainText(/black\s*(fixed( \([\d.]+ ms\))?|compensated( \([^)]*\))?|automatic \(not fixed\))\s*\d+/);
+  const halfShown = await page.getByTestId('camera-bench-results').locator('tbody tr').nth(5).getAttribute('data-half');
+  if (halfShown === 'auto again') await expect(page.getByTestId('camera-bench-lock-note')).toContainText('The exposure was not fixed');
 
   await page.getByRole('button', { name: /My face is centred/ }).click();
   // The exposure is set on the grey field first (Round 79), then calibration starts.
@@ -142,8 +148,10 @@ test('camera setup measures the trackers and shows what the camera and the track
   if (ex.policy === 'auto') expect(String(ex.reason)).not.toBe('');
   expect((p.camera_capabilities as Record<string, unknown>).exposure_modes).toContain('manual');
   // The bench rows are kept with the sitting; the bench's own lock was undone, and Continue set it again.
-  const bench = p.camera_bench as { rows: Array<{ camera_fps: number | null }> };
+  const bench = p.camera_bench as { rows: Array<{ camera_fps: number | null }>; lock: { policy: string } | null };
   expect(bench.rows).toHaveLength(6);
+  // The label shown is the lock the bench recorded, not the half's name.
+  expect(halfShown).toBe(bench.lock?.policy === 'locked-v1' ? 'fixed' : bench.lock?.policy === 'compensated-v1' ? 'compensated' : 'auto again');
   expect(bench.rows.every((r) => (r.camera_fps ?? 0) > 0)).toBe(true);
   expect(['tasks-gpu', 'tasks-cpu', 'legacy']).toContain(p.tracker_backend);
   // No face, so no comparison was adopted: the sitting records none rather than one of nothing.

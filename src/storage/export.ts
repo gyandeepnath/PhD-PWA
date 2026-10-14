@@ -24,7 +24,7 @@ import { cueLag, cueMatched, decodeTrace, pageAt } from '@/tracking/blinkLog';
 import { FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION, fpsTier, rowGateVersion, samplingFpsObserved } from '@/tracking/frameRateGate';
 import { RELIABILITY_GATES, RELIABILITY_RULE_VERSION } from '@/tracking/ocularReliability';
 import { SELF_TEST_RULE_V1 } from '@/tracking/selfTest';
-import { EXPOSURE_RULE_BEFORE } from '@/tracking/cameraExposure';
+import { EXPOSURE_RULE_BEFORE, benchLockLabel } from '@/tracking/cameraExposure';
 import { CALIBRATION_RULE_BEFORE } from '@/tracking/calibrationSequence';
 import { screenName } from '@/tracking/measurementSchedule';
 import { GAZE_RULE_BEFORE } from '@/tracking/gazeCalibration';
@@ -337,15 +337,26 @@ export function cameraPipelineColumns(p: CameraPipelineRecord | null): Record<st
 }
 
 /**
- * The bench check in one cell, one entry per ground: "auto white 30/30/0 L182 33.3ms; …" — exposure,
- * ground, camera/tracker/face frames a second, picture brightness, and the exposure time the camera
- * reported. Blank when it was not run.
+ * The bench check in one cell: first what the exposure step between the halves achieved, then one entry
+ * per ground — "lock locked-v1 exp-r2; auto white 30/30/0 L182 mode continuous; fixed black 30/30/0 L61
+ * 30ms mode none". Each entry: exposure, ground, camera/tracker/face frames a second, picture brightness,
+ * the exposure time the camera reported, and the exposure mode it reported, exactly as read.
+ *
+ * The second half is named by what the step ACHIEVED (Round 82; benchLockLabel): "fixed",
+ * "compensated", or "auto again" when the exposure was not fixed. It used to say "fixed" whatever
+ * happened, so on a camera that refused the lock its rows looked like fixed-exposure rows. Old records
+ * are relabelled from the lock they kept. Blank when the bench was not run.
  */
 export function benchText(b: CameraBenchRecord | null): string {
   if (!b) return '';
   const v = (x: number | null) => (x == null ? '-' : String(Math.round(x)));
-  return b.rows.map((r) => `${r.exposure} ${r.ground} ${v(r.camera_fps)}/${v(r.tracker_fps)}/${v(r.face_fps)} L${v(r.luma)}`
-    + (r.exposure_time_100us == null ? '' : ` ${r.exposure_time_100us / 10}ms`)).join('; ');
+  const after = benchLockLabel(b.lock);
+  const lock = b.lock
+    ? `lock ${b.lock.policy} ${b.lock.rule}${b.lock.reason ? ` (${b.lock.reason})` : ''}`
+    : 'lock not run';
+  return [lock, ...b.rows.map((r) => `${r.exposure === 'auto' ? 'auto' : after.tag} ${r.ground} ${v(r.camera_fps)}/${v(r.tracker_fps)}/${v(r.face_fps)} L${v(r.luma)}`
+    + (r.exposure_time_100us == null ? '' : ` ${r.exposure_time_100us / 10}ms`)
+    + ` mode ${r.exposure_mode ?? '-'}`)].join('; ');
 }
 
 /**
@@ -669,7 +680,7 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '01_session_info.csv', column: 'camera_auto_luma', type: 'number', unit: '0-255', role: 'qc', description: 'Mean brightness of the camera picture under auto-exposure on the grey field, over the same 2 s. The reference the fixed exposure is checked against.' },
   { file: '01_session_info.csv', column: 'camera_lock_fps_check', type: 'number', unit: 'fps', role: 'qc', description: 'Frames a second the camera delivered in the 3-s check of the fixed (or compensated) exposure — recorded whether or not it was then kept, so a reverted attempt shows what it did. Blank when nothing was tried.' },
   { file: '01_session_info.csv', column: 'camera_lock_luma', type: 'number', unit: '0-255', role: 'qc', description: 'Mean picture brightness in that 3-s check. Below 70% of camera_auto_luma the setting is not kept.' },
-  { file: '01_session_info.csv', column: 'camera_bench', type: 'string', unit: '-', role: 'provenance', description: 'The bench check, when the researcher ran it at camera setup (Round 79): white, grey and black screens for 20 s each under automatic exposure, then under a fixed exposure. One entry per screen: exposure, screen, camera/tracker/face frames a second, picture brightness (L, 0-255) and the exposure time the camera reported. A camera whose automatic-exposure rate is lower on black than on white is exposure-limited, and its rate can follow polarity; the fixed rows show whether fixing the exposure stops that. A diagnostic of the device, not a measurement of the participant. Blank when not run.' },
+  { file: '01_session_info.csv', column: 'camera_bench', type: 'string', unit: '-', role: 'provenance', description: 'The bench check, when the researcher ran it at camera setup (Round 79): white, grey and black screens for 20 s each under automatic exposure, then the exposure step, then the three screens again. First entry: what the exposure step achieved ("lock" policy, rule, and the reason when not fixed). Then one entry per screen: the half (auto; then fixed, compensated, or "auto again" when the exposure was not fixed — from Round 82; earlier exports said "fixed" whatever happened), screen, camera/tracker/face frames a second, picture brightness (L, 0-255), the exposure time the camera reported, and the exposure mode it reported ("mode", exactly as read: continuous is automatic; manual, or none on Android, is fixed). A camera whose automatic-exposure rate is lower on black than on white is exposure-limited, and its rate can follow polarity; the fixed rows show whether fixing the exposure stops that. A diagnostic of the device, not a measurement of the participant. Blank when not run.' },
   { file: '01_session_info.csv', column: 'gaze_calibration_valid', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the gaze part of calibration passed. Under gaze_rule_version gaze-r2 (from Round 80): the three dots of the gaze check each gave enough open-eye frames and the two ends of the line separated from the middle, so an on-screen range was fitted and 07 on_screen_ratio is computed. Under gaze-r1 (earlier sittings): the nine-point mapping met its acceptance rule. Gaze is a quality check only; this says nothing about the blink measures, which need calibration_ear_baseline.' },
   { file: '01_session_info.csv', column: 'calibration_ear_baseline', type: 'number', unit: 'ratio', role: 'qc', description: 'Open-eye eye-aspect-ratio baseline for this participant, measured at centre fixation before the gaze targets, in the posture the reading task is performed in. Every blink threshold is expressed as a fraction of this, so it is referenced to the individual rather than a population default. Compare against open_ear_measured in 07_eye_metrics.csv for within-sitting drift. From 2.3.0 an image-plane EAR, like ear_baseline (see there): not comparable in absolute value with earlier builds.' },
   { file: '01_session_info.csv', column: 'calibration_pitch_baseline_frac', type: 'number', unit: 'ratio', role: 'qc', description: 'Frontal head-pose reference captured at calibration. Head-pose columns are relative to this when head_pitch_calibrated is true.' },

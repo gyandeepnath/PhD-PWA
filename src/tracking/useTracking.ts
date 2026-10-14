@@ -25,7 +25,7 @@ import {
 } from './trackerChoice';
 import { APP_VERSION } from '@/lib/env';
 import { openCamera, describeCapabilities } from './cameraRequest';
-import { setExposure, EXPOSURE_RULE, EXPOSURE_TIMING, type ExposureOutcome } from './cameraExposure';
+import { setExposure, benchLockLabel, EXPOSURE_RULE, EXPOSURE_TIMING, type ExposureOutcome } from './cameraExposure';
 
 /**
  * How often the operator's live readout updates, in hertz.
@@ -323,11 +323,14 @@ const E2E_MEASURE_MS = 1500;
 /** What the bench check is showing now: the ground, under which exposure, and how far through it is. */
 export interface BenchPaint {
   ground: 'white' | 'grey' | 'black';
+  /** Which half: 'auto' before the exposure step, 'fixed' after it (whether it was fixed: `label`). */
   exposure: 'auto' | 'fixed';
   index: number;
   total: number;
   /** True while the exposure is being fixed on grey between the two halves. */
   setting?: boolean;
+  /** The second half's exposure as the step left it (cameraExposure.ts benchLockLabel): 'fixed (30 ms)', … */
+  label?: string;
 }
 
 /** What the self-test window saw: blinks, face coverage, and what the pipeline did meanwhile. */
@@ -1222,9 +1225,9 @@ export function useTracking(): TrackingApi {
     const rows: CameraBenchRecord['rows'] = [];
     const grounds: BenchPaint['ground'][] = ['white', 'grey', 'black'];
     const total = grounds.length * 2;
-    const runGrounds = async (exposure: BenchPaint['exposure'], offset: number) => {
+    const runGrounds = async (exposure: BenchPaint['exposure'], offset: number, label?: string) => {
       for (let i = 0; i < grounds.length; i++) {
-        paint({ ground: grounds[i], exposure, index: offset + i, total });
+        paint({ ground: grounds[i], exposure, index: offset + i, total, label });
         await sleep(SETTLE);
         const m = await measureWindow(MEASURE);
         const st = (track.getSettings?.() ?? {}) as Record<string, unknown>;
@@ -1241,7 +1244,8 @@ export function useTracking(): TrackingApi {
       await runGrounds('auto', 0);
       paint({ ground: 'grey', exposure: 'fixed', index: grounds.length, total, setting: true });
       const lock = await setCameraExposure();
-      await runGrounds('fixed', grounds.length);
+      // The second half is named by what the step achieved, not by what it tried (Round 82).
+      await runGrounds('fixed', grounds.length, benchLockLabel(lock ?? null).short);
       const record: CameraBenchRecord = { at: Date.now(), rows, lock: lock ?? null };
       if (pipelineRef.current === info) info.camera_bench = record;
       return record;

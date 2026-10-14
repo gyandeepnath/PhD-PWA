@@ -397,13 +397,21 @@ the camera said (`camera_exposure_mode_readback`). This comes from Chrome's sour
 been seen on the tablet yet — the bench check below is how to see it.
 
 **The bench check (researcher only, before the pilot).** On camera setup, *Run: white, grey, black
-(2 min)* shows white, grey and black screens for about 20 seconds each, first under automatic and then
-under fixed exposure, and gives one row per screen: camera fps, tracker fps, eye sampling fps, brightness and
-exposure time. No participant is needed. Read it this way:
+(2 min)* shows white, grey and black screens for about 20 seconds each under automatic exposure, then
+tries to fix the exposure and shows the three screens again. It gives one row per screen: camera fps,
+tracker fps, eye sampling fps, brightness, exposure time, and what the camera says its exposure mode
+is. No participant is needed. Read it this way:
 
+- **First look at the Exposure column of the last three rows.** It says what the app achieved:
+  *fixed (30 ms)*, *compensated*, or *automatic (not fixed)*. If it is not *fixed*, a line under the
+  table says why, and the last three rows are not fixed-exposure rows: they cannot answer the
+  question below. (Before Round 82 these rows were labelled "fixed" whatever happened.)
+- **Camera says:** *continuous* means automatic exposure; *manual*, or *none* on an Android tablet,
+  means fixed.
 - **Automatic rows:** if the camera delivers fewer frames on black than on white, its rate follows
   the screen (it is limited by its exposure). That is the reason the exposure is fixed.
-- **Fixed rows:** these should be the same on all three screens.
+- **Fixed rows** (only when the Exposure column says *fixed*): these should be the same on all three
+  screens.
 - **Camera about 30 but tracker about 24 on every screen:** the processor is the limit, not the light.
 
 Photograph the table for the investigator. Run it again after a change of tablet, room lighting or

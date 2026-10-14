@@ -29,6 +29,7 @@ import { trialSawFace, MIN_TRIAL_FACE_SHARE, type TrackerTrial } from '@/trackin
 import { TRACKER_LABEL, type TrackerBackend } from '@/tracking/trackers';
 import { LiveFeed, EarTrace, PipelineReadout } from '@/components/LiveCamera';
 import { recordingLabel } from '@/tracking/measurementSchedule';
+import { benchLockLabel } from '@/tracking/cameraExposure';
 import { DeviceBox } from '@/components/DeviceBox';
 import { ScreenCalibration, type ScreenCalibrationResult } from './ScreenCalibration';
 import { BuildInfo, useUpdateWaiting } from '@/components/BuildInfo';
@@ -534,7 +535,7 @@ function BenchGround({ p }: { p: BenchPaint }) {
       <div style={{ width: 14, height: 14, borderRadius: '50%', background: g.ink }} />
       <p className="font-sans" style={{ position: 'absolute', bottom: 24, fontSize: 15, opacity: 0.8 }}>
         {p.setting ? 'Bench check: fixing the exposure on grey…'
-          : `Bench check ${p.index + 1} of ${p.total}: ${g.word}, ${p.exposure === 'auto' ? 'automatic exposure' : 'fixed exposure'} — about 20 s`}
+          : `Bench check ${p.index + 1} of ${p.total}: ${g.word}, ${p.exposure === 'auto' ? 'automatic exposure' : `exposure ${p.label ?? 'after the exposure step'}`} — about 20 s`}
       </p>
     </div>
   );
@@ -543,26 +544,37 @@ function BenchGround({ p }: { p: BenchPaint }) {
 /**
  * The bench check's result, one row per ground. Read it this way (docs/OPERATOR_MANUAL.md): if under
  * automatic exposure the camera delivers fewer frames on black than on white, its rate follows the
- * screen (exposure-limited); the "fixed" rows should then be the same on all three.
+ * screen (exposure-limited); the fixed rows should then be the same on all three.
+ *
+ * The second half is labelled by what the exposure step ACHIEVED (Round 82; benchLockLabel): "fixed
+ * (30 ms)", "compensated", or "automatic (not fixed)" with the reason beneath — it used to read "fixed"
+ * whatever happened. "Camera says" is the exposure mode the camera reported on that screen, exactly as
+ * read: continuous is automatic; manual, or none on Android, is fixed.
  */
 function BenchTable({ b }: { b: CameraBenchRecord }) {
   const v = (x: number | null) => (x == null ? '—' : String(Math.round(x)));
+  const after = benchLockLabel(b.lock);
   return (
-    <table data-testid="camera-bench-results" style={{ width: '100%', marginTop: 8, fontSize: 15, borderCollapse: 'collapse' }}>
-      <thead>
-        <tr style={{ textAlign: 'left', opacity: 0.75 }}>
-          <th>Screen</th><th>Exposure</th><th>camera fps</th><th>tracker fps</th><th>eye sampling fps</th><th>brightness</th><th>exposure time</th>
-        </tr>
-      </thead>
-      <tbody>
-        {b.rows.map((r) => (
-          <tr key={`${r.exposure}-${r.ground}`}>
-            <td>{r.ground}</td><td>{r.exposure}</td><td>{v(r.camera_fps)}</td><td>{v(r.tracker_fps)}</td><td>{v(r.face_fps)}</td>
-            <td>{v(r.luma)}</td><td>{r.exposure_time_100us == null ? '—' : `${r.exposure_time_100us / 10} ms`}</td>
+    <>
+      <table data-testid="camera-bench-results" style={{ width: '100%', marginTop: 8, fontSize: 15, borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ textAlign: 'left', opacity: 0.75 }}>
+            <th>Screen</th><th>Exposure</th><th>camera fps</th><th>tracker fps</th><th>eye sampling fps</th><th>brightness</th><th>exposure time</th><th>Camera says</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {b.rows.map((r) => (
+            <tr key={`${r.exposure}-${r.ground}`} data-half={r.exposure === 'auto' ? 'auto' : after.tag}>
+              <td>{r.ground}</td><td>{r.exposure === 'auto' ? 'automatic' : after.short}</td><td>{v(r.camera_fps)}</td><td>{v(r.tracker_fps)}</td><td>{v(r.face_fps)}</td>
+              <td>{v(r.luma)}</td><td>{r.exposure_time_100us == null ? '—' : `${r.exposure_time_100us / 10} ms`}</td><td>{r.exposure_mode ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {after.note && (
+        <p data-testid="camera-bench-lock-note" className="mt-2" style={{ fontSize: 15, lineHeight: 1.5 }}>{after.note}</p>
+      )}
+    </>
   );
 }
 
@@ -879,8 +891,9 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
               </div>
               {!bench && (
                 <p className={`mt-2 ${help}`}>
-                  Shows white, grey and black screens with automatic, then fixed, camera exposure, and
-                  measures the camera on each. Not needed with a participant.
+                  Shows white, grey and black screens with automatic exposure, then tries to fix the
+                  exposure and shows them again, measuring the camera on each. The table says whether
+                  the exposure was fixed. Not needed with a participant.
                 </p>
               )}
               {bench && <BenchTable b={bench} />}

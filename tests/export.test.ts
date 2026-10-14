@@ -372,7 +372,23 @@ describe('camera pipeline columns', () => {
         { ground: 'black', exposure: 'fixed', camera_fps: 30, tracker_fps: 29.8, face_fps: 0, luma: 61, exposure_mode: 'manual', exposure_time_100us: 300, iso: 800 },
       ],
     };
-    expect(rows(b, '01_session_info.csv')[0].camera_bench).toBe('auto white 30/30/0 L182; fixed black 30/30/0 L61 30ms');
+    /*
+     * Round 82: the second half is named by what the exposure step achieved, the step's outcome comes
+     * first, and each row carries the mode the camera reported. With no step on record the second half
+     * is not called fixed, whatever the camera said.
+     */
+    expect(rows(b, '01_session_info.csv')[0].camera_bench).toBe('lock not run; auto white 30/30/0 L182 mode continuous; auto again black 30/30/0 L61 30ms mode manual');
+    const lock = (policy: 'auto' | 'locked-v1' | 'compensated-v1', reason: string | null) => ({
+      rule: 'exp-r2' as const, policy, reason, exposure_time_100us: policy === 'locked-v1' ? 300 : null, iso: null,
+      exposure_comp: policy === 'compensated-v1' ? -1 / 3 : null, auto_fps: 25, auto_luma: 120, lock_fps: 30, lock_luma: 110,
+      iso_steps: 0, mode_readback: policy === 'locked-v1' ? 'none' : null, at: 1,
+    });
+    b.session.camera_pipeline.camera_bench.lock = lock('locked-v1', null);
+    expect(rows(b, '01_session_info.csv')[0].camera_bench).toBe('lock locked-v1 exp-r2; auto white 30/30/0 L182 mode continuous; fixed black 30/30/0 L61 30ms mode manual');
+    b.session.camera_pipeline.camera_bench.lock = lock('auto', 'the camera offers no exposure control to the browser');
+    expect(rows(b, '01_session_info.csv')[0].camera_bench).toBe('lock auto exp-r2 (the camera offers no exposure control to the browser); auto white 30/30/0 L182 mode continuous; auto again black 30/30/0 L61 30ms mode manual');
+    b.session.camera_pipeline.camera_bench.lock = lock('compensated-v1', 'the camera offers no fixed exposure');
+    expect(rows(b, '01_session_info.csv')[0].camera_bench).toMatch(/lock compensated-v1 exp-r2 \(.*\); auto white .*; compensated black /);
     // A sitting where the step did not run: blank, not a made-up 'auto'.
     expect(rows(bundle(), '01_session_info.csv')[0]).toMatchObject({ camera_exposure_policy: '', camera_auto_fps: '', camera_lock_fps_check: '' });
   });

@@ -7,7 +7,7 @@
  * grey field; a fixed exposure of t ms runs at min(30, 1000 / t) fps; brightness is exposure x gain.
  */
 import { describe, it, expect } from 'vitest';
-import { setExposure, isoLadder, compensationSteps, autoExposureState, EXPOSURE, type ExposureDeps } from '@/tracking/cameraExposure';
+import { setExposure, isoLadder, compensationSteps, autoExposureState, benchLockLabel, EXPOSURE, type ExposureDeps } from '@/tracking/cameraExposure';
 
 interface FakeOpts {
   modes?: string[];
@@ -184,6 +184,25 @@ describe('the exposure step', () => {
     expect(r.policy).toBe('auto');
     expect(r.reason).toMatch(/could not be measured/);
     expect(cam.applied).toEqual([]);
+  });
+});
+
+describe('the bench check\'s second half is named by what the exposure step achieved (Round 82)', () => {
+  const base = { rule: 'exp-r2' as const, reason: null, exposure_time_100us: null, iso: null, exposure_comp: null, auto_fps: 24, auto_luma: 120, lock_fps: 24, lock_luma: 110, iso_steps: 0, mode_readback: null, at: 1 };
+  it('fixed only when the lock was kept, with its exposure time', () => {
+    expect(benchLockLabel({ ...base, policy: 'locked-v1', exposure_time_100us: 300 })).toEqual({ short: 'fixed (30 ms)', tag: 'fixed', note: null });
+  });
+  it('compensated, with the step, and a note that the rate can still follow the screen', () => {
+    const l = benchLockLabel({ ...base, policy: 'compensated-v1', exposure_comp: -1 / 3 });
+    expect(l).toMatchObject({ short: 'compensated (−0.33 EV)', tag: 'compensated' });
+    expect(l.note).toMatch(/can still follow the screen/);
+  });
+  it('never "fixed" when the lock was not kept or the step did not run, and says why', () => {
+    const l = benchLockLabel({ ...base, policy: 'auto', reason: 'the camera offers no exposure control to the browser' });
+    expect(l).toMatchObject({ short: 'automatic (not fixed)', tag: 'auto again' });
+    expect(l.note).toBe('The exposure was not fixed: the camera offers no exposure control to the browser. '
+      + 'The second three rows are automatic exposure again, so they cannot show whether fixing it helps.');
+    expect(benchLockLabel(null).note).toMatch(/the exposure step did not run/);
   });
 });
 

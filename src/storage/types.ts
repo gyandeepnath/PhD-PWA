@@ -913,6 +913,10 @@ export interface CameraBenchRecord {
   at: number;
   rows: Array<{
     ground: 'white' | 'grey' | 'black';
+    /**
+     * Which half the row belongs to: 'auto' before the exposure step, 'fixed' after it. Whether the
+     * exposure WAS then fixed is `lock.policy` (Round 82: shown as such; cameraExposure.ts benchLockLabel).
+     */
     exposure: 'auto' | 'fixed';
     camera_fps: number | null; tracker_fps: number | null; face_fps: number | null; luma: number | null;
     /** What the camera reported at the end of that ground (getSettings()). */

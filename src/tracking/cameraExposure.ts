@@ -306,3 +306,31 @@ export async function setExposure(d: ExposureDeps): Promise<ExposureOutcome> {
     return out;
   }
 }
+
+/**
+ * The bench check's second half, named by what the exposure step between the halves ACHIEVED (Round 82).
+ *
+ * WHY. The bench ran its second half after the exposure step and called it "fixed" whatever the step
+ * did. On a camera with no exposure control, or one that refused the lock — and, under exp-r1, on every
+ * Android camera (see "WHAT COUNTS AS FIXED") — those rows were automatic exposure again, yet the table
+ * read "fixed", and the manual asks whether the fixed rows agree. The label now says which: fixed (with
+ * the exposure time), compensated, or not fixed with the reason. `tag` is the one-word form the export
+ * cell uses; `note` says, when the half is not a fixed exposure, what that half can and cannot show.
+ */
+export function benchLockLabel(lock: ExposureOutcome | null): { short: string; tag: 'fixed' | 'compensated' | 'auto again'; note: string | null } {
+  if (lock?.policy === 'locked-v1') {
+    return { short: lock.exposure_time_100us != null ? `fixed (${lock.exposure_time_100us / 10} ms)` : 'fixed', tag: 'fixed', note: null };
+  }
+  if (lock?.policy === 'compensated-v1') {
+    const ev = lock.exposure_comp == null ? '' : ` (${lock.exposure_comp > 0 ? '+' : lock.exposure_comp < 0 ? '−' : ''}${Math.abs(lock.exposure_comp).toFixed(2)} EV)`;
+    return {
+      short: `compensated${ev}`, tag: 'compensated',
+      note: 'The camera offers no fixed exposure, so automatic exposure was set to aim darker. Its rate can still follow the screen.',
+    };
+  }
+  return {
+    short: 'automatic (not fixed)', tag: 'auto again',
+    note: `The exposure was not fixed: ${lock?.reason ?? 'the exposure step did not run'}. `
+      + 'The second three rows are automatic exposure again, so they cannot show whether fixing it helps.',
+  };
+}
