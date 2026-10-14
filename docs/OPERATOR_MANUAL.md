@@ -389,6 +389,13 @@ frame a second) and the picture at least 70% as bright as under automatic exposu
 automatic exposure and records why. There is nothing to do. The camera check's result says which
 (*exposure fixed (30 ms)* or *automatic exposure*).
 
+*From Round 82 (rule `exp-r2`).* Chrome on an Android tablet reports a fixed exposure as "none",
+not "manual". Before Round 82 the app read "none" as a refusal and went back to automatic exposure,
+so on the tablet the exposure was never kept fixed. An export from those builds shows this in
+`camera_exposure_reason` as *it reports "none"*. The app now counts "none" as fixed and records what
+the camera said (`camera_exposure_mode_readback`). This comes from Chrome's source code; it has not
+been seen on the tablet yet — the bench check below is how to see it.
+
 **The bench check (researcher only, before the pilot).** On camera setup, *Run: white, grey, black
 (2 min)* shows white, grey and black screens for about 20 seconds each, first under automatic and then
 under fixed exposure, and gives one row per screen: camera fps, tracker fps, eye sampling fps, brightness and

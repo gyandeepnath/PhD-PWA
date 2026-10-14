@@ -359,6 +359,7 @@ export function pipelineFields(
   const ex = info?.camera_exposure ?? null;
   return {
     camera_exposure_policy: ex?.policy ?? null,
+    camera_exposure_rule: ex?.rule ?? null,
     camera_exposure_time_100us: ex?.exposure_time_100us ?? null,
     camera_iso: ex?.iso ?? null,
     camera_exposure_comp: ex?.exposure_comp ?? null,
@@ -1173,7 +1174,7 @@ export function useTracking(): TrackingApi {
         outcome = {
           rule: EXPOSURE_RULE, policy: 'auto', reason: 'left on auto-exposure for the study (CONFIG.CAMERA_EXPOSURE_POLICY)',
           exposure_time_100us: null, iso: null, exposure_comp: null, auto_fps: null, auto_luma: null,
-          lock_fps: null, lock_luma: null, iso_steps: 0, at: Date.now(),
+          lock_fps: null, lock_luma: null, iso_steps: 0, mode_readback: null, at: Date.now(),
         };
       } else {
         const fast = isE2ETimingActive();

@@ -924,7 +924,8 @@ export interface CameraBenchRecord {
 
 /** The exposure step's result; see tracking/cameraExposure.ts. */
 export interface ExposureOutcome {
-  rule: 'exp-r1';
+  /** 'exp-r2' from Round 82 (a read-back of 'none' counts as fixed); 'exp-r1' before. */
+  rule: 'exp-r1' | 'exp-r2';
   policy: 'auto' | 'locked-v1' | 'compensated-v1';
   /** Why the camera was left on auto, or why compensation was used instead of a lock; null for a clean lock. */
   reason: string | null;
@@ -945,6 +946,12 @@ export interface ExposureOutcome {
   lock_luma: number | null;
   /** ISO raises tried. */
   iso_steps: number;
+  /**
+   * The exposure mode the camera reported in the final check of a fixed exposure, exactly as read
+   * (getSettings().exposureMode): 'manual', 'none' (Chrome on Android, for a fixed exposure), 'continuous'
+   * …; null when no fixed exposure was tried or the camera reported none. Absent before Round 82.
+   */
+  mode_readback?: string | null;
   /** When it was set (Date.now()). */
   at: number;
 }
@@ -977,6 +984,8 @@ export interface PipelineWindowFields {
    * (100 µs units), ISO and compensation the page set. See CameraPipelineRecord.camera_exposure.
    */
   camera_exposure_policy?: 'auto' | 'locked-v1' | 'compensated-v1' | null;
+  /** The exposure rule that set it (ExposureOutcome.rule); absent before Round 82. */
+  camera_exposure_rule?: 'exp-r1' | 'exp-r2' | null;
   camera_exposure_time_100us?: number | null;
   camera_iso?: number | null;
   camera_exposure_comp?: number | null;

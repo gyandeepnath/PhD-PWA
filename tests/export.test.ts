@@ -354,10 +354,17 @@ describe('camera pipeline columns', () => {
       },
     };
     expect(rows(b, '01_session_info.csv')[0]).toMatchObject({
-      camera_exposure_policy: 'locked-v1', camera_exposure_reason: '', camera_exposure_time_100us: '300', camera_iso: '800',
+      camera_exposure_policy: 'locked-v1', camera_exposure_rule: 'exp-r1', camera_exposure_reason: '', camera_exposure_mode_readback: '',
+      camera_exposure_time_100us: '300', camera_iso: '800',
       camera_exposure_comp: '', camera_auto_fps: '25', camera_auto_luma: '118', camera_lock_fps_check: '29.9', camera_lock_luma: '112.5',
     });
-    expect(rows(b, '07_eye_metrics.csv')[0]).toMatchObject({ camera_exposure_policy: 'locked-v1', camera_exposure_time_100us: '300', camera_iso: '800', camera_exposure_comp: '' });
+    // A 07 row from before Round 82 has a policy and no rule: it was set under exp-r1, the only rule then.
+    expect(rows(b, '07_eye_metrics.csv')[0]).toMatchObject({ camera_exposure_policy: 'locked-v1', camera_exposure_rule: 'exp-r1', camera_exposure_time_100us: '300', camera_iso: '800', camera_exposure_comp: '' });
+    // From Round 82 the rule and the camera's raw read-back are recorded (Android reads back 'none').
+    b.session.camera_pipeline.camera_exposure = { ...b.session.camera_pipeline.camera_exposure!, rule: 'exp-r2', mode_readback: 'none' };
+    b.eyeMetrics[0].camera_exposure_rule = 'exp-r2';
+    expect(rows(b, '01_session_info.csv')[0]).toMatchObject({ camera_exposure_rule: 'exp-r2', camera_exposure_mode_readback: 'none' });
+    expect(rows(b, '07_eye_metrics.csv')[0]).toMatchObject({ camera_exposure_rule: 'exp-r2' });
     // The bench check, when it was run, in one cell.
     b.session.camera_pipeline.camera_bench = {
       at: 1, lock: null, rows: [

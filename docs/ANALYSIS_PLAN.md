@@ -599,7 +599,8 @@ These are not optional and they come first.
    - **The open-eye baseline, rule `cal-r2`** (01 `calibration_rule_version`; `cal-r1` before). The
      baseline is still the 90th percentile of the centre-fixation window and still needs 30 usable
      frames; the blink cuts are still 0.75 and 0.60 of it. What changed is the window: it runs on the
-     grey field (#808080, under the exposure fixed at camera setup) instead of a dark screen, for at
+     grey field (#808080, under the exposure set at camera setup — fixed where the camera kept it,
+     see `camera_exposure_policy`) instead of a dark screen, for at
      least 6 s and on until 30 usable frames, at most 12 s, instead of a fixed 6 s. Why: the dark
      screen lit the face as no reading condition does and is the slowest case for an automatically
      exposed camera, and on the study tablet the fixed window failed in good light (investigator's
@@ -615,6 +616,22 @@ These are not optional and they come first.
      threshold for it is set here. The deprecated zone columns (`gaze_deviation_ratio`,
      `zone_center_ratio`, `zone_transition_count`) are blank on `gaze-r2` rows, and neither template
      reads them.
+8. **The exposure rule (Round 82): `exp-r2`** (01 `camera_exposure_rule` and 07
+   `camera_exposure_rule`; `exp-r1` before). The camera's exposure is still fixed once per sitting on
+   the grey field, with the same rate and brightness checks. What changed is how the camera's own
+   report is read. `exp-r1` kept the fixed exposure only when the camera reported `manual`; Chrome on
+   Android reports `none` for exactly that state (it turns auto-exposure off without setting the
+   lock flag that it reports as `manual`; Chromium source, `docs/CITATION_VERIFICATION.md` #60), so on
+   the study tablet every `exp-r1` sitting would have fallen back to `compensated-v1` or `auto`.
+   `exp-r2` counts `manual` and `none` as fixed, and still refuses a camera that reports
+   auto-exposure running. No threshold changed. The camera's raw report is kept
+   (`camera_exposure_mode_readback`), so a sitting can be judged under either rule. Consequence for
+   the analysis: under `exp-r1` no Android row could be `locked-v1`, so `fit_exposure_known` was never
+   TRUE and the "exposure known only" fitted-minimum refit (item 2) was empty; under `exp-r2` it can
+   run. Nothing new is modelled: an `exp-r1` sitting on the tablet is simply one recorded on
+   automatic or compensated exposure, which `camera_exposure_policy` already says, and every analysis
+   that reads the policy reads it the same way. Not measured on the tablet: this follows from the
+   browser's source, and the bench check is how it is confirmed on the device.
 
 ---
 

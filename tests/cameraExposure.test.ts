@@ -1,5 +1,5 @@
 /**
- * The exposure step (Round 79, rule exp-r1): fix the exposure on the grey field and keep it only if the
+ * The exposure step (Round 79; rule exp-r2 from Round 82): fix the exposure on the grey field and keep it only if the
  * camera stays at least as fast and the picture bright enough; otherwise compensation, otherwise auto —
  * and always say which and why.
  *
@@ -7,7 +7,7 @@
  * grey field; a fixed exposure of t ms runs at min(30, 1000 / t) fps; brightness is exposure x gain.
  */
 import { describe, it, expect } from 'vitest';
-import { setExposure, isoLadder, compensationSteps, EXPOSURE, type ExposureDeps } from '@/tracking/cameraExposure';
+import { setExposure, isoLadder, compensationSteps, autoExposureState, EXPOSURE, type ExposureDeps } from '@/tracking/cameraExposure';
 
 interface FakeOpts {
   modes?: string[];
@@ -18,6 +18,13 @@ interface FakeOpts {
   refuseManual?: boolean;
   /** The camera accepts the constraint but carries on in auto. */
   ignoresManual?: boolean;
+  /**
+   * The mode the camera reads back once 'manual' is applied. Chrome on Android reads back 'none': it
+   * turns auto-exposure off without setting the auto-exposure lock flag, and reports NONE for that
+   * (Chromium source, ledger #60; Round 82). Chrome's own fake camera echoes 'manual', which is why
+   * exp-r1's refusal of 'none' never showed in a test.
+   */
+  readbackWhenManual?: string;
   /** Under a fixed exposure the camera runs at this rate whatever the exposure (a fixed frame duration). */
   manualFps?: number;
 }
@@ -46,7 +53,7 @@ function fakeCamera(o: FakeOpts = {}) {
   const deps: ExposureDeps = {
     capabilities: () => caps as MediaTrackCapabilities,
     settings: () => ({
-      exposureMode: o.ignoresManual ? 'continuous' : st.mode,
+      exposureMode: o.ignoresManual ? 'continuous' : (st.mode === 'manual' && o.readbackWhenManual) || st.mode,
       ...(st.mode === 'manual' ? { exposureTime: st.time100 ?? AUTO_MS * 10 } : {}),
       ...(st.iso != null ? { iso: st.iso } : {}),
     }),
@@ -82,6 +89,37 @@ describe('the exposure step', () => {
     expect(r.lock_luma!).toBeGreaterThanOrEqual(EXPOSURE.LUMA_TARGET * r.auto_luma!);
     // Only image-capture constraints are sent (Chrome rejects a mix with size or frame rate).
     for (const a of cam.applied) expect(Object.keys(a).every((k) => ['exposureMode', 'exposureTime', 'iso', 'exposureCompensation'].includes(k))).toBe(true);
+  });
+
+  it('keeps the lock on a camera that reads back "none" for a fixed exposure, as Chrome on Android does (exp-r2)', async () => {
+    const cam = fakeCamera({ iso: { min: 100, max: 3200 }, readbackWhenManual: 'none' });
+    const r = await setExposure(cam.deps);
+    expect(r).toMatchObject({ rule: 'exp-r2', policy: 'locked-v1', reason: null, mode_readback: 'none', exposure_time_100us: EXPOSURE.CAP_100US, iso: 800 });
+    // Nothing was undone: the last thing sent is the lock itself, not a return to auto.
+    expect(cam.applied[cam.applied.length - 1]).toMatchObject({ exposureMode: 'manual' });
+    // exp-r1 would have refused this sitting: the raw read-back is what lets a row be judged under both.
+    const clean = await setExposure(fakeCamera({ iso: { min: 100, max: 3200 } }).deps);
+    expect(clean.mode_readback).toBe('manual');
+  });
+
+  it('still refuses a lock the camera reports as running auto-exposure, and records what it said', async () => {
+    for (const said of ['continuous', 'single-shot', 'something-else']) {
+      const r = await setExposure(fakeCamera({ iso: { min: 100, max: 3200 }, readbackWhenManual: said }).deps);
+      expect(r.policy, said).toBe('auto');
+      expect(r.reason, said).toBe(`the camera did not keep the fixed exposure (it reports "${said}")`);
+      expect(r.mode_readback, said).toBe(said);
+    }
+    expect(autoExposureState('manual')).toBe('off');
+    expect(autoExposureState('none')).toBe('off');
+    expect(autoExposureState('continuous')).toBe('on');
+    expect(autoExposureState(undefined)).toBeNull();
+  });
+
+  it('a "none" read-back does not excuse the measured checks: a darker picture still undoes the lock', async () => {
+    const r = await setExposure(fakeCamera({ iso: null, readbackWhenManual: 'none' }).deps);
+    expect(r.policy).toBe('auto');
+    expect(r.reason).toMatch(/too dark/);
+    expect(r.mode_readback).toBe('none');
   });
 
   it('keeps the exposure auto-exposure chose when it is already 30 ms or shorter', async () => {

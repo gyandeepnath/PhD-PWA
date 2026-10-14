@@ -133,7 +133,10 @@ test('camera setup measures the trackers and shows what the camera and the track
    * the camera was left on auto.
    */
   const ex = p.camera_exposure as Record<string, unknown>;
-  expect(ex.rule).toBe('exp-r1');
+  expect(ex.rule).toBe('exp-r2');
+  // Round 82: the mode the camera read back is kept as read. Chrome's fake camera echoes 'manual'; Chrome on
+  // Android reads back 'none' for the same lock (Chromium source, ledger #60), and exp-r2 accepts both.
+  if (ex.policy === 'locked-v1') expect(['manual', 'none']).toContain(ex.mode_readback);
   expect(['locked-v1', 'compensated-v1', 'auto']).toContain(ex.policy);
   expect(Number(ex.auto_fps)).toBeGreaterThan(0);
   if (ex.policy === 'auto') expect(String(ex.reason)).not.toBe('');

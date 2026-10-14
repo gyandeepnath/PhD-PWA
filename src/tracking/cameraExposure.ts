@@ -1,6 +1,6 @@
 /**
  * Fix the camera's exposure once per sitting, on the grey field, so every condition is filmed the same
- * way (Round 79, rule 'exp-r1').
+ * way (Round 79, rule 'exp-r1'; Round 82, rule 'exp-r2' — see "WHAT COUNTS AS FIXED" below).
  *
  * WHY. The investigator measured at most 23-25 frames a second on the study tablet, even in good light.
  * Chrome leaves the camera's auto-exposure free to lengthen each frame when it judges the picture dark
@@ -26,10 +26,24 @@
  *   3. Chrome sets the sensor's sensitivity only when the page gives an `iso`, so with the exposure fixed
  *      the picture can come out darker than under auto. If it is below 90% of the auto brightness and
  *      the camera offers ISO, the ISO is raised step by step (doubling) until it is not;
- *   4. the result is checked for 3 s: the lock is KEPT only if the camera still reports manual
- *      exposure, delivers at least as many frames a second as under auto (1 fps tolerance) and the
- *      picture is at least 70% as bright as under auto. Otherwise auto-exposure is restored, and why is
- *      recorded.
+ *   4. the result is checked for 3 s: the lock is KEPT only if the camera does not report that
+ *      auto-exposure is running again, delivers at least as many frames a second as under auto (1 fps
+ *      tolerance) and the picture is at least 70% as bright as under auto. Otherwise auto-exposure is
+ *      restored, and why is recorded.
+ *
+ * WHAT COUNTS AS FIXED (exp-r2, Round 82). exp-r1 kept the lock only when the camera read back
+ * `exposureMode === 'manual'`. Chrome on Android never reads that back (Chromium source, ledger #60,
+ * read again at commit 3bdd35dd on 14 Oct 2026): for the web's 'manual' it sets CONTROL_AE_MODE_OFF and
+ * never sets CONTROL_AE_LOCK (VideoCaptureCamera2.java, configureCommonCaptureSettings), and it reports
+ * the current mode as NONE when CONTROL_AE_MODE is OFF and as FIXED only when CONTROL_AE_LOCK is set
+ * (getPhotoCapabilities); NONE reaches the page as "none" (video_capture_device_android.cc,
+ * ToMojomMeteringMode; image_capture.cc, UpdateMediaTrackSettingsAndCapabilities, which runs before
+ * applyConstraints resolves). So under exp-r1 every Android sitting fell back to compensation or auto.
+ * exp-r2 reads the mode for what it says about auto-exposure: 'manual' and 'none' both mean auto-exposure
+ * is off; 'continuous' and 'single-shot' mean it runs, and the lock is not kept; a camera that reports no
+ * mode is judged on the measurements alone, as before. The measured checks (rate and brightness) are
+ * unchanged. The raw mode is kept (`mode_readback`), so a row can be re-judged under either rule. Not
+ * measured on the study tablet: this is what the browser's source says it reports.
  *
  * WHERE THE LOCK IS NOT OFFERED. Some cameras offer only exposure compensation. Then the most negative
  * compensation step (down to -1 EV) that keeps the picture at least 70% as bright is used
@@ -53,7 +67,20 @@ import type { ExposureOutcome } from '@/storage/types';
 
 export type { ExposureOutcome };
 
-export const EXPOSURE_RULE = 'exp-r1';
+export const EXPOSURE_RULE = 'exp-r2';
+/** The rule before Round 82: kept the lock only on a read-back of 'manual' (see the header). */
+export const EXPOSURE_RULE_BEFORE = 'exp-r1';
+
+/**
+ * What a read-back `exposureMode` says about auto-exposure (exp-r2): 'off' for 'manual' and 'none' (Chrome
+ * on Android reports 'none' for the web's 'manual'; header), 'on' for 'continuous' and 'single-shot', and
+ * null when the camera reports no mode or one this list does not know.
+ */
+export function autoExposureState(mode: unknown): 'off' | 'on' | null {
+  if (mode === 'manual' || mode === 'none') return 'off';
+  if (mode === 'continuous' || mode === 'single-shot') return 'on';
+  return null;
+}
 
 export type ExposurePolicy = 'auto' | 'locked-v1' | 'compensated-v1';
 
@@ -141,7 +168,7 @@ export async function setExposure(d: ExposureDeps): Promise<ExposureOutcome> {
   const now = d.now ?? (() => Date.now());
   const out: ExposureOutcome = {
     rule: EXPOSURE_RULE, policy: 'auto', reason: null, exposure_time_100us: null, iso: null, exposure_comp: null,
-    auto_fps: null, auto_luma: null, lock_fps: null, lock_luma: null, iso_steps: 0, at: now(),
+    auto_fps: null, auto_luma: null, lock_fps: null, lock_luma: null, iso_steps: 0, mode_readback: null, at: now(),
   };
   let caps: MediaTrackCapabilities | null = null;
   try { caps = d.capabilities(); } catch { caps = null; }
@@ -222,7 +249,10 @@ export async function setExposure(d: ExposureDeps): Promise<ExposureOutcome> {
       out.lock_fps = check.cameraFps;
       out.lock_luma = check.luma;
       const mode = d.settings().exposureMode;
-      if (mode !== undefined && mode !== 'manual') {
+      out.mode_readback = mode === undefined || mode === null ? null : String(mode);
+      // exp-r2: 'none' is how Chrome on Android reports the fixed exposure; only a mode that says
+      // auto-exposure is running (or one this rule does not know) undoes the lock. Unreported: as before.
+      if (mode !== undefined && mode !== null && autoExposureState(mode) !== 'off') {
         out.reason = `the camera did not keep the fixed exposure (it reports "${String(mode)}")`;
       } else if (!kept(check)) {
         out.reason = failWhy(check, 'fixing the exposure');

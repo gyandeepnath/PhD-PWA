@@ -249,8 +249,9 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
   Nothing about the tablet's camera or tracker throughput has been measured on the device yet.
   From Round 79 (after the investigator saw at most 23–25 frames a second on the tablet):
   - the camera is asked for a 30-fps mode, and its **exposure is fixed** on the grey field at camera
-    setup where the camera allows it (rule `exp-r1`), so white-page and black-page conditions are
-    filmed the same way;
+    setup where the camera allows it (rule `exp-r2` from Round 82, which reads Chrome on Android's
+    report of a fixed exposure correctly; `exp-r1` before), so white-page and black-page conditions
+    are filmed the same way;
   - every condition is judged by one **frame-rate gate, `fps-g2`**: face-solved samples a second while
     the face was seen (`sampling_fps_observed`) — adequate at 20 or more, reduced at 15–20 (kept,
     flagged), too slow under 15 (exploratory) — and flagged when it differs by more than 2 from that
@@ -285,7 +286,8 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
   rule `gaze-r1`) are deprecated and blank on new rows; they measured page layout more than attention
   and counted blinks as looking away.
 - **The open-eye baseline** (Round 80, rule `cal-r2`) is taken on the grey field, under the exposure
-  fixed at camera setup, instead of on a dark screen: at least 6 s, on until 30 usable frames, at most
+  set at camera setup (fixed where the camera kept it; `camera_exposure_policy` in 01), instead of on
+  a dark screen: at least 6 s, on until 30 usable frames, at most
   12 s. The 30-frame floor and both blink cuts are unchanged. Because the ground changed, a cal-r2
   baseline is not assumed equal to a cal-r1 one (`calibration_rule_version` in 01).
 - **Head pitch** (`head_pitch_mean`) is reported relative to each participant's own frontal posture,

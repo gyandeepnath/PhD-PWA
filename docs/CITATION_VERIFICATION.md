@@ -1410,10 +1410,29 @@ Files read, and what each is cited for (quoted or paraphrased from the code as r
 - `third_party/blink/renderer/modules/mediastream/media_stream_video_track.cc`: *"the frame rate
   returned by MediaStreamTrack.getSettings() must be the configured frame rate"* — not the delivered one.
 
+**Re-read 14 Oct 2026 (Round 82), at commit `3bdd35dd9977b5ec520899781816c36293a8cd87` of `main`,
+for what a page reads back after asking for `exposureMode: 'manual'`:**
+
+- `VideoCaptureCamera2.java`, `configureCommonCaptureSettings`: for exposure mode NONE or FIXED it
+  sets `CONTROL_AE_MODE` to `CONTROL_AE_MODE_OFF` and `SENSOR_EXPOSURE_TIME`; `CONTROL_AE_LOCK` is
+  never set anywhere in the file (it is only read).
+- the same file, `getPhotoCapabilities`: *"int jniExposureMode = AndroidMeteringMode.CONTINUOUS;"*,
+  then NONE when the preview request's `CONTROL_AE_MODE` is `CONTROL_AE_MODE_OFF`, and FIXED only when
+  its `CONTROL_AE_LOCK` is true.
+- `video_capture_device_android.cc`, `ToMojomMeteringMode`: FIXED → `MANUAL`, NONE → `NONE`.
+- `third_party/blink/renderer/modules/imagecapture/image_capture.cc`: `OnMojoSetPhotoOptions` calls
+  `GetPhotoState` (*"Retrieve the current device status after setting the options."*), and
+  `UpdateMediaTrackSettingsAndCapabilities` sets
+  `settings_->setExposureMode(ToString(photo_state->current_exposure_mode))`.
+
+So Chrome on Android reports a fixed exposure as `"none"`, never `"manual"`. Cited for exactly that
+(tracking/cameraExposure.ts, rule `exp-r2`). Not observed on the study tablet.
+
 **What this licenses:** that a page cannot hold an Android camera's frame rate with `frameRate`
 constraints, that Chrome lets auto-exposure lower the rate, that exposure can be fixed through
-`exposureMode`/`exposureTime`/`iso`, and that `getSettings().frameRate` is a setting. **It does not
-license** any claim about what the study tablet's camera does: nothing was measured on it.
+`exposureMode`/`exposureTime`/`iso`, that `getSettings().frameRate` is a setting, and (Round 82) that a
+fixed exposure reads back as `"none"` on Android. **It does not license** any claim about what the
+study tablet's camera does: nothing was measured on it.
 
 ### 61. Android camera2 API reference — auto-exposure frame-rate ranges and anti-banding (cited in code, Round 79)
 **Status: NOT INDEXED IN PUBMED (developer documentation). Read at source:
