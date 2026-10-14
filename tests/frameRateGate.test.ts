@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION, fpsConsistent, fpsTier, gateParticipant, medianFps,
+  FPS_GATE, FPS_GATE_DEFINITIONS, FPS_GATE_V1, FPS_GATE_VERSION, fpsConsistent, fpsTier, gateParticipant, medianFps,
   rowGateVersion, samplingFpsObserved,
 } from '@/tracking/frameRateGate';
 import { EyeMetricsAggregator } from '@/tracking/aggregator';
@@ -28,6 +28,18 @@ describe('fps-g2: the numbers the simulation fixed', () => {
     expect(FPS_GATE).toEqual({ ADEQUATE: 20, REDUCED: 15, CONSISTENCY_BAND: 2 });
     expect(FPS_GATE_VERSION).toBe('fps-g2');
     expect(FPS_GATE_V1).toBe('g1-25/30');
+  });
+
+  /*
+   * Round 82. The gate in force is the entry its version names, and a released version never changes
+   * its numbers. To adopt another gate (for example tier A from 22), add a NEW entry and point
+   * FPS_GATE_VERSION at it — frameRateGate.ts FPS_GATE_DEFINITIONS lists every place that changes with
+   * it. Editing the numbers of 'fps-g2' instead fails here.
+   */
+  it('is the entry its version names, and fps-g2 always stands for 20 / 15 / 2', () => {
+    expect(FPS_GATE).toEqual(FPS_GATE_DEFINITIONS[FPS_GATE_VERSION]);
+    expect(FPS_GATE_DEFINITIONS['fps-g2']).toEqual({ ADEQUATE: 20, REDUCED: 15, CONSISTENCY_BAND: 2 });
+    expect(Object.keys(FPS_GATE_DEFINITIONS)).toContain(FPS_GATE_VERSION);
   });
 
   it('tiers at the boundaries: 20 is A, 19.99 B, 15 B, 14.99 C, nothing is null', () => {
@@ -152,6 +164,11 @@ describe('the analysis templates carry the same gate, line for line', () => {
   const R = read('src/analysis/analysis_template.R');
   const PY = read('src/analysis/analysis_template.py');
   const num = (text: string, re: RegExp) => Number(re.exec(text)?.[1]);
+
+  it('names the same gate version as the app, so the three numbers cannot change under the old name', () => {
+    expect(/^FPS_GATE_VERSION {2}<- "([^"]+)"/m.exec(R)?.[1]).toBe(FPS_GATE_VERSION);
+    expect(/^FPS_GATE_VERSION = "([^"]+)"/m.exec(PY)?.[1]).toBe(FPS_GATE_VERSION);
+  });
 
   it('uses the same three numbers as the app', () => {
     expect(num(R, /^FPS_GATE_ADEQUATE <- (\d+)/m)).toBe(FPS_GATE.ADEQUATE);

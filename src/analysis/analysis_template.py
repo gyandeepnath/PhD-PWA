@@ -93,9 +93,12 @@ def truthy(col: pd.Series) -> pd.Series:
 
 # --- The frame-rate gate fps-g2 (ANALYSIS_PLAN.md §5 item 2) ---------------------------------------
 # ONE DEFINITION: src/tracking/frameRateGate.ts, operation for operation, as in the R template
-# (tests/frameRateGate.test.ts pins these three numbers to the app's). Computed when 07 is read, from the
+# (tests/frameRateGate.test.ts pins these three numbers, and the version they stand for, to the app's).
+# Computed when 07 is read, from the
 # two columns every row stores, for every row — rows recorded before the gate are re-tiered too — and
 # before any exclusion, so a participant's median is over all of their camera-on rows with a rate.
+FPS_GATE_VERSION = "fps-g2"  # the gate the three numbers below stand for (frameRateGate.ts
+                             # FPS_GATE_DEFINITIONS): change all four together, never one alone.
 FPS_GATE_ADEQUATE = 20  # PRE-REGISTERED (docs/FPS_GATE_SIMULATION.md): tier A at or above
 FPS_GATE_REDUCED = 15   # PRE-REGISTERED: tier B from here to ADEQUATE; tier C below
 FPS_GATE_BAND = 2       # PRE-REGISTERED: fps_consistent within this of the participant's median

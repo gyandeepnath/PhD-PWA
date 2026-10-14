@@ -23,9 +23,13 @@
  *                               below 15 fps.
  * And CONSISTENCY: a condition whose rate is more than 2 fps from the participant's own median is
  * flagged. Between 20 and 30 fps the incomplete-blink ratio moved by at most 0.31 points per fps in the
- * simulation, so 2 fps bounds a frame-rate-driven difference between one person's conditions at about
- * 0.6 points — a fifth of the planned 3-point effect. The comparison the study makes is within each
- * participant, so this is the part of the gate that protects it most.
+ * simulation, so 2 fps bounds a frame-rate-driven difference between one person's TIER-A conditions at
+ * about 0.6 points — a fifth of the planned 3-point effect. The comparison the study makes is within
+ * each participant, so this is the part of the gate that protects it most. THE BOUND IS FOR TIER A
+ * ONLY (Round 82): across tier B (15 to 20 fps) the ratio moves faster — 0.38 to 0.66 points per fps in
+ * the decision scenarios (docs/FPS_GATE_SIMULATION.md, A4b) — so there 2 fps can move it 0.75 to 1.3
+ * points, a quarter to over two-fifths of the effect. The band was set from the 20-30 slope (rule C3)
+ * and is not changed; what covers tier B is the pre-registered tier-A-only refit.
  *
  * THIS IS NOT THE OLD 30 LOWERED. The g1 gate's 30 rested on an external recommendation that was never
  * verified (blink.ts FPS_RATIO_THRESHOLD), and on the tablet it failed nearly every condition, so it
@@ -38,19 +42,42 @@
  */
 import { MIN_RATE_WINDOW_MS } from './blink';
 
-/** Any change to the quantity, the tiers or the band must change this string. */
+/** Any change to the quantity, the tiers or the band must change this string (FPS_GATE_DEFINITIONS). */
 export const FPS_GATE_VERSION = 'fps-g2';
 /** The gate before Round 79, as fps_gate_version names it on rows judged under it. */
 export const FPS_GATE_V1 = 'g1-25/30';
 
-export const FPS_GATE = {
+export interface FpsGateNumbers {
   /** Tier A at or above this many face-solved samples per second of observed time. */
-  ADEQUATE: 20,
+  readonly ADEQUATE: number;
   /** Tier B from this up to ADEQUATE; tier C below. */
-  REDUCED: 15,
+  readonly REDUCED: number;
   /** A condition more than this many fps from the participant's median is not consistent. */
-  CONSISTENCY_BAND: 2,
-} as const;
+  readonly CONSISTENCY_BAND: number;
+}
+
+/**
+ * What each gate version stands for (Round 82). A released version's numbers never change: rows carry
+ * the version (fps_gate_version), so a different floor or band under the same name would make old and
+ * new rows indistinguishable. tests/frameRateGate.test.ts holds 'fps-g2' to these numbers.
+ *
+ * TO ADOPT A DIFFERENT GATE — for example the stricter reading of docs/FPS_GATE_SIMULATION.md, tier A
+ * from 22 — change all of these together, never one alone:
+ *   1. add an entry here under a new name (e.g. 'fps-g2-22': { ADEQUATE: 22, REDUCED: 15,
+ *      CONSISTENCY_BAND: 2 }) and set FPS_GATE_VERSION to it — FPS_GATE follows;
+ *   2. FPS_GATE_VERSION and FPS_GATE_ADEQUATE (and the others that change) in both analysis templates,
+ *      src/analysis/analysis_template.R and .py — tests/frameRateGate.test.ts fails until they match;
+ *   3. docs/ANALYSIS_PLAN.md §5 item 2: the new numbers, the date, and why;
+ *   4. the test's expectations for the new version.
+ * Tiers are recomputed from columns every 07 row stores, so this can be done after collection and both
+ * gates reported.
+ */
+export const FPS_GATE_DEFINITIONS: Readonly<Record<string, FpsGateNumbers>> = {
+  'fps-g2': { ADEQUATE: 20, REDUCED: 15, CONSISTENCY_BAND: 2 },
+};
+
+/** The gate in force: the numbers FPS_GATE_VERSION stands for. */
+export const FPS_GATE: FpsGateNumbers = FPS_GATE_DEFINITIONS[FPS_GATE_VERSION];
 
 export type FpsTier = 'A' | 'B' | 'C';
 

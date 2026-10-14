@@ -136,20 +136,24 @@ cvsq        <- read_export("13_cvsq.csv", with_folder = TRUE)          # CVS-Q s
 
 # --- The frame-rate gate fps-g2 (ANALYSIS_PLAN.md §5 item 2) ---------------------------------
 # ONE DEFINITION. These lines are src/tracking/frameRateGate.ts, operation for operation, so the app,
-# the export and this file put every row in the same tier (tests/frameRateGate.test.ts pins the three
-# numbers below to the app's). It is computed HERE, from the two columns every 07 row stores, for every
-# row read — so rows recorded before the gate existed (fps_gate_version blank, or g1-25/30) are
-# re-tiered too — and BEFORE any exclusion: a participant's median is over all of that participant's
+# the export and this file put every row in the same tier (tests/frameRateGate.test.ts pins the
+# version and the three numbers below to the app's). It is computed HERE, from the two columns every
+# 07 row stores, for every row read — so rows recorded before the gate existed (fps_gate_version
+# blank, or g1-25/30) are re-tiered too — and BEFORE any exclusion: a participant's median is over all of that participant's
 # camera-on rows with a rate, so a row's flag does not depend on which set is modelled.
 #   sampling_fps_observed = (ear_sample_count - 1) / observed_duration_ms x 1000, to 0.01 half up:
 #     face-solved samples per second while the face was seen (no rate under 1 s or 2 samples);
 #   fps_tier: A at FPS_GATE_ADEQUATE or more, B from FPS_GATE_REDUCED, C below;
 #   fps_consistent: within FPS_GATE_BAND of the participant's median.
+FPS_GATE_VERSION  <- "fps-g2"  # the gate the three numbers below stand for (frameRateGate.ts
+                                # FPS_GATE_DEFINITIONS): change all four together, never one alone.
 FPS_GATE_ADEQUATE <- 20  # PRE-REGISTERED (docs/FPS_GATE_SIMULATION.md): detection >= 0.98 and kappa
                          # within 0.05 of 30 fps in every decision scenario of the shipped classifier.
 FPS_GATE_REDUCED  <- 15  # PRE-REGISTERED: detection >= 0.95; nothing below 15 was simulated.
 FPS_GATE_BAND     <- 2   # PRE-REGISTERED: at most 0.31 points of ratio per fps between 20 and 30, so 2 fps
-                         # is at most a fifth of the planned 3-point effect.
+                         # is at most a fifth of the planned 3-point effect between tier-A rows; across
+                         # tier B (15-20) the ratio moves faster, 0.75-1.3 points per 2 fps
+                         # (docs/FPS_GATE_SIMULATION.md A4b), and the tier-A-only refit covers that.
 fps_gate <- function(d) {
   cam <- as.character(d$camera_active) %in% c("TRUE", "true", "1")
   n   <- suppressWarnings(as.numeric(d$ear_sample_count))

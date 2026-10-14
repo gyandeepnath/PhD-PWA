@@ -68,9 +68,18 @@ Pad 6; the only device figure is the investigator's report of at most 23–25 fr
 | C1 reduced floor (detection ≥ 0.95) | **15 fps** (lowest simulated) | 15 fps |
 | C2 kappa at 20 fps vs 30 fps | at most 0.019 lower — passes | at most 0.048 lower — passes |
 | C3 worst slope, 20–30 fps | 0.310 points per fps → **band 2 fps** (0.62 points) | the same (0.310) |
+| Slope across tier B, 15–20 fps (Round 82; not a decision rule) | 0.376–0.662 points per fps: 2 fps = 0.75–1.32 points | 0.258–0.720: 0.52–1.44 points |
 
 **Gate fps-g2: tier A ≥ 20 fps, tier B 15 to < 20, tier C < 15, consistent within 2 fps of the
 participant's median.** These are R2's values; this simulation reproduces them on the shipped code.
+
+**The 2-fps band's bound holds in tier A only** (Round 82; appendix A4b). C3 took the slope between
+20 and 30 fps, where 2 fps moves the ratio at most 0.62 points. Tier-B rows stay in the confirmatory
+model, and across 15–20 fps the ratio moves faster: in the decision scenarios 2 fps moves it 0.75 to
+1.32 points — 25% to 44% of the planned 3-point effect, so C3's own 25% criterion is not met there.
+The gate is not changed: the band was fixed by C3 before collection, and the pre-registered refit on
+tier-A rows only is what shows whether tier-B rows moved the result. (A 1-fps band for tier B would
+be a new gate version; it is not proposed.)
 
 **Where the robustness check differs, and why it does not move the gate.** In one of the 14 extra
 scenarios — the V-shaped lid, whole-frame exposure, 2% noise — detection at 20 fps is 0.971, below
@@ -80,10 +89,18 @@ shallowest incomplete blinks, within 0.05 of the 0.75 registration cut, and that
 found even at 30 fps (0.69–0.99). So this criterion measures how many simulated blinks were placed
 right at the definition's edge — an assumption — more than whether 20 fps is adequate; and the
 effect those misses have on the ratio is already inside the C3 slope. C2 and C3 hold on all 18
-scenarios. **This is a judgement and is recorded as one**: an investigator who prefers the stricter
-reading can set `FPS_GATE.ADEQUATE` to 22 in `src/tracking/frameRateGate.ts`; tiers are recomputed
-from columns already stored in every row, so the choice can be changed after collection without
-re-collecting anything, and both can be reported.
+scenarios. **This is a judgement and is recorded as one.** An investigator who prefers the stricter
+reading (tier A from 22) adopts it as a **new gate version**, never by editing the number alone —
+rows carry `fps_gate_version`, and 22 under the name `fps-g2` would make old and new rows look alike.
+All of these change together (`src/tracking/frameRateGate.ts`, `FPS_GATE_DEFINITIONS`, lists them):
+1. a new entry in `FPS_GATE_DEFINITIONS` (e.g. `'fps-g2-22': { ADEQUATE: 22, REDUCED: 15,
+   CONSISTENCY_BAND: 2 }`), and `FPS_GATE_VERSION` set to it;
+2. `FPS_GATE_VERSION` and `FPS_GATE_ADEQUATE` in both templates (`src/analysis/analysis_template.R`
+   and `.py`) — `tests/frameRateGate.test.ts` fails until they match the app;
+3. `docs/ANALYSIS_PLAN.md` §5 item 2: the new number, the date and the reason;
+4. the test's expectations for the new version (the test refuses a change to `fps-g2`'s own numbers).
+Tiers are recomputed from columns already stored in every row, so the choice can be made after
+collection without re-collecting anything, and both gates can be reported.
 
 **The fitted minimum (appendix §B).** With the true exposure, the shift of the ratio between 20 and
 60 fps falls from 3.6–6.0 points (lowest frame) to −0.4 to +1.2 points (fitted); with the V-shaped
@@ -108,8 +125,13 @@ identically, so the polarity difference is zero by design (the table's "fixed ex
 fixed level against the auto white page, not a polarity difference).
 
 **Two causes of the same 24 fps (appendix §D).** A tracker that drops 20% of a 30-fps camera's
-frames shifts the ratio about as much as a camera running regularly at the same mean rate (+1.7 vs
-+1.0 points; a 40-ms exposure at 25 fps, +1.4). Dropped frames are not worse than a slow camera.
+frames shifts the ratio MORE than a camera running regularly at the same mean rate: +1.7 against
++1.0 points (about 70% more), and more than a 25-fps camera with a 40-ms exposure (+1.4). The gaps
+are irregular — some 33 ms, some 67 ms — and a blink in a long gap is sampled as at 15 fps. Both
+shifts are still within C3's worst slope over the same span (0.31 points per fps × 6 fps ≈ 1.9
+points). Corrected in Round 82: this paragraph said "about as much" and "dropped frames are not worse
+than a slow camera", which the appendix's own numbers do not support. The frame-interval check
+(`npm run frame-intervals`) tells the two causes apart on an export.
 
 **Landmark noise (appendix §E).** Against a calibration at 3% noise, reading-window noise of 2%
 or 4% moves the ratio by +0.7 or −0.65 points: about 0.7 points per 1% of noise. Noise that differed
@@ -302,6 +324,31 @@ Least-squares slope of the shift vs 60 fps over 20, 22, 24, 25, 26 and 30 fps; n
 | linear, exposure 30 ms fixed, noise 3% | -0.186 |
 | linear, exposure 30 ms fixed, noise 4% | -0.214 |
 
+##### A4b. Ratio shift per fps across tier B (15 to 20 fps)
+
+Least-squares slope of the shift vs 60 fps over 15, 18 and 20 fps; negative = the ratio falls as the rate rises.
+
+| scenario | slope, points per fps | a 2-fps difference moves the ratio by |
+|---|---|---|
+| D cosine, exposure whole frame, noise 2% | -0.376 | 0.75 points |
+| D cosine, exposure whole frame, noise 3% | -0.499 | 1.00 points |
+| D cosine, exposure whole frame, noise 4% | -0.478 | 0.96 points |
+| cosine, exposure instant, noise 2% | -0.258 | 0.52 points |
+| cosine, exposure instant, noise 3% | -0.342 | 0.68 points |
+| cosine, exposure instant, noise 4% | -0.325 | 0.65 points |
+| cosine, exposure 30 ms fixed, noise 2% | -0.272 | 0.54 points |
+| cosine, exposure 30 ms fixed, noise 3% | -0.301 | 0.60 points |
+| cosine, exposure 30 ms fixed, noise 4% | -0.382 | 0.76 points |
+| linear, exposure whole frame, noise 2% | -0.618 | 1.24 points |
+| D linear, exposure whole frame, noise 3% | -0.662 | 1.32 points |
+| linear, exposure whole frame, noise 4% | -0.720 | 1.44 points |
+| linear, exposure instant, noise 2% | -0.347 | 0.69 points |
+| linear, exposure instant, noise 3% | -0.563 | 1.13 points |
+| linear, exposure instant, noise 4% | -0.337 | 0.67 points |
+| linear, exposure 30 ms fixed, noise 2% | -0.426 | 0.85 points |
+| linear, exposure 30 ms fixed, noise 3% | -0.460 | 0.92 points |
+| linear, exposure 30 ms fixed, noise 4% | -0.551 | 1.10 points |
+
 ##### A5. Which blinks are missed — by true depth, in the scenario with the lowest detection at 20 fps (linear, exposure whole frame, noise 2%)
 
 | fps | all | depth 0.00–0.60 | depth 0.60–0.70 | depth 0.70–0.72 | depth 0.72–0.74 | depth 0.74–0.75 |
@@ -381,7 +428,7 @@ Same participant, same blinks. White page: 30 fps, 15 ms exposure. Black page: 2
 | 3% | 0.273 | — |
 | 4% | 0.266 | -0.65 ± 0.16 |
 
-(414 s)
+(399 s)
 
 ## Appendix 2: the full output of `npm run sim:selftest` (1,000 attempts per cell)
 

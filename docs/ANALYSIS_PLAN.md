@@ -478,8 +478,12 @@ These are not optional and they come first.
      20261008). At 20 fps it found at least 98% of blinks and classified them within 0.05 kappa of its
      accuracy at 30 fps, in every decision scenario; at 15, at least 95%; nothing below 15 was
      simulated. Between 20 and 30 fps the ratio moved at most 0.31 percentage points per fps, so a
-     2-fps band keeps a frame-rate-driven difference between one person's conditions under about 0.6
-     points — a fifth of the planned 3-point effect. Every assumption is listed there; the stricter
+     2-fps band keeps a frame-rate-driven difference between one person's tier-A conditions under
+     about 0.6 points — a fifth of the planned 3-point effect. **That bound is for tier A only**
+     (Round 82): across tier B (15 to 20 fps) the ratio moved 0.38–0.66 points per fps in the decision
+     scenarios, so there 2 fps allows 0.75–1.3 points, a quarter to over two-fifths of the effect. The
+     band is not changed (it was set from the 20–30 slope, rule C3); the pre-registered tier-A-only
+     refit is what shows whether tier-B rows moved the result. Every assumption is listed there; the stricter
      reading of one robustness scenario (22 fps) is recorded there as a judgement.
    - **What the published evidence does and does not say** (`docs/CITATION_VERIFICATION.md` #63,
      #64). Zheng et al. (2022) recommend 30 fps or more, but compared only 30 with 8 frames a second;

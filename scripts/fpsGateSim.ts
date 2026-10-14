@@ -107,6 +107,20 @@ console.log('| scenario | slope, points per fps |');
 console.log('|---|---|');
 for (const { g, s } of slopes) console.log(`| ${g.decision ? 'D ' : ''}${g.res.name} | ${s.toFixed(3)} |`);
 
+/*
+ * Round 82: the same slope across tier B (15, 18 and 20 fps — the grid's rates there). C3 set the 2-fps
+ * consistency band from the 20-30 slope only, but tier B rows stay in the confirmatory model, and the
+ * ratio moves faster per fps there. Printed so the band's bound within tier B is stated, not assumed;
+ * the gate is unchanged. Computed from the cells above, so no other number moves.
+ */
+const TIER_B_FPS = [15, 18, 20];
+const slopesB = grid.map((g) => ({ g, s: slope(TIER_B_FPS, TIER_B_FPS.map((f) => 100 * dRef(g.res, f).diff)) }));
+console.log('\n### A4b. Ratio shift per fps across tier B (15 to 20 fps)\n');
+console.log('Least-squares slope of the shift vs 60 fps over 15, 18 and 20 fps; negative = the ratio falls as the rate rises.\n');
+console.log('| scenario | slope, points per fps | a 2-fps difference moves the ratio by |');
+console.log('|---|---|---|');
+for (const { g, s } of slopesB) console.log(`| ${g.decision ? 'D ' : ''}${g.res.name} | ${s.toFixed(3)} | ${(2 * Math.abs(s)).toFixed(2)} points |`);
+
 // Where detection falls short: by the blink's true depth, in the scenario with the lowest detection at 20 fps.
 const worstDet = grid.reduce((a, b) => (det(b.res, 20) < det(a.res, 20) ? b : a));
 console.log(`\n### A5. Which blinks are missed — by true depth, in the scenario with the lowest detection at 20 fps (${worstDet.res.name})\n`);
