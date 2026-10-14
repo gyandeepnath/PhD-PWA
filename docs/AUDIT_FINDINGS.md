@@ -6562,3 +6562,246 @@ None added. No author–year citation was added to code or docs in this round.
   `session_builds` in 01).
 - **Not measured on the tablet:** the database's own size, and how long the cohort view takes to open
   there.
+
+## Round 82 — review fixes for Rounds 79 and 80 (the camera's exposure, the bench check, the camera check, the gate's wording, the schedule, the live graph)
+
+A review of Rounds 79 and 80 (I2a: camera, gate, simulation; I2b: calibration, schedule, live graph)
+reported two major and seven minor findings. Each was checked before it was fixed; all nine held, and
+all nine are fixed. Two rules change, each under a new version recorded in the data: the exposure rule
+(`exp-r1` → `exp-r2`) and the camera check's pass rule (`st-r2` → `st-r3`). No threshold was lowered.
+The frame-rate gate `fps-g2` and the blink rule `blink-r1` are unchanged.
+
+**Nothing here was measured on the Xiaomi Pad 6.** The exposure finding comes from Chrome's source
+code; the camera-check numbers come from a simulation.
+
+### In plain words
+
+1. **On the tablet, the camera's exposure was never being fixed.** Chrome on an Android tablet
+   reports a fixed exposure as "none", not "manual". The app read "none" as a refusal and went back to
+   automatic exposure every time. It now accepts "none" (rule `exp-r2`) and records what the camera
+   said. Seen in Chrome's source, not yet on the tablet: the bench check will show it.
+2. **The bench check called its second half "fixed" even when it was not.** It now says *fixed
+   (30 ms)*, *compensated* or *automatic (not fixed)* with the reason, on screen and in the export.
+3. **The camera check let blinks before a flash count.** In a simulation, someone who ignored the
+   flashes and just blinked as usual passed in about 1 attempt in 6 at 15 blinks a minute. Now only a
+   blink after the flash counts (rule `st-r3`): about 1 in 40. Someone who blinks at each flash passes
+   as before. A blink just before a flash is shown as *too early*.
+4. **The 2-frames-a-second band protects tier A fully, tier B less.** The text said the band holds a
+   frame-rate difference to about 0.6 points; that is true between 20 and 30 frames a second. Between
+   15 and 20 it is 0.75–1.3 points. The gate is not changed; the pre-registered tier-A-only re-fit
+   covers it, and the text now says so.
+5. **Dropped frames shift the blink measure more than a slow camera at the same rate**, not "about as
+   much" (+1.7 against +1.0 points). Corrected below and in the simulation note.
+6. **The table of what is measured when** promised panel labels that cannot be seen during the
+   calibration and the camera check, and left out the two kinds of camera image kept with consent
+   (the annotation video and the setup photographs). Both fixed.
+7. **The live graph could, for a moment, mark a complete blink as incomplete** when the graph's left
+   edge cut through it. Fixed.
+8. **Changing the frame-rate floor (for example to 22) now has to be done under a new gate name**,
+   and the note lists every place that changes with it.
+
+### 1. The exposure lock on Android (major) — confirmed in the source; rule `exp-r2`
+
+**The claim, checked.** Chromium's `main` read again on 14 Oct 2026, pinned at commit
+`3bdd35dd9977b5ec520899781816c36293a8cd87` (the same files fetched by branch and by commit were
+byte-identical; ledger #60):
+
+- `media/capture/video/android/java/src/org/chromium/media/VideoCaptureCamera2.java`, lines
+  1324–1327, `configureCommonCaptureSettings`: for the web's `'manual'` (Android `FIXED`) Chrome turns
+  auto-exposure off —
+  `if (mExposureMode == AndroidMeteringMode.NONE || mExposureMode == AndroidMeteringMode.FIXED) { requestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF);`
+  — and `CONTROL_AE_LOCK` is never set anywhere in the file (it appears only at lines 668–669, read).
+- The same file, lines 662–672, `getPhotoCapabilities`: `int jniExposureMode =
+  AndroidMeteringMode.CONTINUOUS;`, then `NONE` when the preview request's `CONTROL_AE_MODE` is
+  `CONTROL_AE_MODE_OFF`, and `FIXED` only when `mPreviewRequest.get(CaptureRequest.CONTROL_AE_LOCK)`
+  is true.
+- `media/capture/video/android/video_capture_device_android.cc`, lines 63–70, `ToMojomMeteringMode`:
+  `FIXED` → `mojom::MeteringMode::MANUAL`; `NONE` → `mojom::MeteringMode::NONE`.
+- `third_party/blink/renderer/modules/imagecapture/image_capture.cc`: line 2690, in
+  `OnMojoSetPhotoOptions`, *"Retrieve the current device status after setting the options."*; line
+  2742, `settings_->setExposureMode(ToString(photo_state->current_exposure_mode));`; and
+  `ToV8MeteringMode` maps `NONE` to `kNone`, the web's `"none"`. This runs before `applyConstraints`
+  resolves.
+
+So after a successful `'manual'`, Chrome on Android reads back `"none"`. `exp-r1` kept the lock only
+on `"manual"`, so on the tablet every sitting would have fallen back to `compensated-v1` or `auto`
+with the reason *it reports "none"*; `fit_exposure_known` could never be TRUE there, so the "exposure
+known only" fitted-minimum refit would always be empty; and the plan's and codebook's "under the
+exposure fixed at camera setup" would have been false. The unit fake and Chromium's own fake camera
+both echo `"manual"`, which is why no test showed it.
+
+**The fix** (`src/tracking/cameraExposure.ts`). `exp-r2` reads the mode for what it says about
+auto-exposure (`autoExposureState`): `manual` and `none` mean it is off (kept); `continuous` and
+`single-shot` mean it runs (not kept); an unreported mode is judged on the measurements alone, as
+before. The rate and brightness checks are unchanged (no threshold moved). The raw mode is recorded
+(`ExposureOutcome.mode_readback`; 01 `camera_exposure_mode_readback`), so any sitting can be judged
+under either rule, and the rule is in the data (01 and 07 `camera_exposure_rule`; a 07 row with a
+policy and no rule was set under `exp-r1`). Unit tests: a fake camera that answers `"none"` after
+`"manual"`, as Android does, keeps the lock; `continuous`, `single-shot` and an unknown mode still
+undo it; a `"none"` read-back with a too-dark picture is still refused. Recorded in ANALYSIS_PLAN §5
+item 8, PROTOCOL, the operator manual and ledger #60.
+
+**What the measurement can and cannot judge.** The exposure time Chrome reports on Android after a set
+is the value Chrome itself set — the one asked for, or the one auto-exposure had chosen — because after
+a set its repeating request no longer reads capture results back (`setRepeatingRequest(mPreviewRequest,
+null, null)`), so that number cannot show that the sensor holds it; the frame rate and brightness in the 3-s check can, which is why they
+stay the deciding part. Whether the white, grey and black screens then give the same rate is what the
+bench check shows on the device.
+
+### 2. The bench check's second half (major) — confirmed; relabelled
+
+**Checked.** `runCameraBench` ran its second half as `'fixed'` whatever `setCameraExposure` returned;
+the table and the 01 `camera_bench` cell printed that word; neither showed the lock's outcome or what
+the camera reported. With `exp-r1` on Android every "fixed" row would have been automatic or
+compensated exposure.
+
+**Fixed.** `benchLockLabel` (cameraExposure.ts) names the second half by what the step achieved:
+*fixed (30 ms)*, *compensated (−0.33 EV)*, or *automatic (not fixed)* with a line under the table
+giving the reason and saying those rows cannot show whether fixing helps. The screen during the run
+says the same. The table has a *Camera says* column (the exposure mode read on that screen). The 01
+cell now starts with the lock (`lock locked-v1 exp-r2`, or `lock auto exp-r2 (<reason>)`), names the
+second half `fixed`, `compensated` or `auto again`, and gives each row's mode (`mode none`). Old
+records are relabelled from the lock they kept. The manual's "how to read it" says to read the
+Exposure column first. Unit and e2e tests check that the label shown is the lock recorded.
+
+### 3. The camera check counted blinks before the flash (minor) — measured; rule `st-r3`
+
+**Measured.** The self-test simulation (`src/sim/selfTestSim.ts`, `npm run sim:selftest`, 1,000
+attempts per cell, shipped aggregator, classifier and scorer) now has a participant who ignores the
+flashes and blinks only spontaneously (scenario D) and one who answers every flash and also blinks
+spontaneously at 20 a minute (scenario E). The rates are assumptions; the one verified figure is a
+mean of 11.6 a minute (SD 7.84) while reading on a computer (Portello et al. 2013, ledger #2,
+re-checked in PubMed on 14 Oct 2026, abstract). Each blink starts at least 300 ms after the one before
+ends (assumed).
+
+| Spontaneous blinks a minute (assumed), 24 fps | Passed `st-r2` | Passed `st-r3` |
+|---|---|---|
+| 10 | 4.8% | 0.6% |
+| 15 | 16.3% | 2.4% |
+| 20 | 40.0% | 8.2% |
+| 26 | 64.8% | 16.5% |
+
+Scenario E: `st-r3` passed exactly as often as `st-r2` (1.000 from 18 fps up, 0.996 at 15), as did
+every scenario of blinks at each flash (A, B). Landmark noise alone (C) passed nothing under any rule.
+
+**Fixed.** `st-r3` (selfTest.ts): a flash counts the nearest blink that begins in the 1.2 s AFTER it.
+Nothing else changed — 4 of 5, 90% face, the frame-rate gate, the 1.2-s window length. A limit on
+extra blinks was not added: in scenario E a participant who did everything right had about four extra
+blinks per attempt, so such a limit would fail them. `st-r2` sittings stay reproducible: `scoreSelfTest`
+and `matchCues` take the rule, and the 07b `cue_matched` column and the integrity check re-run the
+matching under each sitting's own `selftest_rule`. The result screen marks a flash missed by a blink
+just before it as *too early* and says to wait for the flash; the instruction now reads "Wait for it
+to flash white, then blink once". The simulation note's "Noise alone never passes" now says exactly
+what was tested (noise only; not eye or head movements, which were not simulated). Recorded in
+ANALYSIS_PLAN §5 item 2, the codebook (`selftest_rule` is now a factor of 3), PROTOCOL, the blueprint
+and the manual. **What remains**: at 20 or more blinks a minute about 1 attempt in 12 can still pass
+by chance. Such a pass still means the camera saw this person's blinks (in scenario D they were
+found as often as they were made); it does not show that the instruction was followed.
+
+### 4. The 2-fps band in tier B (minor) — confirmed; wording only
+
+**Checked in the shipped simulation.** `npm run sim:fps` now prints the slope across tier B (table
+A4b, from the 15, 18 and 20 fps cells already run, so no other number moved — the regenerated
+appendix is otherwise identical). Decision scenarios: −0.376 to −0.662 points per fps, so 2 fps moves
+the ratio 0.75–1.32 points (25–44% of the 3-point effect; C3's criterion is 25%). All 18 scenarios:
+0.52–1.44 points. Between 20 and 30 fps it is at most 0.62 points, as before.
+
+**Fixed (wording; the gate is not changed).** The 0.6-point statement is limited to tier A, and the
+tier-B bound is stated, in `frameRateGate.ts`, ANALYSIS_PLAN §5 item 2, the `fps_consistent` codebook
+entry, the R template's comment and the simulation note: the pre-registered tier-A-only refit is what
+covers tier B. A 1-fps tier-B band would be a new gate version and is not proposed.
+
+### 5. Dropped frames against a slow camera (minor) — confirmed; corrected
+
+Appendix §D (unchanged by the re-run): 24 fps regular +0.97 ± 0.29; a 30-fps camera whose tracker
+keeps 80% +1.69 ± 0.31; 25 fps with 40 ms +1.42 ± 0.30 points, each against 30 fps. **Correction to
+Round 79** ("Other results", *Two causes of the same 24 fps*): a tracker keeping 80% of a 30-fps
+camera's frames shifts the ratio MORE than a camera running regularly at that mean rate — about 70%
+more (+1.7 against +1.0 points) and more than the 25-fps, 40-ms case — still within C3's worst slope
+over the same 6 fps (about 1.9 points). The simulation note's paragraph is corrected the same way.
+
+### 6. The schedule's "Shown live" column and the camera images kept (two minor findings) — confirmed
+
+**Checked.** `Experiment.tsx` sets `panelLocked = … || procedureRunning`, and `ResearcherPanel.tsx`
+shows nothing but the plain dot when locked (`const shown = open && !p.locked && …`), so "Recording:
+open-eye baseline", "Recording: gaze check" and "Recording: camera check" can never be seen; on the
+reading pages the panel opens as a strip that says "Recording", not "Recording: reading window". And
+`measurementSchedule.ts` had no row for the annotation video (`captureMedia('reading_segment', …)`,
+one per polarity, `annotationSegmentSteps`) or the setup photographs (`session_start` after the
+camera check, `session_end`).
+
+**Fixed.** Those rows now point at what the operator sees (the calibration screen's eyes found /
+steady / done and its tick per dot; the dot screen and the result screen) and say the panel stays a
+plain dot; the reading row names the strip's "Recording". Two rows were added: *Annotation video*
+(validation subsample, its own consent; the first reading window of each polarity, up to 3 min, kept
+only if that reading is completed; 15_media_inventory) and *Setup photographs* (their own consent;
+after the camera check and at the end). Both document copies were regenerated; the test now fails if
+the table promises a procedure label or if the panel stops locking. The protocol's consent table said
+"one 3-minute reading segment per session"; the app records one per polarity, and the table now says
+so.
+
+### 7. The live graph's left edge (minor) — confirmed; fixed
+
+**Checked** with the review's series (24 fps, one complete blink, deepest frame 0.06 at t = 1000):
+the record calls it `full`; the live count over a trace starting at 1050 ms called it `incomplete`.
+
+**Fixed** (`blinkCount.ts`, `useTracking.ts`). The trace buffer is kept `TRACE_LEAD_MS` (1 s) longer
+than the 10 s drawn; blinks are classified over the whole buffer and only those whose deepest frame
+is inside the drawn window are marked; a blink already under way at the buffer's first sample is not
+marked at all (an unmarked dip, never a wrong mark). The graph is still sent only its 10 s. The 1 s
+is about three spontaneous blinks long (Nakamura et al. 2008, ledger #62: about 100 ms down, 220 ms
+up). `tests/blinkCount.test.ts` has the review's case.
+
+### 8. Changing the frame-rate floor (minor) — confirmed; the version now carries the numbers
+
+**Checked.** The simulation note said an investigator could "set `FPS_GATE.ADEQUATE` to 22", without
+the version, the templates or the plan; every row would then have read `fps-g2` under a different
+rule.
+
+**Fixed.** `FPS_GATE` is now the entry of `FPS_GATE_DEFINITIONS` that `FPS_GATE_VERSION` names; a test
+holds `fps-g2` to 20 / 15 / 2, so the numbers cannot change under the old name. Both templates declare
+`FPS_GATE_VERSION` and a test holds it to the app's. The registry's comment and the simulation note
+list every step (a new entry and version, both templates' constants, ANALYSIS_PLAN, the test).
+
+### 9. Checks run
+
+- `npm run verify` (lint, types, 1,587 unit tests, corpus, codebook, export gate, analysis gate):
+  green.
+- `npm run sim:fps` (399 s) and `npm run sim:selftest` (115 s) re-run and both appendices
+  regenerated. Every table that existed before reproduces digit for digit; what is new is table A4b,
+  scenarios D and E, and the `st-r3` column.
+- End-to-end, retries off, one worker: `cameraDiagnostics` (3), `cameraLost` (3), `fullRun` (1),
+  `setupNavigation` (11): 18 passed.
+- After `npm run build`, the production-bundle suite (e2e-prod, 7 tests): passed.
+- Looked at, at 1280 x 800: the bench table (Chromium's fake camera kept the lock, so its last three
+  rows read *fixed (5 ms)* and the camera says *manual*), and the camera check's instruction and
+  result screens.
+
+### 10. Versions in the data
+
+| Rule | Before | Now | Where it is recorded |
+|---|---|---|---|
+| Camera exposure | `exp-r1` | `exp-r2` | 01 and 07 `camera_exposure_rule` (new); 01 `camera_exposure_mode_readback` (new) |
+| Camera check | `st-r2` | `st-r3` | 01 `selftest_rule` |
+| Frame-rate gate | `fps-g2` | `fps-g2` (unchanged; now also declared in both templates) | 07 `fps_gate_version` |
+| Blink rule | `blink-r1` | unchanged | 07b `rule_version` |
+
+### 11. Citations
+
+- Ledger #60 (Chromium source): re-read at commit `3bdd35dd…` on 14 Oct 2026 for what a page reads
+  back after `'manual'`; `image_capture.cc` added to the files read. Status unchanged (not indexed in
+  PubMed; read at source).
+- Ledger #2 (Portello et al. 2013): re-checked in PubMed (PMID 23538437, abstract only); now also cited
+  for context beside the simulation's assumed spontaneous blink rates, which are not taken from it.
+- Ledger #62 (Nakamura et al. 2008): now also cited in `blinkCount.ts` for the same mean phase
+  durations. Status unchanged.
+
+### 12. Not done, and why
+
+- **Not observed on the tablet:** the `"none"` read-back, the frame rate with the exposure fixed, and
+  whether the three screens then agree. The bench check is how to see each of them.
+- **Not simulated:** eye or head movements that dip the eye's openness without a blink, during the
+  camera check; and a participant who anticipates the flash. The *too early* note covers the second
+  on the screen.
+- **No tier-B band.** Proposing one would change the gate after it was fixed; the tier-A-only refit is
+  the pre-registered answer.
