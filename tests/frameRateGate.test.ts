@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  FPS_GATE, FPS_GATE_DEFINITIONS, FPS_GATE_V1, FPS_GATE_VERSION, fpsConsistent, fpsTier, gateParticipant, medianFps,
+  FPS_GATE, FPS_GATE_DEFINITIONS, FPS_GATE_V1, FPS_GATE_VERSION, fpsConsistent, fpsText, fpsTier, gateParticipant, medianFps,
   rowGateVersion, samplingFpsObserved,
 } from '@/tracking/frameRateGate';
 import { EyeMetricsAggregator } from '@/tracking/aggregator';
@@ -51,6 +51,16 @@ describe('fps-g2: the numbers the simulation fixed', () => {
     expect(fpsTier(0)).toBe('C');
     expect(fpsTier(null)).toBeNull();
     expect(fpsTier(Number.NaN)).toBeNull();
+  });
+
+  it('is shown to one decimal, never rounded onto a floor it is below (Round 83)', () => {
+    expect(fpsText(24.37)).toBe('24.4');
+    expect(fpsText(18.2)).toBe('18.2');
+    // One decimal would put these on the floor above them, in the next tier's words.
+    expect(fpsText(19.96)).toBe('19.96');
+    expect(fpsText(14.96)).toBe('14.96');
+    expect(fpsText(20)).toBe('20.0');
+    expect(fpsText(19.94)).toBe('19.9');
   });
 });
 

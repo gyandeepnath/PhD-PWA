@@ -117,6 +117,16 @@ export function fpsTier(fps: number | null | undefined): FpsTier | null {
   return 'C';
 }
 
+/**
+ * A rate for the screen: one decimal, or the stored two when one decimal would round it onto a tier floor
+ * it is below — 19.96 is tier B, and "20.0" would read as adequate (Round 83). Used wherever a rate is
+ * shown beside its tier.
+ */
+export function fpsText(fps: number): string {
+  const one = fps.toFixed(1);
+  return fpsTier(Number(one)) === fpsTier(fps) ? one : fps.toFixed(2);
+}
+
 /** Median of the finite values; null when there are none. */
 export function medianFps(values: Array<number | null | undefined>): number | null {
   const v = values.filter((x): x is number => x != null && Number.isFinite(x)).sort((a, b) => a - b);

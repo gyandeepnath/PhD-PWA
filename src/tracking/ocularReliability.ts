@@ -38,7 +38,7 @@
  * Pure: the same function serves the dashboard (from a sitting's records) and the export (from the
  * columns of analysis_long.csv), so the screen and the file cannot disagree.
  */
-import { FPS_GATE, fpsTier } from './frameRateGate';
+import { FPS_GATE, fpsText, fpsTier } from './frameRateGate';
 import { MEASURE } from './measurementSchedule';
 
 /** Any change to a check, a threshold or the mapping to the three words must change this string. */
@@ -163,8 +163,8 @@ export function ocularReliability(x: ReliabilityInput): ReliabilityResult {
   const rateNeeded = `${FPS_GATE.ADEQUATE} a second or more (${FPS_GATE.REDUCED}–${FPS_GATE.ADEQUATE} reduced)`;
   const rateGate = 'fps-g2 tier (plan §5.2)';
   const tier = fpsTier(x.fps);
-  // One decimal: a rate rounded to the whole number can land on the floor it failed (19.96 -> "20").
-  const r = x.fps == null ? null : x.fps.toFixed(1);
+  // Never rounded onto the floor it failed: 19.96 reads "19.96", not "20" or "20.0" (fpsText).
+  const r = x.fps == null ? null : fpsText(x.fps);
   if (!on) checks.push(NOT_JUDGED('rate', MEASURE.samplingRate.name, rateNeeded, rateGate));
   else if (tier == null) {
     // No rate with the camera on: under a second observed or under two samples. The templates keep such
