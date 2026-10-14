@@ -52,15 +52,42 @@ describe('the measurement schedule (Round 80)', () => {
     expect(block('docs/PROTOCOL.md')).toBe(scheduleMarkdown());
   });
 
-  it('has a row for every window that keeps frames, and says what the panel prints there', () => {
+  it('has a row for every window that keeps frames, and says only what can be seen while it runs', () => {
     const rows = measurementSchedule();
     const windows: RecordingWindow[] = ['reading', 'selftest', 'baseline', 'gaze_check'];
     for (const w of windows) {
       const keeping = rows.filter((r) => r.windows?.includes(w));
       expect(keeping.length, w).toBeGreaterThan(0);
-      expect(keeping.some((r) => r.live.includes(`"${RECORDING_LABEL[w]}"`)), w).toBe(true);
     }
+    /*
+     * Round 82. The panel is locked to a plain dot while a measured procedure runs (Experiment.tsx
+     * panelLocked includes procedureRunning; ResearcherPanel.tsx shows nothing more when locked), so the
+     * procedures' full labels can never be seen: the table must not promise them. On the reading pages
+     * the panel opens as a strip that says "Recording".
+     */
+    const text = scheduleMarkdown();
+    for (const w of ['selftest', 'baseline', 'gaze_check'] as const) {
+      expect(text, w).not.toContain(RECORDING_LABEL[w]);
+      for (const r of rows.filter((x) => x.windows?.includes(w))) expect(r.live, w).toMatch(/panel stays a plain dot while it runs/);
+    }
+    expect(text).not.toContain(RECORDING_LABEL.reading);
+    expect(rows.some((r) => r.windows?.includes('reading') && r.live.includes(`"${recordingShort('reading')}"`))).toBe(true);
+    expect(readFileSync('src/experiment/Experiment.tsx', 'utf8')).toMatch(/const panelLocked = [^;]*\|\| procedureRunning;/);
+    expect(readFileSync('src/components/ResearcherPanel.tsx', 'utf8')).toMatch(/const shown = open && !p\.locked/);
     expect(rows.some((r) => r.cadence === 'Not measured' && r.live.includes(RECORDING_LABEL.none))).toBe(true);
+  });
+
+  it('lists the camera images kept under their own consent, not only the numbers (Round 82)', () => {
+    const rows = measurementSchedule();
+    const video = rows.find((r) => r.measure.startsWith('Annotation video'));
+    const photos = rows.find((r) => r.measure.startsWith('Setup photographs'));
+    expect(video).toMatchObject({ cadence: 'Each polarity' });
+    expect(video!.when).toContain(`up to ${CONFIG.ANNOTATION_SEGMENT_MS / 60000} min`);
+    expect(photos).toMatchObject({ cadence: 'Start and end' });
+    // The two checkpoints the app captures at, and the one-per-polarity rule, in the code.
+    const exp = readFileSync('src/experiment/Experiment.tsx', 'utf8');
+    for (const c of ['session_start', 'session_end', 'reading_segment']) expect(exp).toContain(`captureMedia('${c}'`);
+    expect(readFileSync('src/experiment/counterbalance.ts', 'utf8')).toMatch(/export function annotationSegmentSteps/);
   });
 
   it('states the timings the code applies', () => {

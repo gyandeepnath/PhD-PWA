@@ -122,7 +122,8 @@ export function recordingShort(w: RecordingWindow | null | undefined): string {
 }
 
 /** How often, in the schedule's words. */
-export type Cadence = 'Continuously' | 'Each blink' | 'Each reading window' | 'Once per sitting' | 'Live only' | 'Not measured';
+export type Cadence = 'Continuously' | 'Each blink' | 'Each reading window' | 'Once per sitting' | 'Each polarity'
+  | 'Start and end' | 'Live only' | 'Not measured';
 
 export interface ScheduleRow {
   measure: string;
@@ -131,7 +132,11 @@ export interface ScheduleRow {
   when: string;
   /** Where it is kept; "Not kept" when it is not. */
   kept: string;
-  /** What the researcher sees of it while it happens. */
+  /**
+   * What the researcher sees of it while it happens. Only what can actually be seen: the panel is a
+   * plain locked dot while a measured procedure runs (Experiment.tsx panelLocked; ResearcherPanel.tsx),
+   * and on the reading pages it opens as a strip that says "Recording", not the full label.
+   */
   live: string;
   /** The recording window(s) that keep it, for the test that ties the code's windows to this table. */
   windows?: RecordingWindow[];
@@ -153,8 +158,8 @@ export function measurementSchedule(): ScheduleRow[] {
       measure: `${MEASURE.eyeOpenness.name}, face found, head position, iris position`,
       cadence: 'Continuously',
       when: 'Every frame the tracker processes, from camera setup to the end of the sitting',
-      kept: `Only in the ${RECORDING_WINDOWS} windows below that the panel marks "Recording"; on every other screen shown live and discarded`,
-      live: `Card: picture, last-10-s graph, eye openness, on screen now; panel says "${RECORDING_LABEL.none}" outside them`,
+      kept: `Only in the ${RECORDING_WINDOWS} windows below (reading, camera check, open-eye baseline, gaze check); on every other screen shown live and discarded`,
+      live: `Card: picture, last-10-s graph, eye openness, on screen now; on the set-up screens it says "${RECORDING_LABEL.none}"`,
     },
     {
       measure: MEASURE.pictureBrightness.name,
@@ -184,7 +189,7 @@ export function measurementSchedule(): ScheduleRow[] {
       cadence: 'Once per sitting',
       when: `Calibration, centre dot on the grey field: at least ${s1(CONFIG.EAR_BASELINE_MS)}, on until ${MIN_EAR_BASELINE_SAMPLES} usable frames, at most ${s1(CONFIG.EAR_BASELINE_MAX_MS)}; again on a retry or a resume`,
       kept: 'Calibration record; 01 calibration_ear_baseline',
-      live: `Panel: "${RECORDING_LABEL.baseline}"; calibration screen: eyes found / steady / done`,
+      live: `Calibration screen: eyes found / steady / done. The panel stays a plain dot while it runs`,
       windows: ['baseline'],
     },
     {
@@ -192,7 +197,7 @@ export function measurementSchedule(): ScheduleRow[] {
       cadence: 'Once per sitting',
       when: `After the baseline: ${GAZE_DOTS.length} dots across a reading line, each sampled ${s1(GAZE_DOT_SAMPLE_MS)} after ${s1(GAZE_DOT_SETTLE_MS)} to settle; a short dot is shown again (up to ${GAZE_DOT_ATTEMPTS} times in all)`,
       kept: 'Calibration record; 01 gaze_calibration_valid',
-      live: `Panel: "${RECORDING_LABEL.gaze_check}"; calibration screen: a tick per dot`,
+      live: `Calibration screen: a tick per dot. The panel stays a plain dot while it runs`,
       windows: ['gaze_check'],
     },
     {
@@ -200,7 +205,7 @@ export function measurementSchedule(): ScheduleRow[] {
       cadence: 'Once per sitting',
       when: `After calibration: about ${selfTestS} s, ${SELF_TEST.CUES} flashes on the grey field`,
       kept: '01 selftest_*; its blinks and frames in 07b and 07c (window = selftest)',
-      live: `Panel: "${RECORDING_LABEL.selftest}"; result screen: each flash, the trace`,
+      live: `The dot screen counts the flashes; then the result screen shows each flash and the trace. The panel stays a plain dot while it runs`,
       windows: ['selftest'],
     },
     {
@@ -208,7 +213,7 @@ export function measurementSchedule(): ScheduleRow[] {
       cadence: 'Each blink',
       when: 'The reading window only: from the "Begin reading" tap to the last page\'s Next',
       kept: '07b, one row per blink; 07c, every frame\'s eye openness',
-      live: `Panel: "${RECORDING_LABEL.reading}"; blinks this reading, incomplete beside (a blink is counted when the eye reopens)`,
+      live: `Panel strip on the reading page (tap the dot): "${recordingShort('reading')}", blinks this reading, incomplete beside (a blink is counted when the eye reopens)`,
       windows: ['reading'],
     },
     {
@@ -223,6 +228,25 @@ export function measurementSchedule(): ScheduleRow[] {
       live: 'Panel "last reading" on the screens after it',
       windows: ['reading'],
     },
+    /*
+     * The camera IMAGES the app keeps, each under its own consent (OPERATOR_MANUAL §2; storage/media.ts
+     * mayCapture). Everything above keeps numbers; these two keep pictures. Round 82: the table said
+     * the camera kept only numbers, which left both out.
+     */
+    {
+      measure: 'Annotation video (validation subsample only, its own consent)',
+      cadence: 'Each polarity',
+      when: `The first reading window of each polarity: up to ${Math.round(CONFIG.ANNOTATION_SEGMENT_MS / 60000)} min from "Begin reading"; kept only if that reading is completed`,
+      kept: 'A video file, one per polarity (15_media_inventory, reading_segment)',
+      live: 'Nothing on screen',
+    },
+    {
+      measure: 'Setup photographs (their own consent)',
+      cadence: 'Start and end',
+      when: 'One after the camera check, one at the end of the sitting',
+      kept: 'Two photo files (15_media_inventory, session_start and session_end)',
+      live: 'Nothing on screen',
+    },
     {
       measure: 'Questions, ratings, fatigue scale, word search, reaction task, grey field, breaks',
       cadence: 'Not measured',
@@ -234,7 +258,7 @@ export function measurementSchedule(): ScheduleRow[] {
       measure: 'Live picture, last-10-s graph and its blink marks, live frame rates',
       cadence: 'Live only',
       when: `While the researcher card is open (${LIVE_READOUT_HZ} updates a second)`,
-      kept: 'Never kept',
+      kept: 'Never kept (the only camera images kept are the two consented items above)',
       live: 'Card',
     },
   ];
