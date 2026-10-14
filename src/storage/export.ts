@@ -354,9 +354,11 @@ export function benchText(b: CameraBenchRecord | null): string {
   const lock = b.lock
     ? `lock ${b.lock.policy} ${b.lock.rule}${b.lock.reason ? ` (${b.lock.reason})` : ''}`
     : 'lock not run';
-  return [lock, ...b.rows.map((r) => `${r.exposure === 'auto' ? 'auto' : after.tag} ${r.ground} ${v(r.camera_fps)}/${v(r.tracker_fps)}/${v(r.face_fps)} L${v(r.luma)}`
+  const row = (r: CameraBenchRecord['rows'][number]) =>
+    `${r.exposure === 'auto' ? 'auto' : after.tag} ${r.ground} ${v(r.camera_fps)}/${v(r.tracker_fps)}/${v(r.face_fps)} L${v(r.luma)}`
     + (r.exposure_time_100us == null ? '' : ` ${r.exposure_time_100us / 10}ms`)
-    + ` mode ${r.exposure_mode ?? '-'}`)].join('; ');
+    + ` mode ${r.exposure_mode ?? '-'}`;
+  return [lock, ...b.rows.map(row)].join('; ');
 }
 
 /**

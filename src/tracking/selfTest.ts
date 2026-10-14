@@ -5,10 +5,10 @@
  * WHY. The investigator asked how to know the blink measurement works. Nothing answered that until the
  * export was opened, after the participant had gone. Now, right after calibration, the participant blinks
  * once each time a dot flashes; each flash counts one blink beginning in the 1.2 s after it as its hit
- * (matchCues; 1.2 s either side before Round 82), and every other blink is an extra. With the frame rate and how much of the time a face
- * was in view, that is a verdict an operator can act on: reseat the participant, fix the light, or
- * accept and continue — and the result is exported with the sitting (selftest_* in
- * 01_session_info.csv) either way.
+ * (matchCues; 1.2 s either side before Round 82), and every other blink is an extra. With the frame
+ * rate and how much of the time a face was in view, that is a verdict an operator can act on: reseat
+ * the participant, fix the light, or accept and continue — and the result is exported with the sitting
+ * (selftest_* in 01_session_info.csv) either way.
  *
  * The pass rule is an ENGINEERING check that the pipeline sees deliberate blinks, not a validation of the
  * incomplete-blink classifier (which no retrieved study has validated for this method; see
@@ -256,8 +256,8 @@ export function limitShort(limit: PipelineLimit, p: PipelineWindowFields | null)
  *
  * At the real timing (a flash every CUE_EVERY_MS, 3 s, against a window of 1.2 s) a blink is within the
  * window of one flash at most, so this is simply: for each flash, the nearest blink in its window. The
- * order matters only when two flashes come closer than the window: the collapsed timings of the test
- * harness, or a screen that stalled and delayed a flash (a late frame delays a flash, never skips it).
+ * order matters only when two flashes come closer than the window (twice the window under st-r1 and
+ * st-r2): the collapsed timings of the test harness, or a screen that stalled and delayed a flash (a late frame delays a flash, never skips it).
  *
  * One function for the score and for the export (07b_blink_events.csv cue_matched, re-run under the rule
  * the sitting was scored with), so the file marks exactly the blinks that made selftest_detected.
