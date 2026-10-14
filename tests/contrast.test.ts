@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { wcagContrastRatio, michelsonContrast, relativeLuminance, wcagLevel } from '@/lib/contrast';
 import { CONDITIONS, conditionDefinitionHash, rtStimulusColours } from '@/experiment/conditions';
 import { UI_TEXT, UI_GROUNDS, UI_FILLS_WITH_WHITE_TEXT, RETIRED_TEXT_COLOURS } from '@/lib/uiPalette';
+import { DIM_FILL } from '@/dashboard/charts';
 import { CONFIG } from '@/experiment/config';
 
 describe('WCAG relative luminance', () => {
@@ -219,6 +220,11 @@ describe('operator-screen text colours meet WCAG AA', () => {
   it('a disabled button is still legible (muted text on the disabled grey)', () => {
     // Disabled was white on #cfcbc3: 1.6:1.
     expect(wcagContrastRatio(UI_TEXT.muted, '#E8E6E1')).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('a chart bar the analysis leaves out is grey and still visible: at least 3:1 on the chart\'s white (Round 83)', () => {
+    // A fill, not text, so WCAG 1.4.11's 3:1 is the bar. Grey, so it is not read as one of the colours.
+    expect(wcagContrastRatio(DIM_FILL, UI_GROUNDS.white)).toBeGreaterThanOrEqual(3);
   });
 
   it('the retired colours really were below AA as text on cream, which is why they are retired', () => {

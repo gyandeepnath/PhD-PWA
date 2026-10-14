@@ -8,14 +8,21 @@ export interface Datum {
   label: string;
   value: number | null;
   flag?: 'good' | 'warn' | 'bad';
+  /**
+   * Drawn in grey: the value is shown, and the analysis leaves the row out (Round 83: an eye chart's bar
+   * whose blink data is not usable under rule rel-r1). Its value is not hidden, only marked.
+   */
+  dim?: boolean;
 }
 
 const FLAG_COLORS = { good: '#22c97a', warn: '#f5a623', bad: '#e64c4c' } as const;
+/** A bar left out of the analysis. A fill, so 3:1 on white is the bar it must clear (tests/contrast.test.ts). */
+export const DIM_FILL = '#8a8780';
 
 export function BarPanel({
-  title, data, color = '#4f8ef7', unit = '', baseline,
-}: { title: string; data: Datum[]; color?: string; unit?: string; baseline?: number }) {
-  const clean = data.filter((d) => d.value != null) as { label: string; value: number; flag?: keyof typeof FLAG_COLORS }[];
+  title, data, color = '#4f8ef7', unit = '', baseline, dimNote,
+}: { title: string; data: Datum[]; color?: string; unit?: string; baseline?: number; dimNote?: string }) {
+  const clean = data.filter((d) => d.value != null) as { label: string; value: number; flag?: keyof typeof FLAG_COLORS; dim?: boolean }[];
   return (
     <div style={{ background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 16 }}>
       <h3 style={{ fontFamily: 'Roboto, ui-sans-serif, sans-serif', fontSize: 16, fontWeight: 500, color: '#3a3a4a', marginBottom: 8 }}>
@@ -30,7 +37,7 @@ export function BarPanel({
           {baseline != null && <ReferenceLine y={baseline} stroke="#e64c4c" strokeDasharray="4 4" />}
           <Bar dataKey="value" fill={color} radius={[4, 4, 0, 0]}>
             {clean.map((d, i) => (
-              <Cell key={i} fill={d.flag ? FLAG_COLORS[d.flag] : color} />
+              <Cell key={i} fill={d.dim ? DIM_FILL : d.flag ? FLAG_COLORS[d.flag] : color} />
             ))}
           </Bar>
         </BarChart>
@@ -38,6 +45,11 @@ export function BarPanel({
       {clean.length < data.length && (
         <p style={{ fontFamily: 'Roboto, ui-sans-serif, sans-serif', fontSize: 14, color: '#4a4a60', marginTop: 4 }}>
           No data: {data.filter((d) => d.value == null).map((d) => d.label).join(', ')}
+        </p>
+      )}
+      {dimNote && clean.some((d) => d.dim) && (
+        <p data-testid="chart-dim-note" style={{ fontFamily: 'Roboto, ui-sans-serif, sans-serif', fontSize: 14, color: '#4a4a60', marginTop: 4 }}>
+          {dimNote}: {clean.filter((d) => d.dim).map((d) => d.label).join(', ')}
         </p>
       )}
     </div>
