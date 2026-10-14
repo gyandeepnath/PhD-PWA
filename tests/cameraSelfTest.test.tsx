@@ -1,5 +1,5 @@
 /**
- * The camera self-test screen (Round 79, rule st-r2): on the grey field, each attempt reported criterion
+ * The camera self-test screen (Round 79; rule st-r3 from Round 82): on the grey field, each attempt reported criterion
  * by criterion and flash by flash, with the eye's openness through the check, and earlier attempts kept
  * with the one recorded. Rendered for real in jsdom with faked clocks.
  */
@@ -86,7 +86,23 @@ describe('the camera self-test screen', () => {
     expect(m.q('selftest-pipeline')!.textContent).toMatch(/Camera delivered 24 fps at 1280×720 · tracker processed 24 fps, 20 ms a frame/);
     expect(m.q('selftest-pipeline')!.textContent).toMatch(/exposure fixed \(30 ms\)/);
     m.click('selftest-continue');
-    expect(m.done[0]).toMatchObject({ rule: 'st-r2', verdict: 'working', attempt: 1, earlier: [], ground: CONFIG.ADAPTATION_COLOR });
+    expect(m.done[0]).toMatchObject({ rule: 'st-r3', verdict: 'working', attempt: 1, earlier: [], ground: CONFIG.ADAPTATION_COLOR });
+    // The light bands are the 1.2 s AFTER each flash (st-r3), and the caption says so.
+    expect(m.q('selftest-trace')!.textContent).toMatch(/Light bands: the 1\.2 s after each flash, where a blink counts/);
+    m.unmount();
+  });
+
+  it('st-r3: blinks just BEFORE the flashes do not count, and each such flash says "too early"', () => {
+    fake();
+    const m = mount(observer(5, 24, -400));
+    m.click('selftest-start');
+    m.runCheck();
+    expect(m.q('selftest-verdict')!.dataset.verdict).toBe('failed');
+    const chips = [...m.q('selftest-cues')!.querySelectorAll('[data-seen]')] as HTMLElement[];
+    // Every blink came 0.4 s before its flash: none counted, and every flash names its early blink.
+    expect(chips.every((c) => c.dataset.seen === 'false' && c.dataset.early === 'true')).toBe(true);
+    expect(chips[1].textContent).toMatch(/✗ 2 · blink 0\.4 s before — too early/);
+    expect(m.q('selftest-reasons')!.textContent).toMatch(/came just before a flash instead — ask the participant to wait for each flash, then blink/);
     m.unmount();
   });
 

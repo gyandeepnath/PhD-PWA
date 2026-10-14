@@ -16,6 +16,7 @@
  */
 import { QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
 import { cueMatched, measuredFrames, tierCounts } from '@/tracking/blinkLog';
+import { SELF_TEST_RULE_V1 } from '@/tracking/selfTest';
 import { EAR_TIERS } from '@/tracking/blink';
 import type { SessionBundle } from './gather';
 import { MIN_SCALE } from '@/lib/viewportScale';
@@ -718,7 +719,8 @@ export function auditBundle(bundle: SessionBundle, opts: AuditOptions = {}): Int
           + 'Do not use the self-test rows of 07b/07c; nothing else is affected.', [o.record_id]);
         continue;
       }
-      const matched = cueMatched(o);
+      // Re-run under the rule the sitting was scored with (st-r3 from Round 82: after the flash only).
+      const matched = cueMatched(o, st!.rule ?? SELF_TEST_RULE_V1);
       const hits = matched ? matched.filter(Boolean).length : null;
       const flashes = o.cues?.length ?? 0;
       if (hits != null && (hits !== st!.detected || flashes !== st!.cued)) {

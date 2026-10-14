@@ -68,6 +68,14 @@ of incomplete blinks (p = 0.002); mean blink rate 11.6/min (SD 7.84).
 `incompleteP` around a mean of 0.16 and `blinkRate` around 13/min; both now trace to a verified
 record rather than to an assumption.
 
+**Also cited (Round 82)** in `src/tracking/selfTest.ts`, `src/sim/selfTestSim.ts`,
+`docs/FPS_GATE_SIMULATION.md` and `docs/ANALYSIS_PLAN.md`, for context only: the one verified blink
+rate beside the camera-check simulation's assumed spontaneous rates (10–26 a minute), which are NOT
+taken from this paper. Re-checked in PubMed on 14 Oct 2026 (PMID 23538437, abstract only): *"The mean
+blink rate during the task without the audible tone was 11.6 blinks per minute (SD, 7.84)"*, during
+*"a continuous 15-minute reading task on a desktop computer at a viewing distance of 50 cm"*. The camera
+check is not reading, so the figure does not give the rate during the check.
+
 ### 3. Talens-Estarelles et al. (2020)
 **Status: CONFIRMED.** PMID 33259378 · DOI [10.1097/OPX.0000000000001616](https://doi.org/10.1097/OPX.0000000000001616)
 

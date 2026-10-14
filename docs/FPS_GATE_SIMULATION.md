@@ -137,14 +137,16 @@ condition and checked between polarities before inference.
 - Nothing below 15 fps was simulated.
 - No published validation of fitting a blink template between frames was found (R2, PubMed search).
 
-## The camera check: self-test rule st-r2
+## The camera check: self-test rules st-r2 and st-r3
 
-Reproduce with `npm run sim:selftest` (1,000 attempts per cell, base seed 20261009, about 1.5
+Reproduce with `npm run sim:selftest` (1,000 attempts per cell, base seed 20261009, about 2
 minutes; the full output is appendix 2, unedited). The code is `scripts/selfTestSim.ts` and
 `src/sim/selfTestSim.ts`; `tests/selfTestSim.test.ts` pins a small run. **A model, not a
 measurement.** Each simulated attempt goes through the shipped code end to end — the aggregator, the
-classifier, the baseline fit and `scoreSelfTest` — exactly as the check on the tablet does. The old
-rule (st-r1) is applied to the same attempts from what it judged.
+classifier, the baseline fit and `scoreSelfTest` — exactly as the check on the tablet does. Each
+attempt is scored three ways: st-r3 (shipped from Round 82: a flash counts a blink that begins in the
+1.2 s after it), st-r2 (the same function with its rule argument: 1.2 s either side of the flash), and
+st-r1, applied from what it judged.
 
 **What was simulated.** The 19-s check: five flashes, 3 s apart. After each flash the participant
 blinks once, beginning 250–900 ms after it, and each blink is deliberate and complete (lowest
@@ -155,13 +157,23 @@ et al. 2008, ledger #62; each frame exposed for its whole interval; landmark noi
 blinks were given the spontaneous blinks' durations because no verified figure was found; a slower
 blink is easier to catch, so this is the harder case.
 
+**Added in Round 82: blinks that answer no flash.** A participant who ignores the flashes and blinks
+only spontaneously, at 10, 15, 20 or 26 blinks a minute (scenario D), and one who answers every flash
+and also blinks spontaneously at 20 a minute (scenario E). The rates are **assumptions**: the one
+verified figure is a mean of 11.6 blinks a minute (SD 7.84) during 15 minutes of reading on a computer
+(Portello et al. 2013, `docs/CITATION_VERIFICATION.md` #2), and the check is not reading. The spacing is
+an assumption too: each blink starts at least 300 ms after the one before ends, and the mean interval
+is 60 s divided by the rate, so the blinks are somewhat more regular than purely random ones; more
+regular blinking would pass by chance more often, more irregular blinking less often. Depths and
+durations are those of the frame-rate simulation (70% complete, 30% incomplete; assumed).
+
 **In plain words.**
 
 1. **The old rule failed a participant who did everything right.** At 24 frames a second, 0 of 1,000
    attempts passed st-r1 in every scenario. At exactly 25 it was a coin toss (0.48–0.52 passed),
    because the camera's timing jitter put the measured rate either side of 25. With the face lost for
    one second it failed even at 25 (0.001), because that second was charged to the rate.
-2. **The new rule passes the same participant at every rate from 15 up.** 0.997–1.000 passed at 15
+2. **st-r2, and st-r3 alike, pass the same participant at every rate from 15 up.** 0.997–1.000 passed at 15
    and all passed from 18. Between 15 and 20 the verdict is "reduced"; from 20 it is "working" (at
    exactly 20, 1–2% read "reduced" because of the same jitter). Under 15 it fails (none passed at 12)
    even though every blink was seen: that is the frame-rate gate, not the blinks.
@@ -170,14 +182,39 @@ blink is easier to catch, so this is the harder case.
    blink, that blink is not counted (4.7 of 5 seen on average), and four are enough.
 4. **A tracker that keeps 80% of a 30-fps camera's frames** (about 24 a second) passes as
    "working" (st-r1 passed 2–3% of those attempts).
-5. **Noise alone never passes.** With no blinks at all, at 4% landmark noise and the V-shaped lid,
-   none of 1,000 attempts passed at any rate.
+5. **Landmark noise alone did not pass.** With no blinks at all, at 4% landmark noise and the
+   V-shaped lid, none of 1,000 attempts passed at any rate, under any rule. This tested noise only. It
+   did not test blinks that answer no flash — item 7 does — nor eye or head movements that dip the
+   eye's openness without a blink (looking down at the tablet's edge, a nod), which were not
+   simulated.
 6. **Every deliberate blink was found at every rate down to 12 frames a second** (5.00 of 5 on
    average with the face in view). At these rates the frame-rate criterion, not blink detection, is
    what decides.
+7. **Blinks that answer no flash passed st-r2 too often, and st-r3 much less often** (Round 82;
+   scenario D, 24 frames a second; within 2 points of these at every rate from 15 to 30):
 
-**What this does and does not show.** It shows that the new rule passes the participant it should at
-the rate the tablet delivers, and fails a camera too slow for the reading measures. It says nothing
+   | Spontaneous blinks a minute (assumed) | Passed st-r2 | Passed st-r3 |
+   |---|---|---|
+   | 10 | 4.8% | 0.6% |
+   | 15 | 16.3% | 2.4% |
+   | 20 | 40.0% | 8.2% |
+   | 26 | 64.8% | 16.5% |
+
+   st-r2 counted a blink up to 1.2 s before a flash as well as after it, so each flash had a 2.4-s
+   window for a chance blink; st-r3 has 1.2 s. A participant who answers every flash, with 20
+   spontaneous blinks a minute besides (scenario E), passed st-r3 exactly as often as st-r2 (1.000 at
+   every rate from 18 up, 0.996 at 15). So st-r3 costs the participant who follows the instruction
+   nothing, as far as this model goes — it assumes the answer comes after the flash; a participant who
+   blinks just before it, anticipating the steady rhythm, now misses that flash, and the result screen
+   says "too early".
+8. **What a chance pass still means.** In scenario D the camera did see the spontaneous blinks (about
+   as many were found as were made: 6.4 per attempt at 20 a minute), so a pass still means what it
+   claims — the camera sees this person's blinks. What it does not show is that the person followed the
+   instruction. At 20 or more blinks a minute, about 1 attempt in 12 (or more) could pass that way.
+
+**What this does and does not show.** It shows that the rule passes the participant it should at
+the rate the tablet delivers, fails a camera too slow for the reading measures, and (st-r3) rarely
+passes blinks that answer no flash at ordinary blink rates. It says nothing
 about incomplete blinks: deliberate blinks are complete, and the check is an engineering check that
 the camera sees this person's blinks, as before. Nothing was measured on the tablet.
 
@@ -348,119 +385,189 @@ Same participant, same blinks. White page: 30 fps, 15 ms exposure. Black page: 2
 
 ## Appendix 2: the full output of `npm run sim:selftest` (1,000 attempts per cell)
 
-Runs per cell 1000; base seed 20261009; each attempt the 19-s check, five flashes; blink latency U(250, 900) ms; deliberate blink depth U(0.05, 0.4) of the open eye; each frame exposed for the whole frame interval.
+Runs per cell 1000; base seed 20261009; each attempt the 19-s check, five flashes; blink latency U(250, 900) ms; deliberate blink depth U(0.05, 0.4) of the open eye; each frame exposed for the whole frame interval. Spontaneous blinks (D, E): mean interval 60000 / rate ms, at least 300 ms after the previous blink ends, 70% complete / 30% incomplete.
 
 
 #### A. Blinks at every flash, face in view throughout — cosine lid, noise 2%
 
-| Sampling | pass st-r1 | pass st-r2 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | fps (whole window) | fps (face seen) | face share |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 | 5.00 | 12.0 | 12.0 | 1.000 |
-| 15 fps | 0.000 | 0.997 | 0.000 | 0.997 | 0.003 | 1.000 | 5.00 | 15.0 | 15.0 | 1.000 |
-| 18 fps | 0.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 5.00 | 18.0 | 18.0 | 1.000 |
-| 20 fps | 0.000 | 1.000 | 0.980 | 0.020 | 0.000 | 1.000 | 5.00 | 20.0 | 20.0 | 1.000 |
-| 22 fps | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 22.0 | 22.0 | 1.000 |
-| 24 fps | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 24.0 | 24.0 | 1.000 |
-| 25 fps | 0.516 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 25.0 | 25.0 | 1.000 |
-| 30 fps | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 30.0 | 30.0 | 1.000 |
-| 30 cam, keeps 80% | 0.021 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 24.0 | 24.0 | 1.000 |
+| Sampling | pass st-r1 | pass st-r2 | pass st-r3 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | blinks found | fps (whole window) | fps (face seen) | face share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 | 5.00 | 5.00 | 12.0 | 12.0 | 1.000 |
+| 15 fps | 0.000 | 0.997 | 0.997 | 0.000 | 0.997 | 0.003 | 1.000 | 5.00 | 5.00 | 15.0 | 15.0 | 1.000 |
+| 18 fps | 0.000 | 1.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 5.00 | 5.00 | 18.0 | 18.0 | 1.000 |
+| 20 fps | 0.000 | 1.000 | 1.000 | 0.980 | 0.020 | 0.000 | 1.000 | 5.00 | 5.00 | 20.0 | 20.0 | 1.000 |
+| 22 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 22.0 | 22.0 | 1.000 |
+| 24 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 24.0 | 24.0 | 1.000 |
+| 25 fps | 0.516 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 25.0 | 25.0 | 1.000 |
+| 30 fps | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 30.0 | 30.0 | 1.000 |
+| 30 cam, keeps 80% | 0.021 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 24.0 | 24.0 | 1.000 |
 
 #### A. Blinks at every flash, face in view throughout — cosine lid, noise 3%
 
-| Sampling | pass st-r1 | pass st-r2 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | fps (whole window) | fps (face seen) | face share |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 | 5.00 | 12.0 | 12.0 | 1.000 |
-| 15 fps | 0.000 | 0.999 | 0.000 | 0.999 | 0.001 | 1.000 | 5.00 | 15.0 | 15.0 | 1.000 |
-| 18 fps | 0.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 5.00 | 18.0 | 18.0 | 1.000 |
-| 20 fps | 0.000 | 1.000 | 0.986 | 0.014 | 0.000 | 1.000 | 5.00 | 20.0 | 20.0 | 1.000 |
-| 22 fps | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 22.0 | 22.0 | 1.000 |
-| 24 fps | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 24.0 | 24.0 | 1.000 |
-| 25 fps | 0.480 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 25.0 | 25.0 | 1.000 |
-| 30 fps | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 30.0 | 30.0 | 1.000 |
-| 30 cam, keeps 80% | 0.022 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 24.0 | 24.0 | 1.000 |
+| Sampling | pass st-r1 | pass st-r2 | pass st-r3 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | blinks found | fps (whole window) | fps (face seen) | face share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 | 5.00 | 5.00 | 12.0 | 12.0 | 1.000 |
+| 15 fps | 0.000 | 0.999 | 0.999 | 0.000 | 0.999 | 0.001 | 1.000 | 5.00 | 5.00 | 15.0 | 15.0 | 1.000 |
+| 18 fps | 0.000 | 1.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 5.00 | 5.00 | 18.0 | 18.0 | 1.000 |
+| 20 fps | 0.000 | 1.000 | 1.000 | 0.986 | 0.014 | 0.000 | 1.000 | 5.00 | 5.00 | 20.0 | 20.0 | 1.000 |
+| 22 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 22.0 | 22.0 | 1.000 |
+| 24 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 24.0 | 24.0 | 1.000 |
+| 25 fps | 0.480 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 25.0 | 25.0 | 1.000 |
+| 30 fps | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 30.0 | 30.0 | 1.000 |
+| 30 cam, keeps 80% | 0.022 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 24.0 | 24.0 | 1.000 |
 
 #### A. Blinks at every flash, face in view throughout — cosine lid, noise 4%
 
-| Sampling | pass st-r1 | pass st-r2 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | fps (whole window) | fps (face seen) | face share |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 | 5.00 | 12.0 | 12.0 | 1.000 |
-| 15 fps | 0.000 | 0.999 | 0.000 | 0.999 | 0.001 | 1.000 | 5.00 | 15.0 | 15.0 | 1.000 |
-| 18 fps | 0.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 5.00 | 18.0 | 18.0 | 1.000 |
-| 20 fps | 0.000 | 1.000 | 0.982 | 0.018 | 0.000 | 1.000 | 5.00 | 20.0 | 20.0 | 1.000 |
-| 22 fps | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 22.0 | 22.0 | 1.000 |
-| 24 fps | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 24.0 | 24.0 | 1.000 |
-| 25 fps | 0.504 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 25.0 | 25.0 | 1.000 |
-| 30 fps | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 30.0 | 30.0 | 1.000 |
-| 30 cam, keeps 80% | 0.032 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 24.0 | 24.0 | 1.000 |
+| Sampling | pass st-r1 | pass st-r2 | pass st-r3 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | blinks found | fps (whole window) | fps (face seen) | face share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 | 5.00 | 5.00 | 12.0 | 12.0 | 1.000 |
+| 15 fps | 0.000 | 0.999 | 0.999 | 0.000 | 0.999 | 0.001 | 1.000 | 5.00 | 5.00 | 15.0 | 15.0 | 1.000 |
+| 18 fps | 0.000 | 1.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 5.00 | 5.00 | 18.0 | 18.0 | 1.000 |
+| 20 fps | 0.000 | 1.000 | 1.000 | 0.982 | 0.018 | 0.000 | 1.000 | 5.00 | 5.00 | 20.0 | 20.0 | 1.000 |
+| 22 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 22.0 | 22.0 | 1.000 |
+| 24 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 24.0 | 24.0 | 1.000 |
+| 25 fps | 0.504 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 25.0 | 25.0 | 1.000 |
+| 30 fps | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 30.0 | 30.0 | 1.000 |
+| 30 cam, keeps 80% | 0.032 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 24.0 | 24.0 | 1.000 |
 
 #### A. Blinks at every flash, face in view throughout — linear lid, noise 2%
 
-| Sampling | pass st-r1 | pass st-r2 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | fps (whole window) | fps (face seen) | face share |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 | 5.00 | 12.0 | 12.0 | 1.000 |
-| 15 fps | 0.000 | 0.998 | 0.000 | 0.998 | 0.002 | 1.000 | 5.00 | 15.0 | 15.0 | 1.000 |
-| 18 fps | 0.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 5.00 | 18.0 | 18.0 | 1.000 |
-| 20 fps | 0.000 | 1.000 | 0.981 | 0.019 | 0.000 | 1.000 | 5.00 | 20.0 | 20.0 | 1.000 |
-| 22 fps | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 22.0 | 22.0 | 1.000 |
-| 24 fps | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 24.0 | 24.0 | 1.000 |
-| 25 fps | 0.498 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 25.0 | 25.0 | 1.000 |
-| 30 fps | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 30.0 | 30.0 | 1.000 |
-| 30 cam, keeps 80% | 0.025 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 24.0 | 24.0 | 1.000 |
+| Sampling | pass st-r1 | pass st-r2 | pass st-r3 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | blinks found | fps (whole window) | fps (face seen) | face share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 | 5.00 | 5.00 | 12.0 | 12.0 | 1.000 |
+| 15 fps | 0.000 | 0.998 | 0.998 | 0.000 | 0.998 | 0.002 | 1.000 | 5.00 | 5.00 | 15.0 | 15.0 | 1.000 |
+| 18 fps | 0.000 | 1.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 5.00 | 5.00 | 18.0 | 18.0 | 1.000 |
+| 20 fps | 0.000 | 1.000 | 1.000 | 0.981 | 0.019 | 0.000 | 1.000 | 5.00 | 5.00 | 20.0 | 20.0 | 1.000 |
+| 22 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 22.0 | 22.0 | 1.000 |
+| 24 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 24.0 | 24.0 | 1.000 |
+| 25 fps | 0.498 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 25.0 | 25.0 | 1.000 |
+| 30 fps | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 30.0 | 30.0 | 1.000 |
+| 30 cam, keeps 80% | 0.025 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 24.0 | 24.0 | 1.000 |
 
 #### A. Blinks at every flash, face in view throughout — linear lid, noise 3%
 
-| Sampling | pass st-r1 | pass st-r2 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | fps (whole window) | fps (face seen) | face share |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 | 5.00 | 12.0 | 12.0 | 1.000 |
-| 15 fps | 0.000 | 0.998 | 0.000 | 0.998 | 0.002 | 1.000 | 5.00 | 15.0 | 15.0 | 1.000 |
-| 18 fps | 0.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 5.00 | 18.0 | 18.0 | 1.000 |
-| 20 fps | 0.000 | 1.000 | 0.984 | 0.016 | 0.000 | 1.000 | 5.00 | 20.0 | 20.0 | 1.000 |
-| 22 fps | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 22.0 | 22.0 | 1.000 |
-| 24 fps | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 24.0 | 24.0 | 1.000 |
-| 25 fps | 0.514 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 25.0 | 25.0 | 1.000 |
-| 30 fps | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 30.0 | 30.0 | 1.000 |
-| 30 cam, keeps 80% | 0.022 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 24.0 | 24.0 | 1.000 |
+| Sampling | pass st-r1 | pass st-r2 | pass st-r3 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | blinks found | fps (whole window) | fps (face seen) | face share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 | 5.00 | 5.00 | 12.0 | 12.0 | 1.000 |
+| 15 fps | 0.000 | 0.998 | 0.998 | 0.000 | 0.998 | 0.002 | 1.000 | 5.00 | 5.00 | 15.0 | 15.0 | 1.000 |
+| 18 fps | 0.000 | 1.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 5.00 | 5.00 | 18.0 | 18.0 | 1.000 |
+| 20 fps | 0.000 | 1.000 | 1.000 | 0.984 | 0.016 | 0.000 | 1.000 | 5.00 | 5.00 | 20.0 | 20.0 | 1.000 |
+| 22 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 22.0 | 22.0 | 1.000 |
+| 24 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 24.0 | 24.0 | 1.000 |
+| 25 fps | 0.514 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 25.0 | 25.0 | 1.000 |
+| 30 fps | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 30.0 | 30.0 | 1.000 |
+| 30 cam, keeps 80% | 0.022 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 24.0 | 24.0 | 1.000 |
 
 #### A. Blinks at every flash, face in view throughout — linear lid, noise 4%
 
-| Sampling | pass st-r1 | pass st-r2 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | fps (whole window) | fps (face seen) | face share |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 | 5.00 | 12.0 | 12.0 | 1.000 |
-| 15 fps | 0.000 | 0.998 | 0.000 | 0.998 | 0.002 | 1.000 | 5.00 | 15.0 | 15.0 | 1.000 |
-| 18 fps | 0.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 5.00 | 18.0 | 18.0 | 1.000 |
-| 20 fps | 0.000 | 1.000 | 0.988 | 0.012 | 0.000 | 1.000 | 5.00 | 20.0 | 20.0 | 1.000 |
-| 22 fps | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 22.0 | 22.0 | 1.000 |
-| 24 fps | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 24.0 | 24.0 | 1.000 |
-| 25 fps | 0.497 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 25.0 | 25.0 | 1.000 |
-| 30 fps | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 30.0 | 30.0 | 1.000 |
-| 30 cam, keeps 80% | 0.024 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 24.0 | 24.0 | 1.000 |
+| Sampling | pass st-r1 | pass st-r2 | pass st-r3 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | blinks found | fps (whole window) | fps (face seen) | face share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 | 5.00 | 5.00 | 12.0 | 12.0 | 1.000 |
+| 15 fps | 0.000 | 0.998 | 0.998 | 0.000 | 0.998 | 0.002 | 1.000 | 5.00 | 5.00 | 15.0 | 15.0 | 1.000 |
+| 18 fps | 0.000 | 1.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 5.00 | 5.00 | 18.0 | 18.0 | 1.000 |
+| 20 fps | 0.000 | 1.000 | 1.000 | 0.988 | 0.012 | 0.000 | 1.000 | 5.00 | 5.00 | 20.0 | 20.0 | 1.000 |
+| 22 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 22.0 | 22.0 | 1.000 |
+| 24 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 24.0 | 24.0 | 1.000 |
+| 25 fps | 0.497 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 25.0 | 25.0 | 1.000 |
+| 30 fps | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.01 | 30.0 | 30.0 | 1.000 |
+| 30 cam, keeps 80% | 0.024 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 5.00 | 24.0 | 24.0 | 1.000 |
 
 #### B. Blinks at every flash, face lost for 1 s at a random moment — cosine lid, noise 3%
 
-| Sampling | pass st-r1 | pass st-r2 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | fps (whole window) | fps (face seen) | face share |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 | 4.68 | 11.4 | 12.1 | 0.947 |
-| 15 fps | 0.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 4.69 | 14.2 | 15.1 | 0.947 |
-| 18 fps | 0.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 4.69 | 17.1 | 18.1 | 0.947 |
-| 20 fps | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 4.69 | 18.9 | 20.1 | 0.947 |
-| 22 fps | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 4.69 | 20.8 | 22.1 | 0.947 |
-| 24 fps | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 4.69 | 22.7 | 24.1 | 0.947 |
-| 25 fps | 0.001 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 4.69 | 23.7 | 25.1 | 0.947 |
-| 30 fps | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 4.69 | 28.4 | 30.1 | 0.947 |
-| 30 cam, keeps 80% | 0.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 4.69 | 22.8 | 24.1 | 0.948 |
+| Sampling | pass st-r1 | pass st-r2 | pass st-r3 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | blinks found | fps (whole window) | fps (face seen) | face share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 | 4.68 | 4.68 | 11.4 | 12.1 | 0.947 |
+| 15 fps | 0.000 | 1.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 4.69 | 4.69 | 14.2 | 15.1 | 0.947 |
+| 18 fps | 0.000 | 1.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 4.69 | 4.69 | 17.1 | 18.1 | 0.947 |
+| 20 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 4.69 | 4.69 | 18.9 | 20.1 | 0.947 |
+| 22 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 4.69 | 4.69 | 20.8 | 22.1 | 0.947 |
+| 24 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 4.69 | 4.69 | 22.7 | 24.1 | 0.947 |
+| 25 fps | 0.001 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 4.69 | 4.69 | 23.7 | 25.1 | 0.947 |
+| 30 fps | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 4.69 | 4.69 | 28.4 | 30.1 | 0.947 |
+| 30 cam, keeps 80% | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 4.69 | 4.69 | 22.8 | 24.1 | 0.948 |
 
 #### C. No blinks at all (eyes open throughout) — linear lid, noise 4%
 
-| Sampling | pass st-r1 | pass st-r2 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | fps (whole window) | fps (face seen) | face share |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 12.0 | 12.0 | 1.000 |
-| 15 fps | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 15.0 | 15.0 | 1.000 |
-| 18 fps | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 18.0 | 18.0 | 1.000 |
-| 20 fps | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 20.0 | 20.0 | 1.000 |
-| 22 fps | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 22.0 | 22.0 | 1.000 |
-| 24 fps | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 24.0 | 24.0 | 1.000 |
-| 25 fps | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 25.0 | 25.0 | 1.000 |
-| 30 fps | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 30.0 | 30.0 | 1.000 |
-| 30 cam, keeps 80% | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 24.0 | 24.0 | 1.000 |
+| Sampling | pass st-r1 | pass st-r2 | pass st-r3 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | blinks found | fps (whole window) | fps (face seen) | face share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 0.00 | 12.0 | 12.0 | 1.000 |
+| 15 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 0.00 | 15.0 | 15.0 | 1.000 |
+| 18 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 0.00 | 18.0 | 18.0 | 1.000 |
+| 20 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 0.00 | 20.0 | 20.0 | 1.000 |
+| 22 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 0.00 | 22.0 | 22.0 | 1.000 |
+| 24 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 0.00 | 24.0 | 24.0 | 1.000 |
+| 25 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 0.00 | 25.0 | 25.0 | 1.000 |
+| 30 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 0.00 | 30.0 | 30.0 | 1.000 |
+| 30 cam, keeps 80% | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.000 | 0.00 | 0.00 | 24.0 | 24.0 | 1.000 |
 
-Done in 84 s.
+#### D. Ignores the flashes, 10 spontaneous blinks a minute — cosine lid, noise 3%
+
+| Sampling | pass st-r1 | pass st-r2 | pass st-r3 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | blinks found | fps (whole window) | fps (face seen) | face share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.005 | 0.91 | 2.99 | 12.0 | 12.0 | 1.000 |
+| 15 fps | 0.000 | 0.051 | 0.006 | 0.000 | 0.006 | 0.994 | 0.006 | 0.93 | 3.04 | 15.0 | 15.0 | 1.000 |
+| 18 fps | 0.000 | 0.047 | 0.005 | 0.000 | 0.005 | 0.995 | 0.005 | 0.93 | 3.07 | 18.0 | 18.0 | 1.000 |
+| 20 fps | 0.000 | 0.050 | 0.005 | 0.005 | 0.000 | 0.995 | 0.005 | 0.93 | 3.07 | 20.0 | 20.0 | 1.000 |
+| 22 fps | 0.000 | 0.049 | 0.006 | 0.006 | 0.000 | 0.994 | 0.006 | 0.94 | 3.07 | 22.0 | 22.0 | 1.000 |
+| 24 fps | 0.000 | 0.048 | 0.006 | 0.006 | 0.000 | 0.994 | 0.006 | 0.93 | 3.09 | 24.0 | 24.0 | 1.000 |
+| 25 fps | 0.026 | 0.049 | 0.005 | 0.005 | 0.000 | 0.995 | 0.005 | 0.94 | 3.08 | 25.0 | 25.0 | 1.000 |
+| 30 fps | 0.050 | 0.050 | 0.006 | 0.006 | 0.000 | 0.994 | 0.006 | 0.94 | 3.10 | 30.0 | 30.0 | 1.000 |
+| 30 cam, keeps 80% | 0.000 | 0.050 | 0.005 | 0.005 | 0.000 | 0.995 | 0.005 | 0.93 | 3.07 | 24.0 | 24.0 | 1.000 |
+
+#### D. Ignores the flashes, 15 spontaneous blinks a minute — cosine lid, noise 3%
+
+| Sampling | pass st-r1 | pass st-r2 | pass st-r3 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | blinks found | fps (whole window) | fps (face seen) | face share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.021 | 1.39 | 4.59 | 12.0 | 12.0 | 1.000 |
+| 15 fps | 0.000 | 0.162 | 0.025 | 0.000 | 0.025 | 0.975 | 0.025 | 1.40 | 4.66 | 15.0 | 15.0 | 1.000 |
+| 18 fps | 0.000 | 0.162 | 0.022 | 0.000 | 0.022 | 0.978 | 0.022 | 1.40 | 4.69 | 18.0 | 18.0 | 1.000 |
+| 20 fps | 0.000 | 0.166 | 0.024 | 0.022 | 0.002 | 0.976 | 0.024 | 1.42 | 4.71 | 20.0 | 20.0 | 1.000 |
+| 22 fps | 0.000 | 0.164 | 0.024 | 0.024 | 0.000 | 0.976 | 0.024 | 1.41 | 4.72 | 22.0 | 22.0 | 1.000 |
+| 24 fps | 0.000 | 0.163 | 0.024 | 0.024 | 0.000 | 0.976 | 0.024 | 1.41 | 4.72 | 24.0 | 24.0 | 1.000 |
+| 25 fps | 0.081 | 0.168 | 0.024 | 0.024 | 0.000 | 0.976 | 0.024 | 1.42 | 4.74 | 25.0 | 25.0 | 1.000 |
+| 30 fps | 0.164 | 0.164 | 0.024 | 0.024 | 0.000 | 0.976 | 0.024 | 1.42 | 4.74 | 30.0 | 30.0 | 1.000 |
+| 30 cam, keeps 80% | 0.001 | 0.160 | 0.024 | 0.024 | 0.000 | 0.976 | 0.024 | 1.41 | 4.71 | 24.0 | 24.0 | 1.000 |
+
+#### D. Ignores the flashes, 20 spontaneous blinks a minute — cosine lid, noise 3%
+
+| Sampling | pass st-r1 | pass st-r2 | pass st-r3 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | blinks found | fps (whole window) | fps (face seen) | face share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.081 | 1.94 | 6.25 | 12.0 | 12.0 | 1.000 |
+| 15 fps | 0.000 | 0.388 | 0.076 | 0.000 | 0.076 | 0.924 | 0.076 | 1.96 | 6.35 | 15.0 | 15.0 | 1.000 |
+| 18 fps | 0.000 | 0.396 | 0.078 | 0.000 | 0.078 | 0.922 | 0.078 | 1.97 | 6.39 | 18.0 | 18.0 | 1.000 |
+| 20 fps | 0.000 | 0.401 | 0.080 | 0.078 | 0.002 | 0.920 | 0.080 | 1.97 | 6.42 | 20.0 | 20.0 | 1.000 |
+| 22 fps | 0.000 | 0.403 | 0.083 | 0.083 | 0.000 | 0.917 | 0.083 | 1.98 | 6.42 | 22.0 | 22.0 | 1.000 |
+| 24 fps | 0.000 | 0.400 | 0.082 | 0.082 | 0.000 | 0.918 | 0.082 | 1.98 | 6.44 | 24.0 | 24.0 | 1.000 |
+| 25 fps | 0.196 | 0.399 | 0.081 | 0.081 | 0.000 | 0.919 | 0.081 | 1.98 | 6.44 | 25.0 | 25.0 | 1.000 |
+| 30 fps | 0.402 | 0.402 | 0.082 | 0.082 | 0.000 | 0.918 | 0.082 | 1.98 | 6.46 | 30.0 | 30.0 | 1.000 |
+| 30 cam, keeps 80% | 0.011 | 0.400 | 0.081 | 0.081 | 0.000 | 0.919 | 0.081 | 1.98 | 6.42 | 24.0 | 24.0 | 1.000 |
+
+#### D. Ignores the flashes, 26 spontaneous blinks a minute — cosine lid, noise 3%
+
+| Sampling | pass st-r1 | pass st-r2 | pass st-r3 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | blinks found | fps (whole window) | fps (face seen) | face share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 0.147 | 2.34 | 8.02 | 12.0 | 12.0 | 1.000 |
+| 15 fps | 0.000 | 0.643 | 0.156 | 0.000 | 0.156 | 0.844 | 0.156 | 2.37 | 8.16 | 15.0 | 15.0 | 1.000 |
+| 18 fps | 0.000 | 0.648 | 0.158 | 0.000 | 0.158 | 0.842 | 0.158 | 2.38 | 8.22 | 18.0 | 18.0 | 1.000 |
+| 20 fps | 0.000 | 0.649 | 0.161 | 0.161 | 0.000 | 0.839 | 0.161 | 2.38 | 8.23 | 20.0 | 20.0 | 1.000 |
+| 22 fps | 0.000 | 0.658 | 0.163 | 0.163 | 0.000 | 0.837 | 0.163 | 2.39 | 8.25 | 22.0 | 22.0 | 1.000 |
+| 24 fps | 0.000 | 0.648 | 0.165 | 0.165 | 0.000 | 0.835 | 0.165 | 2.38 | 8.26 | 24.0 | 24.0 | 1.000 |
+| 25 fps | 0.329 | 0.651 | 0.164 | 0.164 | 0.000 | 0.836 | 0.164 | 2.38 | 8.29 | 25.0 | 25.0 | 1.000 |
+| 30 fps | 0.659 | 0.659 | 0.168 | 0.168 | 0.000 | 0.832 | 0.168 | 2.39 | 8.29 | 30.0 | 30.0 | 1.000 |
+| 30 cam, keeps 80% | 0.013 | 0.653 | 0.165 | 0.165 | 0.000 | 0.835 | 0.165 | 2.38 | 8.25 | 24.0 | 24.0 | 1.000 |
+
+#### E. Blinks at every flash, plus 20 spontaneous blinks a minute — cosine lid, noise 3%
+
+| Sampling | pass st-r1 | pass st-r2 | pass st-r3 | working | reduced | failed | ≥ 4 of 5 seen | mean seen | blinks found | fps (whole window) | fps (face seen) | face share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 12 fps | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 1.000 | 1.000 | 5.00 | 9.14 | 12.0 | 12.0 | 1.000 |
+| 15 fps | 0.000 | 0.996 | 0.996 | 0.000 | 0.996 | 0.004 | 1.000 | 5.00 | 9.22 | 15.0 | 15.0 | 1.000 |
+| 18 fps | 0.000 | 1.000 | 1.000 | 0.000 | 1.000 | 0.000 | 1.000 | 5.00 | 9.24 | 18.0 | 18.0 | 1.000 |
+| 20 fps | 0.000 | 1.000 | 1.000 | 0.986 | 0.014 | 0.000 | 1.000 | 5.00 | 9.25 | 20.0 | 20.0 | 1.000 |
+| 22 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 9.27 | 22.0 | 22.0 | 1.000 |
+| 24 fps | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 9.27 | 24.0 | 24.0 | 1.000 |
+| 25 fps | 0.504 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 9.28 | 25.0 | 25.0 | 1.000 |
+| 30 fps | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 9.29 | 30.0 | 30.0 | 1.000 |
+| 30 cam, keeps 80% | 0.018 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 1.000 | 5.00 | 9.25 | 24.0 | 24.0 | 1.000 |
+
+Done in 115 s.

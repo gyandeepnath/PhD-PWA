@@ -17,9 +17,9 @@ describe('the camera self-test under simulation', () => {
     expect(CHECK_MS).toBe(SELF_TEST.FIRST_CUE_MS + SELF_TEST.CUES * SELF_TEST.CUE_EVERY_MS + 1500);
   });
 
-  it('a participant who blinks at every flash passes st-r2 at 24 fps — and never passed st-r1 there', () => {
+  it('a participant who blinks at every flash passes st-r2 and st-r3 at 24 fps — and never passed st-r1 there', () => {
     const r = runSelfTestScenario(base, [cell(24), dropping, cell(30)]);
-    expect(r['24']).toMatchObject({ passR1: 0, passR2: 1 });
+    expect(r['24']).toMatchObject({ passR1: 0, passR2: 1, passR3: 1 });
     expect(r['24'].verdict.working).toBe(1);
     expect(r['24'].hitsOk).toBe(1);
     // A tracker keeping 80% of a 30-fps camera's frames is the same ~24: st-r2 passes it as working.
@@ -45,9 +45,30 @@ describe('the camera self-test under simulation', () => {
     expect(r['25'].meanSamplingFps).toBeGreaterThan(24.9);
   });
 
-  it('noise alone never passes: a participant who does not blink fails at every rate', () => {
+  it('landmark noise alone, with no blink at all, passed no attempt at any rate', () => {
     const r = runSelfTestScenario({ ...base, shape: 'linear', sigma: 0.04, blinks: false }, [cell(15), cell(24), cell(30)]);
     for (const k of ['15', '24', '30']) expect(r[k].passR2, k).toBe(0);
+    for (const k of ['15', '24', '30']) expect(r[k].passR3, k).toBe(0);
+  });
+
+  /*
+   * Round 82. Blinks that answer no flash — a participant who ignores the flashes and blinks only
+   * spontaneously — passed st-r2 often, because a blink up to 1.2 s BEFORE a flash counted. st-r3 counts
+   * only blinks after a flash. The full run (npm run sim:selftest, 1,000 attempts) is in
+   * docs/FPS_GATE_SIMULATION.md; this pins a small one. The rate is a simulation assumption.
+   */
+  it('blinks that answer no flash pass st-r3 far less often than st-r2; a participant who answers loses nothing', () => {
+    const spont = runSelfTestScenario({ ...base, blinks: false, spontaneousPerMin: 20, runs: 300 }, [cell(24)])['24'];
+    // The camera saw the blinks: about 20 a minute over the 19-s check.
+    expect(spont.meanBlinks).toBeGreaterThan(5.5);
+    expect(spont.meanBlinks).toBeLessThan(7.5);
+    expect(spont.passR2).toBeGreaterThan(0.25);
+    expect(spont.passR3).toBeLessThan(0.15);
+    expect(spont.passR3).toBeLessThan(spont.passR2 / 3);
+    // Answering every flash and blinking spontaneously besides: st-r3 passes every attempt st-r2 did.
+    const both = runSelfTestScenario({ ...base, spontaneousPerMin: 20, runs: 100 }, [cell(24), cell(15)]);
+    expect(both['24']).toMatchObject({ passR2: 1, passR3: 1, meanHits: 5 });
+    expect(both['15'].passR3).toBe(both['15'].passR2);
   });
 
   it('is deterministic: the same seed gives the same numbers', () => {

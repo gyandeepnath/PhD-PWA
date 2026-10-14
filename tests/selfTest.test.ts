@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  SELF_TEST, SELF_TEST_RULE, SELF_TEST_RULE_V1, scoreSelfTest, matchCues, fpsReason, minHits, attemptSummary,
+  SELF_TEST, SELF_TEST_RULE, SELF_TEST_RULE_R2, SELF_TEST_RULE_V1, scoreSelfTest, matchCues, cueWindow, fpsReason, minHits, attemptSummary,
 } from '@/tracking/selfTest';
 import { FPS_GATE, samplingFpsObserved } from '@/tracking/frameRateGate';
 import { CONFIG } from '@/experiment/config';
@@ -10,7 +10,7 @@ const cues = [2500, 5500, 8500, 11500, 14500];
 /** A tablet camera at 24 frames a second, face in view throughout: what the investigator reported. */
 const good = { fps: 24, samplingFps: 24, facePresence: 0.98 };
 
-describe('camera self-test scoring (rule st-r2)', () => {
+describe('camera self-test scoring (rule st-r3; st-r2 where named)', () => {
   it('passes when every cued blink is seen at an adequate frame rate with the face in view', () => {
     const r = scoreSelfTest(cues, cues.map((c) => c + 300), good);
     expect(r).toMatchObject({
@@ -27,8 +27,21 @@ describe('camera self-test scoring (rule st-r2)', () => {
   });
 
   it('records, for each flash, how long after it the matched blink began — null for a flash with none', () => {
+    // st-r2 counted the blink 100 ms BEFORE the second flash; st-r3 does not, and names it as too early.
+    expect(scoreSelfTest([1000, 4000, 7000], [1300, 3900], good, SELF_TEST_RULE_R2).cueLags).toEqual([300, -100, null]);
     const r = scoreSelfTest([1000, 4000, 7000], [1300, 3900], good);
-    expect(r.cueLags).toEqual([300, -100, null]);
+    expect(r.cueLags).toEqual([300, null, null]);
+    expect(r.earlyLags).toEqual([null, -100, null]);
+    // st-r2 has no notion of too early.
+    expect(scoreSelfTest([1000], [900], good, SELF_TEST_RULE_R2).earlyLags).toBeUndefined();
+  });
+
+  it('st-r3: a miss caused by blinks just before the flashes says so, so the operator can ask for a wait', () => {
+    const r = scoreSelfTest(cues, cues.map((c, i) => (i < 2 ? c - 400 : c + 300)), good);
+    expect(r).toMatchObject({ pass: false, detected: 3, extra: 2 });
+    expect(r.reasons.join(' ')).toMatch(/only 3 of 5 blinks came after a flash \(needs 4\); 2 blinks came just before a flash instead — ask the participant to wait for each flash, then blink/);
+    // A blink that a flash took is never offered as "too early" for the next one.
+    expect(scoreSelfTest([1000, 2000], [1500], good).earlyLags).toEqual([null, null]);
   });
 
   it('fails with a plain reason, and the share it needed, when too few cued blinks are seen', () => {
@@ -53,28 +66,48 @@ describe('camera self-test scoring (rule st-r2)', () => {
 
   it('ignores blinks just outside the matching window, and counts one exactly at its edge', () => {
     expect(scoreSelfTest([5000], [5000 + SELF_TEST.WINDOW_MS + 1], good).detected).toBe(0);
-    expect(scoreSelfTest([5000], [5000 - SELF_TEST.WINDOW_MS], good).detected).toBe(1);
+    expect(scoreSelfTest([5000], [5000 + SELF_TEST.WINDOW_MS], good).detected).toBe(1);
+    expect(scoreSelfTest([5000], [5000], good).detected).toBe(1);
+    // st-r3: nothing before the flash counts; st-r2 counted up to the window's length before it.
+    expect(scoreSelfTest([5000], [4999], good).detected).toBe(0);
+    expect(scoreSelfTest([5000], [5000 - SELF_TEST.WINDOW_MS], good, SELF_TEST_RULE_R2).detected).toBe(1);
+    expect(scoreSelfTest([5000], [5000 - SELF_TEST.WINDOW_MS - 1], good, SELF_TEST_RULE_R2).detected).toBe(0);
+  });
+
+  it('names the window each rule used: st-r1 and st-r2 either side, st-r3 after the flash', () => {
+    expect(cueWindow()).toEqual({ before: 0, after: SELF_TEST.WINDOW_MS });
+    expect(cueWindow(SELF_TEST_RULE)).toEqual({ before: 0, after: 1200 });
+    expect(cueWindow(SELF_TEST_RULE_R2)).toEqual({ before: 1200, after: 1200 });
+    expect(cueWindow(SELF_TEST_RULE_V1)).toEqual({ before: 1200, after: 1200 });
+    expect(scoreSelfTest(cues, cues.map((c) => c + 300), good, SELF_TEST_RULE_R2).rule).toBe('st-r2');
   });
 });
 
 describe('which blink each flash took (matchCues, what 07b cue_matched exports)', () => {
   it('counts ONE blink per flash, the nearest: a second blink inside the same window is an extra', () => {
-    // The review's case (Round 81): blinks 242.6 ms before and 1190.7 ms after one flash. Both lags are
-    // inside 1200 ms, but the flash takes only the nearer; the other is an extra.
+    // The review's case (Round 81): blinks 242.6 ms before and 1190.7 ms after one flash. Under st-r2
+    // both lags are inside its window, but the flash takes only the nearer; the other is an extra.
     const flash = 14525.4;
     const blinks = [flash - 242.6, flash + 1190.7];
-    expect(matchCues([flash], blinks)).toEqual([0]);
+    expect(matchCues([flash], blinks, SELF_TEST_RULE_R2)).toEqual([0]);
+    expect(scoreSelfTest([flash], blinks, good, SELF_TEST_RULE_R2)).toMatchObject({ detected: 1, extra: 1 });
+    // st-r3 takes the one after the flash; the one before is an extra.
+    expect(matchCues([flash], blinks)).toEqual([1]);
     expect(scoreSelfTest([flash], blinks, good)).toMatchObject({ detected: 1, extra: 1 });
+    // Two after it: the nearer (earlier) one.
+    expect(matchCues([flash], [flash + 900, flash + 300])).toEqual([1]);
   });
 
-  it('is the matching scoreSelfTest counts: its hits are the blinks matchCues returns', () => {
+  it('is the matching scoreSelfTest counts: its hits are the blinks matchCues returns, under each rule', () => {
     const onsets = [2700, 2900, 5400, 9900, 11550, 14000, 16000];
-    const taken = matchCues(cues, onsets);
-    expect(taken).toEqual([0, 2, -1, 4, 5]);
-    const r = scoreSelfTest(cues, onsets, good);
-    expect(r.detected).toBe(taken.filter((i) => i >= 0).length);
-    expect(r.extra).toBe(onsets.length - r.detected);
-    expect(r.cueLags).toEqual(taken.map((i, k) => (i >= 0 ? Math.round(onsets[i] - cues[k]) : null)));
+    for (const [rule, want] of [[SELF_TEST_RULE_R2, [0, 2, -1, 4, 5]], [SELF_TEST_RULE, [0, -1, -1, 4, -1]]] as const) {
+      const taken = matchCues(cues, onsets, rule);
+      expect(taken, rule).toEqual(want);
+      const r = scoreSelfTest(cues, onsets, good, rule);
+      expect(r.detected).toBe(taken.filter((i) => i >= 0).length);
+      expect(r.extra).toBe(onsets.length - r.detected);
+      expect(r.cueLags).toEqual(taken.map((i, k) => (i >= 0 ? Math.round(onsets[i] - cues[k]) : null)));
+    }
   });
 
   it('takes the flashes in the order shown when their windows overlap (the collapsed test timings)', () => {
@@ -133,7 +166,8 @@ describe('the frame rate is judged by the frame-rate gate fps-g2', () => {
 
   it('runs on the grey field, and its versions name the rules', () => {
     expect(SELF_TEST.GROUND).toBe(CONFIG.ADAPTATION_COLOR);
-    expect(SELF_TEST_RULE).toBe('st-r2');
+    expect(SELF_TEST_RULE).toBe('st-r3');
+    expect(SELF_TEST_RULE_R2).toBe('st-r2');
     expect(SELF_TEST_RULE_V1).toBe('st-r1');
     // Every criterion is a time or a share; none is a number of frames.
     expect(SELF_TEST).toMatchObject({ WINDOW_MS: 1200, MIN_HIT_SHARE: 0.8, MIN_FACE: 0.9 });

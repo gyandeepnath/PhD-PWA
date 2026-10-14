@@ -438,15 +438,18 @@ from black to white for each flash. It takes about 18 seconds. It passes when al
 
 | What is checked | Needed |
 |---|---|
-| Blinks seen | at least 4 of the 5 flashes, each blink beginning within 1.2 s of its flash |
+| Blinks seen | at least 4 of the 5 flashes, each blink beginning in the 1.2 s after its flash (from Round 82; before, 1.2 s either side) |
 | Face in view | at least 90% of the time |
 | Eye sampled (face frames a second while the face was seen) | 15 or more: 20 or more is *The camera is working*; 15 to 20 is *working, at a reduced frame rate* (a pass) |
 
 The result screen shows each line with a tick or a cross, each flash with whether a blink was seen
 and when it began, and a trace of eye openness through the check with the five flashes marked
-(light bands are the 1.2 s either side of each flash). Read it this way:
+(light bands are the 1.2 s after each flash, where a blink counts). Read it this way:
 
 - **No dip at a flash**: the participant did not blink, or blinked late. Explain again and try again.
+- **"too early"** under a flash: the participant blinked just before the flash, guessing its rhythm.
+  A blink before a flash is not an answer to it, so it does not count. Ask them to wait for each
+  flash, then blink, and try again.
 - **A dip that does not reach the dashed line**: the blink was too shallow for the camera to count.
   Check the light on the face and glare on spectacles.
 - **Two dips in one band**: each flash counts one blink, the one nearest to it; the other is an
@@ -462,6 +465,15 @@ and when it began, and a trace of eye openness through the check with the five f
 recorded. A *reduced* pass is a pass: continue, or improve the light and try again. Before Round 79
 the check failed whenever the camera ran below 25 frames a second, which on the study tablet was
 almost always: that was the rule, not the participant.
+
+**Why only blinks after the flash (Round 82, rule `st-r3`).** Before, a blink up to 1.2 s before a
+flash also counted. In a simulation, a participant who ignored the flashes and blinked only on their
+own passed that rule in about 1 attempt in 6 at 15 blinks a minute, and 2 in 5 at 20. Counting only
+blinks after the flash cuts this to about 1 in 40 and 1 in 12, and a participant who blinks at every
+flash passes as before (`docs/FPS_GATE_SIMULATION.md`; the blink rates are assumptions of the
+simulation). So a pass can still, now and then, come from ordinary blinking — it still shows the camera
+sees this person's blinks, which is what the check is for. Watch that the participant blinks at the
+flashes.
 
 **What to send the investigator from the tablet** the first time the new version runs (photograph
 the screens or copy the numbers): from camera set-up, the three rates, the face width, the line

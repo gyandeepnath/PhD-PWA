@@ -60,7 +60,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
   → CALIBRATION         on the grey field (Round 80): centre-fixation open-eye EAR + frontal-pitch baseline
                           (at least 6 s, on until 30 usable frames, at most 12 s; rule cal-r2), then a
                           three-dot gaze check across a reading line (rule gaze-r2) / positioning check;
-                          then the camera self-test (st-r2)
+                          then the camera self-test (st-r3)
   → CVSQ_BASELINE       CVS-Q (16 items), validated habitual frame — see the CVS-Q note below
   → BASELINE_FATIGUE    5-item VAS baseline
   → INSTRUCTIONS        participant overview of the per-condition tasks
@@ -258,8 +258,9 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
     participant's own median. The values come from a simulation of the app's own blink measure
     (`docs/FPS_GATE_SIMULATION.md`; `docs/ANALYSIS_PLAN.md` §5 item 2), not from a measurement;
   - the **camera self-test** after calibration (blink once at each of 5 flashes) runs on the grey
-    field and judges the same rate (rule `st-r2`): at least 4 of 5 blinks seen within 1.2 s of their
-    flash, the face in view 90% of the time, and at least 15 samples a second ("working" from 20).
+    field and judges the same rate (rule `st-r3` from Round 82; `st-r2` before): at least 4 of 5 blinks
+    seen beginning in the 1.2 s after their flash (`st-r2`: 1.2 s either side), the face in view 90%
+    of the time, and at least 15 samples a second ("working" from 20).
     Under the old rule (`st-r1`) it demanded 25 frames a second over the whole check and so failed on
     the tablet whatever the participant did. It remains a check that the camera sees this person's
     deliberate blinks, not a validation of incomplete-blink classification.

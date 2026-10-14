@@ -513,6 +513,15 @@ These are not optional and they come first.
      before it were scored under `st-r1` (`selftest_fps` ≥ 25 over the whole window), which a 23–25-fps
      camera failed whatever the participant did. The self-test is a QC record that the camera saw this
      person's deliberate blinks; no analysis rule in this plan uses it.
+   - **Self-test rule `st-r3` (Round 82).** The same as `st-r2`, except that a flash counts only a
+     blink beginning in the 1.2 s AFTER it (`st-r2`: 1.2 s either side). Why: a blink before a flash
+     cannot answer it, and in simulation (`docs/FPS_GATE_SIMULATION.md`, item 7) a participant who
+     ignored the flashes and blinked only spontaneously passed `st-r2` in 16% of attempts at 15 blinks
+     a minute and 40% at 20, against 2% and 8% under `st-r3`, while one who blinked at every flash
+     passed both alike. No threshold changed: still 4 of 5, 90% face, the same gate, the same 1.2-s
+     window length. The blink rates are simulation assumptions. `selftest_rule` names the rule; the 07b
+     `cue_matched` column is re-run under each sitting's own rule, so `st-r2` sittings keep their
+     counts. As before, no analysis rule uses the self-test.
    **Why the rate was what it was** (from version 2.3.0, Round 75): `camera_fps_delivered`,
    `tracker_fps`, `frames_skipped` and `process_ms_p50`/`process_ms_p95` in `07_eye_metrics.csv`
    separate a camera that delivered too few frames from a tracker that could not keep up. They are

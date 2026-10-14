@@ -175,7 +175,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) whit
   → CALIBRATION         on the grey field: EAR open-eye baseline + per-person frontal-pitch baseline
                         (head frontal → pitch zero; rule cal-r2: at least 6 s, until 30 usable
                         frames, at most 12 s), a three-dot gaze check (rule gaze-r2), then the
-                        camera self-test (rule st-r2)  /
+                        camera self-test (rule st-r3)  /
                         positioning check if no camera
   → CVSQ_BASELINE       validated CVS-Q (16 items)
   → BASELINE_FATIGUE    5-item visual-fatigue VAS (0–10)
@@ -301,7 +301,7 @@ Webcam frames → MediaPipe **FaceMesh** (468/478 landmarks) → one sample **pe
 from processed-frame timestamps. From Round 79 every condition is judged by the frame-rate gate
 **fps-g2** (`frameRateGate.ts`): `sampling_fps_observed`, face-solved samples a second while the face
 was seen — tier A ≥ 20, B 15–20, C < 15 — and within 2 fps of the participant's own median
-(`docs/FPS_GATE_SIMULATION.md`). The camera self-test (rule st-r2) judges the same rate.
+(`docs/FPS_GATE_SIMULATION.md`). The camera self-test (rule st-r3; st-r2 before Round 82) judges the same rate.
 
 ### 5.1 Eye-Aspect-Ratio (EAR) and blink classification (`blink.ts`)
 - **EAR** (Soukupová & Čech, 2016): for eye points p1..p6, `EAR = (‖p2−p6‖ + ‖p3−p5‖) / (2·‖p1−p4‖)`,

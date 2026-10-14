@@ -430,18 +430,20 @@ export function cueLag(cues: number[] | undefined, onsetMs: number): number | nu
 
 /**
  * Whether each blink of a self-test record is one a flash took — the test's own matching
- * (selfTest.ts matchCues), run on the record's stored flash and blink times — for the blinks in onset
- * order, the order 07b lists them in. The TRUE ones are the blinks that made selftest_detected. Null
- * for a reading record, and for a self-test record with no flash times.
+ * (selfTest.ts matchCues), run on the record's stored flash and blink times under the rule the sitting
+ * was scored with (`rule`, 01 selftest_rule: st-r3 counts blinks after a flash only, st-r1 and st-r2
+ * either side) — for the blinks in onset order, the order 07b lists them in. The TRUE ones are the
+ * blinks that made selftest_detected. Null for a reading record, and for a self-test record with no
+ * flash times.
  *
  * The stored times are rounded to 0.01 ms and the test ran on the unrounded ones, so the two could
- * disagree only for a blink within 0.01 ms of the 1.2 s edge or of a tie; the integrity report holds
+ * disagree only for a blink within 0.01 ms of a window edge or of a tie; the integrity report holds
  * the count to selftest_detected (selftest_events_match), so such a case would not pass unseen.
  */
-export function cueMatched(record: Pick<OcularEventsRecord, 'window' | 'cues' | 'events'>): boolean[] | null {
+export function cueMatched(record: Pick<OcularEventsRecord, 'window' | 'cues' | 'events'>, rule: string): boolean[] | null {
   if (record.window !== 'selftest' || !record.cues || record.cues.length === 0) return null;
   const onsets = record.events.map((e) => e.onset_ms).sort((a, b) => a - b);
-  const taken = new Set(matchCues(record.cues, onsets));
+  const taken = new Set(matchCues(record.cues, onsets, rule));
   return onsets.map((_, i) => taken.has(i));
 }
 

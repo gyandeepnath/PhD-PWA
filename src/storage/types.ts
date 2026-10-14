@@ -284,6 +284,8 @@ export interface SessionRecord {
      * st-r2 judges `samplingFps` by the frame-rate gate fps-g2 (`tier`; a reduced pass at tier B is
      * `verdict` 'reduced'), records each flash's lag to its blink (`cueLags`, ms, null = not seen), the
      * ground it was shown on, and which attempt of this run of the check it was, with the earlier ones.
+     * 'st-r3' from Round 82: the same, except that a flash counts only a blink beginning in the 1.2 s
+     * AFTER it (st-r1 and st-r2: either side); `earlyLags` names a flash missed by a blink just before it.
      */
     rule?: string;
     samplingFps?: number | null;
@@ -291,6 +293,7 @@ export interface SessionRecord {
     verdict?: 'working' | 'reduced' | 'failed';
     notes?: string[];
     cueLags?: Array<number | null>;
+    earlyLags?: Array<number | null>;
     ground?: string;
     attempt?: number;
     earlier?: Array<{ verdict: 'working' | 'reduced' | 'failed'; cued: number; detected: number; samplingFps: number | null; facePresence: number | null }>;

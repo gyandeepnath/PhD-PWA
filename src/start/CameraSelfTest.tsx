@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { now } from '@/lib/timing';
 import { CONFIG, isE2ETimingActive } from '@/experiment/config';
 import {
-  SELF_TEST, scoreSelfTest, minHits, attemptSummary, type SelfTestResult, type SelfTestAttemptSummary,
+  SELF_TEST, scoreSelfTest, minHits, attemptSummary, cueWindow, type SelfTestResult, type SelfTestAttemptSummary,
 } from '@/tracking/selfTest';
 import { FPS_GATE } from '@/tracking/frameRateGate';
 import { EAR_TIERS, MIN_GAP_MS } from '@/tracking/blink';
@@ -14,12 +14,16 @@ import { ScrollCue } from '@/components/ScrollCue';
  * "Blink each time the dot flashes" — the camera self-test, run after calibration. See
  * tracking/selfTest.ts for why it exists and what a pass does and does not mean.
  *
- * ON THE GREY FIELD (Round 79, rule st-r2). It was shown on the dark ground of the calibration routine,
+ * ON THE GREY FIELD (Round 79, from rule st-r2). It was shown on the dark ground of the calibration routine,
  * and under automatic exposure a dark screen is the one that slows a tablet camera most: the check ran
  * at the camera's worst rate and judged it against a floor the camera could not reach. It now runs on the
  * grey field's #808080 in its black ink — the screen every condition starts from — so the camera sees
  * the face lit as it will be before each reading (and, with the exposure fixed at camera setup, filmed
  * the same way). The flash is the dot turning from black to white.
+ *
+ * AFTER THE FLASH (Round 82, rule st-r3). A flash counts a blink that begins in the 1.2 s after it, not
+ * one before it (selfTest.ts SELF_TEST_RULE says why). The participant is asked to wait for the flash,
+ * and a flash missed by a blink that came just before it says "too early".
  *
  * EACH ATTEMPT SAYS WHAT HAPPENED. The result lists the three criteria with the value measured and the
  * value needed, each flash with whether a blink was seen and how long after it began, and the eye's
@@ -161,8 +165,8 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false }
           </p>
         )}
         <p className="font-lab" style={{ fontSize: 17, maxWidth: 560, marginTop: 14, lineHeight: 1.6 }}>
-          Look at the dot in the middle of the screen. Each time it flashes white, blink once — a normal,
-          firm blink. It flashes {SELF_TEST.CUES} times and takes about {Math.round((SELF_TEST.FIRST_CUE_MS + SELF_TEST.CUES * SELF_TEST.CUE_EVERY_MS) / 1000)} seconds.
+          Look at the dot in the middle of the screen. Wait for it to flash white, then blink once — a
+          normal, firm blink. It flashes {SELF_TEST.CUES} times and takes about {Math.round((SELF_TEST.FIRST_CUE_MS + SELF_TEST.CUES * SELF_TEST.CUE_EVERY_MS) / 1000)} seconds.
         </p>
         <button type="button" data-testid="selftest-start" onClick={() => { setStoppedByRotation(false); setPhase('running'); }}
           style={{ ...primary, marginTop: 26 }}>
@@ -197,7 +201,7 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false }
         Attempt {r.attempt ?? 1}{r.earlier?.length ? ` · earlier: ${r.earlier.map((a, i) => `${i + 1} ${a.verdict === 'failed' ? 'did not pass' : a.verdict}`).join(', ')}` : ''}
       </p>
 
-      {/* The three criteria, each with the value measured and the value needed (rule st-r2). */}
+      {/* The three criteria, each with the value measured and the value needed (rule st-r3). */}
       <ul data-testid="selftest-criteria" className="font-lab" style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', fontSize: 16, lineHeight: 1.6, textAlign: 'left' }}>
         <Criterion ok={r.detected >= need} testid="selftest-crit-blinks">
           Blinks seen: {r.detected} of {r.cued} flashes (needs {need})
@@ -210,17 +214,23 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false }
         </Criterion>
       </ul>
 
-      {/* Each flash: a blink seen within 1.2 s, and when it began. */}
+      {/*
+        Each flash: a blink that began in the 1.2 s after it (st-r3), and when; or, for a flash with
+        none, a blink that came just before it — too early to count, and the thing to tell the participant.
+      */}
       <div data-testid="selftest-cues" className="font-lab" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', alignItems: 'center', marginTop: 10, fontSize: 15 }}>
         <span>Flashes:</span>
-        {(r.cueLags ?? []).map((lag, i) => (
-          <span key={i} data-seen={lag != null} style={{ padding: '3px 9px', borderRadius: 8, border: `1px solid ${INK}`, background: lag != null ? 'rgba(255,255,255,0.45)' : 'transparent' }}>
-            {lag != null ? '✓' : '✗'} {i + 1} · {lag == null ? 'no blink seen' : lagText(lag)}
-          </span>
-        ))}
+        {(r.cueLags ?? []).map((lag, i) => {
+          const early = lag == null ? (r.earlyLags?.[i] ?? null) : null;
+          return (
+            <span key={i} data-seen={lag != null} data-early={early != null} style={{ padding: '3px 9px', borderRadius: 8, border: `1px solid ${INK}`, background: lag != null ? 'rgba(255,255,255,0.45)' : 'transparent' }}>
+              {lag != null ? '✓' : '✗'} {i + 1} · {lag != null ? lagText(lag) : early != null ? `${lagText(early)} — too early` : 'no blink seen'}
+            </span>
+          );
+        })}
       </div>
 
-      {seen && <SelfTestTrace obs={seen.obs} cues={seen.cues} startedAt={seen.startedAt} cueLags={r.cueLags ?? []} />}
+      {seen && <SelfTestTrace obs={seen.obs} cues={seen.cues} startedAt={seen.startedAt} cueLags={r.cueLags ?? []} rule={r.rule} />}
 
       {/*
         The three stages behind the frame rate, so a low one says which stage is short (round 75): what
@@ -342,11 +352,12 @@ export function traceGeometry(
 }
 
 /**
- * The eye's openness through the check, with each flash, its ±1.2 s matching window, and the blink
- * matched to it. Drawn in the grey field's ink; nothing here is stored (the stored trace is 07c).
+ * The eye's openness through the check, with each flash, its matching window (from st-r3 the 1.2 s
+ * after it; cueWindow), and the blink matched to it. Drawn in the grey field's ink; nothing here is
+ * stored (the stored trace is 07c).
  */
-function SelfTestTrace({ obs, cues, startedAt, cueLags }: {
-  obs: SelfTestObservation; cues: number[]; startedAt: number; cueLags: Array<number | null>;
+function SelfTestTrace({ obs, cues, startedAt, cueLags, rule }: {
+  obs: SelfTestObservation; cues: number[]; startedAt: number; cueLags: Array<number | null>; rule?: string;
 }) {
   if (obs.baseline == null || !(obs.baseline > 0) || obs.trace.length < 2) {
     return (
@@ -360,13 +371,13 @@ function SelfTestTrace({ obs, cues, startedAt, cueLags }: {
   /** Room above the plot for each flash's number. */
   const TOP_PAD = 18;
   const g = traceGeometry(obs.trace, obs.baseline, cues, startedAt, W, H);
-  const win = SELF_TEST.WINDOW_MS;
+  const win = cueWindow(rule);
   return (
     <figure data-testid="selftest-trace" style={{ margin: '10px 0 0', width: W, maxWidth: '100%' }}>
       <svg viewBox={`0 0 ${W} ${H + TOP_PAD}`} width="100%" role="img" aria-label="Eye openness through the check, with the five flashes marked" style={{ display: 'block' }}>
         {cues.map((c, i) => (
           <g key={i}>
-            <rect x={g.x(c - win)} y={TOP_PAD} width={Math.max(0, g.x(c + win) - g.x(c - win))} height={H} fill="rgba(255,255,255,0.28)" />
+            <rect x={g.x(c - win.before)} y={TOP_PAD} width={Math.max(0, g.x(c + win.after) - g.x(c - win.before))} height={H} fill="rgba(255,255,255,0.28)" />
             <line x1={g.x(c)} x2={g.x(c)} y1={TOP_PAD} y2={H + TOP_PAD} stroke={INK} strokeWidth={1} />
             <text x={g.x(c)} y={14} fontSize={14} textAnchor="middle" fill={INK}>{i + 1}{cueLags[i] != null ? ' ✓' : ' ✗'}</text>
             {cueLags[i] != null && <circle cx={g.x(c + cueLags[i]!)} cy={TOP_PAD + g.y(EAR_TIERS.partial)} r={3.5} fill={INK} />}
@@ -379,7 +390,7 @@ function SelfTestTrace({ obs, cues, startedAt, cueLags }: {
         </g>
       </svg>
       <figcaption className="font-lab" style={{ fontSize: 14, lineHeight: 1.45, marginTop: 4 }}>
-        Eye openness (top = this person&apos;s open eye). Light bands: 1.2 s either side of each flash, where a blink counts.
+        Eye openness (top = this person&apos;s open eye). Light bands: {win.before === 0 ? 'the 1.2 s after each flash' : '1.2 s either side of each flash'}, where a blink counts.
         Dashed: the blink line; dotted: the complete-blink line; a dot marks where a counted blink began.
       </figcaption>
     </figure>
