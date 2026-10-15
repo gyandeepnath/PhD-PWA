@@ -687,6 +687,8 @@ else a sitting produces put together.
    - `12_quality_flags.csv` — look at `engagement_flag` and `reasons`.
    - `01_session_info.csv` — confirm `lux_complete` and that the three readings are what you took.
    - `07_eye_metrics.csv` — confirm `camera_active` is true and `face_presence_ratio` is high.
+   - On the tablet, Dashboard → **Data Quality / QC** — how many conditions are **✕ Not usable**,
+     and the reason under each (see *Reading the dashboard*, below).
 5. **Copy the export off the tablet the same day.** Not at the end of the week. Everything lives in
    the tablet's browser storage until you do, and a wiped or failed device destroys it.
 
@@ -703,6 +705,36 @@ else a sitting produces put together.
 6. There is no second session to book. If the sitting had to be **split** for scheduling, book the
    remaining half as soon as the participant can manage — the ten conditions belong to one
    protocol, and a long gap between halves adds a period effect the design does not model.
+
+**Reading the dashboard** (Round 83). Every tab opens with a short blue box, *How to read this
+page*. Long explanations are folded: a line or two is shown, and **More ▾** opens the rest. Nothing
+was removed; it is one tap away.
+
+On **Data Quality / QC**, *Is the blink data reliable?* gives each reading condition one row and one
+verdict. The verdict follows the analysis's own checks (rule `rel-r1`), so it says what the analysis
+will do with that condition:
+
+| Verdict | What it means | What the analysis does |
+|---|---|---|
+| **✓ Good** | Every check passed. | Uses it. |
+| **! Usable** | One check is flagged: eye sampling rate 15–20 a second, or more than 2 from this participant's usual; face in view under 90%; head turned away over 20% of the time; the camera saw under 90% of the reading. | Uses it, and leaves it out of one pre-planned re-check. |
+| **✕ Not usable** | The camera was off or stopped; no blinks were counted (for example, no open-eye baseline at calibration); or the eye sampling rate was under 15 a second. | Leaves it out of the eye-data analysis. The other measures of that condition (reading, questions, ratings, reaction time) are not affected. |
+
+- Each column of the row is one check: **✓** passed, **!** flagged, **✕** failed, **–** not measured.
+  The line under the row names the check that was not met. **Details ▾** shows every check: what
+  was measured, what was needed, the rule, and what the analysis does.
+- A **Note** (few blinks, a dim or over-lit face, the camera covered, the open eye narrower than at
+  calibration) is worth knowing but never changes the verdict. **Engagement** is about the
+  participant, not the camera, and does not change it either.
+- In the three eye charts a **grey** bar is a Not-usable condition: its value is drawn, and the chart
+  names it.
+- **Every number, as tables ▾** at the bottom of the tab opens the full tables.
+- The same verdict is in the export: `ocular_reliability`, `ocular_reliability_checks` and
+  `reliability_rule_version` in `analysis_long.csv` and `10_wide_summary.csv`. The older column
+  `qc_overall` is still written but is superseded: do not use it.
+- What to do: a Not-usable condition is recorded as it is. Use its reason to fix the cause before the
+  next participant (camera stopped or no face: seating, the lens, light; rate too slow: the
+  troubleshooting row on frame rate, §6; no open-eye baseline: let calibration finish).
 
 **The Session Manager.** The white **← Back to home** button is at the top left, like the way out
 on every other screen. In-progress and withdrawn sittings are always listed; **Completed** sittings

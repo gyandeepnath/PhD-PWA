@@ -645,6 +645,40 @@ These are not optional and they come first.
    automatic or compensated exposure, which `camera_exposure_policy` already says, and every analysis
    that reads the policy reads it the same way. Not measured on the tablet: this follows from the
    browser's source, and the bench check is how it is confirmed on the device.
+9. **The blink-data verdict, rule `rel-r1` (Round 83).** One word per condition-run for "is this
+   row's blink data reliable?", shown on the dashboard and written to `analysis_long.csv` and
+   `10_wide_summary.csv` as `ocular_reliability`, with `ocular_reliability_checks` (the codes of the
+   checks that failed or flagged) and `reliability_rule_version` (`rel-r1`). **It adds no rule and
+   changes no model**: no row enters or leaves any analysis because of it. It is read off the checks
+   above, in the R template's order, so the word says what the analysis will do with the row.
+   - **not_usable** — not in the confirmatory eye-data models: no eye record, the camera off or
+     stopped, no blink counted (`blink_total` blank or 0; without an open-eye baseline nothing is
+     counted), or tier C under `fps-g2` (item 2).
+   - **usable** — in the confirmatory models, and flagged by a pre-specified check: tier B (left out
+     of the tier-A-only refit), `fps_consistent` FALSE (out of the consistent-rows refit), no rate
+     measurable with the camera on (kept; nothing vouches for its sampling), or a §5.3–5.4 check (out
+     of the QC-clean refit): `face_presence_ratio` under 0.90 (the
+     protocol's pilot gate, R `QC_FACE_PRESENCE_MIN`), `off_axis_ratio` over 0.20, or
+     `observed_duration_ms` / `reading_time_ms` under 0.90 (both ANALYST DEFAULTS in R,
+     `QC_OFF_AXIS_MAX` and `QC_EXPOSURE_MIN_FRAC`). Strict inequalities, as R writes them.
+   - **good** — in the confirmatory models, and no check flags it.
+   - **Held to the templates.** `tests/ocularReliability.test.ts` reads the three thresholds out of
+     `analysis_template.R` and fails if either side moves; the analysis gate (`npm run
+     verify:analysis`) checks that R's §5.3–5.4 count and the export's agree on the same rows,
+     including a copy with one participant's exposure halved.
+   - **Not in the verdict:** few blinks (under 20), the light, a camera covered for 5 s or more, an
+     open eye narrower than 85% of the calibration baseline. No rule in this plan uses them — the
+     binomial model already weights each run by its blinks — so they are shown beside the verdict as
+     notes and cannot make a row look worse than the analysis treats it.
+   - **Superseded, still written:** `qc_overall` and the dashboard's older per-signal flags, computed
+     exactly as before so an analysis run on them reproduces. Their thresholds were not the
+     templates' (a face in view under 50% was "bad" there; the analysis keeps such a row), and the
+     page did not say which rule a "bad" had failed: testing 2.3.1, the investigator saw most
+     conditions marked bad. Neither template reads `qc_overall`; do not use it as an exclusion rule.
+   - **Versioned.** Any change to a check, a threshold or the mapping to the three words changes
+     `reliability_rule_version`. The verdict is computed when a file is written, from stored columns,
+     so a sitting exported before Round 83 gets it on its next export, and every row of one file is
+     under one rule.
 
 ---
 
