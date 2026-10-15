@@ -86,6 +86,31 @@ describe('condition aggregation', () => {
     expect(s[0].comprehension_correct).toBe(1);
     expect(s[0].search_accuracy).toBe(1);
   });
+  it('names the rating format on every fatigue and perception row, the old sliders where a row carries none (Round 84)', () => {
+    const b = bundle();
+    b.fatigue = b.fatigue.map((f) => (f.condition_id === 'B'
+      ? { ...f, eye_strain: 4.1, slider_version: 'vas-v2', vas_line_mm: 99.8, vas_line_source: 'measured' as const } : f));
+    const files = buildExportFiles(b);
+    const rows = (name: string) => {
+      const [head, ...rest] = files.find((f) => f.filename === name)!.content.trim().split('\n').map(splitCsvRow);
+      return rest.map((r) => Object.fromEntries(head.map((h, i) => [h, r[i]])));
+    };
+    const fat = rows('03_fatigue_scores.csv');
+    expect(fat.map((r) => [r.condition_id, r.slider_version, r.vas_line_mm, r.vas_line_source])).toEqual([
+      ['', 'sl-v1', '', ''], ['A', 'sl-v1', '', ''], ['B', 'vas-v2', '99.8', 'measured'],
+    ]);
+    expect(fat[2].eye_strain).toBe('4.1');
+    expect(rows('06_display_perception.csv').map((r) => r.slider_version)).toEqual(['sl-v1']);
+    const wide = rows('10_wide_summary.csv');
+    expect(wide.map((r) => [r.condition_id, r.slider_version])).toEqual([['A', 'sl-v1'], ['B', 'vas-v2']]);
+    for (const col of ['slider_version', 'vas_line_mm', 'vas_line_source']) {
+      for (const file of ['03_fatigue_scores.csv', '06_display_perception.csv']) {
+        expect(CODEBOOK.some((c) => c.file === file && c.column === col), `${file} ${col}`).toBe(true);
+      }
+    }
+    expect(ANALYSIS_LONG_COLUMNS).toContain('slider_version');
+  });
+
   it('computes fatigue delta from baseline', () => {
     expect(baselineFatigueMean(bundle())).toBe(1);
     const s = buildConditionSummaries(bundle());

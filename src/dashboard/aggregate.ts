@@ -4,6 +4,7 @@
  * charts/tables and the wide-format CSV, so the numbers are guaranteed consistent.
  */
 import type { SessionBundle } from '@/storage/gather';
+import { rowSliderVersion } from '@/scales/vas';
 import { CONFIG } from '@/experiment/config';
 import { FPS_GATE, fpsTier, gateParticipant, type FpsTier } from '@/tracking/frameRateGate';
 import {
@@ -173,6 +174,11 @@ export interface ConditionSummary {
   // Fatigue
   fatigue_mean: number | null;
   fatigue_delta: number | null;
+  /**
+   * The rating format this condition's fatigue and perception ratings were made with (scales/vas.ts):
+   * 'vas-v2' or, on rows from before Round 84, 'sl-v1'. Null where neither rating was recorded.
+   */
+  slider_version: string | null;
   eye_strain: number | null;
   dryness: number | null;
   blur: number | null;
@@ -432,7 +438,15 @@ export interface EngagementResult {
  */
 function isStraightLined(fat?: FatigueRecord): boolean {
   if (!fat || !fat.all_touched) return false;
-  const v = [fat.eye_strain, fat.dryness, fat.blur, fat.burning, fat.headache];
+  /*
+   * Compared at WHOLE POINTS of the 0-10 scale, the steps the rule was written for. On the number
+   * slider (sl-v1) every value is a whole point already, so this changes nothing there. On the 100 mm
+   * line (vas-v2, Round 84) the items are in tenths, and five marks a careless participant taps
+   * straight down the screen land a millimetre or two apart, never exactly together: compared exactly,
+   * the rule would almost never fire on the new format. Rounded, it asks the same question of both —
+   * five answers in the same whole point — and the floor and ceiling stay exempt for the reason above.
+   */
+  const v = [fat.eye_strain, fat.dryness, fat.blur, fat.burning, fat.headache].map((x) => Math.round(x));
   if (!v.every((x) => x === v[0])) return false;
   return v[0] !== FATIGUE_MIN && v[0] !== FATIGUE_MAX;
 }
@@ -781,6 +795,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
 
       fatigue_mean: fat?.fatigue_mean ?? null,
       fatigue_delta: fat && baseline != null ? fat.fatigue_mean - baseline : null,
+      slider_version: fat ?? perc ? rowSliderVersion((fat ?? perc)!) : null,
       eye_strain: fat?.eye_strain ?? null,
       dryness: fat?.dryness ?? null,
       blur: fat?.blur ?? null,

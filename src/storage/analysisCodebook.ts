@@ -19,6 +19,7 @@ import { CONFIG } from '@/experiment/config';
 import { ILLUMINATION, ILLUMINATION_LEVELS } from '@/experiment/illumination';
 import { FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION } from '@/tracking/frameRateGate';
 import { RELIABILITY_GATES, RELIABILITY_RULE_VERSION } from '@/tracking/ocularReliability';
+import { SLIDER_VERSION, SLIDER_VERSION_V1, VAS_LINE_MM } from '@/scales/vas';
 
 // The current protocol's single illumination level, for the prose below — derived, so it cannot say
 // "300 lux" after the protocol changes. See docs/ILLUMINATION_AMENDMENT.md.
@@ -163,6 +164,8 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
     description: 'Display comfort rating for this condition.' },
   { column: 'clarity_score', role: 'secondary', unit: '0-100', missing: 'not completed',
     description: 'Text clarity rating for this condition.' },
+  { column: 'slider_version', role: 'qc', unit: 'vas-v2|sl-v1', missing: 'neither rating recorded',
+    description: `The format the fatigue and comfort/clarity ratings of this run were made with: '${SLIDER_VERSION}' from Round 84 (each a ${VAS_LINE_MM} mm visual analogue line, no marker until tapped, no numbers; fatigue in tenths of 0-10, comfort and clarity whole millimetres of 0-100) or '${SLIDER_VERSION_V1}' before it (the number sliders: fatigue whole numbers 0-10). Same ranges, different instruments: the templates model one format and say how many rows of another they left out (ANALYSIS_PLAN.md §4c).` },
   { column: 'comprehension_correct', role: 'secondary', unit: 'count', missing: 'not completed',
     description: 'COUNT of correct items, not a proportion. Model binomially as cbind(comprehension_correct, comprehension_items - comprehension_correct). Counted from the item records, so it is an integer and the denominator is the items actually administered.' },
   { column: 'comprehension_items', role: 'secondary', unit: 'count', missing: 'no items recorded for this condition',

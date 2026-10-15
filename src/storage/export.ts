@@ -23,6 +23,7 @@ import { conditionPhysical, sessionMmPerCssPx, trialEccentricity } from '@/lib/p
 import { cueLag, cueMatched, decodeTrace, pageAt } from '@/tracking/blinkLog';
 import { FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION, fpsTier, rowGateVersion, samplingFpsObserved } from '@/tracking/frameRateGate';
 import { RELIABILITY_GATES, RELIABILITY_RULE_VERSION } from '@/tracking/ocularReliability';
+import { rowSliderVersion, SLIDER_VERSION, SLIDER_VERSION_V1, VAS_LINE_MM } from '@/scales/vas';
 import { SELF_TEST_RULE_V1 } from '@/tracking/selfTest';
 import { EXPOSURE_RULE_BEFORE, benchLockLabel } from '@/tracking/cameraExposure';
 import { CALIBRATION_RULE_BEFORE } from '@/tracking/calibrationSequence';
@@ -504,9 +505,12 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
 
   // ---- 03_fatigue_scores.csv
   { file: '03_fatigue_scores.csv', column: 'stage', type: 'factor', unit: '-', role: 'id', description: 'baseline (once per session) or post_condition (once per condition).' },
-  { file: '03_fatigue_scores.csv', column: 'fatigue_mean', type: 'number', unit: '0-10', role: 'dv', description: 'Mean of the five visual-fatigue VAS items. Ordinal — model with a cumulative-link model, not OLS.' },
-  { file: '03_fatigue_scores.csv', column: 'all_touched', type: 'boolean', unit: '-', role: 'qc', description: 'Every slider was moved. False means at least one item kept its default and the record is suspect.' },
+  { file: '03_fatigue_scores.csv', column: 'fatigue_mean', type: 'number', unit: '0-10', role: 'dv', description: "Mean of the five visual-fatigue items. The analysis models its change from the sitting's baseline (fatigue_delta, 10_wide_summary.csv) by LMM, and the items by a cumulative-link model as a sensitivity (ANALYSIS_PLAN.md §4, §4c). Read slider_version before pooling rows." },
+  { file: '03_fatigue_scores.csv', column: 'all_touched', type: 'boolean', unit: '-', role: 'qc', description: 'Every item was answered. Continue is held until they are, so this is TRUE on every row the app writes; FALSE would mean a row from outside it.' },
   { file: '03_fatigue_scores.csv', column: 'response_time_ms', type: 'integer', unit: 'ms', role: 'qc', description: 'Time from screen mount to submit. Implausibly fast = careless responding.' },
+  { file: '03_fatigue_scores.csv', column: 'slider_version', type: 'string', unit: '-', role: 'provenance', description: `The rating format. '${SLIDER_VERSION}' from Round 84: each item a ${VAS_LINE_MM} mm visual analogue line, words only at the ends, no marker or value until tapped, stored as whole millimetres / 10 (0.0-10.0 in tenths). '${SLIDER_VERSION_V1}' on rows recorded before it: an eleven-step 0-10 slider that showed its number, whole numbers only. The two are different instruments on the same 0-10 range: do not pool them without this column (ANALYSIS_PLAN.md §4c).` },
+  { file: '03_fatigue_scores.csv', column: 'vas_line_mm', type: 'number', unit: 'mm', role: 'qc', description: `The length the lines were drawn at when Continue was pressed, from their width on screen and this sitting's millimetres per pixel (the ruler check, or the fallback vas_line_source names). ${VAS_LINE_MM} unless the screen could not hold it. Blank on ${SLIDER_VERSION_V1} rows, whose line had no set length.` },
+  { file: '03_fatigue_scores.csv', column: 'vas_line_source', type: 'factor(3)', unit: '-', role: 'provenance', description: "Where the millimetres per pixel behind vas_line_mm came from: measured (this sitting's ruler check), assumed_study_tablet_panel or assumed_0.2055 (the fallbacks physical_size_source in 02_conditions.csv also uses; correct only on the study tablet). Blank on rows before Round 84." },
 
   // ---- 07_eye_metrics.csv
   { file: '07_eye_metrics.csv', column: 'incomplete_blink_ratio', type: 'number', unit: '0-1', role: 'primary', description: "THE PRIMARY OUTCOME. Incomplete blinks / all detected blinks, during reading. A bounded proportion: model on the logit scale or with a beta/binomial mixed model. HOW THE CLASSIFICATION IS MADE, because it bears on what this column can support: a blink is registered when the eye aspect ratio falls below 0.75 of the participant's own open-eye baseline and counted COMPLETE when it falls below 0.60. Baseline normalisation and the 0.75 registration cut each have published precedent; the 0.60 completeness cut has NONE — docs/LITERATURE_VALIDATION.md searched for it and found no validation of that separation for webcam EAR at any baseline fraction, and every retrieved study classifying blink completeness against a reference standard uses a different signal (near-infrared segmentation, keratograph, high-speed infrared, or a masked clinical observer). Incomplete blinks are also the harder class even with far better instrumentation. Treat the ratio as a within-study relative measure, not as a value comparable to published incomplete-blink proportions, and state the classifier limitation in any write-up." },
@@ -707,11 +711,11 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '02_conditions.csv', column: 'michelson_contrast', type: 'number', unit: '0-1', role: 'covariate', description: 'Michelson contrast. Saturates at 1.000 for every negative-polarity condition because a pure black background sets minimum luminance to zero, so it cannot discriminate there.' },
   { file: '02_conditions.csv', column: 'below_wcag_aa', type: 'boolean', unit: '-', role: 'covariate', description: 'True when contrast is below 4.5:1. Balanced two per polarity by design, so polarity is not confounded with accessibility compliance.' },
   { file: '02_conditions.csv', column: 'condition_duration_sec', type: 'number', unit: 's', role: 'qc', description: 'Wall-clock duration of the condition-run. A large outlier indicates an interruption.' },
-  { file: '03_fatigue_scores.csv', column: 'eye_strain', type: 'integer', unit: '0-10', role: 'dv', description: 'Eye strain rating on the five-item visual-fatigue scale, recorded per condition. Ordinal; model with a cumulative-link model rather than as continuous.' },
-  { file: '03_fatigue_scores.csv', column: 'dryness', type: 'integer', unit: '0-10', role: 'dv', description: 'Dryness or grittiness rating on the five-item visual-fatigue scale, recorded per condition. Ordinal; model with a cumulative-link model rather than as continuous.' },
-  { file: '03_fatigue_scores.csv', column: 'blur', type: 'integer', unit: '0-10', role: 'dv', description: 'Blurred vision rating on the five-item visual-fatigue scale, recorded per condition. Ordinal; model with a cumulative-link model rather than as continuous.' },
-  { file: '03_fatigue_scores.csv', column: 'burning', type: 'integer', unit: '0-10', role: 'dv', description: 'Burning or stinging rating on the five-item visual-fatigue scale, recorded per condition. Ordinal; model with a cumulative-link model rather than as continuous.' },
-  { file: '03_fatigue_scores.csv', column: 'headache', type: 'integer', unit: '0-10', role: 'dv', description: 'Headache rating on the five-item visual-fatigue scale, recorded per condition. Ordinal; model with a cumulative-link model rather than as continuous.' },
+  { file: '03_fatigue_scores.csv', column: 'eye_strain', type: 'number', unit: '0-10', role: 'dv', description: 'Eye strain rating on the five-item visual-fatigue scale, recorded per condition. Whole numbers on sl-v1 rows; tenths (whole millimetres of the 100 mm line / 10) on vas-v2 rows — see slider_version. The cumulative-link sensitivity takes it at whole points.' },
+  { file: '03_fatigue_scores.csv', column: 'dryness', type: 'number', unit: '0-10', role: 'dv', description: 'Dryness or grittiness rating on the five-item visual-fatigue scale, recorded per condition. Whole numbers on sl-v1 rows; tenths (whole millimetres of the 100 mm line / 10) on vas-v2 rows — see slider_version. The cumulative-link sensitivity takes it at whole points.' },
+  { file: '03_fatigue_scores.csv', column: 'blur', type: 'number', unit: '0-10', role: 'dv', description: 'Blurred vision rating on the five-item visual-fatigue scale, recorded per condition. Whole numbers on sl-v1 rows; tenths (whole millimetres of the 100 mm line / 10) on vas-v2 rows — see slider_version. The cumulative-link sensitivity takes it at whole points.' },
+  { file: '03_fatigue_scores.csv', column: 'burning', type: 'number', unit: '0-10', role: 'dv', description: 'Burning or stinging rating on the five-item visual-fatigue scale, recorded per condition. Whole numbers on sl-v1 rows; tenths (whole millimetres of the 100 mm line / 10) on vas-v2 rows — see slider_version. The cumulative-link sensitivity takes it at whole points.' },
+  { file: '03_fatigue_scores.csv', column: 'headache', type: 'number', unit: '0-10', role: 'dv', description: 'Headache rating on the five-item visual-fatigue scale, recorded per condition. Whole numbers on sl-v1 rows; tenths (whole millimetres of the 100 mm line / 10) on vas-v2 rows — see slider_version. The cumulative-link sensitivity takes it at whole points.' },
   { file: '04_comprehension.csv', column: 'question_index', type: 'integer', unit: '0-2', role: 'id', description: 'Position of the item within the passage. Three items per passage, so a condition contributes three rows; a join on condition_id must AGGREGATE rather than select one row.' },
   { file: '04_comprehension.csv', column: 'question_kind', type: 'factor(3)', unit: '-', role: 'iv', description: 'What the item probes: gist, inference or detail. Carried so accuracy can be modelled by item type instead of pooling three different demands.' },
   { file: '04_comprehension.csv', column: 'selected_index', type: 'integer', unit: '0-3', role: 'dv', description: 'Option the participant chose.' },
@@ -742,9 +746,12 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
       + 'termination level.' },
   { file: '06_display_perception.csv', column: 'display_comfort_score', type: 'number', unit: '0-100', role: 'dv', description: 'Rated comfort of the display in this condition, captured immediately after reading.' },
   { file: '06_display_perception.csv', column: 'text_clarity_score', type: 'number', unit: '0-100', role: 'dv', description: 'Rated clarity of the text in this condition, captured immediately after reading.' },
-  { file: '06_display_perception.csv', column: 'comfort_touched', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the comfort slider was actually moved. False means the value is the untouched default and should not be treated as a response.' },
-  { file: '06_display_perception.csv', column: 'clarity_touched', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the clarity slider was actually moved. False means the value is the untouched default.' },
+  { file: '06_display_perception.csv', column: 'comfort_touched', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the comfort rating was actually given. False means the value is the untouched default and should not be treated as a response (possible only on sl-v1 rows: a vas-v2 line has no default, and Continue waits for it).' },
+  { file: '06_display_perception.csv', column: 'clarity_touched', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the clarity rating was actually given. False means the value is the untouched default (sl-v1 rows only, as for comfort_touched).' },
   { file: '06_display_perception.csv', column: 'response_time_ms', type: 'number', unit: 'ms', role: 'qc', description: 'Time from the rating screen appearing to submission. Very short values feed the rushed-response flag.' },
+  { file: '06_display_perception.csv', column: 'slider_version', type: 'string', unit: '-', role: 'provenance', description: `The rating format. '${SLIDER_VERSION}' from Round 84: a ${VAS_LINE_MM} mm visual analogue line, words only at the ends, no marker or value until tapped, stored as whole millimetres (0-100). '${SLIDER_VERSION_V1}' on rows recorded before it: a 0-100 slider that showed its number over a filled track. Do not pool the two without this column (ANALYSIS_PLAN.md §4c).` },
+  { file: '06_display_perception.csv', column: 'vas_line_mm', type: 'number', unit: 'mm', role: 'qc', description: `As in 03_fatigue_scores.csv: the length the lines were drawn at, ${VAS_LINE_MM} unless the screen could not hold it; blank on ${SLIDER_VERSION_V1} rows.` },
+  { file: '06_display_perception.csv', column: 'vas_line_source', type: 'factor(3)', unit: '-', role: 'provenance', description: 'As in 03_fatigue_scores.csv: where the millimetres per pixel behind vas_line_mm came from.' },
   { file: '07_eye_metrics.csv', column: 'camera_active', type: 'boolean', unit: '-', role: 'qc', description: 'Whether camera measurement ran for this condition. False when the participant declined camera consent or the camera failed; every ocular column is then missing rather than zero.' },
   { file: '07_eye_metrics.csv', column: 'camera_inactive_reason', type: 'factor(2)', unit: '-', role: 'qc', description: "Why camera_active is FALSE. lost = the camera had been running in this sitting and stopped (its track ended, or frames stopped arriving while the page was visible); the operator was stopped and offered a pause, which restarts the camera and the condition, and chose to continue instead or the condition ended first. not_running = the camera was not running for this condition and had not been lost since this stretch of the sitting began (consent declined, permission denied, unavailable, or skipped when the sitting was resumed — a resume starts the camera afresh, so a camera lost before a pause and not restarted after it reads not_running). Blank when camera_active is TRUE and on rows recorded before this column existed. A run of 'lost' rows is missing data with a known cause, not a participant choice." },
   { file: '07_eye_metrics.csv', column: 'camera_blocked_ms', type: 'integer', unit: 'ms', role: 'qc', description: "Time during this reading exposure that the camera image was black and flat — the lens covered, or camera access switched off in the tablet's quick settings, which gives apps a blank picture instead of stopping the camera. Such frames used to count as an active camera with no face in view. Above 0, the blink measures of this row rest on less of the exposure than observed_duration_ms suggests; the operator was shown a notice while it lasted. Blank on camera-off rows and rows recorded before this existed." },
@@ -858,6 +865,7 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '10_wide_summary.csv', column: 'search_efficiency', type: 'number', unit: 'hits/min', role: 'dv', description: 'Visual-search correct taps per minute.' },
   { file: '10_wide_summary.csv', column: 'comfort_score', type: 'number', unit: '0-100', role: 'dv', description: 'Rated display comfort for this condition-run.' },
   { file: '10_wide_summary.csv', column: 'clarity_score', type: 'number', unit: '0-100', role: 'dv', description: 'Rated text clarity for this condition-run.' },
+  { file: '10_wide_summary.csv', column: 'slider_version', type: 'string', unit: '-', role: 'provenance', description: `The format this condition-run's fatigue and perception ratings were made with: '${SLIDER_VERSION}' (100 mm visual analogue lines, Round 84) or '${SLIDER_VERSION_V1}' (the number sliders before it). Blank when neither rating was recorded. See 03_fatigue_scores.csv.` },
   { file: '10_wide_summary.csv', column: 'blink_rate', type: 'number', unit: 'blinks/min', role: 'dv', description: 'Total blink rate for this condition-run.' },
   { file: '10_wide_summary.csv', column: 'blink_rate_full', type: 'number', unit: 'blinks/min', role: 'dv', description: 'Complete-blink rate for this condition-run.' },
   { file: '10_wide_summary.csv', column: 'effective_fps', type: 'number', unit: 'fps', role: 'qc', description: "Achieved sampling rate of the EAR series (face-solved frames), not the camera's frame rate. See 07_eye_metrics.csv. Duration-based ocular measures are unreliable below about 25; check this before modelling them." },
@@ -1267,8 +1275,12 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 03 — fatigue
   csv('03_fatigue_scores.csv',
-    ['participant_id', 'condition_id', 'stage', 'eye_strain', 'dryness', 'blur', 'burning', 'headache', 'fatigue_mean', 'all_touched', 'response_time_ms'],
-    bundle.fatigue.map((f) => ({ participant_id: pid, condition_id: f.condition_id ?? '', stage: f.stage, eye_strain: f.eye_strain, dryness: f.dryness, blur: f.blur, burning: f.burning, headache: f.headache, fatigue_mean: f.fatigue_mean, all_touched: f.all_touched, response_time_ms: f.response_time_ms })));
+    ['participant_id', 'condition_id', 'stage', 'eye_strain', 'dryness', 'blur', 'burning', 'headache', 'fatigue_mean', 'all_touched', 'response_time_ms', 'slider_version', 'vas_line_mm', 'vas_line_source'],
+    bundle.fatigue.map((f) => ({
+      participant_id: pid, condition_id: f.condition_id ?? '', stage: f.stage, eye_strain: f.eye_strain, dryness: f.dryness, blur: f.blur, burning: f.burning, headache: f.headache, fatigue_mean: f.fatigue_mean, all_touched: f.all_touched, response_time_ms: f.response_time_ms,
+      // Rows from before Round 84 carry no format; they were the number sliders (scales/vas.ts).
+      slider_version: rowSliderVersion(f), vas_line_mm: f.vas_line_mm ?? '', vas_line_source: f.vas_line_source ?? '',
+    })));
 
   // 04 — comprehension
   csv('04_comprehension.csv',
@@ -1282,8 +1294,11 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 06 — display perception
   csv('06_display_perception.csv',
-    ['participant_id', 'condition_id', 'display_comfort_score', 'text_clarity_score', 'comfort_touched', 'clarity_touched', 'response_time_ms'],
-    bundle.perception.map((p) => ({ participant_id: pid, condition_id: p.condition_id, display_comfort_score: p.display_comfort_score, text_clarity_score: p.text_clarity_score, comfort_touched: p.comfort_touched, clarity_touched: p.clarity_touched, response_time_ms: p.response_time_ms })));
+    ['participant_id', 'condition_id', 'display_comfort_score', 'text_clarity_score', 'comfort_touched', 'clarity_touched', 'response_time_ms', 'slider_version', 'vas_line_mm', 'vas_line_source'],
+    bundle.perception.map((p) => ({
+      participant_id: pid, condition_id: p.condition_id, display_comfort_score: p.display_comfort_score, text_clarity_score: p.text_clarity_score, comfort_touched: p.comfort_touched, clarity_touched: p.clarity_touched, response_time_ms: p.response_time_ms,
+      slider_version: rowSliderVersion(p), vas_line_mm: p.vas_line_mm ?? '', vas_line_source: p.vas_line_source ?? '',
+    })));
 
   // 07 — eye metrics
   csv('07_eye_metrics.csv',
@@ -1430,7 +1445,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 10 — wide one-row-per-condition summary (joined)
   csv('10_wide_summary.csv',
-    ['participant_id', 'session_index', 'condition_id', 'condition_complete', 'attempt_number', 'condition_label', 'session_position', 'polarity', 'color_name', 'wcag_contrast_ratio', 'below_wcag_aa', 'passage_id', 'mean_rt_hits_ms', 'd_prime', 'd_prime_se', 'criterion', 'fatigue_mean', 'fatigue_delta', 'comprehension_correct', 'search_time_ms', 'search_termination', 'search_accuracy', 'search_efficiency', 'comfort_score', 'clarity_score', 'blink_rate', 'blink_rate_full', 'effective_fps', 'face_presence_ratio', 'qc_overall', 'ocular_reliability', 'ocular_reliability_checks', 'reliability_rule_version', 'engagement_flag', 'quality_score'],
+    ['participant_id', 'session_index', 'condition_id', 'condition_complete', 'attempt_number', 'condition_label', 'session_position', 'polarity', 'color_name', 'wcag_contrast_ratio', 'below_wcag_aa', 'passage_id', 'mean_rt_hits_ms', 'd_prime', 'd_prime_se', 'criterion', 'fatigue_mean', 'fatigue_delta', 'comprehension_correct', 'search_time_ms', 'search_termination', 'search_accuracy', 'search_efficiency', 'comfort_score', 'clarity_score', 'slider_version', 'blink_rate', 'blink_rate_full', 'effective_fps', 'face_presence_ratio', 'qc_overall', 'ocular_reliability', 'ocular_reliability_checks', 'reliability_rule_version', 'engagement_flag', 'quality_score'],
     summaries.map((s) => ({
       participant_id: pid, session_index: session.session_index,
       condition_complete: s.condition_complete, attempt_number: s.attempt_number,
@@ -1449,7 +1464,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       fatigue_mean: round(s.fatigue_mean), fatigue_delta: round(s.fatigue_delta), comprehension_correct: s.comprehension_correct,
       search_time_ms: s.search_time_ms, search_termination: s.search_termination ?? '',
       search_accuracy: s.search_accuracy, search_efficiency: s.search_efficiency, comfort_score: s.comfort_score,
-      clarity_score: s.clarity_score, blink_rate: s.blink_rate, blink_rate_full: s.blink_rate_full,
+      clarity_score: s.clarity_score, slider_version: s.slider_version ?? '', blink_rate: s.blink_rate, blink_rate_full: s.blink_rate_full,
       effective_fps: s.effective_fps, face_presence_ratio: s.face_presence_ratio, qc_overall: s.qc.overall,
       // Rule rel-r1, as the dashboard shows it (this sitting's own usual rate for the consistency check).
       ocular_reliability: s.camera_verdict.result.reliability,

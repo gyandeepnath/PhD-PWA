@@ -20,6 +20,7 @@ import { SELF_TEST_RULE_V1 } from '@/tracking/selfTest';
 import { EAR_TIERS } from '@/tracking/blink';
 import type { SessionBundle } from './gather';
 import { MIN_SCALE } from '@/lib/viewportScale';
+import { rowSliderVersion } from '@/scales/vas';
 import {
   isPlausibleMmPerCssPx, isPlausibleViewingDistanceCm, longSide, sessionMmPerCssPx, MM_PER_CSS_PX_RANGE,
   STUDY_TABLET_PANEL_LONG_MM, VIEWING_DISTANCE_CM,
@@ -490,6 +491,18 @@ export function auditBundle(bundle: SessionBundle, opts: AuditOptions = {}): Int
     add(baseline.length === 0 ? 'error' : 'warning', 'one_baseline_fatigue',
       `expected exactly one baseline fatigue record, found ${baseline.length}. ` +
       `fatigue_delta is computed against it.`);
+  }
+  /*
+   * One rating format per sitting (Round 84, scales/vas.ts). A sitting resumed in a build on the other
+   * side of the change has a baseline on one instrument and post-condition ratings on the other, and
+   * every fatigue_delta in it subtracts the two. Not blocking — the ranges are the same — but the rows
+   * cannot be read as one instrument, and the templates model one format at a time.
+   */
+  const formats = new Set([...(bundle.fatigue ?? []), ...(bundle.perception ?? [])].map((r) => rowSliderVersion(r)));
+  if (formats.size > 1) {
+    add('warning', 'one_rating_format',
+      `the fatigue and display ratings of this sitting were made on ${formats.size} formats ` +
+      `(${[...formats].sort().join(', ')}): its fatigue_delta compares ratings on different instruments.`);
   }
   const cvsqStages = new Set((bundle.cvsq ?? []).map((c) => c.stage));
   if (conditions.length > 0 && !(cvsqStages.has('baseline') && cvsqStages.has('session_end'))) {

@@ -118,6 +118,16 @@ describe('coverage and session-level expectations', () => {
     b.tlx.push({ ...b.tlx[0], tlx_id: 'second' });
     expect(checks(b)).toContain('one_tlx_per_session');
   });
+
+  it('warns when one sitting holds ratings on two formats (Round 84)', () => {
+    const b = buildFixtureBundle();
+    expect(checks(b)).not.toContain('one_rating_format');
+    b.fatigue = b.fatigue.map((f, i) => (i === 0 ? f : { ...f, slider_version: 'vas-v2' }));
+    expect(checks(b)).toContain('one_rating_format');
+    const finding = auditBundle(b).findings.find((x) => x.check === 'one_rating_format')!;
+    expect(finding.severity).toBe('warning');
+    expect(finding.detail).toMatch(/sl-v1, vas-v2/);
+  });
 });
 
 describe('a session run under the test harness is not data', () => {

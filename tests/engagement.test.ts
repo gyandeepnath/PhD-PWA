@@ -59,6 +59,20 @@ describe('conditionEngagement', () => {
     expect(e.careless_rushed_fatigue).toBe(true);
   });
 
+  it('judges straight-lining on the 100 mm line at whole points, as on the old eleven-step slider (Round 84)', () => {
+    const on = (v: number[]) => conditionEngagement({
+      reading_time_ms: 60000, word_count: 100,
+      fatigue: fatigue({ eye_strain: v[0], dryness: v[1], blur: v[2], burning: v[3], headache: v[4], slider_version: 'vas-v2' }),
+    }).careless_straight_lined;
+    // Five marks tapped straight down the screen land a millimetre or two apart, never exactly together.
+    expect(on([3.1, 3.2, 2.9, 3.0, 3.3])).toBe(true);
+    // Five answers spread over the scale are not straight-lined, however close two of them are.
+    expect(on([3.1, 3.2, 5.5, 1.0, 3.3])).toBe(false);
+    // The floor and the ceiling stay exempt: five "none" marks are an honest answer.
+    expect(on([0, 0.2, 0.4, 0.1, 0.3])).toBe(false);
+    expect(on([9.8, 10, 9.6, 10, 9.9])).toBe(false);
+  });
+
   it('drops to bad when several strong signals fire together', () => {
     const e = conditionEngagement({
       reading_time_ms: 1000, word_count: 280, // skim (0.3)

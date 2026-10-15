@@ -71,7 +71,7 @@ export const ANALYSIS_LONG_COLUMNS = [
   'perclos_p80', 'blink_duration_mean_ms', 'mean_inter_blink_interval_ms',
   'head_pitch_mean', 'head_movement_std', 'off_axis_ratio',
   // --- subjective and performance ---------------------------------------------------------
-  'fatigue_mean', 'fatigue_delta', 'comfort_score', 'clarity_score',
+  'fatigue_mean', 'fatigue_delta', 'comfort_score', 'clarity_score', 'slider_version',
   'comprehension_correct', 'comprehension_items',
   'search_time_ms', 'search_accuracy', 'search_d_prime', 'search_d_prime_se', 'search_false_detections', 'search_termination',
   'rt_mean_hits_ms', 'rt_median_hits_ms', 'd_prime', 'criterion', 'rt_lapses',
@@ -346,6 +346,7 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         fatigue_delta: round(sum.fatigue_delta),
         comfort_score: sum.comfort_score,
         clarity_score: sum.clarity_score,
+        slider_version: sum.slider_version,
         /*
          * A COUNT, not a proportion.
          *
