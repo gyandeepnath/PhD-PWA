@@ -6805,3 +6805,166 @@ list every step (a new entry and version, both templates' constants, ANALYSIS_PL
   on the screen.
 - **No tier-B band.** Proposing one would change the gate after it was fixed; the tier-A-only refit is
   the pre-registered answer.
+
+## Round 83 — the analysis dashboard: one verdict per condition from the analysis's own checks, and the text organised
+
+The investigator, testing 2.3.1 (instruction 6): the blink data of most conditions read "bad" or
+unreliable on the dashboard, and the justifications and flags were "multiple paragraph-like texts".
+This round makes the dashboard's verdict the analysis's own, says which check a condition failed, and
+organises the page without removing anything from it.
+
+One rule is new and versioned in the data: the blink-data verdict, `rel-r1`
+(`reliability_rule_version`). **It adds no analysis rule and changes no threshold**: no row enters or
+leaves any model because of it. Nothing here was measured on the Xiaomi Pad 6. No export of the
+investigator's test sittings was available, so which old rule marked his conditions "bad" is not
+known; the old rules are described below as the code had them.
+
+### In plain words
+
+1. **"Bad" now means what the analysis will do.** Each reading condition gets one verdict for its
+   blink data: **✓ Good** (every check passed), **! Usable** (in the analysis; one pre-planned
+   re-check leaves it out) or **✕ Not usable** (not in the eye-data analysis). The verdict is read
+   off the checks the analysis templates apply, at their thresholds. The line under the condition
+   names the check that was not met, for example *Face in view 84% (90% needed)*.
+2. **One row per condition.** Its status for each check sits in a column: camera, blinks, eye
+   sampling rate, face in view, head turned away, reading seen, and engagement. **Details ▾** opens
+   every check with what was measured, what was needed, the rule, and what the analysis does.
+3. **Notes are not flags.** Few blinks, a dim or over-lit face, a covered camera and an open eye
+   narrower than at calibration are worth knowing, but no analysis rule uses them. They are printed
+   beside the verdict as *Note:* and never change it.
+4. **The calibration and the camera check are on the page.** A line *Before the readings* shows the
+   open-eye baseline, the camera check and the gaze check, each as its own screen judged it.
+5. **Short text, the rest one tap away.** Every tab opens with *How to read this page*. Each caveat
+   and long notice is one or two lines; **More ▾** opens the full text, word for word. The three old
+   tables are under *Every number, as tables ▾*. Nothing was removed.
+6. **The eye charts grey out a Not-usable condition**, and name it under the chart. Its value is still
+   drawn.
+7. **The same verdict is in the export**, in `analysis_long.csv` and `10_wide_summary.csv`.
+8. **A blocking join-check issue now reads red** on the All Participants tab. It read amber because the
+   list tested for a severity the join check never writes.
+
+### 1. Why the dashboard said "bad" — confirmed in the code
+
+Before this round the dashboard judged eye data twice, by two sets of thresholds, neither of them the
+analysis's:
+
+- **The camera verdict** (`cameraVerdict`, as of f3a3912) said *Not trustworthy* for a face in view
+  under 80% or unknown, a camera covered for 30 s or more, a rate it could not measure, or tier C; and
+  *Usable with care* for anything else it noticed, few blinks and the light included. The R template
+  keeps a row with the face in view 80% of the time in the confirmatory model (it only leaves it out
+  of the QC-clean refit), and uses neither the covered time nor the light.
+- **The QC table's per-signal flags** (`qc_overall`) were "bad" for a face in view under 50% or a
+  head turned away over 40% of the time, and "warn" for a camera that was off, which beside a
+  *Not trustworthy* verdict for the same row gave two colours for one fact.
+- In builds before Round 79 the frame-rate part of both read effective_fps against 25 and 30, which a
+  23–25 fps camera nearly always failed (Round 79).
+
+Neither said which rule had failed in words a reader could check against the analysis plan.
+
+### 2. The rule `rel-r1` (src/tracking/ocularReliability.ts) — new; versioned
+
+Read off the R template's own checks, in its order (ANALYSIS_PLAN §5 item 9):
+
+| Verdict | When | What the analysis does |
+|---|---|---|
+| `not_usable` | no eye record; camera off or stopped; `blink_total` blank or 0 (without an open-eye baseline nothing is counted); tier C under `fps-g2` | not in the confirmatory eye-data models |
+| `usable` | tier B; `fps_consistent` FALSE; no rate measurable with the camera on; face in view under 0.90; head turned away over 0.20; observed under 0.90 of the reading | modelled; out of one pre-registered refit (tier-A-only, consistent-rows, or QC-clean) |
+| `good` | none of these | modelled, in every refit |
+
+- **Held to R.** `tests/ocularReliability.test.ts` reads `QC_FACE_PRESENCE_MIN`, `QC_OFF_AXIS_MAX` and
+  `QC_EXPOSURE_MIN_FRAC` out of `analysis_template.R` and fails if either side moves. The analysis gate
+  checks that R's §5.3–5.4 count equals the export's, on the cohort and on a copy with one
+  participant's exposure halved (10 rows flagged by both).
+- **Exported** (8ddff1d): `ocular_reliability`, `ocular_reliability_checks` (the codes, failures
+  first) and `reliability_rule_version` in `analysis_long.csv` and `10_wide_summary.csv`, computed when
+  the file is written from stored columns, so an older sitting gets the verdict on its next export.
+  `qc_overall` is still written, computed as before, and marked superseded in both codebooks.
+- **On the screen a rate is never rounded onto a floor it is below** (3778f79): 19.96 is tier B and
+  reads "19.96", not "20.0".
+- **Notes** (aggregate.ts `EyeNote`): few blinks (under 20), camera covered 5 s or more, open eye under
+  85% of the baseline, the light. Each has a few words for the row and its full sentence in Details.
+
+### 3. The Data Quality tab (src/dashboard/eyeData.tsx) — reorganised
+
+- *Is the blink data reliable?*: the count of each verdict and the rule (`✓ 3 good · ! 4 usable · ✕ 3
+  not usable · rule rel-r1` on the demo sitting); *Before the readings* (below); then one row per
+  condition. The rate and its steadiness share a cell in the researcher card's words (*18.2 · reduced,
+  off usual*), coloured by the worse of the two checks.
+- **Details** holds the check table (status, check, measured, needed, rule, if not met), the notes in
+  full, every number of the condition (minutes seen, blink rate, incomplete-blink ratio, inter-blink
+  interval, PERCLOS P80 and P70, long closures, on-screen ratio, lighting, picture brightness, camera
+  covered, open eye against calibration) and the engagement score with each signal.
+- **Every number, as tables** keeps the three tables the tab used to open with, every column of them.
+  The QC table's *Overall* column is now *Reliability* (the verdict), and it gains *Reading seen* (the
+  §5.4 check); cell colours follow the verdict's checks instead of the superseded flags. Lighting is in
+  plain ink: it is a note. The engagement table's flags are the short labels, with the full sentences,
+  as `12_quality_flags.csv` writes them, under *Flags in full*.
+- The comparison figures (Portello, Rosenfield & Chu 2013, ledger #2) are one line, with the rest of
+  the paragraph behind More; the citation and every number in it are unchanged.
+
+### 4. Before the readings (src/dashboard/sittingChecks.ts) — new on the page, nothing judged anew
+
+The open-eye baseline (`cal-r*`), the camera check (`st-r*`) and the gaze check (`gaze-r*`), read from
+the same fields and the same calibration record as `01_session_info.csv` (the last one taken; how many
+there were is said). Each status is the verdict the check gave when it ran: a missing baseline says
+why (*eyes not measured*, …) and that no blink is then counted; a camera check that did not pass says
+the operator continued anyway; a reduced pass is flagged; a gaze check that did not pass reads *not
+measured*, because only the on-screen ratio rests on it (§5 item 7). An `st-r1` sitting is judged by
+its own pass.
+
+### 5. The rest of the page — organised, not cut
+
+- **How to read this page** on every tab: two to five short lines, for the investigator.
+- **Caveats** (reaction time, search, eye): one or two lines, with the full text behind More.
+  `tests/dashboardQuality.test.tsx` checks that the three full texts are still in the source word for
+  word, and that a caveat's full text is in the page, hidden until opened.
+- **Notices**: the withdrawn and unfinished banners keep their first sentence, the rest behind More;
+  so do the cohort table's explanation and the "one condition is behind" warning.
+- **Words**: table headings spelled out (*Change from baseline*, not *Δ*; *Contrast (WCAG)*, not
+  *WCAG*); the overview's camera tile is *Eye data good* with the usable and not-usable counts under
+  it, and the engagement tile gives its warn and bad counts. The All Participants table gains *Eye data:
+  good, usable, not usable* per condition, from the pooled export's own column, and its headers wrap so
+  the last columns stay on a tablet's screen.
+- **Colours**: every status uses the operator palette (✓ green, ! amber, ✕ red, – muted), each at
+  least 4.5:1 on white and on the tinted grounds (`tests/contrast.test.ts`, which now covers
+  `parts.tsx` and `eyeData.tsx`); the grey bar clears 3:1 on white. No status is told by colour alone:
+  each carries its symbol and a word.
+- **The join-check list** (All Participants) coloured an issue red only for severity `error`, which
+  `storage/joinIntegrity.ts` never writes (`blocking` | `warning`): a blocking issue read amber. It now
+  reads red, and the summary line counts *N blocking · N warnings*.
+
+### 6. Checks run
+
+- `npm run verify` (lint, types, 1,605 unit tests, corpus, codebook, export gate 862/862, analysis
+  gate): green.
+- End-to-end, retries off, one worker: `dashboardTabs` (every tab scrolls to its last row at
+  1152 x 650), `fullRun`, `edge` (the withdrawn banner): 7 passed.
+- After `npm run build`, the production-bundle suite (e2e-prod, 7 tests): passed.
+- Looked at, every tab scrolled through, at 1920 x 1200 and 1152 x 720, on a demo sitting with every
+  verdict (good; usable for a reduced rate, face in view 84%, head turned away 27%, the camera seeing
+  79% of the reading; not usable for a stopped camera, no baseline, 12.4 a second; and notes), with
+  Details, More and the tables opened, and once with a reduced camera check and a failed gaze check.
+  Fixed from looking: a doubled ⚠ in the search caveat; a test that counted the Details table's rows
+  as the condition's.
+
+### 7. Versions in the data
+
+| Rule | Before | Now | Where it is recorded |
+|---|---|---|---|
+| Blink-data verdict | none (`qc_overall`, still written, superseded) | `rel-r1` | `reliability_rule_version` in `analysis_long.csv` and `10_wide_summary.csv` |
+| Frame-rate gate, blink rule, calibration, camera check, gaze | unchanged | unchanged | as before |
+
+### 8. Citations
+
+No citation was added. The Portello et al. (2013, #2) and Dinges & Grace (1998) texts on the eye tab
+are unchanged, now behind More.
+
+### 9. Not done, and why
+
+- **The investigator's own test sittings were not re-read** under `rel-r1`: none were available here.
+  Their next export carries the verdict, and the Data Quality tab shows it on the tablet.
+- **The engagement flags' full sentences** (`12_quality_flags.csv` `reasons`) still say "frame rate"
+  where the screen says "eye sampling rate"; they are export text that analyses may match on, so they
+  were left as written.
+- **No new threshold.** Where the old verdict and the analysis differed, the analysis's threshold was
+  taken; none was lowered.
