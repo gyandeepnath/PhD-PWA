@@ -24,6 +24,8 @@ import { cueLag, cueMatched, decodeTrace, pageAt } from '@/tracking/blinkLog';
 import { FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION, fpsTier, rowGateVersion, samplingFpsObserved } from '@/tracking/frameRateGate';
 import { RELIABILITY_GATES, RELIABILITY_RULE_VERSION } from '@/tracking/ocularReliability';
 import { rowSliderVersion, SLIDER_VERSION, SLIDER_VERSION_V1, VAS_LINE_MM } from '@/scales/vas';
+import { TYPOGRAPHY_VERSION, TYPOGRAPHY_VERSION_V1 } from '@/lib/fonts';
+import { expectedLinePx, READING_LINE_TOLERANCE } from '@/lib/renderedText';
 import { SELF_TEST_RULE_V1 } from '@/tracking/selfTest';
 import { EXPOSURE_RULE_BEFORE, benchLockLabel } from '@/tracking/cameraExposure';
 import { CALIBRATION_RULE_BEFORE } from '@/tracking/calibrationSequence';
@@ -502,6 +504,9 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
       + 'interrupted page cannot masquerade as a waited-out one — but the two columns are on different clocks and a '
       + 'difference between them is not evidence of anything on its own. Use condition_hidden_ms to tell them apart.' },
   { file: '02_conditions.csv', column: 'reading_speed_wpm', type: 'integer', unit: 'words/min', role: 'dv', description: 'Derived: passage word count / reading_time_ms. Word counts are computed from the passage text, not declared.' },
+  { file: '02_conditions.csv', column: 'typography_version', type: 'string', unit: '-', role: 'provenance', description: `The typography the condition's screens were drawn with (lib/fonts.ts). '${TYPOGRAPHY_VERSION}' from Round 84: Roboto's own 700 face for the few bold words (the reaction task's colour name, the search target), no synthetic bold, text autosizing off, kerning and ligatures written out at their defaults. '${TYPOGRAPHY_VERSION_V1}' before: those bold words drawn as a synthetic bold of the 500 face. The reading passage, the questions and the search excerpt are the same in both (pixel-identical in headless Chromium).` },
+  { file: '02_conditions.csv', column: 'reading_line_px_rendered', type: 'number', unit: 'CSS px', role: 'qc', description: `The distance from one line of the passage to the next on page 1, as the screen drew it (lib/renderedText.ts), display scale included. With a unitless line height it is font size x ${CONFIG.READING_LINE_HEIGHT} whatever face is drawn, so it checks the SIZE: it should equal reading_line_px_expected. More than ${READING_LINE_TOLERANCE * 100}% away means the browser or a system text-size setting changed the passage's size, and the integrity audit says so (reading_text_size). Blank on rows before Round 84, and where the browser gave no line boxes.` },
+  { file: '02_conditions.csv', column: 'reading_line_px_expected', type: 'number', unit: 'CSS px', role: 'qc', description: `What reading_line_px_rendered should be: ${CONFIG.READING_FONT_SIZE_PX} px x line height ${CONFIG.READING_LINE_HEIGHT} x stimulus_scale. Computed at export. Blank where stimulus_scale is unknown.` },
 
   // ---- 03_fatigue_scores.csv
   { file: '03_fatigue_scores.csv', column: 'stage', type: 'factor', unit: '-', role: 'id', description: 'baseline (once per session) or post_condition (once per condition).' },
@@ -1246,7 +1251,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 02 — conditions (+ reading speed in words/min, derived from passage length & reading time)
   csv('02_conditions.csv',
-    ['participant_id', 'session_id', 'session_index', 'condition_id', 'session_position', 'condition_label', 'polarity', 'background_color', 'text_color', 'color_name', 'ink_name', 'passage_id', 'wcag_contrast_ratio', 'wcag_level', 'michelson_contrast', 'below_wcag_aa', 'adaptation_ms_before', 'adaptation_ms_planned', 'adaptation_ms_min', 'adaptation_ended_by', 'passage_repeat_number', 'attempt_number', 'condition_complete', 'stimulus_scale', 'layout_viewport', 'device_pixel_ratio', 'mm_per_layout_px', 'reading_x_height_mm', 'reading_x_height_arcmin', 'physical_size_source', 'display_mode', 'display_mode_acknowledged', 'condition_hidden_ms', 'condition_hidden_events', 'condition_portrait_ms', 'condition_portrait_events', 'condition_notice_ms', 'condition_notice_events', 'stimulus_scale_changes', 'condition_monitor_open_ms', 'condition_monitor_open_events', 'reading_monitor_open_ms', 'reading_time_ms', 'reading_wall_clock_ms', 'reading_hidden_ms', 'reading_min_page_dwell_ms', 'reading_speed_wpm', 'condition_duration_sec'],
+    ['participant_id', 'session_id', 'session_index', 'condition_id', 'session_position', 'condition_label', 'polarity', 'background_color', 'text_color', 'color_name', 'ink_name', 'passage_id', 'wcag_contrast_ratio', 'wcag_level', 'michelson_contrast', 'below_wcag_aa', 'adaptation_ms_before', 'adaptation_ms_planned', 'adaptation_ms_min', 'adaptation_ended_by', 'passage_repeat_number', 'attempt_number', 'condition_complete', 'stimulus_scale', 'layout_viewport', 'device_pixel_ratio', 'mm_per_layout_px', 'reading_x_height_mm', 'reading_x_height_arcmin', 'physical_size_source', 'display_mode', 'display_mode_acknowledged', 'condition_hidden_ms', 'condition_hidden_events', 'condition_portrait_ms', 'condition_portrait_events', 'condition_notice_ms', 'condition_notice_events', 'stimulus_scale_changes', 'condition_monitor_open_ms', 'condition_monitor_open_events', 'reading_monitor_open_ms', 'reading_time_ms', 'reading_wall_clock_ms', 'reading_hidden_ms', 'reading_min_page_dwell_ms', 'reading_speed_wpm', 'typography_version', 'reading_line_px_rendered', 'reading_line_px_expected', 'condition_duration_sec'],
     bundle.conditions.map((c) => {
       const words = PASSAGES[c.passage_id]?.wordCount ?? null;
       const wpm = words != null && c.reading_time_ms ? Math.round(words / (c.reading_time_ms / 60000)) : '';
@@ -1270,6 +1275,10 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
         condition_monitor_open_ms: c.condition_monitor_open_ms ?? '', condition_monitor_open_events: c.condition_monitor_open_events ?? '',
         reading_monitor_open_ms: c.reading_monitor_open_ms ?? '',
         reading_speed_wpm: wpm,
+        // What the stimulus text was drawn with, and the size it was drawn at (lib/fonts.ts, lib/renderedText.ts).
+        typography_version: c.typography_version || TYPOGRAPHY_VERSION_V1,
+        reading_line_px_rendered: c.reading_line_px_rendered ?? '',
+        reading_line_px_expected: typeof c.stimulus_scale === 'number' && c.stimulus_scale > 0 ? round(expectedLinePx(c.stimulus_scale), 2) : '',
       };
     }));
 

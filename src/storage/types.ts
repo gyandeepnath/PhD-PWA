@@ -581,6 +581,16 @@ export interface ConditionRecord {
   reading_page_dwells_ms?: number[];
   /** Shortest single-page dwell. The skim signal: a page finished at its unlock was not read. */
   reading_min_page_dwell_ms?: number | null;
+  /**
+   * The typography the condition was drawn with (lib/fonts.ts TYPOGRAPHY_VERSION): 'ty-v2' from Round
+   * 84. Absent on rows recorded before it, which the export names 'ty-v1'.
+   */
+  typography_version?: string;
+  /**
+   * Page 1's distance from one line of the passage to the next as the screen drew it, CSS px
+   * (lib/renderedText.ts). 22 x 1.4 x stimulus_scale when the browser drew the declared size.
+   */
+  reading_line_px_rendered?: number | null;
 }
 
 export type FatigueStage = 'baseline' | 'post_condition';

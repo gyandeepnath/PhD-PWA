@@ -61,6 +61,7 @@ import { ResearcherPanel } from '@/components/ResearcherPanel';
 import { NavChip } from '@/components/NavChip';
 import { useDialog } from '@/components/ConfirmDialog';
 import { UI_TEXT } from '@/lib/uiPalette';
+import { TYPOGRAPHY_VERSION } from '@/lib/fonts';
 import { CameraSelfTest } from '@/start/CameraSelfTest';
 import { FPS_GATE } from '@/tracking/frameRateGate';
 import { backTarget, operatorExitFor, EXIT_LABEL } from './navigation';
@@ -1106,6 +1107,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
        */
       stimulus_scale: currentScale(),
       layout_viewport: layoutViewport(),
+      // What the stimulus text was drawn with: font faces and rendering settings (lib/fonts.ts).
+      typography_version: TYPOGRAPHY_VERSION,
       // The CSS pixel's size depends on it, and the ruler calibration was taken at pre-flight's.
       device_pixel_ratio: Number.isFinite(window.devicePixelRatio) && window.devicePixelRatio > 0 ? window.devicePixelRatio : null,
       // Per condition, because a resume can come back in a different launch (a tab, or the installed
@@ -1703,6 +1706,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                     // The per-page dwells make a skim locatable rather than merely suspected.
                     reading_page_dwells_ms: r.pageDwellsMs,
                     reading_min_page_dwell_ms: r.pageDwellsMs.length ? Math.min(...r.pageDwellsMs) : null,
+                    // The size the passage was actually drawn at, page 1 (typography ty-v2).
+                    reading_line_px_rendered: r.linePxRendered,
                     // Panel-open time within the reading exposure itself, where the blink data comes from.
                     reading_monitor_open_ms: readingMonitor.current?.stop().hiddenMs,
                   });

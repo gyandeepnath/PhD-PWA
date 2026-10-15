@@ -716,6 +716,16 @@ These are not optional and they come first.
      so a sitting exported before Round 83 gets it on its next export, and every row of one file is
      under one rule.
 
+**The reading text as drawn (Round 84).** Every physical figure for the passage (x-height in arcmin,
+line length) is computed from the declared 22 px at line height 1.4 and the display scale. From Round
+84 page 1 of every condition also measures the line pitch the screen actually drew
+(`reading_line_px_rendered`, 02_conditions.csv) against that declaration (`reading_line_px_expected`).
+A condition more than 2% off is reported by the integrity audit (`reading_text_size`, a warning) and
+should be named in the write-up; it is not excluded automatically, because the measured size is in the
+data. `typography_version` (02) says which typography the condition was drawn with; `ty-v1` and
+`ty-v2` draw the passage, the questions and the search excerpt identically (lib/fonts.ts), so it does
+not split the analysis.
+
 ---
 
 ## 5b. Which template implements this plan

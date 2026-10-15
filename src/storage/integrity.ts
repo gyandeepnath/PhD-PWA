@@ -21,6 +21,8 @@ import { EAR_TIERS } from '@/tracking/blink';
 import type { SessionBundle } from './gather';
 import { MIN_SCALE } from '@/lib/viewportScale';
 import { rowSliderVersion } from '@/scales/vas';
+import { expectedLinePx, linePitchOff, READING_LINE_TOLERANCE } from '@/lib/renderedText';
+import { CONFIG } from '@/experiment/config';
 import {
   isPlausibleMmPerCssPx, isPlausibleViewingDistanceCm, longSide, sessionMmPerCssPx, MM_PER_CSS_PX_RANGE,
   STUDY_TABLET_PANEL_LONG_MM, VIEWING_DISTANCE_CM,
@@ -503,6 +505,22 @@ export function auditBundle(bundle: SessionBundle, opts: AuditOptions = {}): Int
     add('warning', 'one_rating_format',
       `the fatigue and display ratings of this sitting were made on ${formats.size} formats ` +
       `(${[...formats].sort().join(', ')}): its fatigue_delta compares ratings on different instruments.`);
+  }
+  /*
+   * The passage drawn at the size the protocol states (typography ty-v2, Round 84): page 1's measured
+   * line pitch against 22 px x 1.4 x the condition's display scale. A system text-size setting or the
+   * browser's own enlargement would change every physical figure the export computes from the declared
+   * size, and the x-height in arcmin first. Not blocking: the size is recorded either way.
+   */
+  const offSize = conditions.filter((c) => linePitchOff(c.reading_line_px_rendered, c.stimulus_scale) === true);
+  if (offSize.length) {
+    add('warning', 'reading_text_size',
+      `${offSize.length} condition(s) drew the reading passage at a size other than the declared ` +
+      `${CONFIG.READING_FONT_SIZE_PX} px x ${CONFIG.READING_LINE_HEIGHT} (line pitch off by more than ` +
+      `${READING_LINE_TOLERANCE * 100}%; ${offSize[0].condition_label}: ${offSize[0].reading_line_px_rendered} px a line where ` +
+      `${expectedLinePx(offSize[0].stimulus_scale as number).toFixed(2)} was expected). reading_x_height_arcmin and the other ` +
+      `physical columns assume the declared size. Check the tablet's font-size and display-size settings.`,
+      offSize.slice(0, 5).map((c) => c.condition_label));
   }
   const cvsqStages = new Set((bundle.cvsq ?? []).map((c) => c.stage));
   if (conditions.length > 0 && !(cvsqStages.has('baseline') && cvsqStages.has('session_end'))) {

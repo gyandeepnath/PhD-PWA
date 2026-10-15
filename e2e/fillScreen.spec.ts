@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
-import { startNewExperiment, stageNow, handleStage, assertStimulusFits } from './helpers';
+import { startNewExperiment, stageNow, handleStage, assertStimulusFits, dbAll } from './helpers';
+import { CONFIG } from '../src/experiment/config';
 import { computeScale, DESIGN_WIDTH, DESIGN_HEIGHT, SCALE_STEP, STIMULUS_COLUMN_PX } from '../src/lib/viewportScale';
 
 /**
@@ -121,6 +122,24 @@ for (const vp of VIEWPORTS) {
       await handleStage(page, stage);
     }
     expect([...measured].sort()).toEqual(['mcq-box', 'reading-text', 'search-text']);
+
+    // ---- the sizes as drawn (Round 84): the passage at its declared size, the rating lines 100 mm
+    // The driver's ruler reading is the study tablet's panel over this screen's width, so on every
+    // viewport here a 100 mm line is 100 mm by that measurement — the same fraction of the screen.
+    const [cond] = await dbAll<{ typography_version?: string; reading_line_px_rendered?: number; stimulus_scale?: number }>(page, 'conditions');
+    expect(cond.typography_version).toBe('ty-v2');
+    const declared = CONFIG.READING_FONT_SIZE_PX * CONFIG.READING_LINE_HEIGHT * (cond.stimulus_scale ?? NaN);
+    expect(Math.abs((cond.reading_line_px_rendered ?? NaN) / declared - 1), `line pitch ${cond.reading_line_px_rendered} px against ${declared.toFixed(2)}`)
+      .toBeLessThanOrEqual(0.02);
+    const ratings = [
+      ...await dbAll<{ vas_line_mm?: number; vas_line_source?: string; slider_version?: string }>(page, 'fatigue_scores'),
+      ...await dbAll<{ vas_line_mm?: number; vas_line_source?: string; slider_version?: string }>(page, 'display_perception'),
+    ];
+    expect(ratings.length, 'the baseline, the display rating and the post-display rating').toBe(3);
+    for (const r of ratings) {
+      expect([r.slider_version, r.vas_line_source]).toEqual(['vas-v2', 'measured']);
+      expect(Math.abs((r.vas_line_mm ?? NaN) - 100), `a rating line drawn at ${r.vas_line_mm} mm`).toBeLessThanOrEqual(0.5);
+    }
 
     // ---- the reaction-time dots: inside the screen, clear of its edges
     expect(dots.length, 'no reaction-time dot was seen').toBeGreaterThanOrEqual(4);

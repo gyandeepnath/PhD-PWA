@@ -94,6 +94,11 @@ rises just after each blink, never during it.
   Close the tab and open the app from its icon instead. **The same check is made again when you
   resume a sitting** (see *Exit — resume later* below) and at a break if the way the app is
   displayed has changed, and each display records which launch it ran in.
+- **Font size and display size at the tablet's default**, in the system settings and in Chrome's
+  accessibility settings (text scaling 100%). The reading text is drawn at one fixed size for every
+  condition. Since Round 84 the app measures the size it actually drew on page 1 of every display
+  (`reading_line_px_rendered`); if a setting enlarged it, the data-integrity check says so
+  (`reading_text_size`).
 - Battery above 80 per cent, or keep it on charge.
 - **Never run a session in a private or incognito window.** The data is thrown away when the window
   closes and nothing warns you at the time. Always launch from the home-screen icon. Pre-flight

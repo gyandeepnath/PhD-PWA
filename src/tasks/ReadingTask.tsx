@@ -6,6 +6,7 @@
  * condition's colours.
  */
 import { useEffect, useRef, useState } from 'react';
+import { renderedLinePitch } from '@/lib/renderedText';
 import { STIMULUS_FONT_STACK } from '@/lib/fonts';
 import { CONFIG } from '@/experiment/config';
 import { now } from '@/lib/timing';
@@ -29,6 +30,11 @@ export interface ReadingResult {
   hiddenMs: number;
   /** Dwell on each page, in order. Lets a skim be located rather than only suspected. */
   pageDwellsMs: number[];
+  /**
+   * The distance between lines of page 1 as drawn, in CSS px (lib/renderedText.ts), or null where the
+   * browser gave no line boxes. Expected: 22 x 1.4 x the display scale.
+   */
+  linePxRendered: number | null;
 }
 
 interface Props {
@@ -97,6 +103,9 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin, on
    * the only terminal handler relying on rendered state alone.
    */
   const advancing = useRef(false);
+  /** Page 1's measured line pitch, taken once, after its first layout. */
+  const linePx = useRef<number | null>(null);
+  const block = useRef<HTMLDivElement | null>(null);
 
   /**
    * Hidden time for this exposure. Shared implementation, because this file's own copy seeded its
@@ -154,7 +163,9 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin, on
       }
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    // Page 1, once laid out: how far apart its lines are, as drawn (the size check of typography ty-v2).
+    const measure = page === 0 ? requestAnimationFrame(() => { linePx.current = renderedLinePitch(block.current); }) : 0;
+    return () => { cancelAnimationFrame(raf); cancelAnimationFrame(measure); };
   }, [page, started]);
 
   if (!started) {
@@ -194,6 +205,7 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin, on
         wallClockMs: Math.round(wall),
         hiddenMs: away,
         pageDwellsMs: [...pageDwells.current],
+        linePxRendered: linePx.current,
       });
     } else {
       // `page` is 0-based; the next page's number as the counter shows it is page + 2.
@@ -283,7 +295,7 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin, on
           down whatever box is left, so a footer that grew when Next unlocked moved every line of
           the passage. See STIMULUS_FOOTER_ROW_PX.
         */}
-        <div data-testid="reading-block" style={{ margin: 'auto 0' }}>
+        <div data-testid="reading-block" ref={block} style={{ margin: 'auto 0' }}>
           {passage.pages[page].split(/\n{2,}/).map((para, i, all) => (
             <p
               key={i}

@@ -369,6 +369,22 @@ export async function driveUntil(page: Page, target: string, maxSteps = 500): Pr
   throw new Error(`did not reach ${target} within ${maxSteps} steps`);
 }
 
+/** Every row of one IndexedDB store, as the app wrote it. */
+export async function dbAll<T = Record<string, unknown>>(page: Page, store: string): Promise<T[]> {
+  return page.evaluate(async (name) => {
+    const db = await new Promise<IDBDatabase>((res, rej) => {
+      const r = indexedDB.open('VisualErgonomicsDB');
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    return new Promise<T[]>((res, rej) => {
+      const req = db.transaction(name).objectStore(name).getAll();
+      req.onsuccess = () => res(req.result as T[]);
+      req.onerror = () => rej(req.error);
+    });
+  }, store);
+}
+
 /** Read IndexedDB store counts from the page. */
 export async function dbCounts(page: Page, stores: string[]): Promise<Record<string, number>> {
   return page.evaluate(async (storeNames) => {

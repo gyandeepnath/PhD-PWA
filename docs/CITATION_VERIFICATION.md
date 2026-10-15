@@ -1305,6 +1305,42 @@ phrases; and its 9.6 cm touch line differed from paper by a small proportional b
 down to the fingertip. **Not cited for:** a tablet (not tested), visual-fatigue symptoms (pain), or the
 claim that 100 mm is the best length on this device — the study's 100 mm is the convention, held fixed.
 
+### 68. Chung (2002) — letter spacing and reading speed (cited in code, Round 84)
+**Status: CONFIRMED.** PMID 11923275 · no DOI in PubMed
+
+> Chung, S. T. L. (2002). The effect of letter spacing on reading speed in central and peripheral
+> vision. *Investigative Ophthalmology & Visual Science, 43*(4), 1270–1276.
+
+Metadata matches PubMed (verified 15 Oct 2026; PubMed prints the pages as 1270-6). **Abstract only.**
+Verbatim: *"Six normal observers read aloud single, short sentences presented on a computer monitor, one
+word at a time, by rapid serial visual presentation (RSVP)"*; *"Letters were rendered in Courier, a
+fixed-width font"*; *"reading speed increased with letter spacing, up to a critical letter spacing, and
+then either remained constant at the same reading speed or decreased slightly for larger letter
+spacings. The value of the critical letter spacing was very close to the standard letter spacing and did
+not depend on eccentricity or print size."*
+
+Cited (Round 84: `src/lib/fonts.ts`) for: widening letter spacing beyond a font's standard spacing did
+not raise reading speed, centrally or at 5 and 10 degrees — one reason the passage keeps Roboto's own
+letter spacing. **Not cited for:** Roboto or any proportional font (the font was Courier), page reading
+(RSVP, one word at a time), justified text, or contrast and polarity. Six observers.
+
+### 69. Slattery & Rayner (2013) — intraword and interword spacing (cited in code, Round 84)
+**Status: CONFIRMED.** PMID 23709061 · DOI [10.3758/s13414-013-0463-8](https://doi.org/10.3758/s13414-013-0463-8)
+
+> Slattery, T. J., & Rayner, K. (2013). Effects of intraword and interword spacing on eye movements
+> during reading: Exploring the optimal use of space in a line of text. *Attention, Perception, &
+> Psychophysics, 75*(6), 1275–1292.
+
+Metadata matches PubMed (verified 15 Oct 2026; PubMed prints the pages as 1275-92). **Abstract only.**
+Verbatim: *"Two eye movement experiments investigated intraword spacing (the space between letters
+within words) and interword spacing (the space between words)"*; *"In English, interword spacing has a
+large influence on word segmentation and is important for saccade target selection. The results
+indicate an interplay between intra- and interword spacing that influences a font's readability."*
+
+Cited (Round 84: `src/lib/fonts.ts`) for: letter and word spacing interact in how a line is read, so
+tuning one alone is not a neutral polish — the reason neither is changed here. **Not cited for:** an
+optimal value of either (the abstract gives none), justified text, screens or polarity.
+
 ## NOT INDEXED IN PUBMED — verified against a secondary authority, or unverified
 
 PubMed indexes biomedical and life-sciences literature only. The references below fall outside

@@ -84,6 +84,15 @@ html {
   width: 100%;
   height: 100%;
   overscroll-behavior: none;
+  /*
+   * TYPOGRAPHY ty-v2 (Round 84; lib/fonts.ts TYPOGRAPHY_VERSION). Chrome on Android may enlarge text it
+   * judges too small to read ("text autosizing"); the reading passage is a controlled stimulus, sized
+   * once for every condition, and must be drawn at exactly the size the protocol states. 100% switches
+   * the adjustment off. Whether it also overrides a system-wide accessibility text size is NOT claimed:
+   * that is what reading_line_px_rendered measures on page 1 of every condition.
+   */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /*
@@ -108,6 +117,17 @@ body {
   height: 100%;
   background: var(--vl-page-bg);
   font-family: 'Roboto', 'Helvetica Neue', Helvetica, Arial, ui-sans-serif, system-ui, sans-serif;
+  /*
+   * ty-v2, continued. No synthetic bold: a weight the vendored faces lack is drawn as the nearest real
+   * one instead of a lighter face smeared wider (public/fonts has Roboto 300-700 from Round 84, so on a
+   * condition screen nothing changes but the bold words, which are now the font's own bold). Kerning
+   * and common ligatures are the browser's defaults today, written out so a browser update cannot
+   * change the letter spacing of the passage silently: measured in headless Chromium, the reading page
+   * is pixel-identical with and without these lines. Nothing here differs between conditions.
+   */
+  font-synthesis-weight: none;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures;
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   -moz-user-select: none;
