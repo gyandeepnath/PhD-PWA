@@ -20,6 +20,7 @@ import { N_CONDITIONS } from '@/experiment/conditions';
 import { UI_TEXT } from '@/lib/uiPalette';
 import { Caveat, Grid, HowToRead, More, Notice, SectionTitle, Stat, cell, countBySeverity, n } from './parts';
 import { countReliability, EyeDataPanel, EyeTables } from './eyeData';
+import { sittingChecks } from './sittingChecks';
 import { ScrollCue } from '@/components/ScrollCue';
 import { useDialog } from '@/components/ConfirmDialog';
 import { BuildIdentity } from '@/components/BuildInfo';
@@ -127,6 +128,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   const summaries = useMemo(() => allSummaries.filter((s) => s.condition_complete), [allSummaries]);
   const unfinished = useMemo(() => allSummaries.filter((s) => !s.condition_complete), [allSummaries]);
   const reliability = countReliability(summaries);
+  const sitting = useMemo(() => (bundle ? sittingChecks(bundle) : []), [bundle]);
   const plannedConditions = bundle?.session.conditions_per_session ?? allSummaries.length;
   const baseline = bundle ? baselineFatigueMean(bundle) : null;
   const mediaCount = (bundle?.media ?? []).length;
@@ -565,7 +567,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
 
       {bundle && tab === 'eye' && (
         <Grid>
-          <EyeDataPanel summaries={summaries} />
+          <EyeDataPanel summaries={summaries} sitting={sitting} />
           <BarPanel title={`${MEASURE.blinkRate.name} per condition`} unit="/min" data={eyeBar(summaries, 'blink_rate')} color="#4f8ef7" dimNote={EYE_DIM_NOTE} />
           <BarPanel title={`${MEASURE.incompleteRatio.name} (CVS marker)`} data={eyeBar(summaries, 'incomplete_blink_ratio')} color="#e07b39" dimNote={EYE_DIM_NOTE} />
           <BarPanel title={`${MEASURE.perclos.name} P80 (drowsiness)`} data={eyeBar(summaries, 'perclos_p80')} color="#e64c4c" dimNote={EYE_DIM_NOTE} />
@@ -685,6 +687,7 @@ const HOW_TO_READ: Record<Tab, string[]> = {
     'Good: every check passed. Usable: in the analysis; one pre-planned re-check leaves it out. Not usable: not in the eye-data analysis.',
     'Each column is one check: ✓ passed, ! flagged, ✕ failed, – not measured. Tap Details for the numbers and the rule.',
     'A note (few blinks, the light, a covered camera) never changes the verdict; nor does Engagement, which is about the participant.',
+    '“Before the readings” is the calibration and the camera check, each as its own screen judged it.',
   ],
   export: [
     'Download data bundle: this sitting. Download analysis dataset: every sitting on this tablet, pooled.',

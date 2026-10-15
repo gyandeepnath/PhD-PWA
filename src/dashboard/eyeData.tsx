@@ -25,6 +25,7 @@ import {
 } from '@/tracking/ocularReliability';
 import { UI_GROUNDS, UI_TEXT } from '@/lib/uiPalette';
 import { CHECK_STATUS, More, Notice, STATUS, VERDICT_STATUS, cell, n, type StatusKey } from './parts';
+import type { SittingCheck } from './sittingChecks';
 
 export function countReliability(summaries: ConditionSummary[]): Record<Reliability, number> {
   const c: Record<Reliability, number> = { good: 0, usable: 0, not_usable: 0 };
@@ -32,7 +33,7 @@ export function countReliability(summaries: ConditionSummary[]): Record<Reliabil
   return c;
 }
 
-export function EyeDataPanel({ summaries }: { summaries: ConditionSummary[] }) {
+export function EyeDataPanel({ summaries, sitting }: { summaries: ConditionSummary[]; sitting?: SittingCheck[] }) {
   const counts = countReliability(summaries);
   const head = ['Cond', 'Verdict', 'Camera', MEASURE.blinks.name, MEASURE.samplingRate.name, MEASURE.faceInView.name, MEASURE.headTurnedAway.name, 'Reading seen', 'Engagement', ''];
   return (
@@ -44,6 +45,7 @@ export function EyeDataPanel({ summaries }: { summaries: ConditionSummary[] }) {
         <span style={{ color: UI_TEXT.red, fontWeight: 600 }}>{STATUS.bad.icon} {counts.not_usable} not usable</span>
         <span style={{ color: UI_TEXT.muted }}> · rule {RELIABILITY_RULE_VERSION}</span>
       </p>
+      {sitting && sitting.length > 0 && <SittingChecksLine checks={sitting} />}
       <div style={{ overflowX: 'auto', marginTop: 8 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Roboto, system-ui, sans-serif', fontSize: 15 }}>
           <thead>
@@ -59,6 +61,40 @@ export function EyeDataPanel({ summaries }: { summaries: ConditionSummary[] }) {
         more={'21 adults reading on a computer for 15 minutes; individuals ranged from 0.9% to 56.5% incomplete — Portello, Rosenfield & Chu 2013. '
           + 'People differ a lot, so one participant with few blinks is not by itself a sign of a fault; the verdict above is what says the camera was seeing the eyes. '
           + 'The camera self-test after calibration (selftest_* in the export) is the direct check: the participant blinked on cue and the result was shown on the spot.'} />
+    </div>
+  );
+}
+
+/**
+ * The checks run once before the readings (sittingChecks.ts), each under its own rule and in its own
+ * screen's verdict: one line of chips, the numbers behind More.
+ */
+function SittingChecksLine({ checks }: { checks: SittingCheck[] }) {
+  return (
+    <div data-testid="sitting-checks" style={{ marginTop: 10 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 10px' }}>
+        <span className="font-sans text-[15px]" style={{ color: UI_TEXT.muted }}>Before the readings:</span>
+        {checks.map((c) => {
+          const st = STATUS[c.status];
+          return (
+            <span key={c.key} data-testid="sitting-check" data-key={c.key} data-status={c.status} className="font-sans text-[15px]"
+              style={{ color: st.color, border: `1px solid ${st.color}`, borderRadius: 999, padding: '2px 10px', whiteSpace: 'nowrap',
+                background: c.status === 'warn' ? UI_GROUNDS.notice : c.status === 'bad' ? UI_GROUNDS.alert : '#fff' }}>
+              <span aria-hidden style={{ fontWeight: 700 }}>{st.icon}</span> {c.label}: {c.value}
+              {c.rule && <span style={{ color: UI_TEXT.muted }}> · {c.rule}</span>}
+            </span>
+          );
+        })}
+      </div>
+      <More label="Before the readings, in full" testId="sitting-checks-more">
+        <ul style={{ paddingLeft: 18, listStyle: 'disc' }}>
+          {checks.map((c) => (
+            <li key={c.key} className="font-sans text-[15px]" style={{ color: UI_TEXT.body }}>
+              <strong>{c.label}</strong>{c.rule ? ` (rule ${c.rule})` : ''}: {c.detail}
+            </li>
+          ))}
+        </ul>
+      </More>
     </div>
   );
 }

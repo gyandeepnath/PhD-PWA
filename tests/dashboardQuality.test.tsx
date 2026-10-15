@@ -13,6 +13,7 @@ import { resolve } from 'node:path';
 import { buildConditionSummaries, type ConditionSummary } from '@/dashboard/aggregate';
 import { EyeDataPanel, EyeTables } from '@/dashboard/eyeData';
 import { Caveat, countBySeverity } from '@/dashboard/parts';
+import { sittingChecks } from '@/dashboard/sittingChecks';
 import { buildFixtureBundle } from '@/sim/bundleFixture';
 import type { EyeMetricsRecord } from '@/storage/types';
 
@@ -118,6 +119,68 @@ describe('each condition is one line: the verdict, a status per check, and the r
       expect(details.textContent).toContain(c.needed);
     }
     expect(details.textContent).toContain('Kept; left out of the tier-A-only re-check.');
+  });
+});
+
+describe('the checks before the readings: each under its own rule, in its own verdict', () => {
+  const byKey = (b: ReturnType<typeof buildFixtureBundle>) => Object.fromEntries(sittingChecks(b).map((c) => [c.key, c]));
+
+  it('reads the baseline, the camera check and the gaze check as 01_session_info.csv does', () => {
+    const c = byKey(buildFixtureBundle());
+    expect(c.baseline).toMatchObject({ status: 'good', value: 'measured', rule: 'cal-r2' });
+    expect(c.baseline.detail).toBe('Baseline 0.312 from 141 usable frames in 6.0 s.');
+    expect(c.camera_check).toMatchObject({ status: 'good', value: 'working, 5 of 5 flashes', rule: 'st-r2' });
+    expect(c.camera_check.detail).toBe('5 of 5 flashes · eye sampled 29.4 a second · face in view 100% · 1 extra blink.');
+    expect(c.gaze_check).toMatchObject({ status: 'good', value: 'passed', rule: 'gaze-r2' });
+  });
+
+  it('says why a baseline is missing, and that no blink is then counted', () => {
+    const b = buildFixtureBundle();
+    Object.assign(b.calibration[0], { ear_baseline: null, ear_baseline_reason: 'eyes_not_measured', ear_baseline_attempts: 3 });
+    const c = byKey(b).baseline;
+    expect(c).toMatchObject({ status: 'bad', value: 'not measured: eyes not measured' });
+    expect(c.detail).toMatch(/no blink is counted in the readings it governed/);
+    expect(c.detail).toMatch(/3 tries/);
+  });
+
+  it('gives the camera check the verdict its screen gave: reduced is flagged, failed is a fail, st-r1 by its pass', () => {
+    const b = buildFixtureBundle();
+    b.session.camera_selftest = { ...b.session.camera_selftest!, verdict: 'reduced', tier: 'B', samplingFps: 17.3 };
+    expect(byKey(b).camera_check).toMatchObject({ status: 'warn', value: 'reduced, 5 of 5 flashes' });
+    b.session.camera_selftest = { ...b.session.camera_selftest!, verdict: 'failed', pass: false, detected: 2 };
+    expect(byKey(b).camera_check).toMatchObject({ status: 'bad', value: 'did not pass, 2 of 5 flashes' });
+    expect(byKey(b).camera_check.detail).toMatch(/continued anyway/);
+    const old = { ...b.session.camera_selftest!, pass: true };
+    delete (old as { verdict?: unknown }).verdict; delete (old as { rule?: unknown }).rule;
+    b.session.camera_selftest = old;
+    expect(byKey(b).camera_check).toMatchObject({ status: 'good', rule: 'st-r1' });
+    b.session.camera_selftest = null;
+    expect(byKey(b).camera_check).toMatchObject({ status: 'none', value: 'not run', rule: null });
+  });
+
+  it('calls a gaze check that did not pass "not measured", never a fault: nothing but the on-screen ratio rests on it', () => {
+    const b = buildFixtureBundle();
+    b.calibration[0].is_real_calibration = false;
+    b.calibration[0].gaze_check = { ...b.calibration[0].gaze_check!, reason: 'not_separable' };
+    expect(byKey(b).gaze_check).toMatchObject({ status: 'none', value: 'not passed: the dots did not separate' });
+  });
+
+  it('takes the LAST calibration, as 01 does, and says how many there were', () => {
+    const b = buildFixtureBundle();
+    b.calibration.push({ ...b.calibration[0], calibration_id: 'cal-2', calibrated_at: (b.calibration[0].calibrated_at ?? 0) + 1000, ear_baseline: 0.3 });
+    const c = byKey(b).baseline;
+    expect(c.detail).toMatch(/^Baseline 0\.300 /);
+    expect(c.detail).toMatch(/The latest of 2 calibrations/);
+  });
+
+  it('shows them as one line of chips above the conditions, with the numbers behind More', () => {
+    const el = render(createElement(EyeDataPanel, { summaries: variedSummaries(), sitting: sittingChecks(buildFixtureBundle()) }));
+    const chips = Array.from(el.querySelectorAll<HTMLElement>('[data-testid="sitting-check"]'));
+    expect(chips.map((c) => c.textContent)).toEqual([
+      '✓ Open-eye baseline: measured · cal-r2', '✓ Camera check: working, 5 of 5 flashes · st-r2', '✓ Gaze check: passed · gaze-r2',
+    ]);
+    const more = el.querySelector<HTMLElement>('[data-testid="sitting-checks-more"]')!;
+    expect(more.querySelector('[hidden]')!.textContent).toContain('Baseline 0.312 from 141 usable frames in 6.0 s.');
   });
 });
 
