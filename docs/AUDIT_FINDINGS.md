@@ -6944,8 +6944,10 @@ its own pass.
   verdict (good; usable for a reduced rate, face in view 84%, head turned away 27%, the camera seeing
   79% of the reading; not usable for a stopped camera, no baseline, 12.4 a second; and notes), with
   Details, More and the tables opened, and once with a reduced camera check and a failed gaze check.
-  Fixed from looking: a doubled ⚠ in the search caveat; a test that counted the Details table's rows
-  as the condition's.
+  Fixed from looking: a doubled ⚠ in the search caveat, and the export tab's short line, which
+  counted "20 data files, a backup and a codebook" (the codebook is one of the 20 tables; the full
+  sentence behind More still gives the count). Fixed from running the tests: a new test that counted
+  the Details table's rows as the condition's.
 
 ### 7. Versions in the data
 
