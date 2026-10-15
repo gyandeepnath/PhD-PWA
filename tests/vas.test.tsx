@@ -10,6 +10,8 @@
  */
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { createElement, act } from 'react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createRoot, type Root } from 'react-dom/client';
 import { FatigueScale, type FatigueResult } from '@/scales/FatigueScale';
 import { DisplayPerceptionRating, type PerceptionResult } from '@/scales/DisplayPerceptionRating';
@@ -177,5 +179,25 @@ describe('the display-perception rating as two visual analogue lines', () => {
     expect(r.lineSource).toBe('assumed_study_tablet_panel');
     // 500 CSS px on screen at the panel's 0.2055 mm per px.
     expect(r.lineMm).toBeCloseTo(500 * (STUDY_TABLET_PANEL_LONG_MM / 1152), 1);
+  });
+});
+
+describe('the analysis templates model one rating format at a time', () => {
+  const R = readFileSync(resolve(__dirname, '..', 'src/analysis/analysis_template.R'), 'utf8');
+  const PY = readFileSync(resolve(__dirname, '..', 'src/analysis/analysis_template.py'), 'utf8');
+
+  it('name the same two formats as the app', () => {
+    expect(/^SLIDER_VERSION {4}<- "([^"]+)"/m.exec(R)?.[1]).toBe(SLIDER_VERSION);
+    expect(/^SLIDER_VERSION_V1 <- "([^"]+)"/m.exec(R)?.[1]).toBe(SLIDER_VERSION_V1);
+    expect(/^SLIDER_VERSION = "([^"]+)"/m.exec(PY)?.[1]).toBe(SLIDER_VERSION);
+    expect(/^SLIDER_VERSION_V1 = "([^"]+)"/m.exec(PY)?.[1]).toBe(SLIDER_VERSION_V1);
+  });
+
+  it('select the format before fitting fatigue (both) and comfort and clarity (R), and round the items half up for the cumulative-link model', () => {
+    expect(R).toMatch(/fat <- rating_format\(fat, "fatigue"\)/);
+    expect(R).toMatch(/perception <- rating_format\(keep_rows\(perception\), "comfort and clarity"\)/);
+    expect(PY).toMatch(/fat = rating_format\(fat, "fatigue"\)/);
+    // As the app's straight-lining check rounds them (Math.round, half up), not R's round() (half to even).
+    expect(R).toMatch(/mutate\(rating = floor\(rating \+ 0\.5\)\)/);
   });
 });

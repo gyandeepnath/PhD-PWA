@@ -62,7 +62,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                           three-dot gaze check across a reading line (rule gaze-r2) / positioning check;
                           then the camera self-test (st-r3)
   → CVSQ_BASELINE       CVS-Q (16 items), validated habitual frame — see the CVS-Q note below
-  → BASELINE_FATIGUE    5-item VAS baseline
+  → BASELINE_FATIGUE    5-item VAS baseline (100 mm lines from Round 84)
   → INSTRUCTIONS        participant overview of the per-condition tasks
   → [×10 conditions per illumination block]
         READING_TASK        intro → passage in THREE pages of near-equal length, justified, at the

@@ -12,9 +12,9 @@
  * marker already on the line that has to be dragged. In an online study of 222 people asked to place
  * given percentages on a line, the VAS (click to place, adjust as often as wanted) had lower measurement
  * error than sliders started at the left, middle or right, and less variability in that error within and
- * between people (Angelike & Reips 2026, Behav Res Methods 58(9); full text read, ledger 65). Its authors
- * add that a slider initialised at a valid position cannot tell a non-response from a response there, and
- * that a starting position can anchor answers. Web VAS approximate an interval scale, where a categorical
+ * between people (Angelike & Reips 2026, Behav Res Methods 58(9); full text read, ledger 65). The paper
+ * also reports, from earlier work, that a slider initialised at a valid position cannot tell a
+ * non-response from a response there, and that a starting position can anchor answers. Web VAS approximate an interval scale, where a categorical
  * scale reaches only ordinal level (Reips & Funke 2008, Behav Res Methods 40(3):699; abstract, ledger 66).
  * So, here:
  *   - NO MARKER until the first touch, and no internal default: an unanswered line has no value at all,

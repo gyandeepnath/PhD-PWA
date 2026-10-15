@@ -122,7 +122,9 @@ def fps_gate(d: pd.DataFrame) -> pd.DataFrame:
         if differs:
             print(f"[fps-g2] {differs} row(s) carry a sampling_fps_observed that differs from the one recomputed "
                   "from their own columns; the recomputed one is used.")
-    version = d["fps_gate_version"].astype(str) if "fps_gate_version" in d.columns else pd.Series("", index=d.index)
+    # fillna before astype: pandas 3 keeps a missing cell missing through astype(str), so a blank version
+    # stayed NaN instead of becoming g1-25/30 (found in Round 84, on pandas 3.0.5).
+    version = d["fps_gate_version"].fillna("").astype(str) if "fps_gate_version" in d.columns else pd.Series("", index=d.index)
     version = version.where(~version.isin(["", "nan", "None"]), "g1-25/30")
     d["sampling_fps_observed"] = fps
     d["fps_tier"] = np.select([fps.ge(FPS_GATE_ADEQUATE), fps.ge(FPS_GATE_REDUCED), fps.notna()], ["A", "B", "C"], default=None)
@@ -132,6 +134,29 @@ def fps_gate(d: pd.DataFrame) -> pd.DataFrame:
     within = (fps - d["fps_median"]).abs().le(FPS_GATE_BAND + 1e-9)
     d["fps_consistent"] = within.astype(object).where(fps.notna() & d["fps_median"].notna(), None)
     return d
+
+
+# The rating format (Round 84; ANALYSIS_PLAN.md §4c). The fatigue items were number sliders until Round
+# 84 ("sl-v1": whole numbers 0-10, the number shown while answering) and are 100 mm visual analogue
+# lines from it ("vas-v2": no marker until tapped, no numbers; tenths of 0-10). Same range, different
+# instruments: one format is modelled, the current one where present, and rows on any other are counted
+# and left out, in print. An export from before the column existed is all "sl-v1". As the R template.
+SLIDER_VERSION = "vas-v2"
+SLIDER_VERSION_V1 = "sl-v1"
+
+
+def rating_format(d: pd.DataFrame, what: str) -> pd.DataFrame:
+    """Keep one rating format: the current one where present, else the one there is; say what was left out."""
+    # fillna before astype: pandas 3 keeps a missing cell missing through astype(str), not "nan".
+    v = d["slider_version"].fillna("").astype(str) if "slider_version" in d.columns else pd.Series("", index=d.index)
+    v = v.where(~v.isin(["", "nan", "None"]), SLIDER_VERSION_V1)
+    d = d.assign(slider_version=v)
+    present = sorted(v.unique())
+    use = SLIDER_VERSION if (SLIDER_VERSION in present or not present) else present[0]
+    other = [x for x in present if x != use]
+    note = f"; {int((v != use).sum())} row(s) on {', '.join(other)} left out, not pooled" if other else ""
+    print(f"[format] {what}: modelled on {use}, {int((v == use).sum())} row(s){note}")
+    return d[v == use]
 
 
 # Codes that mean "this participant's condition set is incomplete" and nothing else. The SENSITIVITY
@@ -553,6 +578,7 @@ def main() -> None:
     fat = fatigue[fatigue["stage"] == "post_condition"].merge(
         cond, on=["participant_id", "condition_id"]
     )
+    fat = rating_format(fat, "fatigue")
     if "condition_id" in wide.columns and "fatigue_delta" in wide.columns:
         fat = fat.merge(wide[["condition_id", "fatigue_delta"]], on="condition_id", how="left")
     fat_dv = "fatigue_delta" if ("fatigue_delta" in fat.columns and fat["fatigue_delta"].notna().any()) else "fatigue_mean"

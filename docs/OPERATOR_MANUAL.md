@@ -534,11 +534,24 @@ Each condition runs the same six measured stages, in this order:
 |---|---|---|
 | `READING_TASK` | Three pages, about 585 words, in the active condition | **Silence.** This is the measurement window. |
 | `COMPREHENSION` | Three questions: gist, inference, detail | Do not hint. Do not confirm answers. |
-| `DISPLAY_PERCEPTION` | Comfort and clarity ratings | Do not comment on the display. |
-| `POST_FATIGUE` | Five visual-fatigue items, 0 to 10 | Let them answer at their own pace. |
+| `DISPLAY_PERCEPTION` | Comfort and clarity: two rating lines to tap | Do not comment on the display. |
+| `POST_FATIGUE` | Five visual-fatigue items, each a rating line from "None" to "Severe" | Let them answer at their own pace. Do not mention numbers. |
 | `VISUAL_SEARCH` | Tap every occurrence of a target word, fixed time limit | Do not point. |
 | `REACTION_TIME` | Go/no-go, 32 trials; the dot appears at one of eight places around the central cross. The card asks the participant to keep their eyes on the cross between dots | Before **Start**, check the participant's hand rests just below the bottom edge of the screen, as the card asks: a hand on the screen covers the lower dots. Then nothing: do not repeat or add to the card's words, which are the same in every condition. |
 | `ADAPTATION` | Neutral grey field. A **Continue** button appears after 30 s; the field moves on by itself at 60 s (120 s when polarity switches) | Let the participant decide when to continue after 30 s. Do not prompt them to hurry: how long they rest is recorded (`adaptation_ms_before`, `adaptation_ended_by`) and analysed. |
+
+**The rating lines (from Round 84).** The fatigue and comfort/clarity ratings are 10 cm lines, not
+sliders:
+
+- Each line is drawn **100 mm long on the glass**, using the ruler check from pre-flight. Skip the ruler
+  check and the app uses the tablet's published screen size instead, and records that it did.
+- There is **no marker until the participant taps**. They tap where it feels right, and can tap again or
+  slide to change it.
+- **No numbers are shown.** If asked what a position means, say only: *"Anywhere between the two ends
+  — wherever it feels right."*
+- Continue stays grey until every line is marked.
+- In the data each row says which kind of rating made it (`slider_version`: `vas-v2` for the line,
+  `sl-v1` for the old sliders). Do not mix the two in one study: switch before data collection.
 
 `ADAPTATION` runs a grey field **before the first condition** and then after every condition except
 the last, so it appears ten times across the ten conditions. The one before the first exists because

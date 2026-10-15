@@ -228,13 +228,13 @@ only after **60 min**.
 
 | Outcome | Column(s) | Model | Why |
 |---|---|---|---|
-| Subjective fatigue | `fatigue_delta` | LMM, Gaussian | Change from the participant's own baseline removes between-person scale use. Use `fatigue_mean` only if baselines are missing. |
+| Subjective fatigue | `fatigue_delta` | LMM, Gaussian | Change from the participant's own baseline removes between-person scale use. Use `fatigue_mean` only if baselines are missing. One rating format at a time (`slider_version`, §4c, Round 84). |
 | Comprehension | `comprehension_correct` / `comprehension_items` | Binomial GLMM | Same argument as the primary: 2/3 is a coarse measurement and should be weighted as such. |
 | Reading speed | `reading_speed_wpm` | LMM | Check against `observed_duration_ms` first — a truncated exposure produces a normal-looking speed. |
 | Visual search | `targets_found` over `search_time_ms`; `search_d_prime`; completion (`search_termination`) | **Poisson rate GLMM, search d′ LMM, completion GLMM; censoring tested** (Round 71, §4c) | Round 71: the uncensored time LMM is printed as a description only. Before: The column is `search_termination` in `analysis_long.csv` (the file this plan is written against) and `termination_mode` in `05_visual_search.csv`; it says whether the block ended by completion or by the 60 s cap. An earlier revision of this line claimed `search_termination` did not exist — that was wrong, and came from checking only the numbered bundle's codebook and not `analysisCodebook.ts`. Capped rows are a lower bound; treating them as measurements biases the mean downward. Either model them as censored or report the completion rate alongside. |
 | Sensitivity | the trials in `08_reaction_trials.csv` (`d_prime` per block as a cross-check) | **Probit GLMM on the trials** (Round 71), with the condition-run's own criterion and d′ (Round 73) | With 20 go and 12 no-go trials, one block's d′ is imprecise. This row used to say "consider weighting" by `d_prime_se`; the template did, and that was biased, because the SE rises with d′ itself (correlation 0.95 on the Round 62 audit's N = 40 cohort), so inverse-variance weights down-weight high-sensitivity blocks. See §4c. |
 | Response bias | the trials (`criterion` per block as a cross-check) | **The same probit GLMM** (Round 71) | A polarity effect on `criterion` **without** one on `d_prime` is a bias shift, not a sensitivity change. Worth reporting as a distinct finding rather than folding into "RT performance". |
-| Comfort, clarity | `display_comfort_score`, `text_clarity_score` (06) | LMM (Round 71) | 0-100 sliders. Untouched sliders (`comfort_touched` / `clarity_touched` FALSE) are excluded. Not a cumulative-link model: see §4c. |
+| Comfort, clarity | `display_comfort_score`, `text_clarity_score` (06) | LMM (Round 71) | 0-100 ratings: sliders before Round 84, 100 mm visual analogue lines from it, one format at a time (§4c). Untouched sliders (`comfort_touched` / `clarity_touched` FALSE, old format only) are excluded. Not a cumulative-link model: see §4c. |
 | RT variability | `rt_sd_ms` | LMM on log (Round 71) | Effect is a ratio of SDs. |
 | Lapses | `lapse_count` of `hits` | Binomial GLMM with an observation-level (run) term (Rounds 71, 73) | Weighted by the block's hits, as the primary is by its blinks. The run term carries the extra-binomial variation between runs; see §4c. |
 | Inter-blink interval | `mean_inter_blink_interval_ms` | LMM on log (Round 71) | Near the reciprocal of blink rate; both are in the ocular family. |
@@ -424,7 +424,8 @@ is not fitted: it needs a package (`survival`) that is not in the install line o
   outcomes". For a 0-100 slider that is not workable: a cumulative-link model needs a threshold between
   every pair of adjacent values used, about ten ratings per participant cannot support up to 100 of
   them, and the scores are close to continuous already, so the LMM is the model, by this amendment. The
-  0-10 fatigue ITEMS are ordinal ratings in the ordinary sense; where `ordinal` is installed the template
+  0-10 fatigue ITEMS are ordinal ratings in the ordinary sense (taken at whole points; see the rating
+  format below); where `ordinal` is installed the template
   fits a cumulative-link mixed model (`ordinal::clmm`) to the five post-condition items stacked, with the
   condition-run intercept (Round 73), as a sensitivity for the fatigue member, and otherwise says `[SKIPPED: ordinal not installed]`. `ordinal`,
   like `glmmTMB`, is in neither the install line nor CI.
@@ -444,6 +445,41 @@ is not fitted: it needs a package (`survival`) that is not in the install line o
 - **CVS-Q change and NASA-TLX**: one value per participant — for CVS-Q the first sitting's baseline to
   the last sitting's close, for NASA-TLX the mean of a participant's sittings — with a t interval over
   participants. A split sitting used to contribute two half-exposure changes counted as independent.
+
+**The rating format (Round 84).** The five fatigue items and the comfort and clarity ratings were
+native sliders: the fatigue items an eleven-step 0-10 scale that printed "x / 10" while the participant
+answered — a number scale, although the synopsis calls it a visual-fatigue VAS — and comfort and clarity
+0-100 sliders that printed their number over a filled track. From Round 84 each is a **100 mm visual
+analogue line** (`src/scales/vas.ts`): drawn 100 mm long from the sitting's ruler measurement (or the
+documented fallback, flagged), words only at the two ends, no marker and no value until the participant
+taps, tap to place and tap again or slide to adjust, nothing on the screen showing a number. Why: in an
+online study of 222 people, a VAS of this kind had lower measurement error, and less variability in that
+error within and between people, than sliders started at the left, middle or right (Angelike & Reips
+2026, full text; `CITATION_VERIFICATION.md` item 65), and web VAS approximate an interval scale where a
+categorical scale reaches only ordinal level (Reips & Funke 2008, abstract; item 66). The 10 cm line and
+the tap-and-adjust procedure are those of a validated digital VAS (Delgado et al. 2018, full text; item
+67), whose 9.6 cm phone line showed a small proportional bias against paper that its authors attribute
+to the fingertip; no tablet was tested, so the 100 mm length is the convention, held identical in every
+condition, not a length shown to be best on this device.
+
+What it changes in the analysis, and what it does not:
+
+- **The stored scales do not change.** Fatigue items stay 0-10 (now in tenths: whole millimetres / 10),
+  comfort and clarity 0-100 (whole millimetres). `fatigue_delta` and its LMM are unchanged, and no
+  threshold or gate moves.
+- **Every row carries `slider_version`** — `vas-v2`, or `sl-v1` on rows from before Round 84 (03, 06,
+  10 and `analysis_long.csv`). The two are the same range on different instruments, so **they are never
+  pooled**: both templates model one format, the current one where present, and print how many rows of
+  any other they left out. The integrity audit warns (`one_rating_format`) when one sitting holds both,
+  because its `fatigue_delta` would subtract a rating on one from a baseline on the other.
+- **The cumulative-link sensitivity on the fatigue items takes them at whole points**, rounded half up:
+  the eleven steps of the old scale, which a `clmm` can carry, instead of up to 101 values, which the
+  comfort-and-clarity argument above rules out. On `sl-v1` rows this changes nothing.
+- **The straight-lining flag is judged at whole points too** (`isStraightLined` in `aggregate.ts`):
+  five marks a careless participant taps straight down the screen land a millimetre or two apart and
+  would never be exactly equal. On `sl-v1` rows it is the same rule; floor and ceiling stay exempt.
+- **Recommended: switch before data collection**, so the study has one format. Pilot rows on `sl-v1`
+  stay readable and are named as such.
 
 **Not done, and why.** A censored-time model of search (Cox or censored-normal): needs `survival`,
 not in the install line or CI (the search rate makes it unnecessary for the family). Moderation of

@@ -1027,10 +1027,32 @@ if (nrow(rt_lapse) == 0 || sum(rt_lapse$lapse_count) == 0) {
   }
 }
 
+# --- The rating format (Round 84; ANALYSIS_PLAN.md §4c) ------------------------------------------
+# The fatigue items and the comfort and clarity ratings were number sliders until Round 84 ("sl-v1":
+# fatigue in whole numbers 0-10, the number shown while answering) and are 100 mm visual analogue lines
+# from it ("vas-v2": no marker until tapped, no numbers; fatigue in tenths of 0-10, comfort and clarity
+# whole millimetres of 0-100). The ranges are the same and the instruments are not, so they are never
+# pooled: one format is modelled, the current one where it is present, and the rows on any other are
+# counted and left out, here, in print. An export from before the column existed is all "sl-v1".
+SLIDER_VERSION    <- "vas-v2"
+SLIDER_VERSION_V1 <- "sl-v1"
+rating_format <- function(d, what) {
+  v <- if ("slider_version" %in% names(d)) as.character(d$slider_version) else rep(NA_character_, nrow(d))
+  v[is.na(v) | v == ""] <- SLIDER_VERSION_V1
+  d$slider_version <- v
+  present <- sort(unique(v))
+  use <- if (SLIDER_VERSION %in% present || !length(present)) SLIDER_VERSION else present[1]
+  other <- setdiff(present, use)
+  cat(sprintf("[format] %s: modelled on %s, %d row(s)%s\n", what, use, sum(v == use),
+              if (length(other)) sprintf("; %d row(s) on %s left out, not pooled", sum(v != use), paste(other, collapse = ", ")) else ""))
+  d[v == use, , drop = FALSE]
+}
+
 # --- Subjective fatigue (post-condition VAS composite) -------------------------------------
 fat <- fatigue %>%
   filter(stage == "post_condition") %>%
   left_join(cond, by = c("participant_id", "condition_id"))
+fat <- rating_format(fat, "fatigue")
 # docs/ANALYSIS_PLAN.md §4 specifies `fatigue_delta`: "Change from the participant's own
 # baseline removes between-person scale use. Use `fatigue_mean` only if baselines are
 # missing." This fitted fatigue_mean unconditionally, carrying every participant's
@@ -1053,9 +1075,12 @@ add_to_family("fatigue", m_fat, paste0(fat_response, ", 0-10 pts"))
 
 # --- The fatigue ITEMS as ordinal ratings (synopsis §3.9: "Ordinal cumulative-link models serve rating
 # outcomes") — a SENSITIVITY for the fatigue member, fitted only where `ordinal` is installed ---------
-# The five post-condition items (eye strain, dryness, blur, burning, headache) are 0-10 integer
-# ratings: eleven ordered categories, which a cumulative-link mixed model (ordinal::clmm) takes as they
-# are, with no assumption that the steps between them are equal. Stacked, with the item as a factor and
+# The five post-condition items (eye strain, dryness, blur, burning, headache) are 0-10 ratings, taken at
+# WHOLE POINTS: eleven ordered categories, which a cumulative-link mixed model (ordinal::clmm) takes as
+# they are, with no assumption that the steps between them are equal. On the number slider (sl-v1) the
+# items are whole points already. On the 100 mm line (vas-v2) they are tenths, up to 101 values, and a
+# threshold between every pair of adjacent values used is what §4c rules out for comfort and clarity;
+# rounded half up (as the app's straight-lining check rounds them) they are the same eleven steps. Stacked, with the item as a factor and
 # the participant and passage intercepts, and the run intercept (1 | run_id): the five items of one rating
 # share that run's level, and stacked without it they counted five times as evidence about a condition
 # that varies only between runs (Round 73). `ordinal` is in neither the install line nor CI, so without it
@@ -1068,6 +1093,7 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
   fat_items <- fat %>% select(participant_id, condition_id, polarity, colour, passage_id, session_position, any_of(items)) %>%
     tidyr::pivot_longer(any_of(items), names_to = "item", values_to = "rating") %>%
     filter(is.finite(rating)) %>%
+    mutate(rating = floor(rating + 0.5)) %>%
     mutate(rating = factor(rating, levels = sort(unique(rating)), ordered = TRUE), item = factor(item))
   # clmm takes no a:b grouping term, which is one more reason the run is a column of its own.
   fat_items$run_id <- run_key(fat_items)
@@ -1092,16 +1118,18 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
 }
 
 # --- Display comfort and text clarity (§4b, subjective family) -------------------------------------
-# 06_display_perception.csv was never read. Both are 0-100 sliders rated immediately after reading,
+# 06_display_perception.csv was never read. Both are 0-100 ratings made immediately after reading — a
+# slider before Round 84, a 100 mm visual analogue line from it (one format at a time: rating_format) —
 # modelled by LMM. NOT a cumulative-link model, whether or not `ordinal` is installed, and this is the
-# justification: a slider with 101 response points needs a threshold between every pair of adjacent
+# justification: a scale with 101 response points needs a threshold between every pair of adjacent
 # values used, which about ten ratings per participant cannot support, while the scores are already
 # close to continuous. A slider never moved (comfort_touched / clarity_touched FALSE) still shows its
-# default value, which the codebook says "should not be treated as a response", so it is left out.
+# default value, which the codebook says "should not be treated as a response", so it is left out (an
+# sl-v1 row only: a line has no default, and Continue waits for it).
 perception <- tryCatch(read_export("06_display_perception.csv"), error = function(err) NULL)
-if (!is.null(perception)) perception <- keep_rows(perception)
+if (!is.null(perception)) perception <- rating_format(keep_rows(perception), "comfort and clarity")
 fit_perception <- function(outcome, score, touched) {
-  cat(sprintf("\n=== Display perception: %s (%s, 0-100 slider, LMM) ===\n", outcome, score))
+  cat(sprintf("\n=== Display perception: %s (%s, 0-100, LMM) ===\n", outcome, score))
   if (is.null(perception) || !(score %in% names(perception))) {
     cat(sprintf("[%s] 06_display_perception.csv not found or has no %s — not modelled.\n", outcome, score))
     return(list(model = NULL, note = "no data in this export"))

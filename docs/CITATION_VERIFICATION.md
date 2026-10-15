@@ -1227,6 +1227,84 @@ tested), while velocities do not — so this project computes no velocity. **Not
 dropped from the same recording, so no exposure or landmark-noise difference), or the size of the limits
 of agreement (not given in the abstract).
 
+### 65. Angelike & Reips (2026) — a visual analogue scale against sliders (cited in code, Round 84)
+**Status: CONFIRMED.** PMID 42487052 · PMC13391775 · DOI [10.3758/s13428-026-03108-8](https://doi.org/10.3758/s13428-026-03108-8)
+
+> Angelike, T., & Reips, U.-D. (2026). Measurement error is lower for visual analogue scales than for
+> slider scales. *Behavior Research Methods, 58*(9).
+
+Metadata matches PubMed (verified 15 Oct 2026). PubMed gives volume 58, issue 9 and no page range or
+article number; none is supplied here. **Full text read** (PMC). Verbatim, abstract: *"we compared visual
+analogue scales (VAS) with different slider scales in an online study (N = 222)"*; *"The slider scale
+conditions differed in the initialization of the slider thumb (left, middle, right)"*; *"the measurement
+error in estimating the true value was lower in VAS than in slider scales. Additionally, our findings
+suggest that VAS lead to reduced variability in errors within and between individuals."* Full text,
+Introduction: *"VAS initially displays an empty line, prompting respondents to mark and select their
+response. In contrast, slider scales feature a marker such as a thumb that is frequently set at the
+extremes or the center"*; and, reporting earlier work (Funke; Funke & Reips): *"if the slider is
+initialized at a valid location, it becomes impossible to distinguish between a valid response and a
+nonresponse"*. Method: every scale was 300 pixels long; the VAS marker a 6-pixel vertical line;
+responses could be adjusted before "Next"; click was disabled on the sliders. Discussion: the VAS
+advantage was *"an average of 0.94%"* of the scale in absolute error; *"researchers intending to employ
+slider scales are strongly advised to always incorporate the click functionality"*.
+
+Cited (Round 84: `src/scales/vas.ts`, `docs/ANALYSIS_PLAN.md` §4c, `docs/AUDIT_FINDINGS.md` Round 84) for:
+an empty line with no marker until the first touch, placed by a tap and adjustable, has lower
+measurement error than a slider with a pre-placed thumb; and a pre-placed thumb cannot tell a
+non-response from a response at its start (as the paper reports from earlier work). **Not cited for:**
+touch screens or tablets (most participants used a desktop or laptop; the 23 smartphone users had
+higher errors, and the authors call for a smartphone replication), symptom ratings (the task was placing
+given percentages on a line), any line length (all were 300 px), or the size of any effect in this
+study. On tick marks the paper reports both sides from other work — added marks improved precision in
+one study (García-Pérez & Alcalá-Quintana) and may pull responses toward them in another (Matejka et
+al.) — so the line's having none rests on the VAS definition and on item 67's lines, not on this paper.
+
+### 66. Reips & Funke (2008) — web visual analogue scales at interval level (cited in code, Round 84)
+**Status: CONFIRMED.** PMID 18697664 · DOI [10.3758/brm.40.3.699](https://doi.org/10.3758/brm.40.3.699)
+
+> Reips, U.-D., & Funke, F. (2008). Interval-level measurement with visual analogue scales in
+> Internet-based research: VAS Generator. *Behavior Research Methods, 40*(3), 699–704.
+
+Metadata matches PubMed (verified 15 Oct 2026). **Abstract only.** Verbatim: *"Results from a validation
+study with 355 participants are reported and show that the scales generated with VAS Generator
+approximate an interval-scale level. In light of previous research on visual analogue versus
+categorical (e.g., radio button) scales in Internet-based research, we conclude that categorical scales
+only reach ordinal-scale level, and thus visual analogue scales are to be preferred whenever possible."*
+
+Cited (Round 84: `src/scales/vas.ts`, `docs/ANALYSIS_PLAN.md` §4c) for: web VAS approximate an interval
+scale, where a categorical scale reaches only ordinal level — the reason the fatigue items move from an
+eleven-step number scale to a line. **Not cited for:** touch input, symptom ratings, or a line length;
+the abstract describes a web tool and its validation, not this design.
+
+### 67. Delgado DA et al. (2018) — a digital VAS against the 10 cm paper line (cited in code, Round 84)
+**Status: CONFIRMED.** PMID 30211382 · PMC6132313 · DOI [10.5435/JAAOSGlobal-D-17-00088](https://doi.org/10.5435/JAAOSGlobal-D-17-00088)
+
+> Delgado, D. A., Lambert, B. S., Boutris, N., McCulloch, P. C., Robbins, A. B., Moreno, M. R., &
+> Harris, J. D. (2018). Validation of digital visual analog scale pain scoring with a traditional
+> paper-based visual analog scale in adults. *Journal of the American Academy of Orthopaedic Surgeons.
+> Global Research & Reviews, 2*(3), e088.
+
+**A different paper from item 40**, "Delgado, Vargas, Ackerman & Salmerón (2018)" in *Educational Research
+Review*: same surname and year, different first author, journal and subject. Metadata matches PubMed
+(verified 15 Oct 2026). **Full text read** (PMC). Verbatim, Methods: *"a traditional paper-based VAS
+(11″ × 8.5″; 10-cm scale) and digitally via either laptop-based (Thinkpad, 14″ screen; 28.9 cm scale)
+or mobile phone–based (iPhone 6, 4.7″ screen; 9.6 cm scale)"*; *"the first spot the patient clicked
+with the mouse on the laptop computer or touched on the mobile phone screen was not the final VAS value.
+Patients had the opportunity to continue clicking or tapping to adjust their response"*; *"The platforms
+included only a single complete line and the phrases 'no pain' at the left terminus and 'worst pain' at
+the right terminus."* Results (abstract): agreement between paper and laptop *"(mean difference, 0.0% ±
+0.5%; no proportional bias detected) but not between the paper- and mobile phone-based platforms (mean
+difference, 1.9% ± 0.5%; proportional bias detected)"*. Discussion: the phone difference is *"likely
+secondary to the size of measurement entity relative to the platform (finger on a mobile phone screen
+[coarse] versus a pen ticking a mark on a line [fine])"*; Limitations: *"we did not evaluate the use of
+this scale on a tablet device."* 98 orthopaedic patients rating pain.
+
+Cited (Round 84: `src/scales/vas.ts`, `docs/ANALYSIS_PLAN.md` §4c) for: the paper VAS is a 10 cm line;
+a validated digital VAS let the first tap be adjusted, and carried only the line and the two end
+phrases; and its 9.6 cm touch line differed from paper by a small proportional bias that the authors put
+down to the fingertip. **Not cited for:** a tablet (not tested), visual-fatigue symptoms (pain), or the
+claim that 100 mm is the best length on this device — the study's 100 mm is the convention, held fixed.
+
 ## NOT INDEXED IN PUBMED — verified against a secondary authority, or unverified
 
 PubMed indexes biomedical and life-sciences literature only. The references below fall outside
