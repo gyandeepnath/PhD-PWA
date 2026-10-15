@@ -112,7 +112,9 @@ describe('one name per measure on every screen (Round 80)', () => {
   // The labels each measure used to carry somewhere, now spelled by MEASURE: the same quantity read
   // "Face found", "FPS", "face fps" or "effective fps" depending on the screen.
   const RETIRED = ["'Face found'", "'FPS (tier)'", "'Face presence'", "'Blink/min'", "'IBI ms'", "'Long-closures'", 'Pooled IBR', 'Low fps', '>face fps<', "row('Gaze'"];
-  const SCREENS = ['src/components/ResearcherPanel.tsx', 'src/components/LiveCamera.tsx', 'src/dashboard/Dashboard.tsx', 'src/start/setupStages.tsx'];
+  // The dashboard's Data Quality view and shared pieces moved to eyeData.tsx and parts.tsx (Round 83).
+  const SCREENS = ['src/components/ResearcherPanel.tsx', 'src/components/LiveCamera.tsx', 'src/dashboard/Dashboard.tsx',
+    'src/dashboard/eyeData.tsx', 'src/dashboard/parts.tsx', 'src/start/setupStages.tsx'];
 
   it('the panel, the camera readout, the dashboard and camera setup use none of the retired labels', () => {
     for (const f of SCREENS) {
@@ -123,7 +125,7 @@ describe('one name per measure on every screen (Round 80)', () => {
 
   it('they take the names from the one table', () => {
     expect(readFileSync('src/components/LiveCamera.tsx', 'utf8')).toMatch(/row\(MEASURE\.samplingRate\.name,/);
-    const dash = readFileSync('src/dashboard/Dashboard.tsx', 'utf8');
+    const dash = readFileSync('src/dashboard/Dashboard.tsx', 'utf8') + readFileSync('src/dashboard/eyeData.tsx', 'utf8');
     for (const k of ['samplingRate', 'faceInView', 'headTurnedAway', 'onScreen', 'blinkRate', 'incompleteRatio', 'interBlinkInterval', 'longClosures']) {
       expect(dash, k).toContain(`MEASURE.${k}.name`);
     }

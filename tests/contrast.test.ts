@@ -251,6 +251,8 @@ describe('operator-screen text colours meet WCAG AA', () => {
     'src/components/ErrorBoundary.tsx', 'src/components/ScrollCue.tsx', 'src/components/InfoTip.tsx',
     'src/components/VisuLabLogo.tsx', 'src/components/ExperimentProgress.tsx',
     'src/screening/IshiharaTest.tsx', 'src/dashboard/Dashboard.tsx', 'src/dashboard/LazyDashboard.tsx',
+    // Round 83: the dashboard's shared pieces and its Data Quality view, moved out of Dashboard.tsx.
+    'src/dashboard/parts.tsx', 'src/dashboard/eyeData.tsx',
     // Round 62: the shared navigation chip and dialog, and the two session-level questionnaires,
     // whose instrument text was 11-12 design px (9.5-10 px on the tablet) in faded mono.
     'src/components/NavChip.tsx', 'src/components/ConfirmDialog.tsx',
@@ -303,7 +305,7 @@ describe('operator-screen text colours meet WCAG AA', () => {
     for (const f of OPERATOR_FILES) {
       readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
         if (SIZE_EXEMPT.some(([file, re]) => file === f && re.test(line))) return;
-        const floor = f === 'src/dashboard/Dashboard.tsx' && /<table\b/.test(line) ? 13 : 14;
+        const floor = f.startsWith('src/dashboard/') && /<table\b/.test(line) ? 13 : 14;
         for (const px of sizesOn(line)) if (px < floor) hits.push(`${f}:${i + 1} ${px}px`);
       });
     }

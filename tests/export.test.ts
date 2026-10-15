@@ -686,7 +686,8 @@ describe('old gaze and calibration rows stay readable (round 80)', () => {
 
   it('leaves no analysis template, dashboard or analysis dataset reading a removed gaze field', () => {
     const removed = /\b(gaze_deviation_ratio|zone_center_ratio|zone_transition_count|gaze_threshold_floored|gaze_h_threshold|gaze_v_threshold)\b/;
-    for (const p of ['src/analysis/analysis_template.R', 'src/analysis/analysis_template.py', 'src/dashboard/aggregate.ts', 'src/dashboard/Dashboard.tsx']) {
+    for (const p of ['src/analysis/analysis_template.R', 'src/analysis/analysis_template.py', 'src/dashboard/aggregate.ts', 'src/dashboard/Dashboard.tsx',
+      'src/dashboard/eyeData.tsx', 'src/dashboard/parts.tsx']) {
       expect(readFileSync(resolve(__dirname, '..', p), 'utf8'), p).not.toMatch(removed);
     }
     expect(ANALYSIS_LONG_COLUMNS.filter((c) => removed.test(c))).toEqual([]);

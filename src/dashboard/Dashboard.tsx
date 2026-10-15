@@ -1,21 +1,25 @@
 /**
  * Researcher analysis dashboard. Loads a session bundle, shows charts/tables built from the shared
- * condition aggregation, surfaces data-quality flags, and exports the CSV+JSON bundle.
- * Honest caveats are shown inline (uncalibrated gaze; sub-Nyquist blink tiers; blink-rate is
- * non-monotonic w.r.t. fatigue; small-N d').
+ * condition aggregation, judges each condition's blink data by rule rel-r1 (the analysis's own checks,
+ * tracking/ocularReliability.ts; the Data Quality tab is eyeData.tsx), and exports the CSV+JSON bundle.
+ * Every tab opens with a short "How to read this page"; caveats are a line or two, with the full text
+ * behind More (parts.tsx).
  */
 import { useEffect, useMemo, useState } from 'react';
 import { get, put } from '@/storage/db';
 import { gatherSession, listSessions, type SessionBundle } from '@/storage/gather';
 import { buildConditionSummaries, baselineFatigueMean, cohortSummary, type ConditionSummary, type CohortSummary } from './aggregate';
 import { MEASURE } from '@/tracking/measurementSchedule';
-import { FPS_GATE, FPS_TIER_WORD } from '@/tracking/frameRateGate';
+import { FPS_GATE } from '@/tracking/frameRateGate';
+import { RELIABILITY_RULE_VERSION } from '@/tracking/ocularReliability';
 import { backupExportFile, buildExportFiles, DamagedParticipantCodeError, downloadExport, downloadSessionMedia } from '@/storage/export';
 import { buildAnalysisDataset } from '@/storage/analysisExport';
 import { BarPanel, LinePanel, type Datum } from './charts';
 import type { SessionRecord } from '@/storage/types';
 import { N_CONDITIONS } from '@/experiment/conditions';
 import { UI_TEXT } from '@/lib/uiPalette';
+import { Caveat, Grid, HowToRead, More, Notice, SectionTitle, Stat, cell, countBySeverity, n } from './parts';
+import { countReliability, EyeDataPanel, EyeTables } from './eyeData';
 import { ScrollCue } from '@/components/ScrollCue';
 import { useDialog } from '@/components/ConfirmDialog';
 import { BuildIdentity } from '@/components/BuildInfo';
@@ -32,11 +36,19 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'export', label: 'Export' },
 ];
 
-const FLAG_COLOR = { good: '#1d7a4a', warn: '#8a5300', bad: '#b3261e' } as const; // text colours: each ≥4.5:1 on white
-const cohortHead: React.CSSProperties = { padding: '6px 10px', fontWeight: 400, whiteSpace: 'nowrap' };
-const cohortCell: React.CSSProperties = { padding: '6px 10px', whiteSpace: 'nowrap' };
-const bar = (s: ConditionSummary[], key: keyof ConditionSummary, flagKey = false): Datum[] =>
-  s.map((c) => ({ label: c.condition_label, value: c[key] as number | null, flag: flagKey ? c.qc.overall : undefined }));
+// Headers wrap, so the whole cohort table fits a tablet's width with its last columns in view.
+const cohortHead: React.CSSProperties = { padding: '6px 8px', fontWeight: 400, verticalAlign: 'bottom', maxWidth: 150 };
+const cohortCell: React.CSSProperties = { padding: '6px 8px', whiteSpace: 'nowrap' };
+const bar = (s: ConditionSummary[], key: keyof ConditionSummary): Datum[] =>
+  s.map((c) => ({ label: c.condition_label, value: c[key] as number | null }));
+/*
+ * An eye chart's bars, with a not-usable condition's bar in grey (rule rel-r1): its value is still drawn,
+ * and marked as one the main eye-data analysis leaves out. The charts used to draw a camera-stopped or
+ * too-slow condition exactly like a good one, beside a verdict that said not to use it.
+ */
+const eyeBar = (s: ConditionSummary[], key: keyof ConditionSummary): Datum[] =>
+  s.map((c) => ({ label: c.condition_label, value: c[key] as number | null, dim: c.camera_verdict.reliability === 'not_usable' }));
+const EYE_DIM_NOTE = 'Grey: blink data not usable (✕ above), left out of the main eye-data analysis';
 
 export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
@@ -114,6 +126,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   const allSummaries = useMemo(() => (bundle ? buildConditionSummaries(bundle) : []), [bundle]);
   const summaries = useMemo(() => allSummaries.filter((s) => s.condition_complete), [allSummaries]);
   const unfinished = useMemo(() => allSummaries.filter((s) => !s.condition_complete), [allSummaries]);
+  const reliability = countReliability(summaries);
   const plannedConditions = bundle?.session.conditions_per_session ?? allSummaries.length;
   const baseline = bundle ? baselineFatigueMean(bundle) : null;
   const mediaCount = (bundle?.media ?? []).length;
@@ -260,6 +273,11 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
    * screen was unreachable by any gesture: on the Data Quality / QC tab about two screens of charts,
    * the "Why rows were excluded" table and every per-condition QC row, and the lower parts of three
    * other tabs. e2e/dashboardTabs.spec.ts visits every tab at the shortest study viewport.
+   *
+   * ORGANISED, NOT CUT (Round 83). The investigator found the justifications and flags "multiple
+   * paragraph-like texts". Every page now opens with a short "How to read this page"; each condition is
+   * one headline and a row of chips; reasons, rules and numbers sit behind Details or More, and every
+   * number that was on the page is still on it (the full tables, under "Every number, as tables").
    */
   return (
     <div data-testid="dashboard-scroll" className="screen scrollable nav-band w-full bg-cream font-sans text-[#1a1a2e]" style={{ padding: '0 3% 3%' }}>
@@ -271,7 +289,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
             RECORDED the sitting (provenance, plus any build that took over part-way through it).
             Round 74: the version alone never changed, so neither could be told apart from the tablet.
           */}
-          <p className="font-sans text-[15px]" style={{ color: '#4a4a60', marginTop: 4 }}>
+          <p className="font-sans text-[15px]" style={{ color: UI_TEXT.muted, marginTop: 4 }}>
             This app: <BuildIdentity testId="dashboard-build" style={{ fontSize: 15 }} />
             {bundle?.session.provenance && (
               <>
@@ -288,7 +306,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
         <select
           value={sessionId ?? ''}
           onChange={(e) => setSessionId(e.target.value)}
-          style={{ fontFamily: '"DM Mono", monospace', fontSize: 15, padding: '8px 12px', borderRadius: 8, border: '1px solid #bdb8ae', background: '#fff', color: '#1a1a2e' }}
+          style={{ fontFamily: '"DM Mono", monospace', fontSize: 15, padding: '8px 12px', borderRadius: 8, border: '1px solid #bdb8ae', background: '#fff', color: UI_TEXT.ink }}
         >
           {sessions.map((s) => (
             <option key={s.session_id} value={s.session_id}>
@@ -303,24 +321,22 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           <button key={t.id} onClick={() => setTab(t.id)}
             className="font-sans text-base"
             style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #bdb8ae', cursor: 'pointer',
-              background: tab === t.id ? '#1a1a2e' : '#fff', color: tab === t.id ? '#fff' : '#3a3a4a' }}>
+              background: tab === t.id ? UI_TEXT.ink : '#fff', color: tab === t.id ? '#fff' : UI_TEXT.body }}>
             {t.label}
           </button>
         ))}
       </div>
 
-      {!bundle && <p className="font-sans text-base leading-relaxed text-[#4a4a60]">No session data found.</p>}
+      <HowToRead lines={HOW_TO_READ[tab]} />
+
+      {!bundle && tab !== 'cohort' && <p className="font-sans text-base leading-relaxed" style={{ color: UI_TEXT.muted }}>No session data found.</p>}
 
       {tab === 'cohort' && (
-        <div style={{ display: 'grid', gap: 14 }}>
-          <p className="font-sans text-[15px] leading-relaxed text-[#4a4a60]">
-            Every participant on this device, pooled the way the analysis pools them — read from
-            analysis_long.csv, so these are the numbers the models will see rather than a parallel
-            calculation that can drift from them. The per-sitting tabs answer “did this sitting work”.
-            This one answers “is the study working”, and those fail in different ways.
-          </p>
-          {cohortBusy && <p className="font-sans text-base leading-relaxed text-[#4a4a60]">Pooling every session…</p>}
-          {!cohortBusy && cohort == null && <p className="font-sans text-base leading-relaxed text-[#4a4a60]">No sessions on this device yet.</p>}
+        // minmax(0, 1fr): a grid item's minimum is its content by default, so the wide table below
+        // pushed this column, and every tile and paragraph in it, past the right edge of the screen.
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 14 }}>
+          {cohortBusy && <p className="font-sans text-base leading-relaxed" style={{ color: UI_TEXT.muted }}>Pooling every session…</p>}
+          {!cohortBusy && cohort == null && <p className="font-sans text-base leading-relaxed" style={{ color: UI_TEXT.muted }}>No sessions on this device yet.</p>}
           {cohort != null && (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
@@ -329,7 +345,8 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                 <Stat label="Condition-runs pooled" value={String(cohort.rows)} />
                 <Stat
                   label="Confirmatory set (modelled)"
-                  value={`${cohort.confirmatory.rows} runs · ${cohort.confirmatory.participants} people`}
+                  value={`${cohort.confirmatory.rows} runs`}
+                  sub={`${cohort.confirmatory.participants} participant${cohort.confirmatory.participants === 1 ? '' : 's'}`}
                 />
                 <Stat
                   label="Smallest / largest condition n"
@@ -338,20 +355,13 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
               </div>
 
               {cohort.maxConditionN - cohort.minConditionN > 1 && (
-                <div style={{ border: '1px solid #f5a623', borderRadius: 10, padding: '12px 14px', background: '#fffaf0' }}>
-                  <p className="font-sans text-[15px] leading-relaxed" style={{ color: '#8a5a00' }}>
-                    One condition is running behind the others by more than one participant
-                    ({cohort.minConditionN} vs {cohort.maxConditionN}). With a counterbalanced design every
-                    condition should accrue at the same rate, so a gap usually means that condition is
-                    failing or being abandoned rather than simply lagging.
-                  </p>
-                </div>
+                <Notice tone="warn"
+                  short={`One condition is behind the others by more than one participant (${cohort.minConditionN} against ${cohort.maxConditionN}).`}
+                  more="With a counterbalanced design every condition should accrue at the same rate, so a gap usually means that condition is failing or being abandoned rather than simply lagging." />
               )}
 
               <div>
-                <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]" style={{ marginBottom: 6 }}>
-                  Primary outcome by condition
-                </p>
+                <SectionTitle>Primary outcome by condition</SectionTitle>
                 <div style={{ overflowX: 'auto' }}>
                   <table className="font-lab" style={{ fontSize: 13, borderCollapse: 'collapse', width: '100%' }}>
                     <thead>
@@ -365,6 +375,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                         <th style={cohortHead}>{MEASURE.incompleteRatio.name} (pooled)</th>
                         <th style={cohortHead}>{MEASURE.incompleteRatio.name} (mean of runs)</th>
                         <th style={cohortHead}>Blinks</th>
+                        <th style={cohortHead}>Eye data: good, usable, not usable</th>
                         <th style={cohortHead}>{MEASURE.samplingRate.name} under {FPS_GATE.ADEQUATE}</th>
                         <th style={cohortHead}>{MEASURE.samplingRate.name} off usual</th>
                       </tr>
@@ -381,6 +392,12 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                           <td style={cohortCell}>{c.pooled_ibr == null ? '—' : c.pooled_ibr.toFixed(3)}</td>
                           <td style={cohortCell}>{c.mean_ibr == null ? '—' : c.mean_ibr.toFixed(3)}</td>
                           <td style={cohortCell}>{c.blinks_total}</td>
+                          {/* The verdicts of rule rel-r1, as the Data Quality tab gives them; a zero is in plain ink. */}
+                          <td style={cohortCell} data-testid="cohort-reliability">
+                            <span style={{ color: c.n_good ? UI_TEXT.green : undefined }}>✓ {c.n_good}</span>{' · '}
+                            <span style={{ color: c.n_usable ? UI_TEXT.amber : undefined }}>! {c.n_usable}</span>{' · '}
+                            <span style={{ color: c.n_not_usable ? UI_TEXT.red : undefined }}>✕ {c.n_not_usable}</span>
+                          </td>
                           <td style={{ ...cohortCell, color: c.n_fps_inadequate > 0 ? UI_TEXT.amber : undefined }}>{c.n_fps_inadequate}</td>
                           <td style={{ ...cohortCell, color: c.n_fps_inconsistent > 0 ? UI_TEXT.amber : undefined }}>{c.n_fps_inconsistent}</td>
                         </tr>
@@ -388,23 +405,15 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                     </tbody>
                   </table>
                 </div>
-                <p className="font-sans text-[15px] leading-relaxed text-[#4a4a60]" style={{ marginTop: 6 }}>
-                  “Blinks” is the denominator the ratio actually rests on — ten rows of four blinks is
-                  not ten measurements. “Pooled” is incomplete blinks over all blinks in those rows,
-                  the quantity the binomial model weights by; “mean of runs” counts every run once
-                  however few blinks it had, so the two differ when blink counts vary. “With outcome”
-                  below n means rows where no blink was counted at all; a condition where that is
-                  common is broken, not merely noisy. “Analysable” and the outcome columns cover the
-                  confirmatory set only: analysable by the join check, not withdrawn, not a test
-                  session, first protocol pass — the rows both analysis templates model.
-                </p>
+                <Notice
+                  short="Blinks is what the ratio rests on: ten rows of four blinks is not ten measurements. Eye data counts the verdicts of the Data Quality tab: good, usable, not usable."
+                  more={'“Pooled” is incomplete blinks over all blinks in those rows, the quantity the binomial model weights by; “mean of runs” counts every run once however few blinks it had, so the two differ when blink counts vary. “With outcome” below n means rows where no blink was counted at all; a condition where that is common is broken, not merely noisy. “Analysable”, the outcome columns and Eye data cover the confirmatory set only: analysable by the join check, not withdrawn, not a test session, first protocol pass — the rows both analysis templates model. '
+                    + `Of its camera-on rows, ${cohort.qcChecks.flagged} of ${cohort.qcChecks.of} are flagged by a §5.3–5.4 check (face in view, head turned away, reading seen); the R template prints the same count.`} />
               </div>
 
               {cohort.exclusions.length > 0 && (
                 <div>
-                  <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]" style={{ marginBottom: 6 }}>
-                    Why rows were excluded
-                  </p>
+                  <SectionTitle>Why rows were excluded</SectionTitle>
                   {cohort.exclusions.map((e) => (
                     <p key={e.reason} className="font-sans text-[15px]" style={{ color: UI_TEXT.muted }}>
                       {e.n}x — {e.reason}
@@ -415,14 +424,22 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
 
               {cohort.issues.length > 0 && (
                 <div>
-                  <p className="font-sans text-sm font-medium uppercase tracking-wide text-[#4a4a60]" style={{ marginBottom: 6 }}>
-                    Join and provenance checks
+                  <SectionTitle>Join and provenance checks</SectionTitle>
+                  {/*
+                    Red for a BLOCKING issue, the join check's word for one that stops a participant
+                    being analysed (storage/joinIntegrity.ts: 'blocking' | 'warning'). This list tested
+                    for 'error', which the join check never writes, so a blocking issue was amber here.
+                  */}
+                  <p className="font-sans text-[15px]" style={{ color: cohort.issues.some((i) => i.severity === 'blocking') ? UI_TEXT.red : UI_TEXT.amber }}>
+                    {countBySeverity(cohort.issues)}: {[...new Set(cohort.issues.map((i) => i.code))].join(', ')}
                   </p>
-                  {cohort.issues.map((i, k) => (
-                    <p key={`${i.code}-${k}`} className="font-sans text-[15px]" style={{ color: i.severity === 'error' ? UI_TEXT.red : '#8a5a00', lineHeight: 1.5 }}>
-                      [{i.severity}] {i.code} — {i.detail}
-                    </p>
-                  ))}
+                  <More label="Show each check">
+                    {cohort.issues.map((i, k) => (
+                      <p key={`${i.code}-${k}`} className="font-sans text-[15px]" style={{ color: i.severity === 'blocking' ? UI_TEXT.red : UI_TEXT.amber, lineHeight: 1.5, marginTop: 4 }}>
+                        [{i.severity}] {i.code} — {i.detail}
+                      </p>
+                    ))}
+                  </More>
                 </div>
               )}
             </>
@@ -437,9 +454,12 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           style={{ margin: '0 0 14px', padding: '12px 14px', borderRadius: 10, border: '1px solid #b83a3a', background: '#fdeeee', color: '#5a1414', lineHeight: 1.55 }}
         >
           <strong>The participant withdrew</strong> — recorded {new Date(bundle.session.withdrawn_at).toLocaleString()}.
-          Nothing on this page may be analysed. The measurements are kept so the withdrawal is auditable,
-          and every export of this sitting carries withdrawn = TRUE, which both analysis templates and
-          the pooled export use to leave this participant out entirely.
+          Nothing on this page may be analysed.
+          <More tone="#5a1414">
+            The measurements are kept so the withdrawal is auditable, and every export of this sitting
+            carries withdrawn = TRUE, which both analysis templates and the pooled export use to leave this
+            participant out entirely.
+          </More>
         </div>
       )}
 
@@ -453,10 +473,12 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
             {unfinished.length === 1 ? '1 condition was' : `${unfinished.length} conditions were`} started and did not finish
           </strong>{' '}
           — {unfinished.map((u) => `${u.condition_label} (position ${u.session_position + 1})`).join(', ')}.
-          Paused or interrupted part-way, so {unfinished.length === 1 ? 'it is' : 'they are'} not a measurement and{' '}
-          {unfinished.length === 1 ? 'is' : 'are'} left out of every figure on this page.
-          {bundle.session.withdrawn_at == null && ' A paused condition restarts from the beginning when the sitting is resumed.'}
-          {' '}The partial rows are kept in the export, flagged condition_complete = FALSE.
+          Left out of every figure on this page.
+          <More tone="#5a3a00">
+            Paused or interrupted part-way, so {unfinished.length === 1 ? 'it is' : 'they are'} not a measurement.
+            {bundle.session.withdrawn_at == null && ' A paused condition restarts from the beginning when the sitting is resumed.'}
+            {' '}The partial rows are kept in the export, flagged condition_complete = FALSE.
+          </More>
         </div>
       )}
 
@@ -479,7 +501,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           */}
           <Stat label="Conditions completed" value={`${summaries.length}/${plannedConditions}`} />
           <Stat label="Mean RT (hits)" value={fmt(avg(summaries.map((s) => s.mean_rt_hits_ms)), 'ms')} />
-          <Stat label="Mean fatigue Δ vs baseline" value={fmt(avg(summaries.map((s) => s.fatigue_delta)))} />
+          <Stat label="Mean fatigue change from baseline" value={fmt(avg(summaries.map((s) => s.fatigue_delta)))} />
           {/*
             The ?? 0 used to sit INSIDE the multiplication, so a null average became 0 before fmt
             could render it as an em dash, and a sitting where comprehension was never administered
@@ -492,8 +514,12 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
             const acc = avg(summaries.map((s) => s.comprehension_correct));
             return acc == null ? fmt(null) : fmt(100 * acc, '%');
           })()} />
-          <Stat label="Camera QC (conditions OK)" value={`${summaries.filter((s) => s.qc.overall === 'good').length}/${summaries.length}`} />
-          <Stat label="Engagement (conditions OK)" value={`${summaries.filter((s) => s.engagement === 'good').length}/${summaries.length}`} />
+          {/* The reliability verdict (rule rel-r1), as the Data Quality tab and the export give it. */}
+          <Stat label="Eye data good" testId="overview-eye-data"
+            value={`${reliability.good}/${summaries.length}`}
+            sub={`${reliability.usable} usable · ${reliability.not_usable} not usable`} />
+          <Stat label="Engagement good" value={`${summaries.filter((s) => s.engagement === 'good').length}/${summaries.length}`}
+            sub={`${summaries.filter((s) => s.engagement === 'warn').length} warn · ${summaries.filter((s) => s.engagement === 'bad').length} bad`} />
         </div>
       )}
 
@@ -502,18 +528,20 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           <BarPanel title="Mean RT per condition" unit="ms" data={bar(summaries, 'mean_rt_hits_ms')} />
           <BarPanel title="d′ (sensitivity)" data={bar(summaries, 'd_prime')} color="#22c97a" />
           <BarPanel title="Hit rate" data={bar(summaries, 'hit_rate')} color="#4f8ef7" />
-          <Caveat text="Pure colour go/no-go (~20 go trials per condition). Per-condition d′ is small-N (SE often > 0.3), so for inference aggregate d′ across conditions per participant (see the R/Python templates). RT runs in the condition's own display: the go-dot is the condition's text colour on its background, so go-target visibility varies with condition by design (yellow on white is 2.39:1). Misses therefore partly reflect the display; only commission errors (tapping no-go dots) count toward the disengagement flag." />
+          <Caveat
+            short="Each condition's d′ rests on about 20 go trials, so one bar is imprecise. The go dot is drawn in the condition's own colours, so misses partly reflect the display."
+            more="Pure colour go/no-go (~20 go trials per condition). Per-condition d′ is small-N (SE often > 0.3), so for inference aggregate d′ across conditions per participant (see the R/Python templates). RT runs in the condition's own display: the go-dot is the condition's text colour on its background, so go-target visibility varies with condition by design (yellow on white is 2.39:1). Misses therefore partly reflect the display; only commission errors (tapping no-go dots) count toward the disengagement flag." />
         </Grid>
       )}
 
       {bundle && tab === 'fatigue' && (
         <Grid>
-          <LinePanel title="Composite fatigue by serial position" data={summaries.map((s) => ({ label: `${s.session_position + 1}:${s.condition_label}`, value: s.fatigue_mean }))} baseline={baseline ?? undefined} />
-          <BarPanel title="Fatigue Δ from baseline" data={bar(summaries, 'fatigue_delta')} color="#f5a623" />
+          <LinePanel title="Fatigue score, in the order the conditions ran" data={summaries.map((s) => ({ label: `${s.session_position + 1}:${s.condition_label}`, value: s.fatigue_mean }))} baseline={baseline ?? undefined} />
+          <BarPanel title="Fatigue: change from baseline" data={bar(summaries, 'fatigue_delta')} color="#f5a623" />
           <BarPanel title="Eye strain" data={bar(summaries, 'eye_strain')} color="#e64c4c" />
           <BarPanel title="Dryness" data={bar(summaries, 'dryness')} color="#e07b39" />
           <SummaryTable
-            headers={['Cond', 'Pol', 'Composite', 'Δ', 'Strain', 'Dry', 'Blur', 'Burn', 'Head']}
+            headers={['Condition', 'Polarity', 'Fatigue score', 'Change from baseline', 'Eye strain', 'Dryness', 'Blur', 'Burning', 'Headache']}
             rows={summaries.map((s) => [s.condition_label, s.polarity, n(s.fatigue_mean), n(s.fatigue_delta), n(s.eye_strain), n(s.dryness), n(s.blur), n(s.burning), n(s.headache)])}
           />
         </Grid>
@@ -526,53 +554,64 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           <BarPanel title="Display comfort" data={bar(summaries, 'comfort_score')} color="#4f8ef7" />
           <BarPanel title="Text clarity" data={bar(summaries, 'clarity_score')} color="#1a1a2e" />
           <SummaryTable
-            headers={['Cond', 'WCAG', 'Search ms', 'Acc', 'Eff', 'FalseDet', 'Comfort', 'Clarity']}
+            headers={['Condition', 'Contrast (WCAG)', 'Search time ms', 'Accuracy', 'Efficiency', 'False detections', 'Comfort', 'Clarity']}
             rows={summaries.map((s) => [s.condition_label, `${s.wcag_contrast_ratio}${s.below_wcag_aa ? ' ⚠' : ''}`, n(s.search_time_ms, 0), n(s.search_accuracy), n(s.search_efficiency), n(s.false_detections, 0), n(s.comfort_score, 0), n(s.clarity_score, 0)])}
           />
-          <Caveat text="Visual-search target counts differ across passages (recorded per condition); passage↔condition decoupling makes this orthogonal to condition. WCAG ⚠ marks conditions below AA (4.5:1) — include contrast as a covariate." />
+          <Caveat
+            short="Contrast below 4.5:1 (WCAG AA) is marked ⚠ in the table; include contrast as a covariate."
+            more="Visual-search target counts differ across passages (recorded per condition); passage↔condition decoupling makes this orthogonal to condition. WCAG ⚠ marks conditions below AA (4.5:1) — include contrast as a covariate." />
         </Grid>
       )}
 
       {bundle && tab === 'eye' && (
         <Grid>
-          <CameraVerdictPanel summaries={summaries} />
-          <BarPanel title={`${MEASURE.blinkRate.name} per condition`} unit="/min" data={bar(summaries, 'blink_rate')} color="#4f8ef7" />
-          <BarPanel title={`${MEASURE.incompleteRatio.name} (CVS marker)`} data={bar(summaries, 'incomplete_blink_ratio')} color="#e07b39" />
-          <BarPanel title={`${MEASURE.perclos.name} P80 (drowsiness)`} data={bar(summaries, 'perclos_p80')} color="#e64c4c" />
+          <EyeDataPanel summaries={summaries} />
+          <BarPanel title={`${MEASURE.blinkRate.name} per condition`} unit="/min" data={eyeBar(summaries, 'blink_rate')} color="#4f8ef7" dimNote={EYE_DIM_NOTE} />
+          <BarPanel title={`${MEASURE.incompleteRatio.name} (CVS marker)`} data={eyeBar(summaries, 'incomplete_blink_ratio')} color="#e07b39" dimNote={EYE_DIM_NOTE} />
+          <BarPanel title={`${MEASURE.perclos.name} P80 (drowsiness)`} data={eyeBar(summaries, 'perclos_p80')} color="#e64c4c" dimNote={EYE_DIM_NOTE} />
           <BarPanel title="Engagement quality score" data={summaries.map((s) => ({ label: s.condition_label, value: s.quality_score, flag: s.engagement }))} />
-          <OcularTable summaries={summaries} />
-          <EngagementTable summaries={summaries} />
-          <QcTable summaries={summaries} />
-          <Caveat text="What these numbers mean. For visual fatigue (this study) the markers used are a LOWER blink rate and a HIGHER share of incomplete blinks (Portello, Rosenfield & Chu 2013), read with the first/second-half bins and the gap between blinks. PERCLOS counts time with the eyes mostly closed; it tracks drowsiness, so in an awake participant it is small and a value near zero is not a fault (PERCLOS: Dinges & Grace 1998, FHWA tech brief — metadata only, not yet read at source). Blink rate goes DOWN with concentrated reading and UP with sleepiness, so never read 'higher = more tired' on its own. Blink duration and the micro-blink count need 25 frames a second or more; the blink counts and the incomplete-blink ratio follow the eye sampling rate's tiers (adequate from 20). The on-screen ratio is a quality check of whether the participant looked at the tablet, and needs a passed gaze check. A webcam is a screening-grade measure; an infrared eye-tracker is the reference standard." />
+          <Caveat
+            short="The fatigue markers used here are a lower blink rate and a higher incomplete-blink ratio. PERCLOS tracks drowsiness, so a value near zero is normal in an awake reader."
+            more="What these numbers mean. For visual fatigue (this study) the markers used are a LOWER blink rate and a HIGHER share of incomplete blinks (Portello, Rosenfield & Chu 2013), read with the first/second-half bins and the gap between blinks. PERCLOS counts time with the eyes mostly closed; it tracks drowsiness, so in an awake participant it is small and a value near zero is not a fault (PERCLOS: Dinges & Grace 1998, FHWA tech brief — metadata only, not yet read at source). Blink rate goes DOWN with concentrated reading and UP with sleepiness, so never read 'higher = more tired' on its own. Blink duration and the micro-blink count need 25 frames a second or more; the blink counts and the incomplete-blink ratio follow the eye sampling rate's tiers (adequate from 20). The on-screen ratio is a quality check of whether the participant looked at the tablet, and needs a passed gaze check. A webcam is a screening-grade measure; an infrared eye-tracker is the reference standard." />
+          <div style={{ gridColumn: '1 / -1' }}>
+            <More label="Every number, as tables" testId="eye-tables">
+              <EyeTables summaries={summaries} />
+            </More>
+          </div>
         </Grid>
       )}
 
       {bundle && tab === 'export' && (
         <div style={{ background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 20, maxWidth: 720 }}>
-          <p className="font-sans text-base leading-relaxed text-[#4a4a60]">
-            Exports 20 CSVs, an analysis JSON, a complete session backup, a master codebook
-            documenting every column, and a provenance manifest (app version, git hash,
-            condition-definition hash, per-file checksums). Analyse with the R / Python mixed-model
-            templates in <code>src/analysis/</code>. Keep the <code>backup_*.json</code>: it is what
-            restores this session if the tablet is lost.
+          <p className="font-sans text-base leading-relaxed" style={{ color: UI_TEXT.muted }}>
+            Downloads this sitting: its data tables, a codebook of every column, and a backup. Keep the{' '}
+            <code>backup_*.json</code>: it restores this session if the tablet is lost.
           </p>
+          <More>
+            <p className="font-sans text-[15px] leading-relaxed" style={{ color: UI_TEXT.muted }}>
+              Exports 20 CSVs, an analysis JSON, a complete session backup, a master codebook
+              documenting every column, and a provenance manifest (app version, git hash,
+              condition-definition hash, per-file checksums). Analyse with the R / Python mixed-model
+              templates in <code>src/analysis/</code>.
+            </p>
+          </More>
           <button onClick={onExport} disabled={exporting}
             className="mt-4 rounded-xl px-8 py-3 font-sans text-base font-medium text-white transition active:scale-95"
-            style={{ background: '#1a1a2e', cursor: exporting ? 'wait' : 'pointer' }}>
+            style={{ background: UI_TEXT.ink, cursor: exporting ? 'wait' : 'pointer' }}>
             {exporting ? 'Exporting…' : 'Download data bundle ↓'}
           </button>
 
           {/* The analysis dataset pools every session on the device, so it is offered separately
               from the single-session bundle above and says plainly what it covers. */}
           <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid #e5e2dc' }}>
-            <p className="font-sans text-base leading-relaxed text-[#4a4a60]">
+            <p className="font-sans text-base leading-relaxed" style={{ color: UI_TEXT.muted }}>
               The analysis dataset pools <strong>every session on this device</strong> into one long
               file, one row per participant × condition, with the join checked and its verdict on
               every row.
             </p>
             <button onClick={onExportAnalysis} disabled={exporting}
               className="mt-3 rounded-xl px-8 py-3 font-sans text-base font-medium transition active:scale-95"
-              style={{ background: '#fff', color: '#1a1a2e', border: '1px solid #1a1a2e', cursor: exporting ? 'wait' : 'pointer' }}>
+              style={{ background: '#fff', color: UI_TEXT.ink, border: `1px solid ${UI_TEXT.ink}`, cursor: exporting ? 'wait' : 'pointer' }}>
               {exporting ? 'Building…' : 'Download analysis dataset ↓'}
             </button>
             {analysisSummary && (
@@ -581,7 +620,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           </div>
           {mediaCount > 0 && (
             <>
-              <p className="font-sans text-base leading-relaxed text-[#4a4a60]" style={{ marginTop: 18 }}>
+              <p className="font-sans text-base leading-relaxed" style={{ marginTop: 18, color: UI_TEXT.muted }}>
                 This session holds <strong>{mediaCount}</strong> consented photo/video file(s). They
                 are not part of the data bundle. Each is written under the name given in{' '}
                 <code>15_media_inventory.csv</code>. They contain identifiable images of the
@@ -611,159 +650,56 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   );
 }
 
-// ---- small presentational helpers ----
-function Grid({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>{children}</div>;
-}
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 16 }}>
-      <div className="font-sans text-[15px] leading-relaxed text-[#4a4a60]">{label}</div>
-      <div className="font-serif" style={{ fontSize: 28, marginTop: 4 }}>{value}</div>
-    </div>
-  );
-}
-function Caveat({ text }: { text: string }) {
-  return (
-    <div style={{ gridColumn: '1 / -1', background: '#fff8ec', border: '1px solid #f5a62340', borderRadius: 12, padding: 14 }}>
-      <p className="font-sans text-[15px] leading-relaxed" style={{ color: UI_TEXT.amber }}>⚠ {text}</p>
-    </div>
-  );
-}
+// ---- small helpers ----
+
+/**
+ * What each tab is for and how to read it: a few short lines, the same box on every tab (parts.tsx
+ * HowToRead). Written for the investigator, not for a programmer; the words for statuses and measures are
+ * the researcher card's and the export's.
+ */
+const HOW_TO_READ: Record<Tab, string[]> = {
+  overview: [
+    'One tile per question about this sitting; the tabs above give the detail.',
+    'Eye data good: reading conditions whose blink data passed every check. Data Quality / QC says why the others did not.',
+    'A dash (—) means not measured. It is never a zero.',
+  ],
+  cohort: [
+    'Every participant on this tablet, read from analysis_long.csv: the rows and numbers the analysis will use.',
+    'The other tabs answer “did this sitting work?”; this one answers “is the study working?”.',
+    'Look for a condition with fewer rows than the others, or many rows without blinks.',
+  ],
+  reaction: [
+    'One bar per finished condition, in the order they ran (N: negative polarity, P: positive).',
+    '“No data” under a chart lists the conditions with nothing measured.',
+  ],
+  fatigue: [
+    'One bar per finished condition. The fatigue score is the mean of the five items (0–10); the line shows it in the order the conditions ran, against the baseline before the first (dashed).',
+    'Change from baseline: above 0 is more fatigue than at the start.',
+  ],
+  search: [
+    'One bar per finished condition, in the order they ran.',
+    'The table gives every figure, with ⚠ on conditions below 4.5:1 contrast.',
+  ],
+  eye: [
+    `Each reading condition gets one verdict for its blink data, from the analysis's own checks (rule ${RELIABILITY_RULE_VERSION}): ✓ Good, ! Usable or ✕ Not usable.`,
+    'Good: every check passed. Usable: in the analysis; one pre-planned re-check leaves it out. Not usable: not in the eye-data analysis.',
+    'Each column is one check: ✓ passed, ! flagged, ✕ failed, – not measured. Tap Details for the numbers and the rule.',
+    'A note (few blinks, the light, a covered camera) never changes the verdict; nor does Engagement, which is about the participant.',
+  ],
+  export: [
+    'Download data bundle: this sitting. Download analysis dataset: every sitting on this tablet, pooled.',
+    'Check on the receiving computer that every file arrived before confirming.',
+  ],
+};
+
 function SummaryTable({ headers, rows }: { headers: string[]; rows: (string | number)[][] }) {
   return (
     <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 13 }}>
-        <thead><tr>{headers.map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
-        <tbody>{rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} style={{ padding: '6px 10px', borderBottom: '1px solid #f3f1ec' }}>{c}</td>)}</tr>)}</tbody>
+        <thead><tr>{headers.map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc', verticalAlign: 'bottom' }}>{h}</th>)}</tr></thead>
+        <tbody>{rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} style={cell}>{c}</td>)}</tr>)}</tbody>
       </table>
     </div>
-  );
-}
-function OcularTable({ summaries }: { summaries: ConditionSummary[] }) {
-  return (
-    <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 13 }}>
-        <thead><tr>{['Cond', MEASURE.blinks.name, 'Minutes seen', `${MEASURE.blinkRate.name} /min`, MEASURE.incompleteRatio.name, `${MEASURE.interBlinkInterval.name} ms`, `${MEASURE.perclos.name} P80`, `${MEASURE.perclos.name} P70`, MEASURE.longClosures.name, `${MEASURE.samplingRate.name} (tier)`].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
-        <tbody>
-          {summaries.map((s) => (
-            <tr key={s.condition_id}>
-              <td style={cohortCell}>{s.condition_label}</td>
-              <td style={cohortCell}>{n(s.blink_count_total, 0)}</td>
-              <td style={cohortCell}>{n(s.observed_minutes, 1)}</td>
-              <td style={cohortCell}>{n(s.blink_rate, 1)}</td>
-              <td style={cohortCell}>{n(s.incomplete_blink_ratio)}</td>
-              <td style={cohortCell}>{n(s.mean_inter_blink_interval_ms, 0)}</td>
-              <td style={cohortCell}>{n(s.perclos_p80)}</td>
-              <td style={cohortCell}>{n(s.perclos_p70)}</td>
-              <td style={cohortCell}>{n(s.long_closure_count, 0)}</td>
-              <td style={{ ...cell, color: s.camera_active ? FLAG_COLOR[s.qc.fps] : undefined }}><FpsCell s={s} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-/**
- * "Is the camera working?" — one plain sentence per condition, then what went wrong. Answers the
- * question the numbers alone cannot: whether a small blink figure is a quiet reader or a camera that
- * was not seeing the eyes. The comparison figures are from the one verified reading study in the
- * citation ledger (#2), stated with their spread so a single participant is not judged against a mean.
- */
-function CameraVerdictPanel({ summaries }: { summaries: ConditionSummary[] }) {
-  const counts = { good: 0, warn: 0, bad: 0 };
-  summaries.forEach((s) => { counts[s.camera_verdict.level]++; });
-  return (
-    <div data-testid="camera-verdicts" style={{ gridColumn: '1 / -1', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 16 }}>
-      <h3 className="font-sans" style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>Is the camera working?</h3>
-      <p className="font-sans" style={{ fontSize: 16, color: '#3d3d5c', marginTop: 4 }}>
-        {counts.good} condition{counts.good === 1 ? '' : 's'} measured well · {counts.warn} usable with care · {counts.bad} not trustworthy
-      </p>
-      <ul style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-        {summaries.map((s) => (
-          <li key={s.condition_id} data-testid="camera-verdict" data-level={s.camera_verdict.level} style={{ fontFamily: 'Roboto, system-ui, sans-serif', fontSize: 16, color: '#1a1a2e', lineHeight: 1.5 }}>
-            <span style={{ display: 'inline-block', minWidth: 64, fontWeight: 700, color: FLAG_COLOR[s.camera_verdict.level] }}>
-              {s.camera_verdict.level === 'good' ? '✓' : s.camera_verdict.level === 'warn' ? '!' : '✕'} {s.condition_label}
-            </span>{' '}
-            {s.camera_verdict.headline}
-            {s.camera_verdict.problems.length > 0 && s.camera_active && (
-              <span style={{ display: 'block', paddingLeft: 68, color: '#3d3d5c' }}>{s.camera_verdict.problems.join(' · ')}</span>
-            )}
-          </li>
-        ))}
-      </ul>
-      <p className="font-sans" style={{ fontSize: 15, color: '#3d3d5c', marginTop: 12, lineHeight: 1.6 }}>
-        For comparison: 21 adults reading on a computer for 15 minutes blinked 11.6 times a minute on
-        average (SD 7.84), and 16.1% of their blinks were incomplete (SD 15.7; individuals ranged from
-        0.9% to 56.5%) — Portello, Rosenfield &amp; Chu 2013. People differ a lot, so one participant
-        with few blinks is not by itself a sign of a fault; a ✓ above is what says the camera was
-        seeing the eyes. The camera self-test after calibration (selftest_* in the export) is the
-        direct check: the participant blinked on cue and the result was shown on the spot.
-      </p>
-    </div>
-  );
-}
-function EngagementTable({ summaries }: { summaries: ConditionSummary[] }) {
-  return (
-    <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 13 }}>
-        <thead><tr>{['Cond', 'Engagement', 'Quality', 'Read ms', 'Fatigue ms', 'Flags'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
-        <tbody>
-          {summaries.map((s) => (
-            <tr key={s.condition_id}>
-              <td style={cohortCell}>{s.condition_label}</td>
-              <td style={{ ...cell, fontWeight: 700, color: FLAG_COLOR[s.engagement] }}>{s.engagement}</td>
-              <td style={cohortCell}>{n(s.quality_score)}</td>
-              <td style={cohortCell}>{n(s.reading_time_ms, 0)}</td>
-              <td style={cohortCell}>{n(s.fatigue_response_ms, 0)}</td>
-              <td style={cohortCell}>{s.engagement_reasons.length ? s.engagement_reasons.join('; ') : '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-function QcTable({ summaries }: { summaries: ConditionSummary[] }) {
-  return (
-    <div style={{ gridColumn: '1 / -1', overflowX: 'auto', background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 12 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"DM Mono", monospace', fontSize: 13 }}>
-        <thead><tr>{['Cond', 'Camera', `${MEASURE.samplingRate.name} (tier)`, MEASURE.faceInView.name, MEASURE.headTurnedAway.name, MEASURE.onScreen.name, MEASURE.lighting.name, 'Overall'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: UI_TEXT.muted, borderBottom: '1px solid #e5e2dc' }}>{h}</th>)}</tr></thead>
-        <tbody>
-          {summaries.map((s) => (
-            <tr key={s.condition_id}>
-              <td style={cohortCell}>{s.condition_label}</td>
-              <td style={cohortCell}>{s.camera_active ? 'on' : 'off'}</td>
-              <td style={{ ...cell, color: s.camera_active ? FLAG_COLOR[s.qc.fps] : undefined }}><FpsCell s={s} /></td>
-              <td style={{ ...cell, color: FLAG_COLOR[s.qc.facePresence] }}>{n(s.face_presence_ratio)}</td>
-              <td style={{ ...cell, color: FLAG_COLOR[s.qc.offAxis] }}>{n(s.off_axis_ratio)}</td>
-              {/* A quality check only (gaze-r2); no flag of its own, and — without a passed gaze check. */}
-              <td style={cohortCell} data-testid="on-screen-ratio">{n(s.on_screen_ratio)}</td>
-              <td style={{ ...cell, color: FLAG_COLOR[s.qc.lighting] }}>{s.lighting_quality ?? '—'}</td>
-              <td style={{ ...cell, fontWeight: 700, color: FLAG_COLOR[s.qc.overall] }}>{s.qc.overall}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-const cell = { padding: '6px 10px', borderBottom: '1px solid #f3f1ec' } as const;
-
-/**
- * The frame-rate gate fps-g2 in one cell: the eye's sampling rate while the face was seen, its tier
- * (A adequate, B reduced, C too slow) and "off usual" when more than 2 fps from the sitting's median —
- * the same rule as the export and the templates (tracking/frameRateGate.ts). It showed effective_fps
- * with a warning sign under 25, which face loss lowered and which the tablet's 23-25 fps nearly always
- * set off.
- */
-function FpsCell({ s }: { s: ConditionSummary }) {
-  if (!s.camera_active) return <>—</>;
-  return (
-    <span data-testid="fps-tier" data-tier={s.fps_tier ?? ''} title={s.fps_tier ? FPS_TIER_WORD[s.fps_tier] : 'no rate'}>
-      {n(s.sampling_fps_observed, 0)} {s.fps_tier ?? ''}{s.fps_consistent === false ? ' · off usual' : ''}
-    </span>
   );
 }
 
@@ -773,7 +709,4 @@ function avg(xs: (number | null)[]): number | null {
 }
 function fmt(x: number | null, unit = ''): string {
   return x == null ? '—' : `${Math.round(x * 10) / 10}${unit}`;
-}
-function n(x: number | null, dp = 2): string {
-  return x == null ? '—' : (Math.round(x * 10 ** dp) / 10 ** dp).toString();
 }
