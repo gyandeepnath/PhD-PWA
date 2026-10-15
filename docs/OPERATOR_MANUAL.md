@@ -720,6 +720,9 @@ will do with that condition:
 | **! Usable** | One check is flagged: eye sampling rate 15–20 a second, or more than 2 from this participant's usual; face in view under 90%; head turned away over 20% of the time; the camera saw under 90% of the reading. | Uses it, and leaves it out of one pre-planned re-check. |
 | **✕ Not usable** | The camera was off or stopped; no blinks were counted (for example, no open-eye baseline at calibration); or the eye sampling rate was under 15 a second. | Leaves it out of the eye-data analysis. The other measures of that condition (reading, questions, ratings, reaction time) are not affected. |
 
+- Above the rows, **Before the readings** shows the sitting's open-eye baseline, camera check and
+  gaze check, each as its own screen judged it. No baseline means no blinks were counted. A gaze
+  check that did not pass only means there is no on-screen ratio.
 - Each column of the row is one check: **✓** passed, **!** flagged, **✕** failed, **–** not measured.
   The line under the row names the check that was not met. **Details ▾** shows every check: what
   was measured, what was needed, the rule, and what the analysis does.
