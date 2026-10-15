@@ -14,7 +14,6 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { buildFixtureBundle } from '@/sim/bundleFixture';
-import { ratingTrack } from '@/scales/trackStyle';
 
 const dashboardSource = () => readFileSync(resolve(__dirname, '..', 'src/dashboard/Dashboard.tsx'), 'utf8');
 
@@ -110,7 +109,7 @@ describe('the condition-run carries no polarity-correlated flash or chrome', () 
   const CONDITION_SCREENS = [
     'src/tasks/ReadingTask.tsx', 'src/tasks/TaskIntro.tsx', 'src/tasks/ComprehensionTask.tsx',
     'src/tasks/VisualSearchTask.tsx', 'src/scales/FatigueScale.tsx',
-    'src/scales/DisplayPerceptionRating.tsx', 'src/scales/NasaTlx.tsx',
+    'src/scales/DisplayPerceptionRating.tsx', 'src/scales/VasLine.tsx', 'src/scales/NasaTlx.tsx',
   ];
 
   it('does not fade condition screens in from the page colour', () => {
@@ -173,6 +172,7 @@ describe('instruction text on condition screens is never faded', () => {
   const SCREENS = [
     'src/tasks/ReadingTask.tsx', 'src/tasks/TaskIntro.tsx', 'src/tasks/ComprehensionTask.tsx',
     'src/tasks/VisualSearchTask.tsx', 'src/scales/FatigueScale.tsx', 'src/scales/DisplayPerceptionRating.tsx',
+    'src/scales/VasLine.tsx',
   ];
 
   it('uses no opacity on text, and no fixed slate colour, on any condition screen', () => {
@@ -185,29 +185,29 @@ describe('instruction text on condition screens is never faded', () => {
     expect(read('src/tasks/ReactionTimeTask.tsx')).not.toMatch(/opacity: 0\.\d/);
   });
 
-  it('opens every rating slider with no visible anchor, and counts a tap as an answer', () => {
+  it('opens every rating with no visible anchor, and counts a tap as an answer', () => {
     // A visible default thumb (50 on perception and NASA-TLX, 0 on fatigue) is an anchor that pulls
-    // ratings toward it. `vl-untouched` hides it; pointer-down marks the answer, so a tap landing
-    // exactly on the hidden default still registers.
-    for (const f of ['src/scales/DisplayPerceptionRating.tsx', 'src/scales/FatigueScale.tsx', 'src/scales/NasaTlx.tsx']) {
-      const src = read(f);
-      expect(src, f).toMatch(/'vl-untouched'/);
-      expect(src, f).toMatch(/onPointerDown=/);
-    }
+    // ratings toward it. The NASA-TLX keeps its published slider and hides the thumb (`vl-untouched`);
+    // pointer-down marks the answer, so a tap landing exactly on the hidden default still registers.
+    const tlx = read('src/scales/NasaTlx.tsx');
+    expect(tlx).toMatch(/'vl-untouched'/);
+    expect(tlx).toMatch(/onPointerDown=/);
     expect(read('src/styles/theme.css')).toMatch(/\.vl-untouched::-webkit-slider-thumb \{\s*opacity: 0;/);
-    // And neither condition-coloured scale paints its track before it is touched.
-    expect(read('src/scales/DisplayPerceptionRating.tsx')).toMatch(/ratingTrack\(text, touched, value\)/);
-    expect(read('src/scales/FatigueScale.tsx')).toMatch(/ratingTrack\(text, touched\[it\.key\]/);
+    // The two condition-coloured ratings are visual analogue lines (Round 84, scales/vas.ts): no value
+    // at all until touched — null, not a hidden default — and the marker drawn only once there is one.
+    expect(read('src/scales/FatigueScale.tsx')).toMatch(/eye_strain: null, dryness: null, blur: null, burning: null, headache: null/);
+    const dpr = read('src/scales/DisplayPerceptionRating.tsx');
+    expect(dpr).toMatch(/useState<number \| null>\(null\);[\s\S]*useState<number \| null>\(null\);/);
+    const line = read('src/scales/VasLine.tsx');
+    expect(line).toMatch(/onPointerDown=/);
+    expect(line).toMatch(/\{value != null && \(/);
   });
 
-  it('draws the empty track visibly, in full ink, and fills only what was answered', () => {
-    // The empty track was ink at 13-19% alpha: ~1.1:1 in P4, a line the participant could barely see
-    // and had to tap. It is full ink, dashed, so it carries the condition's own contrast.
-    const untouched = ratingTrack('#C9A400', false, 50);
-    expect(untouched).toMatch(/repeating-linear-gradient/);
-    expect(untouched).not.toMatch(/#C9A400[0-9a-f]{2}\b/i);   // no alpha suffix on the ink
-    expect(untouched).not.toMatch(/ 50%/);                      // no fill before an answer
-    const touched = ratingTrack('#C9A400', true, 73);
-    expect(touched).toMatch(/#C9A400 73%, transparent 73%/);
+  it('draws the line in full ink, with nothing on it but its ends and the answer', () => {
+    // No alpha on the ink, no gradient fill, no tick or number between the ends.
+    const code = read('src/scales/VasLine.tsx').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    expect(code).not.toMatch(/\$\{ink\}[0-9a-f]{2}\b|ink \+ '[0-9a-f]{2}'/i);
+    expect(code).not.toMatch(/linear-gradient|opacity/);
+    expect(code.match(/background: ink/g) ?? []).toHaveLength(4);   // the line, two end stops, the marker
   });
 });

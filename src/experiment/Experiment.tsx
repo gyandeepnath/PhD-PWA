@@ -1598,6 +1598,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       view = (
         <FatigueScale
           prompt="How are your eyes feeling right now, before we begin?"
+          physical={session ?? {}}
           onComplete={async (r) => {
             if (session) {
               // One baseline per sitting, for the reason given at CVSQ_BASELINE: every fatigue_delta
@@ -1607,6 +1608,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 fatigue_id: uuidv4(), session_id: session.session_id, condition_id: null,
                 stage: 'baseline', ...r.items, fatigue_mean: r.mean, touched: r.touched, all_touched: true,
                 response_time_ms: r.responseTimeMs,
+                slider_version: r.sliderVersion, vas_line_mm: r.lineMm, vas_line_source: r.lineSource,
               });
               // Propagate the measured baseline into the participant record (was hard-wired to 0).
               const p = await get('participants', session.participant_id);
@@ -1742,6 +1744,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         <DisplayPerceptionRating
           background={cond.background} text={cond.text}
           display={displayPosition}
+          physical={session ?? {}}
           onComplete={async (r) => {
             if (session) await clearConditionRows('display_perception', conditionId);
             if (session) await put('display_perception', {
@@ -1749,6 +1752,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               display_comfort_score: r.comfort, text_clarity_score: r.clarity,
               comfort_touched: r.comfortTouched, clarity_touched: r.clarityTouched,
               response_time_ms: r.responseTimeMs,
+              slider_version: r.sliderVersion, vas_line_mm: r.lineMm, vas_line_source: r.lineSource,
             });
             advance();
           }}
@@ -1762,12 +1766,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           background={cond?.background ?? '#F8F7F5'}
           text={cond?.text ?? '#1a1a2e'}
           eyebrow={displayStepLabel('POST_FATIGUE', displayPosition)}
+          physical={session ?? {}}
           onComplete={async (r) => {
             if (session) await clearConditionRows('fatigue_scores', conditionId);
             if (session) await put('fatigue_scores', {
               fatigue_id: uuidv4(), session_id: session.session_id, condition_id: conditionId,
               stage: 'post_condition', ...r.items, fatigue_mean: r.mean, touched: r.touched, all_touched: true,
               response_time_ms: r.responseTimeMs,
+              slider_version: r.sliderVersion, vas_line_mm: r.lineMm, vas_line_source: r.lineSource,
             });
             advance();
           }}

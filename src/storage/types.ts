@@ -9,6 +9,7 @@ import type { QuestionKind } from '@/experiment/passages';
  */
 import type { Polarity, WcagLevel } from './schemaEnums';
 import type { IlluminationLevel } from '@/experiment/illumination';
+import type { PhysicalSource } from '@/lib/physicalCalibration';
 import type { MediaConsent, MediaRecord } from './media';
 
 export type Stage =
@@ -606,6 +607,18 @@ export interface FatigueRecord {
   all_touched: boolean;
   /** Time from scale mount to submit (ms) — engagement/careless-responding signal. */
   response_time_ms: number | null;
+  /**
+   * The rating format, on every fatigue and display-perception row from Round 84 (scales/vas.ts):
+   * 'vas-v2', the 100 mm visual analogue line. ABSENT on rows recorded before it, which the export
+   * names 'sl-v1' (the number sliders).
+   */
+  slider_version?: string;
+  /**
+   * The length the lines were drawn at when the participant pressed Continue, in mm — 100 unless the
+   * screen could not hold it — and where the millimetres per pixel behind it came from.
+   */
+  vas_line_mm?: number | null;
+  vas_line_source?: PhysicalSource | null;
 }
 
 /** Validated CVS-Q (Seguí 2015): 16 items, frequency x intensity, cutoff >=6. Baseline + end only. */
@@ -666,6 +679,10 @@ export interface DisplayPerceptionRecord {
   clarity_touched: boolean;
   /** Time from rating mount to submit (ms) — engagement signal. */
   response_time_ms: number | null;
+  /** As on FatigueRecord. */
+  slider_version?: string;
+  vas_line_mm?: number | null;
+  vas_line_source?: PhysicalSource | null;
 }
 
 /**

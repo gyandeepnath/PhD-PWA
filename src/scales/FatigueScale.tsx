@@ -1,16 +1,20 @@
 /**
- * 5-item visual-analogue fatigue scale (0-10). Composite = mean of items.
+ * 5-item visual-fatigue scale, each item a 100 mm visual analogue line (Round 84; see vas.ts).
+ * Stored per item 0-10 in tenths (whole millimetres / 10); composite = mean of items.
  *
- * Audit fix: each slider has a `touched` flag and submit is disabled until all five are touched,
- * so an untouched all-zero record can't be silently submitted (the original defaulted every
- * slider to 0 with submit always enabled).
+ * Audit fix: submit is disabled until all five are answered, so an untouched all-zero record can't be
+ * silently submitted (the original defaulted every slider to 0 with submit always enabled). Since Round
+ * 84 an unanswered line has no value at all — null, not 0 — and no marker, so there is no default to be
+ * anchored by or to submit by accident.
  */
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { mean } from '@/lib/stats';
 import { now } from '@/lib/timing';
 import { STIMULUS_FONT_STACK } from '@/lib/fonts';
+import type { PhysicalSource, SessionPhysical } from '@/lib/physicalCalibration';
 import { ActionRow, Eyebrow, LOOP_TEXT_MIN_PX, PrimaryButton } from '@/tasks/loopChrome';
-import { ratingTrack } from './trackStyle';
+import { VasLine } from './VasLine';
+import { drawnLineMm, SLIDER_VERSION, vasLineCssPx } from './vas';
 
 export interface FatigueResult {
   items: { eye_strain: number; dryness: number; blur: number; burning: number; headache: number };
@@ -18,6 +22,12 @@ export interface FatigueResult {
   touched: { eye_strain: boolean; dryness: boolean; blur: boolean; burning: boolean; headache: boolean };
   /** Time from mount to submit (ms) — engagement/careless-responding signal. */
   responseTimeMs: number;
+  /** The rating format (vas.ts SLIDER_VERSION). */
+  sliderVersion: string;
+  /** The length the lines were drawn at when the participant pressed Continue, mm; null if unmeasurable. */
+  lineMm: number | null;
+  /** Where the millimetres per pixel behind that length came from (the ruler, or a documented fallback). */
+  lineSource: PhysicalSource;
 }
 
 const ITEMS = [
@@ -37,6 +47,8 @@ interface Props {
   text?: string;
   /** Inside a display: "Display k of N · Step 3 of 5 · Ratings". None before the displays begin. */
   eyebrow?: string;
+  /** The sitting's ruler calibration (or its absence), which sets the line's 100 mm. */
+  physical: SessionPhysical;
   onComplete: (r: FatigueResult) => void;
 }
 
@@ -47,7 +59,7 @@ interface Props {
  * exactly the low-contrast conditions — a legibility effect correlated with the factor under test.
  * The SIZE did the same: the instruction was 12 px DM Mono, the item labels 14, the "0" and "10" ends
  * 11 px — 9.5 CSS px on the tablet at the old scale. Everything is now 16 px in the stimulus face;
- * hierarchy is carried by size and weight. Decoration (the empty track) may still be translucent.
+ * hierarchy is carried by size and weight.
  *
  * ONE INK. The answered value, the track and the button were drawn in a separate `accent`: the
  * condition's ink after a display, but #4f8ef7 at the baseline — a blue at 3.2:1 on the cream, the
@@ -55,22 +67,40 @@ interface Props {
  * questionnaires do (the NASA-TLX's accent became #1f5fbf for the same reason).
  *
  * Shared by the baseline (on the cream set-up ground, before any display) and every post-display
- * rating, so the instrument looks the same at the reference point as at each repeat.
+ * rating, so the instrument looks the same at the reference point as at each repeat — the same
+ * 100 mm lines, at the same place on the screen.
  */
 const label: React.CSSProperties = { fontFamily: STIMULUS_FONT_STACK, fontSize: LOOP_TEXT_MIN_PX };
 
-export function FatigueScale({ prompt, background = '#F8F7F5', text = '#1a1a2e', eyebrow, onComplete }: Props) {
-  const [values, setValues] = useState<Record<Key, number>>({
-    eye_strain: 0, dryness: 0, blur: 0, burning: 0, headache: 0,
-  });
-  const [touched, setTouched] = useState<Record<Key, boolean>>({
-    eye_strain: false, dryness: false, blur: false, burning: false, headache: false,
-  });
+const EMPTY: Record<Key, number | null> = { eye_strain: null, dryness: null, blur: null, burning: null, headache: null };
 
+export function FatigueScale({ prompt, background = '#F8F7F5', text = '#1a1a2e', eyebrow, physical, onComplete }: Props) {
+  /** Whole millimetres from the left end of each line, or null while unanswered. */
+  const [values, setValues] = useState<Record<Key, number | null>>(EMPTY);
   const [sent, setSent] = useState(false);
+  const sentRef = useRef(false);
   const mountedAt = useRef(now());
-  const allTouched = ITEMS.every((it) => touched[it.key]);
-  const composite = mean(ITEMS.map((it) => values[it.key]));
+  const firstLine = useRef<HTMLDivElement | null>(null);
+  // Fixed for the life of the screen: the pixel ratio and the calibration do not change under it.
+  const line = useMemo(() => vasLineCssPx(physical, window.devicePixelRatio), [physical]);
+  const answered = ITEMS.filter((it) => values[it.key] != null).length;
+  const allTouched = answered === ITEMS.length;
+
+  const submit = () => {
+    // A ref as well as the state: two taps inside one frame both see the state from before the first.
+    if (!allTouched || sent || sentRef.current) return;
+    sentRef.current = true;
+    setSent(true);
+    // Tenths of the 0-10 scale: whole millimetres of the line, divided by ten.
+    const items = Object.fromEntries(ITEMS.map((it) => [it.key, (values[it.key] as number) / 10])) as FatigueResult['items'];
+    const touched = Object.fromEntries(ITEMS.map((it) => [it.key, true])) as FatigueResult['touched'];
+    onComplete({
+      items, mean: mean(Object.values(items)), touched, responseTimeMs: now() - mountedAt.current,
+      sliderVersion: SLIDER_VERSION,
+      lineMm: drawnLineMm(firstLine.current?.getBoundingClientRect().width ?? NaN, physical, window.devicePixelRatio),
+      lineSource: line.source,
+    });
+  };
 
   return (
     // Fixed vertical padding: a percentage is a share of the WIDTH, which the address bar changes.
@@ -83,42 +113,17 @@ export function FatigueScale({ prompt, background = '#F8F7F5', text = '#1a1a2e',
       <div style={{ width: '100%', maxWidth: 720, margin: 'auto' }}>
       {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
       <h2 className={`${eyebrow ? 'mt-2 ' : ''}font-serif text-3xl font-light`}>{prompt}</h2>
-      <p className="mt-1" style={label}>Tap or drag each slider. 0 = none, 10 = severe.</p>
+      <p className="mt-1" style={label}>Tap each line where it matches how your eyes feel. Tap again or slide to change it.</p>
 
-      <div className="mt-5 space-y-5">
-        {ITEMS.map((it) => (
-          <div key={it.key}>
-            <div className="flex justify-between" style={{ ...label, marginBottom: 4 }}>
-              <span>{it.label}</span>
-              <span style={{ fontWeight: 700 }}>
-                {touched[it.key] ? `${values[it.key]} / 10` : 'not set'}
-              </span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ ...label, width: 22, textAlign: 'right' }}>0</span>
-              <input
-                type="range"
-                min={0}
-                max={10}
-                step={1}
-                value={values[it.key]}
-                aria-label={it.key}
-                className={touched[it.key] ? undefined : 'vl-untouched'}
-                onPointerDown={() => setTouched((t) => ({ ...t, [it.key]: true }))}
-                style={{
-                  flex: 1,
-                  color: text,
-                  // Full-ink dashed track, solid up to the answer once touched. See ratingTrack.
-                  background: ratingTrack(text, touched[it.key], values[it.key] * 10),
-                }}
-                onChange={(e) => {
-                  setValues((v) => ({ ...v, [it.key]: Number(e.target.value) }));
-                  setTouched((t) => ({ ...t, [it.key]: true }));
-                }}
-              />
-              <span style={{ ...label, width: 22 }}>10</span>
-            </div>
-          </div>
+      {/* The gap between items is wider than a label's distance from its own line, so each label groups with its line. */}
+      <div className="mt-3" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {ITEMS.map((it, i) => (
+          <VasLine
+            key={it.key} name={it.key} label={it.label} left="None" right="Severe" anchors="beside"
+            ink={text} value={values[it.key]} lineCssPx={line.cssPx}
+            onChange={(mm) => setValues((v) => ({ ...v, [it.key]: mm }))}
+            lineRef={i === 0 ? (el) => { firstLine.current = el; } : undefined}
+          />
         ))}
       </div>
 
@@ -141,15 +146,8 @@ export function FatigueScale({ prompt, background = '#F8F7F5', text = '#1a1a2e',
         baseline rating to the screen that must not show it, needing only one line to become live
         again. A comment saying "no longer used" does not stop that; not having the value here does.
       */}
-      <ActionRow style={{ marginTop: 24 }} status={allTouched ? 'Thank you — tap Continue.' : 'Set all sliders to continue.'}>
-        <PrimaryButton
-          ink={text} ground={background} enabled={allTouched && !sent}
-          onClick={() => {
-            if (!allTouched || sent) return;
-            setSent(true);
-            onComplete({ items: { ...values }, mean: composite, touched: { ...touched }, responseTimeMs: now() - mountedAt.current });
-          }}
-        >
+      <ActionRow style={{ marginTop: 20 }} status={allTouched ? 'Thank you — tap Continue.' : `Mark every line to continue (${answered} of ${ITEMS.length} marked).`}>
+        <PrimaryButton ink={text} ground={background} enabled={allTouched && !sent} onClick={submit}>
           Continue →
         </PrimaryButton>
       </ActionRow>

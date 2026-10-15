@@ -105,7 +105,7 @@ export function PrimaryButton({ ink, ground, enabled = true, onClick, children, 
 
 /**
  * The row the primary button sits in under the content of the questions and the ratings: the button
- * at the right-hand edge, and a one-line status ("Set all sliders to continue.") at the left.
+ * at the right-hand edge, and a one-line status ("Mark both lines to continue.") at the left.
  */
 export function ActionRow({ status, children, style }: { status?: ReactNode; children: ReactNode; style?: CSSProperties }) {
   return (

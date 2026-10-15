@@ -51,6 +51,19 @@ export async function setAllRanges(page: Page, value: number) {
   }
 }
 
+/**
+ * Mark every visual analogue line on the screen (the fatigue and display-perception ratings, Round 84)
+ * by TAPPING it, as a participant does: a real pointer press at `fraction` of the way along each line.
+ * There is no input to set any more, and a set value would skip the code under test.
+ */
+export async function markAllVas(page: Page, fraction: number) {
+  for (const line of await page.locator('[role=slider][data-testid^="vas-"] [data-vas-line]').all()) {
+    const b = await line.boundingBox();
+    if (!b) throw new Error('a visual analogue line has no box on screen');
+    await page.mouse.click(b.x + fraction * b.width, b.y + b.height / 2);
+  }
+}
+
 export async function checkAllBoxes(page: Page) {
   for (const box of await page.getByRole('checkbox').all()) await box.check({ force: true });
 }
@@ -198,7 +211,7 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
       break;
     case 'BASELINE_FATIGUE':
     case 'POST_FATIGUE':
-      await setAllRanges(page, 3);
+      await markAllVas(page, 0.3);
       await click(page, /Continue/);
       await waitStageChange(page, stage);
       break;
@@ -249,7 +262,7 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
       break;
     }
     case 'DISPLAY_PERCEPTION':
-      await setAllRanges(page, 70);
+      await markAllVas(page, 0.7);
       await click(page, /Continue/);
       await waitStageChange(page, stage);
       break;

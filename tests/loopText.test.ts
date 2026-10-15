@@ -30,6 +30,7 @@ const LOOP_SCREENS = [
   'src/tasks/ComprehensionTask.tsx',
   'src/scales/DisplayPerceptionRating.tsx',
   'src/scales/FatigueScale.tsx',
+  'src/scales/VasLine.tsx',
   'src/tasks/VisualSearchTask.tsx',
   'src/tasks/ReactionTimeTask.tsx',
   'src/tasks/loopChrome.tsx',
