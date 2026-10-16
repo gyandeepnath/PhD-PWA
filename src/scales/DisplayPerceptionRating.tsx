@@ -74,7 +74,13 @@ export function DisplayPerceptionRating({ background, text, physical, onComplete
       <Eyebrow>{displayStepLabel('DISPLAY_PERCEPTION', display)}</Eyebrow>
       <h2 className="mt-2 font-serif text-3xl font-light">How did this display feel?</h2>
       <p className="mt-1" style={label}>Tap each line to rate this display. Tap again or slide to change it.</p>
-      <div className="mt-6" style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+      {/*
+        The gap between the two items is about twice a label's distance from its own line. With the end
+        words UNDER each line, a 22 px gap left the first line's end words ("Very uncomfortable") as close
+        to the second item's label as that label was to its own line, so the two read as one block
+        (seen in the Round 84 screenshots). There is room for it at every viewport the suite fits.
+      */}
+      <div className="mt-6" style={{ display: 'flex', flexDirection: 'column', gap: 44 }}>
         <VasLine
           name="comfort" label="Comfort of the display" left="Very uncomfortable" right="Very comfortable" anchors="below"
           ink={text} value={comfort} lineCssPx={line.cssPx} onChange={setComfort}
