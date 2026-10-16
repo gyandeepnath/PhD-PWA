@@ -112,8 +112,12 @@ one line:
 
 > `VisuLab 2.2.0 · built 4 Oct 2026 09:33 UTC · e05d3c4`
 
-The **version** (2.2.0) changes only when a change alters what a participant sees or what the export
-means. The **build time** (always in UTC) changes with every deployment, so it is the part that tells
+The **version** (2.4.0 at the time of writing) changes only when a change alters what a participant
+sees or what the export means. 2.4.0 is the first build after 2.3.1, the build the investigator
+tested: it brings the 100 mm rating lines, the grey-field calibration with the three-dot gaze check,
+the camera check that counts only blinks after a flash, the fixed exposure kept on Android, the
+reorganised dashboard and the per-blink files. Builds deployed while these were being made still
+said 2.3.1, so on a sitting labelled 2.3.1 the `git_hash` says which build it really was. The **build time** (always in UTC) changes with every deployment, so it is the part that tells
 you whether the tablet has the newest build. The **commit** (seven characters) is what the export
 records as `git_hash`. The same three are in `01_session_info.csv` (`app_version`, `build_time`,
 `git_hash`), and the dashboard shows both the build drawing it and the build that recorded the sitting.
@@ -221,7 +225,7 @@ CVSQ_BASELINE → BASELINE_FATIGUE → INSTRUCTIONS`
 Pre-flight comes **before** the colour-vision plates on purpose: a blue-light filter left on would
 invalidate the red-green plates.
 
-**Tick all (builds after 2.3.1).** The seven room-and-device items on the right of pre-flight
+**Tick all (version 2.4.0 onwards).** The seven room-and-device items on the right of pre-flight
 (brightness, blue-light filter, screen cleaned, lux, lenses, backlight, stand) can be ticked one by
 one, or all at once with **Tick all**. Tick all asks first; answer **I have checked each of these**
 only if you have. The sitting records which way the list was ticked (`preflight_bulk_ticked` in

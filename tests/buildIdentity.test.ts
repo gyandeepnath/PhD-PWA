@@ -38,9 +38,9 @@ describe('buildIdentity', () => {
 });
 
 describe('where the version and the build come from', () => {
-  it('package.json is 2.3.1 — Round 76: the viewing distance is typed, never a prefilled 55', () => {
+  it('package.json is 2.4.0 — Round 85: the measurement rules changed since 2.3.1 (Rounds 78-85)', () => {
     const pkg = JSON.parse(src('package.json'));
-    expect(pkg.version).toBe('2.3.1');
+    expect(pkg.version).toBe('2.4.0');
     const lock = JSON.parse(src('package-lock.json'));
     expect(lock.version).toBe(pkg.version);
     expect(lock.packages[''].version).toBe(pkg.version);
