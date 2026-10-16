@@ -765,9 +765,13 @@ line length) is computed from the declared 22 px at line height 1.4 and the disp
 (`reading_line_px_rendered`, 02_conditions.csv) against that declaration (`reading_line_px_expected`).
 A condition more than 2% off is reported by the integrity audit (`reading_text_size`, a warning) and
 should be named in the write-up; it is not excluded automatically, because the measured size is in the
-data. `typography_version` (02) says which typography the condition was drawn with; `ty-v1` and
-`ty-v2` draw the passage, the questions and the search excerpt identically (lib/fonts.ts), so it does
-not split the analysis.
+data. `typography_version` (02) says which typography the condition was drawn with. In headless
+desktop Chromium, the reading pages, questions and search excerpt compared (6 pages, 2 questions, 1
+excerpt) were pixel-identical under `ty-v1` and `ty-v2` (lib/fonts.ts). That was **not measured on the
+Xiaomi Pad 6**: the one `ty-v2` change that could alter the passage there — text autosizing switched off
+(`text-size-adjust`) — does nothing on desktop. On a tablet at its default text settings the two should
+draw the passage the same, so the version should not split the analysis; `reading_line_px_rendered` is
+what checks this on the device (`ty-v1` rows, which include every sitting recorded with 2.3.1, have none).
 
 ---
 

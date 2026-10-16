@@ -44,8 +44,12 @@ export async function stimulusFontLoaded(): Promise<boolean | null> {
  * WHAT ty-v2 IS, AND WHAT IT LEAVES ALONE. The reading text is set exactly as before — Roboto 400 at
  * 22 px, line height 1.4, justified, no hyphenation, paragraphs 0.7 em apart, in the 1040 px column
  * (experiment/config.ts) — because every one of those decides how the corpus breaks into its three
- * pages, and all ten conditions share them. Measured in headless Chromium at 1152x720, every reading page,
- * question and search excerpt of two displays is pixel-identical under ty-v1 and ty-v2. What changed:
+ * pages, and all ten conditions share them. MEASURED, AND HOW FAR IT GOES: in headless desktop Chromium
+ * at 1152x720, the three reading pages of two displays (6), the first question of each (2) and one search
+ * excerpt were pixel-identical under ty-v1 and ty-v2. NOT MEASURED ON THE XIAOMI PAD 6: the one change
+ * that could alter the passage there, text-size-adjust (below), does nothing on desktop, so that
+ * comparison could not have shown it. On a tablet at its default text settings it should change nothing;
+ * reading_line_px_rendered is what checks this on the device, condition by condition. What changed:
  *   - the few BOLD words on condition screens (the reaction task's colour name, the search target) are
  *     the font's own bold: the vendored Roboto had no 700 face, and Chromium drew them as the 500 face
  *     smeared wider (synthetic bold), which it no longer may (theme.css font-synthesis-weight: none);
