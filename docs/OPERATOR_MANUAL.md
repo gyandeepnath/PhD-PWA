@@ -740,7 +740,7 @@ will do with that condition:
 | Verdict | What it means | What the analysis does |
 |---|---|---|
 | **✓ Good** | Every check passed. | Uses it. |
-| **! Usable** | One check is flagged: eye sampling rate 15–20 a second, or more than 2 from this participant's usual; face in view under 90%; head turned away over 20% of the time; the camera saw under 90% of the reading. | Uses it, and leaves it out of one pre-planned re-check. |
+| **! Usable** | One check is flagged: eye sampling rate 15–20 a second, not measurable, or more than 2 from this sitting's usual; face in view under 90%; head turned away over 20% of the time; the camera saw under 90% of the reading. | Uses it, and leaves it out of one pre-planned re-check. |
 | **✕ Not usable** | The camera was off or stopped; no blinks were counted (for example, no open-eye baseline at calibration); or the eye sampling rate was under 15 a second. | Leaves it out of the eye-data analysis. The other measures of that condition (reading, questions, ratings, reaction time) are not affected. |
 
 - Above the rows, **Before the readings** shows the sitting's open-eye baseline, camera check and
@@ -758,6 +758,12 @@ will do with that condition:
 - The same verdict is in the export: `ocular_reliability`, `ocular_reliability_checks` and
   `reliability_rule_version` in `analysis_long.csv` and `10_wide_summary.csv`. The older column
   `qc_overall` is still written but is superseded: do not use it.
+- **One difference, for a split sitting.** This tab (and `10_wide_summary.csv`) compares each
+  condition's eye sampling rate with **this sitting's** usual rate. `analysis_long.csv`, and so the
+  **All Participants** tab, compares it with the participant's usual rate over **every sitting** they
+  have on the tablet — for a split sitting, both halves. So for a split sitting the "more than 2 from
+  the usual" check, and with it the verdict, can differ between the two. When the participant has
+  just one sitting, they agree.
 - What to do: a Not-usable condition is recorded as it is. Use its reason to fix the cause before the
   next participant (camera stopped or no face: seating, the lens, light; rate too slow: the
   troubleshooting row on frame rate, §6; no open-eye baseline: let calibration finish).
