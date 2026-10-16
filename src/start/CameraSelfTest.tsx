@@ -33,7 +33,7 @@ import { ScrollCue } from '@/components/ScrollCue';
  * with the one recorded. The operator chooses: continue, try again, or continue anyway; the result is
  * recorded in every case.
  */
-export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false }: {
+export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false, onStoppedByRotation }: {
   begin: () => void;
   /** Ends the check; given the cue times, the check's blinks are held to be stored with the result. */
   end: (cueTimes?: number[]) => SelfTestObservation;
@@ -46,6 +46,8 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false }
    * block and score blinks the camera saw from the short edge, while the block said nothing was lost.
    */
   halted?: boolean;
+  /** Called when a rotation has actually stopped a running check; see CalibrationRoutine's. */
+  onStoppedByRotation?: () => void;
 }) {
   const [phase, setPhase] = useState<'intro' | 'running' | 'result'>('intro');
   useEffect(() => { onRunning?.(phase === 'running'); }, [phase, onRunning]);
@@ -68,6 +70,7 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false }
     setFlash(false);
     setCueCount(0);
     setStoppedByRotation(true);
+    onStoppedByRotation?.();
     setPhase('intro');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [halted, phase]);

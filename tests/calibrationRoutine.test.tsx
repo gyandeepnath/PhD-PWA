@@ -33,8 +33,10 @@ function mount(o: {
   /** Per call of sampleGazeTarget, whether the showing was enough. */
   dotEnough?: boolean[];
   outcomes?: CalibrationOutcome[];
+  /** How long writing the record takes. */
+  endMs?: number;
 }) {
-  const calls = { baseline: 0, dots: [] as GazeDotId[], end: [] as Array<{ gazeRun?: boolean; baselineAttempts?: number }>, done: 0 };
+  const calls = { baseline: 0, dots: [] as GazeDotId[], end: [] as Array<{ gazeRun?: boolean; baselineAttempts?: number }>, done: 0, stopped: 0 };
   let dotCall = 0;
   const host = document.createElement('div');
   document.body.appendChild(host);
@@ -57,14 +59,18 @@ function mount(o: {
     },
     endGazeCalibration: async (_s: string, opts?: { gazeRun?: boolean; baselineAttempts?: number }) => {
       calls.end.push(opts ?? {});
+      if (o.endMs) await new Promise((res) => setTimeout(res, o.endMs));
       return (o.outcomes ?? [outcome(true)])[Math.min(calls.end.length - 1, (o.outcomes ?? [outcome(true)]).length - 1)];
     },
     onDone: () => { calls.done++; },
+    onStoppedByRotation: () => { calls.stopped++; },
   };
   act(() => { root.render(createElement(CalibrationRoutine, props)); });
+  /** Turn the tablet: portrait sets `halted`, as Experiment.tsx does. */
+  const turn = (portrait: boolean) => act(() => { root.render(createElement(CalibrationRoutine, { ...props, halted: portrait })); });
   const q = (id: string) => host.querySelector(`[data-testid=${id}]`) as HTMLElement | null;
   return {
-    calls, q,
+    calls, q, turn,
     click: async (id: string) => { await act(async () => { q(id)!.click(); }); },
     /** Let `ms` of faked time pass, a frame at a time, flushing the routine's awaits. */
     run: async (ms: number) => { for (let t = 0; t < ms; t += 50) await act(async () => { await vi.advanceTimersByTimeAsync(50); }); },
@@ -161,6 +167,40 @@ describe('the calibration screen', () => {
     await m.click('calibration-accept-thin');
     expect(m.calls.end).toHaveLength(1);
     expect(m.calls.done).toBe(1);
+    m.unmount();
+  });
+  /*
+   * Round 85. The portrait block says "stopped, nothing from it is kept" only when the routine reports
+   * that it stopped a run. It used to infer that from onRunning, which stays true past the sampling,
+   * through the write of an attempt already taken in landscape.
+   */
+  it('a rotation while the camera is sampled stops the run, keeps nothing, and reports the stop', async () => {
+    fake();
+    const m = mount({ baselines: [GOOD] });
+    await m.click('calibration-begin');
+    await m.run(3000);
+    m.turn(true);
+    expect(m.calls.stopped).toBe(1);
+    await m.run(15000);
+    m.turn(false);
+    expect(m.q('calibration-stopped')).not.toBeNull();
+    expect(m.calls.end).toHaveLength(0);
+    expect(m.calls.dots).toEqual([]);
+    m.unmount();
+  });
+
+  it('a rotation after the sampling, while an attempt taken in landscape is written, is not a stop', async () => {
+    fake();
+    const m = mount({ baselines: [NO_FACE], endMs: 1000 });
+    await m.click('calibration-begin');
+    await m.run(250 + 6000 + 100); // settle, the baseline window, and into the write
+    expect(m.calls.end).toHaveLength(1);
+    m.turn(true);
+    await m.run(2000);
+    m.turn(false);
+    expect(m.calls.stopped).toBe(0);
+    expect(m.q('calibration-stopped')).toBeNull();
+    expect(m.q('calibration-routine')!.dataset.phase).toBe('no_baseline');
     m.unmount();
   });
 });

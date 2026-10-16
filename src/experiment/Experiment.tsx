@@ -407,18 +407,19 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   /** The camera self-test is showing, after a completed calibration routine. */
   const [selfTesting, setSelfTesting] = useState(false);
   /*
-   * The calibration routine or camera self-test that was running when the tablet turned to portrait,
-   * held for as long as the tablet stays there. The component stops it (its `halted` prop) and then
-   * reports it is no longer running, so this has to remember that it was — the portrait block says
-   * the step was stopped and has to be begun again, not that nothing is lost.
+   * The calibration routine or camera self-test that the rotation to portrait stopped, held for as
+   * long as the tablet stays there: the portrait block says the step was stopped and has to be begun
+   * again, not that nothing is lost.
+   *
+   * Set by the component itself, when its `halted` prop has actually stopped a run (Round 85). It used
+   * to be inferred from procedureRunning, which for the calibration stays true past the sampling,
+   * through the write of an attempt already taken wholly in landscape: a rotation in that gap was told
+   * "stopped, nothing from it is kept" while the attempt was kept and its result shown on return.
    */
-  const timedProcedure = procedureRunning && machine.stage === 'CALIBRATION'
-    ? (selfTesting ? 'selftest' : 'calibration') : null;
   const [stoppedByPortrait, setStoppedByPortrait] = useState<'calibration' | 'selftest' | null>(null);
-  useEffect(() => {
-    if (!portrait) setStoppedByPortrait(null);
-    else if (timedProcedure) setStoppedByPortrait(timedProcedure);
-  }, [portrait, timedProcedure]);
+  useEffect(() => { if (!portrait) setStoppedByPortrait(null); }, [portrait]);
+  const calibrationStopped = useCallback(() => setStoppedByPortrait('calibration'), []);
+  const selfTestStopped = useCallback(() => setStoppedByPortrait('selftest'), []);
   /** The operator chose to continue while the camera image was blocked; re-armed when it clears. */
   const [cameraBlockAccepted, setCameraBlockAccepted] = useState(false);
   useEffect(() => { if (!tracking.cameraBlocked) setCameraBlockAccepted(false); }, [tracking.cameraBlocked]);
@@ -1566,6 +1567,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             end={tracking.endSelfTest}
             onRunning={setProcedureRunning}
             halted={portrait}
+            onStoppedByRotation={selfTestStopped}
             onDone={async (r) => {
               const base = await get('sessions', session.session_id) ?? session;
               // The pipeline record is refreshed too: a tracker that fell back since camera setup is
@@ -1592,6 +1594,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           onDone={() => setSelfTesting(true)}
           onRunning={setProcedureRunning}
           halted={portrait}
+          onStoppedByRotation={calibrationStopped}
         />
       ) : (
         <Calibration cameraStatus={tracking.status} onDone={() => advanceOrResume('CALIBRATION')} />
@@ -2278,7 +2281,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           stage={machine.stage}
           calibrated={tracking.status === 'active'}
           // On the first portrait frame the effect above has not run yet; the live value covers it.
-          stopped={stoppedByPortrait ?? timedProcedure}
+          stopped={stoppedByPortrait}
         />
       )}
       {showCameraLost && (

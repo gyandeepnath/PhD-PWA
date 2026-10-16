@@ -60,6 +60,13 @@ interface Props {
    * its start and says why, and the calibration is begun again in landscape.
    */
   halted?: boolean;
+  /**
+   * Called when a rotation has actually stopped a run — the camera was being sampled. The portrait
+   * block says "stopped, nothing from it is kept" only on this. It used to infer the stop from
+   * onRunning, which stays true past the sampling, through the write of an attempt already taken in
+   * landscape: a rotation in that gap was told "stopped" while the attempt was kept (Round 85).
+   */
+  onStoppedByRotation?: () => void;
 }
 
 type Phase =
@@ -114,7 +121,7 @@ function eyesText(eyes: EyeState | null, steady: boolean): string {
   return 'Looking for the eyes…';
 }
 
-export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCalibration, sampleGazeTarget, endGazeCalibration, onDone, onRunning, halted = false }: Props) {
+export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCalibration, sampleGazeTarget, endGazeCalibration, onDone, onRunning, halted = false, onStoppedByRotation }: Props) {
   const STEPS = calibrationSequence();
   const baselineStep = STEPS.find((s): s is EarBaselineStep => s.kind === 'ear_baseline')!;
   const dotSteps = STEPS.filter((s): s is GazeDotStep => s.kind === 'gaze_dot');
@@ -153,6 +160,8 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
     sampling.current = false;
     run.current += 1;
     setStoppedByRotation(true);
+    onStoppedByRotation?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [halted]);
 
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));

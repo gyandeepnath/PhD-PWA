@@ -311,8 +311,13 @@ test('turning the tablet to portrait stops a running calibration or camera check
   await page.getByRole('button', { name: /My face is centred/ }).click({ timeout: 60_000 });
   await page.waitForSelector('[data-stage="CALIBRATION"]', { timeout: 30_000 });
 
+  // Under ?e2e the calibration (rule cal-r2) samples for only about a second — a 250 ms settle and a
+  // 400-800 ms baseline window, with no face in the fake camera — so the rotation follows the tap
+  // without a pause, as the camera check's does below. It used to wait 600 ms, which left a few
+  // hundred ms of margin: on a busy machine the window closed first, the attempt was recorded in
+  // landscape, and the test read that as a stop that kept its data (Round 85). The block's sentence
+  // confirms the rotation caught it running: it says "stopped" only when the routine stopped a run.
   await page.getByTestId('calibration-begin').click();
-  await page.waitForTimeout(600);
   await page.setViewportSize(portrait);
   const block = page.getByTestId('portrait-block');
   await expect(block).toContainText('The eye calibration has to be taken in landscape, so the one that was running has been stopped');
