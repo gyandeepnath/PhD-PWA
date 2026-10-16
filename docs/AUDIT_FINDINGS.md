@@ -6970,3 +6970,246 @@ are unchanged, now behind More.
   were left as written.
 - **No new threshold.** Where the old verdict and the analysis differed, the analysis's threshold was
   taken; none was lowered.
+
+## Round 84 — the rating lines (a 100 mm visual analogue scale) and the stimulus typography
+
+The investigator, testing 2.3.1: *"For the fatigue scale, improve the sliders if possible"*
+(instruction 8), and *"Refine the text and fonts if possible. The size now seems fine, but polishing
+and calibration is still required for accurate and scientific results"* (instruction 3). Research for
+both is in the Round 78 research report (R2 §E and §F); every source used below was re-checked in
+PubMed for this round and is in the citation ledger (items 65-69).
+
+Two things are new and versioned in the data: the rating format (`slider_version`: `vas-v2`, rows
+before it `sl-v1`) and the typography (`typography_version`: `ty-v2`, rows before it `ty-v1`). **No
+threshold or gate changed, and the stored scales did not change.** Nothing here was measured on the
+Xiaomi Pad 6: the line lengths and text sizes below were measured in headless Chromium.
+
+### In plain words
+
+1. **The ratings are now 10 cm lines.** The five fatigue items and the comfort and clarity ratings are
+   each a line 100 mm long on the glass, with a word at each end ("None" … "Severe"; "Very
+   uncomfortable" … "Very comfortable"; "Very unclear" … "Very clear"). The length comes from the ruler
+   check at pre-flight, so it is the same 100 mm at every display size.
+2. **Nothing is on the line until the participant taps.** The tap places a short upright marker that
+   stands above the line, so the finger does not hide it. They can tap again or slide to change it.
+   An unanswered line has no value at all (not 0). Continue waits until every line is marked.
+3. **No numbers are shown.** The old fatigue slider printed "3 / 10" while the participant answered,
+   which made it a number scale rather than the visual-fatigue VAS the synopsis describes.
+4. **The data keep their old scales.** Fatigue items are still 0-10 (now to one decimal: whole
+   millimetres divided by 10), comfort and clarity still 0-100 (whole millimetres). `fatigue_delta`
+   and its model are unchanged. Every row says which format made it, and the analysis never mixes the
+   two. **Switch before data collection**, so the study has one format.
+5. **The text is unchanged where it matters.** Size, spacing, line height, justification and the 3
+   pages are exactly as before: every reading page, question and search excerpt looked at is
+   pixel-identical. What changed: the few **bold** words (the reaction task's colour name and the
+   search target) are now the font's own bold instead of a smeared imitation, and the browser is told
+   not to resize the text by itself.
+6. **The text size is now measured, not assumed.** Page 1 of every display records how far apart the
+   lines were actually drawn. If a tablet setting enlarged the text, the data check says so.
+7. **Checked by looking.** Both rating screens were photographed untouched and marked, in a light and
+   a dark display, at three screen sizes, and every reading page, question and search excerpt of a
+   whole sitting was checked to fit at the same three sizes. One thing was changed from looking: the
+   two comfort and clarity lines now have more space between them, so each label sits with its own line.
+
+### 1. The rating lines (src/scales/vas.ts, VasLine.tsx; 62e3067)
+
+**What it was.** Two native range sliders. The fatigue items: 0-10 in whole steps, "x / 10" and the
+ends "0" and "10" printed beside each, the internal value starting at 0 with the thumb hidden until
+touched, the track solid up to the answer. Comfort and clarity: 0-100, the number printed above the
+middle of the track (the word "not set" stood there before the first touch), the value starting at 50.
+Neither had a physical length: about 650 design px, about 134 mm on the study tablet.
+
+**The evidence** (all re-verified in PubMed this round):
+
+| Point | Finding | Source |
+|---|---|---|
+| A VAS beats a slider | In 222 people placing given percentages on a line, a VAS (empty line, click to place, adjust) had lower measurement error than sliders started left, middle or right, and less variability in error within and between people | Angelike & Reips 2026, full text (ledger 65) |
+| A pre-set thumb hides non-response | A slider initialised at a valid position cannot tell a non-response from a response there (the paper reporting earlier work) | Angelike & Reips 2026, full text |
+| Interval level | Web VAS approximate an interval scale; categorical scales reach only ordinal level | Reips & Funke 2008, abstract (ledger 66) |
+| The procedure | A validated digital VAS: one line, a phrase at each end only, the first tap adjustable until the patient is satisfied; the paper VAS a 10 cm line | Delgado et al. 2018, full text (ledger 67) |
+| The length | A 9.6 cm phone line showed a small proportional bias against paper (mean 1.9% of the scale), put down to the fingertip; a 28.9 cm laptop line agreed with paper; **no tablet was tested** | Delgado et al. 2018 |
+
+**The design** — each point from the table, or a stated judgement:
+- **100 mm**, drawn from the sitting's millimetres per pixel (the ruler check; the documented panel
+  fallback when it was skipped, flagged in `vas_line_source`). In CSS the width is
+  `100 / mm_per_css_px` divided by the display scale, so the length holds at any scale. If the column
+  cannot hold it the line shrinks and the length actually drawn is recorded (`vas_line_mm`).
+  *Judgement:* 100 mm is the paper convention, not a length shown to be best on a tablet; a bias common
+  to every condition does not move a within-participant contrast; whether the fingertip adds noise on
+  this tablet is **not measured**.
+- **No marker and no value until touched** (null, not a hidden default). **Tap to place, tap again or
+  slide to change** (pointer capture keeps a slide attached to its line).
+- **Words only at the ends; no numbers, no interior ticks, no fill.** Short end words sit beside the
+  line (fatigue), long ones under its ends (comfort, clarity). The item label starts where the line
+  does, and the gap between items is wider than a label's distance from its own line: 16 design px on
+  the fatigue screen, 44 on the comfort and clarity screen, where the end words sit under the line
+  (it was 22 there, which the screenshots showed was not enough; 137e2e4).
+- **Touch target 46 design px tall** (about 9.5 mm on the study tablet), reaching 12 px past each end,
+  where a tap reads as 0 or 100. The marker is 4 px wide and stands 20 px above the line.
+- **Full ink, at full opacity** in every condition, like every other mark on a condition screen
+  (`loopText.test.ts`, `dashboardDisplay.test.ts` now include `VasLine.tsx`).
+- **Status in words, no score.** *Mark every line to continue (3 of 5 marked).* The participant never
+  sees a value: `tests/vas.test.tsx` checks that no number is printed for an answer, and
+  `noParticipantFeedback.test.ts` still keeps the baseline and any composite off the fatigue screen.
+- **NASA-TLX keeps its own published slider**; it runs once, on the cream ground, after the displays.
+
+**Measured in headless Chromium** (a ruler reading equal to the study tablet's panel over the screen
+width, as the e2e driver types it): the line drew 486.6 CSS px at 1152 x 720 and at 1152 x 650 (where
+the display scale is 0.90), and 811 CSS px at 1920 x 1200 — 100 mm by that measurement on all three,
+the same 42% of the screen's width. `e2e/fillScreen.spec.ts` now requires every rating row of a
+display to record `vas_line_mm` within 0.5 mm of 100, `vas_line_source` 'measured' and `slider_version`
+'vas-v2', at six viewports from 1152 x 720 to 2560 x 1600.
+
+**A double tap is one answer.** Continue on both rating screens now latches on a ref as well as on
+state, so two taps inside one frame cannot submit twice (found by `tests/vas.test.tsx`; React flushes a
+real click before the next, so it was not seen in use).
+
+### 2. The data and the analysis (b398bff, 107c178, ed98325)
+
+- **03_fatigue_scores.csv and 06_display_perception.csv** gain `slider_version`, `vas_line_mm`,
+  `vas_line_source`; **10_wide_summary.csv** and **analysis_long.csv** gain `slider_version` (the
+  format the condition's ratings were made with). A row with no stored format is `sl-v1`. The codebook
+  describes the items as tenths on `vas-v2`, and no longer calls `fatigue_mean` "ordinal — model with a
+  cumulative-link model, not OLS", which the plan's LMM on `fatigue_delta` never was.
+- **The integrity audit warns** (`one_rating_format`) when one sitting holds both formats, because its
+  `fatigue_delta` would subtract a rating on one from a baseline on the other. Not blocking.
+- **Both templates model one format at a time** (`rating_format`): the current one where present, and
+  they print how many rows on another format were left out, e.g. *[format] fatigue: modelled on vas-v2,
+  3 row(s); 3 row(s) on sl-v1 left out, not pooled* (checked on a mixed table in R and in Python). An
+  export from before the column is all `sl-v1`. The R template applies it to comfort and clarity too.
+- **The cumulative-link sensitivity takes the fatigue items at whole points**, rounded half up
+  (`floor(x + 0.5)`, as the app's straight-lining check rounds them, not R's half-to-even): the eleven
+  steps of the old scale, which a `clmm` can carry, instead of up to 101 values, which §4c already
+  rules out for comfort and clarity. No change on `sl-v1` rows.
+- **Straight-lining** (`isStraightLined`, aggregate.ts) is judged at whole points too: five marks
+  tapped straight down the screen land a millimetre or two apart and would never be exactly equal.
+  Same rule on `sl-v1` rows; the floor and ceiling stay exempt. Recorded in ANALYSIS_PLAN §4c.
+- **Found while checking the templates:** under pandas 3 (3.0.5 here), `astype(str)` keeps a missing
+  cell missing instead of writing "nan", so the Python template's blank `fps_gate_version` stayed
+  missing instead of becoming `g1-25/30`. Both uses now `fillna("")` first.
+- **The rushed-rating floors** (3 s for the five fatigue items, 2 s for comfort and clarity;
+  `ENGAGEMENT` in aggregate.ts) are **unchanged**. A tap may be quicker than a drag, so the flag may fire
+  more often on `vas-v2` rows; that is not measured, and the floors are not lowered to compensate
+  (ed98325).
+- **Docs:** ANALYSIS_PLAN §4 and §4c (*The rating format*); OPERATOR_MANUAL (*The rating lines*: what
+  they look like, the one sentence to say if asked, switch before collecting); PROTOCOL's stage list.
+- **Wording swept** (7d5ac64): MASTER_BLUEPRINT still described comfort and clarity as two 0-100
+  sliders and the fatigue items as plain 0-10 items, and a codebook comment still said the instrument's
+  sliders were `max={10}`. They now describe the 100 mm lines (and `sl-v1` as the format before them).
+  Code comments that named "the sliders" as something the researcher panel must not cover, or as
+  translucent decoration, now name the rating lines, which are full ink. The participant's words, the
+  manual, the protocol and the export codebook already matched; no "0-10", "x / 10" or "slider" is left
+  on any participant screen except the NASA-TLX, which keeps its own published slider.
+
+### 3. The typography, `ty-v2` (src/lib/fonts.ts, theme.css, public/fonts; 635d7e0)
+
+**Found.** The vendored Roboto is ONE variable font file (weight axis 100-900, read from its `fvar`
+table), copied three times and declared only at 300, 400 and 500. Every bold word on a condition screen
+— the reaction task's colour name, the search target — therefore matched the 500 face and was drawn as
+a **synthetic bold** of it. Measured in headless Chromium: with the old fonts, the bold line renders
+differently with synthetic bold allowed and forbidden (so it was synthetic); with a 700 face declared,
+the two are identical (none is synthesised).
+
+**Changed** (uniform in every condition):
+- **Roboto 700 added**: the same file again, declared at 700, by the vendoring script (which now also
+  writes the stylesheet's header comment it had lost). The existing files are byte-identical after
+  re-vendoring; Google's stylesheet now lists four more code points (U+20C1-20C4) in the latin-ext
+  range, which no text here uses.
+- **`font-synthesis-weight: none`**: a weight with no face is drawn as the nearest real one.
+- **`text-size-adjust: 100%`** on the page: Chrome's text autosizing off. Whether it also overrides an
+  Android or Chrome accessibility text size is **not claimed** — that is what the measurement below is
+  for.
+- **`font-kerning: normal; font-variant-ligatures: common-ligatures`**: today's defaults, written out.
+
+**Measured unchanged.** Element screenshots at 1152 x 720, taken with the old and the new typography,
+of the three reading pages of two displays (6), the first question of each (2) and one search excerpt:
+**pixel-identical** (re-compared byte for byte while writing this round). The reaction task's card and
+the search screen's header, where the bold words are, differ, as intended.
+
+**Left alone, and why** (lib/fonts.ts):
+- **Letter spacing** stays the font's own: reading speed rose with letter spacing only up to about the
+  standard spacing, centrally and peripherally (Chung 2002, abstract, ledger 68; six observers, RSVP,
+  Courier).
+- **Word spacing** is not tuned: letter and word spacing interact in how a line is read (Slattery &
+  Rayner 2013, abstract, ledger 69), so changing one alone is not neutral.
+- **Justification** widens the spaces between words and leaves the letters alone — measured in
+  Chromium: the word "letter" is 50.53 px wide justified and ragged; the word gaps of one line went
+  from 5.44 to 8.19 px. No verified evidence for or against justified text was found; it stays the
+  investigator's uniform decision.
+- **Hyphenation** stays off. `hyphens: manual` breaks a word only at a soft hyphen, and the corpus has
+  none (now a test), so no word is ever split across lines.
+- **Size 22 px, line height 1.4, paragraph gap 0.7 em, the 1040 px column**: unchanged; they decide the
+  three pages.
+- **Not added**: `-webkit-font-smoothing` (no effect off macOS), `text-rendering`, `text-wrap: pretty`
+  (would move line breaks in a checked corpus).
+
+**The size as drawn** (src/lib/renderedText.ts). Page 1 of every display measures the distance from
+one line of the passage to the next, first line to last over the number of gaps, in CSS px. With a
+unitless line height it is font size x 1.4 whatever face is drawn, so it checks the size, not the face
+(`stimulus_font_ok` checks the face). 02_conditions.csv gains `typography_version`,
+`reading_line_px_rendered` and `reading_line_px_expected` (22 x 1.4 x `stimulus_scale`); the integrity
+audit warns (`reading_text_size`) past 2%, naming the condition. `fillScreen.spec.ts` requires the
+measured pitch within 2% of the declared one at all six viewports.
+
+**Fit.** A whole sitting was walked at each of 1152 x 720 (display scale 1.0), 1152 x 650 (0.90) and
+1920 x 1200 (1.66), counting what was checked: **30 reading pages, 30 questions and 10 search excerpts**
+at every one of the three, each inside its box with nothing clipped and nothing to scroll
+(`assertStimulusFits`), three pages per passage. `allScreensFit` repeats the walk at 1152 x 720,
+1152 x 713, 1280 x 800 and 1152 x 650, and passed.
+
+**Looked at** (1920 x 1200, 1152 x 720 and 1152 x 650; a light display, black on white, and a dark one,
+green on black): the baseline and post-display fatigue lines and the comfort and clarity lines,
+untouched and marked; all three reading pages; the search excerpt; the reaction task's card. The
+lines measure 100 mm by the ruler reading at every screen size and are identical in every display;
+the marker is plainly distinct from the end stops (thicker, and taller above the line); nothing on the
+reading pages moved. The bold words are the font's own bold. What was wrong, and changed: the
+spacing of the comfort and clarity items (above). What was seen and left: a few justified lines open wide gaps between words (for example the
+first line of the second paragraph of *The carbon cycle*), the known cost of justified text without
+hyphenation, which is the investigator's standing decision and the same rule in every display.
+
+### 4. Not done, and why
+
+- **The viewing-distance band.** R2 §F suggested warning outside 50-60 cm (the synopsis's band; the
+  field accepts 40-80). Not part of this task; left for the investigator (§5).
+- **Time to first touch and number of adjustments** per rating (R2 §E): not recorded. They would add
+  columns nobody has a pre-registered use for; `response_time_ms` stays the engagement signal.
+- **The simulated analysis cohort** still produces old-format (`sl-v1`) ratings, which is a valid
+  export; the `vas-v2` path of the templates was exercised on mixed tables directly.
+
+### 5. For the investigator to decide
+
+1. **Use the new lines from the first real participant.** Rows made on the old sliders and on the
+   lines are kept apart by the analysis, so a study with both loses the old rows from every rating
+   model.
+2. **Try the lines on the Xiaomi Pad 6 before collecting.** Do the ruler check, then hold a ruler to
+   one rating line: it should read 10 cm. If it does not, the ruler check was skipped or mistyped, and
+   the data say which (`vas_line_mm`, `vas_line_source`).
+3. **Justified text.** It stays, as decided; a few lines show wide gaps between words because no word
+   is ever split. Ragged-right text would remove the gaps and should keep the same lines and pages
+   (the browser breaks the lines first and only then widens the spaces), which the fit walk would
+   confirm. It is a choice about the stimulus, not a fit problem; no evidence was found either way.
+4. **The viewing-distance warning** outside 50-60 cm (R2 §F): not built; say if it is wanted.
+
+### 6. Checks run
+
+- `npm run verify` (lint, types, 103 test files and 1,626 unit tests, corpus, codebook, export gate
+  872/872, analysis templates): green, after the last change of this round.
+- End-to-end, retries off: `fullRun`, `stimulusGeometry`, `fillScreen` (six viewports, now including
+  the 100 mm and line-pitch checks) and `allScreensFit`, 21 passed; `loopChrome`, `stimulusFill`,
+  `edge`, `setupNavigation` and `dashboardTabs` (the shared driver taps the lines wherever a spec
+  passes them), passed;
+  after the comfort and clarity gap changed, `loopChrome`, `stimulusFill` (that screen) and
+  `allScreensFit` again, passed.
+- After `npm run build`, the production-bundle suite (e2e-prod, 7 tests), retries off: passed.
+- The fit walk and the screenshots above, from temporary specs that were deleted after use.
+- The five sources (ledger 65-69) were fetched again from PubMed while writing this round; title,
+  authors, journal, volume, pages, PMID and DOI match the ledger.
+
+### 7. Versions in the data
+
+| Rule or format | Before | Now | Where it is recorded |
+|---|---|---|---|
+| Rating format (fatigue, comfort, clarity) | number sliders, `sl-v1` (no column) | 100 mm visual analogue lines, `vas-v2` | `slider_version` in 03, 06, 10 and `analysis_long.csv` |
+| Typography | `ty-v1` (no column): synthetic bold, defaults unpinned | `ty-v2` | `typography_version` in 02 |
+| Straight-lining | exact equality of five whole numbers | the same, at whole points | ANALYSIS_PLAN §4c; identical on `sl-v1` rows |
+| Frame-rate gate, blink rule, calibration, camera check, gaze, reliability | unchanged | unchanged | as before |
