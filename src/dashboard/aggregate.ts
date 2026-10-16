@@ -40,9 +40,13 @@ export type QcFlag = 'good' | 'warn' | 'bad';
  * for one labelled sensitivity refit of the PRIMARY (no signal here is built from an ocular outcome).
  */
 export const ENGAGEMENT = {
-  /** Fatigue questionnaire (5 sliders) faster than this is implausibly rushed. ANALYST DEFAULT. */
+  /**
+   * Fatigue questionnaire (5 items) faster than this is implausibly rushed. ANALYST DEFAULT. Unchanged by
+   * the 100 mm lines of Round 84: a tap may be quicker than a drag, so the flag may fire more often on
+   * vas-v2 rows; that is not measured, and the floor is not lowered to compensate.
+   */
   FATIGUE_RUSHED_MS: 3000,
-  /** Perception rating (2 sliders) faster than this is implausibly rushed. ANALYST DEFAULT. */
+  /** Perception rating (2 items) faster than this is implausibly rushed. ANALYST DEFAULT. As above. */
   PERCEPTION_RUSHED_MS: 2000,
   /** Reading faster than wordCount / this (wpm) is an implausible skim (normal reading ≤ ~400 wpm). ANALYST DEFAULT. */
   SKIM_WPM_CEILING: 400,
