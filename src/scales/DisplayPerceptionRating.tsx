@@ -78,21 +78,22 @@ export function DisplayPerceptionRating({ background, text, physical, onComplete
         The gap between the two items is about twice a label's distance from its own line. With the end
         words UNDER each line, a 22 px gap left the first line's end words ("Very uncomfortable") as close
         to the second item's label as that label was to its own line, so the two read as one block
-        (seen in the Round 84 screenshots). There is room for it at every viewport the suite fits.
+        (seen in the Round 84 screenshots). There is room for it at every viewport the suite fits. Drawn
+        as part of the first item (spaceBelow), so a tap in it marks neither line (VasLine.tsx).
       */}
-      <div className="mt-6" style={{ display: 'flex', flexDirection: 'column', gap: 44 }}>
+      <div className="mt-6" style={{ display: 'flex', flexDirection: 'column' }}>
         <VasLine
           name="comfort" label="Comfort of the display" left="Very uncomfortable" right="Very comfortable" anchors="below"
-          ink={text} value={comfort} lineCssPx={line.cssPx} onChange={setComfort}
+          ink={text} value={comfort} lineCssPx={line.cssPx} onChange={setComfort} spaceBelow={44}
           lineRef={(el) => { firstLine.current = el; }}
         />
         <VasLine
           name="clarity" label="Clarity of the text" left="Very unclear" right="Very clear" anchors="below"
-          ink={text} value={clarity} lineCssPx={line.cssPx} onChange={setClarity}
+          ink={text} value={clarity} lineCssPx={line.cssPx} onChange={setClarity} spaceBelow={32}
         />
       </div>
+      {/* The 32 px above the status line is the clarity item's own space (spaceBelow), as between the items. */}
       <ActionRow
-        style={{ marginTop: 32 }}
         status={both ? 'Thank you — tap Continue.' : 'Mark both lines to continue.'}
       >
         <PrimaryButton

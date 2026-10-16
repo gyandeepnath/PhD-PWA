@@ -554,7 +554,12 @@ sliders:
   slide to change it.
 - **No numbers are shown.** If asked what a position means, say only: *"Anywhere between the two ends
   — wherever it feels right."*
+- **Only a tap on the line counts** — on it, or a little above or below it. A tap on an item's words
+  ("Tired or aching eyes", "None", "Severe") or in the space between two items does nothing (from
+  Round 85; before, a tap on the words could mark the line nearest them).
 - Continue stays grey until every line is marked.
+- **Check this once on the tablet before collecting:** on the first fatigue screen, tap the words
+  *Tired or aching eyes*. No marker should appear. Then tap the line under them: a marker appears.
 - In the data each row says which kind of rating made it (`slider_version`: `vas-v2` for the line,
   `sl-v1` for the old sliders). Do not mix the two in one study: switch before data collection.
 

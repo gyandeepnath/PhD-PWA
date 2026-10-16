@@ -115,12 +115,17 @@ export function FatigueScale({ prompt, background = '#F8F7F5', text = '#1a1a2e',
       <h2 className={`${eyebrow ? 'mt-2 ' : ''}font-serif text-3xl font-light`}>{prompt}</h2>
       <p className="mt-1" style={label}>Tap each line where it matches how your eyes feel. Tap again or slide to change it.</p>
 
-      {/* The gap between items is wider than a label's distance from its own line, so each label groups with its line. */}
-      <div className="mt-3" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/*
+        The gap between items is wider than a label's distance from its own line, so each label groups
+        with its line. It is drawn as part of the item above (spaceBelow), not as a gap between them, so
+        a tap there belongs to an item and marks nothing (VasLine.tsx). The last item's space is the 20 px
+        above the status line.
+      */}
+      <div className="mt-3" style={{ display: 'flex', flexDirection: 'column' }}>
         {ITEMS.map((it, i) => (
           <VasLine
             key={it.key} name={it.key} label={it.label} left="None" right="Severe" anchors="beside"
-            ink={text} value={values[it.key]} lineCssPx={line.cssPx}
+            ink={text} value={values[it.key]} lineCssPx={line.cssPx} spaceBelow={i < ITEMS.length - 1 ? 16 : 20}
             onChange={(mm) => setValues((v) => ({ ...v, [it.key]: mm }))}
             lineRef={i === 0 ? (el) => { firstLine.current = el; } : undefined}
           />
@@ -146,7 +151,8 @@ export function FatigueScale({ prompt, background = '#F8F7F5', text = '#1a1a2e',
         baseline rating to the screen that must not show it, needing only one line to become live
         again. A comment saying "no longer used" does not stop that; not having the value here does.
       */}
-      <ActionRow style={{ marginTop: 20 }} status={allTouched ? 'Thank you — tap Continue.' : `Mark every line to continue (${answered} of ${ITEMS.length} marked).`}>
+      {/* The 20 px above the status line is the last item's own space (spaceBelow), for the same reason. */}
+      <ActionRow status={allTouched ? 'Thank you — tap Continue.' : `Mark every line to continue (${answered} of ${ITEMS.length} marked).`}>
         <PrimaryButton ink={text} ground={background} enabled={allTouched && !sent} onClick={submit}>
           Continue →
         </PrimaryButton>

@@ -12,6 +12,17 @@
  * reads as 0 or 100) places the marker at that point along the line; dragging moves it; a second tap
  * re-places it. Pointer capture keeps a drag that leaves the target attached to this line. Keyboard, for
  * the operator: Home and End set the ends, and the arrows move a placed marker by a millimetre.
+ *
+ * ONLY A TAP INSIDE THE TARGET MARKS THE LINE (Round 85). On a touch screen the browser hands a tap that
+ * lands near something tappable, but not on it, to that thing (Chromium's touch adjustment). The item's
+ * label, its end words and the space under it were not tappable, so a tap on the label a few pixels
+ * above the target was taken as a rating on the line, at the left end where the label starts — measured
+ * in headless Chromium with a touch screen at 1152 x 720: taps 3-9.5 px above the target marked it, and
+ * so did taps 1-9 px into the space below it. With a real fingertip, whose contact is wider, the reach
+ * is probably larger (not measured on the Xiaomi Pad 6). Every part of an item that is not the target
+ * now takes a tap itself and ignores it (`sinkTaps`): the browser then has the tapped element itself to
+ * give the tap to, and the line is marked only by a tap inside its own target. The space between items
+ * is part of the item above it (`spaceBelow`) for the same reason, so no gap is left unowned.
  */
 import { useRef, type CSSProperties } from 'react';
 import { STIMULUS_FONT_STACK } from '@/lib/fonts';
@@ -38,7 +49,19 @@ const BESIDE_ANCHOR_PX = 60;
 
 const text16: CSSProperties = { fontFamily: STIMULUS_FONT_STACK, fontSize: LOOP_TEXT_MIN_PX, lineHeight: 1.4 };
 
-export function VasLine({ name, label, left, right, anchors, ink, value, lineCssPx, onChange, lineRef }: {
+/** Does nothing: its being there is what makes the element answer a tap itself (see the header). */
+function ignoreTap() {}
+
+/**
+ * Makes an element take a tap itself, so the browser does not hand a tap on it to the nearest line.
+ * A native listener, because React listens at the root and the element would otherwise have none of its
+ * own; adding the same function twice is a no-op, so a re-run of the ref is harmless.
+ */
+function sinkTaps(el: HTMLElement | null) {
+  el?.addEventListener('click', ignoreTap);
+}
+
+export function VasLine({ name, label, left, right, anchors, ink, value, lineCssPx, onChange, lineRef, spaceBelow = 0 }: {
   /** The item's key: the target's data-testid is `vas-<name>`. */
   name: string;
   label: string;
@@ -55,6 +78,8 @@ export function VasLine({ name, label, left, right, anchors, ink, value, lineCss
   onChange: (mm: number) => void;
   /** The line element, so the screen can record the length it was drawn at. */
   lineRef?: (el: HTMLDivElement | null) => void;
+  /** Space under the item, design px, before the next one: part of this item, so a tap there marks nothing. */
+  spaceBelow?: number;
 }) {
   const line = useRef<HTMLDivElement | null>(null);
   const dragging = useRef(false);
@@ -126,24 +151,28 @@ export function VasLine({ name, label, left, right, anchors, ink, value, lineCss
 
   return (
     // As wide as the line and its end words, centred in the column; the label starts where they do.
+    // Every element here but the target takes its own taps (sinkTaps), so only the target marks the line.
     <div style={{ width: 'fit-content', maxWidth: '100%', margin: '0 auto', color: ink }}>
       {/* The label starts where the line does, so it reads as the line's own. */}
-      <div style={{ ...text16, paddingLeft: (anchors === 'beside' ? BESIDE_ANCHOR_PX : 0) + VAS_OVERSHOOT_PX }}>{label}</div>
+      <div ref={sinkTaps} data-vas-label="" style={{ ...text16, paddingLeft: (anchors === 'beside' ? BESIDE_ANCHOR_PX : 0) + VAS_OVERSHOOT_PX }}>{label}</div>
       {anchors === 'beside' ? (
-        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
-          <span style={{ ...text16, width: BESIDE_ANCHOR_PX, flex: 'none', textAlign: 'right', marginTop: LINE_Y - 11 }}>{left}</span>
+        // The end words take the row's full height (padded down to the line), so the row has no strip
+        // above or below a word that belongs to nothing.
+        <div style={{ display: 'flex', alignItems: 'stretch' }}>
+          <span ref={sinkTaps} style={{ ...text16, width: BESIDE_ANCHOR_PX, flex: 'none', textAlign: 'right', paddingTop: LINE_Y - 11 }}>{left}</span>
           {target}
-          <span style={{ ...text16, width: BESIDE_ANCHOR_PX, flex: 'none', marginTop: LINE_Y - 11 }}>{right}</span>
+          <span ref={sinkTaps} style={{ ...text16, width: BESIDE_ANCHOR_PX, flex: 'none', paddingTop: LINE_Y - 11 }}>{right}</span>
         </div>
       ) : (
         <>
           <div style={{ display: 'flex' }}>{target}</div>
-          <div style={{ ...text16, display: 'flex', justifyContent: 'space-between', gap: 24, padding: `0 ${VAS_OVERSHOOT_PX}px`, marginTop: -4 }}>
+          <div ref={sinkTaps} style={{ ...text16, display: 'flex', justifyContent: 'space-between', gap: 24, padding: `0 ${VAS_OVERSHOOT_PX}px`, marginTop: -4 }}>
             <span>{left}</span>
             <span>{right}</span>
           </div>
         </>
       )}
+      {spaceBelow > 0 && <div ref={sinkTaps} data-vas-space="" style={{ height: spaceBelow }} />}
     </div>
   );
 }
