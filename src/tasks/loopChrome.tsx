@@ -15,8 +15,8 @@
  *   - Text a participant has to read on a condition screen is at least LOOP_TEXT_MIN_PX (16) design
  *     px — 16 CSS px in the installed app on the study tablet, 14.4 with Chrome's address bar — in
  *     Roboto, the stimulus face, in FULL ink: no opacity and no alpha anywhere it carries meaning.
- *     Hierarchy is by size, weight and case. Decoration that nobody reads (a rule, the empty slider
- *     track) may stay translucent.
+ *     Hierarchy is by size, weight and case. Decoration that nobody reads (a rule) may stay
+ *     translucent; the rating lines are marks the participant aims at, so they are full ink (VasLine.tsx).
  *   - One eyebrow: uppercase, 16 px, weight 500. Its text comes from experiment/taskSteps.tsx.
  *   - One counter for "Page 1 of 3", "Question 1 of 3", "4 of 11 found": 16 px, weight 500, at the
  *     right-hand end of the task's own header row.

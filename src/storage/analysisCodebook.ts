@@ -151,7 +151,8 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
 
   // ---------------------------------------------------------------- subjective and performance
   /*
-   * 0-10, NOT 0-100. The instrument's sliders are max={10}. These two entries said 0-100 while the
+   * 0-10, NOT 0-100. Each item is stored 0-10: whole numbers on the old sliders (sl-v1), tenths on the
+   * 100 mm line since Round 84 (vas-v2: whole millimetres / 10; scales/vas.ts). These two entries said 0-100 while the
    * same quantity is documented 0-10 in both of export.ts's entries for it — and they sit directly
    * above comfort_score and clarity_score, which genuinely ARE 0-100, inviting an analyst to read
    * all four on one scale and to report a fatigue effect an order of magnitude too small.

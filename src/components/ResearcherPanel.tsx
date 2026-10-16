@@ -54,7 +54,7 @@ import { ScrollCue } from '@/components/ScrollCue';
  *     corner nothing else uses (the reading footer's countdown and button sit at the right; see
  *     ReadingTask). Everywhere else in a display — the questions, the ratings, word search, the
  *     reaction task — it is LOCKED: collapsed and untappable, because an open panel there sat over
- *     the answers, the sliders, or where a target could be, and a tap near the left edge landed on it;
+ *     the answers, the rating lines, or where a target could be, and a tap near the left edge landed on it;
  *   - every moment it is open is recorded (setMonitorOpen → condition_monitor_open_ms and
  *     reading_monitor_open_ms), so its effect can be modelled rather than assumed away.
  * During the eye calibration, the camera self-test and the colour-vision plates (`locked`, not on a

@@ -287,7 +287,8 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
       f.fatigue_mean = (f.eye_strain + f.dryness + f.blur + f.burning + f.headache) / 5;
     }
 
-    // Comfort and clarity ratings (0-100 sliders), with participant scale use and no condition effect.
+    // Comfort and clarity ratings (0-100), with participant scale use and no condition effect. Written as
+    // old-format rows (no slider_version, so sl-v1: the number sliders), which is still a valid export.
     const comfortU = gaussian(rng, 0, 10);
     for (const pr of b.perception) {
       const slider = (x: number) => Math.max(0, Math.min(100, Math.round(x)));

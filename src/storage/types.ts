@@ -606,7 +606,10 @@ export interface FatigueRecord {
   burning: number;
   headache: number;
   fatigue_mean: number;
-  /** Per-item touched flags — distinguishes a genuine 0 from an untouched slider. */
+  /**
+   * Per-item touched flags — distinguishes a genuine 0 from an untouched slider (sl-v1). On vas-v2 rows
+   * every flag is true: an unmarked line has no value at all, and Continue waits for every line.
+   */
   touched: {
     eye_strain: boolean;
     dryness: boolean;

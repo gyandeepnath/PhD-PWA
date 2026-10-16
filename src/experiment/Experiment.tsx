@@ -2202,7 +2202,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    * Where the researcher panel may open, and in what ink (screen audit F10). Inside a display only on
    * the reading task and the grey field, whose bottom-left corner nothing else uses; locked — an ink
    * indicator that cannot be tapped — on every other display screen, where an open panel sat over the
-   * answers or the sliders or where a target could appear, and during the measured set-up procedures:
+   * answers or the rating lines or where a target could appear, and during the measured set-up procedures:
    * the calibration dots and self-test (the whole calibration stage) and the colour-vision plates.
    */
   /*

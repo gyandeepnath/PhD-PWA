@@ -178,7 +178,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) whit
                         camera self-test (rule st-r3)  /
                         positioning check if no camera
   → CVSQ_BASELINE       validated CVS-Q (16 items)
-  → BASELINE_FATIGUE    5-item visual-fatigue VAS (0–10)
+  → BASELINE_FATIGUE    5-item visual-fatigue VAS (100 mm lines from Round 84; stored 0–10)
   → INSTRUCTIONS        participant overview
   → ADAPTATION          grey field before the first condition too (see below)
   → [× 10 conditions, Williams order, per illumination block]
@@ -186,7 +186,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) whit
                              eye-tracking window
         → COMPREHENSION      3 × 4-option MCQ per passage — gist, inference, detail
                              (QUESTIONS_PER_PASSAGE = 3; accuracy + RT per item; no feedback)
-        → DISPLAY_PERCEPTION comfort + clarity sliders, captured immediately after reading
+        → DISPLAY_PERCEPTION comfort + clarity, two 100 mm rating lines, captured immediately after reading
         → POST_FATIGUE       5-item VAS, immediately after the strongest fatigue inducer (reading)
         → VISUAL_SEARCH      tap every target word in a one-screen excerpt, 60 s limit
                              (VS_TIME_LIMIT_MS; selective attention)
@@ -244,13 +244,17 @@ is a pure transition function; `Experiment.tsx` is the driver.
   options are set at the passage's size and column width (Round 63).
 
 ### 4.3 Display perception (`DisplayPerceptionRating.tsx`)
-- Two sliders: **display comfort** and **text clarity** (0–100). `touched` flags gate submission
-  (prevents default-value/straight-line responses being silently accepted).
+- Two **100 mm visual analogue lines** (Round 84): **display comfort** and **text clarity**, stored
+  0–100 (whole millimetres). Words only at the two ends, no numbers; no marker and no value until the
+  participant taps; tap again or slide to change. Continue waits until both are marked. Before Round 84
+  these were 0–100 sliders that showed their number (`slider_version` `sl-v1`; see `scales/vas.ts`).
 
 ### 4.4 Visual fatigue VAS (`FatigueScale.tsx`)
-- **5 items** (eye strain, dryness, blur, burning, headache), 0–10 each; composite = **mean**.
-  Collected at baseline and immediately after each condition's reading. `touched`/`all_touched`
-  flags recorded.
+- **5 items** (eye strain, dryness, blur, burning, headache), each a **100 mm visual analogue line**
+  (Round 84; "None" … "Severe", no numbers, no marker until tapped), stored 0–10 in tenths (whole
+  millimetres / 10); composite = **mean**. Collected at baseline and immediately after each
+  condition's reading. Every row records `slider_version` (`vas-v2`; `sl-v1` before Round 84, an
+  eleven-step slider that showed its number) and the length the line was drawn at (`vas_line_mm`).
 
 ### 4.5 Visual search (`VisualSearchTask.tsx`)
 - Tap **every occurrence** of a target word on **one screen**: an excerpt of the passage (whole
