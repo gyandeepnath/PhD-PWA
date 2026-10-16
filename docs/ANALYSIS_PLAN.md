@@ -452,15 +452,23 @@ answered — a number scale, although the synopsis calls it a visual-fatigue VAS
 0-100 sliders that printed their number over a filled track. From Round 84 each is a **100 mm visual
 analogue line** (`src/scales/vas.ts`): drawn 100 mm long from the sitting's ruler measurement (or the
 documented fallback, flagged), words only at the two ends, no marker and no value until the participant
-taps, tap to place and tap again or slide to adjust, nothing on the screen showing a number. Why: in an
-online study of 222 people, a VAS of this kind had lower measurement error, and less variability in that
-error within and between people, than sliders started at the left, middle or right (Angelike & Reips
-2026, full text; `CITATION_VERIFICATION.md` item 65), and web VAS approximate an interval scale where a
-categorical scale reaches only ordinal level (Reips & Funke 2008, abstract; item 66). The 10 cm line and
+taps, tap to place and tap again or slide to adjust, nothing on the screen showing a number. Why: the
+old fatigue sliders showed a number while the participant answered, so they were a number scale, not
+the VAS the synopsis describes; the lines show no number and no fill, follow the VAS definition, and
+have one fixed physical length. Web VAS approximate an interval scale where a categorical scale reaches
+only ordinal level (Reips & Funke 2008, abstract; `CITATION_VERIFICATION.md` item 66). The 10 cm line and
 the tap-and-adjust procedure are those of a validated digital VAS (Delgado et al. 2018, full text; item
 67), whose 9.6 cm phone line showed a small proportional bias against paper that its authors attribute
 to the fingertip; no tablet was tested, so the 100 mm length is the convention, held identical in every
 condition, not a length shown to be best on this device.
+
+**Not claimed: that the line is more accurate than the old sliders.** In an online study of 222 people,
+a VAS had lower measurement error, and less variability in that error, than sliders started at the left,
+middle or right (Angelike & Reips 2026, full text; item 65). But every slider there was drag-only (its
+click turned off) with the thumb visible at its start, and the authors note that a slider that also
+takes a click might do as well or better, which they did not test. The old sliders here took a tap and
+hid the thumb until the first touch, so that study does not compare the line with what it replaced
+(corrected in Round 85; Round 84 stated it without this limit).
 
 What it changes in the analysis, and what it does not:
 

@@ -8,14 +8,26 @@
  * had a physical length: it was whatever the 720 px column left, about 134 mm on the study tablet.
  *
  * WHAT A VAS IS, AND WHY THIS ONE. A VAS shows an empty line with words at its two ends; the respondent
- * marks a point on it and the score is the distance from the left end. A slider instead starts with a
- * marker already on the line that has to be dragged. In an online study of 222 people asked to place
- * given percentages on a line, the VAS (click to place, adjust as often as wanted) had lower measurement
- * error than sliders started at the left, middle or right, and less variability in that error within and
- * between people (Angelike & Reips 2026, Behav Res Methods 58(9); full text read, ledger 65). The paper
- * also reports, from earlier work, that a slider initialised at a valid position cannot tell a
- * non-response from a response there, and that a starting position can anchor answers. Web VAS approximate an interval scale, where a categorical
- * scale reaches only ordinal level (Reips & Funke 2008, Behav Res Methods 40(3):699; abstract, ledger 66).
+ * marks a point on it and the score is the distance from the left end. Web VAS approximate an interval
+ * scale, where a categorical scale reaches only ordinal level (Reips & Funke 2008, Behav Res Methods
+ * 40(3):699; abstract, ledger 66).
+ *
+ * WHAT THE CHANGE RESTS ON. The old fatigue sliders printed "x / 10" while the participant answered,
+ * which made them a number scale, not the visual-fatigue VAS the synopsis describes; both old sliders
+ * also filled the track up to the answer, and neither had a physical length. The lines show no number
+ * and no fill, follow the VAS definition and the tap-and-adjust procedure of a validated digital VAS
+ * (Delgado et al. 2018, below), and are one fixed physical length.
+ *
+ * WHAT IS NOT CLAIMED: that the line is more accurate than the old sliders. In an online study of 222
+ * people placing given percentages on a line, a VAS (click to place, adjust as often as wanted) had lower
+ * measurement error than sliders started at the left, middle or right, and less variability in that
+ * error (Angelike & Reips 2026, Behav Res Methods 58(9); full text read, ledger 65) — but every slider
+ * there was DRAG-ONLY (its click was disabled) with the thumb VISIBLE at its start, and the authors write
+ * that a slider that also takes a click may outperform the VAS, which their study did not test. The old sliders
+ * here took a tap and hid the thumb until the first touch (SLIDER_VERSION_V1), so that study does not
+ * compare the line with the instrument it replaced. What is used from it: the paper reports, from earlier
+ * work, that a slider initialised at a valid position cannot tell a non-response from a response there,
+ * and that a starting position can anchor answers — which is why the line has no internal default at all.
  * So, here:
  *   - NO MARKER until the first touch, and no internal default: an unanswered line has no value at all,
  *     which is not 0 (`null` until touched);

@@ -1250,12 +1250,20 @@ slider scales are strongly advised to always incorporate the click functionality
 
 Cited (Round 84: `src/scales/vas.ts`, `docs/ANALYSIS_PLAN.md` §4c, `docs/AUDIT_FINDINGS.md` Round 84) for:
 an empty line with no marker until the first touch, placed by a tap and adjustable, has lower
-measurement error than a slider with a pre-placed thumb; and a pre-placed thumb cannot tell a
-non-response from a response at its start (as the paper reports from earlier work). **Not cited for:**
-touch screens or tablets (most participants used a desktop or laptop; the 23 smartphone users had
-higher errors, and the authors call for a smartphone replication), symptom ratings (the task was placing
-given percentages on a line), any line length (all were 300 px), or the size of any effect in this
-study. On tick marks the paper reports both sides from other work — added marks improved precision in
+measurement error than a DRAG-ONLY slider with a pre-placed, visible thumb; and a pre-placed thumb cannot
+tell a non-response from a response at its start (as the paper reports from earlier work). **Not cited
+for:** a comparison with a slider that takes a tap, or one whose thumb is hidden until the first touch —
+such as the app's own number sliders (`sl-v1`), which did both. Re-read in full text, metadata re-checked, for Round 85 (16 Oct 2026):
+*"The sole modification implemented for all slider conditions entailed the disabling of the click
+functionality, thereby restricting participants to dragging the slider to the intended location"*, and,
+Discussion, *"the possibility remains that slider scales with click functionality may in fact outperform
+VAS with regard to measurement error"*. So the paper does not show the 100 mm line beats what it
+replaced; the change rests on the lines showing no number and no fill, the VAS definition, item 67's
+procedure and one fixed length (`src/scales/vas.ts`). Round 84 stated the comparison without this limit;
+corrected in Round 85. **Nor for:** touch screens or tablets (most participants used a desktop or laptop;
+the 23 smartphone users had higher errors, and the authors call for a smartphone replication), symptom
+ratings (the task was placing given percentages on a line), any line length (all were 300 px), or the
+size of any effect in this study. On tick marks the paper reports both sides from other work — added marks improved precision in
 one study (García-Pérez & Alcalá-Quintana) and may pull responses toward them in another (Matejka et
 al.) — so the line's having none rests on the VAS definition and on item 67's lines, not on this paper.
 
