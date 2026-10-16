@@ -7213,3 +7213,179 @@ hyphenation, which is the investigator's standing decision and the same rule in 
 | Typography | `ty-v1` (no column): synthetic bold, defaults unpinned | `ty-v2` | `typography_version` in 02 |
 | Straight-lining | exact equality of five whole numbers | the same, at whole points | ANALYSIS_PLAN §4c; identical on `sl-v1` rows |
 | Frame-rate gate, blink rule, calibration, camera check, gaze, reliability | unchanged | unchanged | as before |
+
+## Round 85 — review fixes for Rounds 83 and 84, and a portrait message that claimed a stop it had not made
+
+An independent review of Rounds 83 (the dashboard) and 84 (the rating lines and the typography) was
+run in its own worktree at 502209b. It found no blocker, one major and four minor problems. All five
+are fixed below. The final end-to-end run of this round then found a sixth, older problem (item 6):
+the portrait block could say a calibration had been stopped when it had not.
+
+**One rule changed and is versioned in the data:** straight-lining on the 100 mm lines (`str-r2`).
+Nothing was lowered to make data look better: in the simulation the new rule flags honest raters
+less often than the old one did, and flags a careless respondent who taps one spot within 1-2 mm far
+more often (about the same at a 3 mm scatter). Nothing here was measured on
+the Xiaomi Pad 6.
+
+### In plain words
+
+1. **Straight-lining on the new lines is now judged by how close the five marks are** — all five
+   within 5 mm — not by rounding each mark to a whole number first. Round 84's rounding made the flag
+   depend on where marks fell relative to the half-way points: five marks 1 mm apart could escape it
+   and five marks 9 mm apart could be caught. The 5 mm comes from a simulation, stated below. Old
+   slider rows keep the old rule.
+2. **The slider study is described for what it tested.** It compared a line with drag-only sliders
+   that started with a visible thumb; our old sliders took a tap and hid the thumb. The docs no longer
+   say the study shows the line beats *our* old slider. The change rests on what does differ: no
+   number and no fill while answering, the textbook VAS, one physical length.
+3. **"The text is unchanged" now says what was measured**: six reading pages, two questions and one
+   search excerpt, in headless desktop Chromium, not on the tablet. On the tablet, the line spacing
+   each page records is the check.
+4. **A tap on a rating's label no longer marks the line.** On a touch screen, Chrome hands a tap near
+   something tappable to that thing, so a tap on the words above a line marked it at its left end.
+   Now only a tap on the line itself marks it.
+5. **The manual says which "usual" rate the dashboard uses** (this sitting's), and why a split
+   sitting's verdict can differ from the pooled file's.
+6. **The portrait warning only says "stopped" when something was stopped.** If the tablet was turned
+   in the fraction of a second after the calibration finished sampling, while its result was being
+   saved, the warning said "stopped, nothing from it is kept" although the attempt — taken wholly in
+   landscape — was kept and shown on return. Data were never wrong; the sentence was.
+
+### 1. Straight-lining on the 100 mm lines, rule `str-r2` (0f0085d) — major
+
+**Found.** Round 84 compared the five fatigue items after rounding each to a whole point. On a 100 mm
+line a whole point is a 10 mm bin, so whether five marks counted as "identical" depended on where they
+fell against the x.5 boundaries, not on how close they were. ANALYSIS_PLAN §4c, the code comment and
+the Round 84 "Versions in the data" table said the rule "asks the same question of both" formats. It
+did not, and no simulation was stated for the change. The flag's sentence in `12_quality_flags.csv`
+still said "all five identical", which a `vas-v2` row never is.
+
+**Fixed.** On `vas-v2` rows: flagged when all five marks lie within **5 mm** of each other (largest
+minus smallest), unless their average is in the first or last 5 mm of the line (an honest "none" or
+"severe" on every item). `sl-v1` rows keep the old rule, `str-r1`. The rule lives in one module,
+`src/dashboard/straightLine.ts`. `12_quality_flags.csv` gains `straight_line_rule`, and the sentence
+says "within 5 mm" on the lines. ANALYSIS_PLAN §4c is corrected, and the Round 84 table row
+"Straight-lining … the same, at whole points" is superseded by this round.
+
+**Where 5 mm comes from.** `npm run sim:straightline` (`src/sim/straightLine.ts`, pinned by
+`tests/straightLineSim.test.ts`): the largest spread that flags honest raters no more often than the
+old whole-number rule did. Re-run for this round; selected rows (share of honest respondents flagged):
+
+| Honest respondent, items differing by SD | Old rule, same feelings | Round 84 (whole points) | `str-r2` (5 mm) | 6 mm |
+|---|---|---|---|---|
+| level uniform 10-90 mm, SD 3 mm | 32.3% | 32.4% | 30.7% | 45.9% |
+| level uniform 10-90 mm, SD 5 mm | 9.8% | 9.8% | 6.4% | 11.2% |
+| level uniform 10-90 mm, SD 10 mm | 1.0% | 1.0% | 0.5% | 0.9% |
+| mild, level uniform 5-20 mm, SD 5 mm | 9.7% | 10.1% | 6.0% | 10.5% |
+| Careless: one spot, five taps scattered SD 1 mm | — | 76.7% | 99.6% | 99.7% |
+| Careless, SD 2 mm | — | 53.4% | 70.0% | 84.6% |
+| Careless, SD 3 mm | — | 32.0% | 30.4% | 45.3% |
+| Honest "none" on every item, taps at the left end, SD 3 mm | — | 0.0% | 0.0% | 0.01% |
+
+200,000 simulated respondents a row, base seed 20261016. The criterion, fixed before choosing: the
+largest spread at which an honest rater is flagged no more often than the old whole-number rule
+flagged the same feelings, at every spread simulated. 6 mm already fails it (46% against 32% at SD
+3 mm, 11% against 10% at SD 5 mm). Judging the ends by the average of the marks matters: requiring
+every mark inside the first 5 mm instead flagged an honest "none" in 14% of cases at SD 3 mm. How far
+apart honest ratings lie in this sample, and how far a fingertip strays on this tablet, are not known;
+the respondents are simulation assumptions, not measured values. A flag costs 0.1 of the 1.0 quality
+score and on its own leaves a condition "good".
+
+### 2. What the slider study tested (ad45854) — minor
+
+**Found.** The main evidence for replacing the sliders (Angelike & Reips 2026, ledger 65) was applied
+to a comparison the paper did not make. Every slider in that study had its click disabled and showed
+its thumb at the start, and the authors say a slider that takes a click may outperform a VAS. The old
+`sl-v1` sliders took a tap and hid the thumb until touched.
+
+**Fixed.** `src/scales/vas.ts`, ANALYSIS_PLAN §4c and ledger 65 ("Not cited for") now say so, and
+rest the change on what does differ: no number and no fill while answering, the VAS definition and
+procedure, and one physical length on every display.
+
+### 3. What the typography comparison measured (2761463) — minor
+
+**Found.** `fonts.ts`, the 02 codebook entry for `typography_version` and ANALYSIS_PLAN said ty-v1 and
+ty-v2 draw "every reading page, question and search excerpt" identically and that the change "does not
+split the analysis". The comparison covered six pages, two questions and one excerpt, in headless
+desktop Chromium — where `text-size-adjust`, the one ty-v2 change that could alter the passage on the
+tablet, does nothing.
+
+**Fixed.** All three now state the measured scope and "not measured on the Xiaomi Pad 6". On the
+device, `reading_line_px_rendered` (recorded on page 1 of every display; ty-v1 rows have none) is
+the check, and the integrity audit already warns past 2%.
+
+### 4. A tap on a label marked the line (99fcdd1) — minor
+
+**Found.** On a touch screen, Chromium retargets a tap that lands near a tappable element to that
+element. A tap on an item's label, a few pixels above its line, or in the space below it, was taken
+as a rating at the line's left end — a stray low rating.
+
+**Fixed.** Every part of an item except its line now takes its own taps and ignores them, and the
+space between items belongs to the item above, so no gap is unowned. The screens are pixel-identical
+before and after. New `e2e/vasTouch.spec.ts` (touch emulation): taps on the label, an end word and the
+space below mark nothing; a tap on the line does. It fails without the fix. With a real fingertip the
+contact area is larger; the manual asks for one check on the tablet.
+
+### 5. The dashboard's "usual" rate (a099eb6) — minor
+
+**Found.** The manual said the Usable flag means a rate "more than 2 from this participant's usual",
+and that the same verdict is in `analysis_long.csv`. The Data Quality tab (and `10_wide_summary.csv`)
+compare against this sitting's median; `analysis_long.csv` (and the All Participants tab) against the
+participant's median over every sitting. For a split sitting the two can differ.
+
+**Fixed.** The manual says "this sitting's usual rate", explains the split-sitting difference in one
+sentence, and the Usable row names its other cause: an eye sampling rate that could not be measured
+with the camera on.
+
+### 6. The portrait block claimed a stop it had not made (this round)
+
+**Found** by the final end-to-end run, retries off: `setupNavigation` "turning the tablet to portrait
+stops a running calibration…" failed once (one calibration record where none was expected) while
+seven specs ran together; it passed 3 of 3 alone. Two causes:
+
+- **The app.** Experiment.tsx inferred "the calibration was stopped" from `procedureRunning`. For the
+  calibration that is `busy`, which stays true past the sampling, through the write of the attempt
+  just measured. A rotation in that gap was shown "…has been stopped. Nothing from it is kept", but
+  the routine — correctly — did not stop an attempt whose frames were all taken in landscape: the
+  record was written and its result shown on return. The camera check had no such gap (its "running"
+  is exactly its stoppable phase).
+- **The test.** Since cal-r2 (Round 80) the calibration samples for only about a second under
+  `?e2e` (250 ms settle, 400-800 ms baseline window, no face in the fake camera). The test waited
+  600 ms before rotating, leaving a few hundred ms; on a busy machine the window closed first.
+
+**Fixed.** `CalibrationRoutine` and `CameraSelfTest` now call `onStoppedByRotation` when their
+`halted` prop has actually stopped a run, and the portrait block's "stopped" sentence is driven by that
+alone; otherwise it shows the ordinary calibration message ("Rotate back to carry on with it"). Two
+unit tests in `tests/calibrationRoutine.test.tsx`: a rotation while the camera is sampled stops the
+run, writes nothing and reports the stop; a rotation during the write of a landscape attempt is not a
+stop, the record is kept and its result shown. The e2e test now rotates straight after the tap, as its
+camera-check half already did, and the block's sentence confirms the stop.
+
+### 7. For the investigator
+
+1. **On the tablet, tap the words above a rating line** (for example "Eye strain"): the line should
+   stay empty. Then tap the line: a marker should appear where the finger was.
+2. Nothing else here needs a decision. The open questions from Rounds 80, 82 and 84 stand.
+
+### 8. Checks run
+
+- The review (502209b, its own worktree): `npm run verify` green; 28 of 28 end-to-end tests with
+  retries off (allScreensFit, dashboardTabs, fillScreen at six viewports, fullRun, loopChrome,
+  stimulusFill, stimulusGeometry); production bundle 7 of 7; a full sitting walked at 1152x720,
+  1152x650 and 1920x1200 with every page, question and excerpt fitting; ledger 65-69 re-fetched from
+  PubMed.
+- After the five fixes (a099eb6): `npm run verify` green (104 test files, 1,631 unit tests, export
+  gate 873/873, analysis templates).
+- `npm run sim:straightline` re-run for this round: the figures in §1 and in ANALYSIS_PLAN §4c match
+  its output.
+- After item 6 (359c036): `npm run verify` green (104 test files, 1,633 unit tests, corpus, codebook,
+  export gate 873/873, analysis templates); the **whole end-to-end suite, retries off: 81 of 81
+  passed** (including `setupNavigation` and the new `vasTouch`); `npm run build`, then the
+  production-bundle suite, retries off: 7 of 7. The portrait test alone, before the fix: 3 of 3.
+
+### 9. Versions in the data
+
+| Rule or format | Before | Now | Where it is recorded |
+|---|---|---|---|
+| Straight-lining | `str-r1` on every row (Round 84: whole points on `vas-v2` rows) | `str-r1` on `sl-v1` rows; `str-r2` (all five within 5 mm, end exemption) on `vas-v2` rows | `straight_line_rule` in 12; ANALYSIS_PLAN §4c |
+| Rating format, typography, frame-rate gate, blink rule, calibration, camera check, gaze, reliability | unchanged | unchanged | as before |
