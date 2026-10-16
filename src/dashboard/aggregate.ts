@@ -5,6 +5,7 @@
  */
 import type { SessionBundle } from '@/storage/gather';
 import { rowSliderVersion } from '@/scales/vas';
+import { isStraightLined, straightLineRule, STRAIGHT_LINE, STRAIGHT_LINE_RULE_V1 } from './straightLine';
 import { CONFIG } from '@/experiment/config';
 import { FPS_GATE, fpsTier, gateParticipant, type FpsTier } from '@/tracking/frameRateGate';
 import {
@@ -209,6 +210,11 @@ export interface ConditionSummary {
   engagement_signals: EngagementSignal[];
   /** Individual careless-responding signals (also exported in the quality-flags CSV). */
   careless_straight_lined: boolean;
+  /**
+   * Which rule judged careless_straight_lined (dashboard/straightLine.ts): 'str-r1' on the number
+   * sliders, 'str-r2' on the 100 mm lines. Null where no fatigue rating was recorded.
+   */
+  straight_line_rule: string | null;
   careless_rushed_fatigue: boolean;
   careless_rushed_perception: boolean;
   reading_skim: boolean;
@@ -416,6 +422,8 @@ export interface EngagementResult {
   /** True when too few blinks were captured for the incomplete-blink ratio to be precise. */
   insufficient_blinks: boolean;
   careless_straight_lined: boolean;
+  /** The rule that judged careless_straight_lined (straightLine.ts); null with no fatigue rating. */
+  straight_line_rule: string | null;
   careless_rushed_fatigue: boolean;
   careless_rushed_perception: boolean;
   reading_skim: boolean;
@@ -426,38 +434,6 @@ export interface EngagementResult {
   rt_disengaged: boolean;
   low_face_presence: boolean;
 }
-
-/**
- * True when all five fatigue items are identical AND that value is not the floor.
- *
- * Straight-lining is a careless-responding signature, but "0 on every item" is also the expected
- * HONEST answer for a healthy 18-35 participant early in a sitting. Flagging it penalised exactly
- * the least symptomatic participants at exactly the earliest conditions — and since the
- * pre-registered sensitivity analysis re-fits the models excluding flagged conditions, it would
- * have removed preferentially the low-fatigue, early-position runs, biasing both the time-on-task
- * and the condition effects upward.
- *
- * The ceiling is exempted for the same reason in the other direction: five 10s late in a sitting
- * is a plausible report, not evidence of carelessness.
- */
-function isStraightLined(fat?: FatigueRecord): boolean {
-  if (!fat || !fat.all_touched) return false;
-  /*
-   * Compared at WHOLE POINTS of the 0-10 scale, the steps the rule was written for. On the number
-   * slider (sl-v1) every value is a whole point already, so this changes nothing there. On the 100 mm
-   * line (vas-v2, Round 84) the items are in tenths, and five marks a careless participant taps
-   * straight down the screen land a millimetre or two apart, never exactly together: compared exactly,
-   * the rule would almost never fire on the new format. Rounded, it asks the same question of both —
-   * five answers in the same whole point — and the floor and ceiling stay exempt for the reason above.
-   */
-  const v = [fat.eye_strain, fat.dryness, fat.blur, fat.burning, fat.headache].map((x) => Math.round(x));
-  if (!v.every((x) => x === v[0])) return false;
-  return v[0] !== FATIGUE_MIN && v[0] !== FATIGUE_MAX;
-}
-
-/** Endpoints of the 0-10 per-item fatigue scale. */
-const FATIGUE_MIN = 0;
-const FATIGUE_MAX = 10;
 
 /**
  * Per-condition engagement / careless-responding assessment. Pure and unit-tested. Each fired
@@ -639,9 +615,22 @@ export function conditionEngagement(args: {
   const careless_rushed_perception = !!perception && perception.response_time_ms != null && perception.response_time_ms < ENGAGEMENT.PERCEPTION_RUSHED_MS;
   if (careless_rushed_perception) penalise(ENGAGEMENT_PENALTY.RUSHED_PERCEPTION, `perception rating rushed (${Math.round(perception!.response_time_ms!)}ms)`, `Display rating rushed, ${(perception!.response_time_ms! / 1000).toFixed(1)} s`);
 
-  // Straight-lined fatigue ratings.
+  // Straight-lined fatigue ratings, by the rule for the row's rating format (straightLine.ts). The
+  // sentence says what that rule found: five identical numbers on the old slider, five marks within a
+  // few millimetres on the 100 mm line, where no two marks are ever exactly equal.
   const careless_straight_lined = isStraightLined(fatigue);
-  if (careless_straight_lined) penalise(ENGAGEMENT_PENALTY.STRAIGHT_LINED, 'fatigue ratings straight-lined (all five identical)', 'Fatigue ratings all the same');
+  const straight_line_rule = fatigue ? straightLineRule(fatigue) : null;
+  if (careless_straight_lined) {
+    if (straight_line_rule === STRAIGHT_LINE_RULE_V1) {
+      penalise(ENGAGEMENT_PENALTY.STRAIGHT_LINED, 'fatigue ratings straight-lined (all five identical)', 'Fatigue ratings all the same');
+    } else {
+      penalise(
+        ENGAGEMENT_PENALTY.STRAIGHT_LINED,
+        `fatigue ratings straight-lined (all five within ${STRAIGHT_LINE.VAS_SPREAD_MM} mm)`,
+        `Fatigue ratings all within ${STRAIGHT_LINE.VAS_SPREAD_MM} mm`,
+      );
+    }
+  }
 
   // Comprehension miss (weak on its own). With three items per passage a single slip is not
   // evidence of disengagement, so the flag fires only at or below chance, which for three
@@ -699,7 +688,7 @@ export function conditionEngagement(args: {
   return {
     engagement, quality_score, reasons, signals,
     blink_count_total: blinkCount, insufficient_blinks,
-    careless_straight_lined, careless_rushed_fatigue, careless_rushed_perception,
+    careless_straight_lined, straight_line_rule, careless_rushed_fatigue, careless_rushed_perception,
     reading_skim, reading_interrupted, condition_interrupted,
     comprehension_wrong, rt_disengaged, low_face_presence,
   };
@@ -822,6 +811,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       blink_count_total: eng.blink_count_total,
       insufficient_blinks: eng.insufficient_blinks,
       careless_straight_lined: eng.careless_straight_lined,
+      straight_line_rule: eng.straight_line_rule,
       careless_rushed_fatigue: eng.careless_rushed_fatigue,
       careless_rushed_perception: eng.careless_rushed_perception,
       reading_skim: eng.reading_skim,

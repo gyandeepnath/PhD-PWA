@@ -59,18 +59,49 @@ describe('conditionEngagement', () => {
     expect(e.careless_rushed_fatigue).toBe(true);
   });
 
-  it('judges straight-lining on the 100 mm line at whole points, as on the old eleven-step slider (Round 84)', () => {
-    const on = (v: number[]) => conditionEngagement({
+  it('judges straight-lining on the 100 mm line by how far apart the marks are, not by rounding (str-r2, Round 85)', () => {
+    const run = (v: number[]) => conditionEngagement({
       reading_time_ms: 60000, word_count: 100,
       fatigue: fatigue({ eye_strain: v[0], dryness: v[1], blur: v[2], burning: v[3], headache: v[4], slider_version: 'vas-v2' }),
-    }).careless_straight_lined;
-    // Five marks tapped straight down the screen land a millimetre or two apart, never exactly together.
-    expect(on([3.1, 3.2, 2.9, 3.0, 3.3])).toBe(true);
+    });
+    const on = (v: number[]) => run(v).careless_straight_lined;
+    // The review's cases against Round 84's whole-point rule: marks within 1 and 2 mm were NOT flagged
+    // (they straddle 3.5 and 4.5), marks 9 mm apart were (they all round to 3).
+    expect(on([3.4, 3.5, 3.4, 3.5, 3.4])).toBe(true);
+    expect(on([4.5, 4.6, 4.4, 4.5, 4.6])).toBe(true);
+    expect(on([2.5, 3.4, 2.6, 3.4, 3.0])).toBe(false);
+    // 5 mm apart is the widest still read as one spot; 6 mm is not.
+    expect(on([3.0, 3.5, 3.2, 3.1, 3.3])).toBe(true);
+    expect(on([3.0, 3.6, 3.2, 3.1, 3.3])).toBe(false);
     // Five answers spread over the scale are not straight-lined, however close two of them are.
     expect(on([3.1, 3.2, 5.5, 1.0, 3.3])).toBe(false);
-    // The floor and the ceiling stay exempt: five "none" marks are an honest answer.
+    // The ends stay exempt, judged by the marks' average: taps at the end stop that stray a few
+    // millimetres in are still "none" ...
     expect(on([0, 0.2, 0.4, 0.1, 0.3])).toBe(false);
+    expect(on([0, 0.5, 0.4, 0.1, 0.3])).toBe(false);
     expect(on([9.8, 10, 9.6, 10, 9.9])).toBe(false);
+    // ... but five marks together just inside the end zone are not.
+    expect(on([0.3, 0.5, 0.6, 0.7, 0.8])).toBe(true);
+    // The sentence says what the rule found, and the row says which rule.
+    const e = run([3.4, 3.5, 3.4, 3.5, 3.4]);
+    expect(e.reasons).toContain('fatigue ratings straight-lined (all five within 5 mm)');
+    expect(e.signals.map((x) => x.short)).toContain('Fatigue ratings all within 5 mm');
+    expect(e.reasons.join(' ')).not.toMatch(/identical/);
+    expect(e.straight_line_rule).toBe('str-r2');
+  });
+
+  it('keeps the whole-number rule on the old number sliders (str-r1)', () => {
+    const run = (v: number[]) => conditionEngagement({
+      reading_time_ms: 60000, word_count: 100,
+      fatigue: fatigue({ eye_strain: v[0], dryness: v[1], blur: v[2], burning: v[3], headache: v[4] }),
+    });
+    expect(run([3, 3, 3, 3, 3])).toMatchObject({ careless_straight_lined: true, straight_line_rule: 'str-r1' });
+    expect(run([3, 3, 3, 3, 3]).reasons).toContain('fatigue ratings straight-lined (all five identical)');
+    expect(run([3, 3, 4, 3, 3]).careless_straight_lined).toBe(false);
+    expect(run([0, 0, 0, 0, 0]).careless_straight_lined).toBe(false);
+    expect(run([10, 10, 10, 10, 10]).careless_straight_lined).toBe(false);
+    // No fatigue rating, no rule.
+    expect(conditionEngagement({ reading_time_ms: 60000, word_count: 100 }).straight_line_rule).toBeNull();
   });
 
   it('drops to bad when several strong signals fire together', () => {

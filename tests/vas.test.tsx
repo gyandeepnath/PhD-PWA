@@ -197,7 +197,7 @@ describe('the analysis templates model one rating format at a time', () => {
     expect(R).toMatch(/fat <- rating_format\(fat, "fatigue"\)/);
     expect(R).toMatch(/perception <- rating_format\(keep_rows\(perception\), "comfort and clarity"\)/);
     expect(PY).toMatch(/fat = rating_format\(fat, "fatigue"\)/);
-    // As the app's straight-lining check rounds them (Math.round, half up), not R's round() (half to even).
+    // Half up (floor(x + 0.5)), as ANALYSIS_PLAN §4c states, not R's round() (half to even).
     expect(R).toMatch(/mutate\(rating = floor\(rating \+ 0\.5\)\)/);
   });
 });

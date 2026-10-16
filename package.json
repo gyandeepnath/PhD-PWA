@@ -37,6 +37,7 @@
     "frame-intervals": "tsx scripts/frameIntervals.ts",
     "sim:fps": "tsx scripts/fpsGateSim.ts",
     "sim:selftest": "tsx scripts/selfTestSim.ts",
+    "sim:straightline": "tsx scripts/straightLineSim.ts",
     "postbuild": "node scripts/verifyBundle.mjs"
   },
   "dependencies": {

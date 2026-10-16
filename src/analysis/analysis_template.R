@@ -1080,7 +1080,7 @@ add_to_family("fatigue", m_fat, paste0(fat_response, ", 0-10 pts"))
 # they are, with no assumption that the steps between them are equal. On the number slider (sl-v1) the
 # items are whole points already. On the 100 mm line (vas-v2) they are tenths, up to 101 values, and a
 # threshold between every pair of adjacent values used is what §4c rules out for comfort and clarity;
-# rounded half up (as the app's straight-lining check rounds them) they are the same eleven steps. Stacked, with the item as a factor and
+# rounded half up (floor(x + 0.5), not R's half-to-even round()) they are the same eleven steps. Stacked, with the item as a factor and
 # the participant and passage intercepts, and the run intercept (1 | run_id): the five items of one rating
 # share that run's level, and stacked without it they counted five times as evidence about a condition
 # that varies only between runs (Round 73). `ordinal` is in neither the install line nor CI, so without it

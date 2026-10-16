@@ -10,6 +10,7 @@ import type { CameraBenchRecord, CameraPipelineRecord, ExposureOutcome, SessionR
 import type { MediaRecord } from './media';
 import { summariseLux, LUX_CHECKPOINTS } from '@/experiment/illumination';
 import { buildConditionSummaries, ENGAGEMENT } from '@/dashboard/aggregate';
+import { STRAIGHT_LINE, STRAIGHT_LINE_RULE_V1, STRAIGHT_LINE_RULE_V2 } from '@/dashboard/straightLine';
 import { isConditionComplete } from './conditionStatus';
 import { latestCalibration as lastCalibrationTaken } from './calibrationLookup';
 import { isWithdrawn } from './gather';
@@ -927,7 +928,8 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
       + 'interrupted — check condition_interrupted before reading it as evidence of engagement.' },
   { file: '12_quality_flags.csv', column: 'careless_rushed_fatigue', type: 'boolean', unit: '-', role: 'qc', description: 'True when the fatigue scale was submitted too quickly to have been read.' },
   { file: '12_quality_flags.csv', column: 'careless_rushed_perception', type: 'boolean', unit: '-', role: 'qc', description: 'True when the comfort and clarity ratings were submitted too quickly to have been read.' },
-  { file: '12_quality_flags.csv', column: 'careless_straight_lined', type: 'boolean', unit: '-', role: 'qc', description: 'True when all five fatigue items received an identical value, the classic straight-lining signature.' },
+  { file: '12_quality_flags.csv', column: 'careless_straight_lined', type: 'boolean', unit: '-', role: 'qc', description: `True when the five fatigue items were straight-lined, by the rule straight_line_rule names: on the number sliders (sl-v1) all five the same whole number; on the 100 mm lines (vas-v2) all five marks within ${STRAIGHT_LINE.VAS_SPREAD_MM} mm of each other. Not when the answer is "none" or "severe" on every item (all 0 or all 10; on the lines, the marks' average within ${STRAIGHT_LINE.VAS_END_ZONE_MM} mm of an end), which is a plausible honest answer. On its own it costs 0.1 of quality_score and leaves the condition 'good'. ANALYSIS_PLAN.md §4c.` },
+  { file: '12_quality_flags.csv', column: 'straight_line_rule', type: 'string', unit: '-', role: 'provenance', description: `The rule that judged careless_straight_lined: '${STRAIGHT_LINE_RULE_V1}' on sl-v1 rows (five identical whole numbers; the rule since before Round 84) or '${STRAIGHT_LINE_RULE_V2}' on vas-v2 rows (five marks within ${STRAIGHT_LINE.VAS_SPREAD_MM} mm, Round 85; the width from a stated simulation, ANALYSIS_PLAN.md §4c). Blank when no fatigue rating was recorded. Set by the row's slider_version (03_fatigue_scores.csv).` },
   { file: '12_quality_flags.csv', column: 'condition_interrupted', type: 'boolean', unit: '-', role: 'qc', description: 'The app was backgrounded, OR the tablet was held in portrait (behind the blocking overlay, where no tap reaches the task), OR a blocking notice was up (the camera lost or blocked, or the Pause confirmation), for more than 2 s somewhere in this condition — see condition_hidden_ms, condition_portrait_ms and condition_notice_ms on 02_conditions.csv for which. Portrait counts because it blocks input exactly as backgrounding throttles it, while leaving hidden time at 0. reading_interrupted does not cover this — it '
       + 'watches the passage only, and every other task in a condition is also timed. The threshold is lower than the reading one on '
       + 'purpose: reading is self-paced and dwell-gated, so a few seconds away costs time and nothing else, while the reaction-time '
@@ -1500,7 +1502,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
    * ANALYSIS_PLAN.md §5.5 actually asks.
    */
   csv('12_quality_flags.csv',
-    ['condition_id', 'participant_id', 'session_index', 'condition_label', 'session_position', 'condition_complete', 'attempt_number', 'engagement_flag', 'quality_score', 'blink_count_total', 'insufficient_blinks', 'reading_time_ms', 'fatigue_response_ms', 'perception_response_ms', 'reading_skim', 'reading_interrupted', 'condition_interrupted', 'rt_disengaged', 'careless_rushed_fatigue', 'careless_rushed_perception', 'careless_straight_lined', 'comprehension_wrong', 'low_face_presence', 'reasons'],
+    ['condition_id', 'participant_id', 'session_index', 'condition_label', 'session_position', 'condition_complete', 'attempt_number', 'engagement_flag', 'quality_score', 'blink_count_total', 'insufficient_blinks', 'reading_time_ms', 'fatigue_response_ms', 'perception_response_ms', 'reading_skim', 'reading_interrupted', 'condition_interrupted', 'rt_disengaged', 'careless_rushed_fatigue', 'careless_rushed_perception', 'careless_straight_lined', 'straight_line_rule', 'comprehension_wrong', 'low_face_presence', 'reasons'],
     summaries.map((s) => ({
       condition_id: s.condition_id,
       participant_id: pid, session_index: session.session_index, condition_label: s.condition_label,
@@ -1512,6 +1514,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       reading_skim: s.reading_skim, reading_interrupted: s.reading_interrupted,
       condition_interrupted: s.condition_interrupted, rt_disengaged: s.rt_disengaged, careless_rushed_fatigue: s.careless_rushed_fatigue,
       careless_rushed_perception: s.careless_rushed_perception, careless_straight_lined: s.careless_straight_lined,
+      straight_line_rule: s.straight_line_rule ?? '',
       comprehension_wrong: s.comprehension_wrong, low_face_presence: s.low_face_presence, reasons: s.engagement_reasons.join('; '),
     })));
 

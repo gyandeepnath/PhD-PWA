@@ -475,9 +475,43 @@ What it changes in the analysis, and what it does not:
 - **The cumulative-link sensitivity on the fatigue items takes them at whole points**, rounded half up:
   the eleven steps of the old scale, which a `clmm` can carry, instead of up to 101 values, which the
   comfort-and-clarity argument above rules out. On `sl-v1` rows this changes nothing.
-- **The straight-lining flag is judged at whole points too** (`isStraightLined` in `aggregate.ts`):
-  five marks a careless participant taps straight down the screen land a millimetre or two apart and
-  would never be exactly equal. On `sl-v1` rows it is the same rule; floor and ceiling stay exempt.
+- **The straight-lining flag has one rule per format** (`src/dashboard/straightLine.ts`; Round 85), and
+  `straight_line_rule` in `12_quality_flags.csv` says which judged each row:
+  - **`str-r1`, number sliders (`sl-v1`):** all five items the same whole number, not 0 and not 10.
+    Unchanged since before Round 84.
+  - **`str-r2`, 100 mm lines (`vas-v2`):** all five marks within **5 mm** of each other (largest minus
+    smallest), unless their average lies in the first or last 5 mm of the line (an honest "none" or
+    "severe" on every item).
+  - **Why not one rule.** Round 84 rounded each mark to a whole point and compared those, and said
+    that asked "the same question" of both formats. It did not: the verdict then depended on where the
+    marks fell against the x.5 boundaries, not on how close together they were — five marks within 1 mm
+    (3.4, 3.5, 3.4, 3.5, 3.4) were not flagged, five 9 mm apart (2.5 to 3.4) were. A line has no steps,
+    so `str-r2` asks how far apart the marks are. The two rules are not the same question either; the
+    width is chosen so the line flags honest raters no more often than the slider did.
+  - **Where 5 mm comes from: a simulation** (`src/sim/straightLine.ts`, `npm run sim:straightline`, base
+    seed 20261016, 200,000 simulated respondents a row; a model, not measured on the tablet or on
+    people). Criterion, fixed before choosing: the largest spread at which an honest rater is flagged no
+    more often than the old whole-number rule flagged the same feelings, at every item-to-item spread
+    simulated. Results (share flagged):
+
+    | Simulated respondent | Old rule, same feelings | Round 84 (whole points) | `str-r2` (5 mm) | 6 mm |
+    |---|---|---|---|---|
+    | Honest, symptoms differing by SD 3 mm | 32.3% | 32.4% | 30.7% | 45.9% |
+    | Honest, SD 5 mm | 9.8% | 9.8% | 6.4% | 11.2% |
+    | Honest, SD 10 mm | 1.0% | 1.0% | 0.5% | 0.9% |
+    | Honest, SD 20 mm | 0.07% | 0.07% | 0.03% | 0.07% |
+    | Careless: one spot, taps scattered SD 1 mm | — | 76.7% | 99.6% | 99.7% |
+    | Careless, SD 2 mm | — | 53.4% | 70.0% | 84.6% |
+    | Careless, SD 3 mm | — | 32.0% | 30.4% | 45.3% |
+    | Honest "none": taps at the end stop, SD 3 mm | — | 0% | 0% | 0.01% |
+
+    Honest raters: a level anywhere from 10 to 90 mm, the five items scattered around it. Careless: one
+    aim point from 5 to 95 mm, five taps straight down the screen. How far apart five honest symptom
+    ratings lie in this sample, and how far a fingertip strays between taps on this tablet, are **not
+    known**, so both are ranges. Judging the ends by the average of the marks matters: requiring every
+    mark inside the first 5 mm instead flagged an honest "none" in 14% of cases at SD 3 mm.
+  - **What a flag costs:** 0.1 of the 1.0 quality score. On its own it leaves a condition "good", so it
+    never by itself removes a row from the sensitivity refit.
 - **Recommended: switch before data collection**, so the study has one format. Pilot rows on `sl-v1`
   stay readable and are named as such.
 
@@ -603,7 +637,8 @@ These are not optional and they come first.
    means every rate in that row describes only the fraction the camera saw, and the rates themselves
    look entirely normal.
 5. **Careless responding.** `12_quality_flags.csv` carries straight-lining and rushed-response
-   signals per condition.
+   signals per condition. Straight-lining is judged by the rule `straight_line_rule` names, one per
+   rating format (§4c).
 6. **Per-blink records (from schema 10, Round 78) — optional, for validation only.** The main
    analysis does not change: it reads the per-condition totals in `07_eye_metrics.csv`, and neither
    template reads the two files below.
