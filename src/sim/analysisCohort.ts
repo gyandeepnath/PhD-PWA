@@ -36,6 +36,7 @@ import { PASSAGES, countWords } from '@/experiment/passages';
 import { computeSdt } from '@/lib/signalDetection';
 import { scoreCvsq } from '@/scales/cvsq';
 import { planRtBlock } from '@/lib/rtLocations';
+import { summariseRtBlock } from '@/lib/rtSummary';
 import { CONFIG } from '@/experiment/config';
 import { ENGAGEMENT } from '@/dashboard/aggregate';
 
@@ -99,6 +100,12 @@ const esc = (v: string) => JSON.stringify(v).slice(1, -1);
 
 export function simulateCohort(opts: CohortOptions): SessionBundle[] {
   const rng = makeRng(opts.seed ?? 20260402);
+  /*
+   * The anticipations' own stream (Round 86), so adding them moved no other simulated value: every
+   * draw from `rng` below is the one it was before, and only the trials this stream turns into
+   * anticipations differ.
+   */
+  const antRng = makeRng((opts.seed ?? 20260402) + 86);
   const binom = (n: number, p: number) => { let x = 0; for (let k = 0; k < n; k++) if (rng() < p) x++; return x; };
   const poisson = (lambda: number) => {
     const limit = Math.exp(-lambda);
@@ -217,6 +224,13 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
     const critU = gaussian(rng, 0, 0.2);
     const lapseU = gaussian(rng, 0, 0.4);   // participants differ in how often they lapse, as in d' and c
     const phi = (x: number) => 0.5 * (1 + erf(x / Math.SQRT2));
+    /*
+     * ANTICIPATIONS (Round 86, audit 86 D4): a response faster than the 150 ms cutoff is its own
+     * accuracy level, out of both detection pools. Half the cohort produces some, at 0.5-2.5% of its
+     * responses — the rates at which the audit's old definition of a signal trial excluded most of a
+     * cohort — so the join verdict and both templates are run over blocks that hold them.
+     */
+    const antRate = antRng() < 0.5 ? 0 : 0.005 + antRng() * 0.02;
     for (const r of b.rtSummaries) {
       const c = byId.get(r.condition_id)!;
       const def = CONDITIONS.find((d) => d.label === c.condition_label)!;
@@ -230,8 +244,6 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
       const blockDp = gaussian(rng, 0, 0.25);
       const blockRt = gaussian(rng, 0, 25);
       const blockLapse = logistic(Math.log(0.05 / 0.95) + lapseU + gaussian(rng, 0, 0.5));
-      let hits = 0; let misses = 0; let fas = 0; let crs = 0;
-      const hitRts: number[] = [];
       trials.forEach((t, k) => {
         const p = plan.trials[k];
         const outer = p.location.ring === 'outer';
@@ -241,36 +253,22 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
         const accuracy: RtAccuracy = p.signal ? (responded ? 'hit' : 'miss') : (responded ? 'false_alarm' : 'correct_rejection');
         // A few slow responses beyond the 600 ms lapse threshold, so the lapse model has events to fit.
         const lapse = responded && p.signal && rng() < blockLapse;
-        const rt = responded
+        const drawnRt = responded
           ? Math.max(160, Math.round((lapse ? 720 : 380 + rtU + blockRt + 4 * c.session_position + (outer ? 20 : 0)) + gaussian(rng, 0, 45)))
           : null;
+        // Drawn after the response, from its own stream, so the draws above are unchanged.
+        const anticipatory = responded && antRate > 0 && antRng() < antRate;
+        const rt = anticipatory ? 70 + Math.floor(antRng() * 70) : drawnRt;
         Object.assign(t, {
           is_signal: p.signal, trial_category: p.signal ? 'signal' : 'noise', stimulus_color: p.color,
           stim_location_id: p.location.id, stim_ring: p.location.ring, stim_angle_deg: p.location.angleDeg,
           stim_dx_px: p.location.dx, stim_dy_px: p.location.dy, stim_ecc_px: p.location.eccPx,
           stim_scale_at_onset: 1,
-          accuracy, response_time_ms: rt,
+          accuracy: anticipatory ? 'anticipation' : accuracy, response_time_ms: rt, anticipatory,
         });
-        if (accuracy === 'hit') { hits++; hitRts.push(rt!); } else if (accuracy === 'miss') misses++;
-        else if (accuracy === 'false_alarm') fas++; else crs++;
       });
-      const sdt = computeSdt({ hits, misses, falseAlarms: fas, correctRejections: crs });
-      const mean = hitRts.length ? hitRts.reduce((a, x) => a + x, 0) / hitRts.length : null;
-      const sd = hitRts.length > 1 && mean != null
-        ? Math.sqrt(hitRts.reduce((a, x) => a + (x - mean) ** 2, 0) / (hitRts.length - 1)) : null;
-      const sorted = [...hitRts].sort((a, x) => a - x);
-      const median = sorted.length ? (sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2) : null;
-      const lapses = hitRts.filter((x) => x > CONFIG.RT_LAPSE_THRESHOLD_MS).length;
-      Object.assign(r, {
-        median_rt_hits_ms: median, rt_sd_ms: sd == null ? null : Math.round(sd * 100) / 100,
-        rt_cv: sd != null && mean ? Math.round((sd / mean) * 10_000) / 10_000 : null,
-        lapse_count: lapses, lapse_rate: hitRts.length ? lapses / hitRts.length : null,
-        hits, misses, false_alarms: fas, correct_rejections: crs,
-        hit_rate: sdt.hit_rate, false_alarm_rate: sdt.false_alarm_rate,
-        mean_rt_hits_ms: mean == null ? null : Math.round(mean * 100) / 100,
-        d_prime: sdt.d_prime, d_prime_se: sdt.d_prime_se, d_prime_unstable: sdt.d_prime_unstable,
-        criterion: sdt.criterion, d_prime_estimable: sdt.estimable,
-      });
+      // The summary by the task's own function, from these trials (lib/rtSummary.ts), as the app writes it.
+      Object.assign(r, summariseRtBlock(trials));
     }
 
     // Post-condition fatigue rises with position. The five items of one rating share the run's own

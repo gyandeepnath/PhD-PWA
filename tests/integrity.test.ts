@@ -11,6 +11,10 @@ import { auditBundle } from '@/storage/integrity';
 import { buildExportFiles } from '@/storage/export';
 import { buildFixtureBundle } from '@/sim/bundleFixture';
 import { splitCsvRow } from './helpers/csv';
+import { summariseRtBlock } from '@/lib/rtSummary';
+import { checkJoin } from '@/storage/joinIntegrity';
+import { makeRng } from '@/sim/rng';
+import type { ReactionTrialRecord } from '@/storage/types';
 
 const checks = (b: ReturnType<typeof buildFixtureBundle>) => auditBundle(b).findings.map((f) => f.check);
 
@@ -32,6 +36,74 @@ describe('a sound bundle passes cleanly', () => {
     }
     b.fatigue = b.fatigue.filter((x) => x.stage === 'baseline' || x.condition_id === keep);
     expect(auditBundle(b).errors).toBe(0);
+  });
+});
+
+/*
+ * AN ANTICIPATION IS NOT A SUMMARY FAULT (Round 86, audit 86 D4).
+ *
+ * The task's summary counts as signal_trials the go trials it SCORED — hits plus misses, hit_rate's
+ * denominator — and the codebook says so; the audit counted every go trial presented. So one go-dot
+ * tapped faster than the 150 ms cutoff raised summary_matches_trials as an error, and that check is a
+ * blocking one: the participant was dropped from every pre-registered model for a summary that was
+ * right. The blocks here are summarised by the task's own function (lib/rtSummary.ts).
+ */
+describe('a block with anticipations is audited by the task\'s own definition', () => {
+  const NOW = { conditionsPerParticipant: 10, sittingsPerParticipant: 1, illuminationLevels: 1 };
+  const summaryErrors = (b: ReturnType<typeof buildFixtureBundle>) =>
+    auditBundle(b).findings.filter((f) => f.check === 'summary_matches_trials');
+  /** Turn one trial of the first condition into an anticipation and re-summarise as the task does. */
+  const anticipate = (b: ReturnType<typeof buildFixtureBundle>, from: ReactionTrialRecord['accuracy']) => {
+    const cid = b.conditions[0].condition_id;
+    const t = b.reactionTrials.find((r) => r.condition_id === cid && r.accuracy === from)!;
+    Object.assign(t, { response_time_ms: 112, accuracy: 'anticipation', anticipatory: true });
+    const i = b.rtSummaries.findIndex((r) => r.condition_id === cid);
+    b.rtSummaries[i] = { ...b.rtSummaries[i], ...summariseRtBlock(b.reactionTrials.filter((r) => r.condition_id === cid)) };
+    return b.rtSummaries[i];
+  };
+
+  it('raises nothing for a go-trial anticipation, and the participant stays analysable', () => {
+    const b = buildFixtureBundle();
+    const s = anticipate(b, 'hit');
+    expect(s.anticipations).toBeGreaterThan(0);
+    // The scored go trials, not the go trials presented.
+    expect(s.signal_trials).toBe(s.hits + s.misses);
+    expect(summaryErrors(b), JSON.stringify(summaryErrors(b))).toEqual([]);
+    const v = checkJoin([b], NOW).participants[0];
+    expect(v.excluded_by).not.toContain('audit_summary_matches_trials');
+  });
+
+  it('raises nothing for a no-go anticipation either', () => {
+    const b = buildFixtureBundle();
+    anticipate(b, 'correct_rejection');
+    expect(summaryErrors(b)).toEqual([]);
+  });
+
+  it('never faults a summary the task itself would write, over many random blocks', () => {
+    const rng = makeRng(86);
+    for (let k = 0; k < 200; k++) {
+      const b = buildFixtureBundle();
+      const cid = b.conditions[0].condition_id;
+      for (const t of b.reactionTrials.filter((r) => r.condition_id === cid)) {
+        const responded = rng() < 0.7;
+        const rt = responded ? Math.round(rng() * 900) : null;
+        const ant = rt != null && rt < 150;
+        Object.assign(t, {
+          response_time_ms: rt, anticipatory: ant,
+          accuracy: ant ? 'anticipation' : t.is_signal ? (responded ? 'hit' : 'miss') : (responded ? 'false_alarm' : 'correct_rejection'),
+        });
+      }
+      const i = b.rtSummaries.findIndex((r) => r.condition_id === cid);
+      b.rtSummaries[i] = { ...b.rtSummaries[i], ...summariseRtBlock(b.reactionTrials.filter((r) => r.condition_id === cid)) };
+      expect(summaryErrors(b), `block ${k}`).toEqual([]);
+    }
+  });
+
+  it('still faults a summary that miscounts its scored go trials', () => {
+    const b = buildFixtureBundle();
+    const s = anticipate(b, 'hit');
+    s.signal_trials += 1; // the count of go trials PRESENTED: what the old check demanded
+    expect(summaryErrors(b).map((f) => f.detail).join(' ')).toMatch(/signal_trials/);
   });
 });
 

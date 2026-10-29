@@ -194,6 +194,12 @@ for (const { root, options } of jobs) {
   for (const f of ds.files) writeFileSync(root + '/_pooled/' + f.filename, f.content);
   const s = cohortSummary(ds.files, ds.integrity, N_CONDITIONS);
   writeFileSync(root + '.expected.json', JSON.stringify({ confirmatory: s.confirmatory, sensitivity: s.sensitivity, qcChecks: s.qcChecks }));
+  // Who anticipated a go dot, and the exporter's verdict on them (Round 86, audit 86 D4; checked below).
+  writeFileSync(root + '.anticipations.json', JSON.stringify(bundles.map((b) => ({
+    participant_id: b.session.participant_id,
+    go_anticipations: b.reactionTrials.filter((t) => t.is_signal && t.accuracy === 'anticipation').length,
+    verdict: ds.integrity.participants.find((p) => p.participant_id === b.session.participant_id) ?? null,
+  }))));
   // The r-short state below halves P001's observed_duration_ms in the per-sitting files; the same edit
   // on the bundles gives the dashboard's count of §5.3-5.4 flags (rule rel-r1) for the same rows.
   if (root.endsWith('/cohort')) {
@@ -288,6 +294,20 @@ for (const { root, options } of jobs) {
     const m = new RegExp(`^${term}\\s+(-?[\\d.]+(?:e[-+]?\\d+)?)`, 'm').exec(block);
     return m ? Number(m[1]) : NaN;
   };
+  /*
+   * AN ANTICIPATION IS NOT AN INTEGRITY FAULT (Round 86, audit 86 D4). Half the cohort taps some go dots
+   * under the 150 ms cutoff, as real participants do. The audit used to count those as signal trials the
+   * summary had lost, a blocking error: at a 0.5% anticipation rate it took 18 of 40 participants out of
+   * every model, with this gate green, because no simulated participant ever anticipated.
+   */
+  {
+    const ant = JSON.parse(readFileSync(`${at('cohort')}.anticipations.json`, 'utf8'));
+    const anticipators = ant.filter((a) => a.go_anticipations > 0);
+    const faulted = anticipators.filter((a) => (a.verdict?.excluded_by ?? []).some((x) => /summary_matches_trials/.test(x)));
+    ok('the cohort holds participants who anticipated a go dot', anticipators.length >= 3, `${anticipators.length} participant(s)`);
+    ok('... and none of them is excluded for it', faulted.length === 0,
+      faulted.map((a) => `${a.participant_id}: ${a.verdict.excluded_by.join(';')}`).join(' | '));
+  }
   const r = await RUNS['Python:cohort'];
   ok('the template runs to completion without raising', r.status === 0,
     (r.stderr || '').trim().split('\n').slice(-3).join(' | '));

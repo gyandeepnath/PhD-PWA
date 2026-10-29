@@ -216,6 +216,24 @@ for (const f of files.filter((x) => x.filename.endsWith('.csv'))) {
   ok(`${f.filename}: condition_id all resolve`, orphans.length === 0, `${orphans.length} orphan(s): ${orphans.slice(0, 3).map((o) => o.condition_id).join(',')}`);
 }
 
+/*
+ * The audit the export carries (16_integrity_report.csv, and the manifest's joins_sound) must find the
+ * fixture sound WITH anticipations in it (Round 86, audit 86 D4). The audit counted every go trial
+ * presented as a signal trial while the task counts the go trials scored, so a single go-dot tapped
+ * under 150 ms was a blocking error and the participant left the analysis. The fixture holds a go and
+ * a no-go anticipation; a check that disagrees with the task again stops this gate.
+ */
+{
+  const reaction = table(F.get('08_reaction_trials.csv')!);
+  const antGo = reaction.rows.filter((r) => r.accuracy === 'anticipation' && r.is_signal === 'true').length;
+  const antNoGo = reaction.rows.filter((r) => r.accuracy === 'anticipation' && r.is_signal === 'false').length;
+  ok('the fixture holds anticipations on go and on no-go trials', antGo > 0 && antNoGo > 0, `go ${antGo}, no-go ${antNoGo}`);
+  const m = JSON.parse(F.get('export_manifest.json')!);
+  ok('the integrity audit finds the sitting sound, anticipations and all', m.integrity?.joins_sound === true && m.integrity?.errors === 0,
+    (F.get('16_integrity_report.csv') ?? '').split('\n').filter((l) => l.includes(',error,')).slice(0, 3).join(' | '));
+  log(`   08_reaction_trials.csv: ${antGo} go and ${antNoGo} no-go anticipation(s); 16_integrity_report.csv: ${m.integrity?.errors} error(s)`);
+}
+
 // ================================================================ 6. NASA-TLX
 log('\n' + '='.repeat(104));
 log('6. NASA-TLX — one session-level row, raw_tlx is the mean of the six ratings as marked');

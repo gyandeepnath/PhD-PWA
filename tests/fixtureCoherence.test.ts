@@ -175,7 +175,10 @@ describe('the reaction-time summary is a summary of its own trials', () => {
     for (const r of bundle.rtSummaries) {
       const trials = trialsOf(r.condition_id);
       expect(r.total_trials).toBe(trials.length);
-      expect(r.signal_trials).toBe(trials.filter((t) => t.is_signal).length);
+      // The go trials SCORED (hits plus misses), as the task and the codebook define it — not the go
+      // trials presented, which is what this line and the audit both used to demand (Round 86).
+      expect(r.signal_trials).toBe(trials.filter((t) => t.is_signal && t.accuracy !== 'anticipation').length);
+      expect(r.anticipations).toBe(trials.filter((t) => t.anticipatory).length);
       expect(r.hits).toBe(trials.filter((t) => t.accuracy === 'hit').length);
       expect(r.misses).toBe(trials.filter((t) => t.accuracy === 'miss').length);
       expect(r.false_alarms).toBe(trials.filter((t) => t.accuracy === 'false_alarm').length);
@@ -189,6 +192,18 @@ describe('the reaction-time summary is a summary of its own trials', () => {
       expect(r.misses).toBeGreaterThan(0);
       expect(r.false_alarms).toBeGreaterThan(0);
       expect(r.hit_rate!).toBeLessThan(1);
+    }
+  });
+
+  it('holds anticipations on go and on no-go trials, so every gate meets them', () => {
+    // None, and the audit's wrong definition of a signal trial excluded every participant with one
+    // fast tap while every gate stayed green (Round 86, audit 86 D4).
+    const ant = bundle.reactionTrials.filter((t) => t.accuracy === 'anticipation');
+    expect(ant.some((t) => t.is_signal)).toBe(true);
+    expect(ant.some((t) => !t.is_signal)).toBe(true);
+    for (const t of ant) {
+      expect(t.anticipatory).toBe(true);
+      expect(t.response_time_ms!).toBeLessThan(CONFIG.RT_MIN_VALID_RT_MS);
     }
   });
 

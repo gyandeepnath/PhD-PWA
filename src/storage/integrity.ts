@@ -23,6 +23,7 @@ import { MIN_SCALE } from '@/lib/viewportScale';
 import { rowSliderVersion } from '@/scales/vas';
 import { expectedLinePx, linePitchOff, READING_LINE_TOLERANCE } from '@/lib/renderedText';
 import { CONFIG } from '@/experiment/config';
+import { rtBlockCounts } from '@/lib/rtSummary';
 import {
   isPlausibleMmPerCssPx, isPlausibleViewingDistanceCm, longSide, sessionMmPerCssPx, MM_PER_CSS_PX_RANGE,
   STUDY_TABLET_PANEL_LONG_MM, VIEWING_DISTANCE_CM,
@@ -637,20 +638,26 @@ export function auditBundle(bundle: SessionBundle, opts: AuditOptions = {}): Int
           `${list.length} trial rows exist. Every rate in the summary is over the wrong denominator.`,
           [s.condition_id]);
       }
-      const signals = list.filter((r) => r.is_signal).length;
+      /*
+       * The counts by the task's own definition (lib/rtSummary.ts), not a second one. signal_trials is
+       * the go trials SCORED — hits plus misses, hit_rate's denominator, as the codebook says — so a go
+       * trial answered inside the anticipation cutoff is not one. This check counted every go trial
+       * presented, and so faulted every block holding a go-trial anticipation; the fault is a blocking
+       * one, so one fast tap took the participant out of the analysis (Round 86, audit 86 D4).
+       */
+      const { signal_trials: signals, hits, false_alarms: fa } = rtBlockCounts(list);
       if (s.signal_trials !== signals) {
         add('error', 'summary_matches_trials',
           `rt_summaries: condition "${s.condition_id}" reports signal_trials=${s.signal_trials} but ` +
-          `${signals} trials are signals. The hit rate and d' are computed over the wrong base.`,
+          `${signals} go trials were scored (hits plus misses; an anticipation is neither). The hit ` +
+          `rate and d' are computed over the wrong base.`,
           [s.condition_id]);
       }
-      const hits = list.filter((r) => r.accuracy === 'hit').length;
       if (s.hits !== hits) {
         add('error', 'summary_matches_trials',
           `rt_summaries: condition "${s.condition_id}" reports hits=${s.hits} but ${hits} trials are ` +
           `scored as hits.`, [s.condition_id]);
       }
-      const fa = list.filter((r) => r.accuracy === 'false_alarm').length;
       if (s.false_alarms !== fa) {
         add('error', 'summary_matches_trials',
           `rt_summaries: condition "${s.condition_id}" reports false_alarms=${s.false_alarms} but ` +

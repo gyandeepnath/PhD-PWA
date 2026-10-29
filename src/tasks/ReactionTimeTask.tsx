@@ -26,8 +26,7 @@ import { planRtBlock, type RtLocation, type RtRing } from '@/lib/rtLocations';
 import { currentScale } from '@/lib/viewportScale';
 import { relativeLuminance } from '@/lib/contrast';
 import { rafDelay, randInt, now } from '@/lib/timing';
-import { median, stdSample } from '@/lib/stats';
-import { computeSdt } from '@/lib/signalDetection';
+import { summariseRtBlock, type RtBlockSummary } from '@/lib/rtSummary';
 import { STIMULUS_FONT_STACK } from '@/lib/fonts';
 import { displayStepLabel, type DisplayPosition } from '@/experiment/taskSteps';
 import type { RtAccuracy } from '@/storage/types';
@@ -69,34 +68,8 @@ export interface RawTrial {
 
 export interface RtResult {
   trials: RawTrial[];
-  summary: {
-    total_trials: number;
-    signal_trials: number;
-    hits: number;
-    false_alarms: number;
-    misses: number;
-    correct_rejections: number;
-    /** Null when the block held no signal trials — never 0, which would be a measurement. */
-    hit_rate: number | null;
-    /** Null when the block held no noise trials. */
-    false_alarm_rate: number | null;
-    mean_rt_hits_ms: number | null;
-    median_rt_hits_ms: number | null;
-    rt_sd_ms: number | null;
-    error_rate: number | null;
-    rt_cv: number | null;
-    anticipations: number;
-    lapse_count: number;
-    lapse_rate: number | null;
-    inverse_efficiency_ms: number | null;
-    first_half_mean_rt_ms: number | null;
-    second_half_mean_rt_ms: number | null;
-    d_prime: number | null;
-    d_prime_se: number | null;
-    d_prime_unstable: boolean;
-    criterion: number | null;
-    d_prime_estimable: boolean;
-  };
+  /** See lib/rtSummary.ts: hit_rate and the other rates are null, never 0, over an empty pool. */
+  summary: RtBlockSummary;
 }
 
 type Phase = 'instruction' | 'fixation' | 'delay' | 'stimulus' | 'feedback' | 'iti' | 'practice_done' | 'done';
@@ -186,8 +159,6 @@ function buildTrials(
   }
   return plan.trials;
 }
-
-const avg = (xs: number[]): number | null => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
 
 interface Props {
   background: string;
@@ -419,92 +390,9 @@ export function ReactionTimeTask({
   const finish = () => {
     setPhaseSync('done');
     onTrialsRunning?.(false);
-    const recs = records.current;
-    const hits = recs.filter((r) => r.accuracy === 'hit');
-    const misses = recs.filter((r) => r.accuracy === 'miss').length;
-    const fa = recs.filter((r) => r.accuracy === 'false_alarm').length;
-    const cr = recs.filter((r) => r.accuracy === 'correct_rejection').length;
-    const anticipations = recs.filter((r) => r.anticipatory).length;
-    const validHitRts = hits.filter((r) => !r.anticipatory && r.response_time_ms != null).map((r) => r.response_time_ms!);
-    const meanRt = avg(validHitRts);
-    const sdRt = validHitRts.length > 1 ? stdSample(validHitRts) : null;
-    /**
-     * Over SCORED trials, not over all trials. An anticipation is neither an error nor a correct
-     * response — it is a trial on which no detection judgement was made — so leaving it in the
-     * denominator diluted the error rate of exactly the participants who were producing them.
-     */
-    const scoredTrials = hits.length + misses + fa + cr;
-    /*
-     * NULL when nothing was scored, not 0.
-     *
-     * 0 is a perfect score, and the block that produces an empty denominator is the opposite of a
-     * perfect one: a participant tapping rhythmically has every response land inside the 150 ms
-     * anticipation cutoff, so every trial is an anticipation and all four detection pools are empty.
-     * The codebook names that phenotype as the one this task exists to detect.
-     *
-     * The fabricated 0 then silenced the detector. conditionEngagement's rt_disengaged test
-     * null-guards false_alarm_rate and lapse_rate — with a comment saying an unmeasured rate "is not
-     * evidence of engagement OR of disengagement" — and left error_rate unguarded because its type
-     * said it could not be null. So the one rate that could be fabricated was the one without a
-     * guard, `0 > 0.3` was false, no penalty was charged, and the condition passed the engagement
-     * filter with its ocular data intact.
-     */
-    const errorRate = scoredTrials > 0 ? (misses + fa) / scoredTrials : null;
-    const lapseCount = validHitRts.filter((rt) => rt > CONFIG.RT_LAPSE_THRESHOLD_MS).length;
-    // Inverse efficiency needs an accuracy to divide by; without a scored trial there is none, and
-    // an IES computed against an assumed perfect accuracy would be the same fabrication one layer on.
-    const accuracyProp = errorRate != null ? 1 - errorRate : null;
-    const ies = meanRt != null && accuracyProp != null && accuracyProp > 0 ? meanRt / accuracyProp : null;
-
-    // Within-block vigilance: valid hit RTs in the first vs second half of the (chronological) block.
-    const mid = recs.length / 2;
-    const halfRt = (lo: number, hi: number) =>
-      avg(recs.filter((r, i) => i >= lo && i < hi && r.accuracy === 'hit' && !r.anticipatory && r.response_time_ms != null).map((r) => r.response_time_ms!));
-
-    const sdt = computeSdt({ hits: hits.length, misses, falseAlarms: fa, correctRejections: cr });
-
-    onComplete({
-      trials: recs,
-      summary: {
-        total_trials: recs.length,
-        signal_trials: hits.length + misses,
-        hits: hits.length,
-        false_alarms: fa,
-        misses,
-        correct_rejections: cr,
-        hit_rate: sdt.hit_rate,
-        false_alarm_rate: sdt.false_alarm_rate,
-        mean_rt_hits_ms: meanRt,
-        median_rt_hits_ms: validHitRts.length ? median(validHitRts) : null,
-        rt_sd_ms: sdRt,
-        error_rate: errorRate,
-        rt_cv: meanRt && sdRt != null && meanRt > 0 ? sdRt / meanRt : null,
-        anticipations,
-        lapse_count: lapseCount,
-        /**
-         * Denominator = VALID hits, matching the numerator and matching the codebook.
-         *
-         * lapseCount is counted among validHitRts (non-anticipatory, with a recorded RT) while the
-         * denominator was all hits. The deflation scales with the anticipation count, and
-         * anticipations rise with disengagement — so the index the codebook calls a fatigue-
-         * sensitive measure was shrunk hardest exactly where fatigue was greatest, attenuating the
-         * position and condition effects toward null. It also feeds the disengagement flag, which
-         * therefore under-fired for the most disengaged blocks.
-         *
-         * Null, not 0, for an empty denominator: a condition in which the participant stopped
-         * responding altogether used to export the best possible lapse rate as a measurement.
-         */
-        lapse_rate: validHitRts.length ? lapseCount / validHitRts.length : null,
-        inverse_efficiency_ms: ies,
-        first_half_mean_rt_ms: halfRt(0, mid),
-        second_half_mean_rt_ms: halfRt(mid, recs.length),
-        d_prime: sdt.d_prime,
-        d_prime_se: sdt.d_prime_se,
-        d_prime_unstable: sdt.d_prime_unstable,
-        criterion: sdt.criterion,
-        d_prime_estimable: sdt.estimable,
-      },
-    });
+    // The block's summary, by the one derivation the audit, the fixture and the cohort also use
+    // (lib/rtSummary.ts, Round 86): the arithmetic that lived here, moved there unchanged.
+    onComplete({ trials: records.current, summary: summariseRtBlock(records.current) });
   };
 
   const dot = CONFIG.RT_DOT_PX;
