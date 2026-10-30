@@ -9,6 +9,7 @@ import { EAR_TIERS, MIN_GAP_MS } from '@/tracking/blink';
 import type { SelfTestObservation } from '@/tracking/useTracking';
 import { TRACKER_LABEL, type TrackerBackend } from '@/tracking/trackers';
 import { ScrollCue } from '@/components/ScrollCue';
+import { reportAsyncFailure, describeFailure } from '@/lib/asyncFailure';
 
 /**
  * "Blink each time the dot flashes" — the camera self-test, run after calibration. See
@@ -37,7 +38,8 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false, 
   begin: () => void;
   /** Ends the check; given the cue times, the check's blinks are held to be stored with the result. */
   end: (cueTimes?: number[]) => SelfTestObservation;
-  onDone: (result: SelfTestResult) => void;
+  /** Records the result and moves on. Awaited: a write that fails hands the buttons back (see finish). */
+  onDone: (result: SelfTestResult) => void | Promise<unknown>;
   /** True while the dot is flashing: the operator's Exit chip is withheld, as in calibration. */
   onRunning?: (running: boolean) => void;
   /**
@@ -122,7 +124,32 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
+  /*
+   * ONE CONTINUE PER RESULT (Round 86, audit 86 F14). The handler behind it writes the result, the
+   * check's blinks and the sitting's first photograph before the screen changes, and a second tap in
+   * that time — a double tap — ran all of it twice: two start photographs, and a second advance that
+   * moved past the baseline CVS-Q. The first tap latches here (and the buttons say the result is being
+   * saved); Experiment's advance also refuses any call from a screen no longer on show.
+   *
+   * A write that FAILS hands the buttons back, so the operator can continue again once the cause is
+   * dealt with, instead of facing a "Saving…" that never ends; the failure itself is named on the
+   * background-failure panel (lib/asyncFailure.ts), as it was when the rejection went unhandled.
+   */
+  const doneRef = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const finish = (r: SelfTestResult) => {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    setSaving(true);
+    void Promise.resolve(onDone(r)).catch((err: unknown) => {
+      doneRef.current = false;
+      setSaving(false);
+      reportAsyncFailure(describeFailure(err));
+    });
+  };
+
   const tryAgain = (r: SelfTestResult) => {
+    if (doneRef.current) return;
     earlier.current = [...earlier.current, attemptSummary(r)];
     setResult(null);
     setSeen(null);
@@ -266,22 +293,22 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false, 
       <div style={{ display: 'flex', gap: 12, marginTop: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
         {r.pass ? (
           <>
-            <button type="button" data-testid="selftest-continue" onClick={() => onDone(r)} style={primary}>
-              Continue →
+            <button type="button" data-testid="selftest-continue" onClick={() => finish(r)} disabled={saving} style={primary}>
+              {saving ? 'Saving…' : 'Continue →'}
             </button>
             {verdict === 'reduced' && (
-              <button type="button" data-testid="selftest-retry" onClick={() => tryAgain(r)} style={secondary}>
+              <button type="button" data-testid="selftest-retry" onClick={() => tryAgain(r)} disabled={saving} style={secondary}>
                 Try again
               </button>
             )}
           </>
         ) : (
           <>
-            <button type="button" data-testid="selftest-retry" onClick={() => tryAgain(r)} style={primary}>
+            <button type="button" data-testid="selftest-retry" onClick={() => tryAgain(r)} disabled={saving} style={primary}>
               Try again
             </button>
-            <button type="button" data-testid="selftest-continue-anyway" onClick={() => onDone(r)} style={secondary}>
-              Continue anyway
+            <button type="button" data-testid="selftest-continue-anyway" onClick={() => finish(r)} disabled={saving} style={secondary}>
+              {saving ? 'Saving…' : 'Continue anyway'}
             </button>
           </>
         )}

@@ -31,6 +31,7 @@ import {
 import { priorParticipantProgress } from '@/storage/gather';
 import { saveResume, clearResume } from '@/storage/sessionPersistence';
 import { isInLoop } from './stateMachine';
+import { useStageTransitions } from './useStageTransitions';
 import { BreakScreen } from '@/start/BreakScreen';
 import { DB_VERSION } from '@/storage/schemaEnums';
 import type { ParticipantRecord, Provenance, SessionRecord, Stage } from '@/storage/types';
@@ -152,10 +153,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const [stageStartedAt, setStageStartedAt] = useState(() => Date.now());
   /** Minutes each finished condition took in this sitting, for an honest time-left estimate. */
   const conditionMinutes = useRef<number[]>([]);
-  // Transition lock: ignore re-entrant advance() calls (e.g. accidental double-taps on a tablet)
-  // until the machine actually changes — prevents skipping a stage. Reset on every stage change.
-  const transitioning = useRef(false);
-
+  /**
+   * Every move of the machine is made FROM a named screen and refused once that screen has gone, and a
+   * second move from the same screen before the first commits is refused too (useStageTransitions.ts,
+   * Round 86). The lock alone, which this used to be, let a late duplicate call advance the NEXT screen.
+   */
+  const { isShown, move, once } = useStageTransitions(machine, setMachine);
   /**
    * Administered stages a resumed sitting already holds (the colour-vision plates and the two
    * baselines; see setupStagesHeld), stepped over by advance() while the resume walks
@@ -174,13 +177,31 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    */
   const backStack = useRef<Stage[]>([]);
 
-  const advance = useCallback(() => {
-    if (transitioning.current) return;
-    transitioning.current = true;
-    const returnTo = backStack.current.pop();
-    if (returnTo) { setMachine((m) => ({ stage: returnTo, stepIndex: m.stepIndex })); return; }
-    setMachine((m) => nextStateSkipping(m, nConditionsRef.current, resumeHeld.current));
-  }, []);
+  /**
+   * ADVANCE FROM A NAMED SCREEN, and only from it (Round 86, audit 86 F14): the next stage in the
+   * sequence, or the screen a Back control stepped over. A call made from a screen no longer on show —
+   * a completion handler run twice by a double tap, whose second copy finishes after the first has
+   * already moved on — does nothing. See useStageTransitions.ts.
+   */
+  const advanceFrom = useCallback((from: MachineState) => {
+    move(from, () => {
+      const returnTo = backStack.current.pop();
+      if (returnTo) return { stage: returnTo, stepIndex: from.stepIndex };
+      return nextStateSkipping(from, nConditionsRef.current, resumeHeld.current);
+    });
+  }, [move]);
+  /**
+   * advance() from the screen this render shows. Every handler below is created in the render of its
+   * own screen, so it carries that screen; see advanceFrom.
+   */
+  const advance = useCallback(() => advanceFrom(machine), [advanceFrom, machine]);
+  /**
+   * A completion handler of the screen this render shows, made safe against a double tap: ignored
+   * while it is already running, while the move it makes is under way, and once the screen has gone
+   * (useStageTransitions.ts `once`). Every screen's handler below that writes before it moves on is
+   * wrapped in it.
+   */
+  const latched = <A extends unknown[], R>(key: string, fn: (...args: A) => R) => once(machine, key, fn);
 
   /**
    * Where the loop should re-enter after a resumed session has re-run camera setup and calibration.
@@ -244,18 +265,23 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    * case it enters the way every route into the loop does: break if due, grey field, condition. It
    * used to land directly on READING_TASK; see loopEntry.
    */
-  const advanceOrResume = useCallback((from: 'CALIBRATION' | 'INSTRUCTIONS' = 'CALIBRATION') => {
+  const advanceOrResume = useCallback((at: 'CALIBRATION' | 'INSTRUCTIONS' = 'CALIBRATION') => {
+    // From this render's screen, like advance(). A duplicate call used to arrive after the jump had
+    // been taken, find it consumed, and advance() from the loop's entry instead — skipping a resumed
+    // sitting's break or grey field (audit 86 F14, the resume variant). Now it is refused: its screen
+    // has gone.
+    if (!isShown(machine)) return;
     const target = resumeJumpTo.current;
-    if (target == null || from !== resumeConsumeAt.current) { advance(); return; }
-    resumeJumpTo.current = null;
-    resumeHeld.current = new Set();
-    transitioning.current = true;
-    setMachine(loopEntry(target, nConditionsRef.current));
-  }, [advance]);
+    if (target == null || at !== resumeConsumeAt.current) { advance(); return; }
+    move(machine, () => {
+      resumeJumpTo.current = null;
+      resumeHeld.current = new Set();
+      return loopEntry(target, nConditionsRef.current);
+    });
+  }, [advance, isShown, move, machine]);
 
+  // A new reaction-time block opens on its instruction card: no trial has run yet.
   useEffect(() => {
-    transitioning.current = false;
-    // A new reaction-time block opens on its instruction card: no trial has run yet.
     if (machine.stage === 'REACTION_TIME') setRtPhase('card');
   }, [machine]);
 
@@ -336,11 +362,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
 
   /** Go back to `to`, remembering where to return to. Setup only; see backStack and navigation.ts. */
   const goBack = useCallback((to: Stage) => {
-    if (transitioning.current) return;
-    transitioning.current = true;
-    backStack.current.push(machine.stage);
-    setMachine({ stage: to, stepIndex: machine.stepIndex });
-  }, [machine]);
+    move(machine, () => {
+      backStack.current.push(machine.stage);
+      return { stage: to, stepIndex: machine.stepIndex };
+    });
+  }, [machine, move]);
 
   /*
    * The display scale is FROZEN on every condition screen (and during calibration, whose targets are
@@ -1228,7 +1254,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
        * frame, and so no criterion validity for the automated incomplete-blink classifier that
        * produces the primary outcome. The sub-study could not have collected a single segment.
        */
-      view = <Consent askAnnotationVideo={isAnnotationSubsample(enrolment)} onConsent={async (media) => {
+      view = <Consent askAnnotationVideo={isAnnotationSubsample(enrolment)} onConsent={latched('consent', async (media) => {
         if (session) {
           /*
            * Persist the media grants alongside the participation consent, in one write, so a
@@ -1257,12 +1283,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           setSession(fresh);
         }
         advance();
-      }} />;
+      })} />;
       break;
     case 'PARTICIPANT_PROFILE':
       view = (
         <ParticipantProfile
-          onSubmit={saveProfile}
+          onSubmit={latched('profile', saveProfile)}
           // Filled in when the operator has come back to correct it; blank on the first visit.
           initial={lastProfile.current}
           onBack={consentRevisitable ? () => goBack('CONSENT') : undefined}
@@ -1279,7 +1305,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
            * participant remembered six digits.
            */
           seed={(session?.enrolment_number ?? 1) * 101 + (session?.session_index ?? 1)}
-          onComplete={async (r) => {
+          onComplete={latched('colour-vision', async (r) => {
             if (session) {
               const p = await get('participants', session.participant_id);
               if (p) {
@@ -1380,7 +1406,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               await put('sessions', fresh);
               setSession(fresh);
             }
-          }}
+          })}
           /*
            * Advancing is the component's call, not this handler's. A screen that does not pass puts
            * an operator notice up first — the formal plates have to be administered while the
@@ -1394,7 +1420,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     case 'PREFLIGHT':
       view = (
         <Preflight
-          onDone={async ({ fontOk, displayMode, displayModeAcknowledged, screen: measured, bulkTicked }) => {
+          onDone={latched('preflight', async ({ fontOk, displayMode, displayModeAcknowledged, screen: measured, bulkTicked }) => {
             if (displayModeAcknowledged) launchAcks.current.add(displayMode);
             if (session) {
               const c = measured.calibration;
@@ -1424,7 +1450,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               setSession(fresh);
             }
             advance();
-          }}
+          })}
           // Only when this sitting's own profile answer can be replaced faithfully; see profileBase.
           onBack={profileBase.current && lastProfile.current ? () => goBack('PARTICIPANT_PROFILE') : undefined}
         />
@@ -1432,7 +1458,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       break;
     case 'CVSQ_BASELINE':
       view = (
-        <Cvsq stage="baseline" onComplete={async (r) => {
+        <Cvsq stage="baseline" onComplete={latched('cvsq-baseline', async (r) => {
           if (session) {
             // One baseline per sitting. A resume steps over this stage when the row exists (see
             // nextStateSkipping); replacing here as well means no route can leave two.
@@ -1445,12 +1471,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             });
           }
           advance();
-        }} />
+        })} />
       );
       break;
     case 'CVSQ_END':
       view = (
-        <Cvsq stage="session_end" onComplete={async (r) => {
+        <Cvsq stage="session_end" onComplete={latched('cvsq-end', async (r) => {
           if (session) {
             // Replace any prior attempt. A crash between here and the NASA-TLX leaves the resume
             // pointer past the last condition, which resumes at this stage — so without this the
@@ -1465,12 +1491,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             });
           }
           advance();
-        }} />
+        })} />
       );
       break;
     case 'NASA_TLX':
       view = (
-        <NasaTlx onComplete={async (r) => {
+        <NasaTlx onComplete={latched('tlx', async (r) => {
           if (session) {
             await put('nasa_tlx', {
               tlx_id: uuidv4(), session_id: session.session_id,
@@ -1499,7 +1525,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             clearResume(session.session_id);
           }
           advance();
-        }} />
+        })} />
       );
       break;
     case 'CAMERA_SETUP':
@@ -1526,7 +1552,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       view = session?.media_consent?.camera_metrics === true ? (
         <CameraSetup
           camera={cameraSetupTracking}
-          onContinue={async () => {
+          onContinue={latched('camera-setup', async () => {
             /*
              * What the camera and the tracker are running as, kept with the sitting (round 75): the
              * backend and how it was chosen (and the comparison, when one was run), what was asked of
@@ -1539,7 +1565,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               setSession(fresh);
             }
             advance();
-          }}
+          })}
           onSkip={() => advanceOrResume()}
           retains={{
             setupPhotos: session?.media_consent?.setup_photos === true,
@@ -1568,7 +1594,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             onRunning={setProcedureRunning}
             halted={portrait}
             onStoppedByRotation={selfTestStopped}
-            onDone={async (r) => {
+            onDone={latched('selftest', async (r) => {
               const base = await get('sessions', session.session_id) ?? session;
               // The pipeline record is refreshed too: a tracker that fell back since camera setup is
               // recorded as the one that actually ran.
@@ -1577,9 +1603,20 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               // The same attempt's blinks and trace, as the sitting's closed-eye reference (07b/07c, Round 78).
               await tracking.saveSelfTestLog(session.session_id);
               setSession(fresh);
-              setSelfTesting(false);
-              void captureMedia('session_start').finally(() => advanceOrResume('CALIBRATION'));
-            }}
+              /*
+               * The photograph is taken while the check's result is still on screen (saving), and the
+               * screen is left in the same update as the stage (Round 86, audit 86 M3). selfTesting
+               * used to be cleared first, so for the second or two the photograph took, the stage still
+               * read CALIBRATION with no self-test: the calibration routine's start screen came back,
+               * live, and a tap on it began a calibration the app then abandoned mid-baseline.
+               */
+              try {
+                await captureMedia('session_start');
+              } finally {
+                setSelfTesting(false);
+                advanceOrResume('CALIBRATION');
+              }
+            })}
           />
         );
         break;
@@ -1605,7 +1642,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         <FatigueScale
           prompt="How are your eyes feeling right now, before we begin?"
           physical={session ?? {}}
-          onComplete={async (r) => {
+          onComplete={latched('baseline-fatigue', async (r) => {
             if (session) {
               // One baseline per sitting, for the reason given at CVSQ_BASELINE: every fatigue_delta
               // is computed against it, so two would make every delta ambiguous.
@@ -1633,7 +1670,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               }
             }
             advance();
-          }}
+          })}
         />
       );
       break;
@@ -1691,7 +1728,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               if (annotationSteps.includes(machine.stepIndex)) void captureMedia('reading_segment', cond?.label ?? null, conditionId);
             }}
             onPageChange={(p) => tracking.markReadingPage(p)}
-            onComplete={async (r) => {
+            onComplete={latched('reading', async (r) => {
               // Close the annotation clip at the SAME instant the automated measurement window
               // closes, so a human coder and the classifier see the same footage.
               annotationRecording.current?.finish(true);
@@ -1717,7 +1754,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 }
               }
               advance();
-            }}
+            })}
           />
         );
       }
@@ -1726,7 +1763,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       if (cond && passage) view = (
         <ComprehensionTask
           passage={passage} background={cond.background} text={cond.text}
-          onComplete={async (results) => {
+          onComplete={latched('comprehension', async (results) => {
             // One row per item. Written sequentially so a failure part-way through leaves the
             // rows that did land intact and identifiable, rather than a partial batch.
             if (session) {
@@ -1743,7 +1780,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               }
             }
             advance();
-          }}
+          })}
         />
       );
       break;
@@ -1753,7 +1790,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           background={cond.background} text={cond.text}
           display={displayPosition}
           physical={session ?? {}}
-          onComplete={async (r) => {
+          onComplete={latched('perception', async (r) => {
             if (session) await clearConditionRows('display_perception', conditionId);
             if (session) await put('display_perception', {
               perception_id: uuidv4(), session_id: session.session_id, condition_id: conditionId,
@@ -1763,7 +1800,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               slider_version: r.sliderVersion, vas_line_mm: r.lineMm, vas_line_source: r.lineSource,
             });
             advance();
-          }}
+          })}
         />
       );
       break;
@@ -1775,7 +1812,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           text={cond?.text ?? '#1a1a2e'}
           eyebrow={displayStepLabel('POST_FATIGUE', displayPosition)}
           physical={session ?? {}}
-          onComplete={async (r) => {
+          onComplete={latched('post-fatigue', async (r) => {
             if (session) await clearConditionRows('fatigue_scores', conditionId);
             if (session) await put('fatigue_scores', {
               fatigue_id: uuidv4(), session_id: session.session_id, condition_id: conditionId,
@@ -1784,7 +1821,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               slider_version: r.sliderVersion, vas_line_mm: r.lineMm, vas_line_source: r.lineSource,
             });
             advance();
-          }}
+          })}
         />
       );
       break;
@@ -1793,7 +1830,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         <VisualSearchTask
           passage={passage} background={cond.background} text={cond.text}
           display={displayPosition}
-          onComplete={async (r) => {
+          onComplete={latched('search', async (r) => {
             if (session) await put('visual_search', {
               condition_id: conditionId, session_id: session.session_id, passage_id: passage.id,
               search_target: passage.searchTarget, targets_in_set: passage.searchTargetCount,
@@ -1805,7 +1842,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               termination_mode: r.terminationMode,
             });
             advance();
-          }}
+          })}
         />
       );
       break;
@@ -1832,7 +1869,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
            */
           blockIndex={step?.position ?? machine.stepIndex}
           onTrialsRunning={(running) => setRtPhase(running ? 'trials' : 'saving')}
-          onComplete={async (res) => {
+          onComplete={latched('reaction', async (res) => {
             // Trials are over; only writes remain, so Pause becomes available again.
             setRtPhase('saving');
             if (session) {
@@ -1885,7 +1922,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               saveResume(session.session_id, machine.stepIndex + 1);
             }
             advance();
-          }}
+          })}
         />
       );
       break;
@@ -1899,7 +1936,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       const dur = switched ? CONFIG.ADAPTATION_SWITCH_POLARITY_MS : CONFIG.ADAPTATION_SAME_POLARITY_MS;
       const minDur = Math.min(CONFIG.ADAPTATION_MIN_MS, dur);
       const label = nextStep ? `Next: ${CONDITIONS[nextStep.conditionIndex].polarity === 'positive' ? 'Light' : 'Dark'} background` : '';
-      view = <AdaptationScreen minMs={minDur} maxMs={dur} nextLabel={label} onDone={(delivered) => {
+      view = <AdaptationScreen minMs={minDur} maxMs={dur} nextLabel={label} onDone={latched('adaptation', (delivered) => {
         // What the participant actually saw, not what was scheduled. The screen subtracts any time
         // the document was hidden, so a tablet that auto-locks mid-field cannot certify a
         // polarity-switch control that did not happen.
@@ -1908,7 +1945,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         adaptationMin.current = minDur;
         adaptationEndedBy.current = delivered.endedBy;
         advance();
-      }} />;
+      })} />;
       break;
     }
     case 'BREAK_SCREEN': {
@@ -1927,13 +1964,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           completed={machine.stepIndex + 1}
           total={plan.length}
           canContinue={launchOk || breakTicked}
-          onContinue={() => {
+          onContinue={latched('break', () => {
             if (!launchOk) {
               if (!breakTicked) return;
               launchAcks.current.add(liveMode);
             }
             advance();
-          }}
+          })}
         >
           {!launchOk && (
             <div style={{ textAlign: 'left', marginTop: 20 }}>
@@ -1963,13 +2000,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     case 'LAUNCH_CHECK':
       view = (
         <LaunchCheck onContinue={(mode) => {
-          if (transitioning.current) return;
           const then = launchCheckThen.current;
           if (!then) return;
-          launchAcks.current.add(mode);
-          launchCheckThen.current = null;
-          transitioning.current = true;
-          setMachine(then);
+          move(machine, () => {
+            launchAcks.current.add(mode);
+            launchCheckThen.current = null;
+            return then;
+          });
         }} />
       );
       break;
@@ -1983,7 +2020,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             onSubmit={(lux) => void logLuxCheckpoint('end', lux)}
           />
         )}
-        onExport={async () => {
+        onExport={latched('export', async () => {
         // Final setup-proof still, before the record is closed. Ordered before the status write so a
         // capture failure cannot leave the session marked complete without its end photo attempted.
         await captureMedia('session_end');
@@ -2000,7 +2037,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         }
         tracking.stop();
         advance();
-      }} />;
+      })} />;
       break;
     case 'EXPORT_DASHBOARD':
       // The way back is the shared NavChip, drawn by LazyDashboard — the same control, in the same

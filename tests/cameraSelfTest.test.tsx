@@ -33,13 +33,13 @@ function observer(hits: number, fps = 24, lag = 300) {
   };
 }
 
-function mount(end: (cueTimes?: number[]) => SelfTestObservation) {
+function mount(end: (cueTimes?: number[]) => SelfTestObservation, onDone?: (r: SelfTestResult) => Promise<unknown>) {
   const done: SelfTestResult[] = [];
   const host = document.createElement('div');
   document.body.appendChild(host);
   const root = createRoot(host);
   let endFn = end;
-  act(() => { root.render(createElement(CameraSelfTest, { begin: () => {}, end: (c?: number[]) => endFn(c), onDone: (r: SelfTestResult) => done.push(r) })); });
+  act(() => { root.render(createElement(CameraSelfTest, { begin: () => {}, end: (c?: number[]) => endFn(c), onDone: (r: SelfTestResult) => { done.push(r); return onDone?.(r); } })); });
   const q = (id: string) => host.querySelector(`[data-testid=${id}]`) as HTMLElement | null;
   return {
     done, q,
@@ -123,6 +123,51 @@ describe('the camera self-test screen', () => {
     m.click('selftest-continue');
     expect(m.done[0]).toMatchObject({ attempt: 2, verdict: 'working' });
     expect(m.done[0].earlier).toEqual([{ verdict: 'failed', cued: 5, detected: 2, samplingFps: 24, facePresence: 0.97 }]);
+    m.unmount();
+  });
+
+  /*
+   * A double tap on the result's Continue (Round 86, audit 86 F14). The handler writes the result, the
+   * check's blinks and the start photograph before the screen changes; a second tap in that time ran it
+   * all again — two photographs, and a second advance past the baseline CVS-Q.
+   */
+  it('a double tap on Continue, or on Continue anyway, hands the result on once and says it is saving', () => {
+    fake();
+    for (const [hits, id] of [[5, 'selftest-continue'], [2, 'selftest-continue-anyway']] as const) {
+      const m = mount(observer(hits));
+      m.click('selftest-start');
+      m.runCheck();
+      m.click(id);
+      m.click(id);
+      expect(m.done).toHaveLength(1);
+      expect((m.q(id) as HTMLButtonElement).disabled).toBe(true);
+      expect(m.q(id)!.textContent).toBe('Saving…');
+      // Nor can the other button start a new attempt under the one being saved.
+      if (m.q('selftest-retry')) {
+        m.click('selftest-retry');
+        expect(m.q('selftest-verdict')).not.toBeNull();
+      }
+      m.unmount();
+    }
+  });
+
+  it('a Continue whose write fails hands the buttons back, so it can be tried again', async () => {
+    fake();
+    let fail = true;
+    const m = mount(observer(5), async () => { if (fail) throw new Error('database closed'); });
+    m.click('selftest-start');
+    m.runCheck();
+    m.click('selftest-continue');
+    expect((m.q('selftest-continue') as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect((m.q('selftest-continue') as HTMLButtonElement).disabled).toBe(false);
+    expect(m.q('selftest-continue')!.textContent).toBe('Continue →');
+    // Named on the background-failure panel, as an unhandled rejection is.
+    expect(document.getElementById('visulab-async-error')?.textContent).toMatch(/Error: database closed/);
+    document.getElementById('visulab-async-error')?.remove();
+    fail = false;
+    m.click('selftest-continue');
+    expect(m.done).toHaveLength(2);
     m.unmount();
   });
 

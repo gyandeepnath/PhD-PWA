@@ -276,7 +276,7 @@ describe('a resume walk does not re-administer a baseline the sitting already ho
     const src = readFileSync('src/experiment/Experiment.tsx', 'utf8');
     expect(src).toMatch(/clearSessionStageRows\('cvsq_scores', session\.session_id, 'baseline'\)/);
     expect(src).toMatch(/clearSessionStageRows\('fatigue_scores', session\.session_id, 'baseline'\)/);
-    expect(src).toMatch(/nextStateSkipping\(m, nConditionsRef\.current, resumeHeld\.current\)/);
+    expect(src).toMatch(/nextStateSkipping\(from, nConditionsRef\.current, resumeHeld\.current\)/);
   });
 });
 
