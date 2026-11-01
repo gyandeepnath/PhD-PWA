@@ -174,6 +174,21 @@ describe('the ways a real join goes wrong', () => {
     expect(r.analysable_participants).toBe(2);
   });
 
+  it('warns when two codes differ only in letter case (Round 87, audit 86 F2), and merges nothing', () => {
+    // Before Round 87 a second sitting typed "case1" for "CASE1" was enrolled as a new participant.
+    const r = checkJoin([...complete('CASE1', 3), ...complete('case1', 4), ...complete('P02', 5)], EXPECT);
+    const variants = r.issues.filter((i) => i.code === 'participant_code_case_variants');
+    expect(variants).toHaveLength(1);
+    expect(variants[0].severity).toBe('warning');
+    expect(variants[0].participant_id).toContain('CASE1');
+    expect(variants[0].participant_id).toContain('case1');
+    // Still two participants, as stored: which record is the person's is the researcher's decision.
+    expect(r.total_participants).toBe(3);
+    expect(r.analysable_participants).toBe(3);
+    expect(checkJoin([...complete('P01', 1), ...complete('P02', 2)], EXPECT).issues
+      .some((i) => i.code === 'participant_code_case_variants')).toBe(false);
+  });
+
   it('warns, but does not exclude, when a participant record is missing', () => {
     const b = complete('P01');
     const r = checkJoin([

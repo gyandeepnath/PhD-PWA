@@ -300,7 +300,7 @@ describe('a withdrawal applies to every sitting of the participant', () => {
     await recordWithdrawal(s2.session_id);
     expect((await priorParticipantProgress(s2.participant_id)).withdrawnAt).toBeTypeOf('number');
     const form = readFileSync('src/start/setupStages.tsx', 'utf8');
-    expect(form).toMatch(/repeatAcknowledged && splitAcknowledged && !withdrawn;/);
+    expect(form).toMatch(/repeatAcknowledged && splitAcknowledged && !withdrawn\b/);
     const exp = readFileSync('src/experiment/Experiment.tsx', 'utf8');
     expect(exp).toMatch(/if \(prior\.withdrawnAt != null\) \{/);
   });

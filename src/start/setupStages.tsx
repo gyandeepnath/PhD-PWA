@@ -34,7 +34,7 @@ import { DeviceBox } from '@/components/DeviceBox';
 import { ScreenCalibration, type ScreenCalibrationResult } from './ScreenCalibration';
 import { BuildInfo, useUpdateWaiting } from '@/components/BuildInfo';
 import { useDialog } from '@/components/ConfirmDialog';
-import { PARTICIPANT_ID_PATTERN } from '@/lib/participantId';
+import { PARTICIPANT_ID_PATTERN, canonicalParticipantId, participantIdProblem } from '@/lib/participantId';
 import { useTapGuard, CONSENT_TAP_GUARD_MS } from '@/lib/tapGuard';
 import type { CameraStatus, CameraPipelineRecord, CameraBenchRecord, ExposureOutcome } from '@/storage/types';
 
@@ -130,6 +130,10 @@ export interface IlluminationAssignment {
   sittings: number;
   /** When this participant withdrew from the study, if they did (any sitting, the bin included). */
   withdrawnAt: number | null;
+  /** The code as this participant's sittings store it, which the new sitting reuses; null if new or ambiguous. */
+  storedParticipantId: string | null;
+  /** Every spelling of the code stored on the device; more than one is refused (Round 87, audit 86 F2). */
+  spellings: string[];
 }
 
 export function SessionInit({
@@ -152,7 +156,6 @@ export function SessionInit({
   const [lum, setLum] = useState('');
   const [bright, setBright] = useState('');
   const [sitting, setSitting] = useState<'single' | 'split'>('single');
-  const [err, setErr] = useState('');
   const dirty = [pid, lux, deviation, repeatNote, splitReason, lum, bright].some((v) => v.trim() !== '') || sitting !== 'single';
   useEffect(() => { onDirty?.(dirty); }, [dirty, onDirty]);
 
@@ -196,9 +199,36 @@ export function SessionInit({
    * not the researcher's to override with a note.
    */
   const withdrawn = assigned?.withdrawnAt != null;
+  /*
+   * The same code stored in two letter cases (Round 87, audit 86 F2). Before codes were upper-cased, a
+   * second sitting typed "case1" for a first stored as "CASE1" was enrolled afresh, so the device can
+   * already hold both: two enrolments, two condition orders, possibly one person. A new sitting would
+   * join one of them, and which one is the researcher's decision, not the form's.
+   */
+  const ambiguous = (assigned?.spellings.length ?? 0) > 1;
+  /** Why the typed code is not one the app issues, said where it is typed (it used to be said nowhere). */
+  const pidProblem = participantIdProblem(pid);
   const valid =
     PARTICIPANT_ID_PATTERN.test(pid) && luxEntered && (inRange || deviation.trim().length >= 3)
-    && repeatAcknowledged && splitAcknowledged && !withdrawn;
+    && repeatAcknowledged && splitAcknowledged && !withdrawn && !ambiguous;
+  /*
+   * What is still missing, said under the button. "Begin setup" is disabled until the form is valid, so
+   * the message its handler used to set could never be shown: a trailing space from a keyboard
+   * suggestion left the button grey with no word as to why (audit 86 F2).
+   */
+  const missing = !PARTICIPANT_ID_PATTERN.test(pid)
+    ? (pidProblem ?? 'Enter the participant code.')
+    : withdrawn || ambiguous
+      ? 'A new sitting cannot be started under this code (see above).'
+      : !repeatAcknowledged
+        ? 'This participant has already completed all ten conditions. Record why they are being run again, or correct the code.'
+        : !luxEntered
+          ? 'Enter the measured illuminance (lux).'
+          : !(inRange || deviation.trim().length >= 3)
+            ? `Illuminance is outside ${spec?.min}–${spec?.max} lux. Adjust the room, or record a reason for the deviation.`
+            : !splitAcknowledged
+              ? `A split sitting needs a reason of at least ${SPLIT_REASON_MIN_CHARS} characters, so that a clinical judgement is not indistinguishable from a scheduling one later.`
+              : null;
 
   return (
     <div className={shell}>
@@ -211,8 +241,38 @@ export function SessionInit({
         <div className="mt-8" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '20px 40px', alignItems: 'start' }}>
         <div className="space-y-5">
           <Field label="Participant ID — a CODE, not a name (letters, digits, - or _, ≤20)">
-            <input data-testid="pid" className="vl-input" value={pid} onChange={(e) => setPid(e.target.value)} placeholder="P001" />
+            {/* Kept in its canonical form as it is typed — no surrounding spaces, upper case — and the
+                keyboard is asked for capitals and no corrections, so what the tablet's keyboard adds
+                by itself (a capitalised first letter, the space after a suggestion) cannot make a
+                second participant of one (Round 87, audit 86 F2; lib/participantId.ts). */}
+            <input
+              data-testid="pid" className="vl-input" value={pid}
+              onChange={(e) => setPid(canonicalParticipantId(e.target.value))}
+              autoCapitalize="characters" autoCorrect="off" autoComplete="off" spellCheck={false}
+              placeholder="P001"
+            />
           </Field>
+          {pidProblem && (
+            <p data-testid="pid-problem" role="status" className="font-sans text-[15px]" style={{ color: UI_TEXT.red, marginTop: -8, lineHeight: 1.45 }}>
+              {pidProblem}
+            </p>
+          )}
+          {ambiguous && (
+            <div data-testid="participant-ambiguous" className="font-sans text-base"
+              style={{ border: '1px solid #b83a3a', background: '#fdeeee', color: '#5a1414', borderRadius: 10, padding: 12 }}>
+              <strong>This code is stored on this tablet in {assigned!.spellings.length} spellings:</strong>{' '}
+              {assigned!.spellings.join(', ')}. They were recorded as different participants, with their
+              own enrolment numbers and condition orders, before codes were matched regardless of letter
+              case. A new sitting cannot be started under the code until the researcher decides which
+              record is this participant's (see the operator manual, §8).
+            </div>
+          )}
+          {assigned?.storedParticipantId != null && assigned.storedParticipantId !== pid && (
+            <p data-testid="pid-stored-as" className={help}>
+              Recorded as <strong>{assigned.storedParticipantId}</strong>, the spelling of this participant&apos;s
+              earlier sittings, so the export keeps them together.
+            </p>
+          )}
           {withdrawn && (
             <div data-testid="participant-withdrawn" className="font-sans text-base"
               style={{ border: '1px solid #b83a3a', background: '#fdeeee', color: '#5a1414', borderRadius: 10, padding: 12 }}>
@@ -355,24 +415,12 @@ export function SessionInit({
           )}
         </div>
         </div>
-        {err && <p className="mt-3 font-sans text-[15px]" style={{ color: UI_TEXT.red }}>{err}</p>}
         <button
           className={btn}
           style={{ marginTop: 28, ...btnState(valid) }}
           disabled={!valid}
           onClick={() => {
-            if (!valid) {
-              setErr(
-                !repeatAcknowledged
-                  ? 'This participant has already completed all ten conditions. Record why they are being run again, correct the ID, or delete the earlier sitting in the dashboard.'
-                  : !splitAcknowledged
-                    ? `A split sitting needs a reason of at least ${SPLIT_REASON_MIN_CHARS} characters, so that a clinical judgement is not indistinguishable from a scheduling one later.`
-                    : luxEntered && spec && !inRange
-                    ? `Illuminance is outside ${spec.min}–${spec.max} lux. Adjust the room, or record a reason for the deviation.`
-                    : 'Enter a valid Participant ID and a measured lux value.',
-              );
-              return;
-            }
+            if (!valid) return;
             onSubmit({
               participantId: pid,
               ambientLux: luxNum,
@@ -388,6 +436,11 @@ export function SessionInit({
         >
           Begin setup →
         </button>
+        {!valid && dirty && missing && (
+          <p data-testid="begin-blocked" role="status" className="mt-3 font-sans text-[15px]" style={{ color: UI_TEXT.body, lineHeight: 1.45 }}>
+            {missing}
+          </p>
+        )}
       </div>
       <style>{VL_INPUT_CSS}</style>
       {/* With the deviation and split-reason fields open the form runs about 200 px past the bottom

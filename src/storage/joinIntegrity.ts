@@ -22,6 +22,7 @@ import { isConditionComplete } from './conditionStatus';
 import type { Provenance } from './types';
 import { N_ILLUMINATION_BLOCKS, ILLUMINATION_LEVELS } from '@/experiment/illumination';
 import type { IlluminationLevel } from '@/experiment/illumination';
+import { canonicalParticipantId } from '@/lib/participantId';
 
 /** One problem found while checking whether the sessions can be pooled. */
 export interface JoinIssue {
@@ -543,6 +544,34 @@ export function checkJoin(bundles: SessionBundle[], expect: JoinExpectation): Jo
         detail: `Enrolment number ${n} is shared by ${ids.length} participants. Enrolment drives the Williams `
           + 'row and the illumination order, so these participants received identical assignments '
           + 'rather than the balanced ones the design intends.',
+      });
+    }
+  }
+
+  /*
+   * --- one code in two letter cases ---------------------------------------------------------
+   *
+   * Before Round 87 a code was stored as typed, and a second sitting typed "case1" for a first stored as
+   * "CASE1" was enrolled as a new participant (audit 86 F2): a new enrolment number, a new condition
+   * order from position 0. This dataset groups sittings by the code as stored, so the two appear here as
+   * two participants, each with part of a protocol — and possibly one person. They are not merged: which
+   * record is the participant's, and whether the second exposure to the passages read in the first rules
+   * the other out, is the researcher's decision. Said once, naming both.
+   */
+  const byCanonical = new Map<string, string[]>();
+  for (const p of participants) {
+    if (p.participant_id.startsWith(unresolvedParticipantKey(''))) continue;
+    const k = canonicalParticipantId(p.participant_id);
+    (byCanonical.get(k) ?? byCanonical.set(k, []).get(k)!).push(p.participant_id);
+  }
+  for (const ids of byCanonical.values()) {
+    if (ids.length > 1) {
+      issues.push({
+        severity: 'warning', code: 'participant_code_case_variants',
+        participant_id: ids.join(' & '), session_id: null,
+        detail: `${ids.join(' and ')} differ only in letter case, so they may be one person entered twice: `
+          + 'before Round 87 the app treated a differently capitalised code as a new participant, with its own '
+          + 'enrolment number and condition order. Check the paper records before analysing either.',
       });
     }
   }

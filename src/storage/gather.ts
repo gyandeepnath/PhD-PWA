@@ -11,6 +11,7 @@ import type {
   ReactionTrialRecord, RtSummaryRecord, CalibrationRecord, PerformanceLogRecord, OcularEventsRecord,
 } from './types';
 import { requiredGrant, type MediaRecord, type MediaConsent } from './media';
+import { sameParticipant } from '@/lib/participantId';
 
 export interface SessionBundle {
   session: SessionRecord;
@@ -157,22 +158,58 @@ export function normaliseBundle(b: SessionBundle): SessionBundle {
 }
 
 /**
+ * Every sitting recorded under this participant code, the recycle bin included, matched as the same
+ * participant (lib/participantId.ts sameParticipant: letter case and surrounding spaces do not make a
+ * different person). Round 87, audit 86 F2: the lookup used to be the by_participant index, an exact
+ * match, so "case1" found nothing of "CASE1" and became a second participant.
+ *
+ * A scan of the sessions store rather than an index read: a sitting record is small, a tablet holds a
+ * study's worth of them (tens to a few hundred), and an index on a case-folded key would have to be
+ * added to every record on the device by a migration — rewriting stored records to save a scan.
+ */
+export async function sittingsOfParticipant(participantId: string): Promise<SessionRecord[]> {
+  return (await getAll('sessions') as SessionRecord[]).filter((s) => sameParticipant(s.participant_id, participantId));
+}
+
+/** What priorParticipantProgress knows about a participant before a new sitting is started. */
+export interface PriorParticipantProgress {
+  /**
+   * The code as this participant's sittings already store it, letter case included, which a new
+   * sitting must reuse so the export joins it to them; null for a participant new to this device, or
+   * when their sittings store it in more than one spelling (see `spellings`).
+   */
+  participantId: string | null;
+  /**
+   * Every spelling the matching sittings store, bin included. More than one means the device already
+   * holds the same code in two letter cases — two enrolments that may be one person, recorded before
+   * Round 87 — and a new sitting would join only one of them: refused until the researcher decides.
+   */
+  spellings: string[];
+  enrolment: number | null;
+  conditionsCompleted: number;
+  sittings: number;
+  withdrawnAt: number | null;
+}
+
+/**
  * Prior progress for a participant across all their (non-deleted) sittings. Used to make
  * split-sessions work: the enrolment number — which drives the Williams counterbalance order —
  * MUST be reused across a participant's sittings (a fresh number would re-roll the condition order
  * on sitting 2 and break the design), and the next sitting must resume at the global serial
  * position where the last one stopped.
  */
-export async function priorParticipantProgress(
-  participantId: string,
-): Promise<{ enrolment: number | null; conditionsCompleted: number; sittings: number; withdrawnAt: number | null }> {
-  const every = (await getAllByIndex('sessions', 'by_participant', participantId) as SessionRecord[]).map(normalise);
+export async function priorParticipantProgress(participantId: string): Promise<PriorParticipantProgress> {
+  const every = (await sittingsOfParticipant(participantId)).map(normalise);
+  const spellings = [...new Set(every.map((s) => s.participant_id))].sort();
+  const stored = spellings.length === 1 ? spellings[0] : null;
   // Withdrawal is read across EVERY sitting, the recycle bin included: a withdrawn sitting that was
   // later binned is still a participant who withdrew.
   const withdrawnAt = every.reduce<number | null>(
     (w, s) => (s.withdrawn_at != null && (w == null || s.withdrawn_at < w) ? s.withdrawn_at : w), null);
   const sessions = every.filter((s) => s.deleted_at == null);
-  if (sessions.length === 0) return { enrolment: null, conditionsCompleted: 0, sittings: 0, withdrawnAt };
+  if (sessions.length === 0) {
+    return { participantId: stored, spellings, enrolment: null, conditionsCompleted: 0, sittings: 0, withdrawnAt };
+  }
   // Reuse the earliest-assigned enrolment number for stability.
   const enrolment = sessions.reduce((min, s) => Math.min(min, s.enrolment_number), Infinity);
   let conditionsCompleted = 0;
@@ -180,7 +217,10 @@ export async function priorParticipantProgress(
     const conds = await getAllByIndex('conditions', 'by_session', s.session_id) as { completed_at: number | null }[];
     conditionsCompleted += conds.filter((c) => c.completed_at != null).length;
   }
-  return { enrolment: Number.isFinite(enrolment) ? enrolment : null, conditionsCompleted, sittings: sessions.length, withdrawnAt };
+  return {
+    participantId: stored, spellings,
+    enrolment: Number.isFinite(enrolment) ? enrolment : null, conditionsCompleted, sittings: sessions.length, withdrawnAt,
+  };
 }
 
 export const BIN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -401,9 +441,9 @@ export async function recordWithdrawal(sessionId: string): Promise<{ mediaDestro
    * marked, the recycle bin included (a restore would otherwise bring one back unmarked), and the
    * media of every sitting is destroyed.
    */
-  const sittings = named.participant_id
-    ? (await getAllByIndex('sessions', 'by_participant', named.participant_id) as SessionRecord[])
-    : [named];
+  // Matched as the same participant (sittingsOfParticipant), so a sitting stored before Round 87 under
+  // another letter case of the code is withdrawn with the rest; the confirmation names the spellings.
+  const sittings = named.participant_id ? await sittingsOfParticipant(named.participant_id) : [named];
   const at = named.withdrawn_at ?? Date.now();
   let mediaDestroyed = 0;
   for (const session of sittings) {

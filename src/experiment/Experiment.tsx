@@ -29,6 +29,7 @@ import {
   type MediaRecord,
 } from '@/storage/media';
 import { priorParticipantProgress } from '@/storage/gather';
+import { canonicalParticipantId } from '@/lib/participantId';
 import { saveResume, clearResume } from '@/storage/sessionPersistence';
 import { isInLoop } from './stateMachine';
 import { useStageTransitions } from './useStageTransitions';
@@ -700,6 +701,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       priorPasses: passes,
       sittings: prior.sittings,
       withdrawnAt: prior.withdrawnAt,
+      storedParticipantId: prior.participantId,
+      spellings: prior.spellings,
     };
   }, []);
 
@@ -856,14 +859,31 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     // Split-session continuity: reuse this participant's prior enrolment number (so the Williams
     // condition order is identical across sittings) and resume at the global serial position where
     // their last sitting stopped. A brand-new participant gets a fresh sequential enrolment number.
-    const prior = await priorParticipantProgress(d.participantId);
-    // Refused here as well as on the form: nothing may start a sitting for a participant who withdrew.
-    if (prior.withdrawnAt != null) {
+    const typed = canonicalParticipantId(d.participantId);
+    const prior = await priorParticipantProgress(typed);
+    const refuse = (why: string) => {
       creatingSession.current = false;
       setBeginning(false);
-      setSessionCreateError(`participant ${d.participantId} withdrew from the study; no new sitting can be started under this ID`);
+      setSessionCreateError(why);
+    };
+    // Refused here as well as on the form: nothing may start a sitting for a participant who withdrew.
+    if (prior.withdrawnAt != null) {
+      refuse(`participant ${typed} withdrew from the study; no new sitting can be started under this ID`);
       return;
     }
+    // The same code stored in two letter cases (before Round 87): a new sitting would join one of two
+    // enrolments that may be one person. The researcher decides which (the session form says so).
+    if (prior.spellings.length > 1) {
+      refuse(`participant code ${typed} is stored on this tablet as ${prior.spellings.join(' and ')}; no new sitting can be started under it until that is resolved`);
+      return;
+    }
+    /*
+     * The code as this participant's sittings already store it (Round 87, audit 86 F2): the export joins
+     * a participant's sittings on it, so a second half typed "case1" for a first stored as "CASE1" — or a
+     * first stored as "case1" before codes were upper-cased — must carry the stored spelling. A new
+     * participant gets the canonical form.
+     */
+    const participantId = prior.participantId ?? typed;
     const enrol = prior.enrolment ?? await nextEnrolmentNumber();
     // Which illumination block is this participant on, and how far into it? Each block is a full
     // pass through the ten conditions, so completed / 10 gives the block and completed % 10 the
@@ -889,7 +909,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
 
     const rec: SessionRecord = {
       session_id: sid,
-      participant_id: d.participantId,
+      participant_id: participantId,
       enrolment_number: enrol,
       status: 'in_progress',
       deleted_at: null,

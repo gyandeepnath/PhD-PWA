@@ -17,6 +17,7 @@ import { NavChip } from '@/components/NavChip';
 import { ScrollCue } from '@/components/ScrollCue';
 import { useDialog } from '@/components/ConfirmDialog';
 import { UI_TEXT } from '@/lib/uiPalette';
+import { sameParticipant } from '@/lib/participantId';
 import type { SessionRecord } from '@/storage/types';
 
 interface Props {
@@ -240,11 +241,14 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
       await dialog.alert({ title: 'Already withdrawn', body: `${label} is already recorded as withdrawn (${new Date(s.withdrawn_at).toLocaleString()}).`, confirmLabel: 'Close' });
       return;
     }
-    const siblings = [...active, ...bin].filter((x) => x.participant_id === s.participant_id);
+    // Matched as recordWithdrawal matches them: letter case does not make another person (Round 87).
+    const siblings = [...active, ...bin].filter((x) => sameParticipant(x.participant_id, s.participant_id));
+    const spellings = [...new Set(siblings.map((x) => x.participant_id))];
     if (!(await dialog.confirm({
       title: `Record that participant ${s.participant_id} WITHDREW from the study?`,
       body: (siblings.length > 1
-        ? `This applies to the PARTICIPANT: all ${siblings.length} of their sittings on this tablet are marked, not only ${label}.\n\n`
+        ? `This applies to the PARTICIPANT: all ${siblings.length} of their sittings on this tablet are marked, not only ${label}`
+          + (spellings.length > 1 ? ` — including those recorded as ${spellings.join(', ')}` : '') + '.\n\n'
         : '')
       + 'Use this when they have withdrawn but have NOT asked for their data to be deleted. Ask '
       + 'them; the consent form offers both.\n\n'
