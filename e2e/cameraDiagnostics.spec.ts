@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { startNewExperiment, driveUntil, stageNow, handleStage, throughCameraAndCalibration } from './helpers';
+import { startNewExperiment, driveUntil, stageNow, throughCameraAndCalibration } from './helpers';
 
 /*
  * The camera path, with Chromium's fake camera (round 75).
@@ -232,7 +232,11 @@ test('the researcher card shows the live picture on set-up screens and never on 
   expect(feed).toEqual({ playing: true, same: true });
 
   // Into the first condition: no picture of the participant, whatever the card's state was.
-  for (let i = 0; i < 40 && (await stageNow(page)) !== 'READING_TASK'; i++) await handleStage(page, await stageNow(page));
+  // driveUntil reads the stage ONCE per step. This loop read it twice — once to test, once to hand to
+  // handleStage — so when the short ?e2e adaptation ended between the reads, the driver was handed
+  // READING_TASK and pressed 'Begin reading' itself, and readPassageThrough then waited for a button
+  // that had gone (failed 1 run in 3, audit 86).
+  await driveUntil(page, 'READING_TASK', 40);
   expect(await stageNow(page)).toBe('READING_TASK');
   const visibleVideos = await page.evaluate(() => [...document.querySelectorAll('video')]
     .filter((v) => { const r = v.getBoundingClientRect(); return r.width > 1 && r.height > 1; }).length);

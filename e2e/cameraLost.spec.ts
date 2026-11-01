@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { startNewExperiment, driveUntil, stageNow, handleStage, throughCameraAndCalibration } from './helpers';
+import { startNewExperiment, driveUntil, stageNow, throughCameraAndCalibration } from './helpers';
 
 /*
  * A camera lost mid-sitting must stop the sitting, not fail silently.
@@ -14,7 +14,9 @@ async function intoReadingWithCamera(page: Page) {
   await startNewExperiment(page);
   await driveUntil(page, 'CAMERA_SETUP');
   await throughCameraAndCalibration(page);
-  for (let i = 0; i < 200 && (await stageNow(page)) !== 'READING_TASK'; i++) await handleStage(page, await stageNow(page));
+  // One stage read per step (driveUntil): a loop that tested the stage and then read it again could be
+  // handed a READING_TASK it had not tested for, and act on it.
+  await driveUntil(page, 'READING_TASK', 200);
   expect(await stageNow(page)).toBe('READING_TASK');
 }
 
