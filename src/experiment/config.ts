@@ -429,8 +429,11 @@ const E2E_OVERRIDES: Partial<typeof BASE_CONFIG> = {
   RT_TRIALS_PER_CONDITION: 4,
   RT_PRACTICE_TRIALS: 1,
   RT_RESPONSE_WINDOW_MS: 120,
-  RT_FIXATION_MIN_MS: 30,
-  RT_FIXATION_MAX_MS: 30,
+  /*
+   * The fixation is NOT shortened (Round 86): the device's fixed 400 ms is what keeps the first trial's
+   * dot out of the tap guard (lib/tapGuard.ts, 300 ms from the "Start" tap), and the harness has to keep
+   * that order to test it — at 30 ms the first dot fell inside the guard. It costs under 0.4 s a trial.
+   */
   RT_DELAY_MIN_MS: 20,
   RT_DELAY_MAX_MS: 60,
   RT_DELAY_MEAN_MS: 30,

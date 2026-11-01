@@ -12,6 +12,7 @@
  * j of 5 · Name" drawn from experiment/taskSteps.tsx.
  */
 import type { ReactNode } from 'react';
+import { useTapGuard } from '@/lib/tapGuard';
 import { STIMULUS_FONT_STACK } from '@/lib/fonts';
 import { Eyebrow, PrimaryButton } from './loopChrome';
 
@@ -29,6 +30,14 @@ interface Props {
 }
 
 export function TaskIntro({ eyebrow, title, lines, children, buttonLabel = 'Begin →', background, text, onBegin }: Props) {
+  /*
+   * The card handing over to its task is a screen change (lib/tapGuard.ts, Round 86): the guard is
+   * armed as the card goes, in the commit that draws the task. The task's first screen used to take the
+   * second tap of a double tap on the card's button — a word under "Begin search", a false alarm in the
+   * search d′ (audit 86 M1); the reaction field under "Start", trial 1 scored as an anticipation (M2).
+   * The reaction task's first dot cannot appear inside the guard; see tapGuard.ts.
+   */
+  useTapGuard();
   return (
     <div
       data-testid="task-intro"

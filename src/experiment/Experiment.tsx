@@ -32,6 +32,7 @@ import { priorParticipantProgress } from '@/storage/gather';
 import { saveResume, clearResume } from '@/storage/sessionPersistence';
 import { isInLoop } from './stateMachine';
 import { useStageTransitions } from './useStageTransitions';
+import { useTapGuard, TAP_GUARD_VERSION } from '@/lib/tapGuard';
 import { BreakScreen } from '@/start/BreakScreen';
 import { DB_VERSION } from '@/storage/schemaEnums';
 import type { ParticipantRecord, Provenance, SessionRecord, Stage } from '@/storage/types';
@@ -159,6 +160,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    * Round 86). The lock alone, which this used to be, let a late duplicate call advance the NEXT screen.
    */
   const { isShown, move, once } = useStageTransitions(machine, setMachine);
+  /*
+   * Every screen of the sitting is a screen change for the tap guard (lib/tapGuard.ts, Round 86): a
+   * touch that starts within 300 ms of it was aimed at the screen that went — the second tap of a
+   * double tap on "Begin setup" used to tick the consent screen's camera option under it (audit 86 F8).
+   */
+  useTapGuard(`${machine.stage}#${machine.stepIndex}`);
   /**
    * Administered stages a resumed sitting already holds (the colour-vision plates and the two
    * baselines; see setupStagesHeld), stepped over by advance() while the resume walks
@@ -1136,6 +1143,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       layout_viewport: layoutViewport(),
       // What the stimulus text was drawn with: font faces and rendering settings (lib/fonts.ts).
       typography_version: TYPOGRAPHY_VERSION,
+      // Which touches reached its tasks: a touch starting as a screen changed is dropped (lib/tapGuard.ts).
+      tap_guard_version: TAP_GUARD_VERSION,
       // The CSS pixel's size depends on it, and the ruler calibration was taken at pre-flight's.
       device_pixel_ratio: Number.isFinite(window.devicePixelRatio) && window.devicePixelRatio > 0 ? window.devicePixelRatio : null,
       // Per condition, because a resume can come back in a different launch (a tab, or the installed

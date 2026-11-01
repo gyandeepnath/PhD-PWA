@@ -773,6 +773,28 @@ Xiaomi Pad 6**: the one `ty-v2` change that could alter the passage there — te
 draw the passage the same, so the version should not split the analysis; `reading_line_px_rendered` is
 what checks this on the device (`ty-v1` rows, which include every sitting recorded with 2.3.1, have none).
 
+**A touch that began as the screen changed (Round 86).** On the tablet a double tap on a button that
+changes the screen reached the app as two taps, and the second landed on whatever the new screen had
+drawn under it: trial 1 of the reaction task scored as a false start or an anticipation after a double
+tap on Start, a word of the search passage counted as a false alarm after a double tap on Begin search
+(audit 86 M1, M2; also a colour-vision plate answered unseen and the consent screen's camera option
+ticked, outside the analysis). From Round 86 a touch that *starts* within 300 ms of a screen change is
+dropped whole before the app sees it (lib/tapGuard.ts; 300 ms is Android's own double-tap window), and
+`tap_guard_version` (02_conditions.csv) says which rule a condition's touches were taken under: `tg-v2`
+with the guard, `tg-v1` before it. Inside a task the guard is armed only by the instruction card handing
+over to the task, never by a stimulus: the reaction task's first dot comes at least 700 ms after Start
+(a fixed 400 ms fixation cross, then a delay of at least 300 ms), so no response to a dot can fall in it.
+What it does take is a touch in the first 300 ms of trial 1's fixation cross, which a `tg-v1` row scored
+as a false start; inside the double-tap window that touch cannot be told from the second tap of Start.
+Response and onset timestamps are unchanged: the guard drops events or passes them untouched, and the
+reaction time is still the touch's own timestamp minus the onset taken at paint. **`tg-v1` rows cannot be
+corrected** — the touches were not stored — and the templates do not drop them: in the audit's
+reproductions a carried tap changed trial 1 of a reaction block or added one search false alarm, and only
+in a sitting where the participant double-tapped (a geometry probe over every other screen found the
+second tap landing on nothing that records). Whether
+a sensitivity analysis should leave out reaction trial 1 on `tg-v1` rows is the investigator's decision
+(not pre-specified here).
+
 ---
 
 ## 5b. Which template implements this plan

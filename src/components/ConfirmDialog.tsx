@@ -31,6 +31,7 @@
  */
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { UI_TEXT } from '@/lib/uiPalette';
+import { useTapGuard } from '@/lib/tapGuard';
 
 export interface DialogRequest {
   title: string;
@@ -140,6 +141,9 @@ function ConfirmDialog({ pending, onAnswer }: { pending: Pending; onAnswer: (a: 
   // Per instance: two dialogs on one page (the manager's and the dashboard's) must not share an id.
   const titleId = useId();
   const bodyId = useId();
+  // A dialog opening, and closing, is a screen change (lib/tapGuard.ts, Round 86): the second tap of a
+  // double tap on the control that raised it must not answer it, nor reach the screen it closes onto.
+  useTapGuard();
 
   const cardRef = useRef<HTMLDivElement>(null);
   const okRef = useRef<HTMLButtonElement>(null);

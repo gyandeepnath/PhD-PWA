@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { startNewExperiment, driveUntil, markAllVas, click } from './helpers';
+import { TAP_GUARD_MS } from '../src/lib/tapGuard';
 
 /**
  * Only a tap inside a rating line's own target marks it, on a TOUCH screen (Round 85).
@@ -20,6 +21,9 @@ async function value(page: Page, name: string): Promise<string | null> {
 
 /** Taps around and on one item: its label is the `index`-th on the screen, its left end word the `wordIndex`-th `endWord`. */
 async function tapsMarkOnlyTheTarget(page: Page, name: string, index: number, endWord: string, wordIndex = 0) {
+  // Past the screen's tap guard (lib/tapGuard.ts, Round 86), or a miss below could pass only because the
+  // guard dropped it as the second tap of whatever brought the screen up.
+  await page.waitForTimeout(TAP_GUARD_MS + 100);
   const target = (await page.getByTestId(`vas-${name}`).boundingBox())!;
   const label = (await page.locator('[data-vas-label]').nth(index).boundingBox())!;
   const word = (await page.getByText(endWord, { exact: true }).nth(wordIndex).boundingBox())!;

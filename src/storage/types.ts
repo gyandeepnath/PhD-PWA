@@ -587,6 +587,12 @@ export interface ConditionRecord {
    */
   typography_version?: string;
   /**
+   * The rule the condition's touches were taken under (lib/tapGuard.ts TAP_GUARD_VERSION): 'tg-v2' from
+   * Round 86, a touch starting within 300 ms of a screen change dropped as the second tap of a double
+   * tap. Absent on rows recorded before it, which the export names 'tg-v1'.
+   */
+  tap_guard_version?: string;
+  /**
    * Page 1's distance from one line of the passage to the next as the screen drew it, CSS px
    * (lib/renderedText.ts). 22 x 1.4 x stimulus_scale when the browser drew the declared size.
    */

@@ -11,6 +11,7 @@
  * remains a per-item measure and is not inflated by the items preceding it.
  */
 import { useEffect, useRef, useState } from 'react';
+import { useTapGuard } from '@/lib/tapGuard';
 import { STIMULUS_FONT_STACK } from '@/lib/fonts';
 import { CONFIG } from '@/experiment/config';
 import { now } from '@/lib/timing';
@@ -70,6 +71,10 @@ export function ComprehensionTask({ passage, background, text, onComplete }: Pro
    */
   const recorded = useRef<Set<number>>(new Set());
   const reported = useRef(false);
+
+  // Each question is a new screen (lib/tapGuard.ts, Round 86): its options sit where the last one's did
+  // and mean something else, so a touch carried from the last question must not choose one.
+  useTapGuard(index);
 
   const questions = passage.questions;
   const q = questions[index];

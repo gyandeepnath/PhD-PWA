@@ -5,6 +5,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { makeRng } from '@/sim/rng';
+import { useTapGuard } from '@/lib/tapGuard';
 import { buildScreeningPlates, isFigurePixel, scoreIshihara, type Plate, type IshiharaResult } from './ishihara';
 
 export const PLATE_DIAMETER = 280;
@@ -88,6 +89,14 @@ export function IshiharaTest({ onComplete, onDone, seed, onRunning }: Props) {
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [notice, setNotice] = useState<IshiharaResult['status'] | null>(null);
   const busy = useRef(false); // guard against double-taps advancing or completing twice
+  /*
+   * Each plate is a new screen, and so is the operator notice (lib/tapGuard.ts, Round 86). busy above
+   * stops a second answer to the SAME plate, and is released as the next plate is drawn — whose digit
+   * buttons are the same buttons in the same place. So the second tap of a double tap answered the next
+   * plate after ~140 ms on screen: plate 2 took plate 1's answer unseen, and the greyscale control plate,
+   * answered that way, made the whole screen inconclusive (audit 86 F11).
+   */
+  useTapGuard(notice ? 'notice' : idx);
   const plate = plates[idx];
   const isLast = idx === plates.length - 1;
   useEffect(() => { onRunning?.(notice == null); }, [notice, onRunning]);

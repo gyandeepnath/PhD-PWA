@@ -35,6 +35,7 @@ import {
 import type { GazeDotId } from '@/tracking/gazeCalibration';
 import type { CalibrationOutcome, GazeDotResult } from '@/tracking/useTracking';
 import { InfoTip } from '@/components/InfoTip';
+import { useTapGuard } from '@/lib/tapGuard';
 
 interface Props {
   sessionId: string;
@@ -126,6 +127,8 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
   const baselineStep = STEPS.find((s): s is EarBaselineStep => s.kind === 'ear_baseline')!;
   const dotSteps = STEPS.filter((s): s is GazeDotStep => s.kind === 'gaze_dot');
   const [phase, setPhase] = useState<Phase>({ kind: 'intro' });
+  // Each kind of screen of the routine is a screen change (lib/tapGuard.ts, Round 86); its progress is not.
+  useTapGuard(phase.kind);
   const [busy, setBusy] = useState(false);
   const [marks, setMarks] = useState<Record<GazeDotId, DotMark>>({ centre: 'todo', left: 'todo', right: 'todo' });
   /** How many times the baseline window has run since Begin; recorded with the calibration. */

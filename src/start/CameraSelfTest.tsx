@@ -10,6 +10,7 @@ import type { SelfTestObservation } from '@/tracking/useTracking';
 import { TRACKER_LABEL, type TrackerBackend } from '@/tracking/trackers';
 import { ScrollCue } from '@/components/ScrollCue';
 import { reportAsyncFailure, describeFailure } from '@/lib/asyncFailure';
+import { useTapGuard } from '@/lib/tapGuard';
 
 /**
  * "Blink each time the dot flashes" — the camera self-test, run after calibration. See
@@ -52,6 +53,8 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false, 
   onStoppedByRotation?: () => void;
 }) {
   const [phase, setPhase] = useState<'intro' | 'running' | 'result'>('intro');
+  // The intro, the flashing dot and the result are three screens (lib/tapGuard.ts, Round 86).
+  useTapGuard(phase);
   useEffect(() => { onRunning?.(phase === 'running'); }, [phase, onRunning]);
   useEffect(() => () => onRunning?.(false), [onRunning]);
   const [flash, setFlash] = useState(false);

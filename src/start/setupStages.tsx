@@ -35,6 +35,7 @@ import { ScreenCalibration, type ScreenCalibrationResult } from './ScreenCalibra
 import { BuildInfo, useUpdateWaiting } from '@/components/BuildInfo';
 import { useDialog } from '@/components/ConfirmDialog';
 import { PARTICIPANT_ID_PATTERN } from '@/lib/participantId';
+import { useTapGuard, CONSENT_TAP_GUARD_MS } from '@/lib/tapGuard';
 import type { CameraStatus, CameraPipelineRecord, CameraBenchRecord, ExposureOutcome } from '@/storage/types';
 
 /**
@@ -646,6 +647,8 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
 }) {
   const [step, setStep] = useState<'notice' | 'starting' | 'preview' | 'exposure' | 'denied'>(
     camera.status === 'active' ? 'preview' : 'notice');
+  // Each step is a screen change (lib/tapGuard.ts, Round 86): "My face is centred" must be a decision.
+  useTapGuard(step);
   const [errMsg, setErrMsg] = useState('');
   /*
    * Whether the failure screen shows the library's own reason. The reason itself is read from the
@@ -1206,6 +1209,15 @@ export function Consent({
   const [cameraMetrics, setCameraMetrics] = useState(false);
   const [setupPhotos, setSetupPhotos] = useState(false);
   const [annotationVideo, setAnnotationVideo] = useState(false);
+  /*
+   * NO GRANT FROM A CARRIED TAP (Round 86, audit 86 F8). This screen follows the session form, and its
+   * camera option sat exactly under the form's "Begin setup": the second tap of a double tap on it
+   * arrived here as a tick on the camera grant — optional, off by default — before the participant had
+   * read a word, and was stored as given. Touches are held off for the screen's first second
+   * (lib/tapGuard.ts CONSENT_TAP_GUARD_MS), not only the 300 ms every screen gets: nothing on this screen
+   * is chosen in its first second except by accident.
+   */
+  useTapGuard('consent', CONSENT_TAP_GUARD_MS);
 
   /*
    * Each option is a checkbox row with its explanation beside it. No "i" notes here: anything shown

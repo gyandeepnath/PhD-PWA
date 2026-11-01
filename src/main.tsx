@@ -5,6 +5,7 @@ import './styles/theme.css';
 import { installViewportScale } from './lib/viewportScale';
 import { installUpdateWatch } from './lib/swUpdate';
 import { reportAsyncFailure, describeFailure } from './lib/asyncFailure';
+import { installTapGuard } from './lib/tapGuard';
 
 // See lib/asyncFailure.ts for why every unhandled rejection is named on screen.
 window.addEventListener('unhandledrejection', (e) => {
@@ -28,6 +29,13 @@ window.addEventListener('error', (e) => {
  * Continue button could not be pressed at all.
  */
 installViewportScale();
+
+/*
+ * A touch that starts as the screen changes was aimed at the screen that went: dropped before any
+ * handler sees it, for the life of the app (lib/tapGuard.ts; audit 86). Each screen arms it as it
+ * changes.
+ */
+installTapGuard();
 
 /*
  * Watch for a newer build. vite.config.ts registers with 'prompt' precisely so a new worker cannot
