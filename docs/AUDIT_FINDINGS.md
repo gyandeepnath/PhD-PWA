@@ -7389,3 +7389,217 @@ camera-check half already did, and the block's sentence confirms the stop.
 |---|---|---|---|
 | Straight-lining | `str-r1` on every row (Round 84: whole points on `vas-v2` rows) | `str-r1` on `sl-v1` rows; `str-r2` (all five within 5 mm, end exemption) on `vas-v2` rows | `straight_line_rule` in 12; ANALYSIS_PLAN §4c |
 | Rating format, typography, frame-rate gate, blink rule, calibration, camera check, gaze, reliability | unchanged | unchanged | as before |
+
+## Round 86 — one fast tap that excluded a participant, and the second tap of a double tap
+
+An audit of 2.4.0 at 26e909c (audit 86) walked the sitting on a touch screen and re-derived the
+data from the stored rows. Every finding below was reproduced by the auditor and again, independently,
+by a second reviewer. This round fixes the blocker and the double-tap problems: D4, F8, F11, F14 (and
+its resume variant), M1, M2 and M3. The audit's other findings are not touched here.
+
+**One rule changed and is versioned in the data:** which touches reach the app (`tap_guard_version`,
+`tg-v2`). **No threshold, cutoff or scoring rule changed.** The D4 fix changes no rule either: the
+integrity check now counts the reaction summary the way the codebook always said it was counted, and
+the summary the task writes is byte-for-byte what it was. Nothing here was measured on the Xiaomi
+Pad 6: the timings below are from desktop Chromium with touch emulation, some with the CPU slowed four
+times as a stand-in for the tablet under FaceMesh.
+
+### In plain words
+
+1. **One fast tap on a go dot no longer removes a participant from the analysis.** A tap on a go
+   dot faster than 150 ms is an anticipation and is not scored. The integrity check counted it anyway,
+   decided the reaction summary was wrong, and marked the whole participant unanalysable — one tap
+   was enough. The summary was right; the check was wrong. It is fixed, and the simulated data the
+   export and analysis gates run on now contain such taps, so the gates would catch it again.
+2. **A double tap on the camera check's Continue no longer skips the baseline CVS-Q.** The second tap
+   ran the Continue a second time, which moved the sitting on from the baseline CVS-Q before it was
+   answered (on a resume, past the break) and stored a second start photograph. Now every move from a
+   screen is accepted only while that screen is on show, and Continue works once.
+3. **After the camera check, the calibration start screen no longer comes back.** For 1-2.5 s after
+   Continue the calibration's "Begin calibration" screen reappeared, live; a tap on it started a
+   calibration the app then abandoned. The check's result now stays up ("Saving…") until the next
+   screen is drawn.
+4. **The second tap of a double tap no longer lands on the next screen.** On a touch screen, when the
+   first tap changed the screen, the second landed on whatever the new screen had drawn in the same
+   place and was taken as an answer: the consent screen's optional camera grant ticked by itself (F8),
+   two colour-vision plates answered by one double tap (F11), a word of the search passage counted as a
+   false alarm (M1), and reaction trial 1 scored as an anticipation or a false start (M2). Now a touch
+   that *starts* within 0.3 s of a screen change is ignored — 1 s on the consent screen — and the
+   participant simply taps again. It never covers a stimulus.
+
+### 1. One go-trial anticipation made a participant unanalysable (6cfcbc6) — D4, blocker
+
+**Found.** `09_rt_summary.csv` defines `signal_trials` as the go trials *scored* — hits plus misses,
+the hit rate's denominator — so a go dot tapped under the 150 ms anticipation cutoff is not one. The
+integrity audit (`summary_matches_trials`, a blocking check) counted every go trial *presented*. Any
+block with one go-trial anticipation therefore raised an error, and the join report took the
+participant out of every pre-registered model. The summary itself was correct. Every gate was green
+because nothing they ran held a go-trial anticipation the audit could disagree on: the bundled fixture
+built its summary by the audit's own definition, the analysis cohort's reaction times started at
+160 ms, and the end-to-end driver never tapped a dot.
+
+**Fixed.** The block summary now has one derivation, `src/lib/rtSummary.ts`: the task's own arithmetic
+moved there unchanged (20 000 random blocks compared byte-identical before and after), and the task,
+the integrity audit, the fixture and the analysis cohort all use it. The fixture carries go and no-go
+anticipations; half the simulated cohort taps some go dots (drawn from its own random stream, so no
+other simulated value moved). The export and analysis gates now fail if the audit and the task
+disagree again — without the fix, 12 of the 24 cohort participants were excluded.
+
+**Tests.** `tests/integrity.test.ts`: a go-trial anticipation and a no-go anticipation raise nothing
+and the participant stays analysable; over many random blocks the audit never faults a summary the
+task would write; a summary that really miscounts is still faulted.
+
+### 2. A double tap on the camera check's Continue skipped the baseline CVS-Q (b931069) — F14, major
+
+**Found.** The camera check's Continue writes the result, its blinks and the start photograph, then
+moves on. The stage machine's lock was released on every stage change, so a second tap during those
+writes ran the handler again and its move came *after* the first had reached the baseline CVS-Q — and
+moved on from there. The sitting's pre-exposure CVS-Q (the reference for the change score, which
+cannot be taken later) was never shown, and a second start photograph was stored. The audit reproduced
+it at 120-150 ms between the taps, with the start-photograph grant (the photograph is the slow write).
+By the code, on a resume the same second call skipped the break and its light reading (not re-run).
+
+**Fixed.** `src/experiment/useStageTransitions.ts`: every move names the screen it leaves (stage and
+condition) and is refused once that screen has gone, or while a move from it is already under way.
+Completion handlers that write before they move on (consent, profile, colour vision, pre-flight, every
+questionnaire, each task, the break, the closing photograph) are latched per screen and released when
+they settle, so a failed one can be tried again. Experiment has no other route to a new stage. The
+camera check also latches its own buttons ("Saving…") and hands them back if the write fails.
+
+**Tests.** `tests/stageTransitions.test.tsx` (a late duplicate from a screen already left — the
+mechanism of both the CVS-Q skip and the resume's break skip — two calls in one tick, a running
+handler called again, a failed handler released, and no route to a new stage other than the
+addressed move) and `tests/cameraSelfTest.test.tsx` (the check's latch, and its release on a failed
+write); `e2e/doubleTap.spec.ts` double-taps Continue 150 ms apart with the CPU slowed four times: the
+baseline CVS-Q is reached and stays, one start photograph. It fails on the previous code.
+
+### 3. The calibration start screen came back after the camera check (b931069) — M3, major
+
+**Found.** Continue cleared the camera check before taking the start photograph, so for the photograph's
+duration (1-2.5 s here) the calibration stage drew a fresh calibration routine: its start screen, with
+a live "Begin calibration". A tap on it started a calibration the app abandoned a moment later.
+
+**Fixed.** The check's result stays on screen until the photograph is taken and the stage changes in
+the same update. **Test:** `e2e/doubleTap.spec.ts` watches every frame after Continue: "Begin
+calibration" never appears before the baseline CVS-Q. It fails on the previous code.
+
+### 4. The second tap of a double tap answered the next screen (5b3b4bf) — F8, M1, M2 major; F11 minor
+
+**Found.** Each screen's own latch cannot see this: the carried tap is the *new* screen's first.
+
+| Double tap on | What the second tap did | Finding |
+|---|---|---|
+| "Begin setup" (session form) | ticked the consent screen's camera option, which sits under the button — an optional grant, off by default, stored as given | F8 |
+| a colour-vision digit | answered the next plate after ~140 ms on screen | F11 |
+| "Begin search" | marked the word under the button: one false alarm in the search d′ | M1 |
+| the reaction task's "Start" | trial 1 scored as an anticipation (by the code, a false start at the device's timing) | M2 |
+
+**Fixed.** `src/lib/tapGuard.ts`: one listener, ahead of every handler in the app, drops a touch (or
+pen) that **starts within 300 ms of a screen change** — all of it: the press, the lift and the click
+the browser makes from it — and the rest of a touch that began on a screen that has since gone. 300 ms
+is Android's own double-tap window: a second touch the tablet itself would call the second tap of a
+double tap falls inside it. A screen change is a new stage, a task's instruction card handing over to
+the task, a new colour-vision plate or comprehension question, the steps of camera setup, calibration
+and the camera check, a dialog opening or closing. **The consent screen holds touches off for its
+first second**: nothing on it is chosen in its first second except by accident. A mouse is not
+guarded (the tablet has none; the test suite clicks faster than any participant) — the stage-move
+guard of §2 still holds for every kind of pointer.
+
+**It never covers a stimulus.** Inside a task only the instruction card's hand-over arms it; the
+reaction task's dot, fixation and feedback, a reading page and the search passage do not. The
+reaction task's first dot comes at least 700 ms after "Start" (a fixed 400 ms fixation cross, then a
+delay of at least 300 ms), so the guard ends 100 ms before the cross can even give way. What it does
+take is a touch in the first 300 ms of trial 1's fixation cross, which before scored as a false start:
+inside the double-tap window it cannot be told from the second tap of "Start". Reading pages unlock
+after 20 s and a page turn is not a screen change for the guard, so reading times cannot be affected.
+
+**Versioned.** What reaches a task changed, so each condition row says which rule its touches were
+taken under: `tap_guard_version` in `02_conditions.csv`, `tg-v2` from this round, `tg-v1` for rows
+without it. The codebook entries for it, `false_start` (08) and `false_detections` (05) say so;
+ANALYSIS_PLAN §5, PROTOCOL (flaw 4) and the operator manual ("a tap straight after a new screen
+appears does nothing — tap again") are updated. Rows recorded before cannot be corrected: the touches
+were not stored. A geometry probe over every other screen of a sitting found the second tap landing on
+nothing that records, so only a sitting where the participant double-tapped one of these buttons is
+affected, and then by one reaction trial or one search false alarm.
+
+**Tests.** `tests/tapGuard.test.tsx`: a touch inside the window is dropped whole and one outside it
+is not; a dropped click does not tick a label's checkbox; a mouse is never touched; a touch let
+through is the same event with the same timestamp; the consent screen's longer hold is not cut short;
+the colour-vision screen answers one plate per double tap; the timing order above on the device's
+settings and the test harness's; the version is stamped and exported. `e2e/doubleTap.spec.ts`
+repeats the four reproductions with a touch screen (130-140 ms between taps): consent boxes all
+unticked, one plate answered, `false_detections` 0, trial 1 neither a response nor a false start. The
+four e2e tests fail with the guard switched off; the two screen tests fail with their arming removed.
+
+### 5. Measured: the guard does not move a timestamp
+
+- **Reaction times.** An end-to-end test taps the reaction field every 45 ms through a whole block —
+  fixations, dots and gaps alike — and records each touch as it reaches the app. Every stored response
+  time is exactly (that touch's own timestamp) − (the stored onset), to 10⁻⁶ ms, as before the guard,
+  and every tap sent more than 350 ms after "Start" reached the app (counted). The guard drops events
+  or passes them untouched; it stamps nothing.
+- **Cost.** Under a microsecond an event for the listener (about 0.6 µs), in desktop Chromium.
+- **The test harness.** Under `?e2e` the reaction fixation used to be shortened to 30 ms, which put the
+  first dot *inside* the guard; the harness now keeps the device's 400 ms so it tests the real order
+  (under 0.4 s a trial). A unit test holds the guard below the fixation on both settings.
+
+### 6. Not measured on the Xiaomi Pad 6
+
+- That Chrome on the Pad 6 delivers a double tap as two separate taps at these gaps (expected: the
+  app's mobile viewport turns off double-tap zoom), and how fast a real finger's second tap comes.
+- The listener's cost on the tablet, and the four-times CPU slowdown as a stand-in for it.
+- Whether 0.3 s (1 s on the consent screen) ever swallows a deliberate tap a participant notices.
+
+### 7. Not fixed here
+
+- **An abandoned calibration run still sets the blink baseline.** The tracker's baseline window is
+  not cancelled when its run is abandoned: when it closes it sets the baseline the blink thresholds
+  use, although no calibration record is written for it. M3's route to this is closed (the start
+  screen no longer comes back), and a run stopped by a rotation ends on the start screen, where the
+  next run measures the baseline again. The one other route found is the camera being lost
+  mid-baseline, which swaps the routine for the plain calibration screen (audit F7, a separate fix).
+  Not reproduced; noted so the tracker's baseline window can be made cancellable.
+- **F9, the extra start photograph on every resume**, is untouched. Its double-tap half (the thank-you
+  button) is covered by the handler latch of §2, which no test exercises on that screen.
+
+### 8. For the investigator
+
+1. **Re-export anything exported before this round** with any build since 2.1.0 (the check came in
+   on 2026-08-29), the 2.3.1 tested on the tablet included. Any participant who tapped a go dot
+   faster than 150 ms was marked unanalysable (`audit_summary_matches_trials` in the join report).
+   The stored data are untouched; a new export audits them correctly.
+2. **A decision (not pre-specified):** whether a sensitivity analysis should leave out reaction
+   trial 1 on `tg-v1` rows. Nothing is dropped by default (ANALYSIS_PLAN §5).
+3. **On the tablet:** double-tap "Begin setup" — every consent box should be empty; double-tap a
+   colour-vision digit — the counter should move by one; on the consent screen, after a second, tap
+   an option and check it ticks. If a deliberate tap is ever ignored, say so: the windows (300 ms,
+   1 s) are a choice and can be changed (as a new `tap_guard_version`).
+
+### 9. Checks run
+
+- On the final state of this round (2e7f862): `npm run verify` green — lint, types, 106 test files
+  with 1,658 unit tests, the corpus and codebook gates (529 codebook entries), the export gate 876/876
+  (the fixture's reaction trials now hold 3 go and 1 no-go anticipations; its integrity report, 0
+  errors) and both analysis templates in R and Python (the cohort now holds participants who
+  anticipated a go dot). The **whole end-to-end suite, retries off: 88 of 88 passed**, including the
+  seven tests of the new `e2e/doubleTap.spec.ts`. `npm run build`, then the production-bundle suite,
+  retries off: 7 of 7.
+- **Each fix fails its tests when reverted**, re-checked for this round on a separate copy of the
+  tree: the audit counting the go trials presented again — 5 unit tests fail (the reference fixture
+  among them, since it now holds a go-trial anticipation); the tap guard dropping nothing — 6 of the
+  11 tap-guard tests fail, the colour-vision and consent screens among them; a stage move not
+  addressed to its screen — the late-duplicate test fails. The end-to-end tests were checked the same
+  way when each fix was made: the four double-tap reproductions fail with the guard switched off, and
+  the camera check's two fail on the code before b931069.
+- The reaction-summary arithmetic moved to `lib/rtSummary.ts` was compared on 20 000 random blocks
+  before and after: byte-identical.
+- 2e7f862 fixed the end-to-end driver of two camera specs, which read the stage twice per step and
+  failed about one run in three on its own (the app was not at fault). After it, 18 of 18 runs passed.
+
+### 10. Versions in the data
+
+| Rule or format | Before | Now | Where it is recorded |
+|---|---|---|---|
+| Touches reaching the app | `tg-v1` (no column): every touch reached what was under it | `tg-v2`: a touch starting within 300 ms of a screen change (1 s on the consent screen) is dropped | `tap_guard_version` in 02; ANALYSIS_PLAN §5 |
+| Reaction summary (`09_rt_summary.csv`) | unchanged — the integrity check now counts it the same way | unchanged | — |
+| Rating format, typography, straight-lining, frame-rate gate, blink rule, calibration, camera check, gaze, reliability | unchanged | unchanged | as before |
