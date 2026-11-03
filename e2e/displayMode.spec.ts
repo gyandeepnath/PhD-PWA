@@ -189,6 +189,10 @@ test('a sitting checked as installed and resumed in a tab is checked again, befo
     if (st === 'READING_TASK' && (await all(page, 'conditions')).length >= 2) break;
     await handleStage(page, st);
   }
+  // Show condition 2's passage before pausing. Under attempt rule at-v2 (audit 86 F12) a restart is a
+  // second exposure only if the passage was shown, and this test resumes a condition that WAS read.
+  await page.getByRole('button', { name: /Begin reading/ }).click({ force: true });
+  await expect(page.getByTestId('reading-page-counter')).toBeVisible();
   await page.getByTestId('pause-chip').click();
   await page.getByTestId('confirm-ok').click();
   await expect(page.getByText(/In progress \(1\)/)).toBeVisible();
