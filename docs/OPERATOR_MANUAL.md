@@ -808,8 +808,28 @@ divides the same ten conditions across two shorter visits. If you use it:
 Entering a participant ID that already exists now shows what is on file — conditions completed,
 sittings, enrolment number — before you can go any further. Read it.
 
-- *Part of the protocol completed* (for example 5 of 10): this is the second half of a split. Carry
-  on; the condition order and enrolment number continue from where they stopped.
+The code is one code however it is typed (Round 87). The box keeps it in capitals and drops any
+space before or after it as you type, so "p001 " is P001 — what the tablet's keyboard adds by itself
+(a capital first letter, the space after a suggestion) can no longer make a second participant of
+one. If the participant's earlier sittings were stored in another letter case before this, the new
+sitting is recorded under *their* spelling, and the form says so. If the tablet holds the same code
+in two letter cases (two enrolments recorded before Round 87, possibly one person), the form names
+both spellings and will not start a sitting under the code: send both sittings' exports to the
+investigator, who decides which record is the participant's.
+
+- *A sitting of this participant is still in progress*: **do not start a new one — Resume it.** Tap
+  **← Back to sessions, to resume it**, then **Resume** on that sitting's row; it carries on where it
+  stopped. The form will not begin a new sitting while one is open: it would start after the last
+  *finished* display, and the paused sitting, resumed later, would show the participant the same
+  displays again (audit 86 found eight passages read twice this way). If the earlier sitting really
+  must not be continued, **Delete** it in the Session Manager first (it goes to the recycle bin). Its
+  displays then no longer count, and a participant with no other sitting is enrolled afresh — a new
+  condition order, possibly passages they have already read — so say why in the notes. A sitting
+  that a later sitting of the same participant has overtaken (the state this used to leave behind) is
+  listed under *In progress* without a Resume button, and its row says which sitting came after it.
+- *Part of the protocol completed* (for example 5 of 10) and no sitting in progress: this is the
+  second half of a split. Carry on; the condition order and enrolment number continue from where
+  they stopped.
 - *All ten completed*: **stop and check the ID.** Starting anyway runs the entire protocol a second
   time — every passage re-read, every search text already familiar, every comprehension question
   already seen — and those are not first-exposure measurements. Nine times out of ten it is a
@@ -819,7 +839,7 @@ If the repeat is deliberate — the first sitting was voided, say, because the c
 throughout — the app will let you proceed, but only after you type the reason. It is stored on the
 session and exported, so write something a stranger reading the data in a year could act on: "first
 sitting voided, camera failed throughout", not "redo". If instead the earlier sitting should simply
-not exist, delete it in the dashboard first and start clean.
+not exist, Delete it in the Session Manager first (the dashboard has no delete) and start clean.
 
 ---
 

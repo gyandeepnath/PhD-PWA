@@ -14,6 +14,7 @@ import { TASK_STEPS } from '@/experiment/taskSteps';
 import { repeatRunAcknowledged, REPEAT_NOTE_MIN_CHARS, SPLIT_REASON_MIN_CHARS } from '@/experiment/participantProgress';
 import { ILLUMINATION, luxInRange, type IlluminationLevel, N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 import type { MediaConsent } from '@/storage/media';
+import type { OpenSitting } from '@/storage/gather';
 import { ScrollCue } from '@/components/ScrollCue';
 import { InfoTip } from '@/components/InfoTip';
 import { UI_TEXT } from '@/lib/uiPalette';
@@ -134,18 +135,23 @@ export interface IlluminationAssignment {
   storedParticipantId: string | null;
   /** Every spelling of the code stored on the device; more than one is refused (Round 87, audit 86 F2). */
   spellings: string[];
+  /** This participant's sittings still in progress; while there is one, a new sitting is refused (audit 86 F3). */
+  openSittings: OpenSitting[];
 }
 
 export function SessionInit({
   onSubmit,
   resolveAssignment,
   onDirty,
+  onBackToSessions,
 }: {
   onSubmit: (d: SessionInitData) => void;
   /** Looks up this participant's counterbalanced assignment from their enrolment history. */
   resolveAssignment: (participantId: string) => Promise<IlluminationAssignment>;
   /** Whether anything has been typed, so Cancel asks before throwing it away (and only then). */
   onDirty?: (dirty: boolean) => void;
+  /** Back to the session manager — the Cancel chip's route — to resume a sitting still in progress. */
+  onBackToSessions?: () => void;
 }) {
   const [pid, setPid] = useState('');
   const [lux, setLux] = useState('');
@@ -206,11 +212,22 @@ export function SessionInit({
    * join one of them, and which one is the researcher's decision, not the form's.
    */
   const ambiguous = (assigned?.spellings.length ?? 0) > 1;
+  /*
+   * AN EARLIER SITTING OF THIS PARTICIPANT IS STILL IN PROGRESS (Round 87, audit 86 F3).
+   *
+   * This form used to say "This sitting continues where they stopped" and let a new sitting begin. It did
+   * not continue anything: it started after the participant's last COMPLETED display, while the earlier
+   * sitting stayed in the session manager with its Resume button — and resuming that ran the same
+   * displays again. In the audit's reproduction positions 2-9 were run twice: eight passages read a second
+   * time, the second reading recorded as a first, and the export blocked for the participant only after it
+   * had all happened. Resume is the way to continue a sitting; a new one is refused while one is open.
+   */
+  const open = assigned?.openSittings[0] ?? null;
   /** Why the typed code is not one the app issues, said where it is typed (it used to be said nowhere). */
   const pidProblem = participantIdProblem(pid);
   const valid =
     PARTICIPANT_ID_PATTERN.test(pid) && luxEntered && (inRange || deviation.trim().length >= 3)
-    && repeatAcknowledged && splitAcknowledged && !withdrawn && !ambiguous;
+    && repeatAcknowledged && splitAcknowledged && !withdrawn && !ambiguous && open == null;
   /*
    * What is still missing, said under the button. "Begin setup" is disabled until the form is valid, so
    * the message its handler used to set could never be shown: a trailing space from a keyboard
@@ -218,7 +235,7 @@ export function SessionInit({
    */
   const missing = !PARTICIPANT_ID_PATTERN.test(pid)
     ? (pidProblem ?? 'Enter the participant code.')
-    : withdrawn || ambiguous
+    : withdrawn || ambiguous || open != null
       ? 'A new sitting cannot be started under this code (see above).'
       : !repeatAcknowledged
         ? 'This participant has already completed all ten conditions. Record why they are being run again, or correct the code.'
@@ -281,7 +298,37 @@ export function SessionInit({
               started under this ID.
             </div>
           )}
-          {assigned && assigned.conditionsCompleted > 0 && (
+          {open && (
+            <div data-testid="sitting-in-progress" className="font-sans text-base"
+              style={{ border: '1px solid #e0a33c', background: '#fdf6e8', borderRadius: 10, padding: '14px 16px', color: UI_TEXT.ink }}>
+              <p className={eyebrow}>A sitting of this participant is still in progress</p>
+              <p className="mt-1 font-serif text-xl">
+                Sitting {open.session_index}, started {new Date(open.started_at).toLocaleString()}
+                {' · '}{open.conditions_completed} of {open.conditions_per_session} display{open.conditions_per_session === 1 ? '' : 's'} finished in it
+              </p>
+              <p className={help} style={{ marginTop: 6 }}>
+                Resume it from the Session Manager: it carries on where it stopped
+                {open.conditions_completed >= open.conditions_per_session
+                  ? ' — its displays are all finished, so only its closing questionnaires are left. '
+                  : '. '}
+                A new sitting cannot be started while it is open — it would begin after the last finished
+                display, and resuming the earlier sitting afterwards would show the participant the same
+                displays again.
+              </p>
+              <p className={help} style={{ marginTop: 6 }}>
+                If the earlier sitting is not to be continued, Delete it in the Session Manager first (it
+                goes to the recycle bin). Its displays then no longer count: a participant with no other
+                sitting is enrolled afresh, with a new condition order, and may meet passages they have
+                already read.
+              </p>
+              {onBackToSessions && (
+                <button type="button" data-testid="back-to-resume" className={btnBack} style={{ marginTop: 12 }} onClick={onBackToSessions}>
+                  ← Back to sessions, to resume it
+                </button>
+              )}
+            </div>
+          )}
+          {assigned && assigned.conditionsCompleted > 0 && !open && (
             <div
               data-testid="prior-progress"
               style={{
@@ -301,10 +348,12 @@ export function SessionInit({
                   ? 'This participant has already been through the whole protocol. Starting now runs '
                     + 'all ten conditions AGAIN: they will re-read every passage, repeat every search '
                     + 'and see every comprehension question a second time. If this ID was a typo, '
-                    + 'correct it. If the earlier sitting is to be discarded, delete it in the '
-                    + 'dashboard first.'
-                  : 'This sitting continues where they stopped — the condition order and enrolment '
-                    + 'number are preserved.'}
+                    + 'correct it. If the earlier sitting is to be discarded, Delete it in the '
+                    + 'Session Manager first.'
+                  // Only a FINISHED earlier sitting reaches this line: one still in progress is refused
+                  // above (audit 86 F3), so this is the second half of a split.
+                  : 'This sitting takes up the remaining displays after their finished sitting — the '
+                    + 'condition order and enrolment number are preserved.'}
               </p>
             </div>
           )}

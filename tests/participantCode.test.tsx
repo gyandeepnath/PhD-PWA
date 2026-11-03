@@ -104,7 +104,7 @@ describe('the session form keeps the code canonical and says what is wrong', () 
 
   const assignment = (over: Partial<IlluminationAssignment> = {}): IlluminationAssignment => ({
     level: 'moderate', block: 0, orderFirst: 'moderate', enrolment: 1, conditionsCompleted: 0, priorPasses: 0,
-    sittings: 0, withdrawnAt: null, storedParticipantId: null, spellings: [], ...over,
+    sittings: 0, withdrawnAt: null, storedParticipantId: null, spellings: [], openSittings: [], ...over,
   });
 
   async function renderForm(resolve: (id: string) => Promise<IlluminationAssignment>) {

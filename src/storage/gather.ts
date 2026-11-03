@@ -12,6 +12,7 @@ import type {
 } from './types';
 import { requiredGrant, type MediaRecord, type MediaConsent } from './media';
 import { sameParticipant } from '@/lib/participantId';
+import { supersededSittings } from './sessionPersistence';
 
 export interface SessionBundle {
   session: SessionRecord;
@@ -189,6 +190,23 @@ export interface PriorParticipantProgress {
   conditionsCompleted: number;
   sittings: number;
   withdrawnAt: number | null;
+  /**
+   * This participant's sittings that are still open — in progress, not in the recycle bin, not
+   * withdrawn, not superseded by a later sitting — oldest first. While there is one, a new sitting is
+   * refused (Round 87, audit 86 F3): it would start after the participant's last COMPLETED display, and
+   * resuming the open one would then present the same displays again.
+   */
+  openSittings: OpenSitting[];
+}
+
+/** An open sitting, as the session form describes it. */
+export interface OpenSitting {
+  session_id: string;
+  session_index: number;
+  started_at: number;
+  conditions_per_session: number;
+  /** Displays this sitting finished. */
+  conditions_completed: number;
 }
 
 /**
@@ -208,18 +226,29 @@ export async function priorParticipantProgress(participantId: string): Promise<P
     (w, s) => (s.withdrawn_at != null && (w == null || s.withdrawn_at < w) ? s.withdrawn_at : w), null);
   const sessions = every.filter((s) => s.deleted_at == null);
   if (sessions.length === 0) {
-    return { participantId: stored, spellings, enrolment: null, conditionsCompleted: 0, sittings: 0, withdrawnAt };
+    return { participantId: stored, spellings, enrolment: null, conditionsCompleted: 0, sittings: 0, withdrawnAt, openSittings: [] };
   }
   // Reuse the earliest-assigned enrolment number for stability.
   const enrolment = sessions.reduce((min, s) => Math.min(min, s.enrolment_number), Infinity);
+  const superseded = supersededSittings(sessions);
   let conditionsCompleted = 0;
+  const openSittings: OpenSitting[] = [];
   for (const s of sessions) {
     const conds = await getAllByIndex('conditions', 'by_session', s.session_id) as { completed_at: number | null }[];
-    conditionsCompleted += conds.filter((c) => c.completed_at != null).length;
+    const done = conds.filter((c) => c.completed_at != null).length;
+    conditionsCompleted += done;
+    if (s.status === 'in_progress' && !isWithdrawn(s) && !superseded.has(s.session_id)) {
+      openSittings.push({
+        session_id: s.session_id, session_index: s.session_index, started_at: s.session_start_time,
+        conditions_per_session: s.conditions_per_session, conditions_completed: done,
+      });
+    }
   }
+  openSittings.sort((a, b) => a.started_at - b.started_at);
   return {
     participantId: stored, spellings,
     enrolment: Number.isFinite(enrolment) ? enrolment : null, conditionsCompleted, sittings: sessions.length, withdrawnAt,
+    openSittings,
   };
 }
 

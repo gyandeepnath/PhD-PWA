@@ -319,6 +319,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const dismissDialog = dialog.dismiss;
   useEffect(() => { dismissDialog(); }, [machine.stage, machine.stepIndex, dismissDialog]);
 
+  /** The operator chip's action, for a control drawn before it is defined in this render (SessionInit). */
+  const onOperatorChipRef = useRef<() => Promise<void>>(async () => {});
   /** SESSION_INIT has something typed in it, so Cancel asks before discarding it. */
   const [initDirty, setInitDirty] = useState(false);
   /** "Begin setup" is writing the session record; Cancel is withheld until it lands or fails. */
@@ -703,6 +705,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       withdrawnAt: prior.withdrawnAt,
       storedParticipantId: prior.participantId,
       spellings: prior.spellings,
+      openSittings: prior.openSittings,
     };
   }, []);
 
@@ -875,6 +878,16 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     // enrolments that may be one person. The researcher decides which (the session form says so).
     if (prior.spellings.length > 1) {
       refuse(`participant code ${typed} is stored on this tablet as ${prior.spellings.join(' and ')}; no new sitting can be started under it until that is resolved`);
+      return;
+    }
+    /*
+     * An earlier sitting of this participant is still open (Round 87, audit 86 F3). A new one would begin
+     * after their last COMPLETED display, and resuming the open one would present the same displays again.
+     * Refused here as well as on the form, which offers the way back to Resume it.
+     */
+    if (prior.openSittings.length > 0) {
+      const o = prior.openSittings[0];
+      refuse(`sitting ${o.session_index} of participant ${typed} is still in progress; resume it from the session manager (or delete it there) before starting another`);
       return;
     }
     /*
@@ -1271,7 +1284,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   let view: React.ReactNode = null;
   switch (machine.stage) {
     case 'SESSION_INIT':
-      view = <SessionInit resolveAssignment={resolveAssignment} onSubmit={beginSession} onDirty={setInitDirty} />;
+      // "Back to sessions" from the open-sitting notice is the Cancel chip's own route (onOperatorChip).
+      view = <SessionInit resolveAssignment={resolveAssignment} onSubmit={beginSession} onDirty={setInitDirty} onBackToSessions={() => { void onOperatorChipRef.current(); }} />;
       break;
     case 'CONSENT':
       /**
@@ -2255,6 +2269,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       cancelLabel: 'Stay here',
     })) exitSitting();
   };
+  onOperatorChipRef.current = onOperatorChip;
   const showOperatorChip = (exitKind === 'cancel' && !session)
     || (exitKind === 'exit' && !!session && !procedureRunning);
 

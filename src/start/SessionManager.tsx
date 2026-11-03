@@ -10,7 +10,7 @@ import {
   listSessions, listDeleted, softDeleteSession, restoreSession, purgeSession, purgeExpired,
   renameSession, sessionLabel, recordWithdrawal, isWithdrawn, BIN_RETENTION_MS, MAX_DISPLAY_LABEL,
 } from '@/storage/gather';
-import { listResumable, clearResume, type ResumePointer } from '@/storage/sessionPersistence';
+import { listResumable, clearResume, supersededSittings, type ResumePointer } from '@/storage/sessionPersistence';
 import { parseSessionBackup, importSessionBackup } from '@/storage/backup';
 import { VisuLabLogo } from '@/components/VisuLabLogo';
 import { NavChip } from '@/components/NavChip';
@@ -96,6 +96,12 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
   const withdrawn = active.filter(isWithdrawn);
   const inProgress = active.filter((s) => s.status === 'in_progress' && !isWithdrawn(s));
   const completed = active.filter((s) => s.status === 'complete' && !isWithdrawn(s));
+  /*
+   * In-progress sittings a later sitting of the same participant has superseded (Round 87, audit 86 F3):
+   * listed, exportable and deletable like any other, but not resumable — resuming one would show the
+   * participant displays the later sitting has already run or will run. The row says so, by name.
+   */
+  const superseded = supersededSittings(active);
 
   // The banner offers the most recently touched one; every other in-progress session still gets its
   // own Resume button on its own row, so none of them is stranded.
@@ -383,7 +389,12 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
 
         <Section title={`In progress (${inProgress.length})`}>
           {inProgress.map((s) => (
-            <Row key={s.session_id} s={s}>
+            <Row key={s.session_id} s={s}
+              note={superseded.has(s.session_id)
+                ? `not resumable: sitting ${superseded.get(s.session_id)!.session_index} of this participant, started `
+                  + `${new Date(superseded.get(s.session_id)!.session_start_time).toLocaleString()}, came after it — `
+                  + 'resuming this one would repeat displays. Export it, or Delete it.'
+                : undefined}>
               {resumable[s.session_id] && (
                 <Btn onClick={() => onResume(s.session_id, resumable[s.session_id].nextStepIndex, resumable[s.session_id].reachedLoop === true)} color={UI_TEXT.blue}>Resume</Btn>
               )}
@@ -523,7 +534,7 @@ function Row({ s, children, note }: { s: SessionRecord; children: React.ReactNod
         {/* The participant code stays in DM Mono — it is a code; the date line under it is not. */}
         <div className="font-lab" style={{ fontSize: 17 }}>{sessionLabel(s)}</div>
         <div className="font-sans" style={{ fontSize: 14, color: UI_TEXT.muted, marginTop: 2 }}>
-          {new Date(s.session_start_time).toLocaleString()}{note ? ` · ${note}` : ''}
+          {new Date(s.session_start_time).toLocaleString()}{note && <span data-testid="row-note">{` · ${note}`}</span>}
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{children}</div>

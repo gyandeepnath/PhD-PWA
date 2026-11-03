@@ -21,6 +21,7 @@
  */
 import { get, getAll, getAllByIndex, put } from './db';
 import type { SessionRecord } from './types';
+import { sameParticipant } from '@/lib/participantId';
 
 const KEY = 'visulab_resume';
 
@@ -115,6 +116,37 @@ export function loadResume(sessionId?: string): ResumePointer | null {
 }
 
 /**
+ * The in-progress sittings that a LATER sitting of the same participant has superseded, each mapped to
+ * the earliest sitting that came after it (Round 87, audit 86 F3).
+ *
+ * A new sitting could be started for a participant whose earlier sitting was still in progress — the
+ * session form invited it ("This sitting continues where they stopped") — and it began at the position
+ * after their last COMPLETED condition. The earlier sitting stayed in the list with its Resume button,
+ * and resuming it ran the same positions again: in the audit's reproduction, positions 2-9 twice, eight
+ * passages read a second time, under a second condition_id that nothing tied to the first. The form now
+ * refuses that start (storage/gather.ts openSittings), but a device can already hold the pair, and a
+ * sitting restored from the recycle bin can make one; so a sitting a later one has superseded is not
+ * offered for resuming. The later sitting carries on from where the participant really is.
+ *
+ * Only a live later sitting supersedes: one in the recycle bin does not (restoring it brings the
+ * supersession back). Withdrawn sittings are never resumable anyway. Matched by participant as
+ * gather.ts does (letter case does not make another person), ordered by when each sitting started.
+ */
+export function supersededSittings(sessions: SessionRecord[]): Map<string, SessionRecord> {
+  const live = sessions.filter((s) => !s.deleted_at);
+  const out = new Map<string, SessionRecord>();
+  for (const s of live) {
+    if ((s.status ?? 'in_progress') !== 'in_progress' || s.withdrawn_at != null) continue;
+    const later = live
+      .filter((t) => t.session_id !== s.session_id && t.session_start_time > s.session_start_time
+        && sameParticipant(t.participant_id, s.participant_id))
+      .sort((a, b) => a.session_start_time - b.session_start_time)[0];
+    if (later) out.set(s.session_id, later);
+  }
+  return out;
+}
+
+/**
  * Every resumable session on this device, newest first, read from IndexedDB.
  *
  * This is the authoritative list. A session that is in progress and has a recorded pointer is
@@ -130,9 +162,12 @@ export async function listResumable(): Promise<ResumePointer[]> {
     return Object.values(cache).sort((a, b) => b.savedAt - a.savedAt);
   }
   const out: ResumePointer[] = [];
+  const superseded = supersededSittings(sessions);
   for (const s of sessions) {
     // Never a withdrawn sitting: resuming one collected data after consent was taken back.
     if (s.status !== 'in_progress' || s.deleted_at || s.withdrawn_at != null) continue;
+    // Never one a later sitting of the same participant superseded: it would repeat their displays.
+    if (superseded.has(s.session_id)) continue;
     const cached = cache[s.session_id];
 
     /**
