@@ -462,8 +462,23 @@ export interface ConditionRecord {
    * already located and the comprehension questions already seen.
    *
    * Optional: rows written before this existed have no value for it, which is not the same as 1.
+   *
+   * From Round 87 (attempt_rule_version 'at-v2') a run counts only once its passage was shown: a pause
+   * on the reading instruction card, before "Begin reading", no longer makes the next run attempt 2
+   * (audit 86 F12; experiment/conditionAttempt.ts).
    */
   attempt_number?: number;
+  /**
+   * The rule attempt_number was counted by (experiment/conditionAttempt.ts): 'at-v2' from Round 87,
+   * only runs whose passage was shown; absent ('at-v1') on rows counted by every entry to the reading
+   * screen.
+   */
+  attempt_rule_version?: string;
+  /**
+   * When THIS run's passage was first shown — the "Begin reading" tap — or null/absent while the
+   * run has not got past the instruction card. What the next run's attempt_number is counted from.
+   */
+  passage_shown_at?: number | null;
   /**
    * The root scale factor the stimuli of THIS condition were presented at, and the viewport it was
    * computed from.

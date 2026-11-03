@@ -432,7 +432,8 @@ is not fitted: it needs a package (`survival`) that is not in the install line o
 - **RT polarity × serial position** (§3): on the per-block mean RT model, and in a trial-level LMM on the
   log RT of valid hits that also carries §4a's ring and ring × colour terms and, from Round 73, the
   condition-run intercept (polarity × position is a between-run contrast too).
-- **Primary sensitivities**: without restarted runs (`attempt_number` > 1); without interrupted runs
+- **Primary sensitivities**: without restarted runs (`attempt_number` > 1, counted by exposure from
+  Round 87 — see `attempt_rule_version`, §5); without interrupted runs
   (`condition_interrupted`); serial position as a factor rather than a line; and first-order carryover —
   `polarity_switched` (the run before, in the same sitting, had the other polarity) added, tested by
   likelihood ratio against the primary refitted on the runs that have a predecessor.
@@ -794,6 +795,21 @@ in a sitting where the participant double-tapped (a geometry probe over every ot
 second tap landing on nothing that records). Whether
 a sensitivity analysis should leave out reaction trial 1 on `tg-v1` rows is the investigator's decision
 (not pre-specified here).
+
+**Which runs count as restarted (Round 87).** `attempt_number` above 1 marks a condition-run that an
+earlier run of the same condition, stopped by a pause or a crash, had already shown the passage to: its
+reading, comprehension and search are second exposures, and the primary sensitivity "without restarted
+runs" leaves it out. The row is written when the reading screen mounts, while its instruction card is
+still up, and up to Round 86 every such entry counted — so a pause, a reload or the camera-lost notice's
+pause on the instruction card, before any word of the passage was shown, made the next run attempt 2: a
+clean first reading flagged `condition_redone` and dropped by that sensitivity (audit 86 F12). From
+Round 87 a run counts only once its passage was shown ("Begin reading" stamps it on the row), and
+`attempt_rule_version` (02_conditions.csv) says which rule a row was counted by: `at-v2` by exposure,
+`at-v1` by entry. Nothing else about the rule changed: a pause anywhere after "Begin reading" still
+counts. **`at-v1` rows cannot be recounted** — whether the earlier run reached the passage was not
+recorded — so an `at-v1` row above 1 is a second exposure or a first reading after a pause on the card;
+the templates treat it as restarted, as before, which can only drop a run, never keep a second reading
+as a first. A run following an `at-v1` row is counted the old way for the same reason.
 
 ---
 

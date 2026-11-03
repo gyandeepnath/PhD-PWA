@@ -22,6 +22,9 @@ import { buildFixtureBundle } from '@/sim/bundleFixture';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
 import { QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
 import type { ComprehensionRecord, ConditionRecord } from '@/storage/types';
+import { nextAttemptNumber, passageWasShown, ATTEMPT_RULE_VERSION, ATTEMPT_RULE_VERSION_V1 } from '@/experiment/conditionAttempt';
+import { buildExportFiles } from '@/storage/export';
+import { splitCsvRow } from './helpers/csv';
 
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
@@ -182,8 +185,12 @@ describe('a redone condition says so', () => {
     passage_repeat_number: 1, attempt_number: attempt,
   } as unknown as ConditionRecord);
 
-  /** The rule ensureCondition applies: read the prior row, add one. */
-  const nextAttempt = (prior: ConditionRecord | undefined) => (prior?.attempt_number ?? 0) + 1;
+  /**
+   * The rule ensureCondition applies (experiment/conditionAttempt.ts). The rows below carry no
+   * attempt_rule_version: written by the old rule, so the earlier run is taken as having shown its
+   * passage — the old count, plus one. The exposure rule itself is the next describe.
+   */
+  const nextAttempt = (prior: ConditionRecord | undefined) => nextAttemptNumber(prior);
 
   it('counts the first entry as attempt 1', async () => {
     const prior = await get('conditions', 'c-1') as ConditionRecord | undefined;
@@ -212,6 +219,56 @@ describe('a redone condition says so', () => {
     }
     const saved = await get('conditions', 'c-1') as ConditionRecord;
     expect(saved.attempt_number).toBe(4);
+  });
+});
+
+describe('a restart counts as an exposure only once the passage was shown (Round 87, audit 86 F12)', () => {
+  /*
+   * The row is written when the reading screen mounts — while its instruction card is still up — so a
+   * pause on the card made the next run attempt 2: a first reading recorded as a second, flagged
+   * condition_redone and dropped by the "without restarted runs" sensitivity.
+   */
+  const run = (over: Partial<ConditionRecord>) => ({
+    attempt_number: 1, attempt_rule_version: ATTEMPT_RULE_VERSION, passage_shown_at: null,
+    reading_time_ms: null, completed_at: null, ...over,
+  } as ConditionRecord);
+
+  it('the first run is attempt 1', () => {
+    expect(nextAttemptNumber(undefined)).toBe(1);
+  });
+
+  it('a run stopped on the instruction card leaves the number where it was, however often', () => {
+    expect(nextAttemptNumber(run({}))).toBe(1);
+    expect(nextAttemptNumber(run({ attempt_number: nextAttemptNumber(run({})) }))).toBe(1);
+    // After one real exposure, a later stop on the card still counts only that one.
+    expect(nextAttemptNumber(run({ attempt_number: 2 }))).toBe(2);
+  });
+
+  it('a run whose passage was shown counts, wherever it stopped', () => {
+    expect(nextAttemptNumber(run({ passage_shown_at: 5000 }))).toBe(2);
+    // Should the stamp's own write have been lost, a reading time or a finished run is proof enough.
+    expect(nextAttemptNumber(run({ reading_time_ms: 90_000 }))).toBe(2);
+    expect(nextAttemptNumber(run({ completed_at: 9000 }))).toBe(2);
+    expect(nextAttemptNumber(run({ attempt_number: 2, passage_shown_at: 5000 }))).toBe(3);
+  });
+
+  it('a row counted by the old rule is taken as shown: an unknown is never read as a first reading', () => {
+    const old = { attempt_number: 1, reading_time_ms: null, completed_at: null } as ConditionRecord;
+    expect(passageWasShown(old)).toBe(true);
+    expect(nextAttemptNumber(old)).toBe(2);
+    expect(nextAttemptNumber({ ...old, attempt_rule_version: ATTEMPT_RULE_VERSION_V1 })).toBe(2);
+  });
+
+  it('the export says which rule each row was counted by', () => {
+    const b = buildFixtureBundle();
+    b.conditions = b.conditions.map((c, i) => (i === 0
+      ? { ...c, attempt_rule_version: ATTEMPT_RULE_VERSION } : { ...c, attempt_rule_version: undefined }));
+    const file = buildExportFiles(b).find((f) => f.filename === '02_conditions.csv')!;
+    const [head, ...rows] = file.content.trim().split('\n').map(splitCsvRow);
+    const col = head.indexOf('attempt_rule_version');
+    expect(col).toBeGreaterThan(-1);
+    expect(rows[0][col]).toBe(ATTEMPT_RULE_VERSION);
+    expect(rows.slice(1).every((r) => r[col] === ATTEMPT_RULE_VERSION_V1)).toBe(true);
   });
 });
 

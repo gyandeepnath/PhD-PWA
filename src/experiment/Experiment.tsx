@@ -34,9 +34,10 @@ import { saveResume, clearResume } from '@/storage/sessionPersistence';
 import { isInLoop } from './stateMachine';
 import { useStageTransitions } from './useStageTransitions';
 import { useTapGuard, TAP_GUARD_VERSION } from '@/lib/tapGuard';
+import { nextAttemptNumber, ATTEMPT_RULE_VERSION } from './conditionAttempt';
 import { BreakScreen } from '@/start/BreakScreen';
 import { DB_VERSION } from '@/storage/schemaEnums';
-import type { ParticipantRecord, Provenance, SessionRecord, Stage } from '@/storage/types';
+import type { ConditionRecord, ParticipantRecord, Provenance, SessionRecord, Stage } from '@/storage/types';
 import { useTracking } from '@/tracking/useTracking';
 import { LazyDashboard as Dashboard } from '@/dashboard/LazyDashboard';
 import { ExperimentProgress } from '@/components/ExperimentProgress';
@@ -136,6 +137,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const conditionIds = useRef<string[]>([]);
   const writtenConditions = useRef<Set<number>>(new Set());
   const conditionStarted = useRef<Record<number, number>>({});
+  /**
+   * The current condition row's first write (ensureCondition), which "Begin reading" waits on before
+   * stamping the passage as shown on that row — so a tap that beats the write cannot lose the stamp,
+   * and with it the count of this exposure (experiment/conditionAttempt.ts).
+   */
+  const conditionRowWrite = useRef<Promise<void>>(Promise.resolve());
+  /** When the current run's passage was shown ("Begin reading"); null until then. See markPassageShown. */
+  const passageShownAt = useRef<number | null>(null);
   const creatingSession = useRef(false);
   // Conditions run in THIS sitting (8 single, 4 split). Drives the loop length + break insertion.
   const nConditionsRef = useRef<number>(N_CONDITIONS);
@@ -1111,6 +1120,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     if (!session || !cond || !step) return;
     if (writtenConditions.current.has(machine.stepIndex)) return;
     writtenConditions.current.add(machine.stepIndex);
+    passageShownAt.current = null;
+    let rowWritten = () => {};
+    conditionRowWrite.current = new Promise<void>((resolve) => { rowWritten = resolve; });
     /**
      * What the grey field ACTUALLY delivered, not what the plan intended.
      *
@@ -1139,9 +1151,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
      * The participant has already read that passage once, already found the search target and
      * already seen the comprehension questions, so the reading time, comprehension and search time
      * on the surviving row are second-exposure values sitting beside nine first-exposure ones.
+     *
+     * Counted by EXPOSURE, not by entry (Round 87, audit 86 F12): this row is written while the reading
+     * screen's instruction card is still up, and a run paused there never showed the passage, so it
+     * does not count. See experiment/conditionAttempt.ts.
      */
-    const prior = await get('conditions', conditionId);
-    const attempt = ((prior as { attempt_number?: number } | undefined)?.attempt_number ?? 0) + 1;
+    const prior = await get('conditions', conditionId) as ConditionRecord | undefined;
+    const attempt = nextAttemptNumber(prior);
     const launch = displayMode();
     await put('conditions', {
       condition_id: conditionId, session_id: session.session_id,
@@ -1165,6 +1181,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
        */
       passage_repeat_number: passageRepeatNumber(session),
       attempt_number: attempt,
+      attempt_rule_version: ATTEMPT_RULE_VERSION,
+      // Not yet: the instruction card is up. Stamped by "Begin reading" (markPassageShown).
+      passage_shown_at: null,
       /*
        * Read NOW, not at session start. The session-level copy is stamped inside beginSession,
        * before the participant has touched the tablet — and the scale is still free to change after
@@ -1185,7 +1204,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       // was acknowledged in this run of the app — false where it was installed and nothing needed it.
       display_mode: launch,
       display_mode_acknowledged: isInstalledDisplay(launch) ? false : launchAcks.current.has(launch),
-    });
+    }).finally(rowWritten);
     conditionStarted.current[machine.stepIndex] = Date.now();
     conditionRescalesAtStart.current = rescalesWhileFrozen();
     /*
@@ -1213,6 +1232,23 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     // onBegin handler — the exposure window has to start when the participant starts reading.
     // NOTE: the annotation video is started from ReadingTask's onBegin, not here. See that handler.
   }, [session, cond, step, conditionId, machine.stepIndex]);
+
+  /**
+   * "Begin reading": this run of the condition has now shown its passage, so a restart from here on is
+   * a second exposure (experiment/conditionAttempt.ts; audit 86 F12). Stamped on the row the moment the
+   * card hands over, after the row's own first write, and never waited for: the passage is drawn in
+   * the same tap, and the reading clock was started before this is called. A failed write is not
+   * swallowed — main.tsx names it on screen, as it does every other — and the reading's own write of
+   * the row (onComplete) carries the stamp again.
+   */
+  const markPassageShown = (id: string) => {
+    const at = Date.now();
+    passageShownAt.current = at;
+    void conditionRowWrite.current.then(async () => {
+      const row = await get('conditions', id);
+      if (row && row.passage_shown_at == null) await put('conditions', { ...row, passage_shown_at: at });
+    });
+  };
 
   // ===== RENDER =====
   const nConditions = plan.length || N_CONDITIONS;
@@ -1745,6 +1781,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
              * outcome.
              */
             onBegin={() => {
+              markPassageShown(conditionId);
               tracking.beginCondition();
               // The window opens on page 1; each stored blink carries its page (Round 78).
               tracking.markReadingPage(1);
@@ -1781,6 +1818,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 if (existing) {
                   await put('conditions', {
                     ...existing,
+                    // Again here, should "Begin reading"'s own write of it have been lost.
+                    passage_shown_at: existing.passage_shown_at ?? passageShownAt.current,
                     // Hidden time removed: the clock used to run while the tablet was backgrounded,
                     // and this span is also the reading-speed denominator.
                     reading_time_ms: r.readingTimeMs,

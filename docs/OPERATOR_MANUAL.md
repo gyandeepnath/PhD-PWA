@@ -584,7 +584,10 @@ leaves, **Keep going** carries on. Answer the box promptly — while it is open 
 screen, and that time is recorded against the display (`condition_notice_ms`). Where you pause
 matters, and the box tells you which case you are in: pausing *during* a condition restarts that
 condition on resume, so its measurements are taken again; pausing on the grey rest screen keeps the
-condition you have just finished and resumes at the next one. Pause is offered on the reaction
+condition you have just finished and resumes at the next one. A restarted condition is recorded as a
+second exposure only if the participant had already seen its passage: a pause on the *Read the
+passage* card, before **Begin reading**, restarts the condition but leaves it a first reading (Round
+87). If you must pause near the start of a display, that card is the place to do it. Pause is offered on the reaction
 task's instruction card, disappears when the participant taps **Start**, and comes back once the last
 dot has been shown, while the results are saved.
 
