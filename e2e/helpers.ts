@@ -360,11 +360,13 @@ export async function assertStimulusFits(page: Page, testId: 'reading-text' | 's
   expect(m.scroll, `${testId}: stimulus box would scroll`).toBeLessThanOrEqual(1);
 }
 
-export async function driveUntil(page: Page, target: string, maxSteps = 500): Promise<void> {
+export async function driveUntil(
+  page: Page, target: string, maxSteps = 500, opts: { split?: boolean; participantId?: string } = {},
+): Promise<void> {
   for (let i = 0; i < maxSteps; i++) {
     const stage = await stageNow(page);
     if (stage === target) return;
-    if (await handleStage(page, stage)) throw new Error(`reached completion before ${target}`);
+    if (await handleStage(page, stage, opts)) throw new Error(`reached completion before ${target}`);
   }
   throw new Error(`did not reach ${target} within ${maxSteps} steps`);
 }

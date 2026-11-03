@@ -42,10 +42,12 @@ async function columnWidthInRootPx(page: import('@playwright/test').Page) {
 test('the reading column is the same width in root pixels on differently-shaped devices', async ({ page }) => {
   const measured: { name: string; scale: number; rootW: number; columnW: number }[] = [];
 
-  for (const vp of VIEWPORTS) {
+  for (const [i, vp] of VIEWPORTS.entries()) {
     await page.setViewportSize({ width: vp.width, height: vp.height });
     await startNewExperiment(page);
-    await driveUntil(page, 'READING_TASK');
+    // A participant of its own per viewport: the first one's sitting is still in progress, and a new
+    // sitting is not started over it (Round 87, audit 86 F3).
+    await driveUntil(page, 'READING_TASK', 500, { participantId: `GEOM${i + 1}` });
     // READING_TASK opens on its intro card; the passage itself is behind "Begin reading".
     const begin = page.getByRole('button', { name: /Begin reading/ });
     if (await begin.count()) await begin.first().click({ force: true });
