@@ -7603,3 +7603,271 @@ four e2e tests fail with the guard switched off; the two screen tests fail with 
 | Touches reaching the app | `tg-v1` (no column): every touch reached what was under it | `tg-v2`: a touch starting within 300 ms of a screen change (1 s on the consent screen) is dropped | `tap_guard_version` in 02; ANALYSIS_PLAN §5 |
 | Reaction summary (`09_rt_summary.csv`) | unchanged — the integrity check now counts it the same way | unchanged | — |
 | Rating format, typography, straight-lining, frame-rate gate, blink rule, calibration, camera check, gaze, reliability | unchanged | unchanged | as before |
+
+## Round 87 — one code per participant, one sitting at a time, a restart counted by what was shown, the full-size display, and the Back gesture
+
+The second set of fixes for audit 86 (2.4.0 at 26e909c): five of its major flow findings, F2, F3, F12,
+F5 and F6. Each was reproduced by the auditor and again, independently, by a second reviewer. Round 86
+fixed the blocker and the double-tap findings; the audit's other findings are not touched here.
+
+**Two rules changed and are versioned in the data:** how `attempt_number` counts a restarted run
+(`attempt_rule_version`, `at-v2`) and when the display scale is frozen (`scale_freeze_version`,
+`sf-v2`). **No threshold, cutoff or scoring rule changed, and nothing stored was rewritten:** the
+condition row gained optional fields only (no index changed, so the database version is unchanged),
+and rows recorded before this round keep their values and say which rule they ran under. Nothing here
+was measured on the Xiaomi Pad 6: the timings below are from desktop Chromium.
+
+### In plain words
+
+1. **A participant's code is one code however it is typed (F2).** "case1" on the day of a second
+   sitting used to be a different person from "CASE1": a new enrolment, a new condition order from the
+   start, and two half-participants in the export. A space left by a keyboard suggestion disabled
+   *Begin setup* with no word as to why. The code is now kept in capitals with no spaces as it is
+   typed, looked up regardless of letter case wherever the app finds a participant's sittings, and the
+   form says why a code is refused.
+2. **A sitting in progress is resumed, not started again (F3).** The form invited a *new* sitting for
+   a participant whose earlier one was paused, and resuming the paused one later showed the same
+   displays again: in the audit, eight passages read twice and recorded as first readings. The form
+   now refuses a new sitting while one is open and offers the way back to Resume it.
+3. **A pause on the reading card is not a second reading (F12).** A pause on the *Read the passage*
+   card, before the passage was ever shown, made the restarted display "attempt 2" — which the
+   analysis reads as "had already read this passage" and leaves out of a sensitivity analysis. A
+   restart now counts only if the passage was shown.
+4. **A turn to portrait no longer shrinks the next display (F5).** After a brief turn to portrait and
+   back during one display, every display up to the next break was drawn at about 60% of its size.
+   Each display now starts at the full fitted size.
+5. **The Back gesture no longer closes the app mid-display (F6).** A swipe from the screen's edge (the
+   tablet's Back) closed the installed app from any screen, with nothing asked; the display was lost
+   and run again. Back is now the top-left button of whatever screen is up — Pause or Exit, with its
+   confirmation — and does nothing where that button is not shown.
+
+### 1. A participant code was case-sensitive, and a trailing space silently disabled Begin setup (a55b6a5) — F2, major
+
+**Found.** The code was stored and looked up exactly as typed. A second sitting typed "case1" for a
+participant stored as "CASE1" found nothing: the form showed no earlier record, the participant got a
+new enrolment number (a new Williams order from position 0), and the export held two half-participants
+for one person. The tablet keyboard makes these variants by itself — a capitalised first letter, the
+space after a suggestion — and the trailing space left *Begin setup* grey with nothing on the screen
+saying why (the handler's message could never show: the button was disabled).
+
+**Fixed.** `src/lib/participantId.ts` holds the canonical form (trimmed, upper case) and a plain reason
+for a refused code. The session form keeps the field canonical as it is typed, asks the keyboard for
+capitals and no corrections, says why a code is refused, and says under *Begin setup* what is still
+missing. Wherever a participant's sittings are looked up (earlier progress, withdrawal) codes are
+matched regardless of letter case (`storage/gather.ts`). A code already stored keeps its spelling, and
+a new sitting of that participant reuses it, so the export joins them; nothing stored is rewritten. A
+code the tablet holds in two letter cases (possible before this round — possibly one person enrolled
+twice) is refused until the investigator decides which record is the participant's, and the join
+report warns `participant_code_case_variants`. Nothing is merged and no analysable verdict changes.
+
+**Tests.** `tests/participantCode.test.tsx` (the canonical form; "case1" finds "CASE1" and reuses its
+enrolment and spelling; a lower-case code stored before this round keeps its spelling; two letter cases
+reported and neither picked; withdrawal read and applied across letter cases; the form shows the code
+in capitals, says why it is refused and why *Begin setup* is disabled); `tests/joinIntegrity.test.ts`,
+`tests/withdrawal.test.ts`; `e2e/sittingInProgress.spec.ts` types "dup1 " and sees DUP1.
+
+### 2. A new sitting could start while the participant's earlier one was in progress (42a54d4) — F3, major
+
+**Found.** For a participant whose sitting was paused, the session form said "This sitting continues
+where they stopped" and let a *new* sitting begin. It continued nothing: the new sitting started after
+the participant's last *finished* display, the paused one kept its Resume button, and resuming it ran
+the same displays again. In the audit, positions 2 to 9 ran twice — eight passages read a second time
+and recorded as first readings — and the export blocked the participant only afterwards.
+
+**Fixed.** While a sitting of the participant is open (in progress, not in the bin, not withdrawn, not
+superseded), *Begin setup* stays disabled; the form names that sitting and how far it got, and offers
+**← Back to sessions, to resume it**. Session creation refuses it as well. The explicit way to discard
+an open sitting is **Delete** in the Session Manager (to the recycle bin, restorable for 30 days), and
+the form says what that costs: a participant with no other sitting is enrolled afresh. A sitting that
+a later live sitting of the same participant came after — the pair the old behaviour left on a device,
+or a restore from the bin can make — is listed under *In progress* without Resume, and its row says
+which sitting came after it (`storage/sessionPersistence.ts`). Operator manual §8 says all of this.
+
+**Tests.** `tests/sittingInProgress.test.tsx` (which sittings are superseded, regardless of letter
+case; a superseded sitting is not offered for resuming and is again once its successor is deleted;
+earlier progress lists the open sitting and not a finished, binned, withdrawn or superseded one; the
+form refuses, keeps *Begin setup* disabled and offers the way back); `e2e/sittingInProgress.spec.ts`
+(the audit's reproduction: refused, and Resume carries the sitting on; a superseded sitting listed
+without Resume). `e2e/stimulusGeometry.spec.ts` now gives each viewport its own participant (11bac02):
+it used to start a second sitting of one while the first was in progress.
+
+### 3. A pause on the reading instruction card counted as a second exposure (a5d34d1) — F12, major; `attempt_rule_version` `at-v2`
+
+**Found.** A display's condition row is written when the reading screen mounts, while its instruction
+card is still up. A pause there (or a reload, or the camera-lost notice's pause) made the next run
+attempt 2, which the codebook defines as "the participant had already read this passage": a clean
+first reading was flagged `condition_redone` and dropped by the pre-registered "without restarted
+runs" sensitivity. The audit reproduced it with one pause on display 2's card.
+
+**Fixed.** `src/experiment/conditionAttempt.ts` counts in one place: a run counts once its passage was
+shown, and the next run's number is the previous one plus one only then. *Begin reading* stamps
+`passage_shown_at` on the row. A row counted by the old rule is taken as shown, so an unknown never
+turns a second reading into a first. **Versioned:** `attempt_rule_version` in `02_conditions.csv` —
+`at-v2` from this round, `at-v1` for rows without it, which cannot be recounted (whether the earlier run
+reached the passage was not recorded); the templates treat an `at-v1` row above 1 as restarted, as
+before, which can only drop a run, never keep a second reading as a first. Codebook, ANALYSIS_PLAN §5
+and the operator manual say so. **Timing:** *Begin reading* to the passage's second frame, 27-28 ms with
+and without the stamp (desktop Chromium).
+
+**Tests.** `tests/conditionRedo.test.ts` (first run 1; stopped on the card, however often, unchanged; a
+run whose passage was shown counts wherever it stopped; an old-rule row taken as shown; the export
+names the rule); `e2e/restartCount.spec.ts` (pauses on the card are not exposures, a pause on a page
+is). `e2e/displayMode.spec.ts` now opens the passage before its pause (cb6295e): it expected the old
+count after a pause on the card.
+
+### 4. After a turn to portrait and back, the next display was drawn at about 60% (7598bfe) — F5, major; `scale_freeze_version` `sf-v2`
+
+**Found.** The display scale may shrink under a stimulus (if the screen really gets smaller) but never
+grows under a reader, and it was frozen on every screen of the condition loop — the grey field between
+displays and the reading card included — so nothing could undo a shrink until the next break. In the
+audit a 0.6 s turn to portrait during display 1 drew all of display 2 at 62% of its size (13.6 px text
+instead of 22), with `stimulus_scale_changes` 0 on its row.
+
+**Fixed.** `src/experiment/scaleFreeze.ts` holds the rule: re-fitted to the screen on the grey field and
+on the reading screen while its card is up; frozen from *Begin reading* to the end of the reaction
+block; calibration frozen as before. Within a display nothing changes. *Begin reading* freezes the scale
+and reads `stimulus_scale`, `layout_viewport` and the rescale count from that moment. **Versioned:**
+`scale_freeze_version` in `02_conditions.csv` (`sf-v2`; `sf-v1` for rows without it). Nothing is
+rescaled in the data; on an `sf-v1` row an inherited shrink shows as a lower `stimulus_scale` (and the
+sitting as `stimulus_scale_stable` in the integrity report), and the physical columns already follow
+it. Codebook, ANALYSIS_PLAN §5, `viewportScale.ts`'s header. **Timing:** *Begin reading* to the
+passage's second frame 27-29 ms before and after (12 taps each, desktop Chromium); the reaction block
+runs frozen as before.
+
+**Tests.** `tests/scaleFreeze.test.ts` (the grey field and the card re-fitted, the passage and every task
+after it frozen, calibration frozen; the version exported), `tests/viewportScale.test.ts`;
+`e2e/scaleFreeze.spec.ts` (a turn to portrait during one display leaves the next at full size; a turn
+on the card is re-fitted before the passage is shown).
+
+### 5. The system Back gesture left the app mid-display with no confirmation (7377560) — F6, major
+
+**Found.** The app kept all its navigation inside the page and never touched the browser's history, so
+it had no entry of its own to go back to. In the installed app (full screen, MIUI gesture navigation)
+an edge swipe is Back, and with nothing to go back to Chrome closes the app. In the audit, Back on page
+2 of display 2 unloaded the app (in a tab, to a blank page); the sitting came back under Resume with
+that display to run again, as a second exposure of its passage. Nothing asked first, and nothing in
+the operator manual mentioned the gesture.
+
+**Fixed.** `src/lib/systemBack.ts`. The app keeps one history entry of its own on top of the one it was
+opened on — same page, same address — so Back no longer leaves the page: it arrives as an event, the
+entry is put straight back, and the gesture goes to whatever is on top of the screen:
+
+- the **top-left button** of the screen (`NavChip`, which every screen's way out already is): Pause
+  inside a display, *Exit — resume later* on a set-up screen, the break and the closing questionnaires,
+  Cancel on the session form, *Back to sessions* on the dashboard, *Back to home* in the session
+  manager — with the button's own confirmation wherever it has one;
+- an **open confirmation** is declined, as Escape and *Keep going* decline it: Back can raise "Pause and
+  exit?", never answer yes to it;
+- **nothing** where no button is drawn — the colour-vision plates, the calibration dots, the
+  self-test, the reaction trials, the thank-you screen, while the session is being written — and under
+  the portrait block or a camera notice, which cover the button and have their own;
+- on the **landing page** nothing claims it, and Back is the browser's: the app closes from its first
+  screen as any Android app does (the first press there takes the app's entry, the next closes it).
+
+A Pause confirmation raised by Back over a display is timed as a notice (`condition_notice_ms`) exactly
+as the button's is. Nothing a task measures changes: the guard has no input listener and runs nothing
+per frame — one history event, and one history entry written when the first screen claims Back and
+after each Back. No rule version: no measured value, scoring or analysis rule changed.
+
+**What it cannot do.** Chrome does not let a page hold Back indefinitely: by its "history manipulation
+intervention" (Chromium's own documentation, read here only in a search summary — the site could not
+be reached from this session) Back skips an entry a page added without a touch on the page, and going
+back and forth between a page's own entries does not count as one; on Android, with nothing left to go
+back to, Back closes the app. Every screen of the study is answered by touch, so after any tap the
+entry is there for the next Back; but **two Back swipes with no tap between them may still close the
+app on the tablet**, as before — the sitting is then resumable and the display restarted, as after a
+crash. The test suite's Back cannot show this (it goes to the entry before, skipped or not).
+
+**Tests.** `tests/systemBack.test.tsx` (7: nothing pushed until a screen claims Back, then one entry
+kept on top and put back after each Back; the topmost claim wins — a notice over a dialog over a
+button over the screen, whatever order they registered in — and within a layer the latest; the landing
+page leaves Back to the browser and the next claim takes it again; a sentinel left by an earlier load
+of the page is not taken for this one's, so after a reload a new one is pushed over it; the button's
+Back is its tap, a disabled button's is nothing; Back over an open confirmation declines it and never
+reaches the button under it). `e2e/systemBack.spec.ts` (2), in the installed app's launch as far as a
+headless browser allows — display mode full screen, and a window whose only history entry is the app,
+the case in which Back used to close it — with a marker on the page that each Back must leave in place
+(the same page, not a reload): on page 2 of a passage Back raises the Pause box over the page still
+shown, a second Back declines it, *Keep going* carries on; under the portrait block Back does nothing
+and leaves no box behind; during the reaction trials it does nothing; the display then finishes as
+attempt 1 with the box's time in `condition_notice_ms`; on the next display's card Back and *Pause and
+exit* resume at display 2 of 10. On set-up: the empty session form's Back is Cancel, the session
+manager's is *Back to home*, the landing page's is the browser's; consent's is *Exit — resume later*
+with its box, which a second Back declines; on a colour-vision plate Back does nothing and the plate
+stays; on the camera screen Back and the box's *Exit to sessions* leave the sitting under Resume.
+
+**Timing.** *Begin reading* to the passage's second frame, desktop Chromium, 16 taps each: median
+27.6 ms with the guard (15.8-29.7) and 27.5 ms without it (22.1-29.5) — the same.
+
+### 6. Not measured on the Xiaomi Pad 6
+
+- **The Back gesture in the installed app on MIUI**: that the edge swipe reaches the app as a history
+  Back (and not, say, as the app being sent to the background), that the Pause box then appears, and
+  what two swipes with no tap between them do (Chrome's intervention, §5). Android's predictive-back
+  animation, if MIUI draws one, was not seen.
+- That the tablet's keyboard honours the session form's request for capitals and no corrections (F2);
+  the field upper-cases what is typed either way.
+- A real turn of the tablet (F5): the tests resize a headless browser's viewport. The installed app is
+  locked to landscape, where this should not arise; it was found in a browser tab.
+- Every timing above is from desktop Chromium.
+
+### 7. Not fixed here
+
+The audit's findings other than these five and those of Round 86 are not touched in this round. Of
+the five fixed here, the one limit left is F6's: two Back swipes in a row, with no tap between them,
+may still close the app on the tablet (§5).
+
+### 8. For the investigator
+
+1. **A decision (F3), made safe by default:** a new sitting is *refused* while the participant's
+   earlier one is open; there is no "abandon the earlier sitting and start again" button. The only way
+   to set an open sitting aside is **Delete** in the Session Manager (to the recycle bin, restorable),
+   which stops its displays counting and, for a participant with no other sitting, enrols them afresh.
+   If you want an explicit, recorded *abandon* instead — the sitting kept in the export, marked
+   abandoned with a reason — say so; it is a new field on the sitting and a new export column.
+2. **Sittings recorded before this round (F12):** an `at-v1` row above 1 cannot be recounted, and the
+   templates treat it as restarted, as before — the conservative choice: it can drop a first reading
+   from the "without restarted runs" sensitivity, never keep a second reading as a first
+   (ANALYSIS_PLAN §5).
+3. **Displays drawn small before this round (F5):** on `sf-v1` rows an inherited shrink shows as a
+   lower `stimulus_scale` (the sitting flagged `stimulus_scale_stable`); nothing is rescaled or dropped
+   by default. Only a browser tab could produce it; the installed app is locked to landscape.
+4. **Two letter cases of one code (F2):** if the join report warns `participant_code_case_variants`,
+   two enrolments recorded before this round may be one person; nothing is merged — you decide which
+   record is the participant's.
+5. **On the tablet:** in the installed app, swipe Back on page 2 of a passage — the Pause box should
+   appear; swipe again — it should close, with the passage still there; swipe during the reaction
+   trials — nothing should happen; tap, then swipe twice quickly — note whether the app closes. On the
+   session form, type a code in lower case — it should appear in capitals.
+
+### 9. Checks run
+
+- On the final state of this round (7377560 and this text): `npm run verify` green — lint, types, 110
+  test files with 1,694 unit tests, the corpus and codebook gates (531 codebook entries), the export gate
+  878/878 and both analysis templates in R and Python. The **whole end-to-end
+  suite, retries off: 95 of 95 passed** (the 93 of before and the two of `e2e/systemBack.spec.ts`).
+  `npm run build`, then the production-bundle suite, retries off: 7 of 7. The two Back tests were also
+  run against the built bundle, served by the field package's server with its service worker: 2 of 2.
+- **Each fix fails its tests when reverted**, checked for this round: the code not canonicalised (F2)
+  — 9 unit tests fail; no sitting superseded (F3) — 4 fail; the form's list of open sittings emptied
+  (F3) — the store test fails; every entry to the reading screen counted again (F12) — the
+  card-pause test fails; the grey field frozen, and the reading card frozen (F5) — one test each.
+  For F6, each part removed in turn: the guard not installed — both Back tests fail; the dialog not
+  claiming Back — both fail (a second Back re-raised the box instead of declining it); the screen
+  not claiming it — both fail (Back on a plate, and during the reaction trials, gave the app's entry
+  away, so the next Back would have left); the portrait block not claiming it — the display test
+  fails (a Pause box was left waiting behind the block). The unit tests of `systemBack.ts` fail
+  for the reload mark, the layer order, the re-push, the disabled chip and the dialog's claim.
+- The end-to-end reproductions of F3, F12 and F5 (`e2e/sittingInProgress.spec.ts`,
+  `e2e/restartCount.spec.ts`, `e2e/scaleFreeze.spec.ts`) are part of the 95; for this round their
+  fixes were reverted against the unit tests only, not against these.
+
+### 10. Versions in the data
+
+| Rule or format | Before | Now | Where it is recorded |
+|---|---|---|---|
+| How a restarted run is counted (`attempt_number`) | `at-v1` (no column): every entry to the reading screen, the instruction card included | `at-v2`: a run counts only once its passage was shown (*Begin reading*) | `attempt_rule_version` in 02; codebook; ANALYSIS_PLAN §5 |
+| When the display scale is frozen | `sf-v1` (no column): the whole condition loop, the grey field and the reading card included | `sf-v2`: from *Begin reading* to the end of the reaction block; re-fitted on the grey field and the card | `scale_freeze_version` in 02; codebook; ANALYSIS_PLAN §5 |
+| Participant code | stored and looked up as typed | trimmed and upper-cased as typed; looked up regardless of letter case; a stored spelling kept | — (no measured value; the join report warns `participant_code_case_variants`) |
+| A new sitting while one is open; the Back gesture | allowed; Back closed the app | refused; Back is the screen's top-left chip | — (no measured value) |
+| Tap guard, reaction summary, rating format, typography, straight-lining, frame-rate gate, blink rule, calibration, camera check, gaze, reliability | unchanged | unchanged | as before |
