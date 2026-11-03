@@ -35,6 +35,7 @@ import { isInLoop } from './stateMachine';
 import { useStageTransitions } from './useStageTransitions';
 import { useTapGuard, TAP_GUARD_VERSION } from '@/lib/tapGuard';
 import { nextAttemptNumber, ATTEMPT_RULE_VERSION } from './conditionAttempt';
+import { scaleFrozenOn, SCALE_FREEZE_VERSION } from './scaleFreeze';
 import { BreakScreen } from '@/start/BreakScreen';
 import { DB_VERSION } from '@/storage/schemaEnums';
 import type { ConditionRecord, ParticipantRecord, Provenance, SessionRecord, Stage } from '@/storage/types';
@@ -143,8 +144,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    * and with it the count of this exposure (experiment/conditionAttempt.ts).
    */
   const conditionRowWrite = useRef<Promise<void>>(Promise.resolve());
-  /** When the current run's passage was shown ("Begin reading"); null until then. See markPassageShown. */
-  const passageShownAt = useRef<number | null>(null);
+  /**
+   * When the current run's passage was shown ("Begin reading") and the scale it was drawn at, the
+   * moment the scale froze for it; null until then. See markPassageShown.
+   */
+  const passageShown = useRef<Pick<ConditionRecord, 'passage_shown_at' | 'stimulus_scale' | 'layout_viewport'> | null>(null);
   const creatingSession = useRef(false);
   // Conditions run in THIS sitting (8 single, 4 split). Drives the loop length + break insertion.
   const nConditionsRef = useRef<number>(N_CONDITIONS);
@@ -387,16 +391,23 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     });
   }, [machine, move]);
 
-  /*
-   * The display scale is FROZEN on every condition screen (and during calibration, whose targets are
-   * placed on the scaled canvas) and re-measured at every other screen. See viewportScale.ts: a scale
-   * that locked small used to last the whole sitting; now it clears at the next setup screen or
-   * break, and it can never grow under a reader.
-   */
   useEffect(() => {
-    setScaleFrozen(isInLoop(machine.stage) || machine.stage === 'CALIBRATION');
     setStageStartedAt(Date.now());
   }, [machine.stage]);
+  /*
+   * The display scale is FROZEN while a display's stimulus is on screen (and during calibration, whose
+   * targets are placed on the scaled canvas) and re-measured at every other screen. See viewportScale.ts:
+   * a scale that locked small used to last the whole sitting; now it clears at the next screen without
+   * a stimulus on it, and it can never grow under a reader.
+   *
+   * One display's stimulus runs from "Begin reading" (markPassageShown, which freezes it) to the end of
+   * its reaction block. The grey field and the reading instruction card before it are re-fitted, so a
+   * shrink taken in one display is never carried into the next (experiment/scaleFreeze.ts; audit 86 F5).
+   * Keyed on the step as well as the stage, so each display's reading screen starts unfrozen.
+   */
+  useEffect(() => {
+    setScaleFrozen(scaleFrozenOn(machine.stage, false));
+  }, [machine.stage, machine.stepIndex]);
   useEffect(() => () => setScaleFrozen(false), []);
   /** rescalesWhileFrozen() when the current condition started; the difference is recorded. */
   const conditionRescalesAtStart = useRef(0);
@@ -1120,7 +1131,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     if (!session || !cond || !step) return;
     if (writtenConditions.current.has(machine.stepIndex)) return;
     writtenConditions.current.add(machine.stepIndex);
-    passageShownAt.current = null;
+    passageShown.current = null;
     let rowWritten = () => {};
     conditionRowWrite.current = new Promise<void>((resolve) => { rowWritten = resolve; });
     /**
@@ -1184,7 +1195,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       attempt_rule_version: ATTEMPT_RULE_VERSION,
       // Not yet: the instruction card is up. Stamped by "Begin reading" (markPassageShown).
       passage_shown_at: null,
+      // How the scale is frozen for this display's stimulus (experiment/scaleFreeze.ts).
+      scale_freeze_version: SCALE_FREEZE_VERSION,
       /*
+       * Provisional: read again when the passage is shown (markPassageShown), which is when the scale
+       * freezes for this display (Round 87, audit 86 F5) — on the instruction card it is still re-fitted.
+       *
        * Read NOW, not at session start. The session-level copy is stamped inside beginSession,
        * before the participant has touched the tablet — and the scale is still free to change after
        * that, when the setup screens are left in portrait, or the address bar is dismissed, or the
@@ -1234,19 +1250,28 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   }, [session, cond, step, conditionId, machine.stepIndex]);
 
   /**
-   * "Begin reading": this run of the condition has now shown its passage, so a restart from here on is
-   * a second exposure (experiment/conditionAttempt.ts; audit 86 F12). Stamped on the row the moment the
-   * card hands over, after the row's own first write, and never waited for: the passage is drawn in
+   * "Begin reading": the display's stimulus starts.
+   *
+   * The scale freezes for it here, not on the instruction card (experiment/scaleFreeze.ts; audit 86
+   * F5): the card was re-fitted, so the passage is drawn at the sitting's full fitted size, and the
+   * scale it is drawn at — and the count of any shrink from now on — are taken at this moment.
+   *
+   * And this run of the condition has now shown its passage, so a restart from here on is a second
+   * exposure (experiment/conditionAttempt.ts; audit 86 F12).
+   *
+   * Stamped on the row after the row's own first write, and never waited for: the passage is drawn in
    * the same tap, and the reading clock was started before this is called. A failed write is not
    * swallowed — main.tsx names it on screen, as it does every other — and the reading's own write of
    * the row (onComplete) carries the stamp again.
    */
   const markPassageShown = (id: string) => {
-    const at = Date.now();
-    passageShownAt.current = at;
+    setScaleFrozen(scaleFrozenOn('READING_TASK', true));
+    const shown = { passage_shown_at: Date.now(), stimulus_scale: currentScale(), layout_viewport: layoutViewport() };
+    passageShown.current = shown;
+    conditionRescalesAtStart.current = rescalesWhileFrozen();
     void conditionRowWrite.current.then(async () => {
       const row = await get('conditions', id);
-      if (row && row.passage_shown_at == null) await put('conditions', { ...row, passage_shown_at: at });
+      if (row && row.passage_shown_at == null) await put('conditions', { ...row, ...shown });
     });
   };
 
@@ -1819,7 +1844,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                   await put('conditions', {
                     ...existing,
                     // Again here, should "Begin reading"'s own write of it have been lost.
-                    passage_shown_at: existing.passage_shown_at ?? passageShownAt.current,
+                    ...(existing.passage_shown_at == null ? passageShown.current : null),
                     // Hidden time removed: the clock used to run while the tablet was backgrounded,
                     // and this span is also the reading-speed denominator.
                     reading_time_ms: r.readingTimeMs,

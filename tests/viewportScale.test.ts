@@ -478,9 +478,14 @@ describe('the scale recovers from a lock, and never grows under a reader', () =>
     input.remove();
   });
 
-  it('the app freezes on condition screens and re-fits on every other screen', () => {
+  it('the app freezes for a display\'s stimulus and re-fits on every other screen (experiment/scaleFreeze.ts)', () => {
     const exp = readFileSync('src/experiment/Experiment.tsx', 'utf8');
-    expect(exp).toMatch(/setScaleFrozen\(isInLoop\(machine\.stage\) \|\| machine\.stage === 'CALIBRATION'\)/);
+    // Every stage change applies the stage's rule with the passage not yet shown …
+    expect(exp).toMatch(/setScaleFrozen\(scaleFrozenOn\(machine\.stage, false\)\)/);
+    // … and "Begin reading" freezes it for the passage (audit 86 F5).
+    expect(exp).toMatch(/setScaleFrozen\(scaleFrozenOn\('READING_TASK', true\)\)/);
+    // No other caller decides the freeze.
+    expect(exp.match(/setScaleFrozen\(/g)).toHaveLength(3); // the two above and the unmount's release
     const app = readFileSync('src/App.tsx', 'utf8');
     expect(app).toMatch(/if \(view\.mode !== 'experiment'\) refitScale\(\)/);
   });

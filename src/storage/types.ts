@@ -497,6 +497,14 @@ export interface ConditionRecord {
   stimulus_scale?: number;
   layout_viewport?: string;
   /**
+   * When the scale is frozen for this display (experiment/scaleFreeze.ts): 'sf-v2' from Round 87 —
+   * re-fitted on the grey field and the reading instruction card, frozen from "Begin reading", and
+   * stimulus_scale / layout_viewport / stimulus_scale_changes read from that moment. Absent ('sf-v1'):
+   * frozen across the whole condition loop, so a shrink in one display carried into the next (audit 86
+   * F5), and the three read from the reading screen's mount.
+   */
+  scale_freeze_version?: string;
+  /**
    * window.devicePixelRatio when this condition started (Round 74). The ruler calibration measured the
    * CSS pixel at the ratio pre-flight saw (the session's device_pixel_ratio); if a resume came back at
    * another ratio — a display-size change — the CSS pixel changed size with it, and the export scales

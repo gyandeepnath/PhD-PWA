@@ -796,6 +796,24 @@ second tap landing on nothing that records). Whether
 a sensitivity analysis should leave out reaction trial 1 on `tg-v1` rows is the investigator's decision
 (not pre-specified here).
 
+**A display's size is fixed for its own stimulus only (Round 87).** The display scale (`stimulus_scale`,
+which with the sitting's ruler calibration gives every visual angle) may shrink while a stimulus is on
+screen, if the screen genuinely gets smaller, and never grows under a reader. Up to Round 86 it was
+frozen across the whole condition loop, the grey field between displays included, so a shrink taken in
+one display — a turn to portrait and back, a system bar, a floating window — stayed for every display up
+to the next break: in audit 86 (F5) a 0.6 s turn during one display drew all of the next at 62% of its
+size, its text 13.6 px instead of 22, with `stimulus_scale_changes` 0 on that row. From Round 87 the grey
+field and the reading instruction card are re-fitted to the screen, the scale freezes at "Begin reading",
+and `stimulus_scale`, `layout_viewport` and `stimulus_scale_changes` are read from that moment;
+`scale_freeze_version` (02_conditions.csv) says which rule a row ran under: `sf-v2`, or `sf-v1` before.
+Nothing is rescaled in the data. On an `sf-v1` row `stimulus_scale` was read when the reading screen
+mounted, a shrink on its instruction card after that being counted in `stimulus_scale_changes`; an
+inherited shrink shows there as a lower `stimulus_scale` (and the sitting as `stimulus_scale_stable` in
+the integrity report), and the physical columns (`reading_x_height_*`) already follow it. On an `sf-v2`
+row it is the scale the passage appeared at, and `stimulus_scale_changes` no longer counts a shrink on
+the instruction card, where no stimulus was up. In the installed app, which is locked to landscape, none of this should
+arise; it was found in a browser tab.
+
 **Which runs count as restarted (Round 87).** `attempt_number` above 1 marks a condition-run that an
 earlier run of the same condition, stopped by a pause or a crash, had already shown the passage to: its
 reading, comprehension and search are second exposures, and the primary sensitivity "without restarted

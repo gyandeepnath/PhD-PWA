@@ -66,13 +66,19 @@
  * size for fluent reading (about 12 arcmin; Legge & Bigelow 2011, J Vis 11(5):8), so those sessions
  * presented a different stimulus.
  *
- * The rule now is FROZEN DURING A CONDITION, RE-MEASURED BETWEEN SCREENS OUTSIDE ONE. Every screen
- * change that is not a condition screen calls `refitScale()`, which forgets the minimum and measures
- * afresh — so a lock clears at the next setup screen, break or manager view instead of never. While a
- * condition runs (`setScaleFrozen(true)`) the scale can never GROW, so text never enlarges under a
+ * The rule now is FROZEN DURING A STIMULUS, RE-MEASURED BETWEEN SCREENS OUTSIDE ONE. Every screen
+ * change that is not a stimulus calls `refitScale()`, which forgets the minimum and measures afresh —
+ * so a lock clears at the next setup screen, break, grey field or manager view instead of never. While
+ * a display's stimulus is on screen (`setScaleFrozen(true)`, from "Begin reading" to the end of its
+ * reaction block; experiment/scaleFreeze.ts) the scale can never GROW, so text never enlarges under a
  * reader; it may still shrink if the screen genuinely shrinks, so content stays reachable, and each
  * such change is counted (`rescalesWhileFrozen`) and recorded on the condition. Measurements taken
  * while a text field has focus are ignored outright: the soft keyboard is the commonest transient.
+ *
+ * The freeze used to cover the whole condition loop, the grey field between displays included, and a
+ * freeze cannot lapse into another: a shrink taken in one display stayed for every display up to the
+ * next break (audit 86 F5). One display's stimulus is the unit now, and the grey field before each is
+ * re-fitted.
  */
 
 /**
@@ -128,7 +134,7 @@ export const OVERFILL_TOLERANCE = 0.01;
 
 let applied = 1;
 
-/** True while a condition is on screen. See the header: the scale may shrink but never grow. */
+/** True while a display's stimulus is on screen. See the header: the scale may shrink but never grow. */
 let frozen = false;
 /** How many times the scale changed while frozen, since the last freeze. */
 let frozenRescales = 0;
