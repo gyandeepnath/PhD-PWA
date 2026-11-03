@@ -23,6 +23,9 @@
  * being answered. Closing it gives the focus back to the control that opened it rather than dropping
  * it on <body>. Its title and body are named to assistive technology by ids unique to the instance.
  *
+ * BACK IS ESCAPE. While it is open the system Back gesture answers it as declined, like Escape and
+ * Cancel (lib/systemBack.ts): Back can raise a Pause or Exit confirmation, never accept one.
+ *
  * IT BELONGS TO ITS SCREEN. `dismiss()` answers whatever is open as declined; Experiment calls it
  * whenever the stage changes, so a confirmation raised on one screen never stays up over the next.
  *
@@ -32,6 +35,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { UI_TEXT } from '@/lib/uiPalette';
 import { useTapGuard } from '@/lib/tapGuard';
+import { useSystemBack } from '@/lib/systemBack';
 
 export interface DialogRequest {
   title: string;
@@ -144,6 +148,9 @@ function ConfirmDialog({ pending, onAnswer }: { pending: Pending; onAnswer: (a: 
   // A dialog opening, and closing, is a screen change (lib/tapGuard.ts, Round 86): the second tap of a
   // double tap on the control that raised it must not answer it, nor reach the screen it closes onto.
   useTapGuard();
+  // The system Back gesture is Escape here (lib/systemBack.ts, Round 87): it declines, never confirms,
+  // so a second swipe after the one that raised "Pause and exit?" keeps the participant where they are.
+  useSystemBack('dialog', cancel);
 
   const cardRef = useRef<HTMLDivElement>(null);
   const okRef = useRef<HTMLButtonElement>(null);

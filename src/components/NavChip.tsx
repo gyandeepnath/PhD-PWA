@@ -36,9 +36,13 @@
  *
  * Screens whose content could reach the top-left corner reserve the chip's band with `.nav-band`;
  * condition screens reserve it with their own top padding.
+ *
+ * THE BACK GESTURE. Android's Back (the edge swipe on the tablet) is this chip: whatever the chip on
+ * the screen does, Back does, and where no chip is drawn Back does nothing (lib/systemBack.ts).
  */
 import type { ReactNode } from 'react';
 import { UI_TEXT } from '@/lib/uiPalette';
+import { useSystemBack } from '@/lib/systemBack';
 
 /** Height of the in-loop chip's visible outline, in design px; the target round it is 44 CSS px. */
 export const FACE_PX = 34;
@@ -53,6 +57,12 @@ export function NavChip({ label, onClick, testId, disabled = false, ink = null, 
   ink?: { ink: string; ground: string } | null;
   ariaLabel?: string;
 }) {
+  /*
+   * The system Back gesture is this chip (lib/systemBack.ts, Round 87, audit 86 F6): it used to close
+   * the installed app, mid-display, with nothing asked. Wherever the chip is drawn Back does what a tap
+   * on it does — Pause and Exit ask first — and a disabled chip makes Back do nothing.
+   */
+  useSystemBack('control', disabled ? null : onClick);
   if (ink) {
     return (
       <button

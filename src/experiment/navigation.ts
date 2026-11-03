@@ -32,6 +32,12 @@
  * session manager and leaves the sitting resumable; the resume re-enters at the first screen whose
  * product is missing (Experiment.tsx). Inside the loop the existing Pause does the same. The
  * thank-you screen and the dashboard have neither: the sitting is complete.
+ *
+ * THE SYSTEM BACK GESTURE (Round 87, audit 86 F6) is the operator chip, never an in-flow Back: where the
+ * chip is drawn Back does what it does, confirmation included, and where it is withheld Back does
+ * nothing (lib/systemBack.ts). The Back controls above are corrections the operator chooses; a swipe
+ * from the screen's edge, made by a resting hand as easily as on purpose, must only ever offer the way
+ * out, and ask.
  */
 import type { Stage } from '@/storage/types';
 import { isInLoop, SETUP_ORDER } from './stateMachine';

@@ -65,6 +65,7 @@ import {
 import { ResearcherPanel } from '@/components/ResearcherPanel';
 import { NavChip } from '@/components/NavChip';
 import { useDialog } from '@/components/ConfirmDialog';
+import { useSystemBack } from '@/lib/systemBack';
 import { UI_TEXT } from '@/lib/uiPalette';
 import { TYPOGRAPHY_VERSION } from '@/lib/fonts';
 import { CameraSelfTest } from '@/start/CameraSelfTest';
@@ -2186,6 +2187,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     setBlockingNotice(cameraNoticeUp || pauseConfirmOverTask);
     return () => setBlockingNotice(false);
   }, [cameraNoticeUp, pauseConfirmOverTask]);
+  // The camera notice covers the Pause chip and has its own buttons: the system Back gesture does nothing
+  // under it (lib/systemBack.ts), rather than raise a confirmation behind it.
+  useSystemBack('notice', null, cameraNoticeUp);
   // A clip filming a run whose camera is gone cannot be compared with that run's (lost) eye data.
   useEffect(() => {
     if (tracking.cameraLostAt != null) annotationRecording.current?.finish(false);
@@ -2554,6 +2558,8 @@ function PortraitBlock({ stage, calibrated, stopped }: {
   /** A timed setup procedure that the rotation stopped. See stoppedByPortrait. */
   stopped: 'calibration' | 'selftest' | null;
 }) {
+  // Drawn over everything, the chip included: the system Back gesture does nothing while it is up.
+  useSystemBack('notice', null);
   const inCondition = isInLoop(stage);
   const beforeCalibration = (SETUP_BEFORE_CALIBRATION as readonly Stage[]).includes(stage);
   /*

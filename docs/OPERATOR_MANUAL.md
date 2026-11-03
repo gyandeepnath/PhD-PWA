@@ -293,6 +293,19 @@ There is deliberately **no Back** on the colour-vision plates, the calibration, 
 that has been submitted, anything inside a display, the break or the thank-you screen: going back
 there would change what is being measured.
 
+**The tablet's own Back gesture** (the swipe in from the edge of the screen) is the top-left button
+of whatever screen is up, and asks first wherever that button does (Round 87). On a set-up screen it
+is **Exit — resume later**, with its confirmation — not *← Back to consent* or *← Back to the profile*,
+which you press yourself when you mean them; inside a display it is **Pause**, with its confirmation.
+While the colour-vision plates, the calibration dots, the self-test or the reaction trials run, and
+on the thank-you screen, it does nothing. With a confirmation box open it is **Keep going** / **Stay
+here**: Back never confirms leaving. So a swipe made by accident — a hand resting on the edge of the
+tablet — at most raises the box; answer it. Only on the app's first screen (*Enter Research Console*)
+does Back close the app, as it does in any app. It used to close the app from any screen, mid-display,
+with nothing asked (audit 86 F6). Chrome does not let a page hold Back without a touch in between:
+two Back swipes in a row with no tap between them may still close the app on the tablet. If that
+happens, open the app again and **Resume**; the display that was running starts again.
+
 Alongside the app, complete the clinical screening: visual acuity, non-cycloplegic refraction, cover
 test, near point of convergence.
 
@@ -589,7 +602,9 @@ second exposure only if the participant had already seen its passage: a pause on
 passage* card, before **Begin reading**, restarts the condition but leaves it a first reading (Round
 87). If you must pause near the start of a display, that card is the place to do it. Pause is offered on the reaction
 task's instruction card, disappears when the participant taps **Start**, and comes back once the last
-dot has been shown, while the results are saved.
+dot has been shown, while the results are saved. The tablet's **Back gesture** inside a display is
+this Pause button: it raises the same box, timed the same way, and does nothing while the reaction
+trials run (see *Going back, and stopping part-way through set-up* in §4).
 
 **The researcher panel** sits at the bottom left. On set-up, break and closing screens it is a dark
 chip with the sitting clock and a coloured camera dot; tap it for the full panel, which takes a
@@ -869,7 +884,7 @@ Print this.
 - [ ] Annotation video offered separately, validation subsample only (default no)
 
 **Setup**
-- [ ] Need to stop? Top-left **Exit — resume later**, never closing the app; mistyped profile → **← Back to the profile** on pre-flight
+- [ ] Need to stop? Top-left **Exit — resume later** (the Back gesture is the same button and asks the same), never closing the app; mistyped profile → **← Back to the profile** on pre-flight
 - [ ] Clinical screening complete; any abnormality recorded and referred
 - [ ] Formal colour-vision plates administered, and the result entered in the profile form
 - [ ] Camera preview shows a face box, and the yellow points sit on the eyelids

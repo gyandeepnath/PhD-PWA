@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { refitScale } from '@/lib/viewportScale';
+import { useSystemBack } from '@/lib/systemBack';
 import Experiment from '@/experiment/Experiment';
 import { LandingPage } from '@/start/LandingPage';
 import { SessionManager } from '@/start/SessionManager';
@@ -23,6 +24,13 @@ export default function App() {
   // Every change of view is a screen boundary outside any stimulus: re-measure the screen, so a
   // scale that locked small (see viewportScale.ts) comes back instead of lasting the whole day.
   useEffect(() => { if (view.mode !== 'experiment') refitScale(); }, [view]);
+  /*
+   * The system Back gesture never leaves the app from inside it (lib/systemBack.ts, Round 87, audit 86
+   * F6). On every view but the landing page it is claimed here, underneath everything: where a screen
+   * draws its top-left chip, Back is that chip; where it draws none — a procedure running, the reaction
+   * trials, the thank-you screen — Back does nothing. The landing page leaves it to the browser.
+   */
+  useSystemBack('screen', null, view.mode !== 'landing');
 
   // Rendered on EVERY view, not just the between-sessions ones: the whole point is that a tablet
   // left on a bookmarked ?e2e URL looks exactly like a real one from the first screen to the last.

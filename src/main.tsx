@@ -6,6 +6,7 @@ import { installViewportScale } from './lib/viewportScale';
 import { installUpdateWatch } from './lib/swUpdate';
 import { reportAsyncFailure, describeFailure } from './lib/asyncFailure';
 import { installTapGuard } from './lib/tapGuard';
+import { installSystemBack } from './lib/systemBack';
 
 // See lib/asyncFailure.ts for why every unhandled rejection is named on screen.
 window.addEventListener('unhandledrejection', (e) => {
@@ -36,6 +37,13 @@ installViewportScale();
  * changes.
  */
 installTapGuard();
+
+/*
+ * The system Back gesture closed the installed app mid-display, with nothing asked (audit 86 F6). It
+ * is now the top-left chip of whatever screen is up, with that chip's confirmation, and nothing where
+ * no chip is drawn (lib/systemBack.ts).
+ */
+installSystemBack();
 
 /*
  * Watch for a newer build. vite.config.ts registers with 'prompt' precisely so a new worker cannot
