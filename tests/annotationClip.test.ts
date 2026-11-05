@@ -67,9 +67,11 @@ describe('the experiment wires it', () => {
     expect(src).toMatch(/useEffect\(\(\) => \(\) => \{ annotationRecording\.current\?\.finish\(false\); \}, \[\]\)/);
   });
   it('a new segment replaces an earlier one of the same condition', () => {
+    // The rule is captureDisposition's (media.ts, Round 89), tested there and in endOfSitting.test.tsx;
+    // the sitting removes what it names before it stores the new clip.
     const body = src.slice(src.indexOf('const captureMedia'), src.indexOf("await put('media_captures'"));
-    expect(body).toMatch(/m\.checkpoint !== 'reading_segment'/);
-    expect(body).toMatch(/await remove\('media_captures', m\.media_id\)/);
+    expect(body).toMatch(/const disposition = captureDisposition\(await held\(\), checkpoint, conditionId, conditionLabel\);/);
+    expect(body).toMatch(/for \(const id of disposition\.replaces\) await remove\('media_captures', id\);/);
     expect(src).toMatch(/captureMedia\('reading_segment', cond\?\.label \?\? null, conditionId\)/);
   });
 });

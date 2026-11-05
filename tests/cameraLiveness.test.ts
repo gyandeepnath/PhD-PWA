@@ -119,7 +119,10 @@ describe('the tracker and the experiment act on it', () => {
     expect(tracker).toMatch(/disabledEyeMetrics\(conditionId, sessionId, lostRef\.current \? 'lost' : 'not_running'\)/);
   });
   it('the experiment stops the sitting with a notice whose recovery is the pause path', () => {
-    expect(experiment).toMatch(/const cameraLostNotice = tracking\.cameraLostAt != null && !cameraLossAccepted && pausable;/);
+    // Where a pause is allowed, and (Round 89, audit 86 F7) on the set-up screens after camera set-up,
+    // whose way back is Exit — resume later.
+    expect(experiment).toMatch(/const cameraLostNotice = tracking\.cameraLostAt != null && !cameraLossAccepted && \(pausable \|\| cameraLostOnSetup\);/);
+    expect(experiment).toMatch(/const cameraLostOnSetup = cameraSetupDone && !pausable && !!session;/);
     // A blank (covered / switched-off) picture raises the same notice; see cameraHealth.ts.
     expect(experiment).toMatch(/const cameraBlockedNotice = !cameraLostNotice && tracking\.cameraBlocked && !cameraBlockAccepted && pausable;/);
     expect(experiment).toMatch(/const cameraNoticeUp = cameraLostNotice \|\| cameraBlockedNotice;/);
@@ -128,7 +131,7 @@ describe('the tracker and the experiment act on it', () => {
     expect(experiment).toMatch(/const pauseConfirmOverTask = dialog\.open && stageInk != null;/);
     expect(experiment).toMatch(/setBlockingNotice\(cameraNoticeUp \|\| pauseConfirmOverTask\)/);
     const notice = experiment.slice(experiment.indexOf('data-testid="camera-lost"'), experiment.indexOf('data-testid="camera-lost"') + 3500);
-    expect(notice).toMatch(/onClick=\{pauseAndExit\}/);
+    expect(notice).toMatch(/onClick=\{cameraLostOnSetup && !cameraBlockedNotice \? exitSitting : pauseAndExit\}/);
     expect(notice).toMatch(/setCameraLossAccepted\(true\)/);
   });
 });
