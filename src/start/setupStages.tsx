@@ -12,11 +12,12 @@ import { N_CONDITIONS } from '@/experiment/conditions';
 import { PASSAGES, QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
 import { TASK_STEPS } from '@/experiment/taskSteps';
 import { repeatRunAcknowledged, REPEAT_NOTE_MIN_CHARS, SPLIT_REASON_MIN_CHARS, participantProgress, sittingLength } from '@/experiment/participantProgress';
-import { ILLUMINATION, luxInRange, type IlluminationLevel, N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
+import { ILLUMINATION, luxInRange, parseLuxEntry, type IlluminationLevel, N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 import type { MediaConsent } from '@/storage/media';
 import type { EarlierBuild, OpenSitting } from '@/storage/gather';
 import { buildKey, currentProvenance, describeBuild } from '@/storage/buildStamp';
 import { ScrollCue } from '@/components/ScrollCue';
+import { parseNumberEntry, HOURS_IN_DAY, HOURS_ENTRY_PROBLEM } from '@/lib/numberEntry';
 import { InfoTip } from '@/components/InfoTip';
 import { UI_TEXT } from '@/lib/uiPalette';
 import { now } from '@/lib/timing';
@@ -212,10 +213,12 @@ export function SessionInit({
     return () => { cancelled = true; };
   }, [pid, resolveAssignment]);
 
-  const luxNum = Number(lux);
+  // The lux rule every reading is entered by (illumination.ts parseLuxEntry): a space was 0 lux here.
+  const luxParsed = parseLuxEntry(lux);
+  const luxNum = luxParsed ?? NaN;
   const spec = assigned ? ILLUMINATION[assigned.level] : null;
   const inRange = spec != null && luxInRange(assigned!.level, luxNum);
-  const luxEntered = lux !== '' && luxNum >= 0 && luxNum <= 200000;
+  const luxEntered = luxParsed != null;
   /*
    * HAS THIS PARTICIPANT ALREADY FINISHED?
    *
@@ -604,9 +607,19 @@ export function ParticipantProfile({ onSubmit, initial, onBack }: {
   const [caffeine, setCaffeine] = useState<boolean | null>(initial ? initial.caffeineToday : null);
   const [clinicalCvd, setClinicalCvd] = useState(initial ? (initial.cvdClinical === 'not_done' ? 'not done' : initial.cvdClinical) : '');
   const [sinceSleep, setSinceSleep] = useState(initial ? String(initial.hoursSinceSleep) : '');
-  const ageN = Number(age);
-  const valid = ageN >= CONFIG.MIN_AGE && ageN <= CONFIG.MAX_AGE && gender && hours !== '' && fam && light && corr && cvd != null && clinicalCvd !== ''
-    && caffeine != null && sinceSleep !== '' && Number.isFinite(Number(sinceSleep));
+  /*
+   * THE THREE TYPED NUMBERS GO THROUGH ONE RULE (lib/numberEntry.ts; audit 86 UI-8, M4). The hour fields
+   * were checked only for being non-empty and stored as Number(text): "abc" was stored as NaN, a single
+   * space as 0, and 60 daily screen hours or 30 hours awake as typed. The value checked is the value
+   * stored, and a field whose text is not a number in range says so under itself.
+   */
+  const ageN = parseNumberEntry(age, CONFIG.MIN_AGE, CONFIG.MAX_AGE);
+  const hoursN = parseNumberEntry(hours, HOURS_IN_DAY.min, HOURS_IN_DAY.max);
+  const sinceSleepN = parseNumberEntry(sinceSleep, HOURS_IN_DAY.min, HOURS_IN_DAY.max);
+  /** Said under a field only once something is typed there: empty is not yet answered, not wrong. */
+  const wrong = (text: string, n: number | null) => text.trim() !== '' && n == null;
+  const valid = ageN != null && gender && hoursN != null && fam && light && corr && cvd != null && clinicalCvd !== ''
+    && caffeine != null && sinceSleepN != null;
 
   return (
     <div className={shell}>
@@ -617,9 +630,16 @@ export function ParticipantProfile({ onSubmit, initial, onBack }: {
       <p className={`mt-2 ${help}`}>Eligibility: ages {CONFIG.MIN_AGE}–{CONFIG.MAX_AGE}. Contact-lens wear on a test day and colour-vision deficiency are exclusions.</p>
       <div className="mt-6" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '20px 40px', alignItems: 'start' }}>
       <div className="space-y-5">
-        <Field label={`Age (${CONFIG.MIN_AGE}–${CONFIG.MAX_AGE})`}><input data-testid="age" className="vl-input" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} /></Field>
+        <Field label={`Age (${CONFIG.MIN_AGE}–${CONFIG.MAX_AGE})`}>
+          <input data-testid="age" className="vl-input" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} />
+          {wrong(age, ageN) && <FieldProblem testid="age-problem">{`Type an age from ${CONFIG.MIN_AGE} to ${CONFIG.MAX_AGE}: the study's inclusion range.`}</FieldProblem>}
+        </Field>
         <Pick label="Gender" value={gender} set={setGender} opts={['male', 'female', 'non-binary', 'prefer not to say']} />
-        <Field label="Daily screen hours"><input data-testid="hours" className="vl-input" inputMode="numeric" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="6" /></Field>
+        {/* inputMode decimal: a number of hours may have a decimal point, which the numeric keypad can lack. */}
+        <Field label={`Daily screen hours (${HOURS_IN_DAY.min}–${HOURS_IN_DAY.max})`}>
+          <input data-testid="hours" className="vl-input" inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="6" />
+          {wrong(hours, hoursN) && <FieldProblem testid="hours-problem">{HOURS_ENTRY_PROBLEM}</FieldProblem>}
+        </Field>
         <Pick label="Device familiarity" value={fam} set={(v) => setFam(v as ProfileData['deviceFamiliarity'])} opts={['low', 'moderate', 'high']} />
         <Pick label="Typical lighting" value={light} set={(v) => setLight(v as ProfileData['lightingHabit'])} opts={['bright', 'moderate', 'dim']} />
       </div>
@@ -636,7 +656,10 @@ export function ParticipantProfile({ onSubmit, initial, onBack }: {
           opts={['normal', 'deficient', 'not done']}
         />
         <Pick label="Caffeine in the last ~4 hours?" value={caffeine == null ? '' : caffeine ? 'yes' : 'no'} set={(v) => setCaffeine(v === 'yes')} opts={['no', 'yes']} />
-        <Field label="Hours since you woke up today"><input data-testid="since-sleep" className="vl-input" inputMode="numeric" value={sinceSleep} onChange={(e) => setSinceSleep(e.target.value)} placeholder="3" /></Field>
+        <Field label="Hours since you woke up today">
+          <input data-testid="since-sleep" className="vl-input" inputMode="decimal" value={sinceSleep} onChange={(e) => setSinceSleep(e.target.value)} placeholder="3" />
+          {wrong(sinceSleep, sinceSleepN) && <FieldProblem testid="since-sleep-problem">{HOURS_ENTRY_PROBLEM}</FieldProblem>}
+        </Field>
       </div>
       </div>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 28 }}>
@@ -646,14 +669,14 @@ export function ParticipantProfile({ onSubmit, initial, onBack }: {
         style={btnState(!!valid)}
         disabled={!valid}
         onClick={() => valid && onSubmit({
-          age: ageN, gender, dailyScreenHours: Number(hours),
+          age: ageN, gender, dailyScreenHours: hoursN,
           deviceFamiliarity: fam as ProfileData['deviceFamiliarity'],
           lightingHabit: light as ProfileData['lightingHabit'],
           correctionType: corr as ProfileData['correctionType'],
           cvdSelfReport: !!cvd,
           cvdClinical: (clinicalCvd === 'not done' ? 'not_done' : clinicalCvd) as ProfileData['cvdClinical'],
           caffeineToday: !!caffeine,
-          hoursSinceSleep: Number(sinceSleep),
+          hoursSinceSleep: sinceSleepN,
         })}
       >
         Continue →
@@ -2020,6 +2043,14 @@ function Field({ label, info, children }: { label: string; info?: ReactNode; chi
         </span>
       )}
     </div>
+  );
+}
+/** Why a typed field will not be accepted, under it, in the amber the forms use for a problem. */
+function FieldProblem({ testid, children }: { testid: string; children: ReactNode }) {
+  return (
+    <span data-testid={testid} role="status" className="font-sans text-[15px]" style={{ display: 'block', marginTop: 6, lineHeight: 1.4, color: UI_TEXT.amber }}>
+      {children}
+    </span>
   );
 }
 function Pick({ label, value, set, opts }: { label: string; value: string; set: (v: string) => void; opts: string[] }) {

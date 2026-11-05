@@ -36,6 +36,7 @@
  */
 
 import { N_CONDITIONS } from './conditions';
+import { parseNumberEntry } from '@/lib/numberEntry';
 
 export type IlluminationLevel = 'dim' | 'moderate';
 
@@ -210,12 +211,12 @@ export function specFor(level: string | null | undefined): IlluminationSpec | nu
 
 /**
  * A lux reading as typed by the operator: a number from 0 to 200,000, or null. The one rule for every
- * place a reading is entered (the checkpoint panels and the session manager's late end reading).
+ * place a reading is entered (the session form, the checkpoint panels and the session manager's late
+ * end reading), and itself the app's one rule for a typed number (lib/numberEntry.ts): the session form
+ * read Number(text), so a space was a reading of 0 lux (audit 86 M4).
  */
 export function parseLuxEntry(text: string): number | null {
-  if (text.trim() === '') return null;
-  const n = Number(text);
-  return Number.isFinite(n) && n >= 0 && n <= 200000 ? n : null;
+  return parseNumberEntry(text, 0, 200000);
 }
 
 /** True when a measured illuminance falls inside the accepted range for the level. */

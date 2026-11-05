@@ -19,6 +19,7 @@ import {
 } from '@/lib/physicalCalibration';
 import { CONFIG } from '@/experiment/config';
 import { UI_TEXT } from '@/lib/uiPalette';
+import { parseNumberEntry } from '@/lib/numberEntry';
 
 export interface ScreenCalibrationResult {
   /** True when Continue may be given: a plausible measurement, or the skip acknowledged; and a distance. */
@@ -30,12 +31,9 @@ export interface ScreenCalibrationResult {
   viewingDistanceCm: number | null;
 }
 
-/** Parse a typed number, accepting a decimal comma. */
+/** Parse a typed number, accepting a decimal comma: the app's one rule (lib/numberEntry.ts), unbounded here. */
 function parseNum(text: string): number | null {
-  const t = text.trim().replace(',', '.');
-  if (!/^\d+(\.\d+)?$/.test(t)) return null;
-  const v = Number(t);
-  return Number.isFinite(v) ? v : null;
+  return parseNumberEntry(text, 0, Number.POSITIVE_INFINITY);
 }
 
 /** The setup screens' input look (setupStages VL_INPUT_CSS), inline: pre-flight has no form styles. */

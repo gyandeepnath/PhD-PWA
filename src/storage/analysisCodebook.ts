@@ -210,7 +210,7 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
   { column: 'age', role: 'covariate', unit: 'years', missing: 'no participant record', description: 'Participant age in whole years. Eligibility restricts this to 18-35, so its range is narrow and it is unlikely to carry much variance in this sample.' },
   { column: 'gender', role: 'covariate', unit: '-', missing: 'no participant record', description: 'Self-reported gender. Recorded for sample description; not a hypothesised moderator, so include it as a covariate only with a stated reason.' },
   { column: 'daily_screen_hours', role: 'covariate', unit: 'hours', missing: 'no participant record',
-    description: 'Habitual daily screen exposure.' },
+    description: 'Habitual daily screen exposure. Typed on the profile as a number from 0 to 24 (Round 90, audit 86 UI-8); before that the field took any text, so an earlier row can hold a value above 24, a blank where text was typed, or 0 where a space was.' },
   { column: 'correction_type', role: 'covariate', unit: '-', missing: 'no participant record',
     description: 'None, glasses or contacts. Contact lens wear is an established influence on ocular-surface outcomes and should be tested as a covariate on the blink measures.' },
   { column: 'cvd_status', role: 'covariate', unit: '-', missing: 'no participant record',
@@ -220,7 +220,7 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
   { column: 'caffeine_today', role: 'covariate', unit: 'boolean', missing: 'not asked',
     description: 'Caffeine on the day of THIS sitting, read from the session record rather than the participant record, which holds a sticky first-sitting copy that must NOT be used. Asked each sitting; under the single-sitting protocol that is once, so it varies BETWEEN participants only.' },
   { column: 'hours_since_sleep', role: 'covariate', unit: 'hours', missing: 'not asked',
-    description: 'Hours awake at the start of THIS sitting, read from the session record. Session-level for the same reason as caffeine_today.' },
+    description: 'Hours awake at the start of THIS sitting, read from the session record. Session-level for the same reason as caffeine_today. Typed on the profile as a number from 0 to 24 (Round 90, audit 86 UI-8); before that the field took any text, so an earlier row can hold a value above 24, a blank where text was typed, or 0 where a space was.' },
 
   // ---------------------------------------------------------------- session covariates
   { column: 'ambient_lux_measured', role: 'qc', unit: 'lux', missing: 'not measured',
