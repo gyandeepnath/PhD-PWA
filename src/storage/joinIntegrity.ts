@@ -20,6 +20,7 @@ import type { SessionBundle } from './gather';
 import { auditBundle, eyeRowTracker } from './integrity';
 import { isConditionComplete } from './conditionStatus';
 import type { Provenance } from './types';
+import { buildKey, describeBuild } from './buildStamp';
 import { N_ILLUMINATION_BLOCKS, ILLUMINATION_LEVELS } from '@/experiment/illumination';
 import type { IlluminationLevel } from '@/experiment/illumination';
 import { canonicalParticipantId } from '@/lib/participantId';
@@ -107,8 +108,7 @@ export interface ProvenanceGroup {
 
 /** Human-readable one-line form of a build stamp, for an issue detail or a log line. */
 export function describeProvenance(g: ProvenanceGroup): string {
-  return `${g.app_version ?? 'unknown version'} @ ${g.git_hash ?? 'unknown commit'}`
-    + ` (conditions ${g.condition_def_hash ?? 'unknown'}, schema ${g.schema_version ?? 'unknown'})`;
+  return describeBuild(g);
 }
 
 /**
@@ -126,13 +126,8 @@ export function groupByProvenance(bundles: SessionBundle[]): ProvenanceGroup[] {
     // Typed as always present on SessionRecord, but a restored backup or a hand-edited record can
     // arrive without it. An unstamped sitting is reported as unstamped, not quietly given the
     // stamp of whichever build happens to be reading it.
-    const p = b.session.provenance as Provenance | undefined;
-    const g: Omit<ProvenanceGroup, 'session_ids'> = {
-      app_version: p?.app_version ?? null,
-      git_hash: p?.git_hash ?? null,
-      condition_def_hash: p?.condition_def_hash ?? null,
-      schema_version: typeof p?.schema_version === 'number' ? p.schema_version : null,
-    };
+    // The comparison the operator's warnings make too (buildStamp.ts), so they cannot disagree with it.
+    const g: Omit<ProvenanceGroup, 'session_ids'> = buildKey(b.session.provenance as Provenance | undefined);
     const key = JSON.stringify(g);
     (groups.get(key) ?? groups.set(key, { ...g, session_ids: [] }).get(key)!)
       .session_ids.push(b.session.session_id);

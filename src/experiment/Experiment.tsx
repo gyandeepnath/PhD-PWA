@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { acquireScreenWakeLock } from '@/lib/wakeLock';
 import { v4 as uuidv4 } from 'uuid';
-import { CONDITIONS, conditionDefinitionHash, N_CONDITIONS, rtStimulusColours } from './conditions';
+import { CONDITIONS, N_CONDITIONS, rtStimulusColours } from './conditions';
 import {
   illuminationForBlock, illuminationOrderFor, luxInRange, summariseLux,
 } from '@/experiment/illumination';
@@ -22,13 +22,14 @@ import {
   loopEntry, setupStagesHeld, sittingProfileComplete, sittingColourVisionScreened, resumeOwesLaunchCheck,
   type MachineState,
 } from './stateMachine';
-import { APP_VERSION, GIT_HASH, BUILD_TIME } from '@/lib/env';
+import { GIT_HASH } from '@/lib/env';
 import { put, get, remove, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows, clearSessionStageRows, storageIsFull } from '@/storage/db';
 import {
   noMediaConsent, mayCapture, capturePhoto, recordDecidedSegment, checksumOfBlob,
   type MediaRecord,
 } from '@/storage/media';
 import { priorParticipantProgress } from '@/storage/gather';
+import { currentProvenance } from '@/storage/buildStamp';
 import { canonicalParticipantId } from '@/lib/participantId';
 import { saveResume, clearResume } from '@/storage/sessionPersistence';
 import { isInLoop } from './stateMachine';
@@ -37,8 +38,7 @@ import { useTapGuard, TAP_GUARD_VERSION } from '@/lib/tapGuard';
 import { nextAttemptNumber, ATTEMPT_RULE_VERSION } from './conditionAttempt';
 import { scaleFrozenOn, SCALE_FREEZE_VERSION } from './scaleFreeze';
 import { BreakScreen } from '@/start/BreakScreen';
-import { DB_VERSION } from '@/storage/schemaEnums';
-import type { ConditionRecord, ParticipantRecord, Provenance, SessionRecord, Stage } from '@/storage/types';
+import type { ConditionRecord, ParticipantRecord, SessionRecord, Stage } from '@/storage/types';
 import { useTracking } from '@/tracking/useTracking';
 import { LazyDashboard as Dashboard } from '@/dashboard/LazyDashboard';
 import { ExperimentProgress } from '@/components/ExperimentProgress';
@@ -72,13 +72,6 @@ import { CameraSelfTest } from '@/start/CameraSelfTest';
 import { FPS_GATE } from '@/tracking/frameRateGate';
 import { backTarget, operatorExitFor, EXIT_LABEL } from './navigation';
 import { displayStepLabel } from './taskSteps';
-
-function provenance(): Provenance {
-  return {
-    app_version: APP_VERSION, git_hash: GIT_HASH, build_time: BUILD_TIME,
-    condition_def_hash: conditionDefinitionHash(), schema_version: DB_VERSION,
-  };
-}
 
 interface ExperimentProps {
   /** When set, rehydrate and resume an in-progress session at the given condition index. */
@@ -727,6 +720,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       storedParticipantId: prior.participantId,
       spellings: prior.spellings,
       openSittings: prior.openSittings,
+      earlierBuilds: prior.earlierBuilds,
     };
   }, []);
 
@@ -974,7 +968,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       consent_given: false,
       consent_time: null,
       media_consent: noMediaConsent(),
-      provenance: provenance(),
+      provenance: currentProvenance(),
       device_type: navigator.userAgent.includes('Android') ? 'Android' : 'Other',
       browser: navigator.userAgent.slice(0, 60),
       screen_resolution: `${screen.width}x${screen.height}`,

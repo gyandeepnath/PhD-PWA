@@ -141,6 +141,15 @@ by itself, because that would reload the app in the middle of a sitting. So:
    is waiting when you reach pre-flight, a dark notice at the **top of pre-flight** says so: it has
    no Update button, because this sitting is open; the sitting runs, and is recorded, on the build
    named in pre-flight's *This device* box. Update from the landing page after it.
+3a. **Never update between the two sittings of a split participant** (Round 88). All of a
+   participant's sittings must be recorded by one build: if the build changes between the two halves,
+   the analysis leaves that participant out of every model (`mixed_build_within_participant` in the
+   join report), although every display was run. When a participant has finished part of their ten
+   displays and has no sitting open, the update notice names them — *Before updating: P003 (5 of 10
+   displays done) has a sitting still to run* — and its button reads **Update anyway**. Do not tap
+   it: run that participant's second sitting first, on the build they started on, and update after.
+   Only the investigator decides that an update cannot wait (a fix to a fault that affects every
+   participant); if so, note on the session sheet which participants were between sittings.
 4. If the notice never appears although a newer build has been published (the build line still
    shows the old time after **Check for updates** says it is downloading and you have waited a
    minute): close the app from recent apps and open it again from its icon, then repeat. Only as a
@@ -820,6 +829,17 @@ divides the same ten conditions across two shorter visits. If you use it:
   repeat the first half's order.
 - Re-run calibration for the second half. Do not reuse the first half's.
 - Keep the gap short. The design treats the two halves as one sitting.
+- **Run both halves on the same build of the app** (Round 88). Do not update the app between the two
+  halves (section 2, step 3a): the analysis leaves out a participant whose sittings were recorded by
+  different builds. The update notice names any participant between sittings and its button reads
+  **Update anyway** — leave it until their second half is done.
+- **If the New Session form says the earlier sitting was recorded by another build** (a yellow box
+  naming both builds), the tablet was updated between the halves. The build cannot be put back. Run
+  the second half anyway — its data are kept, and nothing is gained by sending the participant away —
+  but tell the investigator the same day, and write on the session sheet: the participant's code, both
+  build lines as the box shows them, and why the update was applied. The join report will mark the
+  participant `mixed_build_within_participant`; whether they count, and on which build, is the
+  investigator's decision (docs/DEPLOYMENT.md).
 
 **If the setup screen says the ID already has a record**
 
@@ -871,7 +891,7 @@ Print this.
 - [ ] Screen cleaned; brightness fixed; auto-brightness OFF; blue-light filter OFF
 - [ ] Screen timeout off; Do Not Disturb on; aeroplane mode on
 - [ ] Landscape, fullscreen, launched from home screen
-- [ ] Landing page: **Check for updates**; if a newer build is ready, **Update now** before New Session; build line noted on the sheet
+- [ ] Landing page: **Check for updates**; if a newer build is ready, **Update now** before New Session — but NOT if the notice names a participant between sittings (**Update anyway**; section 8); build line noted on the sheet
 - [ ] Viewing distance measured at 50 to 60 cm with a tape, and typed into pre-flight
 - [ ] Pre-flight ruler check: bar measured in mm (about 103 mm on the study tablet) and typed in
 - [ ] Battery above 80 per cent or on charge

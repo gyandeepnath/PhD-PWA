@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { onUpdateWaiting, applyUpdate } from '@/lib/swUpdate';
-import { sittingsInProgress, sessionLabel } from '@/storage/gather';
+import { participantsBetweenSittings, sittingsInProgress, sessionLabel, type BetweenSittings } from '@/storage/gather';
+import { N_CONDITIONS } from '@/experiment/conditions';
 import { isE2ETimingActive } from '@/experiment/config';
 
 /** How often the open-sitting question is re-asked while the notice is on screen. */
@@ -45,12 +46,24 @@ export const RECHECK_MS = 6000;
  * anything irreversible happens. A sitting started one second before the operator's finger lands is
  * caught by the last of those; nothing else can catch it.
  */
+/*
+ * ... AND ONE PARTICIPANT, ONE BUILD (Round 88, audit 86 D10). The open-sitting gate cannot see a
+ * participant BETWEEN the two sittings of a split: the first half is complete, so this notice offered
+ * "Update now" — and the operator manual says to update at the start of each study day. An update
+ * there records the participant's second sitting by another build, and the pooled export's join check
+ * then keeps them out of every model (mixed_build_within_participant). DEPLOYMENT.md has always said
+ * "between participants, never between the two sittings of one participant"; the rule now stands
+ * where the operator is when it matters. A warning, not a gate: a fix that cannot wait is the
+ * investigator's call, so the button stays, renamed "Update anyway".
+ */
 export function UpdateBanner() {
   const [waiting, setWaiting] = useState(false);
   const [applying, setApplying] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   /** null while the check is still running: neither offer nor refuse on an unanswered question. */
   const [openSittings, setOpenSittings] = useState<string[] | null>(null);
+  /** Participants part-way through their displays with no sitting open: their next sitting is due. */
+  const [between, setBetween] = useState<BetweenSittings[]>([]);
 
   useEffect(() => onUpdateWaiting(setWaiting), []);
 
@@ -81,6 +94,10 @@ export function UpdateBanner() {
       // A database that cannot be read is not evidence that nothing is running. Refuse rather than
       // assume: the update waits for a screen where the question can be answered.
       .catch(() => { if (live) setOpenSittings(['(could not read the session list)']); });
+    // A warning only: an unreadable list says nothing either way, so nothing is shown for it.
+    participantsBetweenSittings()
+      .then((ps) => { if (live) setBetween(ps); })
+      .catch(() => { if (live) setBetween([]); });
     return () => { live = false; };
   }, []);
 
@@ -167,6 +184,17 @@ export function UpdateBanner() {
                 + 'sitting, then this will offer to update.'
               : 'Apply it now, between sessions. Never during a sitting — it reloads the app.'}
         </div>
+        {!blocked && openSittings != null && between.length > 0 && (
+          <div data-testid="update-split-warning" className="font-sans text-[15px]" style={{ marginTop: 6, color: '#ffd9a0' }}>
+            <strong>Before updating:</strong>{' '}
+            {between.slice(0, 4).map((b) => `${b.participant_id} (${b.conditions_completed % N_CONDITIONS} of ${N_CONDITIONS} displays done)`).join(', ')}
+            {between.length > 4 ? ` and ${between.length - 4} more` : ''}{' '}
+            {between.length === 1 ? 'has a sitting' : 'have sittings'} still to run. All of a participant&apos;s
+            sittings must be recorded by one build: if this tablet updates now, the analysis leaves{' '}
+            {between.length === 1 ? 'that participant' : 'those participants'} out of every model. Update after
+            their last sitting, unless the investigator says this update cannot wait (operator manual §8).
+          </div>
+        )}
         {failure && (
           <div className="font-sans text-[15px]" style={{ marginTop: 6, color: '#ffb4b4' }}>
             The update did not apply: {failure}
@@ -184,7 +212,7 @@ export function UpdateBanner() {
             cursor: applying ? 'progress' : 'pointer', fontWeight: 600,
           }}
         >
-          {applying ? 'Updating…' : 'Update now'}
+          {applying ? 'Updating…' : between.length > 0 ? 'Update anyway' : 'Update now'}
         </button>
       )}
     </div>

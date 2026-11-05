@@ -14,7 +14,8 @@ import { TASK_STEPS } from '@/experiment/taskSteps';
 import { repeatRunAcknowledged, REPEAT_NOTE_MIN_CHARS, SPLIT_REASON_MIN_CHARS } from '@/experiment/participantProgress';
 import { ILLUMINATION, luxInRange, type IlluminationLevel, N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 import type { MediaConsent } from '@/storage/media';
-import type { OpenSitting } from '@/storage/gather';
+import type { EarlierBuild, OpenSitting } from '@/storage/gather';
+import { buildKey, currentProvenance, describeBuild } from '@/storage/buildStamp';
 import { ScrollCue } from '@/components/ScrollCue';
 import { InfoTip } from '@/components/InfoTip';
 import { UI_TEXT } from '@/lib/uiPalette';
@@ -137,6 +138,8 @@ export interface IlluminationAssignment {
   spellings: string[];
   /** This participant's sittings still in progress; while there is one, a new sitting is refused (audit 86 F3). */
   openSittings: OpenSitting[];
+  /** Their earlier sittings recorded by a build other than this tablet's now; warned, not refused (Round 88, audit 86 D10). */
+  earlierBuilds?: EarlierBuild[];
 }
 
 export function SessionInit({
@@ -296,6 +299,30 @@ export function SessionInit({
               <strong>Participant {pid} withdrew from the study</strong> on{' '}
               {new Date(assigned!.withdrawnAt as number).toLocaleDateString()}. A new sitting cannot be
               started under this ID.
+            </div>
+          )}
+          {!withdrawn && !ambiguous && open == null && (assigned?.earlierBuilds?.length ?? 0) > 0 && (
+            <div data-testid="earlier-build" role="status" className="font-sans text-base"
+              style={{ border: '1px solid #e0a33c', background: '#fdf6e8', borderRadius: 10, padding: '14px 16px', color: UI_TEXT.ink }}>
+              {/* ONE PARTICIPANT, ONE BUILD (Round 88, audit 86 D10). The pooled export's join check keeps a
+                  participant whose sittings were recorded by different builds out of every model
+                  (mixed_build_within_participant), and nothing said so here, where the second half of a
+                  split begins: the operator learnt it from the export, after the participant had given
+                  the time. Warned, not refused — the build cannot be taken back, and whether the
+                  participant counts is the investigator's decision. */}
+              <p className={eyebrow}>This participant&apos;s earlier sitting was recorded by another build</p>
+              {assigned!.earlierBuilds!.map((b) => (
+                <p key={`${b.session_index}-${b.started_at}`} className="mt-1 font-sans text-[15px]">
+                  Sitting {b.session_index} ({new Date(b.started_at).toLocaleDateString()}): {b.build}
+                </p>
+              ))}
+              <p className="mt-1 font-sans text-[15px]">This tablet now runs: {describeBuild(buildKey(currentProvenance()))}</p>
+              <p className={help} style={{ marginTop: 6 }}>
+                The analysis leaves out a participant whose sittings were recorded by different builds
+                (mixed_build_within_participant in the join report) unless the investigator decides
+                otherwise. You can still run this sitting, and its data are kept. Tell the investigator
+                before you begin, and note it in the session log (operator manual §8).
+              </p>
             </div>
           )}
           {open && (

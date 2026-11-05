@@ -164,7 +164,12 @@ copy an export off it.
 
 If an update genuinely must go out mid-study:
 
-- Do it between participants, never between the two sittings of one participant.
+- Do it between participants, never between the two sittings of one participant. The pooled export
+  blocks such a participant (`mixed_build_within_participant`). Since Round 88 the operator sees the
+  rule too: the update notice names any participant between sittings and its button reads **Update
+  anyway**, and the New Session form names the earlier sitting's build when it differs from the
+  tablet's (OPERATOR_MANUAL.md §2 step 3a and §8; both use the join check's own comparison,
+  `src/storage/buildStamp.ts`).
 - Record the git hash before and after. Every export carries `app_version` and `git_hash`, so the
   break point is recoverable in analysis, but only if you know to look for it.
 - Re-run the offline check in section 4 afterwards.

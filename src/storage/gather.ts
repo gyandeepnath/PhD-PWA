@@ -13,6 +13,9 @@ import type {
 import { requiredGrant, type MediaRecord, type MediaConsent } from './media';
 import { sameParticipant } from '@/lib/participantId';
 import { supersededSittings } from './sessionPersistence';
+import { buildKey, currentProvenance, describeBuild, sameBuild } from './buildStamp';
+import { participantProgress } from '@/experiment/participantProgress';
+import { canonicalParticipantId } from '@/lib/participantId';
 
 export interface SessionBundle {
   session: SessionRecord;
@@ -197,6 +200,22 @@ export interface PriorParticipantProgress {
    * resuming the open one would then present the same displays again.
    */
   openSittings: OpenSitting[];
+  /**
+   * This participant's earlier sittings that were recorded by a build other than the one running now
+   * (Round 88, audit 86 D10), oldest first. A sitting started now would give the participant sittings
+   * from two builds, and the pooled export's join check then excludes them from every model
+   * (mixed_build_within_participant). Not refused — the build cannot be taken back, and whether the
+   * participant counts is the researcher's decision — but said on the New Session form before it begins.
+   */
+  earlierBuilds: EarlierBuild[];
+}
+
+/** An earlier sitting recorded by another build, as the session form names it. */
+export interface EarlierBuild {
+  session_index: number;
+  started_at: number;
+  /** describeBuild() of the build that recorded it. */
+  build: string;
 }
 
 /** An open sitting, as the session form describes it. */
@@ -226,7 +245,7 @@ export async function priorParticipantProgress(participantId: string): Promise<P
     (w, s) => (s.withdrawn_at != null && (w == null || s.withdrawn_at < w) ? s.withdrawn_at : w), null);
   const sessions = every.filter((s) => s.deleted_at == null);
   if (sessions.length === 0) {
-    return { participantId: stored, spellings, enrolment: null, conditionsCompleted: 0, sittings: 0, withdrawnAt, openSittings: [] };
+    return { participantId: stored, spellings, enrolment: null, conditionsCompleted: 0, sittings: 0, withdrawnAt, openSittings: [], earlierBuilds: [] };
   }
   // Reuse the earliest-assigned enrolment number for stability.
   const enrolment = sessions.reduce((min, s) => Math.min(min, s.enrolment_number), Infinity);
@@ -245,11 +264,61 @@ export async function priorParticipantProgress(participantId: string): Promise<P
     }
   }
   openSittings.sort((a, b) => a.started_at - b.started_at);
+  // By the join check's own comparison (buildStamp.ts), against the stamp a sitting started now gets.
+  const now = currentProvenance();
+  const earlierBuilds: EarlierBuild[] = sessions
+    .filter((s) => !sameBuild(s.provenance, now))
+    .sort((a, b) => a.session_start_time - b.session_start_time)
+    .map((s) => ({ session_index: s.session_index, started_at: s.session_start_time, build: describeBuild(buildKey(s.provenance)) }));
   return {
     participantId: stored, spellings,
     enrolment: Number.isFinite(enrolment) ? enrolment : null, conditionsCompleted, sittings: sessions.length, withdrawnAt,
-    openSittings,
+    openSittings, earlierBuilds,
   };
+}
+
+/** A participant part-way through their ten displays with no sitting open: a later sitting is due. */
+export interface BetweenSittings {
+  participant_id: string;
+  /** Displays finished across their sittings (bin excluded). */
+  conditions_completed: number;
+  sittings: number;
+}
+
+/**
+ * Participants BETWEEN SITTINGS: displays finished part-way through a pass of ten, no sitting open, not
+ * withdrawn — the first half of a split done and the second still to come (Round 88, audit 86 D10).
+ *
+ * Exists for the update notice. Its open-sitting gate (sittingsInProgress) cannot see these: the first
+ * half of a split is COMPLETE, so the notice offered "Update now" between the two halves, and an update
+ * there puts the participant's two sittings on two builds, which the pooled export's join check blocks
+ * (mixed_build_within_participant). One read of each store, not one per sitting: the notice re-asks
+ * every few seconds while it is up.
+ */
+export async function participantsBetweenSittings(): Promise<BetweenSittings[]> {
+  const sessions = (await getAll('sessions') as SessionRecord[]).map(normalise).filter((s) => s.deleted_at == null);
+  const done = new Map<string, number>();
+  for (const c of await getAll('conditions') as Array<{ session_id: string; completed_at: number | null }>) {
+    if (c.completed_at != null) done.set(c.session_id, (done.get(c.session_id) ?? 0) + 1);
+  }
+  const byParticipant = new Map<string, SessionRecord[]>();
+  for (const s of sessions) {
+    const key = canonicalParticipantId(s.participant_id);
+    (byParticipant.get(key) ?? byParticipant.set(key, []).get(key)!).push(s);
+  }
+  const out: BetweenSittings[] = [];
+  for (const [, own] of byParticipant) {
+    if (own.some(isWithdrawn)) continue;
+    const superseded = supersededSittings(own);
+    // An open sitting is the open-sitting gate's business, which refuses the update outright.
+    if (own.some((s) => s.status === 'in_progress' && !superseded.has(s.session_id))) continue;
+    const completed = own.reduce((n, s) => n + (done.get(s.session_id) ?? 0), 0);
+    if (participantProgress(completed).offset > 0) {
+      const latest = own.reduce((a, b) => (b.session_start_time > a.session_start_time ? b : a));
+      out.push({ participant_id: latest.participant_id, conditions_completed: completed, sittings: own.length });
+    }
+  }
+  return out.sort((a, b) => a.participant_id.localeCompare(b.participant_id));
 }
 
 export const BIN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
