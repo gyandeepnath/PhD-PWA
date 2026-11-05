@@ -1068,30 +1068,6 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
               )}
             </div>
 
-            {/*
-              The bench check (Round 79): researcher only, no participant needed. It tells whether the
-              camera slows down on dark screens and whether fixing the exposure stops it — the question
-              behind the tablet's 23-25 fps. About two minutes. See docs/OPERATOR_MANUAL.md.
-            */}
-            <div className="mt-4 rounded-xl border border-[#cdd8f0] bg-white p-4 font-sans text-base" data-testid="camera-bench">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <strong>Bench check (researcher, before the pilot)</strong>
-                <button type="button" data-testid="camera-bench-run" disabled={benchRunning || comparing != null}
-                  className="rounded-xl border border-[#1a1a2e] bg-white px-5 py-2 font-sans text-base text-[#1a1a2e] disabled:opacity-50"
-                  onClick={() => void runBench()}>
-                  {benchRunning ? 'Running…' : 'Run: white, grey, black (2 min)'}
-                </button>
-              </div>
-              {!bench && (
-                <p className={`mt-2 ${help}`}>
-                  Shows white, grey and black screens with automatic exposure, then tries to fix the
-                  exposure and shows them again, measuring the camera on each. The table says whether
-                  the exposure was fixed. Not needed with a participant.
-                </p>
-              )}
-              {bench && <BenchTable b={bench} />}
-            </div>
-
             <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {/*
                 Continue first fixes the camera's exposure on the grey field (about 10 s, the participant
@@ -1109,6 +1085,32 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
                 onClick={() => { camera.stop(); onSkip(); }}>
                 Continue without camera
               </button>
+            </div>
+
+            {/*
+              Below the participant's two buttons (audit 86 UI-6): it is the researcher's, before the pilot,
+              and above them it pushed "My face is centred" further below the fold.
+              The bench check (Round 79): researcher only, no participant needed. It tells whether the
+              camera slows down on dark screens and whether fixing the exposure stops it — the question
+              behind the tablet's 23-25 fps. About two minutes. See docs/OPERATOR_MANUAL.md.
+            */}
+            <div className="mt-6 rounded-xl border border-[#cdd8f0] bg-white p-4 font-sans text-base" data-testid="camera-bench">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <strong>Bench check (researcher, before the pilot)</strong>
+                <button type="button" data-testid="camera-bench-run" disabled={benchRunning || comparing != null}
+                  className="rounded-xl border border-[#1a1a2e] bg-white px-5 py-2 font-sans text-base text-[#1a1a2e] disabled:opacity-50"
+                  onClick={() => void runBench()}>
+                  {benchRunning ? 'Running…' : 'Run: white, grey, black (2 min)'}
+                </button>
+              </div>
+              {!bench && (
+                <p className={`mt-2 ${help}`}>
+                  Shows white, grey and black screens with automatic exposure, then tries to fix the
+                  exposure and shows them again, measuring the camera on each. The table says whether
+                  the exposure was fixed. Not needed with a participant.
+                </p>
+              )}
+              {bench && <BenchTable b={bench} />}
             </div>
           </>
         )}
@@ -1132,6 +1134,13 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
           </>
         )}
       </div>
+      {/*
+        "More below" (audit 86 UI-6). The one long set-up screen without it: once the preview runs, the
+        picture, the tracker card and the tracker box take the screen, and "My face is centred" and
+        "Continue without camera" are below its foot at every tablet viewport, with no scrollbar on a
+        tablet to say so.
+      */}
+      <ScrollCue />
     </div>
   );
 }

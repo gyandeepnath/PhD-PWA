@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { startNewExperiment, stageNow, handleStage, throughCameraAndCalibration, driveUntil } from './helpers';
+import { startNewExperiment, stageNow, handleStage, fromCameraPreview, driveUntil } from './helpers';
 
 /**
  * Every screen must fit the box that clips it, on the study tablet.
@@ -85,6 +85,37 @@ async function assertPanelClear(page: Page, where: string): Promise<void> {
   expect(hits, `${where}: under the collapsed researcher panel`).toEqual([]);
 }
 
+/**
+ * A screen that runs past the bottom of its scroll box says so (audit 86 UI-6).
+ *
+ * A tablet shows no scrollbar, so content below the edge of a scroll box is invisible until someone
+ * thinks to drag. Camera set-up was the one long set-up screen without the "More below" cue: once the
+ * preview ran, the tracker card and the bench check pushed "My face is centred — continue" and
+ * "Continue without camera" off the bottom at every viewport, with nothing on screen to say they were
+ * there. Checked on every screen, as it opens (scrolled to the top): every scroll box inside the app
+ * with more than a few pixels below its edge shows its cue. The cue's own threshold is 12 px.
+ */
+async function assertMoreBelowSaid(page: Page, where: string): Promise<void> {
+  // The cue checks itself after fonts and late layout settle (ScrollCue: 300 ms).
+  await page.waitForTimeout(350);
+  const silent = await page.evaluate(() => {
+    const out: string[] = [];
+    for (const e of Array.from(document.querySelectorAll('#root *')) as HTMLElement[]) {
+      if (!/(auto|scroll)/.test(getComputedStyle(e).overflowY)) continue;
+      if (e.clientHeight === 0 || e.scrollTop > 0) continue;
+      if (e.scrollHeight - e.clientHeight <= 12) continue;
+      // The researcher card's own scroll box is the researcher's, and is closed on these screens.
+      if (e.closest('[data-testid^=researcher-panel]')) continue;
+      const cue = e.querySelector('[data-testid=scroll-cue]') as HTMLElement | null;
+      if (!cue || cue.getBoundingClientRect().height === 0) {
+        out.push(`${e.getAttribute('data-testid') ?? e.className.toString().slice(0, 40)} (+${e.scrollHeight - e.clientHeight}px)`);
+      }
+    }
+    return out;
+  });
+  expect(silent, `${where}: a scroll box with more below and no "More below" cue`).toEqual([]);
+}
+
 for (const vp of VIEWPORTS) {
   test(`every screen of a full sitting fits the clipped root — ${vp.name}`, async ({ page }) => {
     await page.setViewportSize({ width: vp.width, height: vp.height });
@@ -104,6 +135,7 @@ for (const vp of VIEWPORTS) {
       });
       await assertRootFits(page, `${stage} (${sub})`);
       await assertPanelClear(page, `${stage} (${sub})`);
+      await assertMoreBelowSaid(page, `${stage} (${sub})`);
       visited.add(stage);
       if (await handleStage(page, stage)) break;
     }
@@ -145,7 +177,13 @@ for (const vp of VIEWPORTS.filter((v) => v.height !== 713)) {
       };
       new MutationObserver(() => requestAnimationFrame(check)).observe(root, { childList: true, subtree: true, characterData: true });
     });
-    await throughCameraAndCalibration(page);
+    // The running preview: the screen with the most on it, and its way on below the fold.
+    await page.getByRole('button', { name: /Enable camera/ }).click();
+    await page.getByRole('button', { name: /My face is centred/ }).waitFor({ timeout: 60_000 });
+    await assertRootFits(page, 'CAMERA_SETUP (preview)');
+    await assertPanelClear(page, 'CAMERA_SETUP (preview)');
+    await assertMoreBelowSaid(page, 'CAMERA_SETUP (preview)');
+    await fromCameraPreview(page);
     await assertRootFits(page, 'after calibration');
     const overflow = await page.evaluate(() => (window as unknown as { __overflow: string[] }).__overflow);
     expect([...new Set(overflow)], 'a camera-path screen overflowed the clipped root').toEqual([]);

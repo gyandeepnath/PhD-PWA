@@ -417,6 +417,11 @@ export async function dbCounts(page: Page, stores: string[]): Promise<Record<str
  */
 export async function throughCameraAndCalibration(page: Page): Promise<void> {
   await page.getByRole('button', { name: /Enable camera/ }).click();
+  await fromCameraPreview(page);
+}
+
+/** The rest of throughCameraAndCalibration, from the camera set-up's running preview. */
+export async function fromCameraPreview(page: Page): Promise<void> {
   await page.getByRole('button', { name: /My face is centred/ }).click({ timeout: 60_000 });
   await page.waitForFunction(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') === 'CALIBRATION', null, { timeout: 30_000 });
   await page.getByRole('button', { name: /Begin calibration/ }).click();
