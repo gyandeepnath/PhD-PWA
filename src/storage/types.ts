@@ -1135,9 +1135,17 @@ export interface EyeMetricsRecord extends PipelineWindowFields {
   incomplete_blink_ratio: number | null;
   blink_duration_mean_ms: number | null;
   bins: BlinkBins;
-  /** Inter-blink interval (ms) + its CV — longer/erratic with reduced blinking. */
+  /**
+   * Inter-blink interval (ms) + its CV — longer/erratic with reduced blinking. From Round 88 (rule
+   * ibi-r2, tracking/blink.ts interBlinkInterval) over the intervals observed end to end only: one with
+   * a sampling gap between its two onsets is left out, as observed time leaves the gap out.
+   */
   mean_inter_blink_interval_ms: number | null;
   inter_blink_interval_cv: number | null;
+  /** The intervals behind them (ibi-r2). Null without a baseline; absent before Round 88. */
+  ibi_interval_count?: number | null;
+  /** 'ibi-r2' from Round 88; absent on earlier rows, which were computed under ibi-r1 (every interval). */
+  ibi_rule_version?: string;
   /** PERCLOS: proportion of time eyes ≥80% / ≥70% closed (validated drowsiness measure). */
   perclos_p80: number | null;
   perclos_p70: number | null;

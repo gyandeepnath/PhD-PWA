@@ -151,13 +151,13 @@ describe('PERCLOS + closure dynamics', () => {
       samples.push({ t_ms: t, ear: blink ? 0.05 : 0.3 });
     }
     const events = classifyBlinks(samples, 0.3);
-    const ibi = interBlinkInterval(events);
+    const ibi = interBlinkInterval(events, samples);
     expect(ibi.mean_inter_blink_interval_ms).toBeGreaterThan(800);
     expect(ibi.mean_inter_blink_interval_ms).toBeLessThan(1200);
   });
 
   it('inter-blink interval is null with fewer than two blinks', () => {
-    expect(interBlinkInterval([]).mean_inter_blink_interval_ms).toBeNull();
+    expect(interBlinkInterval([], []).mean_inter_blink_interval_ms).toBeNull();
   });
 });
 

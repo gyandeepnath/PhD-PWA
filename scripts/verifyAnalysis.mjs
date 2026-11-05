@@ -249,6 +249,10 @@ for (const { root, options } of jobs) {
   editColumn(join(at('flagged'), 'P001', '07_eye_metrics.csv'), 'observed_duration_ms', (v) => { flaggedObs.push(Number(v)); return v; });
   const flaggedTiered = editColumn(join(at('flagged'), 'P001', '07_eye_metrics.csv'), 'ear_sample_count',
     (v, i) => (i <= 4 ? String(Math.round(((i <= 2 ? 12 : 17) * flaggedObs[i - 1]) / 1000) + 1) : v));
+  //    ... and P001's inter-blink intervals recorded before Round 88: ibi_rule_version blank, read as
+  //    ibi-r1 (every interval, a dropout's unobserved time included; audit 86 D2), which R must count
+  //    and leave out of the inter-blink-interval model.
+  const flaggedIbiOld = editColumn(join(at('flagged'), 'P001', '07_eye_metrics.csv'), 'ibi_rule_version', () => '');
   //  - r-short: every exposure halved, and no target locations (a pre-Round-66 export);
   cpSync(cohortDir, at('r-short'), { recursive: true });
   const shortMarked = editColumn(join(at('r-short'), 'P001', '07_eye_metrics.csv'), 'observed_duration_ms',
@@ -673,6 +677,23 @@ for (const { root, options } of jobs) {
       for (const label of ['fps-g2 tier A only \\(reduced rows out\\)', 'fps-g2 every tier \\(tier C put back\\)', 'fps-g2 consistent rows only \\(within 2 fps\\)']) {
         ok(`R (flagged): the refit "${label.replace(/\\/g, '')}" runs`, new RegExp(`${label}\\s+polarity -?[\\d.]+`).test(fOut), 'no such sensitivity line');
       }
+      /*
+       * THE INTERVAL RULE (Round 88, audit 86 D2). Under ibi-r1 the interval spanning a face dropout
+       * carried its unobserved time. The app recomputes such a row from its kept window; one it could not
+       * (the stamp left at ibi-r1) is counted, out of the inter-blink-interval model, and put back in a
+       * sensitivity refit: in the flagged state P001's eight tier-A/B runs (its two tier-C runs are out
+       * already).
+       */
+      const ibiGiven = (text) => +(/^\[n\] inter-blink interval: \d+ of (\d+) rows used/m.exec(text)?.[1] ?? NaN);
+      const ibiLine = (text) => (/^\[ibi-r2\][^\n]*/m.exec(text) ?? ['no [ibi-r2] line'])[0];
+      ok('R: every inter-blink interval in the cohort is under the current rule (ibi-r2), and modelled',
+        /\[ibi-r2\] 0 camera-on condition-run\(s\) carry an inter-blink interval under an earlier rule \(none\)/.test(rOut)
+          && ibiGiven(rOut) > 0 && !/\[ibi-r2 sensitivity\]/.test(rOut), ibiLine(rOut));
+      const sens = /^\[ibi-r2 sensitivity\] with the (\d+) earlier-rule row\(s\) put back: polarity\S* -?[\d.]+ \(SE [\d.]+\) on the log scale, n = (\d+)\./m.exec(fOut);
+      ok('R (flagged): rows left at ibi-r1 are counted, out of the inter-blink-interval model, and put back in its sensitivity refit',
+        flaggedIbiOld && /\[ibi-r2\] 8 camera-on condition-run\(s\) carry an inter-blink interval under an earlier rule \(ibi-r1\)/.test(fOut)
+          && ibiGiven(fOut) === ibiGiven(rOut) - 10 && sens?.[1] === '8' && +sens[2] === ibiGiven(rOut) - 2,
+        `${ibiLine(fOut)}; modelled rows ${ibiGiven(fOut)} vs ${ibiGiven(rOut)} in the cohort; sensitivity ${sens?.[0] ?? 'missing'}`);
     }
     // m5: Objective 2's three models carry the primary's covariates, and the residual-hue model's
     // collinearity is printed beside its coefficients.

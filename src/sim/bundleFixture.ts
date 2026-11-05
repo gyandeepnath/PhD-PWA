@@ -31,6 +31,7 @@ import { CONFIG } from '@/experiment/config';
 import { RT_LOCATIONS } from '@/lib/rtLocations';
 import { EyeMetricsAggregator } from '@/tracking/aggregator';
 import { tierCounts } from '@/tracking/blinkLog';
+import { IBI_RULE_VERSION } from '@/tracking/blink';
 import type { EyeMetricsRecord, OcularEventsRecord, RtAccuracy } from '@/storage/types';
 
 export const FIXTURE = {
@@ -680,6 +681,9 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       },
       mean_inter_blink_interval_ms: 4200,
       inter_blink_interval_cv: 0.45,
+      // Every interval observed (no dropout in the fixture), under the current rule (Round 88).
+      ibi_interval_count: Math.max(0, blinkTotalFor(i) - 1),
+      ibi_rule_version: IBI_RULE_VERSION,
       perclos_p80: Math.round((0.03 + i * 0.001) * 1000) / 1000,
       perclos_p70: 0.05,
       long_closure_count: 0,

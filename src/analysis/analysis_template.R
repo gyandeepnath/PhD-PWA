@@ -2450,12 +2450,40 @@ if (nrow(eye) == 0) {
   # reciprocal of blink rate — the two answer nearly the same question, which Holm within the family
   # allows for rather than double-counts — but not identical: a mean of intervals weights a long pause
   # once, where a rate weights it by its length.
-  eye_ibi <- eye %>% filter(is.finite(mean_inter_blink_interval_ms), mean_inter_blink_interval_ms > 0)
-  m_ibi <- tryCatch(lmer(as.formula(paste0("log(mean_inter_blink_interval_ms) ~ polarity * colour", il_term,
-                                           " + session_position + (1 | participant_id)", re_passage)), data = eye_ibi),
-                    error = function(err) NULL)
+  #
+  # ONE INTERVAL RULE (ibi-r2, Round 88; audit 86 D2). Under ibi-r1 the interval that spanned a face
+  # dropout carried the unobserved seconds, so a look-away lengthened the mean — the signature of the
+  # effect under study: a participant who looks away more in an uncomfortable condition would show it as
+  # suppressed blinking. The app exports a row recorded before Round 88 RECOMPUTED under ibi-r2 from its
+  # kept blinks and trace (07 ibi_recomputed TRUE), so the only ibi-r1 rows left are those it could not
+  # recompute (a sitting before schema 10) — or every row, in a 07 file written by a build before Round
+  # 88 (no ibi_rule_version column): re-export it with the current build. Such rows are counted, kept
+  # out of this model, and put back in the sensitivity refit below, so the investigator sees both
+  # (ANALYSIS_PLAN.md §5; the default is theirs to change).
+  IBI_RULE_VERSION <- "ibi-r2"  # src/tracking/blink.ts IBI_RULE_VERSION (tests/interBlinkInterval.test.ts pins it)
+  ibi_rule <- if ("ibi_rule_version" %in% names(eye)) as.character(eye$ibi_rule_version) else rep(NA_character_, nrow(eye))
+  ibi_rule <- ifelse(is.na(ibi_rule) | ibi_rule == "", "ibi-r1", ibi_rule)
+  has_ibi <- is.finite(eye$mean_inter_blink_interval_ms) & eye$mean_inter_blink_interval_ms > 0
+  n_ibi_old <- sum(ibi_rule != IBI_RULE_VERSION & has_ibi)
+  n_ibi_recomputed <- if ("ibi_recomputed" %in% names(eye)) sum(eye$ibi_recomputed %in% c(1, TRUE, "TRUE", "true") & has_ibi) else 0L
+  cat(sprintf("\n[%s] %d camera-on condition-run(s) carry an inter-blink interval under an earlier rule (%s) and are out of the inter-blink-interval model; %d were recorded before Round 88 and recomputed by the app.\n",
+              IBI_RULE_VERSION, n_ibi_old,
+              if (n_ibi_old > 0) paste(sort(unique(ibi_rule[ibi_rule != IBI_RULE_VERSION & has_ibi])), collapse = ", ") else "none",
+              n_ibi_recomputed))
+  eye_ibi <- eye[has_ibi & ibi_rule == IBI_RULE_VERSION, , drop = FALSE]
+  f_ibi <- as.formula(paste0("log(mean_inter_blink_interval_ms) ~ polarity * colour", il_term,
+                             " + session_position + (1 | participant_id)", re_passage))
+  m_ibi <- tryCatch(lmer(f_ibi, data = eye_ibi), error = function(err) NULL)
   cat("\n=== Inter-blink interval, log scale (secondary) ===\n")
   if (is.null(m_ibi)) cat("the inter-blink-interval model did not fit.\n") else { print(summary(m_ibi)); report_n(m_ibi, eye_ibi, "inter-blink interval") }
+  if (n_ibi_old > 0) {
+    m_ibi_all <- tryCatch(lmer(f_ibi, data = eye[has_ibi, , drop = FALSE]), error = function(err) NULL)
+    if (is.null(m_ibi_all)) cat(sprintf("[%s sensitivity] the refit with the earlier-rule rows put back did not fit.\n", IBI_RULE_VERSION)) else {
+      pol <- grep("^polarity", names(fixef(m_ibi_all)), value = TRUE)[1]
+      cat(sprintf("[%s sensitivity] with the %d earlier-rule row(s) put back: %s %.3f (SE %.3f) on the log scale, n = %d.\n",
+                  IBI_RULE_VERSION, n_ibi_old, pol, fixef(m_ibi_all)[[pol]], sqrt(diag(vcov(m_ibi_all)))[[pol]], nobs(m_ibi_all)))
+    }
+  }
   add_to_family("inter-blink interval", m_ibi, "ratio of intervals", odds_ratio = TRUE)
 
   # -------------------------------------------------------------------------------------------

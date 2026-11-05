@@ -93,11 +93,15 @@ for (const arr of ARRS) {
     probe('computeClosureMetrics', [arr, base], () => B.computeClosureMetrics(arr.map((e, i) => ({ t_ms: i * 33, ear: e })), base, []), { allowNull: true });
   }
   probe('effectiveFps', [arr], () => B.effectiveFps(arr), { allowNull: true });
+  probe('interBlinkInterval', [arr], () => {
+    const series = arr.map((e, i) => ({ t_ms: i * 33, ear: e }));
+    return B.interBlinkInterval(B.classifyBlinks(series, 0.3), series);
+  }, { allowNull: true });
   probe('baselineEar', [arr], () => B.baselineEar(arr));
 }
 for (const c of INTS) for (const d of NUMS) probe('blinkRatePerMinute', [c, d], () => B.blinkRatePerMinute(c, d));
 for (const dur of NUMS) probe('summariseBlinks', [[], dur], () => B.summariseBlinks([], dur), { allowNull: true });
-probe('interBlinkInterval', [[]], () => B.interBlinkInterval([]), { allowNull: true });
+probe('interBlinkInterval', [[], []], () => B.interBlinkInterval([], []), { allowNull: true });
 
 for (const h of INTS) for (const m of INTS) for (const fa of INTS.slice(0, 6)) for (const cr of INTS.slice(0, 6)) {
   probe('computeSdt', [h, m, fa, cr],

@@ -68,7 +68,7 @@ export const ANALYSIS_LONG_COLUMNS = [
   'n_incomplete_fit', 'fit_exposure_known',
   'blink_rate_per_min', 'observed_duration_ms', 'reading_time_ms', 'reading_speed_wpm',
   // --- secondary ocular -------------------------------------------------------------------
-  'perclos_p80', 'blink_duration_mean_ms', 'mean_inter_blink_interval_ms',
+  'perclos_p80', 'blink_duration_mean_ms', 'mean_inter_blink_interval_ms', 'ibi_rule_version',
   'head_pitch_mean', 'head_movement_std', 'off_axis_ratio',
   // --- subjective and performance ---------------------------------------------------------
   'fatigue_mean', 'fatigue_delta', 'comfort_score', 'clarity_score', 'slider_version',
@@ -338,6 +338,8 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         perclos_p80: round(sum.perclos_p80),
         blink_duration_mean_ms: round(e?.blink_duration_mean_ms),
         mean_inter_blink_interval_ms: round(sum.mean_inter_blink_interval_ms),
+        // Which interval rule the value above is under (Round 88; blinkLog.ts exportedInterBlinkInterval).
+        ibi_rule_version: camOn ? sum.ibi_rule_version : null,
         head_pitch_mean: round(e?.head_pitch_mean),
         head_movement_std: round(e?.head_movement_std),
         off_axis_ratio: round(sum.off_axis_ratio),

@@ -25,11 +25,11 @@
  * ten-condition sitting's records are about 1.7 MB (measured: docs/ANALYSIS_PLAN.md §5 item 6, which
  * also gives the backup and export sizes; tests/blinkLog.test.ts fails if they drift).
  */
-import type { BlinkEventDetail, EarSample } from './blink';
-import { BLINK_RULE_VERSION, EAR_TIERS } from './blink';
+import type { BlinkEventDetail, EarSample, InterBlinkInterval } from './blink';
+import { BLINK_RULE_VERSION, EAR_TIERS, IBI_RULE_BEFORE, IBI_RULE_VERSION, interBlinkInterval } from './blink';
 import { fitBlinkMinimum, FIT_RULE_VERSION, type BlinkFit } from './blinkFit';
 import { matchCues } from './selfTest';
-import type { EarTraceColumns, OcularEventsRecord, StoredBlinkEvent } from '@/storage/types';
+import type { EarTraceColumns, EyeMetricsRecord, OcularEventsRecord, StoredBlinkEvent } from '@/storage/types';
 
 /** How far either side of a blink's deepest sample its local frame rate is measured. */
 export const LOCAL_FPS_HALF_WINDOW_MS = 1000;
@@ -453,5 +453,80 @@ export function tierCounts(events: { tier: string }[]): { full: number; micro: n
     full: events.filter((e) => e.tier === 'full').length,
     micro: events.filter((e) => e.tier === 'micro').length,
     incomplete: events.filter((e) => e.tier === 'incomplete').length,
+  };
+}
+
+/**
+ * The face-solved samples of a stored trace — a face and both eyes measured — as the aggregator's
+ * series held them when the window closed: the frames `ear_sample_count` counts (measuredFrames), at
+ * their stored times (ms from the window's first frame, to 0.01 ms).
+ */
+export function traceSamples(c: EarTraceColumns): EarSample[] {
+  const out: EarSample[] = [];
+  for (const f of decodeTrace(c)) {
+    if (f.face && f.ear != null && f.t_ms != null && Number.isFinite(f.t_ms)) out.push({ t_ms: f.t_ms, ear: f.ear });
+  }
+  return out;
+}
+
+/** The inter-blink interval of a kept reading window under the CURRENT rule, from its blinks and trace. */
+export function recordInterBlinkInterval(record: Pick<OcularEventsRecord, 'events' | 'trace'>): InterBlinkInterval {
+  return interBlinkInterval(record.events, traceSamples(record.trace));
+}
+
+/** The inter-blink interval a 07 row is exported and analysed with (exportedInterBlinkInterval). */
+export interface ExportedInterBlinkInterval {
+  mean_inter_blink_interval_ms: number | null;
+  inter_blink_interval_cv: number | null;
+  /** Null on camera-off rows, without a baseline, and on an ibi-r1 row that could not be recomputed. */
+  ibi_interval_count: number | null;
+  /** Null on camera-off rows. */
+  ibi_rule_version: string | null;
+  /** TRUE when an ibi-r1 row was recomputed under the current rule from its kept blinks and trace; null camera-off. */
+  ibi_recomputed: boolean | null;
+}
+
+/**
+ * The inter-blink interval of an eye-metrics row, as every export gives it (07_eye_metrics.csv,
+ * analysis_long.csv, the dashboard): under the CURRENT rule wherever the data allow (Round 88, audit
+ * 86 D2).
+ *
+ * A row recorded under ibi-r2 is exported as recorded. A row recorded before Round 88 (no stamp;
+ * ibi-r1) averaged every interval, a sampling gap's unobserved time included — and its reading window
+ * was kept (07b, 07c; sittings from schema 10): the blinks it was summarised from and the face-solved
+ * frames they were found in. So it is RECOMPUTED here under ibi-r2, by the same function the
+ * aggregator now uses, rather than left out of the analysis or analysed under a rule known to read a
+ * look-away as suppressed blinking. Nothing stored is changed, and the recorded ibi-r1 value stays
+ * reproducible from 07b: the mean of the successive differences of the window's onset_ms.
+ *
+ * Only an ibi-r1 row with no kept window (a sitting before schema 10) keeps its recorded ibi-r1 value,
+ * stamped so. Recomputed from times stored to 0.01 ms, a value can differ from what the live series
+ * would have given only where a frame interval sits within 0.01 ms of the gap threshold.
+ */
+export function exportedInterBlinkInterval(
+  e: EyeMetricsRecord,
+  records: ReadonlyArray<OcularEventsRecord> | undefined,
+): ExportedInterBlinkInterval {
+  const recorded = {
+    mean_inter_blink_interval_ms: e.mean_inter_blink_interval_ms,
+    inter_blink_interval_cv: e.inter_blink_interval_cv,
+  };
+  if (!e.camera_active) return { ...recorded, ibi_interval_count: null, ibi_rule_version: null, ibi_recomputed: null };
+  if (e.ibi_rule_version) {
+    return { ...recorded, ibi_interval_count: e.ibi_interval_count ?? null, ibi_rule_version: e.ibi_rule_version, ibi_recomputed: false };
+  }
+  const id = ocularRecordId('reading', e.condition_id);
+  const kept = records?.find((o) => o.record_id === id && o.window === 'reading');
+  if (!kept || !(kept.trace?.frames > 0)) {
+    return { ...recorded, ibi_interval_count: null, ibi_rule_version: IBI_RULE_BEFORE, ibi_recomputed: false };
+  }
+  const ibi = recordInterBlinkInterval(kept);
+  return {
+    mean_inter_blink_interval_ms: ibi.mean_inter_blink_interval_ms,
+    inter_blink_interval_cv: ibi.inter_blink_interval_cv,
+    // As the aggregator: without a baseline no blink was classified, so there is no interval to count.
+    ibi_interval_count: kept.ear_baseline != null ? ibi.ibi_interval_count : null,
+    ibi_rule_version: IBI_RULE_VERSION,
+    ibi_recomputed: true,
   };
 }

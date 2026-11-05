@@ -21,6 +21,7 @@ import { FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION } from '@/tracking/frameRateGat
 import { RELIABILITY_GATES, RELIABILITY_RULE_VERSION } from '@/tracking/ocularReliability';
 import { SLIDER_VERSION, SLIDER_VERSION_V1, VAS_LINE_MM } from '@/scales/vas';
 import { ATTEMPT_RULE_VERSION, ATTEMPT_RULE_VERSION_V1 } from '@/experiment/conditionAttempt';
+import { IBI_RULE_BEFORE, IBI_RULE_VERSION } from '@/tracking/blink';
 
 // The current protocol's single illumination level, for the prose below — derived, so it cannot say
 // "300 lux" after the protocol changes. See docs/ILLUMINATION_AMENDMENT.md.
@@ -141,8 +142,10 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
     description: 'Proportion of observed frames with the eye at least 80% closed (openness at or below 20% of the calibrated open baseline). A SLEEPINESS covariate, not a visual-fatigue outcome (synopsis §2.5): the analysis templates add it to the primary as a sensitivity and model it only as a check that the display condition does not move it (ANALYSIS_PLAN.md §4). Complete blinks can add frames to it and incomplete blinks never can, so at a given blink rate it falls as the incomplete-blink ratio rises. Bounded and often exactly 0: compress as (y(n-1)+0.5)/n before any logit, never model it raw.' },
   { column: 'blink_duration_mean_ms', role: 'secondary', unit: 'ms', missing: 'camera not running',
     description: 'Mean duration of detected blinks.' },
-  { column: 'mean_inter_blink_interval_ms', role: 'secondary', unit: 'ms', missing: 'fewer than two blinks',
-    description: 'Mean interval between blink onsets.' },
+  { column: 'mean_inter_blink_interval_ms', role: 'secondary', unit: 'ms', missing: 'camera not running, or no interval observed end to end (fewer than two blinks, or every interval spans a sampling gap)',
+    description: `Mean interval between successive blink onsets, over the intervals observed end to end (${IBI_RULE_VERSION}, from Round 88): an interval with a sampling gap between its two onsets — the face not seen, by the gap rule observed_duration_ms leaves out — is not used, so a look-away does not lengthen it. The value 07_eye_metrics.csv exports: a row recorded before Round 88 is recomputed under ${IBI_RULE_VERSION} from its kept blinks and trace. A secondary in the ocular family, modelled on the log scale (ANALYSIS_PLAN.md §4).` },
+  { column: 'ibi_rule_version', role: 'qc', unit: '-', missing: 'camera not running',
+    description: `The inter-blink-interval rule mean_inter_blink_interval_ms is under (07_eye_metrics.csv ibi_rule_version): '${IBI_RULE_VERSION}', or '${IBI_RULE_BEFORE}' (every interval, a look-away's unobserved time included) on a row recorded before Round 88 whose blinks and trace were not kept, so it could not be recomputed. The R template models the ${IBI_RULE_VERSION} rows and refits with the ${IBI_RULE_BEFORE} rows put back as a sensitivity (ANALYSIS_PLAN.md §5).` },
   { column: 'head_pitch_mean', role: 'covariate', unit: 'degrees', missing: 'camera not running',
     description: "Head pitch relative to the participant's own calibrated frontal posture, not a population mean." },
   { column: 'head_movement_std', role: 'covariate', unit: 'degrees', missing: 'camera not running',

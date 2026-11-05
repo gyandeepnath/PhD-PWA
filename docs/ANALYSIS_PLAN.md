@@ -237,7 +237,7 @@ only after **60 min**.
 | Comfort, clarity | `display_comfort_score`, `text_clarity_score` (06) | LMM (Round 71) | 0-100 ratings: sliders before Round 84, 100 mm visual analogue lines from it, one format at a time (§4c). Untouched sliders (`comfort_touched` / `clarity_touched` FALSE, old format only) are excluded. Not a cumulative-link model: see §4c. |
 | RT variability | `rt_sd_ms` | LMM on log (Round 71) | Effect is a ratio of SDs. |
 | Lapses | `lapse_count` of `hits` | Binomial GLMM with an observation-level (run) term (Rounds 71, 73) | Weighted by the block's hits, as the primary is by its blinks. The run term carries the extra-binomial variation between runs; see §4c. |
-| Inter-blink interval | `mean_inter_blink_interval_ms` | LMM on log (Round 71) | Near the reciprocal of blink rate; both are in the ocular family. |
+| Inter-blink interval | `mean_inter_blink_interval_ms` | LMM on log (Round 71), on `ibi_rule_version` `ibi-r2` rows (Round 88, §5) | Near the reciprocal of blink rate; both are in the ocular family. Over the intervals observed end to end only, as the rate is over observed time (§5). |
 | PERCLOS | `perclos_p80` | **A covariate, not an outcome** (Round 70) | See below the table. |
 
 **PERCLOS is a sleepiness covariate, not an outcome** (Round 70). This row used to list it as a
@@ -828,6 +828,39 @@ counts. **`at-v1` rows cannot be recounted** — whether the earlier run reached
 recorded — so an `at-v1` row above 1 is a second exposure or a first reading after a pause on the card;
 the templates treat it as restarted, as before, which can only drop a run, never keep a second reading
 as a first. A run following an `at-v1` row is counted the old way for the same reason.
+
+**The inter-blink interval counts only what was observed (Round 88).** Blink rate has divided by
+observed time — the exposure minus every sampling gap, the face not seen — since its own fix; the
+inter-blink interval had no such rule. It was the mean gap between every pair of successive blink
+onsets, so the interval that spanned a look-away carried the unobserved seconds and the blinks nobody
+saw in them. In audit 86 (D2), through the app's own aggregator, three minutes at 30 fps with a full
+blink every 4 s and one 10 s look-away — face present 94% of the time, passing every gate — gave a mean
+interval of 4,190-4,293 ms instead of 4,000 and a CV of 0.29-0.43 instead of 0; a 40 s look-away,
+5,176 ms. A longer interval reads as suppressed blinking and a larger CV as erratic blinking, so a
+participant who looks away more in an uncomfortable condition would have shown the effect under study.
+
+From Round 88 (rule `ibi-r2`; `ibi_rule_version` in 07_eye_metrics.csv and analysis_long.csv) an
+interval is used only when no sampling gap lies between its two onsets, by the gap rule of observed
+time (`samplingGapThreshold`; the same frame pairs `observed_duration_ms` leaves out), and the CV needs
+at least two intervals: `ibi-r1` wrote 0 — the value of perfectly regular blinking — for a row with
+exactly two blinks; `ibi-r2` leaves it blank, because the spread of one interval is not measured.
+`ibi_interval_count` says how many intervals a row rests on. On a run with no dropout the mean is
+unchanged. No threshold changed: the gap rule is the one observed time has always used.
+
+**Rows recorded before Round 88.** Nothing stored is rewritten. Wherever a row's reading window was
+kept (07b, 07c — every sitting from schema 10), the export **recomputes** its interval, CV and count
+under `ibi-r2` from those blinks and face-solved frames, by the same function the app now uses
+(`ibi_recomputed` TRUE in 07). The value the row was recorded with stays reproducible: it is the mean
+of the successive differences of the window's `onset_ms` in 07b. Only a row whose window was not kept
+(a sitting before schema 10) keeps its recorded `ibi-r1` value, stamped `ibi-r1`; so does every row of
+a 07 file written by a build before Round 88, which has no `ibi_rule_version` column — re-export such
+data with the current build. **Default (the investigator's to change):** the R template's
+inter-blink-interval model uses the `ibi-r2` rows; `ibi-r1` rows are counted (`[ibi-r2] n camera-on
+condition-run(s) carry an inter-blink interval under an earlier rule ...`), kept out of that model, and
+put back in a sensitivity refit printed beside it (`[ibi-r2 sensitivity] with the n earlier-rule row(s)
+put back: ...`). Leaving them out is the conservative choice for inference — an `ibi-r1` value can only
+be lengthened by a look-away, in the direction of the hypothesis — and the refit shows what keeping them
+would change. The Python cross-check does not model the interval (§5b), so it cannot apply another rule.
 
 ---
 

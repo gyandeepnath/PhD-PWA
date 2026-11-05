@@ -658,16 +658,93 @@ export function computeClosureMetrics(
   };
 }
 
-/** Mean and CV of the interval between successive blink onsets (sec). Null with < 2 blinks. */
-export function interBlinkInterval(events: BlinkEvent[]): {
+/**
+ * The rule the inter-blink interval is computed under (Round 88, audit 86 D2), stamped on every
+ * camera-on 07 row as `ibi_rule_version`.
+ *
+ *  - ibi-r1 (rows recorded before Round 88, which carry no stamp): the mean and CV of the gaps between
+ *    EVERY pair of successive blink onsets, whatever happened between them; a CV from a single gap.
+ *  - ibi-r2: only the intervals OBSERVED from end to end — an interval whose two onsets have a sampling
+ *    gap between them (the same gap rule `observedDurationMs` excludes from observed time) is left out;
+ *    the CV needs at least two intervals.
+ *
+ * Nothing stored is rewritten. An unstamped row whose reading window was kept (07b, 07c; sittings from
+ * schema 10) is exported recomputed under ibi-r2 from those blinks and that trace
+ * (blinkLog.ts exportedInterBlinkInterval, `ibi_recomputed` TRUE); only a row without them keeps its
+ * recorded ibi-r1 value, stamped so.
+ */
+export const IBI_RULE_VERSION = 'ibi-r2';
+/** What a camera-on row without a stamp was computed under. */
+export const IBI_RULE_BEFORE = 'ibi-r1';
+
+/**
+ * Every sampling GAP in a series: each pair of successive samples further apart than `gapMs`, as
+ * [last sample before, first sample after]. The same test `observedDurationMs` applies — the time
+ * inside these pairs is exactly the time it leaves out of observed time.
+ */
+export function samplingGaps(samples: EarSample[], gapMs: number): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (let i = 1; i < samples.length; i++) {
+    if (samples[i].t_ms - samples[i - 1].t_ms > gapMs) out.push([samples[i - 1].t_ms, samples[i].t_ms]);
+  }
+  return out;
+}
+
+export interface InterBlinkInterval {
   mean_inter_blink_interval_ms: number | null;
   inter_blink_interval_cv: number | null;
-} {
-  if (events.length < 2) return { mean_inter_blink_interval_ms: null, inter_blink_interval_cv: null };
-  const onsets = events.map((e) => e.onset_ms).sort((a, b) => a - b);
-  const gaps: number[] = [];
-  for (let i = 1; i < onsets.length; i++) gaps.push(onsets[i] - onsets[i - 1]);
-  const m = gaps.reduce((s, g) => s + g, 0) / gaps.length;
-  const sd = Math.sqrt(gaps.reduce((s, g) => s + (g - m) ** 2, 0) / gaps.length);
-  return { mean_inter_blink_interval_ms: m, inter_blink_interval_cv: m > 0 ? sd / m : null };
+  /** How many intervals the mean and CV rest on: the observed ones (ibi-r2). */
+  ibi_interval_count: number;
+}
+
+/**
+ * Mean and CV of the interval between successive blink onsets, over the intervals that were OBSERVED.
+ *
+ * WHY THE SAMPLES ARE NEEDED. This used to take the blink list alone and average the gap between every
+ * pair of successive onsets. The blink RATE divides by observed time (a dropout is not charged to it),
+ * but the interval had no such rule: the interval that spans a face dropout contains the unobserved
+ * seconds — and the blinks that happened in them, which nobody saw. Reproduced through the aggregator
+ * (audit 86 D2): three minutes at 30 fps, a full blink every 4 s, and one 10 s look-away (face present
+ * 94% of the exposure, which passes every gate) gave a mean interval of 4,293 ms instead of 4,000 and a
+ * CV of 0.43 instead of 0; a 40 s look-away, 5,176 ms. The codebook reads a longer interval as blinking
+ * suppressed and a larger CV as erratic blinking, so a look-away produced both signatures of the effect
+ * under study.
+ *
+ * An interval is therefore used only when no sampling gap lies between its two onsets, judged by the
+ * gap rule of observed time (`samplingGapThreshold` on the condition's own series, passed in so the two
+ * cannot disagree). A blink lost to a gap is abandoned by `classifyBlinks`, so the interval around it
+ * spans that gap and is left out with it. Nothing is interpolated: an interval that was not watched
+ * from end to end has no measured length.
+ *
+ * Null mean with no observed interval (fewer than two blinks, or every interval spans a gap). Null CV
+ * with fewer than two: the spread of one interval is not zero, it is unmeasured (ibi-r1 wrote 0, the
+ * value of perfectly regular blinking, for a row with exactly two blinks).
+ */
+export function interBlinkInterval(
+  events: ReadonlyArray<Pick<BlinkEvent, 'onset_ms'>>,
+  samples: EarSample[],
+  gapMs?: number,
+): InterBlinkInterval {
+  const onsets = events.map((e) => e.onset_ms).filter(Number.isFinite).sort((a, b) => a - b);
+  const series = samples.filter((s) => Number.isFinite(s.t_ms));
+  const gaps = samplingGaps(series, gapMs ?? samplingGapThreshold(series));
+  const intervals: number[] = [];
+  let g = 0;
+  for (let i = 1; i < onsets.length; i++) {
+    const from = onsets[i - 1];
+    const to = onsets[i];
+    // Gaps are in time order, so those wholly before this interval are behind it for good.
+    while (g < gaps.length && gaps[g][1] <= from) g++;
+    const spansGap = g < gaps.length && gaps[g][0] < to;
+    if (!spansGap) intervals.push(to - from);
+  }
+  const n = intervals.length;
+  if (n === 0) return { mean_inter_blink_interval_ms: null, inter_blink_interval_cv: null, ibi_interval_count: 0 };
+  const m = intervals.reduce((s, x) => s + x, 0) / n;
+  const sd = Math.sqrt(intervals.reduce((s, x) => s + (x - m) ** 2, 0) / n);
+  return {
+    mean_inter_blink_interval_ms: m,
+    inter_blink_interval_cv: n >= 2 && m > 0 ? sd / m : null,
+    ibi_interval_count: n,
+  };
 }

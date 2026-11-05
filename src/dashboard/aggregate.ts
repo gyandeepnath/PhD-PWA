@@ -8,6 +8,7 @@ import { rowSliderVersion } from '@/scales/vas';
 import { isStraightLined, straightLineRule, STRAIGHT_LINE, STRAIGHT_LINE_RULE_V1 } from './straightLine';
 import { CONFIG } from '@/experiment/config';
 import { FPS_GATE, fpsTier, gateParticipant, type FpsTier } from '@/tracking/frameRateGate';
+import { exportedInterBlinkInterval } from '@/tracking/blinkLog';
 import {
   ocularReliability, reliabilityHeadline, reliabilityReason, type Reliability, type ReliabilityCheck, type ReliabilityResult,
 } from '@/tracking/ocularReliability';
@@ -245,7 +246,10 @@ export interface ConditionSummary {
   blink_rate: number | null;
   blink_rate_full: number | null;
   incomplete_blink_ratio: number | null;
+  /** Under the current interval rule wherever the kept window allows (blinkLog.ts exportedInterBlinkInterval). */
   mean_inter_blink_interval_ms: number | null;
+  /** The interval rule behind it: ibi-r2, or ibi-r1 for an old row that could not be recomputed; null camera-off. */
+  ibi_rule_version: string | null;
   perclos_p80: number | null;
   perclos_p70: number | null;
   long_closure_count: number | null;
@@ -725,6 +729,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
     const eye = bundle.eyeMetrics.find((e) => e.condition_id === c.condition_id);
 
     const cameraActive = eye?.camera_active ?? false;
+    const ibi = eye && cameraActive ? exportedInterBlinkInterval(eye, bundle.ocularEvents) : null;
     const facePresence = cameraActive ? (eye?.face_presence_ratio ?? null) : null;
     const fps = cameraActive ? (eye?.effective_fps ?? null) : null;
     const g = gate[ci];
@@ -850,7 +855,9 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       blink_rate: cameraActive ? (eye?.blink_rate ?? null) : null,
       blink_rate_full: cameraActive ? (eye?.blink_rate_full ?? null) : null,
       incomplete_blink_ratio: cameraActive ? (eye?.incomplete_blink_ratio ?? null) : null,
-      mean_inter_blink_interval_ms: cameraActive ? (eye?.mean_inter_blink_interval_ms ?? null) : null,
+      // As 07 exports it: an interval recorded before Round 88 recomputed from its kept window (ibi-r2).
+      mean_inter_blink_interval_ms: ibi?.mean_inter_blink_interval_ms ?? null,
+      ibi_rule_version: ibi?.ibi_rule_version ?? null,
       perclos_p80: cameraActive ? (eye?.perclos_p80 ?? null) : null,
       perclos_p70: cameraActive ? (eye?.perclos_p70 ?? null) : null,
       long_closure_count: cameraActive ? (eye?.long_closure_count ?? null) : null,

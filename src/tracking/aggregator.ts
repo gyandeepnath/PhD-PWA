@@ -15,6 +15,7 @@ import {
   samplingGapThreshold,
   computeClosureMetrics,
   interBlinkInterval,
+  IBI_RULE_VERSION,
   fitEarBaseline,
   type BlinkEvent,
   type BlinkEventDetail,
@@ -345,7 +346,8 @@ export class EyeMetricsAggregator {
     // The same for the long-closure counts, which reported 0 without a baseline to measure against.
     const closure = blinkMeasurable ? closureRaw
       : { ...closureRaw, long_closure_count: null, long_closure_total_ms: null };
-    const ibi = interBlinkInterval(events);
+    // Over the intervals observed end to end, on the gap rule observed time uses (blink.ts, ibi-r2).
+    const ibi = interBlinkInterval(events, this.ear, samplingGapThreshold(this.ear));
 
     /*
      * The fitted-minimum SENSITIVITY (blinkFit.ts, rule fit-r1; Round 79). The same blinks, each one's
@@ -419,6 +421,9 @@ export class EyeMetricsAggregator {
       bins,
       mean_inter_blink_interval_ms: ibi.mean_inter_blink_interval_ms,
       inter_blink_interval_cv: ibi.inter_blink_interval_cv,
+      // Without a baseline no blink is classified, so there is no interval to count: blank, not 0.
+      ibi_interval_count: blinkMeasurable ? ibi.ibi_interval_count : null,
+      ibi_rule_version: IBI_RULE_VERSION,
       perclos_p80: closure.perclos_p80,
       perclos_p70: closure.perclos_p70,
       long_closure_count: closure.long_closure_count,
