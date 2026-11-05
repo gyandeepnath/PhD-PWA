@@ -130,6 +130,28 @@ Notes on each term:
   therefore doing real work rather than being a convenience, and the residual leak onto the polarity
   contrast should be acknowledged in the limitations — it is small only because the corpus is
   length- and difficulty-matched.
+- **No sitting term, whatever the scheduling** (Round 88, audit 86 D5). The split-sitting
+  accommodation (five runs in each of two sittings) is a scheduling option, not a factor, so the model
+  above — and every secondary model in §4 — has the same formula whether or not anyone's sittings were
+  split. Both templates used to add a fixed `session_index` and a sitting intercept
+  `(1 | participant_id:session_index)` to EVERY model as soon as one participant was split, so how a few
+  people were scheduled changed the published formulae for all of them. Worse, in the R primary's
+  reduction ladder the sitting intercept sat in the maximal structure beside the polarity slope: a split
+  is serial positions 0-4 and 5-9, already in `position_c`, so the sitting intercept usually has no
+  variance, the maximal fit was singular, and the next rung removed the **pre-specified polarity slope**
+  (synopsis §3.9) while keeping the inert sitting term. On the audit's 24-participant cohort with six
+  participants split, H1's interval narrowed from −0.429..−0.198 to −0.430..−0.231 from the scheduling
+  alone. PROTOCOL.md's "`session_index` ... added as a covariate when sittings vary" is kept as a
+  **pre-specified sensitivity**: when any participant's runs are split, the primary is refitted with
+  `session_index` as a fixed covariate (`with the sitting as a covariate (+ session_index)` among its
+  refits, in both templates), because a second sitting starts fresh — fatigue resets between sittings.
+  Archived two-level data are the exception: there the sitting carried illumination and is its
+  whole-plot stratum, so the sitting terms stay, and the reduction order drops the sitting intercept
+  (keeping the polarity slope) **before** it drops the polarity slope. `npm run verify:analysis` runs
+  the gate cohort a second time with six participants split and fails unless every model's formula,
+  rows and H1 are the single-sitting ones. **Investigator decision:** whether the sitting refit should
+  instead be the confirmatory model if many participants are split; the default keeps the pre-specified
+  formula above.
 - **Overdispersion is a standing sensitivity, not a threshold trigger** (amended in Round 70, before
   data collection). Blinks within a condition are not independent Bernoulli trials. This bullet used
   to say: if the dispersion statistic exceeds ~1.5, refit with `glmmTMB(..., family = betabinomial)`.
@@ -446,6 +468,9 @@ is not fitted: it needs a package (`survival`) that is not in the install line o
 - **CVS-Q change and NASA-TLX**: one value per participant — for CVS-Q the first sitting's baseline to
   the last sitting's close, for NASA-TLX the mean of a participant's sittings — with a t interval over
   participants. A split sitting used to contribute two half-exposure changes counted as independent.
+  The Python cross-check did so until Round 88 (audit 86 D6: "n = 28 sitting(s)" for 22 participants);
+  it now takes the same one value per participant as R, and the gate holds the two templates' lines
+  equal on a split cohort.
 
 **The rating format (Round 84).** The five fatigue items and the comfort and clarity ratings were
 native sliders: the fatigue items an eleven-step 0-10 scale that printed "x / 10" while the participant
@@ -894,7 +919,9 @@ delta-method CI, population-averaged), the primary family (H1a and H1b, raw and 
 H1b by a 4-df Wald test), the PERCLOS-adjusted refit and the PERCLOS covariate check with the same
 compression. It does not refit the primary for overdispersion: its participant-clustered sandwich
 covariance does not assume binomial variance, so extra-binomial variation is already in its standard
-errors, and the output says so. The secondary outcome families (§4b) are R's alone.
+errors, and the output says so. The secondary outcome families (§4b) are R's alone — the inter-blink
+interval among them, so its rule (§5, `ibi-r2`) is applied in R only. Python summarises the CVS-Q change
+and the NASA-TLX as R does, one value per participant (Round 88).
 
 Its header used to call itself "authoritative inference", and three requirements of this plan were
 absent from it: the frame-rate sensitivity refit of §5.2, the sum-to-zero polarity coding of §2, and

@@ -463,6 +463,13 @@ def main() -> None:
 
     cond = build_cond(conditions, wide, participant, session_info)
 
+    def t_interval(x: pd.Series) -> tuple[float, float]:
+        """The 95% t interval of a mean, as R's t.test(x)$conf.int: over the units in x."""
+        from scipy import stats
+        x = pd.Series(x, dtype=float)
+        half = stats.t.ppf(0.975, len(x) - 1) * x.std(ddof=1) / np.sqrt(len(x))
+        return float(x.mean() - half), float(x.mean() + half)
+
     def report_n(m, data: pd.DataFrame, label: str) -> None:
         """Rows used of rows given, for every model. patsy drops a row with a missing value in any
         term without a word; on a dataset with mostly-missing frame rates the R primary fell from 120
@@ -472,8 +479,6 @@ def main() -> None:
         print(f"[n] {label}: {used} of {len(data)} rows used"
               + (f" — {gone} dropped for a missing value in a model term" if gone > 0 else ""))
 
-    # Only include session_index when sittings actually vary (else it is constant → unidentified).
-    si = " + session_index" if cond["session_index"].nunique() > 1 else ""
 
     # Ambient illumination is a SINGLE level under the current protocol, and patsy contributes ZERO
     # columns for a one-level categorical with an intercept — no error, no warning, the term simply
@@ -486,6 +491,23 @@ def main() -> None:
     if n_illum <= 1:
         print("\n[PROTOCOL NOTE] One ambient illumination level: illumination terms are omitted and"
               "\nno illumination effect is estimable. This is the protocol, not a fault in the data.")
+
+    # THE SITTING IS IN NO MODEL UNDER THE CURRENT PROTOCOL (Round 88, audit 86 D5; the R template's
+    # SITTING_IN_MODELS says why at length). session_index used to enter every model here as soon as one
+    # participant's runs were split across two sittings, so the scheduling of a few people changed every
+    # formula: on the audit's cohort the RT position effect moved from 3.48 to 2.91. The split is "a
+    # scheduling option and not a factor" (ANALYSIS_PLAN.md header, §1). PROTOCOL.md's covariate is kept
+    # as a pre-specified sensitivity of the primary. Archived two-level data keep it in every model:
+    # there the sitting carried illumination.
+    several_sittings = cond["session_index"].nunique(dropna=True) > 1
+    sitting_sensitivity = several_sittings and n_illum <= 1
+    si = " + session_index" if several_sittings and n_illum > 1 else ""
+    if sitting_sensitivity:
+        k = cond.dropna(subset=["session_index"]).groupby("participant_id")["session_index"].nunique()
+        print(f"\n[sitting] {int((k > 1).sum())} participant(s) ran their conditions over more than one sitting. The split is a"
+              "\nscheduling option, not a factor (ANALYSIS_PLAN.md §1-2): no model carries a sitting term, so every"
+              "\nformula is the one a single-sitting cohort gets. The primary is refitted with session_index as a"
+              "\ncovariate, a pre-specified sensitivity, among its refits below.")
 
     # passage_repeat_number is constant at 1 when each passage is read once, and statsmodels does
     # NOT drop an aliased column - the fit goes singular instead of telling you.
@@ -635,9 +657,9 @@ def main() -> None:
     print("\n=== Mean per-block d' per participant (descriptive; the R template models the trials) ===")
     print(dprime)
 
-    # CVS-Q change, per SITTING. Pivoting on participant_id alone silently averaged the two sittings
-    # (pivot_table defaults to aggfunc="mean"), which destroyed the illumination contrast that is
-    # the entire reason for administering it twice. 13_cvsq.csv now carries session_index.
+    # CVS-Q change. Per SITTING for the illumination contrast of archived two-level data: pivoting on
+    # participant_id alone silently averaged the two sittings (pivot_table defaults to aggfunc="mean"),
+    # which destroyed that contrast. Under the current protocol, one change per PARTICIPANT (below).
     #
     # NOTE: baseline and close use DIFFERENT recall frames (see the `frame` column and
     # docs/LITERATURE_VALIDATION.md). This change score is exploratory.
@@ -670,10 +692,44 @@ def main() -> None:
             # This branch did not exist: with one illumination level the whole block vanished
             # without printing a word, and the key secondary outcome simply never appeared in the
             # output. The change score itself is perfectly estimable; only the contrast is gone.
-            ch = cvsq_wide["change"].dropna()
+            #
+            # ONE CHANGE PER PARTICIPANT, WITH ITS INTERVAL (Round 88, audit 86 D6; ANALYSIS_PLAN.md §4),
+            # as the R template has taken it since its m10 fix. This printed a mean over SITTINGS with no
+            # interval, so a participant whose session was split contributed two half-exposure changes
+            # counted as independent: the audit's split cohort printed "n = 28 sitting(s)" for 22 people,
+            # and the key secondary differed between the two templates whenever a sitting was split. The
+            # change runs from the baseline of a participant's FIRST sitting to the close of their LAST —
+            # the whole exposure the questionnaire brackets — with a t interval over participants.
             print("\n=== CVS-Q baseline-to-close change (EXPLORATORY: frames differ) ===")
             print("One illumination level: no between-level contrast is estimable.")
-            print(f"n = {len(ch)} sitting(s), mean change = {ch.mean():.2f}, sd = {ch.std():.2f}")
+            scored = cvsq.assign(total_score=pd.to_numeric(cvsq["total_score"], errors="coerce"),
+                                 session_index=pd.to_numeric(cvsq["session_index"], errors="coerce"))
+            scored = scored[np.isfinite(scored["total_score"])].reset_index(drop=True)
+
+            def at_end(rows: pd.DataFrame, stage: str, last: bool) -> float:
+                # R: total_score[stage == s][which.min(session_index[stage == s])][1] — the first row
+                # at the first (or last) sitting; no sitting index, no value.
+                r = rows[rows["stage"].eq(stage) & rows["session_index"].notna()]
+                if not len(r):
+                    return float("nan")
+                at = r["session_index"].max() if last else r["session_index"].min()
+                return float(r.loc[r["session_index"].eq(at), "total_score"].iloc[0])
+            per_p = pd.DataFrame([
+                {"participant_id": pid, "n_sittings": g["sitting_folder"].nunique(),
+                 "baseline": at_end(g, "baseline", last=False), "session_end": at_end(g, "session_end", last=True)}
+                for pid, g in scored.groupby("participant_id", sort=True)
+            ], columns=["participant_id", "n_sittings", "baseline", "session_end"]).dropna(subset=["baseline", "session_end"])
+            per_p["change"] = per_p["session_end"] - per_p["baseline"]
+            n_split = int((per_p["n_sittings"] > 1).sum())
+            ch = per_p["change"]
+            if len(ch) >= 2 and ch.std() > 0:
+                lo, hi = t_interval(ch)
+                print(f"[cvsq] mean change, close minus baseline: {ch.mean():.2f} points (95% CI {lo:.2f} to {hi:.2f}), "
+                      f"n = {len(ch)} participant(s)"
+                      + (f"; {n_split} split across sittings, first baseline to last close" if n_split else ""))
+            elif len(ch):
+                print(f"[cvsq] mean change {ch.mean():.2f} from {len(ch)} participant(s), with no variation between them: no interval.")
+            print(ch.describe())
 
     # --- NASA-TLX: SESSION-level workload ------------------------------------------------
     # Never analysed here at all. Once per sitting, so it supports a session-level contrast only
@@ -699,7 +755,16 @@ def main() -> None:
         elif len(tlx):
             print("\n=== NASA-TLX raw score (session level, descriptive) ===")
             print("One rating per sitting and one illumination level: no contrast is estimable.")
-            print(f"n = {len(tlx)} sitting(s), mean = {tlx['raw_tlx'].mean():.2f}, sd = {tlx['raw_tlx'].std():.2f}")
+            print(f"n = {len(tlx)} sitting(s), {tlx['participant_id'].nunique()} participant(s)")
+            # Its level, with an interval over PARTICIPANTS (Round 88, audit 86 D6; as the R template): a
+            # split sitting has two ratings, each of part of the workload, so they are averaged into one per
+            # participant rather than counted twice.
+            raw = pd.to_numeric(tlx["raw_tlx"], errors="coerce")
+            tlx_p = raw[np.isfinite(raw)].groupby(tlx.loc[np.isfinite(raw), "participant_id"]).mean()
+            if len(tlx_p) >= 2 and tlx_p.std() > 0:
+                lo, hi = t_interval(tlx_p)
+                print(f"[NASA-TLX] mean raw TLX {tlx_p.mean():.1f} (95% CI {lo:.1f} to {hi:.1f}), "
+                      f"one value per participant, n = {len(tlx_p)}")
         else:
             print("\n[NASA-TLX not summarised: no confirmatory sitting has a rating]")
 
@@ -897,6 +962,12 @@ def main() -> None:
         print("\n=== PRIMARY: sensitivity refits (polarity_c = positive minus negative, log-odds) ===")
         sens_line("confirmatory (the primary above)", m)
         sens_line("without the eff_fps_c covariate (§2 formula)", m_no_fps)
+        # The sitting, pre-specified (Round 88, audit 86 D5): never in the confirmatory model.
+        if sitting_sensitivity:
+            rows_si = prim[prim["session_index"].notna()].reset_index(drop=True)
+            sens_line("with the sitting as a covariate (+ session_index)", fit_primary(rows_si, primary_rhs + " + session_index"))
+        elif not si:
+            print("  every participant ran in one sitting: no sitting refit to run.")
 
         # --- THE FRAME-RATE GATE fps-g2: its three pre-registered refits (ANALYSIS_PLAN.md §5 item 2)
         # and the polarity check. The primary above uses tiers A and B. If the effect exists only with

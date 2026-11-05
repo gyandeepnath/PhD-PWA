@@ -86,6 +86,14 @@ export interface CohortOptions {
    * Round 62 audit's M2) with the gate green.
    */
   disengaged?: number[];
+  /**
+   * 0-based participant indices whose ten runs were SPLIT into two sittings of five (Round 88, audit 86
+   * D5/D6): the same simulated values, packaged as the app writes a split — a second sitting with its
+   * own session_id, session_index 2, condition_offset 5 — so a template can be held to the same answer
+   * whatever the scheduling. Applied after every draw, so it moves no simulated value (see
+   * splitIntoTwoSittings).
+   */
+  split?: number[];
 }
 
 const logistic = (x: number) => 1 / (1 + Math.exp(-x));
@@ -373,8 +381,68 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
       const last = b.conditions.reduce((a, c) => (c.session_position > a.session_position ? c : a));
       last.completed_at = null;
     }
-    bundles.push(b);
+    bundles.push(...(opts.split?.includes(i) ? splitIntoTwoSittings(b) : [b]));
   }
   return bundles;
 }
 
+/** The days between the two halves of a simulated split. */
+const SPLIT_GAP_MS = 3 * 86_400_000;
+
+/**
+ * One simulated sitting re-packaged as the two sittings of a split (5 + 5), as the app writes them.
+ *
+ * Every measured value is the one simulated for the single sitting: the runs at positions 0-4 are the
+ * first sitting's and 5-9 the second's, each with its rows. What a second sitting re-measures — the
+ * baseline fatigue rating, the CVS-Q at both ends, the NASA-TLX, the calibration and the camera
+ * self-test — is carried into it as a copy under its own ids, so the first sitting's baseline and the
+ * second's close bracket the same exposure as the single sitting's did. Nothing is drawn: a template
+ * must give a split cohort exactly the answer it gives the same people in one sitting each, except
+ * where the analysis plan says a split counts differently (it does not).
+ */
+export function splitIntoTwoSittings(b: SessionBundle): [SessionBundle, SessionBundle] {
+  const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
+  const half = Math.floor(b.conditions.length / 2);
+  const sidB = `${b.session.session_id}-B`;
+  const inB = new Set(b.conditions.filter((c) => c.session_position >= half).map((c) => c.condition_id));
+  const reason = 'participant could attend only an hour at a time (simulated scheduling)';
+  const A = clone(b);
+  const B = clone(b);
+  Object.assign(A.session, { conditions_per_session: half, condition_offset: 0, session_index: 1, sitting_split_reason: reason });
+  Object.assign(B.session, {
+    session_id: sidB, conditions_per_session: b.conditions.length - half, condition_offset: half, session_index: 2,
+    sitting_split_reason: reason,
+    session_start_time: b.session.session_start_time + SPLIT_GAP_MS,
+    session_end_time: b.session.session_end_time == null ? null : b.session.session_end_time + SPLIT_GAP_MS,
+  });
+  const rowsOf = <T extends { condition_id?: string | null; session_id: string }>(rows: T[], second: boolean): T[] =>
+    clone(rows).filter((r) => r.condition_id != null && inB.has(r.condition_id) === second)
+      .map((r) => (second ? { ...r, session_id: sidB } : r));
+  const copyFor = <T extends { session_id: string }>(rows: T[], second: boolean, idKey: keyof T): T[] =>
+    clone(rows).map((r) => (second ? { ...r, session_id: sidB, [idKey]: `${String(r[idKey])}-B` } : r));
+  for (const [X, second] of [[A, false], [B, true]] as const) {
+    X.conditions = rowsOf(b.conditions, second);
+    X.comprehension = rowsOf(b.comprehension, second);
+    X.visualSearch = rowsOf(b.visualSearch, second);
+    X.perception = rowsOf(b.perception, second);
+    X.reactionTrials = rowsOf(b.reactionTrials, second);
+    X.rtSummaries = rowsOf(b.rtSummaries, second);
+    X.eyeMetrics = rowsOf(b.eyeMetrics, second)
+      .map((e) => (second && e.calibration_id ? { ...e, calibration_id: `${e.calibration_id}-B` } : e));
+    X.fatigue = [
+      ...copyFor(b.fatigue.filter((f) => f.stage === 'baseline'), second, 'fatigue_id'),
+      ...rowsOf(b.fatigue.filter((f) => f.stage === 'post_condition'), second),
+    ];
+    X.cvsq = copyFor(b.cvsq, second, 'cvsq_id');
+    X.tlx = copyFor(b.tlx, second, 'tlx_id');
+    X.calibration = copyFor(b.calibration, second, 'calibration_id');
+    X.media = second ? [] : clone(b.media);
+    const events = b.ocularEvents ?? [];
+    X.ocularEvents = [
+      ...rowsOf(events.filter((o) => o.window === 'reading'), second),
+      ...clone(events.filter((o) => o.window === 'selftest'))
+        .map((o) => (second ? { ...o, session_id: sidB, record_id: `selftest:${sidB}` } : o)),
+    ];
+  }
+  return [A, B];
+}

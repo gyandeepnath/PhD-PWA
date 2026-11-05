@@ -172,6 +172,9 @@ try {
     // participant variance at its boundary, where the gradient-based optimizers raise LinAlgError (3 of
     // 80 seeds at N = 10; the PERCLOS simulated here has no participant variance at all).
     ten: { n: 10, seed: 28 },
+    // The main cohort again, six participants' ten runs packaged as two sittings of five (Round 88,
+    // audit 86 D5/D6): the same simulated values, written as the app writes a split.
+    split: { ...SIM, split: [0, 1, 3, 4, 6, 8] },
   };
   const cohortDumper = join(dir, 'dumpCohort.ts');
   writeFileSync(cohortDumper, `
@@ -185,7 +188,8 @@ const jobs: { root: string; options: unknown }[] = JSON.parse(readFileSync(proce
 for (const { root, options } of jobs) {
   const bundles = simulateCohort(options as Parameters<typeof simulateCohort>[0]);
   for (const b of bundles) {
-    const out = root + '/' + b.session.participant_id;
+    // One folder per sitting: a split participant's second sitting beside its first.
+    const out = root + '/' + b.session.participant_id + (b.session.session_index > 1 ? '_S' + b.session.session_index : '');
     mkdirSync(out, { recursive: true });
     for (const f of buildExportFiles(b)) writeFileSync(out + '/' + f.filename, f.content);
   }
@@ -270,12 +274,12 @@ for (const { root, options } of jobs) {
   // Launched longest first: the two full R runs, then the rest.
   const RUNS = {
     ...(rReady ? {
-      'R:cohort': launchR(cohortDir), 'R:r-short': launchR(at('r-short')), 'R:cameras-some': launchR(at('cameras-some')),
+      'R:cohort': launchR(cohortDir), 'R:split': launchR(at('split')), 'R:r-short': launchR(at('r-short')), 'R:cameras-some': launchR(at('cameras-some')),
       'R:cameras-off': launchR(at('cameras-off')), 'R:one': launchR(at('one')), 'R:twice': launchR(at('twice')),
       'R:no-verdict': launchR(at('no-verdict')), 'R:one-polarity': launchR(at('one-polarity')),
       'R:one-polarity-edited': launchR(at('one-polarity-edited')),
     } : {}),
-    'Python:cohort': launchPy(cohortDir), 'Python:flagged': launchPy(at('flagged')),
+    'Python:cohort': launchPy(cohortDir), 'Python:split': launchPy(at('split')), 'Python:flagged': launchPy(at('flagged')),
     ...(rReady ? { 'R:flagged': launchR(at('flagged')) } : {}),
     'Python:cameras-some': launchPy(at('cameras-some')), 'Python:cameras-off': launchPy(at('cameras-off')),
     'Python:one': launchPy(at('one')), 'Python:twice': launchPy(at('twice')), 'Python:no-verdict': launchPy(at('no-verdict')),
@@ -1048,6 +1052,70 @@ for (const { root, options } of jobs) {
     const missing = missingSections(who, res);
     ok(`${who}: ... and still reports every behavioural and questionnaire outcome`, missing.length === 0, `missing: ${missing.join(', ')}`);
     ok(`${who}: ... and flags the small cohort`, said(res, /\[SMALL N\] 6 participants/), 'no [SMALL N] line');
+  }
+  /*
+   * A SPLIT SITTING IS SCHEDULING, NOT A FACTOR (Round 88, audit 86 D5 and D6). The main cohort with
+   * six of its participants' ten runs packaged as two sittings of five, through the app's own writers:
+   * the same people, the same values. Both templates used to put a sitting term into EVERY model as soon
+   * as one participant was split, so the published formulae depended on the scheduling, and R's ladder
+   * then dropped the pre-specified polarity slope for an inert sitting intercept (H1's interval
+   * narrowed); Python counted each split participant twice in the CVS-Q change and the NASA-TLX. Now
+   * every model must have the formula, the rows and the estimate it has when nobody is split, the
+   * sitting must appear only as the primary's pre-specified sensitivity, and the CVS-Q change and
+   * NASA-TLX must be one value per participant in both templates.
+   */
+  {
+    const splitAll = JSON.parse(readFileSync(`${at('split')}.expected.json`, 'utf8'));
+    ok('a split cohort: the exporter admits the split participants, so both sets are the main cohort\'s',
+      JSON.stringify({ confirmatory: splitAll.confirmatory, sensitivity: splitAll.sensitivity }) === JSON.stringify(expected),
+      `split ${JSON.stringify({ confirmatory: splitAll.confirmatory, sensitivity: splitAll.sensitivity })} vs ${JSON.stringify(expected)}`);
+    const nP = expected.confirmatory.participants;
+    const pick = (text, re) => text.match(re) ?? [];
+    /** The first line where two lists differ, for the failure message. */
+    const firstDiff = (a, b) => {
+      for (let i = 0; i < Math.max(a.length, b.length); i++) if (a[i] !== b[i]) return `one sitting each: ${a[i] ?? '(none)'} | split: ${b[i] ?? '(none)'}`;
+      return '';
+    };
+    const MODELS = /^\[(?:n|model)\] [^\n]*/gm;
+    const H1 = /^\[H1\][^\n]*|^PRIMARY MODEL RANDOM STRUCTURE:[^\n]*/gm;
+    const PER_P = /^\[cvsq\] mean change[^\n]*|^\[NASA-TLX\] mean raw TLX[^\n]*/gm;
+    const perP = {};
+    for (const [who, res] of await both('split')) {
+      const main = await RUNS[`${who}:cohort`];
+      const a = main.stdout;
+      const b = res.stdout;
+      ok(`${who}: the split cohort runs to completion`, res.status === 0, (res.stderr || '').trim().split('\n').slice(-2).join(' | '));
+      const [ma, mb] = [pick(a, MODELS), pick(b, MODELS)];
+      ok(`${who}: every model has the formula and the rows it has when nobody is split (${ma.length} [n]/[model] lines)`,
+        ma.length >= (who === 'R' ? 40 : 6) && JSON.stringify(ma) === JSON.stringify(mb), firstDiff(ma, mb));
+      // The finder's measurement: Python's serial-position effects moved (RT 3.48 to 2.91) when a
+      // session_index term entered with the split. Python prints no formula, so its coefficients and the
+      // absence of the term are compared.
+      if (who === 'Python') {
+        const pos = (t) => ['RT mixed model', 'Fatigue mixed model', 'Comprehension GEE'].map((h) => coefAfter(t, h, 'position_c'));
+        ok('Python: no model carries a sitting term, and every position effect is the one-sitting value',
+          !/^session_index\s/m.test(b) && pos(a).every((v, i) => Number.isFinite(v) && v === pos(b)[i]),
+          `position_c one sitting each ${pos(a).join(', ')} vs split ${pos(b).join(', ')}`);
+      }
+      const [ha, hb] = [pick(a, H1), pick(b, H1)];
+      ok(`${who}: the primary's structure and H1 are the ones the same people give in one sitting each`,
+        ha.length >= 2 && JSON.stringify(ha) === JSON.stringify(hb), firstDiff(ha, hb));
+      ok(`${who}: the sitting is the primary's pre-specified sensitivity, run only when a sitting is split`,
+        /\[sitting\] 6 participant\(s\) ran their conditions over more than one sitting/.test(b)
+          && /with the sitting as a covariate \(\+ session_index\)\s+polarity\S* -?[\d.]+/.test(b)
+          && /no sitting refit to run/.test(a) && !/\[sitting\]/.test(a),
+        (/^[^\n]*with the sitting as a covariate[^\n]*/m.exec(b) ?? ['no sitting refit line'])[0]);
+      const [pa, pb] = [pick(a, PER_P), pick(b, PER_P)];
+      ok(`${who}: the CVS-Q change and NASA-TLX are one value per participant (n = ${nP}), as for the same people in one sitting`,
+        pb.length === 2 && new RegExp(`n = ${nP} participant\\(s\\); 6 split across sittings`).test(pb[0]) && new RegExp(`n = ${nP}$`).test(pb[1])
+          && JSON.stringify(pa) === JSON.stringify(pb.map((l) => l.replace('; 6 split across sittings, first baseline to last close', ''))),
+        firstDiff(pa, pb));
+      perP[who] = pb;
+    }
+    if (perP.R) {
+      ok('R and Python: the same CVS-Q change and NASA-TLX level, interval and n on the split cohort',
+        JSON.stringify(perP.R) === JSON.stringify(perP.Python), firstDiff(perP.R, perP.Python ?? []));
+    }
   }
   // Three of twelve without the camera: the primary is fitted on the nine who had one, and every
   // behavioural model keeps all twelve — reading speed used to be taken from the camera-on frame.

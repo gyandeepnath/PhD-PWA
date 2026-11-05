@@ -537,3 +537,41 @@ describe('no codebook description recommends weighting a d-prime by its inverse 
     expect(offenders).toEqual([]);
   });
 });
+
+/*
+ * A SPLIT SITTING IS SCHEDULING, NOT A FACTOR (Round 88, audit 86 D5). The gate's split cohort holds
+ * both templates to the formulae and estimates of the same people in one sitting each; these pin the
+ * parts it cannot reach — archived two-level data, where the sitting is illumination's whole-plot
+ * stratum and its terms stay.
+ */
+describe('the sitting enters no model under the current protocol, and is reduced before the polarity slope', () => {
+  const R = src('src/analysis/analysis_template.R');
+  const py = src('src/analysis/analysis_template.py');
+
+  it('R gives the sitting terms to archived two-level data only', () => {
+    expect(R).toMatch(/^SITTING_IN_MODELS <- USE_SESSION_INDEX && USE_ILLUMINATION$/m);
+    expect(R).toMatch(/^si_term <- if \(SITTING_IN_MODELS\) " \+ session_index" else ""$/m);
+    expect(R).toMatch(/^re_sitting <- if \(SITTING_IN_MODELS\) " \+ \(1 \| participant_id:session_index\)" else ""$/m);
+  });
+
+  it('Python gives session_index to archived two-level data only', () => {
+    expect(py).toMatch(/^ {4}si = " \+ session_index" if several_sittings and n_illum > 1 else ""$/m);
+  });
+
+  it('R\'s ladder drops a sitting intercept, keeping the slope, before it drops the polarity slope', () => {
+    const ladder = R.slice(R.indexOf('  rungs <- list('), R.indexOf('  fit <- list(model = NULL'));
+    const labels = [...ladder.matchAll(/label = "([^"]+)"/g)].map((m) => m[1]);
+    const noSitting = labels.findIndex((l) => /NO SITTING INTERCEPT \(polarity slope kept\)/.test(l));
+    const noSlope = labels.findIndex((l) => /no polarity slope/.test(l));
+    expect(labels[0]).toBe('maximal');
+    expect(noSitting).toBe(1);
+    expect(noSlope).toBeGreaterThan(noSitting);
+    // A rung that keeps the slope accepts no singular fit: a singular slope is still the reason to drop it.
+    expect(ladder).toMatch(/label = "reduction 1 — NO SITTING INTERCEPT \(polarity slope kept\)", singular_ok = FALSE/);
+  });
+
+  it('both refit the primary with the sitting as a covariate, a pre-specified sensitivity', () => {
+    expect(R).toMatch(/sens_line\("with the sitting as a covariate \(\+ session_index\)"/);
+    expect(py).toMatch(/sens_line\("with the sitting as a covariate \(\+ session_index\)"/);
+  });
+});

@@ -332,7 +332,9 @@ differentially change effort across conditions and confound the display manipula
 later sitting for the remaining 5). The participant's enrolment number — which drives the Williams
 order — is **reused across sittings**, and the next sitting resumes at the global serial position
 where the last stopped, so each condition is still run exactly once. `session_index` (sitting
-number) is recorded and added as a covariate when sittings vary; baseline fatigue and CVS-Q are
+number) is recorded; it enters no confirmatory model, so the analysis does not depend on who was
+scheduled in two sittings, and the primary is refitted with it as a covariate as a pre-specified
+sensitivity (ANALYSIS_PLAN.md §2, Round 88); baseline fatigue and CVS-Q are
 re-measured each sitting (fatigue resets between sittings — documented, not assumed away).
 - The **app's digital colour-vision screen** is a screening aid, not a clinical diagnosis and not
   the Ishihara test: seven home-made plates (one greyscale control, six red-green confusion plates)

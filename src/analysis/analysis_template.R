@@ -508,11 +508,10 @@ if (n_si_missing > 0) {
   cat("\n[session_index] ", n_si_missing, " confirmatory condition-run(s) carry no session_index. They are NOT\n",
       "relabelled sitting 1. A model with a sitting term drops them; its [n] line says how many rows it used.\n", sep = "")
 }
-# The sitting term exists only when more than one sitting index occurs: a split sitting, or archived
-# two-level data. NA is not a level — counting it as one put a sitting term into a single-sitting
-# dataset and silently dropped every row whose index was missing.
+# More than one sitting index occurs: a split sitting, or archived two-level data. NA is not a level —
+# counting it as one put a sitting term into a single-sitting dataset and silently dropped every row
+# whose index was missing.
 USE_SESSION_INDEX <- n_distinct(na.omit(cond$session_index)) > 1
-si_term <- if (USE_SESSION_INDEX) " + session_index" else ""
 
 # Ambient illumination is a SINGLE level under the current protocol (300 lux throughout), so it
 # cannot enter any model: a one-level factor is aliased with the intercept, and R either drops it
@@ -525,8 +524,33 @@ USE_ILLUMINATION <- length(unique(na.omit(cond$ambient_illumination_level))) > 1
 il_term  <- if (USE_ILLUMINATION) " + illumination" else ""
 ilx_term <- if (USE_ILLUMINATION) " * illumination" else ""
 ord_term <- if (USE_ILLUMINATION) " + illumination_order_first" else ""
-# The sitting intercept is a stratum only when there is more than one sitting.
-re_sitting <- if (USE_SESSION_INDEX) " + (1 | participant_id:session_index)" else ""
+# THE SITTING IS IN NO MODEL UNDER THE CURRENT PROTOCOL (Round 88, audit 86 D5). Every formula is the
+# one ANALYSIS_PLAN.md §2 and §4 give, whatever the scheduling. A sitting term — the fixed
+# session_index and the intercept (1 | participant_id:session_index) — used to enter EVERY model as
+# soon as one participant's runs were split across two sittings, so how six of twenty-four people were
+# scheduled changed the published formulae for all of them; and in the primary's ladder the sitting
+# intercept sat beside the polarity slope, so when it had no variance (the usual case: a split is
+# serial positions 0-4 and 5-9, already in session_position) the maximal was singular and the next
+# rung dropped the PRE-SPECIFIED polarity slope while keeping the inert sitting term — on the audit's
+# cohort the H1 interval narrowed from -0.429..-0.198 to -0.430..-0.231 from the scheduling alone. The
+# plan calls the split "a scheduling option and not a factor" (header, §1), and the synopsis's model
+# (§3.9) has no sitting term. PROTOCOL.md's "session_index ... added as a covariate when sittings
+# vary" is kept as a PRE-SPECIFIED SENSITIVITY of the primary (SITTING_SENSITIVITY, in its refits).
+# ARCHIVED TWO-LEVEL DATA is the exception: there illumination varied between sittings and the sitting
+# is its whole-plot error stratum, so the terms stay — and the ladder drops that intercept before the
+# polarity slope.
+SITTING_IN_MODELS <- USE_SESSION_INDEX && USE_ILLUMINATION
+SITTING_SENSITIVITY <- USE_SESSION_INDEX && !USE_ILLUMINATION
+si_term <- if (SITTING_IN_MODELS) " + session_index" else ""
+re_sitting <- if (SITTING_IN_MODELS) " + (1 | participant_id:session_index)" else ""
+if (SITTING_SENSITIVITY) {
+  n_split <- cond %>% filter(!is.na(session_index)) %>% group_by(participant_id) %>%
+    summarise(k = n_distinct(session_index), .groups = "drop") %>% filter(k > 1) %>% nrow()
+  cat(sprintf(paste0("\n[sitting] %d participant(s) ran their conditions over more than one sitting. The split is a\n",
+                     "scheduling option, not a factor (ANALYSIS_PLAN.md §1-2): no model carries a sitting term, so every\n",
+                     "formula is the one a single-sitting cohort gets. The primary is refitted with session_index as a\n",
+                     "covariate, a pre-specified sensitivity, among its refits below.\n"), n_split))
+}
 if (!USE_ILLUMINATION) cat(paste0(
   "\n[PROTOCOL NOTE] One ambient illumination level in this dataset, so every illumination term is\n",
   "omitted and NO illumination effect is estimable. This is the protocol, not a fault in the data.\n",
@@ -1832,14 +1856,15 @@ if (is.null(tlx)) {
 # Random structure: ANALYSIS_PLAN.md §1 — one sitting per participant, so a single random-effect
 # stratum, the participant, with a random polarity slope; plus the passage intercept of §2. This
 # comment used to describe a SPLIT-PLOT design with a session intercept nested in participant, which
-# the single-level amendment retired. A sitting intercept is still added when a dataset holds more
-# than one sitting per participant (a split sitting, or archived two-level data, where illumination
-# varied between sittings) — re_sitting is empty otherwise.
+# the single-level amendment retired. A split sitting adds NO term (Round 88; see SITTING_IN_MODELS):
+# the structure does not depend on how participants were scheduled. Only archived two-level data, where
+# illumination varied between sittings, carry the sitting intercept (re_sitting).
 #
 # If the maximal structure is singular or fails to fit, reduce in this PRE-SPECIFIED order and report
 # it — the structure actually fitted is printed from the model, not from a label:
-#   1. drop the random slope for polarity
-#   2. drop the sitting intercept (only present when there are several sittings)
+#   1. drop the sitting intercept (archived two-level data only), keeping the polarity slope
+#   2. drop the random slope for polarity
+#   3. drop the passage intercept (only if keeping it prevents a fit)
 # ===========================================================================================
 primary_failed <- FALSE
 eye <- eye %>% mutate(
@@ -1929,14 +1954,22 @@ if (nrow(eye) == 0) {
   # is the reason to reduce), and passes convergence_verdict(). A fit that lme4 flags and allFit does
   # not vindicate is NOT accepted, and the next rung is tried (m8). If no rung is accepted, the most
   # reduced structure that did fit is reported, marked NOT CONVERGED, rather than nothing.
+  #
+  # THE SITTING INTERCEPT GOES BEFORE THE POLARITY SLOPE (Round 88, audit 86 D5). It used to sit in
+  # the maximal beside the slope and survive the slope's removal: a singular sitting intercept made
+  # the maximal singular, and the next rung dropped the pre-specified slope and kept the inert term.
+  # A rung that carries the slope accepts no singular fit, so a singular slope is still the reason to
+  # drop it. The sitting rungs apply to archived two-level data only (re_sitting is empty otherwise).
   rungs <- list(
     list(label = "maximal", singular_ok = FALSE, applies = TRUE,
          rhs = paste0(". ~ . + (1 + polarity | participant_id)", re_sitting, re_passage)),
-    list(label = "reduction 1 (no polarity slope)", singular_ok = TRUE, applies = TRUE,
+    list(label = "reduction 1 — NO SITTING INTERCEPT (polarity slope kept)", singular_ok = FALSE, applies = nzchar(re_sitting),
+         rhs = paste0(". ~ . + (1 + polarity | participant_id)", re_passage)),
+    list(label = "reduction 2 (no polarity slope)", singular_ok = TRUE, applies = TRUE,
          rhs = paste0(". ~ . + (1 | participant_id)", re_sitting, re_passage)),
-    list(label = "reduction 1b — NO PASSAGE INTERCEPT, passage variance loads onto the residual",
+    list(label = "reduction 2b — NO PASSAGE INTERCEPT, passage variance loads onto the residual",
          singular_ok = TRUE, applies = nzchar(re_passage), rhs = paste0(". ~ . + (1 | participant_id)", re_sitting)),
-    list(label = "reduction 2 — NO SITTING INTERCEPT", singular_ok = TRUE, applies = nzchar(re_sitting),
+    list(label = "reduction 3 — NO SITTING INTERCEPT", singular_ok = TRUE, applies = nzchar(re_sitting),
          rhs = ". ~ . + (1 | participant_id)"))
   fit <- list(model = NULL, notes = character(0))
   rung <- NA_character_
@@ -2227,6 +2260,18 @@ if (nrow(eye) == 0) {
 
     # Without eff_fps_c: §2's own formula (m_no_fps, fitted with the H1 effect size above).
     sens_line("without the eff_fps_c covariate (§2 formula)", m_no_fps)
+
+    # THE SITTING, a pre-specified sensitivity (Round 88, audit 86 D5; PROTOCOL.md "session_index ...
+    # added as a covariate when sittings vary"). A split participant's second sitting starts fresh —
+    # fatigue resets between sittings — so the primary is refitted with session_index as a fixed
+    # covariate. Never in the confirmatory model: there it made the formula depend on the scheduling.
+    if (SITTING_SENSITIVITY) {
+      sitting_change <- ~ . + session_index
+      m_sitting <- tryCatch(suppressWarnings(refit(m_primary, eye, sitting_change)), error = function(err) NULL)
+      sens_line("with the sitting as a covariate (+ session_index)", m_sitting)
+    } else if (!SITTING_IN_MODELS) {
+      cat("  every participant ran in one sitting: no sitting refit to run.\n")
+    }
     sens_line("observation-level random effect (§2)", m_olre)
 
     # §5 QC-clean. The QC panel said this refit ran; it did not, until now.
