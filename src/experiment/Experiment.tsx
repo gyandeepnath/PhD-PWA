@@ -19,7 +19,7 @@ import { annotationSegmentSteps, blockPlan, isAnnotationSubsample, type PlannedS
 import { CONFIG, isE2ETimingActive } from './config';
 import {
   initialState, nextStateSkipping, progressPercent, firstUnsatisfiedSetupStage, resumeOwesBaselines,
-  loopEntry, setupStagesHeld, sittingProfileComplete, sittingColourVisionScreened, resumeOwesLaunchCheck,
+  loopEntry, setupStagesHeld, sittingProfileComplete, sittingColourVisionScreened, resumeOwesLaunchCheck, SETUP_ORDER,
   type MachineState,
 } from './stateMachine';
 import { GIT_HASH } from '@/lib/env';
@@ -1737,7 +1737,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           onStoppedByRotation={calibrationStopped}
         />
       ) : (
-        <Calibration cameraStatus={tracking.status} onDone={() => advanceOrResume('CALIBRATION')} />
+        <Calibration cameraStatus={tracking.status} cameraLost={tracking.cameraLostAt != null} onDone={() => advanceOrResume('CALIBRATION')} />
       );
       break;
     case 'BASELINE_FATIGUE':
@@ -2172,7 +2172,17 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const pausable = (isInLoop(machine.stage) || machine.stage === 'BREAK_SCREEN')
     && !rtTrialsRunning
     && !!session;
-  const cameraLostNotice = tracking.cameraLostAt != null && !cameraLossAccepted && pausable;
+  /*
+   * The set-up screens after camera set-up raise the camera-lost notice too (audit 86 F7). It was shown
+   * only where a pause is allowed, so a camera lost during the calibration said "Camera not active —
+   * this step is skipped", the wording for a participant who has no camera, and nothing at all on the
+   * baseline questionnaires and the instructions: the operator learnt of it at the first grey field,
+   * after the calibration had been skipped. There the way back is Exit — resume later, which sets the
+   * camera up and calibrates again; Continue goes on without it, as in the loop.
+   */
+  const cameraSetupDone = SETUP_ORDER.indexOf(machine.stage) > SETUP_ORDER.indexOf('CAMERA_SETUP');
+  const cameraLostOnSetup = cameraSetupDone && !pausable && !!session;
+  const cameraLostNotice = tracking.cameraLostAt != null && !cameraLossAccepted && (pausable || cameraLostOnSetup);
   /*
    * The camera runs but sees nothing: covered, or camera access switched off in quick settings,
    * which gives a black picture rather than stopping the camera — the case that used to pass
@@ -2461,6 +2471,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               camera, or when the tablet sleeps or is put in the background.
             </p>
           )}
+          {cameraLostOnSetup && !cameraBlockedNotice ? (
+            <p className="font-lab" style={{ fontSize: 14, color: '#c8d8f0', maxWidth: 520, marginTop: 10, lineHeight: 1.6 }}>
+              <strong>Researcher:</strong> exit and resume from the session manager. The camera is set up and
+              calibrated again, and the sitting continues at the first set-up screen not yet completed.
+            </p>
+          ) : (
           <p className="font-lab" style={{ fontSize: 14, color: '#c8d8f0', maxWidth: 520, marginTop: 10, lineHeight: 1.6 }}>
             <strong>Researcher:</strong> pause and resume from the session manager. The camera is set up and
             calibrated again, and {pauseAfterFinished
@@ -2469,10 +2485,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
                 ? 'the session continues at the next condition once this one\'s results have saved (if they do not, this condition starts again)'
                 : 'this condition starts again'}.
           </p>
+          )}
           <div style={{ display: 'flex', gap: 12, marginTop: 22, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button onClick={pauseAndExit} className="font-lab text-sm"
+            {/* From a set-up screen no resume pointer is written: the resume re-derives where to start
+                from what is stored (exitSitting; see onOperatorChip). */}
+            <button onClick={cameraLostOnSetup && !cameraBlockedNotice ? exitSitting : pauseAndExit} className="font-lab text-sm"
               style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid #fff', background: '#fff', color: '#1a1a2e', cursor: 'pointer' }}>
-              Pause and restart the camera
+              {cameraLostOnSetup && !cameraBlockedNotice ? 'Exit — resume later (camera set up again)' : 'Pause and restart the camera'}
             </button>
             <button onClick={() => (cameraBlockedNotice ? setCameraBlockAccepted(true) : setCameraLossAccepted(true))} className="font-lab text-sm"
               style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid #c8d8f0', background: 'transparent', color: '#c8d8f0', cursor: 'pointer' }}>
@@ -2482,7 +2501,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           <p className="font-lab" style={{ fontSize: 12, color: '#8fa0c0', maxWidth: 520, marginTop: 14, lineHeight: 1.6 }}>
             {cameraBlockedNotice
               ? 'If you continue, the time the picture stays black is recorded against this condition (camera_blocked_ms).'
-              : 'If you continue, every remaining condition is recorded with no eye measurements, marked as camera lost.'}
+              : cameraLostOnSetup
+                ? 'If you continue, the calibration is skipped and every condition is recorded with no eye measurements, marked as camera lost.'
+                : 'If you continue, every remaining condition is recorded with no eye measurements, marked as camera lost.'}
           </p>
         </div>
       )}

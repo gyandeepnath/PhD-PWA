@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { startNewExperiment, driveUntil, stageNow, throughCameraAndCalibration } from './helpers';
+import { startNewExperiment, driveUntil, stageNow, handleStage, throughCameraAndCalibration } from './helpers';
 
 /*
  * A camera lost mid-sitting must stop the sitting, not fail silently.
@@ -73,4 +73,54 @@ test('the camera self-test runs after calibration and its result is saved with t
   expect(st?.cued).toBe(5);
   // The fake camera shows no face, so the test must NOT pass — a pass here would mean it checks nothing.
   expect(st?.pass).toBe(false);
+});
+
+/*
+ * The camera lost on a SET-UP screen after camera set-up (audit 86 F7). The notice was raised only where
+ * a pause is allowed, so a camera lost during the calibration showed the no-camera wording ("Camera not
+ * active — this step is skipped") and offered to skip, and on the baseline questionnaires nothing was
+ * said until the first grey field.
+ */
+async function intoCalibration(page: Page) {
+  await startNewExperiment(page);
+  await driveUntil(page, 'CAMERA_SETUP');
+  await page.getByRole('button', { name: /Enable camera/ }).click();
+  await page.getByRole('button', { name: /My face is centred/ }).click({ timeout: 60_000 });
+  await page.waitForFunction(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') === 'CALIBRATION', null, { timeout: 30_000 });
+}
+
+test('the camera stopping during the calibration is called lost, and Continue says so', async ({ page }) => {
+  test.setTimeout(240_000);
+  await intoCalibration(page);
+  await page.getByRole('button', { name: /Begin calibration/ }).click();
+  await page.waitForTimeout(150);
+  expect(await endCameraTrack(page)).toBeGreaterThan(0);
+  const notice = page.getByTestId('camera-lost');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('The camera has stopped');
+  await expect(notice.getByRole('button', { name: /Exit — resume later/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue without the camera' }).click();
+  await expect(notice).toHaveCount(0);
+  await expect(page.getByTestId('calibration-fallback-text')).toContainText('The camera has stopped');
+  await expect(page.getByTestId('calibration-fallback-text')).not.toContainText('Camera not active');
+});
+
+test('the camera stopping on the baseline questionnaire stops the sitting there, and Exit is the way back', async ({ page }) => {
+  test.setTimeout(240_000);
+  await startNewExperiment(page);
+  await driveUntil(page, 'CAMERA_SETUP');
+  await throughCameraAndCalibration(page);
+  await driveUntil(page, 'CVSQ_BASELINE', 50);
+  expect(await endCameraTrack(page)).toBeGreaterThan(0);
+  await expect(page.getByTestId('camera-lost')).toBeVisible();
+  await page.getByTestId('camera-lost').getByRole('button', { name: /Exit — resume later/ }).click();
+  await expect(page.getByText(/In progress \(1\)/)).toBeVisible();
+  await page.getByRole('button', { name: /^Resume/ }).first().click();
+  await page.waitForFunction(() => {
+    const st = document.querySelector('[data-stage]')?.getAttribute('data-stage');
+    return st && st !== 'SESSION_INIT';
+  });
+  // The resume sets the camera up again (after the launch check a tab is given) before anything else.
+  if (await stageNow(page) === 'LAUNCH_CHECK') await handleStage(page, 'LAUNCH_CHECK');
+  expect(await stageNow(page)).toBe('CAMERA_SETUP');
 });

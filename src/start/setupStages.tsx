@@ -1147,16 +1147,26 @@ export function CameraDeclined({ onContinue, onBack }: { onContinue: () => void;
   );
 }
 
-export function Calibration({ cameraStatus, onDone }: { cameraStatus: CameraStatus; onDone: () => void }) {
+export function Calibration({ cameraStatus, cameraLost = false, onDone }: {
+  cameraStatus: CameraStatus;
+  /**
+   * The camera was running in this sitting and stopped (audit 86 F7). Not the same as no camera: the
+   * words for a participant without one ("Camera not active") told the operator nothing had gone wrong.
+   */
+  cameraLost?: boolean;
+  onDone: () => void;
+}) {
   const [counting, setCounting] = useState(false);
   return (
     <div className={shell}>
       <div style={{ width: '100%', maxWidth: 760, margin: '0 auto' }}>
       <h1 className="font-serif text-4xl font-light">Positioning check</h1>
-      <p className={`mt-2 ${help}`}>
+      <p className={`mt-2 ${help}`} data-testid="calibration-fallback-text">
         {cameraStatus === 'active'
           ? 'Keep your eyes open and look at the centre of the screen for a few seconds while we record a baseline.'
-          : 'Camera not active — this step is skipped. The experiment continues without eye tracking.'}
+          : cameraLost
+            ? 'The camera has stopped, and the sitting is going on without it: the calibration is skipped and no eye measurements are recorded. To set the camera up again, use Exit — resume later.'
+            : 'Camera not active — this step is skipped. The experiment continues without eye tracking.'}
       </p>
       <button
         className={btn}
