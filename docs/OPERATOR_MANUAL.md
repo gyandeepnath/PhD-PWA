@@ -176,6 +176,12 @@ Consent is **layered**, and the layers are independent. Do not merge them, and d
 later ones as if they follow from the first.
 
 1. **Participation.** Written informed consent for the study itself.
+
+   **If the person does not consent, or you notice on the consent screen that the code was typed
+   wrong:** tap **Exit — resume later**, then in the Session Manager **Delete** that sitting (In
+   progress) and start again with the right code if there is one. The enrolment number — which fixes
+   the condition order — is taken only when consent is given, so a sitting that never reached consent
+   uses none and leaves no gap in the counterbalancing.
 2. **Camera measurement.** Separate, and refusable. Say plainly:
    > "The tablet's camera measures how you blink while you read. Nothing is recorded or saved as a
    > picture: the camera produces numbers and the images are discarded as they are processed. You

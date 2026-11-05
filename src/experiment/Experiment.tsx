@@ -9,7 +9,7 @@ import { acquireScreenWakeLock } from '@/lib/wakeLock';
 import { v4 as uuidv4 } from 'uuid';
 import { CONDITIONS, N_CONDITIONS, rtStimulusColours } from './conditions';
 import {
-  illuminationForBlock, illuminationOrderFor, luxInRange,
+  illuminationForBlock, illuminationOrderFor, luxInRange, summariseLux,
 } from '@/experiment/illumination';
 import { participantProgress, passageRepeatNumber, sittingLength } from './participantProgress';
 import { mergeExclusionReasons } from './eligibility';
@@ -28,7 +28,7 @@ import {
   noMediaConsent, mayCapture, capturePhoto, recordDecidedSegment, checksumOfBlob, captureDisposition,
   type MediaRecord,
 } from '@/storage/media';
-import { priorParticipantProgress } from '@/storage/gather';
+import { priorParticipantProgress, enrolmentAtConsent } from '@/storage/gather';
 import { logLuxReading } from '@/storage/luxLog';
 import { currentProvenance } from '@/storage/buildStamp';
 import { canonicalParticipantId } from '@/lib/participantId';
@@ -904,7 +904,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
      * participant gets the canonical form.
      */
     const participantId = prior.participantId ?? typed;
-    const enrol = prior.enrolment ?? await nextEnrolmentNumber();
+    /*
+     * PROVISIONAL for a new participant: the next free number, read and not spent. It is allocated at
+     * consent (enrolmentAtConsent; audit 86 F17), so a code typed wrong or a person who declines leaves
+     * no gap in the counterbalancing sequence. A returning participant's number is their own.
+     */
+    const enrol = prior.enrolment ?? await peekNextEnrolmentNumber();
     // Which illumination block is this participant on, and how far into it? Each block is a full
     // pass through the ten conditions, so completed / 10 gives the block and completed % 10 the
     // offset within it. A block may itself be run as one sitting of ten or two sittings of five.
@@ -1361,8 +1366,33 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
            */
           const current = (await get('sessions', session.session_id)) ?? session;
           const at = Date.now();
+          /*
+           * The enrolment number is spent HERE, when the participant consents (audit 86 F17), not at
+           * Begin setup. Normally it is the provisional number the sitting already carries; if another
+           * participant consented in between, the sitting takes the next one, and the condition order
+           * and assignments that hang off it are derived again — before anything has been presented.
+           * The video option was offered for the provisional number: outside the pre-specified
+           * subsample a video grant is not kept.
+           */
+          const enrolNow = await enrolmentAtConsent(current, nextEnrolmentNumber);
+          const reassigned: Partial<SessionRecord> = {};
+          if (enrolNow !== current.enrolment_number) {
+            const block = current.illumination_block ?? 0;
+            const offset = current.condition_offset ?? 0;
+            const level = illuminationForBlock(enrolNow, block);
+            const sittingPlan = blockPlan(enrolNow, block).slice(offset, offset + current.conditions_per_session);
+            Object.assign(reassigned, {
+              enrolment_number: enrolNow, randomisation_seed: enrolNow,
+              condition_order: sittingPlan.map((st) => st.conditionIndex),
+              ambient_illumination_level: level, illumination_order_first: illuminationOrderFor(enrolNow)[0],
+              lux_all_in_range: summariseLux(level, current.lux_readings).all_in_range,
+            });
+            setPlan(sittingPlan);
+            setEnrolment(enrolNow);
+          }
+          const grants = isAnnotationSubsample(enrolNow) ? media : { ...media, annotation_video: false };
           const fresh: SessionRecord = {
-            ...current, consent_given: true, consent_time: at, media_consent: media,
+            ...current, ...reassigned, consent_given: true, consent_time: at, media_consent: grants,
             ...(current.consent_given ? {
               consent_revisions: [
                 ...(current.consent_revisions ?? []),

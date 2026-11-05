@@ -175,6 +175,32 @@ export async function sittingsOfParticipant(participantId: string): Promise<Sess
   return (await getAll('sessions') as SessionRecord[]).filter((s) => sameParticipant(s.participant_id, participantId));
 }
 
+/**
+ * The enrolment number a sitting takes when its participant consents: the number a consented sitting of
+ * the same participant already holds, else the next number of the device's sequence — allocated HERE,
+ * and not before.
+ *
+ * Round 89, audit 86 F17. The number was allocated at "Begin setup", before the consent screen. It fixes
+ * the participant's Williams row (condition order), the passage rotation and the annotation-video
+ * subsample, and the counter only goes up: a code typed wrong and noticed on the consent screen, or a
+ * person who then declined, spent a number nobody would ever use, and every one left a gap in the
+ * counterbalancing sequence (counterbalance.ts: gaps make rows unevenly used). A sitting now carries a
+ * PROVISIONAL number until consent — the next free one, which is what it gets unless another
+ * participant consented in between — and an unconsented sitting deleted from the session manager costs
+ * the sequence nothing. A sitting that already consented (Back to consent in the same sitting) keeps
+ * its number.
+ */
+export async function enrolmentAtConsent(
+  session: Pick<SessionRecord, 'session_id' | 'participant_id' | 'consent_given' | 'enrolment_number'>,
+  allocate: () => Promise<number>,
+): Promise<number> {
+  if (session.consent_given) return session.enrolment_number;
+  const held = (await sittingsOfParticipant(session.participant_id))
+    .filter((s) => s.session_id !== session.session_id && s.deleted_at == null && s.consent_given)
+    .reduce((min, s) => Math.min(min, s.enrolment_number), Infinity);
+  return Number.isFinite(held) ? held : allocate();
+}
+
 /** What priorParticipantProgress knows about a participant before a new sitting is started. */
 export interface PriorParticipantProgress {
   /**
@@ -247,8 +273,9 @@ export async function priorParticipantProgress(participantId: string): Promise<P
   if (sessions.length === 0) {
     return { participantId: stored, spellings, enrolment: null, conditionsCompleted: 0, sittings: 0, withdrawnAt, openSittings: [], earlierBuilds: [] };
   }
-  // Reuse the earliest-assigned enrolment number for stability.
-  const enrolment = sessions.reduce((min, s) => Math.min(min, s.enrolment_number), Infinity);
+  // Reuse the earliest-assigned enrolment number for stability — a CONSENTED sitting's: an unconsented
+  // sitting's number is provisional, not yet spent (Round 89, audit 86 F17; see enrolmentAtConsent).
+  const enrolment = sessions.filter((s) => s.consent_given).reduce((min, s) => Math.min(min, s.enrolment_number), Infinity);
   const superseded = supersededSittings(sessions);
   let conditionsCompleted = 0;
   const openSittings: OpenSitting[] = [];
