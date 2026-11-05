@@ -206,7 +206,7 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
    recorded as a deviation.
 3. Run **colour-vision screening**, allow the **camera**, complete **calibration**, then the
    baseline questionnaires. The participant then completes the 10 conditions of the assigned
-   illumination block (median ~97 min, p95 ~118 min), closing with the end CVS-Q and NASA-TLX.
+   illumination block (median ~98 min, p95 ~121 min), closing with the end CVS-Q and NASA-TLX.
 4. At the end, open the session from the manager → **Export** the CSV + JSON bundle.
 5. Analyse with the **mixed-model templates** in `src/analysis/analysis_template.{R,py}` (random
    intercept per participant; contrast as a covariate; d′ aggregated across conditions). Point them
@@ -302,7 +302,7 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
 - **Contrast confound**: P4 (yellow-on-white) is below WCAG AA (2.39:1); treat WCAG ratio as a
   covariate or reframe as polarity × contrast.
 - **Per-condition d′** rests on ~20 signal (go) trials of 32, so one block's d′ is imprecise (its SE cannot fall below about 0.46). It is not read block by block: the analysis template fits a trial-level probit GLMM to `08_reaction_trials.csv` (d′ and criterion effects together, with the ring terms of ANALYSIS_PLAN.md §4a), and an unweighted per-block LMM as a cross-check (Round 71).
-- **Session length** (median ~97 min) accumulates fatigue; `session_position` (0 … conditions_per_session − 1, so 0–9 for a full sitting) is recorded as a covariate.
+- **Session length** (median ~98 min) accumulates fatigue; `session_position` (0 … conditions_per_session − 1, so 0–9 for a full sitting) is recorded as a covariate.
 
 ## 7. Boredom / disengagement vs. fatigue
 
@@ -404,14 +404,19 @@ Brysbaert's (2019) meta-analytic 238 wpm for dense expository prose, blink rate 
 reading, and two participant-level multipliers so a slow, careful participant is slow throughout
 rather than independently slow at each step.
 
-Result over 2,000 simulated participants: **median 97 min, p95 118 min, p99 130 min**. The
-120-minute gate applies to the median and passes, but 4.0% of simulated participants (81/2000)
+Result over 2,000 simulated participants: **median 97.7 min, p95 120.7 min, p99 132.5 min**. The
+120-minute gate applies to the median and passes, but 5.5% of simulated participants (110/2000)
 exceed two hours, so the pilot needs to watch the tail rather than the centre.
 
-Where the time goes: reading 29.6 min (30.3%), adaptation 14.0 min (14.3%), RT blocks 10.9 min
-(11.2%), comprehension 7.5 min (7.7%), visual search 4.8 min, CVS-Q ×2 6.4 min. Polarity switching
-costs ~5 min per sitting on top of the baseline adaptation, since a Williams row averages 5
+Where the time goes: reading 29.5 min (29.9%), adaptation 15.0 min (15.2%), RT blocks 10.9 min
+(11.1%), comprehension 7.1 min (7.1%), visual search 5.0 min, CVS-Q ×2 6.5 min. Polarity switching
+costs ~6.0 min per sitting on top of the baseline adaptation, since a Williams row averages 5
 switches over 9 transitions.
+
+These figures are the output of `npm run simulate:timing` on the current configuration, and
+`tests/protocolFigures.test.ts` runs the model and fails if this section quotes anything else (Round
+89, audit 86 D11: the section had kept the figures of an earlier configuration — median 97, p95 118,
+4.0% over two hours — while the model gave 97.7, 120.7 and 5.5%).
 
 Reading now dominates the sitting, which is the intended consequence of lengthening the passages:
 it is the only stage that produces the primary outcome, so time spent there is the time that buys
@@ -457,11 +462,11 @@ values, and none of them means "not measured".
 
 | Command | What it checks |
 |---|---|
-| `npm test` | 326 unit and property tests, including the no-fabrication contract |
+| `npm test` | Every unit and property test, including the no-fabrication contract (it prints the count) |
 | `npm run stress` | Six stress rounds, ~11,500 assertions |
-| `npm run verify:export` | Prints every exported table and runs 579 checks over the export pipeline |
+| `npm run verify:export` | Prints every exported table and runs its checks over the export pipeline (it prints the count) |
 | `npm run simulate:timing` | Session-length distribution for the target population |
-| `npx playwright test` | 6 end-to-end tests across 4 spec files |
+| `npx playwright test` | The end-to-end suite, every spec in `e2e/` (`npx playwright test --list` counts them) |
 
 ### What the export now guarantees
 
