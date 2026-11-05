@@ -140,6 +140,11 @@ test('the update banner covers nothing: not the build stamp, not the last sessio
 
   await page.getByRole('button', { name: /Enter Research Console/ }).click();
   await expect(page.getByTestId('update-banner')).toBeVisible();
+  // The list read from the database, down to its last control, before scrolling: scrolled while it was
+  // still empty, the page had nothing to scroll, and the rows that then arrived pushed the bin 500 px
+  // below the screen. The banner's own database reads on mount made that race easy to lose (Round 88).
+  await expect(page.getByText(/In progress \(8\)/)).toBeVisible();
+  await expect(page.getByTestId('bin-toggle')).toContainText('Recycle bin (2)');
   // Scrolled to the very bottom, the last control on the page is clear of the banner.
   await page.getByTestId('manager-scroll').evaluate((el) => { el.scrollTop = el.scrollHeight; });
   await page.waitForTimeout(150);

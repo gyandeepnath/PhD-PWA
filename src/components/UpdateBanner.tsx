@@ -45,8 +45,7 @@ export const RECHECK_MS = 6000;
  * focused, and — the part that actually closes it — AGAIN AT THE MOMENT OF THE CLICK, before
  * anything irreversible happens. A sitting started one second before the operator's finger lands is
  * caught by the last of those; nothing else can catch it.
- */
-/*
+ *
  * ... AND ONE PARTICIPANT, ONE BUILD (Round 88, audit 86 D10). The open-sitting gate cannot see a
  * participant BETWEEN the two sittings of a split: the first half is complete, so this notice offered
  * "Update now" — and the operator manual says to update at the start of each study day. An update

@@ -249,12 +249,17 @@ test.describe('the tasks (audit 86 M1, M2)', () => {
     const sent: number[] = [];
     await page.touchscreen.tap(start.x + start.width / 2, start.y + start.height / 2);
     const startedAt = await page.evaluate(() => performance.now());
-    // Tap the field every 45 ms until the block is over: fixations, dots and gaps alike.
+    // Tap the field until the block is over: fixations, dots and gaps alike. "Over" is the block's own
+    // end ("Block complete."), not a frame with neither cross nor dot on it: the gap between trials is
+    // such a frame, and stopping there sent three taps or thirty depending on the machine. The pause
+    // between taps is short because the harness's response window is 120 ms and each round trip here
+    // costs about 20 ms on its own: at a 45 ms pause the taps came ~67 ms apart, and a block of four
+    // trials could end with none of them landing inside a window.
     for (let k = 0; k < 400 && (await stageNow(page)) === 'REACTION_TIME'; k++) {
+      if ((await page.getByText('Block complete.').count()) > 0) break;
       await page.touchscreen.tap(start.x + start.width / 2, start.y - 120);
       sent.push(await page.evaluate(() => performance.now()));
-      await page.waitForTimeout(45);
-      if ((await page.locator('[data-testid="rt-fixation"], [data-testid="rt-dot"]').count()) === 0 && k > 5) break;
+      await page.waitForTimeout(15);
     }
     await page.waitForFunction(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') !== 'REACTION_TIME', null, { timeout: 60_000 });
     const downs = await page.evaluate(() => (window as unknown as { __downs: number[] }).__downs);
