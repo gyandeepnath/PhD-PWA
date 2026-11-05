@@ -217,6 +217,13 @@ later ones as if they follow from the first.
    validation subsample. A short segment of reading video, coded frame by frame by a human, which is
    what lets us check the automatic blink measure against a person.
 
+   **Both need the camera.** Photographs and video are taken with the camera, so a participant who
+   declines the camera measures (option 2) cannot have either, whatever they tick. The consent screen
+   offers each option on its own, in the approved wording; when the camera is declined and a
+   photograph or the video was agreed to, the *Camera measurement declined* screen tells you so. Tell
+   the participant; they may decide again with **← Back to consent**, and must not be persuaded
+   either way. The export notes it (`grant_not_exercisable` in 16_integrity_report.csv).
+
    **You do not choose who is in the validation subsample.** Membership follows from the enrolment
    number and is fixed before the participant arrives, so the checkbox simply appears for those
    participants and not for others. This is deliberate: choosing at the bench would select the

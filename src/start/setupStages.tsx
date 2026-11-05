@@ -1122,7 +1122,16 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
  * decides again rather than being asked to reverse one answer. The superseded consent is kept on the
  * session record (consent_revisions).
  */
-export function CameraDeclined({ onContinue, onBack }: { onContinue: () => void; onBack?: () => void }) {
+export function CameraDeclined({ onContinue, onBack, unexercisable = [] }: {
+  onContinue: () => void; onBack?: () => void;
+  /**
+   * Media the participant agreed to that needs the camera they declined (media.ts unexercisableGrants;
+   * audit 86 F18). Said here, to the operator, at the time: nothing else did, and the export read the
+   * grant beside an empty inventory like a recorder failure.
+   */
+  unexercisable?: readonly ('setup_photos' | 'annotation_video')[];
+}) {
+  const kept = unexercisable.map((g) => (g === 'setup_photos' ? 'the two setup photographs' : 'the reading video clips'));
   return (
     <div className={shell}>
       <div style={{ width: '100%', margin: '0 auto', maxWidth: 760 }}>
@@ -1131,6 +1140,15 @@ export function CameraDeclined({ onContinue, onBack }: { onContinue: () => void;
           This participant did not consent to camera measurement, so the camera will not be used at
           any point in this session and no blink, gaze or head-position data will be collected.
         </div>
+        {kept.length > 0 && (
+          <div data-testid="camera-declined-media" className="mt-4 rounded-xl border border-[#f0d8a8] bg-[#fff6e5] p-4 font-sans text-base leading-relaxed">
+            <strong>Researcher:</strong> the participant also agreed to {kept.join(' and ')}. These are
+            taken with the camera, so none will be taken in this session. Tell them. If they would like
+            them, they may decide again on the consent screen{onBack ? ' (← Back to consent, below)' : ''};
+            do not persuade them either way. The export
+            records the combination (grant_not_exercisable).
+          </div>
+        )}
         <p className={`mt-4 ${help}`}>
           Everything else runs exactly as normal: every questionnaire, the reading and comprehension
           tasks, visual search and the reaction-time blocks. The session is complete and fully

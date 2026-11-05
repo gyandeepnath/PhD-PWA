@@ -24,6 +24,7 @@ import { rowSliderVersion } from '@/scales/vas';
 import { expectedLinePx, linePitchOff, READING_LINE_TOLERANCE } from '@/lib/renderedText';
 import { CONFIG } from '@/experiment/config';
 import { rtBlockCounts } from '@/lib/rtSummary';
+import { unexercisableGrants } from './media';
 import {
   isPlausibleMmPerCssPx, isPlausibleViewingDistanceCm, longSide, sessionMmPerCssPx, MM_PER_CSS_PX_RANGE,
   STUDY_TABLET_PANEL_LONG_MM, VIEWING_DISTANCE_CM,
@@ -846,11 +847,13 @@ export function auditBundle(bundle: SessionBundle, opts: AuditOptions = {}): Int
    * here rather than by capturing the photograph anyway: no new column is needed, because the state
    * is already fully determined by two consent flags that both ship.
    */
-  const consent = bundle.session?.media_consent;
-  if (consent?.setup_photos === true && consent?.camera_metrics !== true) {
+  // Every camera-derived grant, the reading video included (unexercisableGrants; audit 86 F18).
+  for (const grant of unexercisableGrants(bundle.session?.media_consent)) {
+    const what = grant === 'setup_photos' ? 'Setup photographs are' : 'Annotation video clips are';
+    const none = grant === 'setup_photos' ? 'NO photograph' : 'NO reading video clip';
     add('warning', 'grant_not_exercisable',
-      'setup_photos was granted but camera_metrics was declined. Setup photographs are captured '
-      + 'from the camera stream, so the camera path is skipped and NO photograph was ever possible '
+      `${grant} was granted but camera_metrics was declined. ${what} captured `
+      + `from the camera stream, so the camera path is skipped and ${none} was ever possible `
       + 'for this session. The absence is a consequence of the consent combination, not a capture '
       + 'failure — do not read it as one.');
   }

@@ -25,7 +25,7 @@ import {
 import { GIT_HASH } from '@/lib/env';
 import { put, get, remove, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows, clearSessionStageRows, storageIsFull } from '@/storage/db';
 import {
-  noMediaConsent, mayCapture, capturePhoto, recordDecidedSegment, checksumOfBlob, captureDisposition,
+  noMediaConsent, mayCapture, capturePhoto, recordDecidedSegment, checksumOfBlob, captureDisposition, unexercisableGrants,
   type MediaRecord,
 } from '@/storage/media';
 import { priorParticipantProgress, enrolmentAtConsent } from '@/storage/gather';
@@ -1710,6 +1710,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         <CameraDeclined
           onContinue={() => advanceOrResume()}
           onBack={consentRevisitable ? () => goBack('CONSENT') : undefined}
+          unexercisable={unexercisableGrants(session?.media_consent)}
         />
       );
       break;

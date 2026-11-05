@@ -90,6 +90,24 @@ export function mayCapture(consent: MediaConsent | null | undefined, checkpoint:
 }
 
 /**
+ * The media grants a consent record gives that can never be exercised: photographs and video are taken
+ * from the camera stream, and with camera_metrics declined the camera path is skipped outright (the
+ * refusal is enforced, not merely recorded). The consent screen offers each option as a separate choice,
+ * in wording the ethics committee approved, so a participant can agree to a photograph or the reading
+ * video while declining the camera.
+ *
+ * One list for both places that must say so (Round 89, audit 86 F18): the integrity audit
+ * (grant_not_exercisable) and the camera-declined screen, which tells the operator at the time. It
+ * named setup_photos only, so a validation-subsample participant who agreed to the video and declined
+ * the camera lost every clip with no word anywhere — the export read consent_annotation_video TRUE
+ * beside an empty inventory, the signature of a recorder failure.
+ */
+export function unexercisableGrants(consent: MediaConsent | null | undefined): ('setup_photos' | 'annotation_video')[] {
+  if (!consent || consent.camera_metrics === true) return [];
+  return (['setup_photos', 'annotation_video'] as const).filter((g) => consent[g] === true);
+}
+
+/**
  * What a new capture at `checkpoint` does to the items the sitting already holds: stored as it is,
  * stored in place of earlier ones, or not stored at all.
  *

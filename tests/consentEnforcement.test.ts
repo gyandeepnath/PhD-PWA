@@ -169,6 +169,39 @@ describe('a permission that cannot be exercised is reported, not left as an abse
     expect(r.findings.filter((x) => x.check === 'grant_not_exercisable')).toHaveLength(0);
   });
 
+  it('flags the reading video granted while camera_metrics is declined, as it does photographs (audit 86 F18)', async () => {
+    const { auditBundle } = await import('@/storage/integrity');
+    const r = auditBundle(withConsent({ camera_metrics: false, setup_photos: false }));
+    const hit = r.findings.filter((x) => x.check === 'grant_not_exercisable');
+    expect(hit).toHaveLength(1);
+    expect(hit[0].detail).toMatch(/^annotation_video was granted but camera_metrics was declined/);
+    expect(hit[0].detail).toMatch(/NO reading video clip/);
+    // Both granted: one finding each.
+    expect(auditBundle(withConsent({ camera_metrics: false })).findings
+      .filter((x) => x.check === 'grant_not_exercisable').map((x) => x.detail.split(' ')[0])).toEqual(['setup_photos', 'annotation_video']);
+  });
+
+  it('the camera-declined screen tells the operator what the participant agreed to that cannot be taken (audit 86 F18)', async () => {
+    const { createElement, act } = await import('react');
+    const { createRoot } = await import('react-dom/client');
+    const { CameraDeclined } = await import('@/start/setupStages');
+    const { unexercisableGrants } = await import('@/storage/media');
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    const grants = unexercisableGrants({ camera_metrics: false, setup_photos: false, annotation_video: true, granted_at: 1 });
+    expect(grants).toEqual(['annotation_video']);
+    act(() => root.render(createElement(CameraDeclined, { onContinue: () => {}, onBack: () => {}, unexercisable: grants })));
+    expect(host.querySelector('[data-testid="camera-declined-media"]')?.textContent).toMatch(/also agreed to the reading video clips\. These are\s+taken with the camera, so none will be taken/);
+    act(() => root.render(createElement(CameraDeclined, { onContinue: () => {}, unexercisable: [] })));
+    expect(host.querySelector('[data-testid="camera-declined-media"]')).toBeNull();
+    act(() => root.unmount());
+    host.remove();
+    // With the camera granted nothing is unexercisable.
+    expect(unexercisableGrants({ camera_metrics: true, setup_photos: true, annotation_video: true, granted_at: 1 })).toEqual([]);
+  });
+
   it('does not fire when photographs were never asked for', async () => {
     // Declining both is coherent and needs no note: nothing was promised.
     const { auditBundle } = await import('@/storage/integrity');
