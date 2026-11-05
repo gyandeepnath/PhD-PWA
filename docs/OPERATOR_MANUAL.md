@@ -53,7 +53,7 @@ rises just after each blink, never during it.
 | Blinks (start, end, depth, complete or incomplete, page) | Each blink | The reading window only: from the "Begin reading" tap to the last page's Next | 07b, one row per blink; 07c, every frame's eye openness | Panel strip on the reading page (tap the dot): "Recording", blinks this reading, incomplete beside (a blink is counted when the eye reopens) |
 | Incomplete-blink ratio, Blink rate, Inter-blink interval, PERCLOS, Long closures, Eye sampling rate, Face in view, On-screen ratio, Head position | Each reading window | Summarised when the last page is turned | 07_eye_metrics, one row per condition | Panel "last reading" on the screens after it |
 | Annotation video (validation subsample only, its own consent) | Each polarity | The first reading window of each polarity: up to 3 min from "Begin reading"; kept only if that reading is completed | A video file, one per polarity (15_media_inventory, reading_segment) | Nothing on screen |
-| Setup photographs (their own consent) | Start and end | One after the camera check, one at the end of the sitting | Two photo files (15_media_inventory, session_start and session_end) | Nothing on screen |
+| Setup photographs (their own consent) | Start and end | One when the camera check is accepted (a resumed sitting keeps its first), one when the last questionnaire (NASA-TLX) is submitted | Two photo files (15_media_inventory, session_start and session_end) | Nothing on screen |
 | Questions, ratings, fatigue scale, word search, reaction task, grey field, breaks | Not measured | The camera keeps running | Not kept | Panel: "Live only — not recorded" |
 | Live picture, last-10-s graph and its blink marks, live frame rates | Live only | While the researcher card is open (4 updates a second) | Never kept (the only camera images kept are the two consented items above) | Card |
 <!-- measurement-schedule:end -->
@@ -664,6 +664,14 @@ prompt you. Take the reading properly each time, at the eye position, and enter 
 — not what it said an hour ago. Room light drifts, and a session verified once at the start and
 never re-checked is a session where you do not know what the illuminance was.
 
+A reading is kept only when you tap **Log**. A value typed and not logged holds the screen — the
+break's Continue and the thank-you screen's button wait, and the panel says *Not logged yet* — until
+you tap Log or clear the box; a half-typed number is never logged for you. If the thank-you screen
+is closed before the end reading is logged (the app closed, the tablet slept), the sitting is still
+complete: open **Session Manager → Completed**, and on that sitting tap **Log end lux**. Do it
+straight away, and only if the room's lighting is as it was at the end; the export records how many
+minutes after the end of the sitting the reading was logged (`lux_end_min_after_end`).
+
 ---
 
 **Do not let the tablet leave the app during a condition.**
@@ -726,7 +734,11 @@ else a sitting produces put together.
    on the thank-you screen no longer leaves it looking unfinished. If the participant has to stop
    during these two questionnaires, use **Exit — resume later**: Resume returns to the questionnaire
    that was not yet answered, and a questionnaire already answered is not asked again.
-2. Take the closing setup photograph if that grant was given.
+2. Nothing to do for the closing setup photograph: if that grant was given, the app takes it when
+   the last Task Load Index answer is submitted, while the participant is still at the device, so a
+   thank-you screen closed early does not lose it. A resumed sitting keeps its first start
+   photograph; the camera check of a resume takes no second one. Log the end illuminance on the
+   thank-you screen (or, if that screen was lost, from the Session Manager, above).
 3. **Export.** Dashboard → Export. This writes 20 CSVs (two of them, 07b and 07c, are per-blink validation files the main analysis does not need), an analysis JSON, a codebook, a provenance
    manifest and a `backup_*.json`. A full camera sitting comes to about 6 MB, most of it `07c`; the
    backup alone is about 2 MB. If the session was consented for photographs or video, a second
@@ -925,7 +937,7 @@ Print this.
 
 **After**
 - [ ] Closing CVS-Q and NASA-TLX completed
-- [ ] Closing photograph taken if consented
+- [ ] Closing photograph stored if consented (taken at the last questionnaire; check 15_media_inventory)
 - [ ] Export produced
 - [ ] Integrity report reads `all_checks_passed`
 - [ ] `camera_active` true; face presence high

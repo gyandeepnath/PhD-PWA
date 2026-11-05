@@ -12,6 +12,8 @@ import {
 } from '@/storage/gather';
 import { listResumable, clearResume, supersededSittings, resumeLabel, type ResumePointer } from '@/storage/sessionPersistence';
 import { parseSessionBackup, importSessionBackup } from '@/storage/backup';
+import { logLuxReading, endReadingMissing } from '@/storage/luxLog';
+import { parseLuxEntry } from '@/experiment/illumination';
 import { VisuLabLogo } from '@/components/VisuLabLogo';
 import { NavChip } from '@/components/NavChip';
 import { ScrollCue } from '@/components/ScrollCue';
@@ -175,6 +177,37 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
    * (gather.ts, sessionForExport), and the wording here says what the field is for so the operator
    * is not misled into treating it as a notes field in the first place.
    */
+  /**
+   * The end-of-sitting illuminance, for a completed sitting that has none (audit 86 F4).
+   *
+   * It is logged on the thank-you screen, and a sitting is complete before that screen (at the
+   * NASA-TLX), so a thank-you screen lost to a reload or a sleeping tablet left the reading impossible
+   * to take for good. Offered here instead, through the sitting's own write path; the reading keeps
+   * the time it was logged and the export says how long after the end of the sitting that was
+   * (lux_end_min_after_end), so a late reading is told apart from an on-time one.
+   */
+  const logEndLux = async (s: SessionRecord) => {
+    const text = await dialog.prompt({
+      title: 'End-of-sitting illuminance',
+      body: 'This sitting finished without its end reading: the thank-you screen was closed before it '
+        + 'was logged.\n\nMeasure at the participant\'s eye position with the lux meter, and log it only '
+        + 'if the room\'s lighting is as it was when the sitting ended. The reading is stored with the '
+        + 'time you log it, and the export says how many minutes after the end of the sitting that was.',
+      input: { label: 'Lux', initial: '', maxLength: 7 },
+      confirmLabel: 'Log reading',
+      cancelLabel: 'Cancel',
+      testId: 'end-lux-dialog',
+    });
+    if (text == null) return;
+    const lux = parseLuxEntry(text);
+    if (lux == null) {
+      await dialog.alert({ title: 'Not a reading', body: `"${text}" is not a lux value (0 to 200,000). Nothing was logged.`, confirmLabel: 'Close' });
+      return;
+    }
+    await logLuxReading(s.session_id, 'end', lux);
+    await refresh();
+  };
+
   const rename = async (s: SessionRecord) => {
     const label = await dialog.prompt({
       title: 'Label this sitting',
@@ -423,6 +456,9 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
           {showCompleted && completed.map((s) => (
             <Row key={s.session_id} s={s}>
               <Btn onClick={() => onOpen(s.session_id)} color="#1a1a2e">Open</Btn>
+              {endReadingMissing(s) && (
+                <Btn onClick={() => logEndLux(s)} color={UI_TEXT.blue} outline testId="log-end-lux">Log end lux</Btn>
+              )}
               <Btn onClick={() => rename(s)} color={UI_TEXT.muted} outline>Rename</Btn>
               <MediaControls s={s} onRevoke={revokeMedia} />
               <Btn onClick={() => withdraw(s)} color={UI_TEXT.amber} outline>
@@ -546,9 +582,9 @@ function Row({ s, children, note }: { s: SessionRecord; children: React.ReactNod
  * device at any display scale (theme.css). In design px they came to 38-40 under a finger whenever
  * the manager was scaled down.
  */
-function Btn({ onClick, color, outline, children }: { onClick: () => void; color: string; outline?: boolean; children: React.ReactNode }) {
+function Btn({ onClick, color, outline, children, testId }: { onClick: () => void; color: string; outline?: boolean; children: React.ReactNode; testId?: string }) {
   return (
-    <button onClick={onClick} className="font-sans text-[15px] font-medium" style={{ padding: '9px 16px', minHeight: 'var(--vl-nav-chip-h)', borderRadius: 10, cursor: 'pointer', border: `1px solid ${color}`, background: outline ? '#fff' : color, color: outline ? color : '#fff' }}>
+    <button onClick={onClick} data-testid={testId} className="font-sans text-[15px] font-medium" style={{ padding: '9px 16px', minHeight: 'var(--vl-nav-chip-h)', borderRadius: 10, cursor: 'pointer', border: `1px solid ${color}`, background: outline ? '#fff' : color, color: outline ? color : '#fff' }}>
       {children}
     </button>
   );

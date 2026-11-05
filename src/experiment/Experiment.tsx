@@ -9,7 +9,7 @@ import { acquireScreenWakeLock } from '@/lib/wakeLock';
 import { v4 as uuidv4 } from 'uuid';
 import { CONDITIONS, N_CONDITIONS, rtStimulusColours } from './conditions';
 import {
-  illuminationForBlock, illuminationOrderFor, luxInRange, summariseLux,
+  illuminationForBlock, illuminationOrderFor, luxInRange,
 } from '@/experiment/illumination';
 import { participantProgress, passageRepeatNumber, sittingLength } from './participantProgress';
 import { mergeExclusionReasons } from './eligibility';
@@ -25,10 +25,11 @@ import {
 import { GIT_HASH } from '@/lib/env';
 import { put, get, remove, getAllByIndex, nextEnrolmentNumber, peekNextEnrolmentNumber, clearConditionRows, clearSessionStageRows, storageIsFull } from '@/storage/db';
 import {
-  noMediaConsent, mayCapture, capturePhoto, recordDecidedSegment, checksumOfBlob,
+  noMediaConsent, mayCapture, capturePhoto, recordDecidedSegment, checksumOfBlob, captureDisposition,
   type MediaRecord,
 } from '@/storage/media';
 import { priorParticipantProgress } from '@/storage/gather';
+import { logLuxReading } from '@/storage/luxLog';
 import { currentProvenance } from '@/storage/buildStamp';
 import { canonicalParticipantId } from '@/lib/participantId';
 import { saveResume, clearResume } from '@/storage/sessionPersistence';
@@ -738,22 +739,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    * absolute illuminance, and a derived number here would look like a measurement without being one.
    */
   const logLuxCheckpoint = useCallback(async (checkpoint: 'middle' | 'end', lux: number) => {
-    if (!session || !Number.isFinite(lux)) return;
-    const fresh = await get('sessions', session.session_id);
-    if (!fresh) return;
-    // Never duplicate a checkpoint — a resumed session may revisit the same screen.
-    const readings = [
-      ...(fresh.lux_readings ?? []).filter((r) => r.checkpoint !== checkpoint),
-      { checkpoint, lux, at: Date.now() },
-    ];
-    const updated = {
-      ...fresh,
-      lux_readings: readings,
-      lux_all_in_range: summariseLux(fresh.ambient_illumination_level, readings).all_in_range,
-    };
-    await put('sessions', updated);
-    setSession(updated);
+    if (!session) return;
+    // The one write path, shared with the session manager's late end reading (storage/luxLog.ts).
+    // Never duplicates a checkpoint — a resumed session may revisit the same screen.
+    const updated = await logLuxReading(session.session_id, checkpoint, lux);
+    if (updated) setSession(updated);
   }, [session]);
+  /** A lux reading typed on this screen and not logged: the screen's way on waits (audit 86 F10). */
+  const [luxPending, setLuxPending] = useState(false);
 
   /**
    * Capture one consented media item.
@@ -771,6 +764,10 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     if (!session) return;
     const fresh = await get('sessions', session.session_id);
     if (!mayCapture(fresh?.media_consent, checkpoint)) return;
+    // One photograph per checkpoint per sitting: a resume repeats the camera check, not the start of
+    // the sitting (captureDisposition; audit 86 F9). Asked again at the write, below.
+    const held = async () => (await getAllByIndex('media_captures', 'by_session', session.session_id)) as MediaRecord[];
+    if (!captureDisposition(await held(), checkpoint, conditionId, conditionLabel).store) return;
     const src = tracking.mediaSource();
     if (!src) return;
     try {
@@ -824,20 +821,15 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
        */
       const atWrite = await get('sessions', session.session_id);
       if (!mayCapture(atWrite?.media_consent, checkpoint)) return;
-      if (checkpoint === 'reading_segment') {
-        /*
-         * One segment per condition: this one REPLACES any earlier clip of the same condition in this
-         * sitting. An earlier one can only come from a run that was redone after it — its reading
-         * completed, the condition did not — and the redo has already replaced that run's eye
-         * metrics, which are what a segment is coded against. Matched on condition_id, and on the
-         * label for clips stored before the id was recorded (a label occurs once per sitting).
-         */
-        for (const m of (await getAllByIndex('media_captures', 'by_session', session.session_id)) as MediaRecord[]) {
-          if (m.checkpoint !== 'reading_segment') continue;
-          const same = m.condition_id != null ? m.condition_id === conditionId : m.condition_label === conditionLabel;
-          if (same) await remove('media_captures', m.media_id);
-        }
-      }
+      /*
+       * One segment per condition: a segment REPLACES any earlier clip of the same condition in this
+       * sitting — an earlier one can only come from a run that was redone after it, and the redo has
+       * already replaced that run's eye metrics, which are what a segment is coded against. One
+       * photograph per checkpoint: a later one is not stored. Both rules are captureDisposition's.
+       */
+      const disposition = captureDisposition(await held(), checkpoint, conditionId, conditionLabel);
+      if (!disposition.store) return;
+      for (const id of disposition.replaces) await remove('media_captures', id);
       await put('media_captures', {
         media_id: uuidv4(),
         session_id: session.session_id,
@@ -1622,6 +1614,18 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
              */
             await put('sessions', { ...session, status: 'complete', session_end_time: Date.now() });
             clearResume(session.session_id);
+            /*
+             * The closing photograph, HERE, while the participant is still at the device and before the
+             * thank-you screen (audit 86 F4). It was taken by the thank-you screen's researcher
+             * button, so a sitting whose thank-you screen was lost — the app closed, the tablet
+             * slept, a reload — never got it: the sitting is already complete, nothing resumes to
+             * that screen, and the grant went unexercised. After the completion write, so the
+             * optional photograph can never stand between the participant's last answer and a
+             * complete sitting; and the move to the thank-you screen happens whatever it does (a
+             * full device still reaches the error panel, by the rejection).
+             */
+            try { await captureMedia('session_end'); } finally { advance(); }
+            return;
           }
           advance();
         })} />
@@ -2065,8 +2069,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         <BreakScreen
           completed={machine.stepIndex + 1}
           total={plan.length}
-          canContinue={launchOk || breakTicked}
+          canContinue={(launchOk || breakTicked) && !luxPending}
           onContinue={latched('break', () => {
+            if (luxPending) return;
             if (!launchOk) {
               if (!breakTicked) return;
               launchAcks.current.add(liveMode);
@@ -2093,6 +2098,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               level={session?.ambient_illumination_level ?? null}
               existing={session?.lux_readings?.find((r) => r.checkpoint === 'middle')?.lux ?? null}
               onSubmit={(lux) => void logLuxCheckpoint('middle', lux)}
+              onPendingChange={setLuxPending}
             />
           )}
         </BreakScreen>
@@ -2120,25 +2126,33 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             level={session?.ambient_illumination_level ?? null}
             existing={session?.lux_readings?.find((r) => r.checkpoint === 'end')?.lux ?? null}
             onSubmit={(lux) => void logLuxCheckpoint('end', lux)}
+            onPendingChange={setLuxPending}
           />
         )}
+        exportBlocked={luxPending}
         onExport={latched('export', async () => {
-        // Final setup-proof still, before the record is closed. Ordered before the status write so a
-        // capture failure cannot leave the session marked complete without its end photo attempted.
-        await captureMedia('session_end');
-        if (session) {
-          // Completion is already recorded at NASA_TLX; this only attaches the closing photograph
-          // and keeps an end time for a session that somehow reached here without one.
-          const fresh = await get('sessions', session.session_id);
-          await put('sessions', {
-            ...(fresh ?? session),
-            status: 'complete',
-            session_end_time: fresh?.session_end_time ?? Date.now(),
-          });
-          clearResume(session.session_id);
+        if (luxPending) return;
+        /*
+         * THE WAY OUT ALWAYS OPENS (audit 86 F13). Completion and the closing photograph are recorded at
+         * the NASA-TLX; this keeps an end time only for a sitting that somehow reached here without one.
+         * It used to write the session unconditionally and capture the photograph first, with no
+         * catch: on a full device either write threw, tracking.stop() and the move to the dashboard
+         * were never reached, and the screen's only button did nothing — while the storage-full
+         * panel told the operator to go and export. The camera now stops and the dashboard opens
+         * whatever the write does; a failure still reaches the panel, by the rejection.
+         */
+        try {
+          if (session) {
+            const fresh = await get('sessions', session.session_id);
+            if (fresh && (fresh.status !== 'complete' || fresh.session_end_time == null)) {
+              await put('sessions', { ...fresh, status: 'complete', session_end_time: fresh.session_end_time ?? Date.now() });
+            }
+            clearResume(session.session_id);
+          }
+        } finally {
+          tracking.stop();
+          advance();
         }
-        tracking.stop();
-        advance();
       })} />;
       break;
     case 'EXPORT_DASHBOARD':

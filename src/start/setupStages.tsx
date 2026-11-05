@@ -1326,7 +1326,11 @@ export function Instructions({ conditions, onContinue }: { conditions: number; o
 }
 
 // ---- SESSION COMPLETE ----
-export function SessionComplete({ onExport, luxPanel }: { onExport: () => void; luxPanel?: ReactNode }) {
+export function SessionComplete({ onExport, luxPanel, exportBlocked = false }: {
+  onExport: () => void; luxPanel?: ReactNode;
+  /** A lux reading is typed and not logged: the way on waits (LuxCheckpointPanel; audit 86 F10). */
+  exportBlocked?: boolean;
+}) {
   return (
     <div className={shell} style={{ display: 'flex' }}>
       {/* Centred, and in reading order: the participant's message first, then — set apart — what
@@ -1341,7 +1345,9 @@ export function SessionComplete({ onExport, luxPanel }: { onExport: () => void; 
         </p>
         <div style={{ marginTop: 28, paddingTop: 18, borderTop: '1px solid #e5e2dc' }}>
           {luxPanel}
-          <button className={btn} style={{ marginTop: 18, background: '#1a1a2e' }} onClick={onExport}>
+          <button className={btn} disabled={exportBlocked}
+            style={{ marginTop: 18, ...(exportBlocked ? { background: '#e8e6e1', color: '#4a4a60', cursor: 'not-allowed' } : { background: '#1a1a2e' }) }}
+            onClick={() => { if (!exportBlocked) onExport(); }}>
             Researcher: view export dashboard →
           </button>
         </div>

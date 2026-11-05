@@ -89,6 +89,35 @@ export function mayCapture(consent: MediaConsent | null | undefined, checkpoint:
   return consent[requiredGrant(checkpoint)] === true;
 }
 
+/**
+ * What a new capture at `checkpoint` does to the items the sitting already holds: stored as it is,
+ * stored in place of earlier ones, or not stored at all.
+ *
+ * ONE PHOTOGRAPH PER CHECKPOINT PER SITTING (Round 89, audit 86 F9). The consent the participant gave
+ * reads "two photographs of me at the device — one at the start and one at the end". The start one is
+ * taken when the camera check is accepted, and a resumed sitting runs the camera check again, so
+ * every resume stored another "start of session" photograph: a sitting resumed twice held three. The
+ * first is kept — it is the start of the sitting, and the grant covers that one — and a later one is
+ * not taken. A reading segment, by contrast, REPLACES an earlier clip of the same condition: an
+ * earlier one can only come from a run that was redone, and the redo's measures are what a segment is
+ * coded against (matched on condition_id, or on the label for clips stored before the id was).
+ */
+export function captureDisposition(
+  existing: readonly Pick<MediaRecord, 'media_id' | 'checkpoint' | 'condition_id' | 'condition_label'>[],
+  checkpoint: MediaCheckpoint,
+  conditionId: string | null = null,
+  conditionLabel: string | null = null,
+): { store: boolean; replaces: string[] } {
+  if (checkpoint !== 'reading_segment') {
+    return { store: !existing.some((m) => m.checkpoint === checkpoint), replaces: [] };
+  }
+  const replaces = existing
+    .filter((m) => m.checkpoint === 'reading_segment'
+      && (m.condition_id != null ? m.condition_id === conditionId : m.condition_label === conditionLabel))
+    .map((m) => m.media_id);
+  return { store: true, replaces };
+}
+
 /** FNV-1a 32-bit over raw bytes. */
 export function fnv1aBytes(bytes: Uint8Array): string {
   let h = 0x811c9dc5;

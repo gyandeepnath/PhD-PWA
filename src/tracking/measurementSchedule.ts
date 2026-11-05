@@ -243,7 +243,7 @@ export function measurementSchedule(): ScheduleRow[] {
     {
       measure: 'Setup photographs (their own consent)',
       cadence: 'Start and end',
-      when: 'One after the camera check, one at the end of the sitting',
+      when: 'One when the camera check is accepted (a resumed sitting keeps its first), one when the last questionnaire (NASA-TLX) is submitted',
       kept: 'Two photo files (15_media_inventory, session_start and session_end)',
       live: 'Nothing on screen',
     },

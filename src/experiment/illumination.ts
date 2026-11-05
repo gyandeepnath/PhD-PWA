@@ -208,6 +208,16 @@ export function specFor(level: string | null | undefined): IlluminationSpec | nu
     : null;
 }
 
+/**
+ * A lux reading as typed by the operator: a number from 0 to 200,000, or null. The one rule for every
+ * place a reading is entered (the checkpoint panels and the session manager's late end reading).
+ */
+export function parseLuxEntry(text: string): number | null {
+  if (text.trim() === '') return null;
+  const n = Number(text);
+  return Number.isFinite(n) && n >= 0 && n <= 200000 ? n : null;
+}
+
 /** True when a measured illuminance falls inside the accepted range for the level. */
 export function luxInRange(level: IlluminationLevel | string, lux: number): boolean {
   const spec = specFor(level);
