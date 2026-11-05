@@ -449,7 +449,10 @@ describe('the app’s colour screen does not exclude anyone', () => {
     // The self-report, asserted here; the formal plates, asserted by the profile stage. Both are
     // still exclusions — the point of the change is WHICH instrument decides, not that nothing does.
     expect(experiment).toMatch(/'self-reported colour-vision deficiency'/);
-    expect(experiment).toMatch(/reasons\.push\('colour-vision deficiency on formal plates'\)/);
+    // The formal plates through one rule, from the profile and from the colour screen's notice
+    // (audit 86 UI-7; tests/formalPlates.test.tsx).
+    expect(experiment).toMatch(/recordFormalPlates\(\s*base\?\.cvd_clinical,\s*d\.cvdClinical,/);
+    expect(readFileSync('src/experiment/eligibility.ts', 'utf8')).toMatch(/FORMAL_PLATES_REASON = 'colour-vision deficiency on formal plates'/);
   });
 
   it('still records the failure, so the analyst can model or exclude on it', () => {
@@ -477,6 +480,9 @@ describe('the app’s colour screen does not exclude anyone', () => {
     expect(ui).toMatch(/if \(result\.status === 'normal'\) onDone\(\);\s*\n\s*else setNotice\(result\.status\)/);
     expect(ui).toMatch(/void Promise\.resolve\(onComplete\(result\)\)\.then/);
     expect(ui).toMatch(/Administer the formal plates/);
+    // ...and records the result there: the profile is behind the operator by then (audit 86 UI-7).
+    expect(ui).toMatch(/record the result below/);
+    expect(ui).not.toMatch(/record the result on the profile form/);
     expect(ui).toMatch(/does not exclude anyone and it is not a diagnosis/);
   });
 });

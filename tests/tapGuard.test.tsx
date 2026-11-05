@@ -178,7 +178,7 @@ describe('screens that took a carried tap (audit 86)', () => {
   const counter = (host: HTMLElement) => host.textContent!.match(/Colour-vision screening · (\d+)\/(\d+)/)!.slice(1).map(Number);
 
   it('colour vision: a double tap on a digit answers one plate, not two (F11)', () => {
-    const m = mount(createElement(IshiharaTest, { seed: 101, onComplete: () => {}, onDone: () => {} }));
+    const m = mount(createElement(IshiharaTest, { seed: 101, onComplete: () => {}, onDone: () => {}, onFormalPlates: () => {} }));
     vi.advanceTimersByTime(2000); // the first plate has been looked at
     expect(counter(m.host)[0]).toBe(1);
     const t = performance.now();

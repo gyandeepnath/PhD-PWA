@@ -163,8 +163,11 @@ export async function handleStage(page: Page, stage: string, opts: { split?: boo
        * acknowledging it is what a researcher would do. Checked first, because when it is up there
        * is no digit button to click.
        */
-      const ack = page.getByRole('button', { name: /Recorded — continue/ });
+      const ack = page.getByTestId('formal-plates-record');
       if (await ack.isVisible().catch(() => false)) {
+        // The notice records the formal plate result itself (audit 86 UI-7) and moves on only once
+        // one is chosen. The driver's profile entered 'normal'; it says the same here.
+        await page.getByTestId('formal-plates-normal').click({ force: true });
         await ack.click({ force: true });
         await waitStageChange(page, stage);
         break;

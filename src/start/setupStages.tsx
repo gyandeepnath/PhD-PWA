@@ -625,9 +625,12 @@ export function ParticipantProfile({ onSubmit, initial, onBack }: {
       </div>
       <div className="space-y-5">
         <Pick label="Vision correction" value={corr} set={(v) => setCorr(v as ProfileData['correctionType'])} opts={['none', 'glasses', 'contacts']} />
-        <Pick label="Any colour-vision deficiency? (self-report; the colour-vision plates follow)" value={cvd == null ? '' : cvd ? 'yes' : 'no'} set={(v) => setCvd(v === 'yes')} opts={['no', 'yes']} />
+        {/* "(self-report; the colour-vision plates follow)" sat right above the formal-plates field and read
+            as if the plates came later, which invited 'not done' here (audit 86 M3). The plates that follow
+            are the app's own screen; the formal plates are the operator's, done with the clinical screening. */}
+        <Pick label="Any colour-vision deficiency? (the participant's own answer)" value={cvd == null ? '' : cvd ? 'yes' : 'no'} set={(v) => setCvd(v === 'yes')} opts={['no', 'yes']} />
         <Pick
-          label="Formal colour-vision plates (operator's clinical screening)"
+          label="Formal colour-vision plates (your clinical screening, done before the app's own colour screen)"
           value={clinicalCvd}
           set={setClinicalCvd}
           opts={['normal', 'deficient', 'not done']}

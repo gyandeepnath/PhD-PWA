@@ -6,6 +6,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { makeRng } from '@/sim/rng';
 import { useTapGuard } from '@/lib/tapGuard';
+import type { FormalPlates } from '@/experiment/eligibility';
+import { UI_TEXT } from '@/lib/uiPalette';
 import { buildScreeningPlates, isFigurePixel, scoreIshihara, type Plate, type IshiharaResult } from './ishihara';
 
 export const PLATE_DIAMETER = 280;
@@ -81,9 +83,17 @@ interface Props {
    * second look turns detection into recall. It returns on the operator notice.
    */
   onRunning?: (running: boolean) => void;
+  /**
+   * Record the operator's FORMAL plate result, chosen on the notice (audit 86 UI-7). Awaited before
+   * the notice moves on. The profile, which used to be named as the place to record it, comes before
+   * this screen and cannot be reopened from here.
+   */
+  onFormalPlates: (result: FormalPlates) => unknown;
+  /** What the profile form holds for the formal plates in this sitting, when it is known. */
+  formalPlatesOnProfile?: FormalPlates | null;
 }
 
-export function IshiharaTest({ onComplete, onDone, seed, onRunning }: Props) {
+export function IshiharaTest({ onComplete, onDone, seed, onRunning, onFormalPlates, formalPlatesOnProfile }: Props) {
   const plates = useMemo(() => buildScreeningPlates(seed), [seed]);
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -124,7 +134,9 @@ export function IshiharaTest({ onComplete, onDone, seed, onRunning }: Props) {
     }
   };
 
-  if (notice) return <OperatorNotice status={notice} onDone={onDone} />;
+  if (notice) {
+    return <OperatorNotice status={notice} onDone={onDone} onFormalPlates={onFormalPlates} onProfile={formalPlatesOnProfile ?? null} />;
+  }
 
   return (
     // .screen, not min-h-screen: 100vh is not the scaled root's height, so the plate sat off-centre
@@ -161,6 +173,14 @@ export function IshiharaTest({ onComplete, onDone, seed, onRunning }: Props) {
   );
 }
 
+/** The three formal plate answers, as the profile form words them. */
+const FORMAL_OPTIONS: { value: FormalPlates; label: string }[] = [
+  { value: 'normal', label: 'Normal' },
+  { value: 'deficient', label: 'Deficient' },
+  { value: 'not_done', label: 'Not done' },
+];
+const formalLabel = (v: FormalPlates) => FORMAL_OPTIONS.find((o) => o.value === v)!.label.toLowerCase();
+
 /**
  * Shown to the OPERATOR when the app's screen does not pass — and only then.
  *
@@ -177,9 +197,41 @@ export function IshiharaTest({ onComplete, onDone, seed, onRunning }: Props) {
  * plate was missed, so the attempt measured nothing — one mis-tap on the first of six screens does
  * it — and the setup state machine will not re-present the stage, because a total was recorded.
  * The formal plates are the remedy there too.
+ *
+ * THE RESULT IS RECORDED HERE (audit 86 UI-7). The notice used to say "record the result on the
+ * profile form", with "Recorded — continue" as its only button. The profile is behind the operator
+ * at this point and nothing in the sitting returns to it, so a deficiency found on the plates could
+ * not be entered: the participant kept the profile's 'not done' and stayed eligible. The notice now
+ * asks for the result itself — normal, deficient or not done, the profile's three answers, recorded
+ * by the profile's own rule (eligibility.ts recordFormalPlates) — and moves on only after one is
+ * chosen. Nothing is chosen in advance, so continuing is a statement about the plates, never a tap
+ * past a default; what the profile holds is shown beside it.
  */
-function OperatorNotice({ status, onDone }: { status: IshiharaResult['status']; onDone: () => void }) {
+export function OperatorNotice({ status, onDone, onFormalPlates, onProfile }: {
+  status: IshiharaResult['status'];
+  onDone: () => void;
+  onFormalPlates: (result: FormalPlates) => unknown;
+  onProfile: FormalPlates | null;
+}) {
   const failed = status === 'screen_failed';
+  const [choice, setChoice] = useState<FormalPlates | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const record = async () => {
+    if (!choice || saving) return;
+    setSaving(true);
+    setSaveFailed(false);
+    try {
+      await onFormalPlates(choice);
+    } catch {
+      // Not moved on: the result is the point of this screen. The failure itself is reported by the
+      // storage layer; here the operator is told it was not saved and can press again.
+      setSaving(false);
+      setSaveFailed(true);
+      return;
+    }
+    onDone();
+  };
   return (
     <div className="screen scrollable nav-band panel-band w-full bg-cream p-[5%] font-sans text-[#1a1a2e] animate-fade-in" style={{ display: 'flex' }}>
       <div style={{ maxWidth: 760, width: '100%', margin: 'auto' }}>
@@ -196,18 +248,65 @@ function OperatorNotice({ status, onDone }: { status: IshiharaResult['status']; 
         </p>
         <p className="mt-3 text-[17px] leading-relaxed">
           <strong>Administer the formal plates</strong> (Ishihara or Farnsworth) now, while the
-          participant is here, and record the result on the profile form as normal or deficient. That
-          result is what the analysis uses, and it is the only thing that can settle this. If you
-          cannot do it now, record <em>not done</em> honestly — it is not a pass.
+          participant is here, and record the result below. That result is what the analysis uses,
+          and it is the only thing that can settle this. If you cannot do it now, record <em>not
+          done</em> honestly — it is not a pass.
         </p>
-        <p className="mt-3 text-[15px] leading-relaxed text-[#4a4a60]">
+        <div className="mt-5" role="group" aria-labelledby="formal-plates-label">
+          <p id="formal-plates-label" className="font-sans text-[15px] font-medium text-[#3a3a4a]">
+            Formal colour-vision plates
+            {onProfile && <span className="font-normal text-[#4a4a60]"> · on the profile form: {formalLabel(onProfile)}</span>}
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+            {FORMAL_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                data-testid={`formal-plates-${o.value}`}
+                aria-pressed={choice === o.value}
+                onClick={() => { setChoice(o.value); setSaveFailed(false); }}
+                className="font-sans text-base"
+                style={{
+                  padding: '10px 16px', borderRadius: 10, minHeight: 44, cursor: 'pointer',
+                  border: `1px solid ${choice === o.value ? '#1a1a2e' : '#bdb8ae'}`,
+                  background: choice === o.value ? '#1a1a2e' : '#fff',
+                  color: choice === o.value ? '#fff' : '#3a3a4a',
+                }}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="mt-4 text-[15px] leading-relaxed text-[#4a4a60]">
           Do not tell the participant they have a colour-vision deficiency. If the formal plates show
           one, follow the incidental-findings steps in the operator manual.
         </p>
-        <button onClick={onDone} className="font-lab mt-8"
-          style={{ padding: '14px 28px', borderRadius: 12, border: '1px solid #d8d4cc', background: '#fff', fontSize: 15, cursor: 'pointer' }}>
-          Recorded — continue
+        <button
+          type="button"
+          data-testid="formal-plates-record"
+          onClick={() => { void record(); }}
+          disabled={!choice || saving}
+          className="font-sans mt-6 text-base font-medium"
+          style={{
+            padding: '14px 28px', borderRadius: 12, minHeight: 44,
+            ...(choice && !saving
+              ? { background: '#1a1a2e', color: '#fff', border: '1px solid #1a1a2e', cursor: 'pointer' }
+              : { background: '#e8e6e1', color: UI_TEXT.muted, border: '1px solid #e8e6e1', cursor: 'not-allowed' }),
+          }}
+        >
+          {saving ? 'Recording…' : 'Record and continue →'}
         </button>
+        {saveFailed && (
+          <p role="alert" className="mt-3 font-sans text-[15px]" style={{ color: UI_TEXT.red }}>
+            The result was not saved. Press <em>Record and continue</em> again.
+          </p>
+        )}
+        {!choice && (
+          <p role="status" className="mt-3 font-sans text-[15px] text-[#4a4a60]">
+            Choose the formal plate result to continue.
+          </p>
+        )}
       </div>
     </div>
   );

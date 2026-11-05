@@ -27,8 +27,16 @@
  * everything known about the participant rather than of whichever screen ran last.
  */
 
-/** Which stage is authoritative for a reason. Each owns a disjoint set; see OWNED_BY. */
-export type ExclusionSource = 'profile' | 'colour_vision';
+/**
+ * Which writer is authoritative for a reason. Each owns a disjoint set; see OWNED_BY.
+ *
+ * `formal_plates` is not a stage: it is the operator's formal colour-vision result, which is asked
+ * on the profile form AND on the notice after the app's own colour screen does not pass (audit 86
+ * UI-7). Two screens record one answer, so the answer has its own owner and one rule
+ * (recordFormalPlates below): if it belonged to the profile, the notice could not write it without
+ * also stripping the profile's age and contact-lens reasons.
+ */
+export type ExclusionSource = 'profile' | 'colour_vision' | 'formal_plates';
 
 /**
  * The reasons each stage may assert, as the patterns that recognise them in a stored record.
@@ -55,8 +63,9 @@ export type ExclusionSource = 'profile' | 'colour_vision';
  * reads `screen_failed`, and the screen counts are still exported beside it.
  */
 const OWNED_BY: Record<ExclusionSource, RegExp[]> = {
-  profile: [/inclusion range/i, /contact-lens/i, /formal plates/i],
+  profile: [/inclusion range/i, /contact-lens/i],
   colour_vision: [/colour-vision screening/i, /self-reported colour-vision/i],
+  formal_plates: [/formal plates/i],
 };
 
 export interface EligibilityVerdict {
@@ -88,4 +97,48 @@ export function mergeExclusionReasons(
   const all = [...others];
   for (const r of fresh) if (!all.includes(r)) all.push(r);
   return { eligible: all.length === 0, exclusion_reason: all.length ? all.join('; ') : null };
+}
+
+/** The operator's formal colour-vision plate result (Ishihara or Farnsworth), `cvd_clinical`. */
+export type FormalPlates = 'normal' | 'deficient' | 'not_done';
+
+/** The reason a 'deficient' formal result is recorded under. Owned by `formal_plates`. */
+export const FORMAL_PLATES_REASON = 'colour-vision deficiency on formal plates';
+
+/**
+ * Record a formal plate result: the value to store and the verdict it implies. One rule for every
+ * screen that asks for it — the profile form, and the notice shown when the app's own colour screen
+ * does not pass.
+ *
+ * THE DEFECT THIS EXISTS FOR (audit 86 UI-7). The notice told the operator to administer the formal
+ * plates "now, while the participant is here, and record the result on the profile form" — but the
+ * profile comes BEFORE the colour screen and nothing returns to it in that sitting (its only way
+ * back, from pre-flight, closes once the plates have run). So the formal result could not be
+ * entered: a participant whose plates showed a deficiency kept the 'not done' typed at the profile
+ * and stayed eligible=TRUE in the confirmatory sample of a text-colour factor. The notice now asks
+ * for the result itself, and both screens record it through this function.
+ *
+ * `stored` is the result as it stood before this sitting's answer — the row before this sitting's
+ * profile, when that is known — so a later answer in the same sitting REPLACES an earlier one, as a
+ * correction on the profile does, while results from earlier sittings keep their stickiness:
+ *
+ *   - a 'deficient' result stands at every later sitting (a later 'normal' does not cancel it);
+ *   - 'not_done' never overwrites a real result: it says nothing was measured this time.
+ *
+ * The exclusion reason follows the STORED result, not this answer. It followed the answer, so a
+ * participant 'deficient' at sitting 1 and 'normal' at sitting 2 was stored cvd_clinical='deficient'
+ * with eligible=TRUE — a row that contradicts the codebook's own rule ("a 'deficient' result sets
+ * eligible=false"). `reasons` is the record's reason string as it now stands; every other writer's
+ * reasons are kept (mergeExclusionReasons).
+ */
+export function recordFormalPlates(
+  stored: FormalPlates | null | undefined,
+  answer: FormalPlates,
+  reasons: string | null | undefined,
+): EligibilityVerdict & { cvd_clinical: FormalPlates } {
+  const cvd_clinical: FormalPlates = stored === 'deficient' ? 'deficient'
+    : answer !== 'not_done' ? answer
+      : (stored ?? 'not_done');
+  const verdict = mergeExclusionReasons(reasons, 'formal_plates', cvd_clinical === 'deficient' ? [FORMAL_PLATES_REASON] : []);
+  return { cvd_clinical, ...verdict };
 }

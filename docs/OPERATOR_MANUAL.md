@@ -339,8 +339,10 @@ confirmatory analysis can drop them. Enter what is true rather than what will le
 **Colour vision — two separate things, and only one of them excludes.**
 
 - The **formal plates you administer** (Ishihara or Farnsworth, part of the clinical screening) are
-  the basis for exclusion. Record the result in the profile form: normal, deficient, or not done.
-  Record *not done* honestly if you did not do it; it is not a pass.
+  the basis for exclusion. Do them with the clinical screening, before the profile, and record the
+  result in the profile form: normal, deficient, or not done. Record *not done* honestly if you did
+  not do it; it is not a pass. If the app's own screen then does not pass, its notice asks for the
+  result again (below).
 - The **app's own colour-vision screen** — seven plates: a greyscale control plus six coloured ones
   — is a screening aid and a covariate. It is not the Ishihara test, it has no published sensitivity
   or specificity, and it never excludes anyone on its own. Its digits, plate order and colours are
@@ -358,9 +360,16 @@ If the two disagree, record both and note it. The formal result is what the anal
 **If the app's screen does not pass**, the tablet stops and tells you so before going on. Nothing has
 gone wrong and nobody is excluded — the result is already saved. What it is asking you to do is
 **administer the formal plates now, while the participant is still with you**, and record the result
-on the profile form. That is the only moment the question can be settled: the app's screen cannot
-settle it, and after the session there is no participant to screen. If you genuinely cannot run the
-plates, record *not done* — it is not a pass, and the analysis will treat it as unresolved. Do not
+**on that notice**: tap *Normal*, *Deficient* or *Not done*, then *Record and continue*. Nothing is
+chosen for you, and the notice shows what the profile form holds. The profile is behind you by then
+and cannot be reopened, so this is where the result goes (audit 86 UI-7: the notice used to send you
+to the profile form, which nothing reopens, and a deficiency found there could not be entered). The
+answer replaces the profile's in this sitting and is recorded by the same rule: *Deficient* excludes
+the participant from the confirmatory analysis; *Not done* never replaces a real result; a
+*Deficient* from an earlier sitting stands. That is the only moment the question can be settled: the
+app's screen cannot settle it, and after the session there is no participant to screen. If you
+genuinely cannot run the plates, record *not done* — it is not a pass, and the analysis will treat
+it as unresolved. Do not
 tell the participant they have a colour-vision deficiency on the strength of the app's screen; if the
 formal plates show one, follow the incidental-findings steps below.
 
@@ -936,7 +945,8 @@ Print this.
 **Setup**
 - [ ] Need to stop? Top-left **Exit — resume later** (the Back gesture is the same button and asks the same), never closing the app; mistyped profile → **← Back to the profile** on pre-flight
 - [ ] Clinical screening complete; any abnormality recorded and referred
-- [ ] Formal colour-vision plates administered, and the result entered in the profile form
+- [ ] Formal colour-vision plates administered, and the result entered in the profile form (or on
+      the notice after the app's colour screen, if that screen did not pass)
 - [ ] Camera preview shows a face box, and the yellow points sit on the eyelids
 - [ ] Camera set-up: camera, tracker and eye sampling rates read and noted; the sentence under them names no stage as short
 - [ ] Calibration completed unhurried

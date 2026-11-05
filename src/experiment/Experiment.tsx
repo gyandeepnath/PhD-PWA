@@ -12,7 +12,7 @@ import {
   illuminationForBlock, illuminationOrderFor, luxInRange, summariseLux,
 } from '@/experiment/illumination';
 import { participantProgress, passageRepeatNumber, sittingLength } from './participantProgress';
-import { mergeExclusionReasons } from './eligibility';
+import { mergeExclusionReasons, recordFormalPlates, type FormalPlates } from './eligibility';
 import { trackHiddenTime, trackPortraitTime, trackBlockingNoticeTime, setBlockingNotice, trackMonitorOpenTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { PASSAGES } from './passages';
 import { annotationSegmentSteps, blockPlan, isAnnotationSubsample, type PlannedStep } from './counterbalance';
@@ -1039,10 +1039,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
      */
     // The FORMAL plate result is what excludes. The app's own digital colour-vision screen has no
     // published operating characteristics and is a flag, not a criterion — using it to exclude
-    // contradicted its own module header, which names formal plates as the standard.
-    if (d.cvdClinical === 'deficient') {
-      reasons.push('colour-vision deficiency on formal plates');
-    }
+    // contradicted its own module header, which names formal plates as the standard. It is recorded
+    // below through recordFormalPlates, the rule the colour-screen notice uses too (audit 86 UI-7).
     /*
      * MERGED, not replaced. This stage used to write `eligible: reasons.length === 0` and
      * `exclusion_reason: reasons.join('; ')` over whatever the record held — and the record is
@@ -1062,7 +1060,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
      */
     if (profileBase.current == null) profileBase.current = { row: prior };
     const base = profileBase.current.row;
-    const verdict = mergeExclusionReasons(base?.exclusion_reason, 'profile', reasons);
+    const plates = recordFormalPlates(
+      base?.cvd_clinical,
+      d.cvdClinical,
+      mergeExclusionReasons(base?.exclusion_reason, 'profile', reasons).exclusion_reason,
+    );
+    const verdict = { eligible: plates.eligible, exclusion_reason: plates.exclusion_reason };
 
     /**
      * The participant record is created once and SHARED across a participant's two sittings, so
@@ -1094,8 +1097,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       cvd_screen_correct: base?.cvd_screen_correct ?? null,
       cvd_screen_total: base?.cvd_screen_total ?? null,
       // A 'deficient' result at either sitting stands; 'not_done' never overwrites a real result.
-      cvd_clinical: base?.cvd_clinical === 'deficient' ? 'deficient'
-        : d.cvdClinical !== 'not_done' ? d.cvdClinical : (base?.cvd_clinical ?? 'not_done'),
+      cvd_clinical: plates.cvd_clinical,
       // First-sitting values, kept for continuity; the per-sitting values go on the session below.
       caffeine_today: base?.caffeine_today ?? d.caffeineToday,
       hours_since_sleep: base?.hours_since_sleep ?? d.hoursSinceSleep,
@@ -1118,6 +1120,33 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
 
     advance();
   }, [session, enrolment, advance]);
+
+  /**
+   * The formal plate result, recorded on the notice the colour screen raises when it does not pass
+   * (audit 86 UI-7). The notice asks for the plates "now, while the participant is here"; the profile
+   * that used to be named as the place to record them is behind the operator by then and cannot be
+   * reopened, so a deficiency found on the plates was never entered and the participant stayed
+   * eligible. The answer goes through the profile's own rule (recordFormalPlates) and REPLACES this
+   * sitting's profile answer as a correction there would: merged against the row as it stood before
+   * this sitting's profile (profileBase). After a resume that row is no longer known, and the stored
+   * row is the base — a 'deficient' entered at the profile then stays, the conservative side.
+   */
+  const saveFormalPlates = useCallback(async (answer: FormalPlates) => {
+    if (!session) return;
+    const p = await get('participants', session.participant_id);
+    if (!p) return;
+    const stored = profileBase.current ? profileBase.current.row?.cvd_clinical : p.cvd_clinical;
+    const plates = recordFormalPlates(stored, answer, p.exclusion_reason);
+    const verdict = { eligible: plates.eligible, exclusion_reason: plates.exclusion_reason };
+    await put('participants', {
+      ...p,
+      cvd_clinical: plates.cvd_clinical,
+      eligible: verdict.eligible,
+      exclusion_reason: verdict.exclusion_reason,
+    });
+    // The profile's own copy follows, so a profile reopened in this mount shows what is stored.
+    if (lastProfile.current) lastProfile.current = { ...lastProfile.current, cvdClinical: answer };
+  }, [session]);
 
   // --- condition record (lazy, on entering reading) ---
   const ensureCondition = useCallback(async () => {
@@ -1538,6 +1567,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
            */
           onDone={advance}
           onRunning={setProcedureRunning}
+          // The notice records the formal plates itself (audit 86 UI-7); see saveFormalPlates.
+          onFormalPlates={latched('formal-plates', saveFormalPlates)}
+          formalPlatesOnProfile={lastProfile.current?.cvdClinical ?? null}
         />
       );
       break;

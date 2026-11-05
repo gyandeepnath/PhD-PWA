@@ -97,9 +97,16 @@ describe('every reason a stage can emit, it can also recognise', () => {
   const experiment = experimentRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 
   it('the profile stage’s reasons are recognised as its own', () => {
-    for (const reason of [AGE, CONTACTS, 'colour-vision deficiency on formal plates']) {
+    for (const reason of [AGE, CONTACTS]) {
       expect(mergeExclusionReasons(reason, 'profile', []).exclusion_reason, reason).toBeNull();
     }
+  });
+
+  it('the formal plate result has its own owner, written from the profile and from the colour-screen notice', () => {
+    // Audit 86 UI-7: two screens record one answer, so neither may own it as a stage — the notice
+    // writing through 'profile' would strip the age and contact-lens reasons.
+    expect(mergeExclusionReasons('colour-vision deficiency on formal plates', 'formal_plates', []).exclusion_reason).toBeNull();
+    expect(mergeExclusionReasons(AGE, 'formal_plates', []).exclusion_reason).toBe(AGE);
   });
 
   it('the colour-vision stage’s reasons are recognised as its own', () => {
@@ -118,8 +125,10 @@ describe('every reason a stage can emit, it can also recognise', () => {
     // that the call existed, and a mutation that kept the call while writing a locally recomputed
     // verdict passed — which is precisely the shape of the original defect.
     expect(experiment.match(/mergeExclusionReasons\(/g) ?? []).toHaveLength(2);
+    // The third writer, the colour-screen notice's formal plate result, merges through recordFormalPlates.
+    expect(experiment.match(/recordFormalPlates\(/g) ?? []).toHaveLength(2);
     const written = experiment.match(/eligible: verdict\.eligible,\n\s+exclusion_reason: verdict\.exclusion_reason,/g) ?? [];
-    expect(written, 'a writer computes its own verdict instead of writing the merged one').toHaveLength(2);
+    expect(written, 'a writer computes its own verdict instead of writing the merged one').toHaveLength(3);
     // And no writer joins or splits reason strings on its own any more.
     expect(experiment).not.toMatch(/exclusion_reason: reasons/);
     expect(experiment).not.toMatch(/reasons\.join\(/);
