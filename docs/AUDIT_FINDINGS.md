@@ -8114,3 +8114,301 @@ warn otherwise — is listed below for the investigator.
 | CVS-Q change and NASA-TLX in Python | per sitting, no interval | one value per participant, t interval (as R) | ANALYSIS_PLAN §4, §5b |
 | One build per participant | rule in DEPLOYMENT.md only | also on the update notice, the New Session form and in the operator manual; the rule itself unchanged | OPERATOR_MANUAL §2, §8 |
 | Every other rule (tap guard, attempt counting, scale freeze, reaction summary, rating format, typography, straight-lining, frame-rate gate, blink rule, fitted minimum, calibration, camera check, gaze, reliability) | unchanged | unchanged | as before |
+
+## Round 89 — the remaining minor findings of audit 86: what the screens say, the end of a sitting, and what the files mean
+
+The fourth and last set of fixes for audit 86 (2.4.0 at 26e909c): every minor finding that Rounds 86-88
+did not cover — F1, F4, F7, F9, F10, F13, F15, F16, F17, F18 from the walk through a sitting, and D1, D3,
+D7, D8, D9, D11, D12, D13, D14 and D15 from the data. Each was reproduced by the auditor and again,
+independently, by a second reviewer. (F11, M1, M2 and M3 were fixed in Round 86.)
+
+**One rule changed and is versioned in the data:** how the reaction block's response window closes
+(`rt_window_version`, `rw-v2`; only the `false_start` flag differs, and nothing reads it). **No threshold,
+cutoff or scoring rule changed, and no measured value changed.** One exported column was renamed (10's
+`comprehension_correct` is now `comprehension_proportion`, same values), three columns were added to
+01_session_info.csv and one to 02_conditions.csv, one declared type and several codebook texts were
+corrected, and one reason text in 12_quality_flags.csv was reworded (same rule). Nothing stored was
+rewritten and no store changed, so the database version is unchanged (the condition record gained one
+optional field, as in Rounds 86-88). Nothing here was measured on the Xiaomi Pad 6.
+
+### In plain words
+
+1. **The session manager and the session form say what will happen (F1, F15, F16).** A sitting stopped at
+   its closing questionnaires was offered as "next condition 11/10"; the form said "all 10 conditions" for
+   a participant with five already done, and told the operator to delete a sitting "in the dashboard",
+   which has no Delete.
+2. **A lost thank-you screen loses nothing (F4).** The closing photograph and the end-of-sitting lux
+   reading could be taken only on the thank-you screen, after the sitting was already complete; if that
+   screen was lost (the app closed, the tablet slept) both were lost for good. The photograph is now taken
+   when the last questionnaire (NASA-TLX) is submitted, while the participant is still at the device. A
+   missing end reading can be logged afterwards from the Session Manager, and the export says how many
+   minutes after the end of the sitting it was logged.
+3. **One start photograph per sitting (F9).** Every resume of a camera sitting runs the camera check
+   again, and each one stored another "start of session" photograph — three for a sitting resumed twice,
+   against a consent that says two photographs. The first is kept; later ones are not taken.
+4. **A typed lux reading is logged or cleared, never silently dropped (F10).** A value typed and not
+   logged was discarded when the screen was left. The panel now says *Not logged yet* and the break's
+   Continue and the thank-you button wait until it is logged or the box is cleared.
+5. **On a full device the thank-you screen's button works (F13).** It did nothing, and the camera kept
+   running, because a write before it failed. The camera now stops and the dashboard opens whatever the
+   write does.
+6. **A camera lost during the calibration is called lost (F7).** It said "Camera not active — this step is
+   skipped", the words for a participant without a camera, and the baseline questionnaires said nothing
+   until the first display. The camera-lost notice now covers every set-up screen after camera set-up,
+   with *Exit — resume later* as its way back.
+7. **No enrolment number is spent before consent (F17).** A code typed wrong and noticed on the consent
+   screen, or a person who declined, used up an enrolment number — which fixes the condition order —
+   and left a permanent gap in the counterbalancing. The number is now allocated when consent is given.
+8. **Video agreed to without the camera is said (F18).** A subsample participant who agreed to the reading
+   video but declined the camera got no video and nobody was told. The *Camera measurement declined* screen
+   now tells the operator, and the export warns, as it already did for photographs.
+9. **The files say what they hold (D1, D3, D7, D8, D9, D11, D12, D13, D14, D15).** Detailed below.
+
+### 1. The manager and the session form (b374e48) — F1, F15, F16
+
+**Found.** *F1:* the Resume banner printed `next condition ${index + 1}/${length}`, so a sitting stopped at
+the closing CVS-Q or NASA-TLX read "next condition 11/10" (the resume itself landed correctly). *F16:* the
+form wrote "Single sitting: all 10 conditions (75–120 minutes)" from constants while `beginSession` cut the
+sitting to the conditions left (8 or 5). *F15:* the form, its refusal message and OPERATOR_MANUAL said
+"delete it in the dashboard"; Delete is on the Session Manager's rows, and a participant with nothing left
+is enrolled afresh after it, which was not said.
+
+**Fixed.** `resumeLabel` (sessionPersistence.ts) words every resume pointer ("all displays done — closing
+questionnaires"); `sittingLength` (participantProgress.ts) is the one cut, used by the form's help line and by
+`beginSession`; the three strings name the Session Manager and say the participant is enrolled afresh.
+**Tests.** `tests/sittingWording.test.tsx` (6): the pointer in words, before, inside and after the
+displays, and the banner never past the sitting's length; `sittingLength` and the form's help line for
+every history and either choice, the second half of a split as "the remaining 5"; where Delete is.
+
+### 2. The end of a sitting (f3344d2) — F4, F9, F10, F13
+
+**F4 found.** The only end `LuxCheckpointPanel` and the only `captureMedia('session_end')` were on the
+thank-you screen; the sitting is complete before it (at the NASA-TLX, by design, so a closed app does not
+leave it unfinished) and nothing resumes to it. A reload there: no Resume, `lux_readings` [start only], no
+closing photograph although consented. **Fixed.** The closing photograph is taken in the NASA-TLX handler,
+after the completion write (the optional photograph can never stand between the last answer and a complete
+sitting), before the thank-you screen. A completed sitting with no end reading gets **Log end lux** on its
+Session Manager row, writing through the sitting's own path (`storage/luxLog.ts`, which the break and the
+thank-you screen now use too). The reading keeps the time it was logged, and **new column
+`lux_end_min_after_end`** (01_session_info.csv) says how many minutes after the end of the sitting that
+was, so a late reading is never read as an on-time one.
+
+**F9 found.** `captureMedia('session_start')` ran on every camera-check Continue, and a resume repeats the
+camera check: one photograph per resume. (The double-tap route on the thank-you button was closed by Round
+86's latch.) **Fixed.** `captureDisposition` (media.ts): one photograph per checkpoint per sitting, the
+first kept; the reading-segment replacement rule (one clip per condition) moved beside it. Asked before a
+photograph is taken and again before it is stored.
+
+**F10 found.** The panel held a typed value in its own state; only Log wrote it. **Fixed.** The panel reports
+a typed, unlogged value (`onPendingChange`), says *Not logged yet*, and the screen's way on (the break's
+Continue, the thank-you button) waits until it is logged or cleared. It is never logged for the operator: a
+half-typed "3" is not a reading.
+
+**F13 found.** On a full device the thank-you handler wrote the session unconditionally and captured the
+photograph before `tracking.stop()` and `advance()`, with no catch: the only button did nothing and the
+camera stayed on, while the storage-full panel told the operator to export. **Fixed.** It writes only when
+something is missing, and stops the camera and moves on in a `finally`; a failure still reaches the panel.
+
+**Tests.** `tests/endOfSitting.test.tsx` (14): one photograph per checkpoint (the resume's second start
+photograph not stored, a start photograph not standing in for the end one, segments replaced only for their
+own condition) and the sitting asks it twice; the closing photograph in the NASA-TLX handler after the
+completion write and nowhere on the thank-you screen; the thank-you handler's stop and move in a `finally`
+after its only, conditional write; the panel's pending state (typed, logged, cleared, unmounted) and the
+disabled button; the shared rule for a typed reading (0-200,000); a late end reading stored with its time,
+replacing never adding, and exported with its delay (`lux_end_min_after_end` 45 for a reading 45 minutes
+late). `e2e/endOfSitting.spec.ts` (2): a typed middle reading holds the break until logged or cleared; a
+typed end reading holds the thank-you button; the thank-you screen lost by a reload, the end reading logged
+from the Session Manager; and the audit's reproduction of F13 (every IndexedDB put failing on the thank-you
+screen) now reaches the dashboard. The photograph paths were also run once in a real browser with the fake
+camera (camera and photograph consent, exit at the first break, resume — the camera check ran again — and
+on to the thank-you screen): one start photograph, and the closing one stored before the thank-you screen.
+That run is not in the permanent suite: driving a whole sitting with the fake camera took 3.2 minutes and
+the shared driver loses its place in the reading task about one run in two with the camera on (the audit
+noted the same), so it would make the suite unreliable.
+
+### 3. A camera lost on a set-up screen (18c9a1f) — F7
+
+**Found.** The camera-lost notice was gated on `pausable` (the loop and the break). A camera lost during the
+calibration fell through to the no-camera screen ("Camera not active — this step is skipped. The experiment
+continues without eye tracking.") and on the baseline CVS-Q, baseline fatigue and instructions nothing was
+said until the first grey field — after the calibration had been skipped. **Fixed.** The notice is raised
+on every set-up screen after camera set-up; there its way back is **Exit — resume later (camera set up
+again)** (no resume pointer is written, as for every set-up exit; the resume re-derives where to start and
+sets the camera up first), and *Continue without the camera* says the calibration is skipped. The
+calibration's fallback says the camera stopped. OPERATOR_MANUAL §6 has the row. **Tests.**
+`e2e/cameraLost.spec.ts` (2 new): the camera's track ended 150 ms into the calibration — the notice, its Exit,
+and after Continue the fallback's "The camera has stopped"; ended on the baseline CVS-Q — the notice, Exit
+to the manager, and Resume returns to camera set-up.
+
+### 4. The enrolment number is spent at consent (3e9827c) — F17
+
+**Found.** `nextEnrolmentNumber()` ran in `beginSession`, before the consent screen. The number fixes the
+Williams row, the passage rotation and the annotation-video subsample, and the counter only increases: the
+audit typed "P0O1", noticed on the consent screen, exited, deleted and purged, typed "P001" — who became
+enrolment 2. Enrolment 1, a Williams row and a subsample slot, was never used. The same for every refusal.
+**Fixed.** Begin setup reads the next free number (provisional, not spent); consent allocates it
+(`enrolmentAtConsent`, gather.ts). Normally the number is the provisional one; if another participant
+consented in between, the sitting takes the next number and its condition order and assignments are derived
+again, before anything is presented, and a video grant is kept only if the number taken is in the subsample.
+A returning participant's number is read from consented sittings only; a re-consent in the same sitting
+keeps its number. OPERATOR_MANUAL §3 says what to do on a refusal or a mistyped code (Exit, Delete);
+01's `enrolment_number` codebook entry says an unconsented sitting's number is provisional. **Tests.**
+`tests/enrolmentAtConsent.test.ts` (5: new participant, an abandoned unconsented sitting, two participants
+racing, a returning participant and a re-consent, the form's lookup); `e2e/enrolment.spec.ts` (the audit's
+P0O1/P001 reproduction: P001 is enrolment 1, the counter untouched until consent).
+
+### 5. Video without the camera (e44b2a3) — F18
+
+**Found.** Photographs and video are taken from the camera stream, and a declined camera skips the camera
+path; the consent screen offers each option separately. A subsample participant who agreed to the video and
+declined the camera got no clips, the *Camera measurement declined* screen spoke only of blink data, and the
+integrity audit's `grant_not_exercisable` covered photographs only. **Fixed.** `unexercisableGrants`
+(media.ts) lists every camera-derived grant that cannot be exercised; it drives the audit's
+`grant_not_exercisable` (now for the video too) and a researcher note on the *Camera measurement declined*
+screen, which offers *Back to consent* and says not to persuade. **Not changed:** the consent screen itself.
+It is ethics-approved wording that presents each option as "a separate choice"; making the photograph and
+video options depend on the camera option would change that, so it is listed for the investigator below.
+**Tests.** `tests/consentEnforcement.test.ts` (2 new): the video-only and both-granted warnings; the note on
+the declined screen, and none when nothing is unexercisable.
+
+### 6. The data files (50bb7bf, 11e9101, 758ddbd, and 4ca4b43, eb8bce3)
+
+- **D1 (eb8bce3).** Both manifests hashed the text as UTF-16 code units, and the pooled one counted its
+  bytes the same way, so no tool off the tablet could reproduce them for a file with an en dash. One
+  `manifestEntry()` gives bytes and FNV-1a over the UTF-8 the download writes (`checksum_basis`
+  `fnv1a32_utf8_bytes`). The backup's own checksum keeps its definition, so every backup still verifies.
+  Tests: `tests/manifestChecksum.test.ts`, `tests/analysisExport.test.ts`.
+- **D9 (eb8bce3).** ANALYSIS_PLAN named `lux_all_in_range` (no file has it) and put the checksums in
+  16_integrity_report.csv; corrected, and `tests/analysisPlanColumns.test.ts` now fails on any backticked
+  name in the plan that is not a column, a check code or a template variable.
+- **D11 (4ca4b43).** PROTOCOL quoted an earlier timing model (p95 118, 4.0% over two hours) where the model
+  gives 120.7 and 5.5%; updated, and `tests/protocolFigures.test.ts` runs the seeded model and checks every
+  figure the section quotes. The command table no longer states test counts every round outdates.
+- **D7 (50bb7bf).** `comprehension_wrong` fires at 0 or 1 of 3 correct and was written "comprehension below
+  chance (1/3)", and its codebook and PROTOCOL said "below chance" — but with four options chance is 0.75 of
+  3, so 1 of 3 is above it. **The rule is unchanged** (it feeds `quality_score` and `engagement_flag`, an
+  analyst default; `DROP_DISENGAGED` is FALSE by default). The words now say what it does, from one
+  constant (`COMPREHENSION_FLAG`): the reason text in **12_quality_flags.csv `reasons` now reads
+  "comprehension fewer than half correct (1/3)"**; the `reasons` codebook entry records the old wording, so
+  a search across builds can match on "comprehension". Tests: `tests/engagement.test.ts` (2 new).
+- **D12 (50bb7bf).** 10_wide_summary.csv's `comprehension_correct` was the proportion (0, 1/3, 2/3, 1) and
+  analysis_long.csv's is the count the codebook says to model binomially: a join of the two files put 0.667
+  beside 2 under one name. **10's column is now `comprehension_proportion`** (same values; the codebook entry
+  gives the old name), and so is the summary field behind it. analysis_long is unchanged, and neither
+  template reads the column from 10. Test: `tests/sharedColumnNames.test.ts` joins the two files built from
+  one bundle and requires every column they share by name to carry the same value on every row — it failed
+  on exactly this column before.
+- **D14 (50bb7bf).** A blank d-prime has two reasons — a trial pool was empty, or the participant
+  responded to no trial or to every trial — and four codebook entries named only the first, or only "not
+  completed", so a finished search with no word tapped read as unfinished. The reasons are one constant
+  (`SDT_UNESTIMABLE`, signalDetection.ts) quoted by every entry; values unchanged. Test:
+  `tests/sdtUnestimable.test.ts` (every block of up to four trials per cell is blank exactly for a stated
+  reason; every entry quotes every reason).
+- **D3 (11e9101).** 03_fatigue_scores.csv declared `response_time_ms` an integer while every sitting writes
+  the browser clock's float (329.79999999993015). The export gate's type check could not see it because the
+  fixture's screen times were whole numbers. The fixture's questionnaire times are now shaped as
+  `now() - mountedAt` makes them; the gate failed on the declaration, which is now `number`, like every other
+  response time. **No value changed** — the stored times are not rounded (rounding at capture would change a
+  recorded value, for nothing an analysis uses).
+- **D8 (11e9101).** `experiment_date` was the UTC date, so a sitting started before 05:30 in India was dated
+  the day before, and no file had the time of day. 01 now has **`session_start_local` and
+  `session_end_local`** (ISO 8601 with the device's offset, e.g. 2026-10-29T04:30:00+05:30) and
+  `experiment_date` is the date part of the start. Test: `tests/sessionLocalTime.test.ts` (a 04:30 IST start
+  is dated the 29th).
+- **D13 (11e9101).** On a camera-off row 07 wrote FALSE for `fps_adequate_for_tiers`,
+  `fps_adequate_for_ratio`, `head_pitch_calibrated` and `gaze_calibrated` — "measured and failed" — while
+  analysis_long (Round 54) wrote them blank, and 12 wrote `insufficient_blinks` FALSE with no blink count.
+  One helper, `cameraJudgements` (export.ts), gives both writers blank there, for old and new rows alike;
+  the stored records keep their FALSE (a boolean field), which every writer now reads as "not judged".
+  `low_face_presence` stays FALSE on a camera-off row: its codebook defines it as "face_presence_ratio below
+  0.x", which a blank ratio is not. Test: `tests/cameraOffRow.test.ts` (4).
+- **D15 (758ddbd); `rt_window_version` `rw-v2`.** The reaction block's response window was closed by a
+  once-per-frame poll, so a touch up to one frame after it was taken, found too late, and recorded as
+  `false_start` TRUE ("a response made before the stimulus appeared") with no time. The audit's harness run
+  (120 ms window) gave ten such false starts in forty trials; in production the band is one frame after
+  the 1,000 ms window (about 7 ms at 144 Hz). `classifyRtTouch` (lib/rtResponse.ts) closes the window at its
+  deadline, on the touch's own timestamp against the onset; a later touch is ignored, as one between trials
+  always was. A touch inside the window is taken exactly as before. Only `false_start` differs, and no
+  template, summary or check reads it. Versioned per condition: `rt_window_version` in 02_conditions.csv
+  (`rw-v1` for rows recorded before), codebook (02 and 08) and ANALYSIS_PLAN §5. Tests:
+  `tests/rtResponseWindow.test.ts` (6); `e2e/doubleTap.spec.ts`'s check that every response time is the
+  touch's own timestamp minus the onset passes unchanged.
+
+### 7. Not measured on the Xiaomi Pad 6
+
+- The new notices and their layout at the tablet's size: *Not logged yet*, the disabled break and
+  thank-you buttons, the camera-lost notice on the set-up screens, the researcher note on the *Camera
+  measurement declined* screen, and the Session Manager's *Log end lux* dialog (checked in a headless
+  browser at 1152x720 and in jsdom).
+- The closing photograph's place in the NASA-TLX submit: it adds the photograph's capture time between
+  the last answer and the thank-you screen (the submit button is disabled meanwhile). That time was not
+  measured, on the desktop or on the tablet under FaceMesh; it was taken on the thank-you button before.
+- The response-window deadline at the tablet's frame rate: the rule is judged on event timestamps, which
+  do not depend on it, but the band it affects (one frame) was not measured on the device.
+- The time zone: `session_start_local` uses the device's offset; the tablet's (IST, +05:30) was not read.
+
+### 8. For the investigator
+
+1. **The comprehension flag (D7).** It fires at fewer than half correct (0 or 1 of 3); it is not a
+   below-chance rule, and is now not called one. If you want it to fire only at or below chance (0 of 3),
+   that is a new rule and would be versioned; the default is unchanged.
+2. **A renamed column (D12).** 10_wide_summary.csv's `comprehension_correct` (a proportion) is now
+   `comprehension_proportion`, same values. Neither template reads it. If a script of yours does, it needs
+   the new name (a missing-column error, not a wrong value); the rename is easily reversed if you prefer.
+3. **The consent screen and the camera (F18).** The screen offers photographs and the reading video as
+   separate choices, in the approved wording, although both need the camera. The default leaves it as
+   approved and tells the operator at the time. Making those two options available only when the camera is
+   ticked would need the ethics committee's agreement to the change of wording.
+4. **A late end reading (F4).** An end lux reading logged from the Session Manager is kept with its delay
+   (`lux_end_min_after_end`). Whether readings logged more than some time after the end should count as
+   missing in the illumination checks is not pre-specified; the default counts them, and the column shows
+   the gap.
+5. **Enrolment at consent (F17).** In the rare case that another participant consents between a sitting's
+   Begin setup and its own consent (only possible with sittings parked at the consent screen), the sitting
+   takes the next number, and a video grant is kept only inside the subsample of the number taken; a
+   subsample participant whose screen did not offer the video then has none.
+6. **Old exports.** Files written before this round keep the UTC `experiment_date`, the FALSE camera-off
+   judgements in 07, the 10 column name and the old reason text. Re-export from the tablet (or a backup)
+   for consistent files; nothing stored changed, so a re-export is complete.
+7. **On the tablet:** check the end of one sitting with the photograph grant — the closing photograph in
+   the media inventory, *Log end lux* offered after a reload on the thank-you screen — and the *Not logged
+   yet* hold at the middle-reading break.
+
+### 9. Checks run
+
+- On the final code of this round (df2ed61): `npm run verify` green — lint, types, 123 test files with 1,778
+  unit tests, the corpus and codebook gates (538 codebook entries over 19 files), the export gate 886/886,
+  and both analysis templates in R and Python (the single and split cohorts). The **whole end-to-end
+  suite, retries off: 100 of 100 passed** (15.1 min). `npm run build` (the bundle check: 42 assets, all
+  precached), then the production-bundle suite, retries off: 7 of 7.
+- **Each fix fails its tests when reverted**, checked for this round: the 10 column put back under its old
+  name (D12) — all 3 shared-column tests fail, the join showing 0.667 against 2; the old reason text (D7) —
+  the engagement test fails; the codebook texts without the second reason (D14) — 1 of 3 fails; the UTC date
+  (D8) — the 04:30 IST test fails; both writers without `cameraJudgements` (D13) — 4 of 4 fail; the
+  fixture's real-shaped screen times against the old `integer` declaration (D3) — the export gate fails
+  (881/882) on exactly that column; one photograph per checkpoint switched off (F9) and the panel never
+  reporting a typed value (F10) — 2 of the 14 end-of-sitting tests fail each; the thank-you handler put
+  back (F13) — the full-device end-to-end test fails; the camera-lost notice gated on `pausable` again (F7)
+  — both new end-to-end tests fail; the number allocated at Begin setup again (F17) — the enrolment
+  end-to-end test fails; the video left out of `unexercisableGrants` (F18) — 2 tests fail; the deadline
+  removed from `classifyRtTouch` (D15) — 1 of 6 fails. The earlier commits of this round (b374e48, 4ca4b43,
+  eb8bce3: F1, F15, F16, D11, D1, D9) carry their own tests, which pass here; their reversion was not
+  re-checked in this session.
+- The first verify run on the code before the last commit failed two unit tests that pinned source text this
+  round changed (the segment-replacement loop now in `captureDisposition`; the camera-lost notice's gate and
+  button); both now check the code as it is. Nothing else failed.
+
+### 10. Versions in the data
+
+| Rule or format | Before | Now | Where it is recorded |
+|---|---|---|---|
+| Reaction response window | `rw-v1` (no column): closed at the first frame past it; a touch in that frame recorded as `false_start` TRUE | `rw-v2`: closed at its deadline on the touch's own timestamp; a later touch ignored | `rt_window_version` in 02; codebook (02, 08); ANALYSIS_PLAN §5 |
+| 10_wide_summary.csv comprehension column | `comprehension_correct` (a proportion) | `comprehension_proportion`, same values | codebook (10) |
+| 12 `reasons`, comprehension | "comprehension below chance (k/n)" | "comprehension fewer than half correct (k/n)"; rule unchanged | codebook (12 `reasons`, `comprehension_wrong`); PROTOCOL |
+| 07 camera-off judgements; 12 `insufficient_blinks` | FALSE on a camera-off row | blank | codebook (07, 12) |
+| 01 date and time | `experiment_date` the UTC date | the tablet's date; `session_start_local`, `session_end_local` new | codebook (01) |
+| 01 end reading | — | `lux_end_min_after_end` new | codebook (01) |
+| 03 `response_time_ms` declared type | integer (never true) | number; values unchanged | codebook (03) |
+| Manifests' checksum and bytes | over UTF-16 code units | over the UTF-8 bytes written (`checksum_basis`) | both manifests; ANALYSIS_PLAN §7 |
+| Enrolment number | allocated at Begin setup | allocated at consent; provisional before | codebook (01); OPERATOR_MANUAL §3 |
+| Every other rule (tap guard, attempt counting, scale freeze, inter-blink interval, reaction summary, rating format, typography, straight-lining, frame-rate gate, blink rule, fitted minimum, calibration, camera check, gaze, reliability, engagement thresholds) | unchanged | unchanged | as before |
