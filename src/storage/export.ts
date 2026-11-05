@@ -6,7 +6,7 @@
 import { RATE_CORRECTION_NOTE, SDT_NOT_ESTIMABLE_TEXT } from '@/lib/signalDetection';
 import { CONFIG } from '@/experiment/config';
 import { normaliseBundle, sessionForExport, type SessionBundle } from './gather';
-import type { CameraBenchRecord, CameraPipelineRecord, ExposureOutcome, SessionRecord } from './types';
+import type { CameraBenchRecord, CameraPipelineRecord, ExposureOutcome, EyeMetricsRecord, SessionRecord } from './types';
 import type { MediaRecord } from './media';
 import { summariseLux, LUX_CHECKPOINTS } from '@/experiment/illumination';
 import { buildConditionSummaries, ENGAGEMENT, COMPREHENSION_FLAG, comprehensionFlagReason } from '@/dashboard/aggregate';
@@ -255,6 +255,52 @@ export function round(value: unknown, dp = 4): unknown {
   // precision, so returning them unchanged is exact.
   if (!Number.isFinite(scaled)) return value;
   return Math.round(scaled) / 10 ** dp;
+}
+
+/**
+ * The four judgements on an eye-metrics row that only a running camera can make, as every file writes
+ * them: the stored value on a camera row, blank on a camera-off row.
+ *
+ * Round 89, audit 86 D13. disabledEyeMetrics stores FALSE in these fields on a camera-off row (the
+ * record type is boolean), and FALSE claims the thing was measured and failed: the frame rate judged
+ * too low, the head pitch or the gaze calibration tried and not passed. Round 54 blanked two of them
+ * in analysis_long.csv only; 07_eye_metrics.csv kept writing FALSE beside its own blank fps_tier, so
+ * one row disagreed with itself and with the pooled file. Both writers now take the four from here,
+ * for rows recorded before and after alike, and the stored records are left as they are.
+ */
+export function cameraJudgements(e: Pick<EyeMetricsRecord, 'camera_active' | 'fps_adequate_for_tiers'
+  | 'fps_adequate_for_ratio' | 'head_pitch_calibrated' | 'gaze_calibrated'> | null | undefined): {
+  fps_adequate_for_tiers: boolean | null; fps_adequate_for_ratio: boolean | null;
+  head_pitch_calibrated: boolean | null; gaze_calibrated: boolean | null;
+} {
+  const on = !!e && e.camera_active === true;
+  return {
+    fps_adequate_for_tiers: on ? (e.fps_adequate_for_tiers ?? null) : null,
+    fps_adequate_for_ratio: on ? (e.fps_adequate_for_ratio ?? null) : null,
+    head_pitch_calibrated: on ? (e.head_pitch_calibrated ?? null) : null,
+    gaze_calibrated: on ? (e.gaze_calibrated ?? null) : null,
+  };
+}
+
+/**
+ * A stored epoch time as the tablet's wall clock: ISO 8601 with the device's UTC offset, e.g.
+ * 2026-10-29T04:30:00+05:30.
+ *
+ * experiment_date was the UTC date (`toISOString().slice(0, 10)`), so a sitting started before 05:30
+ * in India was dated the day before, while the session manager and the dashboard showed the tablet's
+ * date; and no file gave the time of day at all (audit 86 D8). The offset is the exporting device's
+ * for that instant (`getTimezoneOffset`, which follows any daylight saving), and it is written into
+ * the value, so the instant is unambiguous wherever the file is read. The tablet records and exports
+ * the sitting, so this is the clock the sitting ran by.
+ */
+export function localIso(epochMs: number, offsetMin: number = -new Date(epochMs).getTimezoneOffset()): string {
+  const shifted = new Date(epochMs + offsetMin * 60_000);
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  const sign = offsetMin < 0 ? '-' : '+';
+  const abs = Math.abs(offsetMin);
+  return `${shifted.getUTCFullYear()}-${p2(shifted.getUTCMonth() + 1)}-${p2(shifted.getUTCDate())}`
+    + `T${p2(shifted.getUTCHours())}:${p2(shifted.getUTCMinutes())}:${p2(shifted.getUTCSeconds())}`
+    + `${sign}${p2(Math.floor(abs / 60))}:${p2(abs % 60)}`;
 }
 
 /** Make a string safe for a filename on every platform (Windows forbids " < > : | ? * \ /). */
@@ -550,14 +596,14 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '03_fatigue_scores.csv', column: 'stage', type: 'factor', unit: '-', role: 'id', description: 'baseline (once per session) or post_condition (once per condition).' },
   { file: '03_fatigue_scores.csv', column: 'fatigue_mean', type: 'number', unit: '0-10', role: 'dv', description: "Mean of the five visual-fatigue items. The analysis models its change from the sitting's baseline (fatigue_delta, 10_wide_summary.csv) by LMM, and the items by a cumulative-link model as a sensitivity (ANALYSIS_PLAN.md §4, §4c). Read slider_version before pooling rows." },
   { file: '03_fatigue_scores.csv', column: 'all_touched', type: 'boolean', unit: '-', role: 'qc', description: 'Every item was answered. Continue is held until they are, so this is TRUE on every row the app writes; FALSE would mean a row from outside it.' },
-  { file: '03_fatigue_scores.csv', column: 'response_time_ms', type: 'integer', unit: 'ms', role: 'qc', description: 'Time from screen mount to submit. Implausibly fast = careless responding.' },
+  { file: '03_fatigue_scores.csv', column: 'response_time_ms', type: 'number', unit: 'ms', role: 'qc', description: "Time from screen mount to submit. Implausibly fast = careless responding. In milliseconds as the browser's clock gives them, with a fractional part, like every other response time in this export. Declared 'integer' until Round 89, which no recorded value ever was (audit 86 D3); the values are unchanged." },
   { file: '03_fatigue_scores.csv', column: 'slider_version', type: 'string', unit: '-', role: 'provenance', description: `The rating format. '${SLIDER_VERSION}' from Round 84: each item a ${VAS_LINE_MM} mm visual analogue line, words only at the ends, no marker or value until tapped, stored as whole millimetres / 10 (0.0-10.0 in tenths). '${SLIDER_VERSION_V1}' on rows recorded before it: an eleven-step 0-10 slider that showed its number, whole numbers only. The two are different instruments on the same 0-10 range: do not pool them without this column (ANALYSIS_PLAN.md §4c).` },
   { file: '03_fatigue_scores.csv', column: 'vas_line_mm', type: 'number', unit: 'mm', role: 'qc', description: `The length the lines were drawn at when Continue was pressed, from their width on screen and this sitting's millimetres per pixel (the ruler check, or the fallback vas_line_source names). ${VAS_LINE_MM} unless the screen could not hold it. Blank on ${SLIDER_VERSION_V1} rows, whose line had no set length.` },
   { file: '03_fatigue_scores.csv', column: 'vas_line_source', type: 'factor(3)', unit: '-', role: 'provenance', description: "Where the millimetres per pixel behind vas_line_mm came from: measured (this sitting's ruler check), assumed_study_tablet_panel or assumed_0.2055 (the fallbacks physical_size_source in 02_conditions.csv also uses; correct only on the study tablet). Blank on rows before Round 84." },
 
   // ---- 07_eye_metrics.csv
   { file: '07_eye_metrics.csv', column: 'incomplete_blink_ratio', type: 'number', unit: '0-1', role: 'primary', description: "THE PRIMARY OUTCOME. Incomplete blinks / all detected blinks, during reading. A bounded proportion: model on the logit scale or with a beta/binomial mixed model. HOW THE CLASSIFICATION IS MADE, because it bears on what this column can support: a blink is registered when the eye aspect ratio falls below 0.75 of the participant's own open-eye baseline and counted COMPLETE when it falls below 0.60. Baseline normalisation and the 0.75 registration cut each have published precedent; the 0.60 completeness cut has NONE — docs/LITERATURE_VALIDATION.md searched for it and found no validation of that separation for webcam EAR at any baseline fraction, and every retrieved study classifying blink completeness against a reference standard uses a different signal (near-infrared segmentation, keratograph, high-speed infrared, or a masked clinical observer). Incomplete blinks are also the harder class even with far better instrumentation. Treat the ratio as a within-study relative measure, not as a value comparable to published incomplete-blink proportions, and state the classifier limitation in any write-up." },
-  { file: '07_eye_metrics.csv', column: 'fps_adequate_for_ratio', type: 'boolean', unit: '-', role: 'qc', description: 'SUPERSEDED from Round 79 by the frame-rate gate fps-g2 (sampling_fps_observed, fps_tier) and kept, unchanged, so analyses run on it reproduce. Gate g1: effective_fps >= 30. On a camera that tops out at 30 frames a second it is FALSE on nearly every row, so it carries little information; the 30 rested on an external recommendation that was never verified. Below it, the sampled minimum EAR is biased upward and incomplete_blink_ratio is inflated — a directional bias, not symmetric noise.' },
+  { file: '07_eye_metrics.csv', column: 'fps_adequate_for_ratio', type: 'boolean', unit: '-', role: 'qc', description: 'SUPERSEDED from Round 79 by the frame-rate gate fps-g2 (sampling_fps_observed, fps_tier) and kept, unchanged, so analyses run on it reproduce. Gate g1: effective_fps >= 30. On a camera that tops out at 30 frames a second it is FALSE on nearly every row, so it carries little information; the 30 rested on an external recommendation that was never verified. Below it, the sampled minimum EAR is biased upward and incomplete_blink_ratio is inflated — a directional bias, not symmetric noise. Blank on a camera-off row: no frame rate was judged. Until Round 89 this file wrote FALSE there, which reads as a frame rate measured and found wanting (analysis_long.csv was already blank; audit 86 D13).' },
   { file: '07_eye_metrics.csv', column: 'sampling_fps_observed', type: 'number', unit: 'frames/s', role: 'qc', description: `The frame-rate gate's measure (fps-g2, Round 79; src/tracking/frameRateGate.ts): face-solved eye samples per second of OBSERVED time, (ear_sample_count - 1) / observed_duration_ms x 1000, to 0.01 half up — the rate at which the eye was sampled while the face was seen. Computed by the export from those two columns, so rows recorded before Round 79 have it too. Unlike effective_fps it does not charge time without a face (which face_presence_ratio already counts) to the rate. Blank on camera-off rows and under 1 s observed.` },
   { file: '07_eye_metrics.csv', column: 'fps_tier', type: 'factor(3)', unit: '-', role: 'qc', description: `The frame-rate gate fps-g2 on sampling_fps_observed. A: ${FPS_GATE.ADEQUATE} or more (adequate). B: ${FPS_GATE.REDUCED} to under ${FPS_GATE.ADEQUATE} (reduced: kept in the confirmatory model, flagged, and dropped in a sensitivity refit). C: under ${FPS_GATE.REDUCED} (too slow: out of the confirmatory ocular models, in a sensitivity refit). Fixed by a simulation of the shipped classifier before data collection (docs/FPS_GATE_SIMULATION.md): at ${FPS_GATE.ADEQUATE} frames a second it found at least 98% of blinks and classified them within 0.05 kappa of its accuracy at 30. Computed for every camera-on row, whatever fps_gate_version says. The second part of the gate, consistency with the participant's own median (within ${FPS_GATE.CONSISTENCY_BAND} fps), needs all of a participant's rows and is in analysis_long.csv (fps_consistent) and the templates. Blank on camera-off rows.` },
   { file: '07_eye_metrics.csv', column: 'fps_gate_version', type: 'string', unit: '-', role: 'provenance', description: `The frame-rate gate the app applied when this row was recorded — what the camera self-test and the researcher panel judged against. '${FPS_GATE_VERSION}' from Round 79; '${FPS_GATE_V1}' on rows recorded before it (effective_fps >= 25 for the tiers, >= 30 for the ratio). fps_tier is always computed under ${FPS_GATE_VERSION}; this column tells old rows from new, so both can be reported. Blank on camera-off rows.` },
@@ -566,11 +612,11 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '07_eye_metrics.csv', column: 'ear_sample_count', type: 'integer', unit: 'count', role: 'qc', description: 'EAR samples behind this row. Zero means nothing was measured, whatever the other columns show.' },
   { file: '07_eye_metrics.csv', column: 'blink_rate', type: 'number', unit: 'blinks/min', role: 'dv', description: 'All detected blinks per minute. Secondary: rate alone is a poor fatigue index, since it falls during reading on any medium and can hold steady while completeness degrades.' },
   { file: '07_eye_metrics.csv', column: 'effective_fps', type: 'number', unit: 'frames/s', role: 'qc', description: "Achieved sampling rate OF THE EAR SERIES — the frames in which a face was actually solved, not the frames the pipeline processed. A camera running at 30 fps whose face solves in 60% of frames reports about 18 here. It is not the camera frame rate. It divides by the whole span, so time without a face lowers it; the frame-rate gate (fps-g2, Round 79) judges sampling_fps_observed instead, which does not, and this column remains the rate the primary model's eff_fps_c covariate is centred from (ANALYSIS_PLAN.md §2). Below ~25 the duration-based metrics are sub-Nyquist; proportion measures remain valid." },
-  { file: '07_eye_metrics.csv', column: 'fps_adequate_for_tiers', type: 'boolean', unit: '-', role: 'qc', description: 'SUPERSEDED from Round 79 by fps_tier (gate fps-g2) and kept, unchanged, so analyses run on it reproduce. Gate g1: effective_fps >= 25, for the duration-based blink metrics.' },
+  { file: '07_eye_metrics.csv', column: 'fps_adequate_for_tiers', type: 'boolean', unit: '-', role: 'qc', description: 'SUPERSEDED from Round 79 by fps_tier (gate fps-g2) and kept, unchanged, so analyses run on it reproduce. Gate g1: effective_fps >= 25, for the duration-based blink metrics. Blank on a camera-off row: no frame rate was judged. Until Round 89 this file wrote FALSE there, which reads as a frame rate measured and found wanting (analysis_long.csv was already blank; audit 86 D13).' },
   { file: '07_eye_metrics.csv', column: 'perclos_p80', type: 'number', unit: '0-1', role: 'covariate', description: 'Proportion of time eyes >80% closed. A SLEEPINESS covariate, never a visual-fatigue outcome — it is insensitive in moderate drowsiness. Complete blinks can add frames to it and incomplete blinks never can (they stay above 60% of the open baseline), so at a given blink rate it falls as the incomplete-blink ratio rises: adjusting the primary outcome for it is a sensitivity, not a correction (ANALYSIS_PLAN.md §4).' },
   { file: '07_eye_metrics.csv', column: 'face_presence_ratio', type: 'number', unit: '0-1', role: 'qc', description: `Fraction of frames with a detected face. Pilot gate: >= ${FACE_PRESENCE_PILOT_GATE} in at least 90% of condition-runs.` },
   { file: '07_eye_metrics.csv', column: 'ear_baseline', type: 'number', unit: 'ratio', role: 'qc', description: 'Per-participant open-eye eye-aspect-ratio from calibration. All blink thresholds are relative to this. Since round 75 EAR is computed in image-plane proportions (landmark y rescaled by the frame\'s width/height before the distances are taken), so it no longer depends on the camera frame\'s shape; earlier builds computed it in frame-normalised units, about 1.78 times larger on a 16:9 frame. Ratios to the baseline, and so every blink classification, are unaffected by the change; absolute EAR values from before and after it are not comparable.' },
-  { file: '07_eye_metrics.csv', column: 'head_pitch_calibrated', type: 'boolean', unit: '-', role: 'qc', description: 'True when head_pitch_mean is relative to the participant\'s own frontal posture rather than a population default.' },
+  { file: '07_eye_metrics.csv', column: 'head_pitch_calibrated', type: 'boolean', unit: '-', role: 'qc', description: 'True when head_pitch_mean is relative to the participant\'s own frontal posture rather than a population default. Blank on a camera-off row: there is no head pitch to be relative to anything. Until Round 89 this file wrote FALSE there (audit 86 D13).' },
 
   // ---- 09_rt_summary.csv
   { file: '09_rt_summary.csv', column: 'mean_rt_hits_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Mean RT for correct go responses, excluding anticipations (<150 ms).' },
@@ -583,7 +629,7 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   // ---- 10_wide_summary.csv
   { file: '10_wide_summary.csv', column: 'fatigue_delta', type: 'number', unit: '-10-10', role: 'dv', description: 'post_condition fatigue_mean minus the session baseline: SIGNED, positive = worse than baseline, negative = better. It was declared 0-10, which made every improvement count as out of range in the manifest. Rounded to 4 dp for presentation.' },
   { file: '12_quality_flags.csv', column: 'blink_count_total', type: 'integer', unit: 'count', role: 'qc', description: 'Blinks captured during the condition. The incomplete-blink ratio is a binomial proportion, so its precision depends entirely on this.' },
-  { file: '12_quality_flags.csv', column: 'insufficient_blinks', type: 'boolean', unit: '-', role: 'qc', description: 'TRUE when fewer than 20 blinks were captured, at which point the incomplete-blink ratio for that condition is too imprecise to interpret (SE >= 0.082 at p=0.16). Flagged, not dropped — down-weight or exclude in a sensitivity analysis.' },
+  { file: '12_quality_flags.csv', column: 'insufficient_blinks', type: 'boolean', unit: '-', role: 'qc', description: 'TRUE when fewer than 20 blinks were captured, at which point the incomplete-blink ratio for that condition is too imprecise to interpret (SE >= 0.082 at p=0.16). Flagged, not dropped — down-weight or exclude in a sensitivity analysis. Blank when there is no blink count to judge (the camera did not run, blink_count_total blank). Until Round 89 it was FALSE there, which reads as enough blinks captured (audit 86 D13).' },
   { file: '10_wide_summary.csv', column: 'engagement_flag', type: 'factor(3)', unit: '-', role: 'qc', description: 'good | warn | bad, from ANALYST-DEFAULT thresholds and penalty weights (not pre-registered). Use it for a with-and-without "bad" sensitivity refit of the PRIMARY (ocular) outcome only, as both analysis templates do, and keep every run in every confirmatory model. Never filter a comprehension, reading-speed or d-prime/criterion model on it: the flag is built partly from those outcomes (comprehension_wrong, reading_skim, rt_disengaged), so filtering on it selects on the dependent variable.' },
   { file: '10_wide_summary.csv', column: 'quality_score', type: 'number', unit: '0-1', role: 'qc', description: 'Composite data-quality score for the condition-run.' },
 
@@ -645,7 +691,9 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '00_condition_reference.csv', column: 'background_color', type: 'string', unit: 'hex', role: 'iv', description: 'Background colour as an sRGB hex triplet, exactly as rendered.' },
   { file: '00_condition_reference.csv', column: 'text_color', type: 'string', unit: 'hex', role: 'iv', description: 'Text colour as an sRGB hex triplet, exactly as rendered.' },
   { file: '00_condition_reference.csv', column: 'wcag_level', type: 'string', unit: '-', role: 'covariate', description: 'Accessibility band implied by the contrast ratio: AAA, AA, AA Large, or Fail. Descriptive; model the continuous ratio, not this band.' },
-  { file: '01_session_info.csv', column: 'experiment_date', type: 'string', unit: 'ISO 8601', role: 'meta', description: 'Date the sitting was run. Session timing. Under the single-sitting protocol there is no between-visit spacing to check; retained for earlier two-visit data and for split sittings.' },
+  { file: '01_session_info.csv', column: 'experiment_date', type: 'string', unit: 'ISO 8601', role: 'meta', description: "Date the sitting started, on the tablet's clock: the date part of session_start_local. Under the single-sitting protocol there is no between-visit spacing to check; retained for earlier two-visit data and for split sittings. Until Round 89 this was the UTC date, so a sitting started before 05:30 in India was dated the day before (audit 86 D8); re-export an older file to get the tablet's date." },
+  { file: '01_session_info.csv', column: 'session_start_local', type: 'datetime', unit: 'ISO 8601', role: 'meta', description: "When the sitting started, on the tablet's clock, with its UTC offset (e.g. 2026-10-29T04:30:00+05:30), to the second. The time of day is a candidate covariate for visual fatigue; no file carried it before Round 89. The offset is the exporting device's for that instant — the tablet that ran the sitting, unless a backup was restored and exported elsewhere." },
+  { file: '01_session_info.csv', column: 'session_end_local', type: 'datetime', unit: 'ISO 8601', role: 'meta', description: 'When the sitting ended (the closing questionnaires submitted), on the same clock and offset as session_start_local. Blank while the sitting has not ended.' },
   { file: '01_session_info.csv', column: 'session_status', type: 'factor(2)', unit: '-', role: 'qc', description: 'in_progress or complete. An export may be taken at any time, including from a withdrawn or interrupted sitting, so this states whether the sitting actually finished. It does NOT say whether the participant withdrew: see withdrawn.' },
   { file: '01_session_info.csv', column: 'withdrawn', type: 'boolean', unit: '-', role: 'qc', description: 'TRUE means the PARTICIPANT WITHDREW from the study. Recording a withdrawal marks every sitting of that participant on the device, so each of their bundles carries it. Not a quality flag — a standing instruction: no row of this bundle, nor of any other bundle for the same participant_id, may be analysed, under any sensitivity analysis. The measurements are kept and exported so the withdrawal is auditable, which is what the participant agreed to when they withdrew without asking for deletion. This column used to be absent, so a withdrawn sitting exported CSVs identical to an ordinary paused one. The shipped R and Python templates drop every sitting of a participant with any withdrawn sitting before modelling, which also covers a sitting exported from another device before the withdrawal was recorded.' },
   { file: '01_session_info.csv', column: 'withdrawn_at', type: 'datetime', unit: 'ISO 8601', role: 'qc', description: 'When the withdrawal was recorded. Blank when the participant did not withdraw.' },
@@ -849,7 +897,7 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '07_eye_metrics.csv', column: 'postural_load', type: 'number', unit: 'index', role: 'covariate', description: 'Composite index of sustained non-neutral head posture. A musculoskeletal-strain proxy, not an ocular measure.' },
   { file: '07_eye_metrics.csv', column: 'head_stability_score', type: 'number', unit: '0-1', role: 'qc', description: 'How steadily the head was held. Low values degrade the reliability of every camera-derived measure in the row.' },
   { file: '07_eye_metrics.csv', column: 'off_axis_ratio', type: 'number', unit: '0-1', role: 'qc', description: 'Proportion of processed frames in which the head was turned away from the display.' },
-  { file: '07_eye_metrics.csv', column: 'gaze_calibrated', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the gaze part of the calibration in force passed (01 gaze_calibration_valid for the calibration named by calibration_id): under gaze-r2, whether on_screen_ratio could be computed; under gaze-r1, whether the deprecated zone columns rest on a valid nine-point fit.' },
+  { file: '07_eye_metrics.csv', column: 'gaze_calibrated', type: 'boolean', unit: '-', role: 'qc', description: 'Whether the gaze part of the calibration in force passed (01 gaze_calibration_valid for the calibration named by calibration_id): under gaze-r2, whether on_screen_ratio could be computed; under gaze-r1, whether the deprecated zone columns rest on a valid nine-point fit. Blank on a camera-off row, as in analysis_long.csv. Until Round 89 this file wrote FALSE there (audit 86 D13).' },
   { file: '07_eye_metrics.csv', column: 'calibration_id', type: 'string', unit: 'uuid', role: 'id', description: 'The calibration this condition was measured under, as calibration_id in the calibration records. A sitting holds more than one when calibration was retried or the sitting was resumed; the calibration_* and gaze_trust columns of 01_session_info.csv describe only the LAST, so join on this to get the fit that governed THIS row. Blank when the camera was not running, and on rows recorded before this column existed.' },
   { file: '07_eye_metrics.csv', column: 'gaze_deviation_ratio', type: 'number', unit: '0-1', role: 'qc', description: 'DEPRECATED (gaze-r1 only; blank on gaze_rule_version gaze-r2 rows). Proportion of frames with gaze outside the nine-point fit\'s central zone. It measured page layout more than attention (the reading line is wider than that zone) and counted blinks as looking away; not an outcome. Use on_screen_ratio.' },
   { file: '07_eye_metrics.csv', column: 'zone_center_ratio', type: 'number', unit: '0-1', role: 'qc', description: 'DEPRECATED (gaze-r1 only; blank on gaze-r2 rows). Proportion of frames in the nine-point fit\'s central zone; one minus gaze_deviation_ratio.' },
@@ -1107,7 +1155,9 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
   const bundle = normaliseBundle(input);
   const { session, participant } = bundle;
   const pid = session.participant_id;
-  const date = new Date(session.session_start_time).toISOString().slice(0, 10);
+  // The tablet's date, not the UTC date (audit 86 D8): the date part of session_start_local.
+  const startLocal = localIso(session.session_start_time);
+  const date = startLocal.slice(0, 10);
   const summaries = buildConditionSummaries(bundle);
   // Most recent calibration by the time it was taken, falling back to document order for records
   // written before calibrated_at existed. Never an arbitrary uuid sort — see 01_session_info.
@@ -1141,9 +1191,11 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'enrolment_number', 'session_index', 'session_status', 'withdrawn', 'withdrawn_at', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'protocol_pass', 'repeat_run_note', 'sitting_split_reason', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'build_time', 'build_changed_mid_sitting', 'session_builds', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'device_pixel_ratio', 'stimulus_scale', 'layout_viewport', 'viewing_distance_cm', 'calibration_bar_design_px', 'calibration_bar_mm', 'calibration_scale', 'mm_per_css_px', 'calibration_skipped', 'physical_size_source', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'consent_revisions', 'preflight_complete', 'preflight_bulk_ticked', 'e2e_timing', 'display_mode', 'display_mode_acknowledged', 'stimulus_font_ok', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'gaze_trust', 'gaze_targets_well_covered', 'gaze_threshold_floored', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected', 'calibration_ear_samples', 'calibration_runs', 'calibration_rule_version', 'calibration_ground', 'calibration_baseline_ms', 'calibration_baseline_reason', 'gaze_rule_version', 'gaze_check_reason', 'selftest_cued', 'selftest_detected', 'selftest_extra', 'selftest_fps', 'selftest_face_presence', 'selftest_pass', 'selftest_camera_fps', 'selftest_tracker_fps', 'selftest_process_ms_p50', 'selftest_process_ms_p95', 'selftest_frames_delivered', 'selftest_frames_processed', 'selftest_frames_skipped', 'selftest_limit', 'selftest_rule', 'selftest_sampling_fps', 'selftest_fps_tier', 'selftest_verdict', 'selftest_attempts', 'selftest_ground', 'tracker_backend', 'tracker_requested', 'tracker_selection', 'tracker_trials', 'tracker_failures', 'camera_requested', 'camera_setting_width', 'camera_setting_height', 'camera_setting_fps', 'camera_cap_fps_max', 'camera_cap_width_max', 'camera_cap_height_max', 'timestamp_source', 'camera_fps_min_requested', 'camera_request_fallback', 'camera_facing', 'camera_exposure_caps', 'camera_exposure_policy', 'camera_exposure_rule', 'camera_exposure_reason', 'camera_exposure_mode_readback', 'camera_exposure_time_100us', 'camera_iso', 'camera_exposure_comp', 'camera_auto_fps', 'camera_auto_luma', 'camera_lock_fps_check', 'camera_lock_luma', 'camera_bench'],
+    ['participant_id', 'experiment_date', 'session_start_local', 'session_end_local', 'enrolment_number', 'session_index', 'session_status', 'withdrawn', 'withdrawn_at', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'protocol_pass', 'repeat_run_note', 'sitting_split_reason', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'build_time', 'build_changed_mid_sitting', 'session_builds', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'device_pixel_ratio', 'stimulus_scale', 'layout_viewport', 'viewing_distance_cm', 'calibration_bar_design_px', 'calibration_bar_mm', 'calibration_scale', 'mm_per_css_px', 'calibration_skipped', 'physical_size_source', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'consent_revisions', 'preflight_complete', 'preflight_bulk_ticked', 'e2e_timing', 'display_mode', 'display_mode_acknowledged', 'stimulus_font_ok', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'gaze_trust', 'gaze_targets_well_covered', 'gaze_threshold_floored', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected', 'calibration_ear_samples', 'calibration_runs', 'calibration_rule_version', 'calibration_ground', 'calibration_baseline_ms', 'calibration_baseline_reason', 'gaze_rule_version', 'gaze_check_reason', 'selftest_cued', 'selftest_detected', 'selftest_extra', 'selftest_fps', 'selftest_face_presence', 'selftest_pass', 'selftest_camera_fps', 'selftest_tracker_fps', 'selftest_process_ms_p50', 'selftest_process_ms_p95', 'selftest_frames_delivered', 'selftest_frames_processed', 'selftest_frames_skipped', 'selftest_limit', 'selftest_rule', 'selftest_sampling_fps', 'selftest_fps_tier', 'selftest_verdict', 'selftest_attempts', 'selftest_ground', 'tracker_backend', 'tracker_requested', 'tracker_selection', 'tracker_trials', 'tracker_failures', 'camera_requested', 'camera_setting_width', 'camera_setting_height', 'camera_setting_fps', 'camera_cap_fps_max', 'camera_cap_width_max', 'camera_cap_height_max', 'timestamp_source', 'camera_fps_min_requested', 'camera_request_fallback', 'camera_facing', 'camera_exposure_caps', 'camera_exposure_policy', 'camera_exposure_rule', 'camera_exposure_reason', 'camera_exposure_mode_readback', 'camera_exposure_time_100us', 'camera_iso', 'camera_exposure_comp', 'camera_auto_fps', 'camera_auto_luma', 'camera_lock_fps_check', 'camera_lock_luma', 'camera_bench'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
+      session_start_local: startLocal,
+      session_end_local: session.session_end_time != null ? localIso(session.session_end_time) : '',
       session_index: session.session_index,
       // Completeness, declared rather than inferred. An export can now be taken from a session that
       // is still running or that a participant withdrew from part-way, and such a session is a
@@ -1360,7 +1412,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
   // 07 — eye metrics
   csv('07_eye_metrics.csv',
     ['participant_id', 'condition_id', 'camera_active', 'camera_inactive_reason', 'camera_blocked_ms', 'camera_muted_ms', 'no_face_longest_ms', 'no_face_episodes', 'tracker_backend', 'camera_fps_delivered', 'tracker_fps', 'frames_delivered', 'frames_processed', 'frames_skipped', 'process_ms_p50', 'process_ms_p95', 'camera_setting_width', 'camera_setting_height', 'camera_setting_fps', 'frame_count_source', 'timestamp_source', 'camera_exposure_policy', 'camera_exposure_rule', 'camera_exposure_time_100us', 'camera_iso', 'camera_exposure_comp', 'effective_fps', 'fps_adequate_for_tiers', 'fps_adequate_for_ratio', 'sampling_fps_observed', 'fps_tier', 'fps_gate_version', 'observed_duration_ms', 'ear_sample_count', 'open_ear_measured', 'blink_rate', 'blink_rate_full', 'incomplete_blink_ratio', 'blink_count_incomplete', 'blink_count_full', 'blink_count_micro', 'blink_count_incomplete_fit', 'incomplete_blink_ratio_fit', 'blinks_not_fitted', 'fit_exposure_ms', 'fit_exposure_known', 'fit_rule_version', 'mean_inter_blink_interval_ms', 'inter_blink_interval_cv', 'ibi_interval_count', 'ibi_rule_version', 'ibi_recomputed', 'perclos_p80', 'perclos_p70', 'long_closure_count', 'long_closure_total_ms', 'blink_duration_mean_ms', 'first_half_blink_rate', 'second_half_blink_rate', 'ear_baseline', 'ear_threshold_used', 'ear_complete_threshold', 'head_pitch_mean', 'head_pitch_calibrated', 'head_yaw_mean', 'head_roll_mean', 'head_movement_std', 'postural_load', 'head_stability_score', 'off_axis_ratio', 'gaze_calibrated', 'calibration_id', 'on_screen_ratio', 'gaze_rule_version', 'gaze_deviation_ratio', 'zone_center_ratio', 'zone_transition_count', 'face_presence_ratio', 'face_size_ratio', 'mean_face_luma', 'lighting_quality'],
-    bundle.eyeMetrics.map((e) => ({ e, ibi: exportedInterBlinkInterval(e, bundle.ocularEvents) })).map(({ e, ibi }) => ({
+    bundle.eyeMetrics.map((e) => ({ e, ibi: exportedInterBlinkInterval(e, bundle.ocularEvents), judged: cameraJudgements(e) })).map(({ e, ibi, judged }) => ({
       participant_id: pid, condition_id: e.condition_id, camera_active: e.camera_active,
       camera_inactive_reason: e.camera_inactive_reason ?? '',
       camera_blocked_ms: e.camera_blocked_ms ?? '', camera_muted_ms: e.camera_muted_ms ?? '',
@@ -1379,8 +1431,9 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       camera_exposure_rule: e.camera_exposure_rule ?? (e.camera_exposure_policy ? EXPOSURE_RULE_BEFORE : ''),
       camera_exposure_time_100us: e.camera_exposure_time_100us ?? '',
       camera_iso: e.camera_iso ?? '', camera_exposure_comp: e.camera_exposure_comp ?? '',
-      effective_fps: e.effective_fps, fps_adequate_for_tiers: e.fps_adequate_for_tiers,
-      fps_adequate_for_ratio: e.fps_adequate_for_ratio,
+      // Blank on a camera-off row, as in analysis_long.csv (cameraJudgements; audit 86 D13).
+      effective_fps: e.effective_fps, fps_adequate_for_tiers: judged.fps_adequate_for_tiers ?? '',
+      fps_adequate_for_ratio: judged.fps_adequate_for_ratio ?? '',
       // The frame-rate gate fps-g2 (Round 79; tracking/frameRateGate.ts): the rate and tier computed from
       // the two stored columns, so rows recorded before it are re-tiered too, and the gate in force when
       // the row was recorded. Blank on camera-off rows. Consistency with the participant's median is a
@@ -1407,10 +1460,10 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       first_half_blink_rate: e.bins.first_half_blink_rate, second_half_blink_rate: e.bins.second_half_blink_rate,
       ear_baseline: e.ear_baseline, ear_threshold_used: e.ear_threshold_used,
       ear_complete_threshold: e.ear_complete_threshold,
-      head_pitch_mean: e.head_pitch_mean, head_pitch_calibrated: e.head_pitch_calibrated, head_yaw_mean: e.head_yaw_mean, head_roll_mean: e.head_roll_mean,
+      head_pitch_mean: e.head_pitch_mean, head_pitch_calibrated: judged.head_pitch_calibrated ?? '', head_yaw_mean: e.head_yaw_mean, head_roll_mean: e.head_roll_mean,
       head_movement_std: e.head_movement_std,
       postural_load: e.postural_load, head_stability_score: e.head_stability_score, off_axis_ratio: e.off_axis_ratio,
-      gaze_calibrated: e.gaze_calibrated,
+      gaze_calibrated: judged.gaze_calibrated ?? '',
       // Which calibration this row was measured under; see storage/calibrationLookup.ts. Blank when
       // the camera was not running, and on rows written before the link existed — the time-based
       // resolution for those is done where the value is USED (analysis_long.csv), not faked here.
@@ -1559,7 +1612,9 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       session_position: s.session_position,
       condition_complete: s.condition_complete, attempt_number: s.attempt_number,
       engagement_flag: s.engagement, quality_score: s.quality_score,
-      blink_count_total: s.blink_count_total, insufficient_blinks: s.insufficient_blinks,
+      // Blank with no blink count to judge — the camera did not run — not FALSE (audit 86 D13).
+      blink_count_total: s.blink_count_total,
+      insufficient_blinks: s.camera_active && s.blink_count_total != null ? s.insufficient_blinks : '',
       reading_time_ms: s.reading_time_ms, fatigue_response_ms: s.fatigue_response_ms, perception_response_ms: s.perception_response_ms,
       reading_skim: s.reading_skim, reading_interrupted: s.reading_interrupted,
       condition_interrupted: s.condition_interrupted, rt_disengaged: s.rt_disengaged, careless_rushed_fatigue: s.careless_rushed_fatigue,

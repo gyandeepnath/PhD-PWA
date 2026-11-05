@@ -522,6 +522,9 @@ export function disabledEyeMetrics(
     camera_active: false,
     camera_inactive_reason: reason,
     effective_fps: null,
+    // FALSE only because the record type is boolean: nothing was judged. Every writer blanks these,
+    // and head_pitch_calibrated and gaze_calibrated below, on a camera-off row (export.ts
+    // cameraJudgements; audit 86 D13), so the stored false is never read as a failed check.
     fps_adequate_for_tiers: false,
     fps_adequate_for_ratio: false,
     observed_duration_ms: null,

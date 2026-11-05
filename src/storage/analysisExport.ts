@@ -31,7 +31,7 @@
  */
 import type { SessionBundle } from './gather';
 import type { ExportFile } from './export';
-import { toCsv, round, manifestEntry, MANIFEST_CHECKSUM_BASIS, beginNonFiniteCount, nonFiniteCellCount, countOutOfDeclaredRange } from './export';
+import { toCsv, round, manifestEntry, MANIFEST_CHECKSUM_BASIS, beginNonFiniteCount, nonFiniteCellCount, countOutOfDeclaredRange, cameraJudgements } from './export';
 import { calibrationForRow } from './calibrationLookup';
 import {
   checkJoin, groupByProvenance, unresolvedParticipantKey,
@@ -465,7 +465,7 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         effective_fps: round(sum.effective_fps),
         // Blank, not FALSE, without a camera: FALSE claims the frame rate was measured and found
         // wanting, and the cohort view counted camera-off rows as frame-rate failures on that basis.
-        fps_adequate_for_ratio: camOn ? (e?.fps_adequate_for_ratio ?? null) : null,
+        fps_adequate_for_ratio: cameraJudgements(e).fps_adequate_for_ratio,
         // The frame-rate gate fps-g2 (frameRateGate.ts), from the row's stored columns. fps_consistent
         // needs all of the participant's rows, so it is filled in once every sitting is in (below).
         ...(() => {
@@ -473,7 +473,7 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
           return { sampling_fps_observed: fps, fps_tier: fpsTier(fps), fps_consistent: null, fps_gate_version: e ? rowGateVersion(e) : null };
         })(),
         face_presence_ratio: round(sum.face_presence_ratio),
-        gaze_calibrated: camOn ? (e?.gaze_calibrated ?? null) : null,
+        gaze_calibrated: cameraJudgements(e).gaze_calibrated,
         // Per ROW: the calibration this condition was measured under, not the sitting's last one.
         gaze_trust: rowCalibration?.gaze_trust ?? null,
         gaze_targets_well_covered: rowCalibration?.gaze_targets_well_covered ?? null,

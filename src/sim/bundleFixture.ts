@@ -94,6 +94,17 @@ const meanOfItems = (it: Record<string, number>) => {
   const v = Object.values(it);
   return Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 100) / 100;
 };
+/**
+ * A questionnaire screen's time as the app stores it: `now() - mountedAt`, the difference of two
+ * performance.now() readings, so a float with a sub-millisecond part and a double's rounding noise
+ * (e.g. 7000.300000000003), never a whole number.
+ *
+ * The fixture used whole numbers here, and so the export gate's declared-type check could not see
+ * that 03_fatigue_scores.csv declared its response_time_ms 'integer' while every real sitting wrote
+ * values like 329.79999999993015 (audit 86 D3). The gate now runs on values shaped like the app's.
+ */
+const SCREEN_MOUNTED_AT = 182_736.4;
+export const screenMs = (ms: number) => (SCREEN_MOUNTED_AT + ms + 0.3) - SCREEN_MOUNTED_AT;
 export const fatigueBaselineMean = () => meanOfItems(FATIGUE_BASELINE_ITEMS);
 export const fatigueMean = (i: number) => meanOfItems(fatigueItemsFor(i));
 
@@ -531,7 +542,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
         fatigue_mean: fatigueBaselineMean(),
         touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true },
         all_touched: true,
-        response_time_ms: 9000,
+        response_time_ms: screenMs(9000),
       },
       ...conditions.map((c, i) => ({
         fatigue_id: `fat-${i}`,
@@ -542,7 +553,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
         fatigue_mean: fatigueMean(i),
         touched: { eye_strain: true, dryness: true, blur: true, burning: true, headache: true },
         all_touched: true,
-        response_time_ms: 7000 + i * 100,
+        response_time_ms: screenMs(7000 + i * 100),
       })),
     ],
     cvsq: [
@@ -565,13 +576,13 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
           cvsq_id: 'cvsq-base', session_id: sid, stage: 'baseline' as const,
           frame: 'habitual_computer_work' as const,
           frequency: Array(16).fill(0) as number[], intensity: Array(16).fill(0) as number[],
-          response_time_ms: 41_000,
+          response_time_ms: screenMs(41_000),
         },
         {
           cvsq_id: 'cvsq-end', session_id: sid, stage: 'session_end' as const,
           frame: 'this_session' as const,
           frequency: Array(16).fill(1) as number[], intensity: Array(16).fill(1) as number[],
-          response_time_ms: 38_000,
+          response_time_ms: screenMs(38_000),
         },
       ].map((row) => {
         const scored = scoreCvsq(row.frequency, row.intensity);
@@ -587,7 +598,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
         // The mean of the six ratings AS MARKED. The 75 that used to sit in the performance slot
         // here was 100 - 25, the reversed contribution; the reversal was the defect.
         raw_tlx: (65 + 30 + 45 + 25 + 70 + 35) / 6,
-        all_touched: true, response_time_ms: 26_000,
+        all_touched: true, response_time_ms: screenMs(26_000),
       },
     ],
     comprehension: conditions.flatMap((c, i) => PASSAGES[c.passage_id].questions.map((q, qi) => {
@@ -605,7 +616,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
         selected_index: selected,
         correct_index: correctIndex,
         is_correct: selected === correctIndex,
-        response_time_ms: 8000 + i * 50 + qi * 400,
+        response_time_ms: screenMs(8000 + i * 50 + qi * 400),
       };
     })),
     visualSearch: conditions.map((c, i) => {
@@ -651,7 +662,7 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       text_clarity_score: 50 + i * 2,
       comfort_touched: true,
       clarity_touched: true,
-      response_time_ms: 5000 + i * 30,
+      response_time_ms: screenMs(5000 + i * 30),
     })),
     eyeMetrics: conditions.map((c, i) => ({
       condition_id: c.condition_id,
