@@ -867,7 +867,9 @@ investigator, who decides which record is the participant's.
   listed under *In progress* without a Resume button, and its row says which sitting came after it.
 - *Part of the protocol completed* (for example 5 of 10) and no sitting in progress: this is the
   second half of a split. Carry on; the condition order and enrolment number continue from where
-  they stopped.
+  they stopped. **Choose Single** for it: the line under the choice says what will run ("the
+  remaining 5 conditions (displays 6–10 of 10)"). The second half is not a new split, so it needs no
+  split reason; choosing Split there runs the same five and only asks for one.
 - *All ten completed*: **stop and check the ID.** Starting anyway runs the entire protocol a second
   time — every passage re-read, every search text already familiar, every comprehension question
   already seen — and those are not first-exposure measurements. Nine times out of ten it is a
@@ -877,7 +879,9 @@ If the repeat is deliberate — the first sitting was voided, say, because the c
 throughout — the app will let you proceed, but only after you type the reason. It is stored on the
 session and exported, so write something a stranger reading the data in a year could act on: "first
 sitting voided, camera failed throughout", not "redo". If instead the earlier sitting should simply
-not exist, Delete it in the Session Manager first (the dashboard has no delete) and start clean.
+not exist, Delete it in the Session Manager first (the dashboard has no delete) and start clean. A
+participant with no sitting left on the tablet is then enrolled afresh: a new enrolment number, so a
+new condition order.
 
 ---
 

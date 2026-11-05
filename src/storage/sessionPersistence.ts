@@ -37,6 +37,24 @@ export interface ResumePointer {
   savedAt: number;
 }
 
+/**
+ * Where a resume will land, in the words the Session Manager shows (audit 86 F1).
+ *
+ * The banner printed `next condition ${nextStepIndex + 1}/${conditions_per_session}` for every sitting
+ * that had reached the loop. A sitting stopped at its closing questionnaires has finished every display,
+ * so its pointer is the sitting's length — and the banner read "next condition 11/10". The resume itself
+ * lands correctly (at the closing CVS-Q or NASA-TLX); only the words were wrong, and they told the
+ * operator a display was still to run. One function, so every place that prints a pointer says the same.
+ */
+export function resumeLabel(
+  pointer: Pick<ResumePointer, 'nextStepIndex' | 'reachedLoop'>,
+  conditionsPerSession: number,
+): string {
+  if (!pointer.reachedLoop) return 'interrupted during setup — setup will be completed first';
+  if (pointer.nextStepIndex >= conditionsPerSession) return 'all displays done — closing questionnaires';
+  return `next condition ${pointer.nextStepIndex + 1}/${conditionsPerSession}`;
+}
+
 function available(): boolean {
   try {
     return typeof localStorage !== 'undefined';

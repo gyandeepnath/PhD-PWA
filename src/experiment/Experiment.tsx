@@ -11,7 +11,7 @@ import { CONDITIONS, N_CONDITIONS, rtStimulusColours } from './conditions';
 import {
   illuminationForBlock, illuminationOrderFor, luxInRange, summariseLux,
 } from '@/experiment/illumination';
-import { participantProgress, passageRepeatNumber } from './participantProgress';
+import { participantProgress, passageRepeatNumber, sittingLength } from './participantProgress';
 import { mergeExclusionReasons } from './eligibility';
 import { trackHiddenTime, trackPortraitTime, trackBlockingNoticeTime, setBlockingNotice, trackMonitorOpenTime, type HiddenTimeTracker } from '@/lib/hiddenTime';
 import { PASSAGES } from './passages';
@@ -921,7 +921,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     const { passes, block, offset } = participantProgress(prior.conditionsCompleted);
     const level = illuminationForBlock(enrol, block);
     const fullPlan = blockPlan(enrol, block);
-    const cps = Math.min(d.conditionsPerSession, N_CONDITIONS - offset);
+    const cps = sittingLength(d.conditionsPerSession, prior.conditionsCompleted);
     const sittingPlan = fullPlan.slice(offset, offset + cps);
     nConditionsRef.current = sittingPlan.length;
     conditionIds.current = sittingPlan.map(() => uuidv4());

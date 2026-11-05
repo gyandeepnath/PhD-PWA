@@ -48,6 +48,20 @@ export function participantProgress(conditionsCompleted: number): ParticipantPro
 }
 
 /**
+ * How many conditions the sitting about to start will run (audit 86 F16).
+ *
+ * The operator chooses a single sitting (all of a pass) or a split (half of it); a participant who has
+ * already finished part of the pass — the second half of a split — has only the rest left, and the
+ * sitting is cut to it. beginSession made that cut while the session form, which wrote its help text
+ * from the constants, said "Single sitting: all 10 conditions" beside "5 of 10 conditions completed".
+ * One function for both, so the form describes the sitting that will be created.
+ */
+export function sittingLength(chosen: number, conditionsCompleted: number): number {
+  const { offset } = participantProgress(conditionsCompleted);
+  return Math.max(0, Math.min(chosen, N_CONDITIONS - offset));
+}
+
+/**
  * How many times the participant has read this passage under the planned protocol, counting now.
  *
  * Derived from the pass, not the illumination block: see above. `protocol_pass` is absent on

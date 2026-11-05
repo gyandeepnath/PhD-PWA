@@ -10,7 +10,7 @@ import {
   listSessions, listDeleted, softDeleteSession, restoreSession, purgeSession, purgeExpired,
   renameSession, sessionLabel, recordWithdrawal, isWithdrawn, BIN_RETENTION_MS, MAX_DISPLAY_LABEL,
 } from '@/storage/gather';
-import { listResumable, clearResume, supersededSittings, type ResumePointer } from '@/storage/sessionPersistence';
+import { listResumable, clearResume, supersededSittings, resumeLabel, type ResumePointer } from '@/storage/sessionPersistence';
 import { parseSessionBackup, importSessionBackup } from '@/storage/backup';
 import { VisuLabLogo } from '@/components/VisuLabLogo';
 import { NavChip } from '@/components/NavChip';
@@ -377,10 +377,10 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
               {/* A session interrupted during setup has no condition pointer; saying "next
                   condition 1/10" for it implied progress that had not happened, and the resume
                   dropped the participant straight into the reading task. */}
+              {/* A sitting stopped at its closing questionnaires has every display done; its pointer is
+                  the sitting's length, which used to print as "next condition 11/10" (audit 86 F1). */}
               Resume {sessionLabel(mostRecent.session)}{' '}
-              {mostRecent.pointer.reachedLoop
-                ? `(next condition ${mostRecent.pointer.nextStepIndex + 1}/${mostRecent.session.conditions_per_session})`
-                : '(interrupted during setup — setup will be completed first)'}
+              ({resumeLabel(mostRecent.pointer, mostRecent.session.conditions_per_session)})
               {Object.keys(resumable).length > 1 && ` · ${Object.keys(resumable).length} sessions in progress`}
             </span>
             <button onClick={() => onResume(mostRecent.pointer.sessionId, mostRecent.pointer.nextStepIndex, mostRecent.pointer.reachedLoop === true)} className="font-sans text-base font-medium text-white" style={{ background: UI_TEXT.blue, border: 'none', borderRadius: 10, padding: '10px 18px', minHeight: 'var(--vl-nav-chip-h)', cursor: 'pointer', flex: '0 0 auto' }}>Resume →</button>

@@ -11,7 +11,7 @@ import { CONFIG } from '@/experiment/config';
 import { N_CONDITIONS } from '@/experiment/conditions';
 import { PASSAGES, QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
 import { TASK_STEPS } from '@/experiment/taskSteps';
-import { repeatRunAcknowledged, REPEAT_NOTE_MIN_CHARS, SPLIT_REASON_MIN_CHARS } from '@/experiment/participantProgress';
+import { repeatRunAcknowledged, REPEAT_NOTE_MIN_CHARS, SPLIT_REASON_MIN_CHARS, participantProgress, sittingLength } from '@/experiment/participantProgress';
 import { ILLUMINATION, luxInRange, type IlluminationLevel, N_ILLUMINATION_BLOCKS } from '@/experiment/illumination';
 import type { MediaConsent } from '@/storage/media';
 import type { EarlierBuild, OpenSitting } from '@/storage/gather';
@@ -140,6 +140,41 @@ export interface IlluminationAssignment {
   openSittings: OpenSitting[];
   /** Their earlier sittings recorded by a build other than this tablet's now; warned, not refused (Round 88, audit 86 D10). */
   earlierBuilds?: EarlierBuild[];
+}
+
+/** The conditions a sitting is asked to run before it is cut to what the participant has left. */
+export function chosenSittingSize(sitting: 'single' | 'split'): number {
+  return sitting === 'split' ? CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2 : CONFIG.CONDITIONS_PER_SESSION_DEFAULT;
+}
+
+/**
+ * The session form's line under Single / Split, for the sitting that will actually be created (audit 86
+ * F16). It was written from the constants alone, so beside "5 of 10 conditions completed" it said
+ * "Single sitting: all 10 conditions (75–120 minutes)" while the sitting created ran 5. It now counts
+ * with sittingLength, the function beginSession cuts the sitting with, and for the rest of a split says
+ * which choice to make: Single — the rest is not a new split and needs no split reason.
+ */
+export function sittingStructureHelp(sitting: 'single' | 'split', conditionsCompleted: number): string {
+  const { offset } = participantProgress(conditionsCompleted);
+  const n = sittingLength(chosenSittingSize(sitting), conditionsCompleted);
+  const total = CONFIG.CONDITIONS_PER_SESSION_DEFAULT;
+  if (offset === 0) {
+    return sitting === 'single'
+      ? `Single sitting: all ${total} conditions (${CONFIG.SINGLE_SITTING_DURATION}).`
+      : `Split: ${n} conditions now, the remaining ${total - n} in a later sitting (re-enter the same Participant ID; the condition order is preserved). Both halves export as ONE participant.`;
+  }
+  const remaining = sittingLength(total, conditionsCompleted);
+  const range = `displays ${offset + 1}–${offset + remaining} of ${total}`;
+  if (sitting === 'single') {
+    return `This sitting: the remaining ${remaining} conditions (${range}), in the participant's condition order. `
+      + 'Both sittings export as ONE participant.';
+  }
+  if (n >= remaining) {
+    return `A split here would also run the remaining ${remaining} conditions (${range}): there is nothing left to split. `
+      + 'Choose Single — this is the rest of an earlier sitting, not a new split, and needs no split reason.';
+  }
+  return `Split: ${n} of the remaining ${remaining} conditions now (displays ${offset + 1}–${offset + n} of ${total}), `
+    + `the last ${remaining - n} in a later sitting. All sittings export as ONE participant.`;
 }
 
 export function SessionInit({
@@ -376,7 +411,9 @@ export function SessionInit({
                     + 'all ten conditions AGAIN: they will re-read every passage, repeat every search '
                     + 'and see every comprehension question a second time. If this ID was a typo, '
                     + 'correct it. If the earlier sitting is to be discarded, Delete it in the '
-                    + 'Session Manager first.'
+                    + 'Session Manager first (the dashboard has no delete): a participant with no '
+                    + 'other sitting left is then enrolled afresh, with a new enrolment number and '
+                    + 'condition order.'
                   // Only a FINISHED earlier sitting reaches this line: one still in progress is refused
                   // above (audit 86 F3), so this is the second half of a split.
                   : 'This sitting takes up the remaining displays after their finished sitting — the '
@@ -465,10 +502,8 @@ export function SessionInit({
             set={(v) => setSitting(v as 'single' | 'split')}
             opts={['single', 'split']}
           />
-          <p className={help} style={{ marginTop: 10 }}>
-            {sitting === 'single'
-              ? `Single sitting: all ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT} conditions (${CONFIG.SINGLE_SITTING_DURATION}).`
-              : `Split: ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2} conditions now, the remaining ${CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2} in a later sitting (re-enter the same Participant ID; the condition order is preserved). Both halves export as ONE participant.`}
+          <p data-testid="sitting-structure-help" className={help} style={{ marginTop: 10 }}>
+            {sittingStructureHelp(sitting, assigned?.conditionsCompleted ?? 0)}
           </p>
           </div>
           {sitting === 'split' && (
@@ -505,7 +540,7 @@ export function SessionInit({
               brightnessPercent: bright === '' ? null : Number(bright),
               repeatRunNote: completedProtocol ? repeatNote.trim() : null,
               sittingSplitReason: sitting === 'split' ? splitReason.trim() : null,
-              conditionsPerSession: sitting === 'split' ? CONFIG.CONDITIONS_PER_SESSION_DEFAULT / 2 : CONFIG.CONDITIONS_PER_SESSION_DEFAULT,
+              conditionsPerSession: chosenSittingSize(sitting),
               luxDeviationNote: inRange ? null : deviation.trim(),
             });
           }}
