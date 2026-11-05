@@ -16,10 +16,13 @@ test('full experiment run writes data and reaches the dashboard', async ({ page 
   for (;;) {
     if (guard++ > 500) throw new Error('stage loop did not terminate');
     const stage = await stageNow(page);
+    // A normal sitting raises no background failure on any screen (audit 86 M1: nothing checked it).
+    expect(await page.locator('#visulab-async-error').count(), `background failure on ${stage}`).toBe(0);
     if (await handleStage(page, stage)) break;
   }
 
   await expect(page.getByText('Analysis Dashboard')).toBeVisible();
+  expect(await page.locator('#visulab-async-error').count(), 'background failure by the dashboard').toBe(0);
 
   /*
    * The cohort tab has to RENDER, not merely compile.

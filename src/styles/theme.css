@@ -54,6 +54,13 @@
    */
   --vl-banner-h: 0px;
   /*
+   * Height, in design px, of the "Something failed in the background" alert while it is showing, set
+   * by lib/asyncFailure.ts; 0 otherwise. The set-up and closing screens (.panel-band), the landing page
+   * and the session manager end above it, so it never covers their buttons (audit 86 M1). Condition
+   * screens do not: their geometry is the stimulus, and the alert's Hide uncovers them.
+   */
+  --vl-alert-h: 0px;
+  /*
    * The collapsed researcher panel (components/ResearcherPanel.tsx) sits fixed at the bottom left —
    * left 10, bottom 10, a 44 CSS px target like every operator control — on every Experiment stage but
    * the first and the last. A screen whose content can reach the bottom left reserves its footprint
@@ -75,9 +82,22 @@
   padding-top: var(--vl-nav-band) !important;
 }
 
-/* A screen that keeps the collapsed researcher panel's corner clear. See --vl-panel-reserve. */
+/*
+ * A screen that keeps the collapsed researcher panel's band clear. See --vl-panel-reserve.
+ *
+ * THE BAND IS OUTSIDE THE SCREEN'S BOX, not padding inside it (audit 86 UI-1). As padding at the end
+ * of a scroll box it cleared the chip only once the screen was scrolled to its end: as the profile
+ * opened at 1152x720, its "← Back to consent" lay half under the chip, where a tap opened the
+ * researcher card. The box now ends above the band, so nothing of the screen is under the chip at
+ * any scroll position: what does not fit scrolls inside the box, with its "More below" cue at the
+ * box's foot. The same box ends above the background-failure alert while one is shown
+ * (--vl-alert-h, lib/asyncFailure.ts; audit 86 M1).
+ */
 .panel-band {
-  padding-bottom: var(--vl-panel-reserve) !important;
+  /* The alert, while up, covers the chip's band too: the larger of the two, not their sum. */
+  height: calc(100% - max(var(--vl-panel-reserve), var(--vl-alert-h))) !important;
+  min-height: 0 !important;
+  padding-bottom: 16px !important;
 }
 
 html {

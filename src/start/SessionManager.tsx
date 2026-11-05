@@ -360,7 +360,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
    * it shows (--vl-banner-h), which used to cover the last rows.
    */
   return (
-    <div data-testid="manager-scroll" className="screen scrollable nav-band w-full bg-cream font-sans text-[#1a1a2e] animate-fade-in" style={{ padding: '0 4% calc(3% + var(--vl-banner-h))' }}>
+    <div data-testid="manager-scroll" className="screen scrollable nav-band w-full bg-cream font-sans text-[#1a1a2e] animate-fade-in" style={{ padding: '0 4% calc(3% + var(--vl-banner-h) + var(--vl-alert-h))' }}>
       {/* No wave backdrop (its lines ran through the session rows), and a type floor of 14-16 px:
           this screen is drawn at about 86% on the tablet, so its old 11-12 px grey captions arrived
           at 9-10 px, in colours at 2-2.8:1. */}

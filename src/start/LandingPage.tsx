@@ -18,7 +18,7 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
      */
     <div
       className="screen scrollable w-full bg-cream font-sans text-[#1a1a2e] animate-fade-in"
-      style={{ position: 'relative', display: 'flex', flexDirection: 'column', padding: '24px 7% calc(16px + var(--vl-banner-h)) 8%' }}
+      style={{ position: 'relative', display: 'flex', flexDirection: 'column', padding: '24px 7% calc(16px + var(--vl-banner-h) + var(--vl-alert-h)) 8%' }}
     >
       <div style={{ flex: '1 0 auto', display: 'flex', gap: '6%' }}>
       {/* Type on the scaled canvas: 13 px and 11 px here arrived at about 11 and 9 px on the tablet,

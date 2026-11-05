@@ -282,7 +282,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
    * number that was on the page is still on it (the full tables, under "Every number, as tables").
    */
   return (
-    <div data-testid="dashboard-scroll" className="screen scrollable nav-band w-full bg-cream font-sans text-[#1a1a2e]" style={{ padding: '0 3% 3%' }}>
+    <div data-testid="dashboard-scroll" className="screen scrollable nav-band w-full bg-cream font-sans text-[#1a1a2e]" style={{ padding: '0 3% calc(3% + var(--vl-alert-h))' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 className="font-serif text-3xl font-light">Analysis Dashboard</h1>

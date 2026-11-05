@@ -58,9 +58,9 @@ import type { CameraStatus, CameraPipelineRecord, CameraBenchRecord, ExposureOut
  * min-h-0 is what lets the flex child actually shrink to its container instead of growing.
  *
  * `nav-band` keeps the top band clear for the operator's navigation chip ("Exit — resume later",
- * top left) and the progress label, so neither sits on a heading or a field; `panel-band` keeps the
- * bottom-left corner clear of the collapsed researcher panel, so it never sits on a button when the
- * form is scrolled to its end (theme.css).
+ * top left) and the progress label, so neither sits on a heading or a field; `panel-band` ends the
+ * screen above the band the collapsed researcher panel sits in, so the chip is over no button at any
+ * scroll position (theme.css; audit 86 UI-1).
  */
 const shell = 'h-full w-full bg-cream px-[5%] nav-band panel-band font-sans text-[#1a1a2e] animate-fade-in overflow-y-auto';
 /*

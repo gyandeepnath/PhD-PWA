@@ -40,9 +40,12 @@ async function assertRootFits(page: Page, where: string): Promise<void> {
 
 /**
  * The collapsed researcher panel sits fixed at the bottom left of every stage but the first and last.
- * On the 1152 px canvas the setup screens' buttons start under it, so a screen scrolled to its end
- * could put Back or Continue beneath the chip, where a tap opens the panel instead. Every control —
- * and the reading page's countdown — must stay clear of it, at the end of every scroll container.
+ * On the 1152 px canvas the setup screens' buttons start under it, so a screen could put Back or
+ * Continue beneath the chip, where a tap opens the panel instead. Every control — and the reading
+ * page's countdown — must stay clear of it AT EVERY SCROLL POSITION: as the screen opens, part-way
+ * down, and at the end of every scroll container. This checked the end only, and the profile's
+ * "← Back to consent" lay under the chip as the screen opened, at 1152x720 and 1280x800 (audit 86
+ * UI-1): a control half-hidden under a chip, at the bottom of a screen that has not been scrolled.
  */
 async function assertPanelClear(page: Page, where: string): Promise<void> {
   const hits = await page.evaluate(() => {
@@ -51,19 +54,33 @@ async function assertPanelClear(page: Page, where: string): Promise<void> {
     const scrollers = (Array.from(document.querySelectorAll('#root *')) as HTMLElement[])
       .filter((e) => /(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 2);
     const saved = scrollers.map((e) => e.scrollTop);
-    for (const e of scrollers) e.scrollTop = e.scrollHeight;
     const c = chip.getBoundingClientRect();
-    const out: string[] = [];
-    for (const el of Array.from(document.querySelectorAll('#root button, #root input, #root [role=button], #root a, [data-testid=reading-countdown]')) as HTMLElement[]) {
-      if (chip.contains(el) || el.closest('[data-testid^=researcher-panel]')) continue;
-      const r = el.getBoundingClientRect();
-      if (r.width === 0 || r.height === 0) continue;
-      if (r.left < c.right && r.right > c.left && r.top < c.bottom && r.bottom > c.top) {
-        out.push((el.innerText || el.getAttribute('aria-label') || el.tagName).trim().slice(0, 40));
+    const out = new Set<string>();
+    for (const at of ['top', 'middle', 'end'] as const) {
+      for (const e of scrollers) {
+        const max = e.scrollHeight - e.clientHeight;
+        e.scrollTop = at === 'top' ? 0 : at === 'middle' ? Math.round(max / 2) : e.scrollHeight;
+      }
+      for (const el of Array.from(document.querySelectorAll('#root button, #root input, #root [role=button], #root a, [data-testid=reading-countdown]')) as HTMLElement[]) {
+        if (chip.contains(el) || el.closest('[data-testid^=researcher-panel]')) continue;
+        // The part of the control on screen: its box, cut by every box that clips it. A control
+        // scrolled out of its scroll box is not under the chip; it is not on screen at all.
+        const v = el.getBoundingClientRect();
+        let [l, t, rt, b] = [v.left, v.top, v.right, v.bottom];
+        for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+          const cs = getComputedStyle(a);
+          if (cs.overflowY === 'visible' && cs.overflowX === 'visible') continue;
+          const ar = a.getBoundingClientRect();
+          l = Math.max(l, ar.left); t = Math.max(t, ar.top); rt = Math.min(rt, ar.right); b = Math.min(b, ar.bottom);
+        }
+        if (rt - l < 1 || b - t < 1) continue;
+        if (l < c.right && rt > c.left && t < c.bottom && b > c.top) {
+          out.add(`${at}: ${(el.innerText || el.getAttribute('aria-label') || el.tagName).trim().slice(0, 40)}`);
+        }
       }
     }
     scrollers.forEach((e, i) => { e.scrollTop = saved[i]; });
-    return out;
+    return [...out];
   });
   expect(hits, `${where}: under the collapsed researcher panel`).toEqual([]);
 }
