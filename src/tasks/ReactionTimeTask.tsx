@@ -27,6 +27,7 @@ import { currentScale } from '@/lib/viewportScale';
 import { relativeLuminance } from '@/lib/contrast';
 import { rafDelay, randInt, now } from '@/lib/timing';
 import { summariseRtBlock, type RtBlockSummary } from '@/lib/rtSummary';
+import { classifyRtTouch } from '@/lib/rtResponse';
 import { STIMULUS_FONT_STACK } from '@/lib/fonts';
 import { displayStepLabel, type DisplayPosition } from '@/experiment/taskSteps';
 import type { RtAccuracy } from '@/storage/types';
@@ -226,10 +227,12 @@ export function ReactionTimeTask({
   };
 
   // Use the hardware pointer-event timestamp (same performance clock as onset) for low-jitter RT.
+  // The window closes at its deadline, on the touch's own timestamp, not at the next frame's poll
+  // (classifyRtTouch; audit 86 D15): a touch just after it is not a response, and not a false start.
   const handleResponse = (e: React.PointerEvent) => {
-    const ph = phaseRef.current;
-    if (ph === 'fixation' || ph === 'delay') falseStartRef.current = true;
-    else if (ph === 'stimulus' && respondedAtRef.current == null) {
+    const kind = classifyRtTouch(phaseRef.current, e.timeStamp, onsetRef.current, CONFIG.RT_RESPONSE_WINDOW_MS, respondedAtRef.current != null);
+    if (kind === 'false_start') falseStartRef.current = true;
+    else if (kind === 'response') {
       respondedAtRef.current = e.timeStamp;
       force((n) => n + 1);
     }
@@ -299,7 +302,7 @@ export function ReactionTimeTask({
     const rawRt = respondedAtRef.current != null ? respondedAtRef.current - onsetRef.current : null;
     /**
      * A latency outside [0, response window] is not a measurement of anything — it is a clock
-     * fault. Recorded as a false start with a null time rather than exported as a reaction time,
+     * fault. (A touch after the window no longer arrives here: classifyRtTouch ignores it.) Recorded as a false start with a null time rather than exported as a reaction time,
      * so an analyst cleaning on `response_time_ms > 0` cannot silently disagree with the summary
      * file, which used to keep counting the same trial as a hit or a false alarm.
      */

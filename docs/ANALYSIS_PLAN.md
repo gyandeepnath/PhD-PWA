@@ -826,6 +826,17 @@ second tap landing on nothing that records). Whether
 a sensitivity analysis should leave out reaction trial 1 on `tg-v1` rows is the investigator's decision
 (not pre-specified here).
 
+**A touch just after the response window is not a false start (Round 89).** The reaction task's response
+window was closed by a once-per-frame poll, so a touch up to one frame after it (about 7 ms at 144 Hz,
+17 ms at 60 Hz, after the 1,000 ms window) was taken, found too late and recorded as `false_start` TRUE —
+"a response made before the stimulus appeared" — with no response time (audit 86 D15). From Round 89 the
+window closes at its deadline, judged on the touch's own timestamp against the onset (lib/rtResponse.ts),
+and such a touch is ignored like a touch between trials. `rt_window_version` (02_conditions.csv) says
+which rule a condition's block ran under: `rw-v2` at the deadline, `rw-v1` before. Only `false_start`
+differs between them; response times, accuracy, every summary and every model are the same, and no
+template reads `false_start`. On `rw-v1` rows a false start may be such a late touch and cannot be told
+apart.
+
 **A display's size is fixed for its own stimulus only (Round 87).** The display scale (`stimulus_scale`,
 which with the sitting's ruler calibration gives every visual angle) may shrink while a stimulus is on
 screen, if the screen genuinely gets smaller, and never grows under a reader. Up to Round 86 it was

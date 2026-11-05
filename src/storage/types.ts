@@ -616,6 +616,12 @@ export interface ConditionRecord {
    */
   tap_guard_version?: string;
   /**
+   * How the reaction block's response window closed (lib/rtResponse.ts RT_WINDOW_VERSION): 'rw-v2' from
+   * Round 89, at its deadline on the touch's own timestamp. Absent on rows recorded before it, which the
+   * export names 'rw-v1': a touch up to one frame after the window was recorded as a false start.
+   */
+  rt_window_version?: string;
+  /**
    * Page 1's distance from one line of the passage to the next as the screen drew it, CSS px
    * (lib/renderedText.ts). 22 x 1.4 x stimulus_scale when the browser drew the declared size.
    */
