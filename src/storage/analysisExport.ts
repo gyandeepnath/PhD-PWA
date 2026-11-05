@@ -31,7 +31,7 @@
  */
 import type { SessionBundle } from './gather';
 import type { ExportFile } from './export';
-import { toCsv, round, fnv1a, beginNonFiniteCount, nonFiniteCellCount, countOutOfDeclaredRange } from './export';
+import { toCsv, round, manifestEntry, MANIFEST_CHECKSUM_BASIS, beginNonFiniteCount, nonFiniteCellCount, countOutOfDeclaredRange } from './export';
 import { calibrationForRow } from './calibrationLookup';
 import {
   checkJoin, groupByProvenance, unresolvedParticipantKey,
@@ -769,9 +769,10 @@ export function buildAnalysisDataset(
      */
     out_of_declared_range_cells: outOfRange.cells,
     out_of_declared_range_columns: outOfRange.columns,
-    files: files.map((f) => ({
-      filename: f.filename, bytes: f.content.length, checksum_fnv1a: fnv1a(f.content),
-    })),
+    // Bytes and checksum over the UTF-8 the download writes, as the per-sitting manifest (Round 89,
+    // audit 86 D1: this one gave UTF-16 code units for both, so a file with an en dash disagreed).
+    checksum_basis: MANIFEST_CHECKSUM_BASIS,
+    files: files.map((f) => manifestEntry(f.filename, f.content)),
   };
   files.push({
     filename: 'analysis_manifest.json',

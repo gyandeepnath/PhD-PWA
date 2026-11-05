@@ -10,7 +10,7 @@
  *   npx tsx scripts/verifyExport.ts --quiet    assertions only (non-zero exit on failure)
  *   npx tsx scripts/verifyExport.ts --show 10_wide_summary.csv   dump one file in full
  */
-import { buildExportFiles, fnv1a, CODEBOOK, countOutOfDeclaredRange } from '../src/storage/export';
+import { buildExportFiles, manifestEntry, MANIFEST_CHECKSUM_BASIS, CODEBOOK, countOutOfDeclaredRange } from '../src/storage/export';
 import { buildFixtureBundle, FIXTURE, readingMs, fatigueMean, ibrFor, rtFor } from '../src/sim/bundleFixture';
 import { CONDITIONS } from '../src/experiment/conditions';
 import { PASSAGES } from '../src/experiment/passages';
@@ -304,10 +304,12 @@ if (man) {
 
   const badSums = entries.filter((e) => {
     const f = shipped.find((x) => x.filename === e.filename);
-    return f != null && e.checksum_fnv1a !== fnv1a(f.content);
+    return f != null && e.checksum_fnv1a !== manifestEntry(f.filename, f.content).checksum_fnv1a;
   });
-  ok('every manifest checksum matches the file it describes', badSums.length === 0,
+  ok('every manifest checksum is FNV-1a over the file\'s UTF-8 bytes, as a tool off the tablet computes it', badSums.length === 0,
     badSums.map((e) => e.filename).join('; '));
+  ok('the manifest names what its checksums are computed over',
+    (JSON.parse(man.content) as { checksum_basis?: string }).checksum_basis === MANIFEST_CHECKSUM_BASIS);
 
   log(`   ${entries.length} files listed; byte counts and checksums verified against the content.`);
 }

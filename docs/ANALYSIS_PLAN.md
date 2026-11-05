@@ -11,7 +11,10 @@
 
 What model answers which question, why that model and not a simpler one, and what would falsify
 each hypothesis. Written against the columns in `analysis_long.csv`; every column named here exists
-and is documented in `analysis_codebook.csv`.
+and is documented in `analysis_codebook.csv`. That promise is checked (Round 89, audit 86 D9:
+`tests/analysisPlanColumns.test.ts`): every name in `code` here is a column of an export file, a check
+code of the integrity or join report, or a variable a template creates. A name that no longer exists
+is written in plain text where its history is told.
 
 **On citations.** Claims about the *design* are derived from the design itself and need no source.
 Claims about the *literature* are limited to records verified against PubMed in
@@ -563,7 +566,9 @@ These are not optional and they come first.
 1. **Did the illumination CONTROL hold?** Plot `ambient_lux_measured` across sittings: it should be
    a tight cluster at 300 lux, not a spread. This is a constancy check rather than a separation
    check — there are no levels to separate — and a sitting outside 250–350 is a protocol deviation.
-   `lux_all_in_range` flags those, and `lux_complete` says whether all three checkpoints were taken.
+   `lux_logged_all_in_range` flags those, and `lux_complete` says whether all three checkpoints were
+   taken. (This line named the column lux_all_in_range until Round 89 — a name no export file has,
+   and the one that once stopped the R template; see §5b.)
 2. **Was the primary outcome measurable? The frame-rate gate `fps-g2`** (Round 79; pre-registered
    here before the first participant). A slower camera misses the deepest moment of more blinks, so
    more of them read as incomplete: a directional bias, not symmetric noise.
@@ -930,7 +935,7 @@ none of them and had nothing in the output to say so.
 
 **That correction was written without checking the R file, and the sentence above implied a
 guarantee that did not exist.** The R template carried the same sum-to-zero and `fatigue_delta`
-defects, and it did not run at all: it selected `lux_all_in_range` from `01_session_info.csv`, where
+defects, and it did not run at all: it selected lux_all_in_range from `01_session_info.csv`, where
 the exporter writes `lux_logged_all_in_range`, so `dplyr` stopped at that join and no model below it
 had ever executed. It also read a single exported folder, which gives `(1 | participant_id)` one
 level, and fitted PERCLOS raw against the instruction in §4. All of these are now fixed, and the
@@ -980,9 +985,14 @@ Stating these protects the thesis more than any additional analysis would.
 ## 7. Reproducibility
 
 Every export carries `app_version`, `git_hash`, `condition_def_hash` and `schema_version`. Report the
-git hash of the build that collected the data. The export is byte-reproducible — it contains no
-timestamps, so re-exporting the same session yields identical files and the checksums in
-`16_integrity_report.csv` certify content rather than time of export.
+git hash of the build that collected the data. The CSV files are byte-reproducible — none carries the
+time of export, so re-exporting the same session yields identical CSVs. Their sizes and checksums are
+in the manifests, `export_manifest.json` (one sitting) and `analysis_manifest.json` (the pooled
+files): for each file its size in bytes and `checksum_fnv1a`, the 32-bit FNV-1a hash of the file's
+UTF-8 bytes as written, which any FNV-1a tool can recompute from the file on disk (Round 89, audit 86
+D1). The manifests themselves are not reproducible: each records when it was written (`exported_at`).
+(This section used to say the export "contains no timestamps" and that the checksums are in
+`16_integrity_report.csv`, which has none.)
 
 **Both templates print their provenance first** (Round 70). Before any data is read: the R or Python
 version, the version of every package a model comes from (and whether `glmmTMB` is installed), and a

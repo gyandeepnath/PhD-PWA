@@ -15,7 +15,7 @@
  *
  * A violation of any of these is a bug regardless of what the correct value is.
  */
-import { buildExportFiles, fnv1a } from '../../src/storage/export';
+import { buildExportFiles, manifestEntry } from '../../src/storage/export';
 import { buildFixtureBundle } from '../../src/sim/bundleFixture';
 import { auditBundle } from '../../src/storage/integrity';
 import type { SessionBundle } from '../../src/storage/gather';
@@ -179,18 +179,20 @@ console.log('4. MONOTONICITY');
 // ---------------------------------------------------------------- checksum sensitivity
 console.log('5. CHECKSUM SENSITIVITY');
 {
+  // The manifests' own checksum (Round 89: FNV-1a over the file's UTF-8 bytes).
+  const fnv = (text: string) => manifestEntry('x', text).checksum_fnv1a;
   const b = buildFixtureBundle();
   const files = buildExportFiles(b);
   for (const f of files) {
     if (!f.filename.endsWith('.csv') || f.content.length < 10) continue;
-    const h0 = fnv1a(f.content);
+    const h0 = fnv(f.content);
     // flip one character in the middle
     const i = Math.floor(f.content.length / 2);
     const flipped = f.content.slice(0, i) + (f.content[i] === 'x' ? 'y' : 'x') + f.content.slice(i + 1);
-    check(`${f.filename}: a one-character change changes the checksum`, fnv1a(flipped) !== h0);
+    check(`${f.filename}: a one-character change changes the checksum`, fnv(flipped) !== h0);
   }
-  check('checksums differ for different content', fnv1a('a') !== fnv1a('b'));
-  check('checksum is stable for identical content', fnv1a('abc') === fnv1a('abc'));
+  check('checksums differ for different content', fnv('a') !== fnv('b'));
+  check('checksum is stable for identical content', fnv('abc') === fnv('abc'));
 }
 
 // ---------------------------------------------------------------- randomised damage sweep

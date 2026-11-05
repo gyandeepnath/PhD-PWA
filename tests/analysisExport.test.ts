@@ -9,7 +9,6 @@
  */
 import { describe, it, expect } from 'vitest';
 import { buildAnalysisDataset, ANALYSIS_LONG_COLUMNS } from '@/storage/analysisExport';
-import { fnv1a } from '@/storage/export';
 import type { SessionBundle } from '@/storage/gather';
 import { N_CONDITIONS } from '@/experiment/conditions';
 
@@ -325,6 +324,13 @@ describe('an empty polarity_switched is not silently reused for two different ab
   });
 });
 
+/** FNV-1a 32-bit over a string's UTF-8 bytes, written out here so the test does not lean on the app's own. */
+function fnv1aOfUtf8(text: string): string {
+  let h = 0x811c9dc5;
+  for (const b of Buffer.from(text, 'utf8')) h = Math.imul(h ^ b, 0x01000193);
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
 describe('the pooled dataset says what produced it', () => {
   /*
    * The four CSVs went out with no build, no commit, no hash of the condition table and no
@@ -357,8 +363,10 @@ describe('the pooled dataset says what produced it', () => {
     for (const f of ds.files.filter((x) => x.filename !== 'analysis_manifest.json')) {
       const entry = listed.get(f.filename) as { bytes: number; checksum_fnv1a: string } | undefined;
       expect(entry, `${f.filename} is not listed in the manifest`).toBeTruthy();
-      expect(entry!.bytes).toBe(f.content.length);
-      expect(entry!.checksum_fnv1a).toBe(fnv1a(f.content));
+      // Measured on the file as written (UTF-8), as a tool off the tablet measures it (audit 86 D1:
+      // this used to pin UTF-16 code units, the wrong measure, for both).
+      expect(entry!.bytes).toBe(Buffer.byteLength(f.content, 'utf8'));
+      expect(entry!.checksum_fnv1a).toBe(fnv1aOfUtf8(f.content));
     }
     expect(listed.has('analysis_long.csv')).toBe(true);
   });

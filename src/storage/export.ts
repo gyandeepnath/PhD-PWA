@@ -19,7 +19,7 @@ import { PASSAGES, SEARCH_EXCERPT_MAX_WORDS } from '@/experiment/passages';
 import { CONDITIONS } from '@/experiment/conditions';
 import { auditBundle } from './integrity';
 import { serialiseSessionBackup } from './backup';
-import { requiredGrant } from './media';
+import { requiredGrant, fnv1aBytes } from './media';
 import { conditionPhysical, sessionMmPerCssPx, trialEccentricity } from '@/lib/physicalCalibration';
 import { cueLag, cueMatched, decodeTrace, exportedInterBlinkInterval, pageAt } from '@/tracking/blinkLog';
 import { FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION, fpsTier, rowGateVersion, samplingFpsObserved } from '@/tracking/frameRateGate';
@@ -266,7 +266,13 @@ export function safeFilePart(s: string, max = 32): string {
   return (cleaned || 'unknown').slice(0, max);
 }
 
-/** FNV-1a 32-bit hash (hex) — lightweight integrity checksum for the manifest. */
+/**
+ * FNV-1a 32-bit hash (hex) over a string's UTF-16 code units.
+ *
+ * NOT the manifests' checksum any more (see manifestEntry): it is kept for the backup file, whose
+ * checksum is defined over this function and verified on read, so every backup already written stays
+ * readable.
+ */
 export function fnv1a(str: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) {
@@ -276,6 +282,30 @@ export function fnv1a(str: string): string {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
+
+/**
+ * What a manifest's `checksum_fnv1a` is computed over (written into both manifests as `checksum_basis`).
+ *
+ * Round 89, audit 86 D1. Both manifests hashed the file's text as UTF-16 code units (fnv1a above), while
+ * 15_media_inventory's checksum of the same name, and its codebook entry, are over the file's bytes. The
+ * two agree only for pure-ASCII text, and the export is full of en dashes, times signs and operator-typed
+ * notes, so an FNV-1a computed on the receiving machine from the file on disk — the check the manifest
+ * exists for — disagreed for 00_CODEBOOK.csv, 16_integrity_report.csv, analysis_codebook.csv and any file
+ * carrying a typed note. The pooled manifest also gave `bytes` as UTF-16 code units (the per-sitting
+ * one was fixed for that in Round 7). A manifest without `checksum_basis` was written before Round 89:
+ * its checksums are over UTF-16 code units, and its pooled byte counts are code units.
+ */
+export const MANIFEST_CHECKSUM_BASIS = 'fnv1a32_utf8_bytes';
+
+/**
+ * One manifest entry: the file's size in bytes and its FNV-1a over those bytes, both measured on the
+ * UTF-8 encoding the download writes (a Blob of a string is UTF-8, no byte-order mark). Both manifests
+ * use this, so they cannot measure differently again.
+ */
+export function manifestEntry(filename: string, content: string): { filename: string; bytes: number; checksum_fnv1a: string } {
+  const bytes = new TextEncoder().encode(content);
+  return { filename, bytes: bytes.length, checksum_fnv1a: fnv1aBytes(bytes) };
+}
 
 /**
  * Data dictionary for the export bundle.
@@ -1704,11 +1734,8 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
      * a truncated transfer, was comparing it with a number that is wrong whenever any of that
      * appears.
      */
-    files: files.map((f) => ({
-      filename: f.filename,
-      bytes: new TextEncoder().encode(f.content).length,
-      checksum_fnv1a: fnv1a(f.content),
-    })),
+    checksum_basis: MANIFEST_CHECKSUM_BASIS,
+    files: files.map((f) => manifestEntry(f.filename, f.content)),
   };
   files.push({ filename: 'export_manifest.json', content: JSON.stringify(manifest, null, 2), mime: 'application/json' });
 
