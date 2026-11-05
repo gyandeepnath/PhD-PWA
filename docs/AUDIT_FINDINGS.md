@@ -7871,3 +7871,246 @@ may still close the app on the tablet (§5).
 | Participant code | stored and looked up as typed | trimmed and upper-cased as typed; looked up regardless of letter case; a stored spelling kept | — (no measured value; the join report warns `participant_code_case_variants`) |
 | A new sitting while one is open; the Back gesture | allowed; Back closed the app | refused; Back is the screen's top-left chip | — (no measured value) |
 | Tap guard, reaction summary, rating format, typography, straight-lining, frame-rate gate, blink rule, calibration, camera check, gaze, reliability | unchanged | unchanged | as before |
+
+## Round 88 — the inter-blink interval over observed time, a split sitting that changes no model, and one build per participant
+
+The third set of fixes for audit 86 (2.4.0 at 26e909c): four of its major data and analysis findings,
+D2, D5, D6 and D10. Each was reproduced by the auditor and again, independently, by a second reviewer.
+Rounds 86 and 87 fixed the blocker and the flow findings; the audit's other findings are not touched
+here.
+
+**One rule changed and is versioned in the data:** the inter-blink interval (`ibi_rule_version`,
+`ibi-r2`). **The analysis templates changed** in which terms enter their models when a sitting is split
+(no rule version: the change is to the templates' formulae, recorded in ANALYSIS_PLAN §2 and checked by
+the analysis gate). **No threshold, cutoff or scoring rule changed, and nothing stored was rewritten:**
+the eye-metrics row gained two optional fields (no store or index changed, so the database version is
+unchanged), and an older row is exported recomputed from its own stored blinks and trace wherever they
+were kept. Nothing here was measured on the Xiaomi Pad 6.
+
+### In plain words
+
+1. **A look-away no longer looks like suppressed blinking (D2).** Blink rate already ignored the time
+   the face was not seen; the inter-blink interval did not. One 10 s look-away in three minutes of
+   reading lengthened the mean interval from 4,000 to about 4,200-4,300 ms and raised its variability
+   from 0 to 0.3-0.4 — the two signs the study reads as visual fatigue. An interval is now used only
+   if the face was seen from one blink to the next.
+2. **How people were scheduled no longer changes the analysis (D5).** If even one participant's ten
+   displays were split over two visits, both analysis templates added a "sitting" term to every model
+   for everyone, and the R primary model then dropped its pre-specified polarity random slope — the
+   confidence interval for the main hypothesis narrowed from the scheduling alone. The models are now
+   the same whether or not anyone's sitting was split; the sitting is a separate, pre-specified check.
+3. **The Python cross-check counts each person once (D6).** It counted a split participant twice in
+   the symptom-questionnaire (CVS-Q) change and the workload (NASA-TLX) summary — 28 "sittings" for 22
+   people. It now takes one value per participant, with a confidence interval, as R does.
+4. **The tablet now warns before a participant is lost to an app update (D10).** A participant whose
+   two visits were recorded by different builds of the app is left out of the analysis. The rule was
+   written only in the developer's deployment notes; the update notice offered *Update now* between the
+   two visits, and the manual said to update every study day. The notice now names anyone between
+   visits and its button reads *Update anyway*; the New Session form says when the earlier visit was a
+   different build; the manual says what to do.
+
+### 1. The inter-blink interval counted the time the face was not seen (f9b60ae) — D2, major; `ibi_rule_version` `ibi-r2`
+
+**Found.** The blink rate divides by observed time — the exposure minus every gap in the camera's
+sampling (a look-away, a lost face) — but the inter-blink interval was the mean gap between every pair
+of successive blink onsets, so the interval spanning a dropout carried the unobserved seconds (and the
+blinks nobody saw in them). Through the app's own aggregator, three minutes at 30 fps with a full blink
+every 4 s: no dropout 4,000 ms, CV 0; one 10 s look-away (face present 94%, which passes every gate)
+4,190-4,293 ms, CV 0.29-0.43; 20 s, 4,513 ms; 40 s, 5,176 ms. The codebook reads a longer interval as
+suppressed blinking and a larger CV as erratic blinking. A row with exactly two blinks also got a CV of
+0 — the value of perfectly regular blinking — from a single interval.
+
+**Fixed.** `interBlinkInterval` (`src/tracking/blink.ts`) now takes the condition's sample series and
+uses an interval only when no sampling gap lies between its two onsets, judged by the gap rule observed
+time uses (`samplingGapThreshold`, passed in so the two cannot disagree). Nothing is interpolated. The
+CV needs at least two intervals (blank otherwise). New column `ibi_interval_count` says how many
+intervals a row rests on. On a run with no dropout the mean is unchanged. **Versioned:**
+`ibi_rule_version` in `07_eye_metrics.csv` and `analysis_long.csv` (`ibi-r2`).
+
+**Old rows.** Nothing stored is rewritten. A row recorded before this round whose reading window was
+kept (07b blinks and 07c trace — every sitting from schema 10) is **exported recomputed** under `ibi-r2`
+from those blinks and frames, by the same function (`ibi_recomputed` TRUE in 07;
+`src/tracking/blinkLog.ts` `exportedInterBlinkInterval`), so 07, `analysis_long.csv` and the dashboard
+agree. The value it was recorded with stays reproducible: the mean of the successive differences of
+the window's `onset_ms` in 07b. Only a row whose window was not kept (a sitting before schema 10), or
+every row of a 07 file written by an older build, stays `ibi-r1`. The R template models the `ibi-r2`
+rows, counts the `ibi-r1` rows, and refits with them put back as a printed sensitivity
+(ANALYSIS_PLAN §5). The Python cross-check does not model the interval, so it cannot apply another rule
+(a test fails if it ever reads the column without the rule). Codebooks (07 and analysis) and
+ANALYSIS_PLAN §4 and §5 say all of this.
+
+**Timing.** The rule runs once, when the reading window has closed (outside every timed interval): 0.5
+ms of a 35 ms finalise for a 180 s window at 30 fps (desktop, median of 200).
+
+**Tests.** `tests/interBlinkInterval.test.ts` (15): the audit's look-aways (10 s, 20 s, 40 s, three of
+5 s, 3 s) each within one frame of 4,000 ms with CV under 0.05 and fewer intervals than the clean run;
+an interval dropped exactly when observed time drops a gap between its onsets; every interval across a
+gap gives a blank, not a number; one interval gives a mean and no CV; no baseline, a blank count; the
+recomputation from the kept window equals the live value; an unstamped row with its window recomputed,
+without it left `ibi-r1`; 07, `analysis_long.csv` and the dashboard summary carry the same value and
+rule; R names the app's rule and refits with the old rows put back. The analysis gate leaves one
+participant's rows at `ibi-r1` and checks that R counts eight, leaves them out and puts them back in
+the sensitivity refit.
+
+### 2. A split sitting changed every model's formula, and the R primary dropped its polarity slope (b8cc2ed) — D5, major
+
+**Found.** Both templates added `session_index` (and R a sitting intercept,
+`(1 | participant_id:session_index)`) to every model as soon as one participant's sittings were split.
+A split participant's sitting index is 1 for serial positions 0-4 and 2 for 5-9, already in the
+position term; so the same people with the same values, six of 24 packaged as 5 + 5, gave different
+formulae: in Python the RT position effect moved from 3.49 to 2.91 (this round's gate cohort; the audit had 3.48 to 2.91). In R's primary the sitting intercept
+sat in the maximal structure beside the polarity slope; it had no variance (SD 2.8e-05), so the maximal
+was singular, and the next rung dropped the **pre-specified polarity random slope** (SD 0.065, perfectly
+estimable) and kept the inert sitting term. H1 went from −0.313 (95% CI −0.429 to −0.198) to −0.330
+(−0.430 to −0.231) — a narrower interval from the scheduling alone. ANALYSIS_PLAN calls the split "a
+scheduling option and not a factor", and its §2 formula and the synopsis's model have no sitting term;
+PROTOCOL.md said the sitting index is "added as a covariate when sittings vary".
+
+**Fixed.** Under the current protocol (one illumination level) no model in either template carries a
+sitting term: every formula is the one ANALYSIS_PLAN §2 and §4 give, whatever the scheduling. PROTOCOL's
+covariate is kept as a **pre-specified sensitivity**: when anyone's sittings are split, the primary is
+refitted with `session_index` as a covariate (`with the sitting as a covariate (+ session_index)` among
+its refits, in R and Python), and both say how many participants were split. Archived two-level data
+(where illumination varied between sittings, and the sitting is its whole-plot error stratum) keep the
+sitting terms, and R's reduction order now drops a sitting intercept, keeping the polarity slope,
+**before** it drops the slope. ANALYSIS_PLAN §2 and PROTOCOL.md updated.
+
+### 3. Python counted a split participant twice in the CVS-Q change and NASA-TLX (b8cc2ed) — D6, major
+
+**Found.** The Python template pivoted the CVS-Q per sitting and printed "n = 28 sitting(s)" for 22
+participants on a cohort with six split, with no interval; NASA-TLX likewise. ANALYSIS_PLAN §4 and the
+R template take one value per participant (first sitting's baseline to last sitting's close; the mean
+of a participant's TLX ratings) with a t interval over participants, so the key secondary differed
+between the two templates whenever a sitting was split. (Recorded in Round 71 as deferred.)
+
+**Fixed.** Python now takes exactly R's values: the change from the baseline at a participant's first
+sitting to the close at their last, the TLX mean per participant, each with a 95% t interval over
+participants, printed in R's words.
+
+**Tests for D5 and D6.** The analysis gate (`npm run verify:analysis`) now runs its 24-participant
+cohort a second time with six participants' ten runs packaged as two sittings of five through the
+app's own writers (`src/sim/analysisCohort.ts`, option `split`), and fails unless: the exporter admits
+the split participants (both sets identical to the single-sitting cohort); in R every `[n]` and
+`[model]` line (49) and in Python every `[n]` line and the RT, fatigue and comprehension position
+effects are identical to the single-sitting run; the primary's random structure and every `[H1]` line
+are identical; the sitting sensitivity is printed for the split cohort and not for the other; and the
+CVS-Q change and NASA-TLX lines say n = 22 participants (6 split) and are identical in R and Python.
+`tests/analysisTemplates.test.ts` pins the archived-data path the gate cannot reach (sitting terms
+only with two illumination levels; the sitting rung before the slope rung, and a rung that keeps the
+slope accepts no singular fit).
+
+### 4. A build change between a participant's two sittings excluded them, with no warning to the operator (467af00) — D10, major
+
+**Found.** The pooled export blocks a participant whose sittings were recorded by different builds
+(`mixed_build_within_participant`) — deliberately: the within-participant contrast would span a change
+to the instrument — even when only the commit differs. DEPLOYMENT.md says to update "between
+participants, never between the two sittings of one participant", but nothing the operator uses said
+so: the manual says to update at the start of each study day; the update notice, gated only on an
+*open* sitting, offered *Update now* between the two halves of a split (the first half is complete);
+and the New Session form said nothing when the second half began under a newer build. The participant
+was lost from every pre-registered model and the operator learnt it from the export.
+
+**Fixed.** The rule stands where the operator is, and is not changed. The **update notice** names every
+participant part-way through their ten displays with no sitting open — *Before updating: P003 (5 of 10
+displays done) has a sitting still to run …* — and its button reads **Update anyway** (a warning, not a
+gate: a fix that cannot wait is the investigator's call). The **New Session form** names the earlier
+sitting's build when it differs from the tablet's, with the tablet's own, and says what the analysis
+will do; it does not refuse the sitting (the build cannot be taken back; the data are kept). Both use
+the join check's own comparison, moved with the build stamp a new sitting gets into
+`src/storage/buildStamp.ts`, so they cannot disagree with the verdict. **Operator manual** §2 (new step
+3a, and the bench checklist) and §8 say: never update between the two halves; if the notice names
+someone, run their second half first; if the form warns, run the half anyway, tell the investigator the
+same day and note both build lines on the session sheet. DEPLOYMENT.md points to them.
+
+**Tests.** `tests/buildContinuity.test.tsx` (8): the warnings call two builds the same exactly when the
+join check groups them (version, commit, condition table, schema; build time alone is the same build);
+who is between sittings — a first half done, and not a finished, open, withdrawn or binned participant,
+regardless of letter case; the earlier sitting's build named, an unstamped one reported as unknown; the
+notice names the participant and offers *Update anyway*, and *Update now* when nobody is between
+sittings; the form names both builds and does not refuse the sitting.
+
+### 5. Two end-to-end tests that depended on the machine's speed (eecafa0)
+
+The full end-to-end run failed two tests; neither is a fault of the app.
+
+- `e2e/doubleTap.spec.ts`, *taps on the reaction field after the guard reach the task with their own
+  timestamps* (Round 86), failed every time, on the Round 87 sources as well. It taps the reaction field
+  "until the block is over", but stopped at the first frame showing neither fixation cross nor dot —
+  which the gap between trials also is — so it sent three taps or thirty depending on the machine. It now
+  stops at the block's own end (*Block complete.*), and taps more densely: in this harness a tap is
+  sometimes delivered after the 120 ms test response window has closed, and at the old pace a block of
+  four trials could record no response at all. What it checks is unchanged (every tap after the guard
+  reaches the task; every response time is that tap's own timestamp minus the onset). 5 of 5 after.
+- `e2e/sessionManager.spec.ts`, *the update banner covers nothing*, scrolled the session manager to its
+  bottom before the session list had been read from the database; the rows then arrived and pushed the
+  last control 500 px below the screen. The banner's new database read on mount (§4) made that race easy
+  to lose. The test now waits for the list (*In progress (8)*, *Recycle bin (2)*) before scrolling. 9 of 9
+  after (the whole file, three times).
+
+### 6. Not measured on the Xiaomi Pad 6
+
+- The update notice's and the New Session form's warnings on the tablet's screen (layout at its size;
+  the wording was checked in a headless browser and jsdom).
+- The inter-blink interval on real look-aways: the tests are synthetic series through the app's own
+  aggregator; on the tablet the gap threshold comes from its own frame timing (as it already did for
+  the blink rate).
+- The 0.5 ms cost of the new rule is a desktop figure; it is spent after the reading window closes.
+
+### 7. Not fixed here
+
+The audit's findings other than these four and those of Rounds 86 and 87 are not touched in this round.
+D10's rule itself (blocking on any build difference, including the commit alone) is unchanged, as
+designed; the verifier's suggestion — block only when something that defines the instrument differs,
+warn otherwise — is listed below for the investigator.
+
+### 8. For the investigator
+
+1. **Old inter-blink rows that cannot be recomputed (D2).** Rows recorded before this round are
+   recomputed from their kept blinks and trace wherever those exist (every sitting from schema 10).
+   For any that cannot be (an older sitting, or a 07 file exported by an older build — re-export it),
+   the default is conservative: R leaves them out of the inter-blink-interval model, counts them, and
+   prints the refit with them put back. An `ibi-r1` value can only have been lengthened by a look-away,
+   in the direction of the hypothesis. Keeping them is your decision (ANALYSIS_PLAN §5).
+2. **The CV of a two-blink row (D2)** is now blank, not 0 (`ibi-r2`); `ibi-r1` rows that are recomputed
+   change with it. Nothing models the CV.
+3. **The sitting (D5).** No model carries it; the primary is refitted with `session_index` as a
+   pre-specified sensitivity. If many participants end up split and you want the sitting in the
+   confirmatory model instead, decide before unblinding (ANALYSIS_PLAN §2). PROTOCOL.md now says the
+   same.
+4. **One build per participant (D10).** A participant whose sittings were recorded by different builds
+   is still out of every model, even when only the commit differs. You may prefer a narrower rule —
+   block only when the condition table, the schema or a versioned scoring rule differs, warn when only
+   the version or commit does (as a build change inside one sitting already is). That would change
+   who is analysable, so it is yours to decide; the default is unchanged.
+5. **On the tablet:** with a split participant's first half done, check that the update notice names
+   them and reads *Update anyway*.
+
+### 9. Checks run
+
+- On the final code of this round (eecafa0; the verify run was on 467af00, and eecafa0 changes two
+  e2e specs and one comment): `npm run verify` green — lint, types, 112 test files with 1,721 unit
+  tests, the corpus and codebook gates (534 codebook entries), the export gate 881/881, and both
+  analysis templates in R and Python, now including the split cohort. The **whole end-to-end suite,
+  retries off: 95 of 95 passed** (14 min). `npm run build` (the bundle check: 42 assets, all
+  precached), then the production-bundle suite, retries off: 7 of 7.
+- **Each fix fails its tests when reverted**, checked for this round: the gap rule switched off (D2) — 7
+  of the 15 interval tests fail; the sitting terms put back into every model in R and Python, and
+  Python's CVS-Q and NASA-TLX taken per sitting again (D5, D6) — 5 gate checks fail (R's formulae, R's
+  structure and H1, Python's position effects, Python's per-participant lines, and R and Python
+  agreeing), with the audit's numbers (Python RT position 3.49 against 2.91; CVS-Q "n = 28" for 22);
+  the participants between sittings, the earlier sitting's build, and the form's warning switched off
+  (D10) — 5 of the 8 tests fail. In that D5 mutation run R's primary, given the sitting intercept,
+  chose "reduction 1 — NO SITTING INTERCEPT (polarity slope kept)": the reordered ladder alone keeps
+  the pre-specified slope.
+- The first full end-to-end run on 467af00 failed the two tests in §5 (93 of 95); both were then run
+  repeatedly before and after their fixes as given there.
+
+### 10. Versions in the data
+
+| Rule or format | Before | Now | Where it is recorded |
+|---|---|---|---|
+| Inter-blink interval and its CV | `ibi-r1` (no column): every interval between successive onsets, a dropout's unobserved time included; CV 0 from one interval | `ibi-r2`: only intervals with no sampling gap between their onsets (the gap rule of observed time); CV from two intervals or more; `ibi_interval_count`; old rows recomputed from 07b/07c where kept (`ibi_recomputed`) | `ibi_rule_version`, `ibi_interval_count`, `ibi_recomputed` in 07; `ibi_rule_version` in analysis_long; codebooks; ANALYSIS_PLAN §4, §5 |
+| Sitting terms in the models | added to every model when any sitting was split; R's ladder dropped the polarity slope before the sitting intercept | none under the current protocol; the primary refitted with `session_index` as a pre-specified sensitivity; archived two-level data keep them, the sitting intercept reduced first | ANALYSIS_PLAN §2; PROTOCOL.md; both templates |
+| CVS-Q change and NASA-TLX in Python | per sitting, no interval | one value per participant, t interval (as R) | ANALYSIS_PLAN §4, §5b |
+| One build per participant | rule in DEPLOYMENT.md only | also on the update notice, the New Session form and in the operator manual; the rule itself unchanged | OPERATOR_MANUAL §2, §8 |
+| Every other rule (tap guard, attempt counting, scale freeze, reaction summary, rating format, typography, straight-lining, frame-rate gate, blink rule, fitted minimum, calibration, camera check, gaze, reliability) | unchanged | unchanged | as before |
