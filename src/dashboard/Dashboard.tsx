@@ -513,7 +513,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
             display threw that guarantee away. Its two neighbours above were always correct.
           */}
           <Stat label="Comprehension accuracy" value={(() => {
-            const acc = avg(summaries.map((s) => s.comprehension_correct));
+            const acc = avg(summaries.map((s) => s.comprehension_proportion));
             return acc == null ? fmt(null) : fmt(100 * acc, '%');
           })()} />
           {/* The reliability verdict (rule rel-r1), as the Data Quality tab and the export give it. */}

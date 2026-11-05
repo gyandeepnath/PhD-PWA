@@ -317,7 +317,7 @@ additional measures target the *data-quality* and *participant-experience* probl
 gets an **engagement flag** (`good`/`warn`/`bad`) and a 0–1 `quality_score` composed from existing
 signals plus newly recorded questionnaire response times: reading **skim** (reading faster than the
 word-count ÷ 400 wpm floor), **rushed** fatigue/perception ratings, **straight-lined** fatigue
-ratings, RT **disengagement** (high false-alarm/error/lapse rate), comprehension below chance across the three items, and
+ratings, RT **disengagement** (high false-alarm/error/lapse rate), comprehension with fewer than half of the three items correct (0 or 1 of 3; not "below chance", which with four options would be 0 of 3), and
 low camera face-presence. Exported in `10_wide_summary.csv` (`engagement_flag`, `quality_score`) and
 the dedicated **`12_quality_flags.csv`** (per-signal booleans + reasons). The analysis templates run
 a **sensitivity analysis**: fit on all data and on the clean subset (drop `bad`); agreement means

@@ -14,7 +14,7 @@
  * `search_termination` means the block was never reached.
  */
 import { PASSAGES } from '@/experiment/passages';
-import { RATE_CORRECTION_NOTE } from '@/lib/signalDetection';
+import { RATE_CORRECTION_NOTE, SDT_NOT_ESTIMABLE_TEXT } from '@/lib/signalDetection';
 import { CONFIG } from '@/experiment/config';
 import { ILLUMINATION, ILLUMINATION_LEVELS } from '@/experiment/illumination';
 import { FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION } from '@/tracking/frameRateGate';
@@ -179,7 +179,7 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
     description: 'Visual-search duration. A MEASUREMENT only when search_termination is voluntary_full. At time_limit the clock ran out, and at voluntary_early the participant stopped before finding every target: in both the time to find them all was not observed, so the row is right-censored, a lower bound. Pooling censored rows untreated biases the mean downward, and giving up early is plausibly commoner in the hardest conditions.' },
   { column: 'search_accuracy', role: 'secondary', unit: '0-1', missing: 'not completed',
     description: `Targets found over targets present ON THE SEARCH SCREEN — a one-screen excerpt of the passage, at the reading font size, where its target is densest. Target counts differ by passage (${Math.min(...PASSAGES.map((p) => p.searchTargetCount))} to ${Math.max(...PASSAGES.map((p) => p.searchTargetCount))}), by investigator decision, so this is not directly comparable across passages: carry passage_id as a random effect rather than treating rows as equally difficult.` },
-  { column: 'search_d_prime', role: 'secondary', unit: "d'", missing: 'not completed',
+  { column: 'search_d_prime', role: 'secondary', unit: "d'", missing: `not completed, OR ${SDT_NOT_ESTIMABLE_TEXT} — a finished search in which no word was tapped is the second case; search_termination and search_false_detections tell the cases apart`,
     description: `PREFER THIS TO search_accuracy as the search outcome. Sensitivity over words-as-trials: hits are target words tapped, false alarms are non-target words tapped, and the correct-rejection pool is the rest of the passage. search_accuracy ignores false detections entirely, so a participant who taps indiscriminately finds every target in seconds and scores 1.0 on it with no quality flag raised; d-prime does not reward that. ${RATE_CORRECTION_NOTE}` },
   { column: 'search_d_prime_se', role: 'qc', unit: "d'", missing: 'search_d_prime blank, or recorded before it was kept',
     description: 'Standard error of search_d_prime. The target pool is a handful of words, so it is large and differs by passage. Do NOT weight search_d_prime by its inverse: like d_prime_se in 09_rt_summary.csv it is computed from the same counts as the estimate and rises with it (within a passage the two are almost perfectly correlated), so inverse-variance weights would down-weight the blocks where the most targets were found. The analysis template fits search_d_prime UNWEIGHTED, with a passage random intercept for the difference between passages.' },
@@ -191,9 +191,9 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
     description: 'Mean reaction time on correct go trials.' },
   { column: 'rt_median_hits_ms', role: 'secondary', unit: 'ms', missing: 'no valid hits',
     description: 'Median reaction time on correct go trials. More robust to lapses than the mean; report both.' },
-  { column: 'd_prime', role: 'secondary', unit: 'z', missing: 'block not completed, OR one trial pool was empty so sensitivity was not estimable — d_prime_estimable in 09_rt_summary.csv separates the two',
+  { column: 'd_prime', role: 'secondary', unit: 'z', missing: `block not completed, OR ${SDT_NOT_ESTIMABLE_TEXT} — d_prime_estimable in 09_rt_summary.csv separates an unfinished block from an unestimable one, and that file's hits, false_alarms, misses and correct_rejections say which reason applies`,
     description: `Sensitivity on the go/no-go block. Check d_prime_se in 09_rt_summary.csv: with 20 go and 12 no-go trials a single block's d-prime is imprecise, and this column carries no indication of that on its own. Do not weight a model of it by 1 / d_prime_se^2 (that SE rises with d-prime, so the weights penalise high sensitivity); the analysis template models sensitivity and criterion together as a probit GLMM on the trials of 08_reaction_trials.csv and keeps an unweighted LMM on this column as a cross-check. ${RATE_CORRECTION_NOTE}` },
-  { column: 'criterion', role: 'secondary', unit: 'z', missing: 'block not completed',
+  { column: 'criterion', role: 'secondary', unit: 'z', missing: `blank exactly when d_prime is: block not completed, OR ${SDT_NOT_ESTIMABLE_TEXT}`,
     description: 'Response bias. A polarity effect on criterion without one on d_prime is a bias shift, not a sensitivity change — a distinction worth making explicitly.' },
   { column: 'rt_lapses', role: 'qc', unit: 'count', missing: 'block not completed',
     description: 'Responses slower than the lapse threshold. A proxy for disengagement in that block.' },

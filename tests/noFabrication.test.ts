@@ -146,7 +146,7 @@ describe('the class rule holds across a bundle with no measurements at all', () 
     const MUST_BE_ABSENT = [
       'incomplete_blink_ratio', 'blink_rate', 'mean_rt_hits_ms', 'd_prime',
       'fatigue_mean', 'fatigue_delta', 'comfort_score', 'clarity_score',
-      'search_accuracy', 'comprehension_correct',
+      'search_accuracy', 'comprehension_proportion',
     ] as const;
 
     for (const s of summaries) {

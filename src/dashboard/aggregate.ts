@@ -145,9 +145,30 @@ export const ENGAGEMENT_PENALTY = {
   RUSHED_FATIGUE: 0.2,
   RUSHED_PERCEPTION: 0.1,
   STRAIGHT_LINED: 0.1,
-  COMPREHENSION_BELOW_CHANCE: 0.1,
+  COMPREHENSION_FEWER_THAN_HALF: 0.1,
   LOW_FACE_PRESENCE: 0.25,
 } as const;
+
+/**
+ * When `comprehension_wrong` fires: fewer than half of the condition's items answered correctly.
+ *
+ * Round 89, audit 86 D7. The flag, its reason text ("comprehension below chance (1/3)"), its codebook entry
+ * and PROTOCOL called this "below chance". Every item has four options, so chance is a quarter of the
+ * items — 0.75 of three — and 1 of 3 is above it; only 0 of 3 is at or below chance. The RULE is
+ * unchanged (it decides quality_score and engagement_flag, and is an analyst default); the words now
+ * say what it does. Whether it should instead fire only at or below chance is the investigator's
+ * decision, and would be a new rule.
+ */
+export const COMPREHENSION_FLAG = {
+  /** Fires when correct / answered is below this. ANALYST DEFAULT. */
+  BELOW_PROPORTION: 0.5,
+  /** What the rule is, in the words every place that names it uses. */
+  RULE_TEXT: 'fewer than half of the comprehension items were answered correctly (0 or 1 of 3; chance with four options is 0.75 of 3)',
+} as const;
+
+export function comprehensionFlagReason(correct: number, answered: number): string {
+  return `comprehension fewer than half correct (${correct}/${answered})`;
+}
 
 export interface ConditionSummary {
   condition_id: string;
@@ -191,8 +212,9 @@ export interface ConditionSummary {
   burning: number | null;
   headache: number | null;
 
-  // Comprehension
-  comprehension_correct: number | null;
+  // Comprehension. A PROPORTION (0, 1/3, 2/3, 1), named so: analysis_long.csv's comprehension_correct is
+  // the COUNT, and one name with two meanings across the export was a factor-of-three trap (audit 86 D12).
+  comprehension_proportion: number | null;
   comprehension_rt_ms: number | null;
 
   // Reading + engagement / careless-responding (boredom/disengagement detection)
@@ -637,12 +659,12 @@ export function conditionEngagement(args: {
   }
 
   // Comprehension miss (weak on its own). With three items per passage a single slip is not
-  // evidence of disengagement, so the flag fires only at or below chance, which for three
-  // 4-option items means fewer than half correct.
+  // evidence of disengagement, so the flag fires only when fewer than half were answered correctly
+  // (0 or 1 of 3). See COMPREHENSION_FLAG for why it is not called "below chance" any more.
   const compAnswered = comprehension?.length ?? 0;
   const compCorrect = comprehension?.filter((x) => x.is_correct).length ?? 0;
-  const comprehension_wrong = compAnswered > 0 && compCorrect / compAnswered < 0.5;
-  if (comprehension_wrong) penalise(ENGAGEMENT_PENALTY.COMPREHENSION_BELOW_CHANCE, `comprehension below chance (${compCorrect}/${compAnswered})`, `Comprehension ${compCorrect} of ${compAnswered}`);
+  const comprehension_wrong = compAnswered > 0 && compCorrect / compAnswered < COMPREHENSION_FLAG.BELOW_PROPORTION;
+  if (comprehension_wrong) penalise(ENGAGEMENT_PENALTY.COMPREHENSION_FEWER_THAN_HALF, comprehensionFlagReason(compCorrect, compAnswered), `Comprehension ${compCorrect} of ${compAnswered}`);
 
   // Camera: participant turned away for a large share of the condition.
   // Null face presence means no face was ever found; that is not "low presence", it is no
@@ -803,7 +825,7 @@ export function buildConditionSummaries(bundle: SessionBundle): ConditionSummary
       // Proportion of items answered correctly, not a boolean: a passage carries three items, so
       // this takes the values 0, 1/3, 2/3 or 1. Absent when the condition recorded no item at all,
       // never 0, which would read as "attempted and got none right".
-      comprehension_correct: comp.length ? comp.filter((x) => x.is_correct).length / comp.length : null,
+      comprehension_proportion: comp.length ? comp.filter((x) => x.is_correct).length / comp.length : null,
       comprehension_rt_ms: comp.length ? comp.reduce((a, x) => a + x.response_time_ms, 0) / comp.length : null,
 
       reading_time_ms: c.reading_time_ms,

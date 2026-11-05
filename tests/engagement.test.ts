@@ -414,3 +414,42 @@ describe('the engagement thresholds declare their provenance', () => {
     expect(source).not.toMatch(/penalise\(\s*\d/);
   });
 });
+
+/**
+ * The comprehension flag says what it does (Round 89, audit 86 D7).
+ *
+ * It fired at 1 of 3 correct and was written "comprehension below chance (1/3)", and its codebook entry
+ * and PROTOCOL said "below chance" — but every item has four options, so chance is 0.75 of 3 and 1 of 3
+ * is above it. The rule is kept (an analyst default that feeds quality_score); the words are corrected,
+ * from one constant, so they cannot disagree with the rule again.
+ */
+describe('the comprehension flag is worded as the rule it applies (audit 86 D7)', () => {
+  const items = (correct: number, of = 3): ComprehensionRecord[] => Array.from({ length: of }, (_, i) => ({
+    ...comprehension(i < correct)[0], comprehension_id: `c${i}`, question_index: i,
+  }));
+
+  it('fires at 0 and 1 of 3, not at 2 or 3, and its reason says "fewer than half", not "below chance"', async () => {
+    const { COMPREHENSION_FLAG } = await import('@/dashboard/aggregate');
+    expect(COMPREHENSION_FLAG.BELOW_PROPORTION).toBe(0.5);
+    for (const [correct, fires] of [[0, true], [1, true], [2, false], [3, false]] as const) {
+      const e = conditionEngagement({ reading_time_ms: 180000, word_count: 580, comprehension: items(correct) });
+      expect(e.comprehension_wrong, `${correct}/3`).toBe(fires);
+      const reason = e.reasons.find((r) => /comprehension/.test(r));
+      if (fires) expect(reason).toBe(`comprehension fewer than half correct (${correct}/3)`);
+      else expect(reason).toBeUndefined();
+      for (const r of e.reasons) expect(r).not.toMatch(/chance/);
+    }
+  });
+
+  it('1 of 3 is above chance for the study’s four-option items, so nothing may call the flag "below chance"', async () => {
+    const { PASSAGES } = await import('@/experiment/passages');
+    const optionCounts = new Set(PASSAGES.flatMap((p) => p.questions.map((q) => q.options.length)));
+    expect([...optionCounts]).toEqual([4]);
+    expect(1 / 3).toBeGreaterThan(1 / [...optionCounts][0]);
+    const { CODEBOOK } = await import('@/storage/export');
+    const entry = CODEBOOK.find((r) => r.file === '12_quality_flags.csv' && r.column === 'comprehension_wrong')!;
+    expect(entry.description).toMatch(/^True when fewer than half of the comprehension items were answered correctly/);
+    const protocol = readFileSync(resolve(__dirname, '../docs/PROTOCOL.md'), 'utf8');
+    expect(protocol).not.toMatch(/comprehension below chance/);
+  });
+});

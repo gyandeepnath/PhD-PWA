@@ -33,6 +33,36 @@ export const RATE_CORRECTION_NOTE =
   + 'left blank when the participant responded to no trial or to every trial: both rates are then at '
   + 'the same extreme and the value would be produced by the correction and the pool sizes alone.';
 
+/**
+ * Every reason computeSdt leaves d-prime (and its criterion and SE) blank, in the words each codebook
+ * entry for a d-prime uses for an empty cell.
+ *
+ * Round 89, audit 86 D14. The entries named only the first: analysis_long's search_d_prime and
+ * criterion said "not completed", its d_prime "block not completed, OR one trial pool was empty", and
+ * 09's d_prime_estimable "FALSE when one of the two trial pools was empty". A FINISHED search in which
+ * the participant tapped no word, or a finished block in which they tapped no dot (or every dot), has
+ * both pools full and a blank d-prime for the second reason below, so it read as an unfinished run.
+ * Values are unchanged; this is what an empty cell means, single-sourced so the entries cannot drift
+ * from the function again. A test runs computeSdt over every small block and checks it is blank
+ * exactly in these cases.
+ */
+export const SDT_UNESTIMABLE = {
+  empty_pool: 'a trial pool was empty (no signal trials, or no noise trials, were scored)',
+  no_variation: 'the participant responded to no trial or to every trial, so responding did not vary (hits and false alarms both 0, or misses and correct rejections both 0)',
+} as const;
+export type SdtUnestimableReason = keyof typeof SDT_UNESTIMABLE;
+
+/** "not estimable: … ; or …" — for a codebook's missing-value text. */
+export const SDT_NOT_ESTIMABLE_TEXT =
+  `not estimable because ${SDT_UNESTIMABLE.empty_pool}, or because ${SDT_UNESTIMABLE.no_variation}`;
+
+/** Which of SDT_UNESTIMABLE applies to these counts, or null when d-prime is estimable. */
+export function sdtUnestimableReason(input: SdtInput): SdtUnestimableReason | null {
+  const r = computeSdt(input);
+  if (r.estimable) return null;
+  return r.hit_rate == null || r.false_alarm_rate == null ? 'empty_pool' : 'no_variation';
+}
+
 export interface SdtResult {
   /** Hits / signal trials. Null when the block held no signal trials — never 0, which is a claim. */
   hit_rate: number | null;

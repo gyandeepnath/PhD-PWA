@@ -352,7 +352,7 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         /*
          * A COUNT, not a proportion.
          *
-         * buildConditionSummaries returns comprehension_correct as a PROPORTION (0, 1/3, 2/3, 1),
+         * buildConditionSummaries returns comprehension_proportion (0, 1/3, 2/3, 1),
          * which is right for its own display purposes and wrong here: the codebook nominates this
          * column as the numerator for a binomial model against comprehension_items. Exporting the
          * proportion under that description would have an analyst compute

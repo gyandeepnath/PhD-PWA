@@ -25,17 +25,17 @@ describe('a measurement that was never taken is not displayed as zero', () => {
      * exclude or re-run, when nothing had been asked. The aggregator deliberately keeps this null.
      */
     const src = dashboardSource();
-    expect(src).not.toMatch(/100 \* \(avg\([^)]*comprehension_correct[^)]*\) \?\? 0\)/);
+    expect(src).not.toMatch(/100 \* \(avg\([^)]*comprehension_(correct|proportion)[^)]*\) \?\? 0\)/);
     // The null has to be tested for before the percentage is applied.
     expect(src).toMatch(/acc == null \? fmt\(null\)/);
   });
 
   it("keeps the aggregator's own null, so the display cannot invent a zero", () => {
-    // Guards the layer beneath: if comprehension_correct ever became 0-for-absent, the tile would be
+    // Guards the layer beneath: if comprehension_proportion ever became 0-for-absent, the tile would be
     // correct and the number still wrong.
     const b = buildFixtureBundle();
     b.comprehension = [];
-    for (const s of buildConditionSummaries(b)) expect(s.comprehension_correct).toBeNull();
+    for (const s of buildConditionSummaries(b)) expect(s.comprehension_proportion).toBeNull();
   });
 });
 

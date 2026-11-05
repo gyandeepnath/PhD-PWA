@@ -83,7 +83,7 @@ describe('condition aggregation', () => {
     const s = buildConditionSummaries(bundle());
     expect(s).toHaveLength(2);
     expect(s[0].mean_rt_hits_ms).toBe(460);
-    expect(s[0].comprehension_correct).toBe(1);
+    expect(s[0].comprehension_proportion).toBe(1);
     expect(s[0].search_accuracy).toBe(1);
   });
   it('names the rating format on every fatigue and perception row, the old sliders where a row carries none (Round 84)', () => {

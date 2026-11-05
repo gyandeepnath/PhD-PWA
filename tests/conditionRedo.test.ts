@@ -122,9 +122,9 @@ describe('the integrity audit catches a duplicated attempt however it arrives', 
 
     // And confirm the aggregate really would have produced a plausible-looking number.
     const summary = buildConditionSummaries(b).find((s) => s.condition_id === target)!;
-    expect(summary.comprehension_correct).not.toBeNull();
-    expect(summary.comprehension_correct).toBeGreaterThanOrEqual(0);
-    expect(summary.comprehension_correct).toBeLessThanOrEqual(1);
+    expect(summary.comprehension_proportion).not.toBeNull();
+    expect(summary.comprehension_proportion).toBeGreaterThanOrEqual(0);
+    expect(summary.comprehension_proportion).toBeLessThanOrEqual(1);
   });
 
   it('flags an item index outside the range the passage defines', () => {
@@ -155,10 +155,10 @@ describe('a duplicated attempt produces a score the codebook says cannot exist',
       b.comprehension.push({ ...item(2, qi, false), condition_id: target, session_id: b.session.session_id });
     }
     const summary = buildConditionSummaries(b).find((s) => s.condition_id === target)!;
-    expect(summary.comprehension_correct).toBe(0.5);
+    expect(summary.comprehension_proportion).toBe(0.5);
     // 0.5 is not a multiple of 1/3, so it cannot arise from a single well-formed attempt.
     const valid = [0, 1 / 3, 2 / 3, 1];
-    expect(valid.some((v) => Math.abs(v - (summary.comprehension_correct ?? -1)) < 1e-9)).toBe(false);
+    expect(valid.some((v) => Math.abs(v - (summary.comprehension_proportion ?? -1)) < 1e-9)).toBe(false);
   });
 });
 

@@ -3,13 +3,13 @@
  * per-file checksums. Pure (`buildExportFiles`) so it is fully unit-testable; `downloadExport`
  * is the thin browser wrapper that streams the files to the device.
  */
-import { RATE_CORRECTION_NOTE } from '@/lib/signalDetection';
+import { RATE_CORRECTION_NOTE, SDT_NOT_ESTIMABLE_TEXT } from '@/lib/signalDetection';
 import { CONFIG } from '@/experiment/config';
 import { normaliseBundle, sessionForExport, type SessionBundle } from './gather';
 import type { CameraBenchRecord, CameraPipelineRecord, ExposureOutcome, SessionRecord } from './types';
 import type { MediaRecord } from './media';
 import { summariseLux, LUX_CHECKPOINTS } from '@/experiment/illumination';
-import { buildConditionSummaries, ENGAGEMENT } from '@/dashboard/aggregate';
+import { buildConditionSummaries, ENGAGEMENT, COMPREHENSION_FLAG, comprehensionFlagReason } from '@/dashboard/aggregate';
 import { STRAIGHT_LINE, STRAIGHT_LINE_RULE_V1, STRAIGHT_LINE_RULE_V2 } from '@/dashboard/straightLine';
 import { isConditionComplete } from './conditionStatus';
 import { latestCalibration as lastCalibrationTaken } from './calibrationLookup';
@@ -577,7 +577,7 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '09_rt_summary.csv', column: 'rt_cv', type: 'number', unit: 'ratio', role: 'dv', description: 'RT coefficient of variation. One of the two most fatigue-sensitive indices.' },
   { file: '09_rt_summary.csv', column: 'lapse_rate', type: 'number', unit: '0-1', role: 'dv', description: 'Proportion of valid hits slower than 600 ms. The other fatigue-sensitive index.' },
   { file: '09_rt_summary.csv', column: 'd_prime', type: 'number', unit: 'z units', role: 'dv', description: `Signal-detection sensitivity for this block, from the rate-corrected hit and false-alarm rates. Imprecise by design (20 go, 12 no-go trials; see d_prime_se). The analysis template does not model this column as its sensitivity outcome: it fits a probit GLMM to the trials in 08_reaction_trials.csv, where d' is the slope on the signal term and needs neither a rate correction nor a weight; a per-block LMM on this column, unweighted, is printed as a cross-check. ${RATE_CORRECTION_NOTE}` },
-  { file: '09_rt_summary.csv', column: 'd_prime_estimable', type: 'boolean', unit: '-', role: 'qc', description: "FALSE when one of the two trial pools was empty, so sensitivity could not be estimated at all — distinct from an estimate that is merely imprecise, which is what d_prime_unstable reports. It is recorded on every block and was being dropped from this file, leaving an empty d_prime cell to mean either 'unestimable' or 'not written'. The case is real: every no-go trial scored as an anticipation (RT under 150 ms) empties the noise pool, and a rhythmically-tapping, disengaged participant is the phenotype this task exists to detect." },
+  { file: '09_rt_summary.csv', column: 'd_prime_estimable', type: 'boolean', unit: '-', role: 'qc', description: `FALSE when sensitivity could not be estimated at all: ${SDT_NOT_ESTIMABLE_TEXT}. The second case is a FINISHED block with both pools full in which the participant tapped no dot (or every dot); hits, false_alarms, misses and correct_rejections on this row tell the two apart. Distinct from an estimate that is merely imprecise, which is what d_prime_unstable reports. It is recorded on every block and was being dropped from this file, leaving an empty d_prime cell to mean either 'unestimable' or 'not written'. The case is real: every no-go trial scored as an anticipation (RT under 150 ms) empties the noise pool, and a rhythmically-tapping, disengaged participant is the phenotype this task exists to detect.` },
   { file: '09_rt_summary.csv', column: 'd_prime_unstable', type: 'boolean', unit: '-', role: 'qc', description: "Set when the standard error of d-prime exceeds 0.3. With 20 signal and 12 noise trials the smallest achievable SE is about 0.46, so this is TRUE for every possible block and carries NO information about any particular block: it says only that one block's d-prime is too imprecise to read on its own, which is true of all of them. Do not count or report it as a finding (the analysis template used to print the share of blocks flagged, which was always 100%). It does NOT mean a rate hit a bound and was corrected — an earlier version of this line said so, and it does not describe the code." },
 
   // ---- 10_wide_summary.csv
@@ -904,7 +904,7 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '10_wide_summary.csv', column: 'd_prime_se', type: 'number', unit: '-', role: 'qc', description: 'Standard error of sensitivity for this condition-run.' },
   { file: '10_wide_summary.csv', column: 'criterion', type: 'number', unit: '-', role: 'dv', description: 'Signal-detection response bias for this condition-run.' },
   { file: '10_wide_summary.csv', column: 'fatigue_mean', type: 'number', unit: '0-10', role: 'dv', description: 'Mean of the five visual-fatigue items for this condition.' },
-  { file: '10_wide_summary.csv', column: 'comprehension_correct', type: 'number', unit: '0-1', role: 'dv', description: 'Proportion of the three comprehension items answered correctly, so it takes the values 0, one third, two thirds or 1. Null when the condition recorded no item at all.' },
+  { file: '10_wide_summary.csv', column: 'comprehension_proportion', type: 'number', unit: '0-1', role: 'dv', description: 'PROPORTION of the comprehension items answered correctly, so it takes the values 0, one third, two thirds or 1. Null when the condition recorded no item at all. Called comprehension_correct in this file before Round 89 (same values): analysis_long.csv has a comprehension_correct that is the COUNT of correct items, and one name with two meanings made a join of the two files a factor-of-three trap. For a model use the count and comprehension_items from analysis_long.csv, or the items in 04_comprehension.csv.' },
   { file: '10_wide_summary.csv', column: 'search_time_ms', type: 'number', unit: 'ms', role: 'dv', description: 'Visual-search time for this condition-run. CENSORED unless search_termination is voluntary_full: at the time limit the clock ran out, and on voluntary_early the participant stopped before finding every target, so the time to find them all was never observed. It used to be absent from this file, which then offered search_efficiency — found per minute, blind to both — as its only search timing.' },
   { file: '10_wide_summary.csv', column: 'search_termination', type: 'factor(3)', unit: '-', role: 'qc', description: 'How the search ended: voluntary_full (every target found), voluntary_early (stopped by the participant first), time_limit (the clock ran out). Read before search_time_ms; see 05_visual_search.csv termination_mode.' },
   { file: '10_wide_summary.csv', column: 'search_accuracy', type: 'number', unit: '0-1', role: 'dv', description: 'Visual-search accuracy for this condition-run. Blank, not 0, if the excerpt held no target.' },
@@ -977,13 +977,13 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
       + 'rt_disengaged is withheld — the high error rates cannot be told apart from the throttling, so attributing them to the '
       + 'participant would be a guess. See condition_hidden_ms on 02_conditions.csv for the duration.' },
   { file: '12_quality_flags.csv', column: 'reading_interrupted', type: 'boolean', unit: '-', role: 'qc', description: 'The app was backgrounded or the screen went off for more than 5 s during the reading exposure. The ocular measures for this condition therefore cover a window that includes time the participant was not looking at the stimulus.' },
-  { file: '12_quality_flags.csv', column: 'comprehension_wrong', type: 'boolean', unit: '-', role: 'qc', description: 'True when the participant scored below chance across the three items for this condition. A single slip does not fire it.' },
+  { file: '12_quality_flags.csv', column: 'comprehension_wrong', type: 'boolean', unit: '-', role: 'qc', description: `True when ${COMPREHENSION_FLAG.RULE_TEXT} for this condition. A single slip does not fire it. Not "below chance": 1 of 3 is above chance, and this file and its reasons text called it that until Round 89 (the rule itself is unchanged).` },
   { file: '12_quality_flags.csv', column: 'low_face_presence', type: 'boolean', unit: '-', role: 'qc', description: `True when face_presence_ratio is below ${ENGAGEMENT.FACE_PRESENCE_MIN} — a face detected for less than `
     + `${Math.round(ENGAGEMENT.FACE_PRESENCE_MIN * 100)}% of the condition, which is the participant turning away rather than a `
     + 'tracking wobble. This is a LOWER bar than the pilot gate stated for face_presence_ratio on '
     + `07_eye_metrics.csv (>= ${FACE_PRESENCE_PILOT_GATE_PCT}%): a run can pass this flag and still fail the gate. Filter on the `
     + 'ratio itself, not on this boolean, if the gate is what you mean.' },
-  { file: '12_quality_flags.csv', column: 'reasons', type: 'string', unit: '-', role: 'qc', description: 'Human-readable list of every penalty that fired, semicolon separated. Read this before excluding a row.' },
+  { file: '12_quality_flags.csv', column: 'reasons', type: 'string', unit: '-', role: 'qc', description: `Human-readable list of every penalty that fired, semicolon separated. Read this before excluding a row. The comprehension penalty reads "${comprehensionFlagReason(1, 3)}" from Round 89; before it, the same rule was written "comprehension below chance (1/3)" (see comprehension_wrong) — match on "comprehension" if you search the text across builds.` },
   { file: '13_cvsq.csv', column: 'session_index', type: 'integer', unit: '1 or 2', role: 'iv', description: 'Which sitting this administration belongs to. The CVS-Q is given twice per sitting (baseline and session_end), so without this a pooled dataset cannot tell the two rows apart. Under the single-sitting protocol that is two rows per participant; the contrast of interest is baseline-to-close WITHIN the sitting.' },
   { file: '13_cvsq.csv', column: 'ambient_illumination_level', type: 'factor(1)', unit: '-', role: 'meta', description: "The sitting's illumination level. CONSTANT in this dataset — see 01_session_info.csv. Retained so a pooled file that also contains earlier two-level data stays separable." },
   { file: '13_cvsq.csv', column: 'stage', type: 'factor(2)', unit: '-', role: 'iv', description: 'When the questionnaire was administered: baseline or session_end. The key secondary outcome is the change between them.' },
@@ -1506,7 +1506,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 10 — wide one-row-per-condition summary (joined)
   csv('10_wide_summary.csv',
-    ['participant_id', 'session_index', 'condition_id', 'condition_complete', 'attempt_number', 'condition_label', 'session_position', 'polarity', 'color_name', 'wcag_contrast_ratio', 'below_wcag_aa', 'passage_id', 'mean_rt_hits_ms', 'd_prime', 'd_prime_se', 'criterion', 'fatigue_mean', 'fatigue_delta', 'comprehension_correct', 'search_time_ms', 'search_termination', 'search_accuracy', 'search_efficiency', 'comfort_score', 'clarity_score', 'slider_version', 'blink_rate', 'blink_rate_full', 'effective_fps', 'face_presence_ratio', 'qc_overall', 'ocular_reliability', 'ocular_reliability_checks', 'reliability_rule_version', 'engagement_flag', 'quality_score'],
+    ['participant_id', 'session_index', 'condition_id', 'condition_complete', 'attempt_number', 'condition_label', 'session_position', 'polarity', 'color_name', 'wcag_contrast_ratio', 'below_wcag_aa', 'passage_id', 'mean_rt_hits_ms', 'd_prime', 'd_prime_se', 'criterion', 'fatigue_mean', 'fatigue_delta', 'comprehension_proportion', 'search_time_ms', 'search_termination', 'search_accuracy', 'search_efficiency', 'comfort_score', 'clarity_score', 'slider_version', 'blink_rate', 'blink_rate_full', 'effective_fps', 'face_presence_ratio', 'qc_overall', 'ocular_reliability', 'ocular_reliability_checks', 'reliability_rule_version', 'engagement_flag', 'quality_score'],
     summaries.map((s) => ({
       participant_id: pid, session_index: session.session_index,
       condition_complete: s.condition_complete, attempt_number: s.attempt_number,
@@ -1522,7 +1522,7 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
       polarity: s.polarity, color_name: s.color_name, wcag_contrast_ratio: s.wcag_contrast_ratio,
       below_wcag_aa: s.below_wcag_aa, passage_id: s.passage_id, mean_rt_hits_ms: s.mean_rt_hits_ms,
       d_prime: s.d_prime, d_prime_se: s.d_prime_se, criterion: s.criterion,
-      fatigue_mean: round(s.fatigue_mean), fatigue_delta: round(s.fatigue_delta), comprehension_correct: s.comprehension_correct,
+      fatigue_mean: round(s.fatigue_mean), fatigue_delta: round(s.fatigue_delta), comprehension_proportion: s.comprehension_proportion,
       search_time_ms: s.search_time_ms, search_termination: s.search_termination ?? '',
       search_accuracy: s.search_accuracy, search_efficiency: s.search_efficiency, comfort_score: s.comfort_score,
       clarity_score: s.clarity_score, slider_version: s.slider_version ?? '', blink_rate: s.blink_rate, blink_rate_full: s.blink_rate_full,
