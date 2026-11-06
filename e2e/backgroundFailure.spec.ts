@@ -90,3 +90,31 @@ test('on a reading page the alert stops the participant until the researcher hid
   await expect(page.locator('#visulab-async-error')).toHaveCount(0);
   expect(await reachable(page, /Next page|finished reading/)).toEqual([true, true, true]);
 });
+
+/** How much of its parent's height the set-up screen's box gives up at its foot (the .panel-band band). */
+async function bandGivenUp(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const box = document.querySelector('.panel-band') as HTMLElement | null;
+    if (!box || !box.parentElement) throw new Error('no .panel-band screen on display');
+    return box.parentElement.clientHeight - box.offsetHeight;
+  });
+}
+
+test('the band kept clear for the researcher chip is taken only where the chip is drawn', async ({ page }) => {
+  /*
+   * When the band became room taken out of the screen's box (audit 86 UI-1), it was taken on the New
+   * Session form too, where no chip is drawn: about 70 px of a 720 px screen, and "Begin setup" went
+   * below the fold, under the "More below" cue, where a tap on it moved nothing (e2e/doubleTap failed
+   * on it). The band now follows the one decision that draws the chip (Experiment.tsx).
+   */
+  test.setTimeout(120_000);
+  await startNewExperiment(page);
+  expect(await page.locator('[data-stage]').first().getAttribute('data-stage')).toBe('SESSION_INIT');
+  await expect(page.locator('[data-testid^=researcher-panel]')).toHaveCount(0);
+  expect(await bandGivenUp(page)).toBe(0);
+  expect(await reachable(page, /Begin setup/)).toEqual([true, true, true]);
+
+  await driveUntil(page, 'CONSENT');
+  expect(await page.locator('[data-testid^=researcher-panel]').count()).toBeGreaterThan(0);
+  expect(await bandGivenUp(page)).toBeGreaterThan(40);
+});

@@ -3,7 +3,7 @@
  * lifecycle, and all IndexedDB writes. Renders the component for the current stage and advances on
  * completion. EXPORT_DASHBOARD renders the full researcher dashboard + CSV/JSON export.
  */
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { acquireScreenWakeLock } from '@/lib/wakeLock';
 import { v4 as uuidv4 } from 'uuid';
@@ -2459,10 +2459,24 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     ?? (calibrationGrey ? { ground: CONFIG.ADAPTATION_COLOR, ink: CONFIG.ADAPTATION_INK }
       : panelLocked ? { ground: '#F8F7F5', ink: UI_TEXT.ink } : null);
 
+  /*
+   * Whether the researcher panel is drawn on this stage. ONE decision for the panel and for the band its
+   * collapsed chip needs (--vl-panel-reserve, theme.css .panel-band): a screen gives up the band only
+   * where the chip is drawn. Since the band became room taken out of the screen's box (audit 86 UI-1)
+   * it costs every set-up screen about 70 px of height, and on the New Session form, which has no chip,
+   * that pushed "Begin setup" below the fold at 1152x720 for a chip that was never there.
+   */
+  const researcherPanelDrawn = machine.stage !== 'SESSION_INIT' && machine.stage !== 'EXPORT_DASHBOARD';
+  const stageStyle: CSSProperties & Record<'--vl-panel-reserve', string | undefined> = {
+    height: '100%',
+    paddingLeft: 'var(--vl-panel-dock, 0px)',
+    '--vl-panel-reserve': researcherPanelDrawn ? undefined : '0px',
+  };
+
   return (
     // --vl-panel-dock is the column the researcher card takes while it is open on a set-up or closing
     // screen (ResearcherPanel.tsx): the screen gives it up, so nothing of the screen is under the card.
-    <div data-stage={machine.stage} style={{ height: '100%', paddingLeft: 'var(--vl-panel-dock, 0px)' }}>
+    <div data-stage={machine.stage} style={stageStyle}>
       {/*
         The researcher panel: live camera readout and the session clock, collapsible. See
         ResearcherPanel.tsx for how it protects the measurement on condition screens (an ink indicator
@@ -2471,7 +2485,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         not drawn at all while the reaction-time trials run, and every moment it is open recorded),
         and how it reserves its footprint on set-up screens.
       */}
-      {machine.stage !== 'SESSION_INIT' && machine.stage !== 'EXPORT_DASHBOARD' && (
+      {researcherPanelDrawn && (
         <ResearcherPanel
           subscribe={tracking.subscribeLive}
           getStream={trackerStream}
