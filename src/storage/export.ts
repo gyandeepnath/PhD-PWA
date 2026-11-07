@@ -27,6 +27,7 @@ import { cueLag, cueMatched, decodeTrace, exportedInterBlinkInterval, pageAt } f
 import { FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION, fpsTier, rowGateVersion, samplingFpsObserved } from '@/tracking/frameRateGate';
 import { RELIABILITY_GATES, RELIABILITY_RULE_VERSION } from '@/tracking/ocularReliability';
 import { rowSliderVersion, SLIDER_VERSION, SLIDER_VERSION_V1, VAS_LINE_MM } from '@/scales/vas';
+import { CAMERA_MEASURES_TEXT } from '@/start/cameraMeasures';
 import { TYPOGRAPHY_VERSION, TYPOGRAPHY_VERSION_V1 } from '@/lib/fonts';
 import { TAP_GUARD_MS, CONSENT_TAP_GUARD_MS, TAP_GUARD_VERSION, TAP_GUARD_VERSION_V1 } from '@/lib/tapGuard';
 import { ATTEMPT_RULE_VERSION, ATTEMPT_RULE_VERSION_V1 } from '@/experiment/conditionAttempt';
@@ -523,7 +524,7 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '01_session_info.csv', column: 'condition_def_hash', type: 'string', unit: '-', role: 'provenance', description: 'Hash of the locked condition table. Ties a dataset to the exact stimulus set that produced it.' },
   { file: '01_session_info.csv', column: 'schema_version', type: 'integer', unit: '-', role: 'provenance', description: 'IndexedDB schema version at export time.' },
 
-  { file: '01_session_info.csv', column: 'consent_camera_metrics', type: 'boolean', unit: '-', role: 'qc', description: 'Participant permitted camera-derived numeric measures. FALSE means no ocular data was collected for them; every other measure still ran.' },
+  { file: '01_session_info.csv', column: 'consent_camera_metrics', type: 'boolean', unit: '-', role: 'qc', description: `Participant permitted camera-derived numeric measures. FALSE means no ocular data was collected for them; every other measure still ran. What the screen said they were agreeing to changed in Round 90 (audit 86 UI-5): from then the consent names ${CAMERA_MEASURES_TEXT}; before it, it named the first three only, although the same gaze estimate (on_screen_ratio, 07_eye_metrics.csv) was computed. Nothing collected changed; git_hash names the build a sitting was consented on.` },
   { file: '01_session_info.csv', column: 'consent_setup_photos', type: 'boolean', unit: '-', role: 'qc', description: 'Participant permitted two retained setup photographs. Separate, optional grant.' },
   { file: '01_session_info.csv', column: 'consent_annotation_video', type: 'boolean', unit: '-', role: 'qc', description: 'Participant permitted retained reading video for the manual blink-annotation sub-study (validation subsample only).' },
   { file: '01_session_info.csv', column: 'media_items_retained', type: 'integer', unit: 'count', role: 'qc', description: 'How many photo/video files this session actually retained. 0 unless a media grant was given.' },

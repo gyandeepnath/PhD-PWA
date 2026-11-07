@@ -18,6 +18,7 @@ import type { EarlierBuild, OpenSitting } from '@/storage/gather';
 import { buildKey, currentProvenance, describeBuild } from '@/storage/buildStamp';
 import { ScrollCue } from '@/components/ScrollCue';
 import { parseNumberEntry, HOURS_IN_DAY, HOURS_ENTRY_PROBLEM } from '@/lib/numberEntry';
+import { CAMERA_MEASURES_TEXT, CAMERA_OPTION_TITLE } from '@/start/cameraMeasures';
 import { InfoTip } from '@/components/InfoTip';
 import { UI_TEXT } from '@/lib/uiPalette';
 import { now } from '@/lib/timing';
@@ -940,14 +941,15 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
                 consent record for an ethics-approved protocol that is not a wording problem. */}
             <div className="mt-4 rounded-xl border border-[#cdd8f0] bg-[#eef3ff] p-4 font-sans text-base leading-relaxed">
               {!retains?.setupPhotos && !retains?.annotationVideo ? (
+                /* What the camera measures, in the consent's own words (start/cameraMeasures.ts; audit 86 UI-5). */
                 <>
                   <strong>Privacy:</strong> no video or images are recorded or stored. The camera only
-                  estimates blink rate, head position and gaze zone — and only those numbers are saved.
+                  measures {CAMERA_MEASURES_TEXT} — and only those numbers are saved.
                 </>
               ) : (
                 <>
-                  <strong>Privacy:</strong> the camera estimates blink rate, head position and gaze
-                  zone, and those numbers are saved. In addition, you agreed that we may keep
+                  <strong>Privacy:</strong> the camera measures {CAMERA_MEASURES_TEXT}, and those numbers
+                  are saved. In addition, you agreed that we may keep
                   {retains.setupPhotos && ' two photographs of you at the device (one now, one at the end)'}
                   {retains.setupPhotos && retains.annotationVideo && ' and'}
                   {retains.annotationVideo && ' a short video segment of you reading, for a person to code frame by frame'}
@@ -1514,10 +1516,17 @@ export function Consent({
           <p style={{ marginTop: 12 }}><strong>Data:</strong> responses are stored on this device
             under a participant code, not your name. You may stop at any time without penalty; tell
             the researcher to withdraw and your data for this session can be deleted.</p>
+          {/*
+            What the camera measures (start/cameraMeasures.ts; audit 86 UI-5): one description for this
+            paragraph, its option below and the camera set-up's privacy box. It named the blinks, the
+            eyelids and the head position, and not the gaze estimate the calibration's three dots and the
+            exported on-screen ratio rest on, which the privacy box called "gaze zone". Nothing collected
+            changed; the investigator checks the wording against the approved consent (Round 90).
+          */}
           <p style={{ marginTop: 12 }}><strong>Camera:</strong> by default the front camera is used
-            only to compute numbers — how often you blink, how fully your eyelids close, head
-            position — and <strong>the images themselves are discarded immediately and never
-            stored</strong>. The options below are separate and entirely optional.</p>
+            only to compute numbers — {CAMERA_MEASURES_TEXT} — and <strong>the images themselves are
+            discarded immediately and never stored</strong>. The options below are separate and entirely
+            optional.</p>
           <p style={{ marginTop: 12 }}>Taking part is voluntary. Declining any option below does not
             affect your participation or anything else about the session.</p>
         </div>
@@ -1532,7 +1541,7 @@ export function Consent({
         </p>
         <Opt
           testid="consent-camera" checked={cameraMetrics} set={setCameraMetrics}
-          title="Use the camera for blink and head-position measures"
+          title={CAMERA_OPTION_TITLE}
           note="Numbers only. No image or video is saved. Declining means the eye measures are not collected for you; everything else runs as normal."
         />
         <Opt

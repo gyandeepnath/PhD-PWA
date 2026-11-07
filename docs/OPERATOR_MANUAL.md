@@ -183,9 +183,15 @@ later ones as if they follow from the first.
    the condition order — is taken only when consent is given, so a sitting that never reached consent
    uses none and leaves no gap in the counterbalancing.
 2. **Camera measurement.** Separate, and refusable. Say plainly:
-   > "The tablet's camera measures how you blink while you read. Nothing is recorded or saved as a
-   > picture: the camera produces numbers and the images are discarded as they are processed. You
+   > "While you read, the tablet's camera measures how often you blink, how fully your eyelids close,
+   > your head position and roughly whether you are looking at the screen. Nothing is recorded or saved
+   > as a picture: the camera produces numbers and the images are discarded as they are processed. You
    > can decline this and still take part in everything else."
+
+   These are the words of the consent screen, its camera option and the camera set-up's privacy box,
+   from one source (`src/start/cameraMeasures.ts`). Until Round 90 the consent named the blinks, the
+   eyelids and the head position but not the gaze estimate the calibration's three dots and the
+   on-screen ratio rest on; the investigator checks this wording against the approved consent.
 
    A participant who declines is **still fully enrolled**. Every questionnaire, reading,
    comprehension, search and reaction-time measure still runs. Record the refusal; do not try to

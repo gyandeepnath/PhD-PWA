@@ -1701,7 +1701,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       /**
        * The grant is ENFORCED here, not merely recorded.
        *
-       * Consent offers "Use the camera for blink and head-position measures" as a separate,
+       * Consent offers "Use the camera for blink, eyelid, head-position and gaze measures"
+       * (start/cameraMeasures.ts CAMERA_OPTION_TITLE; "blink and head-position" before Round 90) as a separate,
        * default-off grant, and tells the participant that declining means the eye measures are not
        * collected for them. That flag was written to the session and exported as
        * consent_camera_metrics — and read by nothing. The very next screen offered "Enable camera",
