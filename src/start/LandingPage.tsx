@@ -7,6 +7,7 @@ import { BuildInfo } from '@/components/BuildInfo';
 import { DeviceBox } from '@/components/DeviceBox';
 import { CONDITIONS } from '@/experiment/conditions';
 import { CONFIG } from '@/experiment/config';
+import { chosenSittingSize } from './setupStages';
 
 export function LandingPage({ onEnter }: { onEnter: () => void }) {
   return (
@@ -31,8 +32,9 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
         <div style={{ height: 2, width: 64, background: '#1a1a2e', opacity: 0.5, margin: '22px 0' }} />
         <p className="font-sans" style={{ fontSize: 18, lineHeight: 1.65, color: '#3a3a4a', maxWidth: 520 }}>
           A tablet platform for visual-ergonomics experiments. Each session measures reading,
-          attention and reaction performance across {CONDITIONS.length} display conditions, with webcam-based
-          blink/gaze estimation and validated fatigue questionnaires.
+          attention and reaction performance across {CONDITIONS.length} display conditions, with blink,
+          gaze and head-position estimates from the tablet&apos;s front camera and validated fatigue
+          questionnaires.
         </p>
         <p className="font-sans" style={{ fontSize: 15, color: '#4a4a60', marginTop: 28 }}>
           Experimental logic by Gyandeep Nath
@@ -56,7 +58,11 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
              */
             ['Conditions', `${CONDITIONS.length} (${new Set(CONDITIONS.map((c) => c.polarity)).size} polarity × ${new Set(CONDITIONS.map((c) => c.colorName)).size} colour)`],
             ['Design', 'Within-subjects, Williams Latin square'],
-            ['Duration', `${CONFIG.SINGLE_SITTING_DURATION} per sitting`],
+            /*
+             * Not "per sitting" (audit 86 UI-13): the constant is the SINGLE sitting's duration, the consent's
+             * own figure, and a split sitting runs half the conditions. Counted as the session form counts it.
+             */
+            ['Duration', `${CONFIG.SINGLE_SITTING_DURATION} for all ${chosenSittingSize('single')} conditions in one sitting; a split sitting runs ${chosenSittingSize('split')} of them`],
             ['Tasks', 'Reading · Search · Go/No-Go'],
           ].map(([k, v]) => (
             <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '12px 0', borderBottom: '1px solid #e5e2dc' }}>

@@ -777,6 +777,14 @@ else a sitting produces put together.
    to the condition and the consent it was taken under. Those files show the participant's face:
    keep them under the terms of the grant that was given, not with the CSVs.
 
+   When the files have been written the app asks **Did every file arrive?** At that moment they are
+   in the tablet's own Downloads folder and nowhere else, so the answer is **Not yet**: the session
+   stays protected from automatic deletion. Press **Copied off and checked** only once the files are
+   copied off the tablet (step 5) and you have checked there that every one arrived. That answer is
+   what lets a session you later delete be purged from the recycle bin 30 days after the deletion;
+   without it the bin keeps the session until you purge it yourself. To give it later, export the
+   session again after copying — every export asks (Round 90).
+
    A session that did **not** finish can be exported too — Session Manager → **In progress** →
    **Export**. It carries `session_complete=false` and only the conditions that actually ran.
 4. **Check the export before the participant leaves the building.** Open:

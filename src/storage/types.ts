@@ -200,7 +200,8 @@ export interface SessionRecord {
    */
   exported_at?: number | null;
   /**
-   * When the OPERATOR confirmed the exported files are actually on the receiving computer.
+   * When the OPERATOR confirmed the exported files are copied off the tablet and checked there
+   * (the dashboard's "Did every file arrive?"; Round 90 reworded it, audit 86 UI-11).
    *
    * This, and not exported_at, is what may release a session to the unattended thirty-day purge.
    * The browser genuinely cannot tell whether a download landed, so the app must not assert that it

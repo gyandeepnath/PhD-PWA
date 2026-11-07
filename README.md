@@ -57,7 +57,7 @@ file**. A 30-day recycle bin holds soft-deleted sessions.
 - **[`docs/PROTOCOL.md`](docs/PROTOCOL.md)** — the authoritative stage sequence and scientific
   rationale.
 - **[`docs/AUDIT_FINDINGS.md`](docs/AUDIT_FINDINGS.md)** — the adversarial audit of the
-  instrument: what was found, what was fixed, and the 31 findings still open.
+  instrument: what was found, what was fixed, and what is still open.
 - **[`docs/LITERATURE_VALIDATION.md`](docs/LITERATURE_VALIDATION.md)** — what a literature sweep
   found for and against the protocol's scientific claims, and the design decisions it raises.
   **Every citation in it is unverified and must be resolved before use.**
@@ -70,7 +70,8 @@ file**. A 30-day recycle bin holds soft-deleted sessions.
 
 ## What an export contains
 
-21 files: **18 CSVs**, an analysis JSON, a complete backup, and a provenance manifest.
+23 files: **20 CSVs**, an analysis JSON, a complete backup, and a provenance manifest
+(`tests/readmeFigures.test.ts` holds these two numbers to what the export writes).
 
 `00_CODEBOOK.csv` documents **every** column in every file — type, unit, role and what it means —
 and `npm run verify:codebook` fails the build if a column is added without a description or a
@@ -131,20 +132,24 @@ with an explanation if you try.
 - **A new build cannot take over a running session.** The service worker installs and waits rather
   than claiming an open page, because claiming it would break the two lazily-loaded chunks: the
   dashboard, which is the only export path, and MediaPipe, which produces the primary outcome.
-- Webcam metrics are reported honestly: uncalibrated-gaze flag, sub-Nyquist blink tiers gated, and
+- Front-camera metrics are reported honestly: uncalibrated-gaze flag, sub-Nyquist blink tiers gated, and
   the blink count behind each primary-outcome ratio exported alongside it.
 
 ---
 
 ## Verification
 
-| Gate | What it covers |
-|---|---|
-| 364 unit and property tests | scoring, counterbalancing balance, contrast, storage, screening, gaze calibration, ocular metrics, backup/restore, media export, schema migration, consent enforcement, stimulus-typeface control, no-fabrication contract |
-| 6 Playwright E2E tests across 4 spec files | full no-camera run, input gating, double-click → single session, reload → resume, split session |
-| 6 stress rounds: 28 scenarios, 2,393 checks, 0 failures | adversarial input, pipeline joins, state machine, metamorphic properties, crash recovery |
-| Export verification, 587 checks | referential integrity, reproducibility, codebook coverage, filename portability |
-| Corpus and codebook gates | passage length and difficulty matching; complete data dictionary |
+Each command prints its own count; the table names what each one checks. (It used to quote counts —
+"364 unit and property tests", "6 Playwright E2E tests across 4 spec files" — that every round
+outdated.)
+
+| Gate | Command | What it covers |
+|---|---|---|
+| Unit and property tests (`tests/`) | `npm test` | scoring, counterbalancing balance, contrast, storage, screening, gaze calibration, ocular metrics, backup/restore, media export, schema migration, consent enforcement, stimulus-typeface control, no-fabrication contract, and the figures the documents quote |
+| End-to-end tests in a real browser (`e2e/`, `e2e-prod/`) | `npm run test:e2e`, `npm run test:e2e:prod` | full sittings at the study tablet's viewports, every screen fitting its box, input gating, double taps, resume, split sittings, the built and installed app |
+| Stress rounds | `npm run stress` | adversarial input, pipeline joins, state machine, metamorphic properties, crash recovery |
+| Export verification | `npm run verify:export` | referential integrity, reproducibility, codebook coverage, filename portability |
+| Corpus and codebook gates | `npm run verify:corpus`, `npm run verify:codebook` | passage length and difficulty matching; complete data dictionary |
 
 CI runs all of it on every push: [`.github/workflows/verify.yml`](.github/workflows/verify.yml).
 

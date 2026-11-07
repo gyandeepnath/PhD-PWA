@@ -56,7 +56,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                         mm per CSS px) and the eye-to-screen distance tape-measured (Round 74);
                         the device's viewport, pixel ratio, scale and build shown
   → COLOR_VISION        digital colour-vision SCREEN, not the Ishihara test (runs AFTER night-shift is off)
-  → CAMERA_SETUP        webcam permission (or skip → no eye tracking)
+  → CAMERA_SETUP        the tablet's front camera: permission and preview (or skip → no eye tracking)
   → CALIBRATION         on the grey field (Round 80): centre-fixation open-eye EAR + frontal-pitch baseline
                           (at least 6 s, on until 30 usable frames, at most 12 s; rule cal-r2), then a
                           three-dot gaze check across a reading line (rule gaze-r2) / positioning check;
@@ -121,7 +121,9 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                              break is a light screen; placed after the grey field it left every
                              post-break condition light-adapted, at 4 of 9 transitions.)
   → CVSQ_END            validated CVS-Q again (Δ from baseline = primary validated fatigue outcome)
-  → SESSION_COMPLETE    thank-you; session marked complete
+  → NASA_TLX            NASA-TLX, six raw subscales, workload over the whole session; the session
+                        is marked complete when it is submitted
+  → SESSION_COMPLETE    thank-you; end illuminance logged here (or later from the Session Manager)
   → EXPORT_DASHBOARD    researcher: charts, QC, CSV/JSON export
 ```
 

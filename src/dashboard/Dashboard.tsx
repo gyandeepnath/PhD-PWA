@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { get, put } from '@/storage/db';
-import { gatherSession, listSessions, type SessionBundle } from '@/storage/gather';
+import { BIN_RETENTION_MS, gatherSession, listSessions, type SessionBundle } from '@/storage/gather';
 import { buildConditionSummaries, baselineFatigueMean, cohortSummary, type ConditionSummary, type CohortSummary } from './aggregate';
 import { MEASURE } from '@/tracking/measurementSchedule';
 import { FPS_GATE } from '@/tracking/frameRateGate';
@@ -25,6 +25,9 @@ import { ScrollCue } from '@/components/ScrollCue';
 import { useDialog } from '@/components/ConfirmDialog';
 import { BuildIdentity } from '@/components/BuildInfo';
 import { buildIdentity } from '@/lib/env';
+
+/** How long the recycle bin keeps a deleted session before a confirmed one may be purged (gather.ts). */
+const BIN_RETENTION_DAYS = Math.round(BIN_RETENTION_MS / (24 * 60 * 60 * 1000));
 
 type Tab = 'overview' | 'cohort' | 'reaction' | 'fatigue' | 'search' | 'eye' | 'export';
 const TABS: { id: Tab; label: string }[] = [
@@ -56,7 +59,13 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   const [sessionId, setSessionId] = useState<string | undefined>(initialSessionId);
   const [bundle, setBundle] = useState<SessionBundle | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
-  const [exporting, setExporting] = useState(false);
+  /*
+   * Which export is running. One flag for the three buttons made "Download analysis dataset" read
+   * "Building…" while the bundle's "Did every file arrive?" question was open and nothing was being
+   * built (audit 86 UI-11). Any export still holds all three buttons; each says only what it is doing.
+   */
+  const [busy, setBusy] = useState<null | 'bundle' | 'analysis' | 'media'>(null);
+  const exporting = busy != null;
   const [analysisSummary, setAnalysisSummary] = useState<string | null>(null);
   const [cohort, setCohort] = useState<CohortSummary | null>(null);
   const [cohortBusy, setCohortBusy] = useState(false);
@@ -135,7 +144,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
 
   const onExport = async () => {
     if (!bundle) return;
-    setExporting(true);
+    setBusy('bundle');
     try {
       let files;
       try {
@@ -169,20 +178,28 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       const fresh = await get('sessions', bundle.session.session_id);
       if (fresh) await put('sessions', { ...fresh, exported_at: now }, { evenWhenFull: true });
 
+      /*
+       * ASKED ABOUT THE TABLET THE FILES ARE ON (audit 86 UI-11). It said "Check the receiving computer NOW":
+       * on the tablet the files land in its own Downloads folder, so at this moment there is no other
+       * computer, and a yes given on seeing them there released the session to the purge below while the
+       * only copies were still on the tablet. It now says where the files are, when to answer yes, and what
+       * a yes releases.
+       */
       const confirmed = await dialog.confirm({
         title: 'Did every file arrive?',
-        body: `${files.length} files were sent to your downloads.\n\n`
-          + 'Check the receiving computer NOW and confirm they all arrived.\n\n'
-          + 'Until you confirm, this session is protected from automatic deletion.',
-        confirmLabel: 'I have checked — the files are there',
-        cancelLabel: 'Not yet, or some are missing',
+        body: `${files.length} files were sent to this tablet's Downloads folder.\n\n`
+          + 'Press "Copied off and checked" only once they are copied off this tablet and you have checked there that all of them arrived.\n\n'
+          + `Until then this session is protected: a session you delete is purged ${BIN_RETENTION_DAYS} days later only if its export was confirmed here. `
+          + 'To confirm later, export it again after copying.',
+        confirmLabel: 'Copied off and checked',
+        cancelLabel: 'Not yet',
         testId: 'export-confirm-dialog',
       });
       if (confirmed) {
         const again = await get('sessions', bundle.session.session_id);
         if (again) await put('sessions', { ...again, export_confirmed_at: Date.now() }, { evenWhenFull: true });
       }
-    } finally { setExporting(false); }
+    } finally { setBusy(null); }
   };
 
   /*
@@ -231,7 +248,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
    * every row and in two accompanying files.
    */
   const onExportAnalysis = async () => {
-    setExporting(true);
+    setBusy('analysis');
     try {
       const sessions = await listSessions();
       // The pooled set carries no 07b/07c, so the blink records are not read (Round 81).
@@ -244,12 +261,12 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
         + (dataset.integrity.clean ? '' : ` · ${dataset.integrity.issues.filter((i) => i.severity === 'blocking').length} blocking issue(s) — see analysis_join_issues.csv`),
       );
       await downloadExport(dataset.files);
-    } finally { setExporting(false); }
+    } finally { setBusy(null); }
   };
 
   const onExportMedia = async () => {
     if (!bundle) return;
-    setExporting(true);
+    setBusy('media');
     try {
       const r = await downloadSessionMedia(bundle);
       const lost = r.missing.length
@@ -266,7 +283,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           + `use the session's media revocation to remove them.\n  ${r.refused.join('\n  ')}`
         : '';
       await dialog.alert({ title: 'Media files written', body: `${r.written} media file(s) written.${lost}${held}`, confirmLabel: 'Done' });
-    } finally { setExporting(false); }
+    } finally { setBusy(null); }
   };
 
   /*
@@ -574,7 +591,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           <BarPanel title="Engagement quality score" data={summaries.map((s) => ({ label: s.condition_label, value: s.quality_score, flag: s.engagement }))} />
           <Caveat
             short="The fatigue markers used here are a lower blink rate and a higher incomplete-blink ratio. PERCLOS tracks drowsiness, so a value near zero is normal in an awake reader."
-            more="What these numbers mean. For visual fatigue (this study) the markers used are a LOWER blink rate and a HIGHER share of incomplete blinks (Portello, Rosenfield & Chu 2013), read with the first/second-half bins and the gap between blinks. PERCLOS counts time with the eyes mostly closed; it tracks drowsiness, so in an awake participant it is small and a value near zero is not a fault (PERCLOS: Dinges & Grace 1998, FHWA tech brief — metadata only, not yet read at source). Blink rate goes DOWN with concentrated reading and UP with sleepiness, so never read 'higher = more tired' on its own. Blink duration and the micro-blink count need 25 frames a second or more; the blink counts and the incomplete-blink ratio follow the eye sampling rate's tiers (adequate from 20). The on-screen ratio is a quality check of whether the participant looked at the tablet, and needs a passed gaze check. A webcam is a screening-grade measure; an infrared eye-tracker is the reference standard." />
+            more="What these numbers mean. For visual fatigue (this study) the markers used are a LOWER blink rate and a HIGHER share of incomplete blinks (Portello, Rosenfield & Chu 2013), read with the first/second-half bins and the gap between blinks. PERCLOS counts time with the eyes mostly closed; it tracks drowsiness, so in an awake participant it is small and a value near zero is not a fault (PERCLOS: Dinges & Grace 1998, FHWA tech brief — metadata only, not yet read at source). Blink rate goes DOWN with concentrated reading and UP with sleepiness, so never read 'higher = more tired' on its own. Blink duration and the micro-blink count need 25 frames a second or more; the blink counts and the incomplete-blink ratio follow the eye sampling rate's tiers (adequate from 20). The on-screen ratio is a quality check of whether the participant looked at the tablet, and needs a passed gaze check. A tablet's front camera is a screening-grade measure; an infrared eye-tracker is the reference standard." />
           <div style={{ gridColumn: '1 / -1' }}>
             <More label="Every number, as tables" testId="eye-tables">
               <EyeTables summaries={summaries} />
@@ -600,7 +617,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           <button onClick={onExport} disabled={exporting}
             className="mt-4 rounded-xl px-8 py-3 font-sans text-base font-medium text-white transition active:scale-95"
             style={{ background: UI_TEXT.ink, cursor: exporting ? 'wait' : 'pointer' }}>
-            {exporting ? 'Exporting…' : 'Download data bundle ↓'}
+            {busy === 'bundle' ? 'Exporting…' : 'Download data bundle ↓'}
           </button>
 
           {/* The analysis dataset pools every session on the device, so it is offered separately
@@ -614,7 +631,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
             <button onClick={onExportAnalysis} disabled={exporting}
               className="mt-3 rounded-xl px-8 py-3 font-sans text-base font-medium transition active:scale-95"
               style={{ background: '#fff', color: UI_TEXT.ink, border: `1px solid ${UI_TEXT.ink}`, cursor: exporting ? 'wait' : 'pointer' }}>
-              {exporting ? 'Building…' : 'Download analysis dataset ↓'}
+              {busy === 'analysis' ? 'Building…' : 'Download analysis dataset ↓'}
             </button>
             {analysisSummary && (
               <p className="font-sans text-[15px]" style={{ marginTop: 10, color: UI_TEXT.muted }}>{analysisSummary}</p>
@@ -691,7 +708,7 @@ const HOW_TO_READ: Record<Tab, string[]> = {
   ],
   export: [
     'Download data bundle: this sitting. Download analysis dataset: every sitting on this tablet, pooled.',
-    'Check on the receiving computer that every file arrived before confirming.',
+    'After a bundle download the app asks whether every file arrived. Answer Not yet until the files are copied off this tablet and checked there.',
   ],
 };
 
