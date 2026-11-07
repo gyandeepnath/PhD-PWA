@@ -44,13 +44,31 @@ interface Props {
  * the screen scrolls, with the "More below" cue. The wording of every question and anchor is
  * unchanged. The value readout was in #4f8ef7, 3.2:1 on the cream; the accent is now #1f5fbf.
  */
+/** Each scale is a target this tall, design px: the operator floor for a control (theme.css .vl-tall). */
+export const TLX_TARGET_PX = 44;
+/** The track drawn across the middle of the target, design px. */
+export const TLX_TRACK_PX = 8;
+/**
+ * The untouched track: the ink at 55% (alpha 8c), 3.7:1 on the instrument's cream (tests/tlxTrack.test.ts).
+ *
+ * It was the ink at 13% (alpha 22), 1.3:1, on a 6 px strip (audit 86 UI-10). The thumb is hidden until a
+ * scale is touched — no default position to anchor a rating on — so the empty track is the only thing
+ * that shows the participant where each scale is; WCAG 1.4.11 asks 3:1 for a control's visible edge.
+ * A tap 12-22 px off the strip's centre line set nothing, so the band a finger had to find was about 24
+ * CSS px against the rating lines' 46. Each scale is now a 44 px target with an 8 px track painted across
+ * its middle. What is recorded is unchanged: the same 0-100 scale in steps of 5, set where the finger lands.
+ */
+export function tlxTrackEmpty(text: string): string {
+  return `${text}8c`;
+}
+
 export function NasaTlx({
   accent = '#1f5fbf',
   background = '#F8F7F5',
   text = '#1a1a2e',
   onComplete,
 }: Props) {
-  const trackEmpty = text + '22';
+  const trackEmpty = tlxTrackEmpty(text);
   const [values, setValues] = useState<TlxRatings>(defaultTlxRatings());
   const [touched, setTouched] = useState<Record<TlxKey, boolean>>(
     () => Object.fromEntries(TLX_DIMENSIONS.map((d) => [d.key, false])) as Record<TlxKey, boolean>,
@@ -74,7 +92,7 @@ export function NasaTlx({
             <div key={d.key}>
               <div className="flex justify-between font-sans" style={{ marginBottom: 4, fontSize: 18, fontWeight: 600 }}>
                 <span>{d.label}</span>
-                <span style={{ fontSize: 16, fontWeight: 700, color: touched[d.key] ? accent : text }}>
+                <span data-testid={`tlx-value-${d.key}`} style={{ fontSize: 16, fontWeight: 700, color: touched[d.key] ? accent : text }}>
                   {touched[d.key] ? values[d.key] : 'not set'}
                 </span>
               </div>
@@ -89,12 +107,13 @@ export function NasaTlx({
                   step={TLX_STEP}
                   value={values[d.key]}
                   aria-label={d.key}
-                  className={touched[d.key] ? undefined : 'vl-untouched'}
+                  className={touched[d.key] ? 'vl-tall' : 'vl-tall vl-untouched'}
                   onPointerDown={() => setTouched((t) => ({ ...t, [d.key]: true }))}
                   style={{
                     flex: 1,
                     color: accent,
-                    background: `linear-gradient(to right, ${touched[d.key] ? accent : trackEmpty} ${values[d.key]}%, ${trackEmpty} ${values[d.key]}%)`,
+                    // The track: an 8 px band across the middle of the 44 px target.
+                    background: `linear-gradient(to right, ${touched[d.key] ? accent : trackEmpty} ${values[d.key]}%, ${trackEmpty} ${values[d.key]}%) center / 100% ${TLX_TRACK_PX}px no-repeat`,
                   }}
                   onChange={(e) => {
                     const v = Number(e.target.value);

@@ -250,6 +250,24 @@ input[type='range']::-moz-range-thumb {
 }
 
 /*
+ * A slider that is its own full-size target (the NASA-TLX scales; audit 86 UI-10). The 6 px input above
+ * is the whole target, so a tap a little off its line set nothing; this one is 44 px tall, as every
+ * operator control is, with its track painted as an 8 px band across its middle by the component
+ * (NasaTlx.tsx), and the thumb centred on that band.
+ *
+ * The negative margin gives the layout back the 6 px the input took before (44 - 2 x 19), so nothing on
+ * the screen moves: the target reaches into the gap above and below its row instead of pushing the rows
+ * apart. Taller rows put the questionnaire's Continue below the fold at 1152 x 720, where all six scales
+ * and Continue fitted (measured in Round 90). The scale's length, its anchors and where a tap lands on
+ * it are the same to the pixel (e2e/tlxTracks.spec.ts).
+ */
+input[type='range'].vl-tall {
+  height: 44px;
+  margin: -19px 0;
+  border-radius: 0;
+}
+
+/*
  * A rating slider the participant has NOT yet touched shows no thumb.
  *
  * Every rating scale started with a visible thumb at a default — display perception at 50 with the

@@ -190,7 +190,8 @@ describe('instruction text on condition screens is never faded', () => {
     // ratings toward it. The NASA-TLX keeps its published slider and hides the thumb (`vl-untouched`);
     // pointer-down marks the answer, so a tap landing exactly on the hidden default still registers.
     const tlx = read('src/scales/NasaTlx.tsx');
-    expect(tlx).toMatch(/'vl-untouched'/);
+    // (Round 90: every TLX scale also carries vl-tall, its 44 px target; audit 86 UI-10.)
+    expect(tlx).toMatch(/[' ]vl-untouched'/);
     expect(tlx).toMatch(/onPointerDown=/);
     expect(read('src/styles/theme.css')).toMatch(/\.vl-untouched::-webkit-slider-thumb \{\s*opacity: 0;/);
     // The two condition-coloured ratings are visual analogue lines (Round 84, scales/vas.ts): no value
