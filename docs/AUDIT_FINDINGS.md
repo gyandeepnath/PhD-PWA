@@ -8412,3 +8412,274 @@ the declined screen, and none when nothing is unexercisable.
 | Manifests' checksum and bytes | over UTF-16 code units | over the UTF-8 bytes written (`checksum_basis`) | both manifests; ANALYSIS_PLAN §7 |
 | Enrolment number | allocated at Begin setup | allocated at consent; provisional before | codebook (01); OPERATOR_MANUAL §3 |
 | Every other rule (tap guard, attempt counting, scale freeze, inter-blink interval, reaction summary, rating format, typography, straight-lining, frame-rate gate, blink rule, fitted minimum, calibration, camera check, gaze, reliability, engagement thresholds) | unchanged | unchanged | as before |
+
+## Round 90 — the screens and their words: the formal plates on the colour notice, the background-failure panel, typed hours, the camera set-up, the type, the NASA-TLX scales, and what the documents say
+
+The fifth set of fixes for audit 86 (2.4.0 at 26e909c), after Rounds 86-89 fixed the walk-through and data
+findings: the screens-and-wording findings UI-1 to UI-13 and the four the second reviewer added (M1-M4). Each was reproduced by the auditor and again,
+independently, by the second reviewer, at the study tablet's viewports.
+
+**No rule, threshold, cutoff or scoring rule changed, and no measured value changed. No stored record
+changed shape, so the database version is unchanged.** What changes in the data: a deficiency found on
+the formal plates after the app's colour screen can now be recorded, and excludes as the rule always said
+(UI-7); a typed hour outside 0-24, or text that is not a number, can no longer be stored (UI-8). The
+NASA-TLX scales are drawn more visibly (UI-10) — same scale, anchors and recording — and the consent now
+names the gaze estimate the camera already made (UI-5) — nothing collected changed. The codebook says so
+for each: 11 `cvd_clinical`; the hour fields in 01, 11 and the analysis dataset; 14 `raw_tlx`; 01
+`consent_camera_metrics`. Nothing here was measured on the Xiaomi Pad 6.
+
+### In plain words
+
+1. **The formal plates can be recorded where the app asks for them (UI-7, M3).** When the app's own colour
+   screen did not pass, its notice said to give the formal plates "and record the result on the profile
+   form" — but the profile comes before the colour screen and cannot be reopened in that sitting. A
+   deficiency found on the plates could not be entered, and the participant stayed eligible. The notice
+   now asks for the result itself (normal, deficient, not done; nothing chosen for you) and records it by
+   the profile's own rule.
+2. **The "Something failed in the background" panel can be put away, and covers no set-up button (M1,
+   UI-4, UI-1).** It sat over the foot of the screen for good: a one-line failure covered the whole *Next
+   page* button, and the storage-full message covered both of pre-flight's buttons. Only a reload — which
+   costs the condition — cleared it, and its instruction line was 12 px faded monospace. It now has
+   **Noted — hide**, every line is at least 15 px in the normal type, and the set-up screens end above it
+   while it is up. The researcher chip at the bottom left no longer lies over the profile's *Back* button.
+3. **Typed hours are numbers in range (UI-8, M4).** "abc" in *Daily screen hours* was stored as an empty
+   cell, a space as 0, and 60 hours a day or 30 hours awake as typed. Both fields now take a number from 0
+   to 24 and say why when they do not.
+4. **Camera set-up says there is more below (UI-6).** With the preview running, its two buttons were below
+   the foot of the screen at every tablet viewport and nothing said so. It now shows *More below*, and the
+   researcher's bench check sits under the buttons, not above them.
+5. **Sentences in the normal type, nothing under 14 px (UI-3, UI-9).** The calibration's instructions, the
+   camera check's result and the camera-lost notice were set in the typewriter face kept for codes and
+   numbers; on the camera-lost notice the sentence saying what *Continue without the camera* costs was the
+   smallest, faintest text on the screen. They are now in Roboto at 15 px or more, and the cost sits under
+   the button it belongs to.
+6. **The NASA-TLX scales can be seen and hit (UI-10).** Until touched, each scale was a pale 6 px line
+   (1.3:1 against the page), and a press about 12 px off the line set nothing. Each is now a 44 px target
+   with a darker line (3.75:1). Nothing on the screen moved, and a press sets exactly the value it set
+   before.
+7. **The consent says everything the camera measures (UI-5) — for you to check against the approved
+   text.** The consent named blinks, eyelid closure and head position; the camera set-up's privacy box said
+   "blink rate, head position and gaze zone"; the calibration runs a gaze check, and the export carries its
+   result. All three now use one sentence that also names "roughly whether you are looking at the screen".
+   **Nothing collected changed.** See §9, item 1.
+8. **The documents and the export screen say what the app does (UI-2, M2, UI-11, UI-12, UI-13).** README
+   counts, the "Did every file arrive?" question, PROTOCOL's flow, and the landing page. Detailed in §7.
+
+### 1. The formal plates on the colour notice (9631ee6) — UI-7, M3
+
+**Found.** IshiharaTest's operator notice said "record the result on the profile form as normal or
+deficient"; its only button was *Recorded — continue*. The profile (PARTICIPANT_PROFILE) is before the
+colour screen in SETUP_ORDER, the only way back from camera set-up returns to consent and then straight to
+camera set-up, and a resume skips a completed profile. The audit's run: profile *not done*, screen failed,
+notice acknowledged — `cvd_clinical` not_done, `eligible` TRUE, no reason. The profile's self-report label
+("the colour-vision plates follow") sat above the formal-plates field and invited *not done* (M3).
+
+**Fixed.** The notice has the three-way control (pre-filled with nothing; the profile's answer is shown
+beside it) and *Record and continue*, enabled only after a choice. The profile and the notice record the
+answer through one function, `recordFormalPlates` (eligibility.ts), with its own reason owner
+(`formal_plates`), so writing it never strips the profile's age or contact-lens reasons. Its rule is the
+codebook's: a *deficient* result at any sitting stands, and *not done* never replaces a real result. The
+exclusion reason now follows the stored result, not the latest answer: a participant *deficient* at one
+sitting and *normal* at the next was stored `cvd_clinical` deficient with `eligible` TRUE, against the
+codebook's own rule. The profile's label now says the formal plates are done before the app's screen.
+OPERATOR_MANUAL §4 says to record the result on the notice.
+**Tests.** `tests/formalPlates.test.tsx` (the notice's control, nothing preselected, the stored value
+shown), `tests/eligibility.test.ts` (the merge: deficient sticky, not done never overwrites, the other
+owners' reasons kept), `e2e/formalPlates.spec.ts` (the audit's reproduction: profile *not done*, screen
+failed, *Deficient* on the notice — the row is `deficient`, `eligible` FALSE, reason "formal plates").
+
+### 2. The background-failure panel and the researcher chip (2e74dc9, a4c7746) — M1, UI-4, UI-1
+
+**Found.** lib/asyncFailure.ts appended a fixed panel to the page and never removed it. With the storage-full
+message (four lines) it covered pre-flight's two buttons scrolled to the end; on a reading page a one-line
+failure covered *Next page* entirely; Exit and Resume kept it. Its instruction line was 12 px monospace at
+85% opacity. Separately, the collapsed researcher chip lay over the left end of the profile's *← Back to
+consent* as the screen opened (elementFromPoint at 15% of the button returned the chip).
+
+**Fixed.** The panel carries the time and **Noted — hide** (the next failure raises it again); every line is
+Roboto, 15 px or more, full opacity. While it is up its height is published as `--vl-alert-h`, and the
+set-up and closing screens, the landing page, the session manager and the dashboard end above it.
+**Condition screens do not move** — their geometry is the stimulus; there the participant stops, as the
+panel asks, and the researcher hides it. The chip: every set-up screen now ends above the chip's band
+instead of padding only the end of its scroll, so no control lies under the chip at any scroll position.
+The band is taken only where the chip is drawn (a4c7746): on the New Session form, which has no chip, it
+had pushed *Begin setup* below the fold, which the full end-to-end suite caught.
+**Tests.** `e2e/backgroundFailure.spec.ts`: the storage-full message on pre-flight scrolled to its end —
+both buttons reachable by a finger, every line at least 14 px, *Noted — hide* removes it; the New Session
+form gives up no band and *Begin setup* is under a finger. `e2e/allScreensFit.spec.ts` now checks the
+chip at the top, middle and end of every scroll box; `e2e/fullRun.spec.ts` checks no panel appears in a
+normal run.
+
+### 3. Typed hours (10ecab8) — UI-8, M4
+
+**Found.** *Daily screen hours* was checked only for being non-empty and *Hours since you woke up* only
+for `Number(text)` being finite; both were stored as `Number(text)`: "abc" became NaN (an empty CSV cell), a
+space 0, "6-8" and 60 or 30 accepted. Daily screen hours is a pre-specified moderator in both templates.
+**Fixed.** One rule for a typed number (lib/numberEntry.ts: digits with one decimal point or comma, spaces
+ignored, inside a range) gives the value that is both checked and stored: age 18-35, both hour fields
+0-24, with a line under a field whose text is not accepted. The session form's lux, which also read a space
+as 0 lux, and the ruler check use the same rule. The codebooks give the range and say what an earlier row
+can hold. **Tests.** `tests/profileNumbers.test.tsx`: Continue stays disabled, with the reason, for "abc",
+"6-8", " ", "25" and "-1" in either field, and is enabled for "6.5" and "6,5"; the stored value is the
+parsed number.
+
+### 4. Camera set-up (b6638a6) — UI-6
+
+**Found.** Once the preview ran, *My face is centred — continue* and *Continue without camera* were at
+y=923 (1152x720), 816 (1152x650) and 1531 (1920x1200) and the screen had no *More below* cue, the one long
+set-up screen without it. **Fixed.** The cue is drawn, and the bench check (the researcher's, before the
+pilot) is below the two buttons. **Tests.** `e2e/allScreensFit.spec.ts` now checks, on every screen of a
+full sitting at four viewports and on the camera preview, that a scroll box with more below its foot
+shows its cue; it failed on the camera preview before.
+
+### 5. The type (aed316c) — UI-3, UI-9
+
+**Found.** CalibrationRoutine, CameraSelfTest, the camera-lost notice (inline in Experiment.tsx) and the
+render-error title set sentences and buttons in DM Mono, against Round 61's rule (sentences in Roboto,
+monospace for inputs, codes and numbers); nothing tested it outside the condition screens. On the
+camera-lost notice the consequence line was 12 px in #8fa0c0.
+**Fixed.** Those sentences and buttons are Roboto. **Left as they were, on purpose:** the lines drawn while
+the eye is being measured (the calibration's status under the dot, "Once more — look at the dot", its step
+row; the camera check's "Blink when the dot flashes · 2 of 5"), so the screens the baselines are taken on
+do not change; and the grey adaptation field's three lines before every display (see §9, item 3). The
+notice is its own component (CameraLostNotice.tsx), Roboto, nothing under 15 px, its colours at 4.5:1 or
+more, the consequence sentence under the two buttons, opening with the button's name. Its words are
+otherwise unchanged. **Tests.** `tests/operatorType.test.ts` counts every monospace use left in these
+files, each with its reason; a new one fails until it has one. It also holds the notice to 14 px and
+4.5:1. `tests/contrast.test.ts` now reads the notice's file. `e2e/cameraLost.spec.ts` reads the notice's
+computed type in a real browser: every line 14 px or more, none monospace.
+
+### 6. The NASA-TLX scales (e9f4883) — UI-10
+
+**Found.** The untouched track was the ink at 13% alpha: (218,218,218) on the cream, 1.31:1 (WCAG 1.4.11 asks
+3:1 for a control's visible edge). The thumb is hidden until touched, deliberately (no default position to
+anchor on), so the track is the only thing that shows where a scale is. The input was 6 px tall; presses
+12-22 px off its centre line set nothing.
+**Fixed.** Each scale is a 44 px target with an 8 px track painted across its middle, at the ink's 55%
+(3.75:1). A first version made each row taller and pushed *Continue* below the fold at 1152x720, where the
+six scales and *Continue* had fitted; a negative margin now gives the layout back the 6 px the input took,
+so nothing on the screen moves.
+**Measured, before and after, at 1152x720** (the same e2e walk on the old and the new code): each of the six
+inputs' position and width (139.6/682.0 px, 330.4 px wide), its anchors' positions, the screen's scroll
+height (652 px, no scroll), and the value a press on the line sets at 0, 3, 10, 25, 50, 75, 90, 97 and 100% of
+the width (0, 0, 5, 25, 50, 75, 95, 100, 100) — **identical**. The scale (0-100 in steps of 5), its anchors,
+the hidden thumb, the touched flag and the stored values are unchanged; the codebook's `raw_tlx` entry says
+when the drawing changed.
+**Tests.** `tests/tlxTrack.test.ts` (the track at 3:1 or more; it was 1.31:1); `e2e/tlxTracks.spec.ts`: a
+press 16 px above or below each of the six lines sets it, *Continue* is inside the screen as it opens and the
+screen does not scroll, and presses at a quarter, half and three quarters set 25, 50 and 75.
+
+### 7. What the documents and the export screen say (cd0f6db, 2becb88) — UI-2, M2, UI-11, UI-12, UI-13
+
+- **README (UI-2, M2).** "21 files: 18 CSVs" — the app writes 23 files, 20 of them CSVs, as its own dialog
+  says. Also "364 unit and property tests", "6 Playwright E2E tests across 4 spec files" and "the 31 findings
+  still open". The two export figures are now held to `buildExportFiles` by `tests/readmeFigures.test.ts`,
+  which also checks the dashboard's and the manual's CSV counts; the verification table names each gate and
+  its command instead of a count, and a test keeps counts out of it.
+- **"Did every file arrive?" (UI-11).** It said "Check the receiving computer NOW", while the files sit in
+  the tablet's own Downloads folder; confirming is what later lets a deleted session be purged from the
+  recycle bin after 30 days, so a yes given on seeing them there released the session while the only copies
+  were on the tablet. (It does not touch the downloaded files themselves.) It now says where the files are,
+  to press **Copied off and checked** only once they are copied off and checked there, what that releases,
+  and how to confirm later (export again). **Not yet** keeps the protection. The manual's export section
+  names the dialog and both answers. The three export buttons have their own busy state, so *Download
+  analysis dataset* no longer reads "Building…" while the question is open. Tests: `tests/exportConfirm.test.ts`;
+  `e2e/exportConfirm.spec.ts` drives the real dialog (its text, the other button's label while it is open,
+  *Not yet* records nothing, *Copied off and checked* records `export_confirmed_at`), and fails on the old
+  dialog and on a shared busy flag.
+- **PROTOCOL's session flow (UI-12)** left out NASA_TLX and said the sitting is marked complete on the
+  thank-you screen (it is marked at the NASA-TLX submit). `tests/protocolFlow.test.ts` parses the stage names
+  out of the block and holds them to the state machine's order.
+- **The landing page (UI-13)** printed "75–120 minutes per sitting" (the single sitting's duration) and
+  called the front camera a webcam, as did the dashboard's eye caveat. It now reads "75–120 minutes for all
+  10 conditions in one sitting; a split sitting runs 5 of them", from the session form's own count.
+  `tests/landingOverview.test.tsx`. (The word "webcam" stays where the literature uses it, for webcam-based
+  eye tracking as a class of method.)
+
+### 8. Not measured on the Xiaomi Pad 6
+
+- Every layout above was checked in a headless Chromium at 1152x720, 1152x650 and 1920x1200 (screenshots
+  looked at: landing, consent, profile with a refused hour, pre-flight with the storage-full panel up and
+  hidden, the colour notice, camera set-up with the preview, calibration intro and result, the camera
+  check's result, the camera-lost notice, the NASA-TLX, the export dialog), and by `allScreensFit` and
+  `fillScreen`. Not on the tablet.
+- The NASA-TLX target by finger. The e2e test presses with the mouse, which lands exactly where it is aimed;
+  on a touch screen Chromium may hand a near-miss to the control (touch adjustment), which the old 6 px
+  strip may have had on the tablet and the test cannot tell. The new 44 px target does not depend on it.
+- The new track's look at the tablet's brightness: the contrast is computed from the colours, not measured
+  on the panel.
+- The background-failure panel's height on the tablet, where its text wraps differently.
+
+### 9. For the investigator
+
+1. **The consent's camera sentence (UI-5) — please check it against the approved consent.** The consent now
+   reads: "by default the front camera is used only to compute numbers — how often you blink, how fully your
+   eyelids close, your head position and roughly whether you are looking at the screen — and the images
+   themselves are discarded immediately and never stored", and the option "Use the camera for blink, eyelid,
+   head-position and gaze measures". The same words are in the camera set-up's privacy box and the manual's
+   spoken script (one source: src/start/cameraMeasures.ts). **Nothing collected changed**: the gaze estimate
+   (`on_screen_ratio`, 07) was computed before and is computed now; the participant is now told. The synopsis
+   says "blink metrics and head position" (SYNOPSIS_AdtU.md:377), which matches the old consent, and "limited
+   to gaze zones" (:395), which no longer describes what is computed (zones went with gaze-r1). If the
+   approved consent cannot name the gaze estimate, the two choices are an amendment to the ethics approval or
+   to stop deriving and exporting it — a change to what is collected, and yours to make. The sentence is one
+   constant, so either change is one edit. The codebook's `consent_camera_metrics` entry says which wording
+   a sitting was consented under (by build).
+2. **Hours awake (UI-8).** *Hours since you woke up today* now takes 0-24, as specified. A participant awake
+   for more than 24 hours cannot be entered; if that should be possible (it would also bear on whether the
+   sitting should go ahead), the upper bound is one constant.
+3. **The grey adaptation field's words (UI-3).** Before every display the grey field shows "Rest your eyes ·
+   you can continue in Ns" and its Continue in the typewriter face. It is part of the display sequence the
+   participant sees ten times, so it was left as it is. Changing its face would not change its luminance in
+   any way that matters, but it is a change to what the participant sees between displays: yours to decide.
+4. **The formal-plate rule (UI-7).** A participant recorded *deficient* at one sitting and *normal* at a
+   later one is now `eligible` FALSE, as the codebook always said; before, the later answer made them
+   eligible while `cvd_clinical` stayed *deficient*. Exports taken before this round may hold such a row.
+5. **Old exports.** Rows written before this round can hold a typed hour above 24, a blank where text was
+   typed, or 0 where a space was; and a formal-plate deficiency found after the colour screen is missing from
+   them (the notice could not record it). Re-export from the tablet for the hour columns' codebook text; the
+   values themselves were stored as typed and are not rewritten.
+6. **On the tablet:** look once at the NASA-TLX (can the six scales be seen before they are touched, and does
+   a fingertip near a line set it?), the camera set-up with the preview running (the *More below* cue), and
+   the colour notice's three buttons.
+
+### 10. Checks run
+
+- On the final code of this round (2becb88): `npm run verify` green — lint, types, 132 test files with 1,835
+  unit tests, the corpus and codebook gates (538 codebook entries over 19 files), the export gate 886/886,
+  and both analysis templates in R and Python. The **whole end-to-end suite, retries off: 106 of 106
+  passed** (18.8 min; six more than Round 89: the new specs for the alert, the formal plates, the NASA-TLX
+  and the export question). `npm run build` (the bundle check: 42 assets, all precached), then the
+  production-bundle suite, retries off: 7 of 7.
+- **Screens looked at**, at 1152x720, 1152x650 and 1920x1200, in one sitting with the fake camera driven to
+  each: the landing page, consent, the profile (as it opens, and with "abc" and "30" typed), pre-flight with
+  the storage-full alert up (scrolled to its end) and hidden, the colour notice before and after a choice,
+  camera set-up with the preview running, the calibration's introduction and result, the camera check's
+  result, the camera-lost notice over a reading page, the NASA-TLX, and the export tab with its question
+  open. At every size: no control under the researcher chip or the alert, the *More below* cue wherever a
+  screen continues, nothing cut off at the right.
+- **Each fix fails its tests when reverted**, checked for this round: the type (UI-3, UI-9) — with the
+  sources as before, 5 of the 16 type tests fail and the notice's wiring test fails; the consequence line
+  set back to 12 px monospace — the camera-lost end-to-end test fails (12 < 14); the NASA-TLX's old track
+  colour — 2 of 3 contrast tests fail; the scales without the 44 px target — the end-to-end test fails (a
+  press 16 px off the line sets nothing); the target without the negative margin — it fails again
+  (*Continue* at 693.6 px, below the screen's 652); the consent wording as before (UI-5) — 2 of 4 fail; the
+  README, PROTOCOL, dialog and landing page as before — 3 of 5, 4 of 4, 4 of 4 and 2 of 2 fail; the old
+  dialog, and the new one with a shared busy flag — the export end-to-end test fails on each; the profile
+  as before (UI-8) — 3 of 7 fail; the formal-plate verdict following the latest answer (UI-7) — 1 of 10
+  fails. The end-to-end checks of the alert, the chip's band and the camera set-up's cue (2e74dc9, a4c7746,
+  b6638a6) were checked against their reversion when they were made (a4c7746: 68 px given up on the New
+  Session form); that was not repeated in this session.
+- Two unit tests that pinned text this round changed on purpose were updated: the dashboard's eye caveat
+  ("A webcam" is now "A tablet's front camera") and the NASA-TLX's untouched class (now beside
+  `vl-tall`). The camera-lost wiring test now reads the new component's call.
+
+### 11. Versions in the data
+
+| Rule or format | Before | Now | Where it is recorded |
+|---|---|---|---|
+| Formal plates (`cvd_clinical`) | entered on the profile only; the eligibility verdict followed the latest answer | entered on the profile or on the colour notice through one rule; the verdict follows the stored result | codebook (11 `cvd_clinical`); OPERATOR_MANUAL §4 |
+| Typed hours (`daily_screen_hours`, `hours_since_sleep`, `hours_since_sleep_session`) | any text; stored as `Number(text)` | a number from 0 to 24, or refused with a reason | codebook (01, 11, analysis dataset) |
+| NASA-TLX scale as drawn | 6 px strip at 1.31:1 | 44 px target, 8 px track at 3.75:1; same scale, anchors and values | codebook (14 `raw_tlx`); by build (`git_hash`, 01) |
+| Consent's camera sentence | blinks, eyelids, head position | the same and "roughly whether you are looking at the screen"; nothing collected changed | codebook (01 `consent_camera_metrics`); OPERATOR_MANUAL §3 |
+| Every rule (tap guard, attempt counting, scale freeze, inter-blink interval, reaction window and summary, rating format, typography of the stimuli, straight-lining, frame-rate gate, blink rule, calibration, camera check, gaze, reliability, engagement thresholds) | unchanged | unchanged | as before |
