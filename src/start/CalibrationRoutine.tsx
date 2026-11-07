@@ -268,6 +268,13 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
   const beginAgain = () => { baselineAttempts.current = 0; void start(); };
 
   // ---- the screen ----
+  /*
+   * TYPE (audit 86 UI-3). The intro, the result notices and their buttons were set in DM Mono, the
+   * typewriter face Round 61 kept for typed codes and numbers. They are sentences, and are now in Roboto.
+   * Three lines stay as they were because they are drawn WHILE the eye is measured — the status under the
+   * centre dot, "Once more — look at the dot" and the step row — and changing them changes the screen the
+   * baseline is taken on (tests/operatorType.test.ts counts them).
+   */
   const btn: React.CSSProperties = { padding: '14px 28px', borderRadius: 12, fontSize: 16, cursor: 'pointer' };
   const primary: React.CSSProperties = { ...btn, background: INK, color: '#ffffff', border: 'none' };
   const secondary: React.CSSProperties = { ...btn, background: 'transparent', color: INK, border: `1px solid ${INK}` };
@@ -301,12 +308,12 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
               Begin it again from the start.
             </p>
           )}
-          <p className="font-lab" style={{ ...para, maxWidth: 600 }}>
+          <p className="font-sans" style={{ ...para, maxWidth: 600 }}>
             First, look at the dot in the middle of the screen and blink as you normally would. Then the
             dot moves along a line: the middle, the left end, the right end. Look at it each time — you do
             not need to touch it. Keep your head still and move only your eyes.
           </p>
-          <button onClick={beginAgain} disabled={busy} data-testid="calibration-begin" className="font-lab" style={{ ...primary, marginTop: 24, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+          <button onClick={beginAgain} disabled={busy} data-testid="calibration-begin" className="font-sans" style={{ ...primary, marginTop: 24, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1 }}>
             {busy ? 'Stopping…' : 'Begin calibration →'}
           </button>
         </div>
@@ -360,19 +367,19 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
       {!showIntro && phase.kind === 'no_baseline' && (
         <div style={centred} data-testid="calibration-no-baseline" data-reason={phase.result.reason ?? ''}>
           <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 400 }}>No eye baseline</h1>
-          <p className="font-lab" data-testid="calibration-reason" style={{ ...para, fontWeight: 500 }}>
+          <p className="font-sans" data-testid="calibration-reason" style={{ ...para, fontWeight: 500 }}>
             {baselineReasonText(phase.result, baselineStep.minSamples)}
           </p>
-          <p className="font-lab" style={para}>
+          <p className="font-sans" style={para}>
             Every blink line is a fraction of this baseline, so without it no blink is counted in this
             sitting — the primary outcome included. Fix the cause and try again. Continuing without it
             is allowed, but it must be a deliberate choice.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button onClick={() => { void start(); }} disabled={busy} className="font-lab" data-testid="calibration-retry" style={primary}>
+            <button onClick={() => { void start(); }} disabled={busy} className="font-sans" data-testid="calibration-retry" style={primary}>
               Try the eye baseline again →
             </button>
-            <button onClick={onDone} disabled={busy} className="font-lab" data-testid="calibration-continue-anyway" style={secondary}>
+            <button onClick={onDone} disabled={busy} className="font-sans" data-testid="calibration-continue-anyway" style={secondary}>
               Continue without blink measures
             </button>
           </div>
@@ -382,16 +389,16 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
       {!showIntro && phase.kind === 'gaze_incomplete' && (
         <div style={centred} data-testid="calibration-gaze-incomplete" data-reason={phase.outcome.gaze?.reason ?? ''}>
           <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 400 }}>Gaze check incomplete</h1>
-          <p className="font-lab" data-testid="calibration-reason" style={{ ...para, fontWeight: 500 }}>{gazeReasonText(phase.outcome)}</p>
-          <p className="font-lab" style={para}>
+          <p className="font-sans" data-testid="calibration-reason" style={{ ...para, fontWeight: 500 }}>{gazeReasonText(phase.outcome)}</p>
+          <p className="font-sans" style={para}>
             This affects only a quality index (the on-screen ratio). The eye baseline was measured, and
             blinks are measured normally.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button onClick={() => { void repeatGaze(); }} disabled={busy} className="font-lab" data-testid="calibration-retry-thin" style={primary}>
+            <button onClick={() => { void repeatGaze(); }} disabled={busy} className="font-sans" data-testid="calibration-retry-thin" style={primary}>
               Repeat the gaze check →
             </button>
-            <button onClick={onDone} disabled={busy} className="font-lab" data-testid="calibration-accept-thin" style={secondary}>
+            <button onClick={onDone} disabled={busy} className="font-sans" data-testid="calibration-accept-thin" style={secondary}>
               Continue
             </button>
           </div>
@@ -401,10 +408,10 @@ export function CalibrationRoutine({ sessionId, measureEarBaseline, beginGazeCal
       {!showIntro && phase.kind === 'error' && (
         <div style={centred}>
           <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 400 }}>Calibration could not be saved</h1>
-          <p className="font-lab" style={para}>Calibration failed: {phase.message}</p>
+          <p className="font-sans" style={para}>Calibration failed: {phase.message}</p>
           <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button onClick={beginAgain} className="font-lab" data-testid="calibration-retry" style={primary}>Try calibration again →</button>
-            <button onClick={onDone} className="font-lab" data-testid="calibration-continue-anyway" style={secondary}>Continue without blink measures</button>
+            <button onClick={beginAgain} className="font-sans" data-testid="calibration-retry" style={primary}>Try calibration again →</button>
+            <button onClick={onDone} className="font-sans" data-testid="calibration-continue-anyway" style={secondary}>Continue without blink measures</button>
           </div>
         </div>
       )}

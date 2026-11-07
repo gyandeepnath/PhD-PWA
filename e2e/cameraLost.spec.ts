@@ -34,6 +34,21 @@ test('the camera stopping mid-condition stops the sitting, and Pause is the way 
   await intoReadingWithCamera(page);
   expect(await endCameraTrack(page)).toBeGreaterThan(0);
   await expect(page.getByTestId('camera-lost')).toBeVisible();
+  /*
+   * The notice is set in the operator type (audit 86 UI-3, UI-9): every line at 14 px or more, none in the
+   * monospace face. The sentence saying what "Continue without the camera" costs was 12 px DM Mono in a
+   * faded blue, the smallest text on the one screen whose job is that choice.
+   */
+  const type = await page.getByTestId('camera-lost').evaluate((el) => [...el.querySelectorAll('h1, p, button')].map((e) => {
+    const cs = getComputedStyle(e);
+    return { text: (e.textContent ?? '').slice(0, 48), px: parseFloat(cs.fontSize), face: cs.fontFamily };
+  }));
+  expect(type.length).toBeGreaterThanOrEqual(6);
+  for (const t of type) {
+    expect(t.px, t.text).toBeGreaterThanOrEqual(14);
+    expect(t.face, t.text).not.toMatch(/DM Mono|monospace/);
+  }
+  await expect(page.getByTestId('camera-lost-cost')).toContainText('every remaining condition is recorded with no eye measurements');
   await page.getByRole('button', { name: 'Pause and restart the camera' }).click();
   await expect(page.getByText(/In progress \(1\)/)).toBeVisible();
   await expect(page.getByRole('button', { name: /^Resume/ }).first()).toBeVisible();

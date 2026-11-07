@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="fixed inset-0 z-50 flex min-h-screen items-center justify-center bg-black/95 p-8">
           <div className="bg-lab-surface w-full max-w-md space-y-3 rounded-2xl border border-lab-warning/40 p-8 text-center">
-            <h1 className="text-lab-warning font-lab text-xl font-light">VisuLab Render Error</h1>
+            <h1 className="text-lab-warning font-sans text-xl font-light">VisuLab Render Error</h1>
             <p className="font-sans text-base leading-relaxed text-[#c8c8dc]">
               {this.state.error.message}
             </p>

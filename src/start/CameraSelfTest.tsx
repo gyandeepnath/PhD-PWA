@@ -180,7 +180,12 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false, 
       </div>
     </div>
   );
-  const btn: React.CSSProperties = { padding: '14px 26px', borderRadius: 12, fontSize: 16, cursor: 'pointer', fontFamily: '"DM Mono", monospace' };
+  /*
+   * TYPE (audit 86 UI-3). The intro, the result — every criterion, reason and note — and both buttons were
+   * DM Mono. They are sentences: Roboto now. The one line drawn while the flashes run and the blinks are
+   * measured ("Blink when the dot flashes · 2 of 5") is left as it was (tests/operatorType.test.ts).
+   */
+  const btn: React.CSSProperties = { padding: '14px 26px', borderRadius: 12, fontSize: 16, cursor: 'pointer', fontFamily: 'Roboto, ui-sans-serif, system-ui, sans-serif' };
   const primary: React.CSSProperties = { ...btn, background: INK, color: '#ffffff', border: 'none' };
   const secondary: React.CSSProperties = { ...btn, background: 'transparent', color: INK, border: `1px solid ${INK}` };
   // Reasons and notes: one item each, with a bullet and a gap, so two reasons never read as one paragraph.
@@ -197,7 +202,7 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false, 
             Start it again.
           </p>
         )}
-        <p className="font-lab" style={{ fontSize: 17, maxWidth: 560, marginTop: 14, lineHeight: 1.6 }}>
+        <p className="font-sans" style={{ fontSize: 17, maxWidth: 560, marginTop: 14, lineHeight: 1.6 }}>
           Look at the dot in the middle of the screen. Wait for it to flash white, then blink once — a
           normal, firm blink. It flashes {SELF_TEST.CUES} times and takes about {Math.round((SELF_TEST.FIRST_CUE_MS + SELF_TEST.CUES * SELF_TEST.CUE_EVERY_MS) / 1000)} seconds.
         </p>
@@ -230,12 +235,12 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false, 
       <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 400 }} data-testid="selftest-verdict" data-verdict={verdict}>
         {VERDICT_TEXT[verdict]}
       </h1>
-      <p className="font-lab" data-testid="selftest-attempt" style={{ fontSize: 15, marginTop: 4 }}>
+      <p className="font-sans" data-testid="selftest-attempt" style={{ fontSize: 15, marginTop: 4 }}>
         Attempt {r.attempt ?? 1}{r.earlier?.length ? ` · earlier: ${r.earlier.map((a, i) => `${i + 1} ${a.verdict === 'failed' ? 'did not pass' : a.verdict}`).join(', ')}` : ''}
       </p>
 
       {/* The three criteria, each with the value measured and the value needed (rule st-r3). */}
-      <ul data-testid="selftest-criteria" className="font-lab" style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', fontSize: 16, lineHeight: 1.6, textAlign: 'left' }}>
+      <ul data-testid="selftest-criteria" className="font-sans" style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', fontSize: 16, lineHeight: 1.6, textAlign: 'left' }}>
         <Criterion ok={r.detected >= need} testid="selftest-crit-blinks">
           Blinks seen: {r.detected} of {r.cued} flashes (needs {need})
         </Criterion>
@@ -251,7 +256,7 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false, 
         Each flash: a blink that began in the 1.2 s after it (st-r3), and when; or, for a flash with
         none, a blink that came just before it — too early to count, and the thing to tell the participant.
       */}
-      <div data-testid="selftest-cues" className="font-lab" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', alignItems: 'center', marginTop: 10, fontSize: 15 }}>
+      <div data-testid="selftest-cues" className="font-sans" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', alignItems: 'center', marginTop: 10, fontSize: 15 }}>
         <span>Flashes:</span>
         {(r.cueLags ?? []).map((lag, i) => {
           const early = lag == null ? (r.earlyLags?.[i] ?? null) : null;
@@ -272,7 +277,7 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false, 
         tablet.
       */}
       {r.pipeline && (
-        <p data-testid="selftest-pipeline" className="font-lab" style={{ fontSize: 14, marginTop: 8, maxWidth: 760, lineHeight: 1.5 }}>
+        <p data-testid="selftest-pipeline" className="font-sans" style={{ fontSize: 14, marginTop: 8, maxWidth: 760, lineHeight: 1.5 }}>
           Camera delivered {num(r.pipeline.camera_fps_delivered)} fps
           {r.pipeline.camera_setting_width ? ` at ${r.pipeline.camera_setting_width}×${r.pipeline.camera_setting_height}` : ''} ·
           tracker processed {num(r.pipeline.tracker_fps)} fps, {num(r.pipeline.process_ms_p50)} ms a frame
@@ -281,16 +286,16 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false, 
         </p>
       )}
       {!r.pass && (
-        <ul data-testid="selftest-reasons" className="font-lab" style={{ ...listStyle, fontSize: 15 }}>
+        <ul data-testid="selftest-reasons" className="font-sans" style={{ ...listStyle, fontSize: 15 }}>
           {r.reasons.map((x) => <li key={x} style={itemStyle}><span aria-hidden>•</span><span>{x}</span></li>)}
         </ul>
       )}
       {r.pass && (r.notes?.length ?? 0) > 0 && (
-        <ul data-testid="selftest-notes" className="font-lab" style={{ ...listStyle, fontSize: 15 }}>
+        <ul data-testid="selftest-notes" className="font-sans" style={{ ...listStyle, fontSize: 15 }}>
           {r.notes!.map((x) => <li key={x} style={itemStyle}><span aria-hidden>•</span><span>{x}</span></li>)}
         </ul>
       )}
-      <p className="font-lab" style={{ fontSize: 14, maxWidth: 760, marginTop: 8, lineHeight: 1.5 }}>
+      <p className="font-sans" style={{ fontSize: 14, maxWidth: 760, marginTop: 8, lineHeight: 1.5 }}>
         Researcher: this checks that the camera sees this person&apos;s blinks. The result is recorded with the session, with any earlier attempts.
       </p>
       <div style={{ display: 'flex', gap: 12, marginTop: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -394,7 +399,7 @@ function SelfTestTrace({ obs, cues, startedAt, cueLags, rule }: {
 }) {
   if (obs.baseline == null || !(obs.baseline > 0) || obs.trace.length < 2) {
     return (
-      <p data-testid="selftest-trace" data-empty="true" className="font-lab" style={{ fontSize: 14, marginTop: 10 }}>
+      <p data-testid="selftest-trace" data-empty="true" className="font-sans" style={{ fontSize: 14, marginTop: 10 }}>
         No eye-openness trace to show: {obs.baseline == null ? 'no open-eye baseline was measured' : 'the face was not found'}.
       </p>
     );
@@ -422,7 +427,7 @@ function SelfTestTrace({ obs, cues, startedAt, cueLags, rule }: {
           <path d={g.path} fill="none" stroke={INK} strokeWidth={1.6} />
         </g>
       </svg>
-      <figcaption className="font-lab" style={{ fontSize: 14, lineHeight: 1.45, marginTop: 4 }}>
+      <figcaption className="font-sans" style={{ fontSize: 14, lineHeight: 1.45, marginTop: 4 }}>
         Eye openness (top = this person&apos;s open eye). Light bands: {win.before === 0 ? 'the 1.2 s after each flash' : '1.2 s either side of each flash'}, where a blink counts.
         Dashed: the blink line; dotted: the complete-blink line; a dot marks where a counted blink began.
       </figcaption>

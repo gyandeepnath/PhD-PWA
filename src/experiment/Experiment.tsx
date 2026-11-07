@@ -54,6 +54,7 @@ import { IshiharaTest } from '@/screening/IshiharaTest';
 import { resolveCvdStatus, countsComeFromPriorAdministration } from '@/screening/ishihara';
 import { Cvsq } from '@/scales/Cvsq';
 import { NasaTlx } from '@/scales/NasaTlx';
+import { CameraLostNotice } from './CameraLostNotice';
 import { LuxCheckpointPanel } from '@/start/LuxCheckpoint';
 import {
   SessionInit, ParticipantProfile, CameraSetup, CameraDeclined, Calibration, AdaptationScreen, SessionComplete,
@@ -2532,65 +2533,19 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         />
       )}
       {showCameraLost && (
-        <div
-          data-testid="camera-lost"
-          style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#1a1a2e', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32 }}
-        >
-          <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 300 }}>
-            {cameraBlockedNotice ? 'The camera cannot see anything' : 'The camera has stopped'}
-          </h1>
-          {cameraBlockedNotice ? (
-            <p data-testid="camera-blocked" className="font-lab" style={{ fontSize: 16, color: '#dbe6f7', maxWidth: 560, marginTop: 14, lineHeight: 1.6 }}>
-              The picture is black. The camera may be covered, or camera access may be switched off in
-              the tablet&apos;s quick settings. Uncover it or switch camera access back on — this message
-              closes by itself as soon as the picture returns.
-            </p>
-          ) : (
-            <p className="font-lab" style={{ fontSize: 16, color: '#dbe6f7', maxWidth: 560, marginTop: 14, lineHeight: 1.6 }}>
-              Eye measurements are not being recorded. This happens when a call or another app takes the
-              camera, or when the tablet sleeps or is put in the background.
-            </p>
-          )}
-          {cameraLostOnSetup && !cameraBlockedNotice ? (
-            <p className="font-lab" style={{ fontSize: 14, color: '#c8d8f0', maxWidth: 520, marginTop: 10, lineHeight: 1.6 }}>
-              <strong>Researcher:</strong> exit and resume from the session manager. The camera is set up and
-              calibrated again, and the sitting continues at the first set-up screen not yet completed.
-            </p>
-          ) : (
-          <p className="font-lab" style={{ fontSize: 14, color: '#c8d8f0', maxWidth: 520, marginTop: 10, lineHeight: 1.6 }}>
-            <strong>Researcher:</strong> pause and resume from the session manager. The camera is set up and
-            calibrated again, and {pauseAfterFinished
-              ? 'the session continues at the next condition'
-              : rtSaving
-                ? 'the session continues at the next condition once this one\'s results have saved (if they do not, this condition starts again)'
-                : 'this condition starts again'}.
-          </p>
-          )}
-          <div style={{ display: 'flex', gap: 12, marginTop: 22, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {/* From a set-up screen no resume pointer is written: the resume re-derives where to start
-                from what is stored (exitSitting; see onOperatorChip). */}
-            <button onClick={cameraLostOnSetup && !cameraBlockedNotice ? exitSitting : pauseAndExit} className="font-lab text-sm"
-              style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid #fff', background: '#fff', color: '#1a1a2e', cursor: 'pointer' }}>
-              {cameraLostOnSetup && !cameraBlockedNotice ? 'Exit — resume later (camera set up again)' : 'Pause and restart the camera'}
-            </button>
-            <button onClick={() => (cameraBlockedNotice ? setCameraBlockAccepted(true) : setCameraLossAccepted(true))} className="font-lab text-sm"
-              style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid #c8d8f0', background: 'transparent', color: '#c8d8f0', cursor: 'pointer' }}>
-              Continue without the camera
-            </button>
-          </div>
-          <p className="font-lab" style={{ fontSize: 12, color: '#8fa0c0', maxWidth: 520, marginTop: 14, lineHeight: 1.6 }}>
-            {cameraBlockedNotice
-              ? 'If you continue, the time the picture stays black is recorded against this condition (camera_blocked_ms).'
-              : cameraLostOnSetup
-                ? 'If you continue, the calibration is skipped and every condition is recorded with no eye measurements, marked as camera lost.'
-                : 'If you continue, every remaining condition is recorded with no eye measurements, marked as camera lost.'}
-          </p>
-        </div>
+        <CameraLostNotice
+          blocked={cameraBlockedNotice}
+          onSetup={cameraLostOnSetup}
+          pauseAfterFinished={pauseAfterFinished}
+          rtSaving={rtSaving}
+          onLeave={cameraLostOnSetup && !cameraBlockedNotice ? exitSitting : pauseAndExit}
+          onContinueWithout={() => (cameraBlockedNotice ? setCameraBlockAccepted(true) : setCameraLossAccepted(true))}
+        />
       )}
       {sessionCreateError && (
         <div
           data-testid="session-create-error"
-          className="font-lab text-sm"
+          className="font-sans text-sm"
           style={{ position: 'fixed', inset: 'auto 12px 12px 12px', zIndex: 60, padding: '12px 14px', borderRadius: 10, border: '1px solid #e64c4c', background: 'rgba(255,240,240,0.97)', color: '#7a1010' }}
         >
           Could not create the session record: {sessionCreateError}. Nothing has been lost. Check

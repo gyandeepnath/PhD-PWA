@@ -130,8 +130,11 @@ describe('the tracker and the experiment act on it', () => {
     // window.confirm, which froze the page and was measured by nothing).
     expect(experiment).toMatch(/const pauseConfirmOverTask = dialog\.open && stageInk != null;/);
     expect(experiment).toMatch(/setBlockingNotice\(cameraNoticeUp \|\| pauseConfirmOverTask\)/);
-    const notice = experiment.slice(experiment.indexOf('data-testid="camera-lost"'), experiment.indexOf('data-testid="camera-lost"') + 3500);
-    expect(notice).toMatch(/onClick=\{cameraLostOnSetup && !cameraBlockedNotice \? exitSitting : pauseAndExit\}/);
+    // The notice is its own component (CameraLostNotice.tsx, Round 90); its two buttons are wired here.
+    const at = experiment.indexOf('<CameraLostNotice');
+    expect(at).toBeGreaterThan(-1);
+    const notice = experiment.slice(at, experiment.indexOf('/>', at));
+    expect(notice).toMatch(/onLeave=\{cameraLostOnSetup && !cameraBlockedNotice \? exitSitting : pauseAndExit\}/);
     expect(notice).toMatch(/setCameraLossAccepted\(true\)/);
   });
 });

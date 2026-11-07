@@ -257,6 +257,9 @@ describe('operator-screen text colours meet WCAG AA', () => {
     // whose instrument text was 11-12 design px (9.5-10 px on the tablet) in faded mono.
     'src/components/NavChip.tsx', 'src/components/ConfirmDialog.tsx',
     'src/scales/Cvsq.tsx', 'src/scales/NasaTlx.tsx',
+    // Round 90 (audit 86 UI-9): the notice that stops a sitting when the camera is lost, which was written
+    // inline in Experiment.tsx, outside this list, and set its one consequence sentence at 12 px.
+    'src/experiment/CameraLostNotice.tsx',
   ];
 
   it('no operator screen sets a retired colour as a text colour', () => {
