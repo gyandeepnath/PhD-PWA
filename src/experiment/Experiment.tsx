@@ -40,7 +40,7 @@ import { useTapGuard, TAP_GUARD_VERSION } from '@/lib/tapGuard';
 import { nextAttemptNumber, ATTEMPT_RULE_VERSION } from './conditionAttempt';
 import { scaleFrozenOn, SCALE_FREEZE_VERSION } from './scaleFreeze';
 import { BreakScreen } from '@/start/BreakScreen';
-import type { ConditionRecord, ParticipantRecord, SessionRecord, Stage } from '@/storage/types';
+import type { CameraOffReason, ConditionRecord, ParticipantRecord, SessionRecord, Stage } from '@/storage/types';
 import { useTracking } from '@/tracking/useTracking';
 import { LazyDashboard as Dashboard } from '@/dashboard/LazyDashboard';
 import { ExperimentProgress } from '@/components/ExperimentProgress';
@@ -749,6 +749,19 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   }, [session]);
   /** A lux reading typed on this screen and not logged: the screen's way on waits (audit 86 F10). */
   const [luxPending, setLuxPending] = useState(false);
+
+  /**
+   * Why the camera is off from this camera set-up, kept with the sitting (SessionRecord.camera_off; audit
+   * 86 CAM-3). Every way past camera setup without the camera writes it — consent declined, or the
+   * operator going on before the camera started, after it had, or after it could not start — and going on
+   * with the camera clears it. Before, none of them was recorded anywhere.
+   */
+  const recordCameraOff = useCallback(async (reason: CameraOffReason, error: string | null) => {
+    if (!session) return;
+    const fresh = { ...(await get('sessions', session.session_id) ?? session), camera_off: { reason, at: Date.now(), error } } as SessionRecord;
+    await put('sessions', fresh);
+    setSession(fresh);
+  }, [session]);
 
   /**
    * Capture one consented media item.
@@ -1730,13 +1743,16 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
              * sitting-level record the export and the integrity audit read.
              */
             if (session) {
-              const fresh = { ...(await get('sessions', session.session_id) ?? session), camera_pipeline: tracking.pipelineInfo() } as SessionRecord;
+              const fresh = { ...(await get('sessions', session.session_id) ?? session), camera_pipeline: tracking.pipelineInfo(), camera_off: null } as SessionRecord;
               await put('sessions', fresh);
               setSession(fresh);
             }
             advance();
           })}
-          onSkip={() => advanceOrResume()}
+          onSkip={latched('camera-skip', async (reason: CameraOffReason, error: string | null) => {
+            await recordCameraOff(reason, error);
+            advanceOrResume();
+          })}
           retains={{
             setupPhotos: session?.media_consent?.setup_photos === true,
             annotationVideo: session?.media_consent?.annotation_video === true,
@@ -1745,7 +1761,10 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         />
       ) : (
         <CameraDeclined
-          onContinue={() => advanceOrResume()}
+          onContinue={latched('camera-declined', async () => {
+            await recordCameraOff('consent_declined', null);
+            advanceOrResume();
+          })}
           onBack={consentRevisitable ? () => goBack('CONSENT') : undefined}
           unexercisable={unexercisableGrants(session?.media_consent)}
         />

@@ -1051,8 +1051,23 @@ export function useTracking(): TrackingApi {
     return startingRef.current;
   }, [startCamera]);
 
+  /*
+   * THE OPERATOR SWITCHED THE CAMERA OFF ("Continue without camera" on the running preview), and the
+   * sitting must then be in the state it is in when the camera was never used (audit 86 CAM-3).
+   *
+   * This released the camera and the tracker and changed nothing else: `status` stayed 'active'. Every
+   * screen keys on it — calibration ran its routine on no frames, the camera check followed and failed
+   * ("No frames arriving"), and endCondition, which writes the camera-off row only when the camera is not
+   * active, wrote every reading row camera_active TRUE with zero samples and a blank reason. A released
+   * camera is now 'stopped': the plain positioning screen, no camera check, and camera-off rows
+   * (camera_inactive_reason not_running, as for a camera that was declined). Why it is off is recorded
+   * with the sitting by camera setup (SessionRecord.camera_off).
+   */
   const stop = useCallback(() => {
     releasePipeline();
+    healthRef.current = new CameraHealth();
+    setCameraBlocked(false);
+    setStatus('stopped');
   }, [releasePipeline]);
 
   const pipelineInfo = useCallback((): CameraPipelineRecord | null => {

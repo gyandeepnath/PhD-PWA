@@ -42,7 +42,22 @@ export type Stage =
   | 'NASA_TLX'
   | 'EXPORT_DASHBOARD';
 
-export type CameraStatus = 'active' | 'denied' | 'failed' | 'unavailable';
+/**
+ * Where the camera is. 'stopped' (audit 86 CAM-3): it ran and the operator switched it off — "Continue
+ * without camera" on camera setup's running preview. It used to leave the status 'active' over a released
+ * camera, so calibration and the camera check ran on no frames and every reading row was written
+ * camera_active TRUE with nothing measured.
+ */
+export type CameraStatus = 'active' | 'denied' | 'failed' | 'unavailable' | 'stopped';
+
+/**
+ * Why the camera was not used from a camera set-up (audit 86 CAM-3): the participant declined camera
+ * measurement at consent, or the operator went on without it — before starting it, after it had started,
+ * or after it could not start (permission refused, the camera or tracker failed, no camera API).
+ */
+export type CameraOffReason =
+  | 'consent_declined' | 'skipped_before_start' | 'skipped_after_start'
+  | 'permission_denied' | 'start_failed' | 'unavailable';
 
 /** Build/version provenance stamped into sessions and exports. */
 export interface Provenance {
@@ -306,6 +321,13 @@ export interface SessionRecord {
    * camera was not used and on sittings recorded before it existed.
    */
   camera_pipeline?: CameraPipelineRecord | null;
+  /**
+   * Why the camera was off from the LAST camera set-up of this sitting (audit 86 CAM-3), with the start
+   * error in the library's words when it could not start; null when it ran from there. Nothing recorded
+   * it: a sitting whose operator went on without the camera read like one whose camera was never offered.
+   * Absent on sittings recorded before it existed. Per condition, camera_active says what was measured.
+   */
+  camera_off?: { reason: CameraOffReason; at: number; error: string | null } | null;
   /** Informed consent recorded. */
   consent_given: boolean;
   consent_time: number | null;

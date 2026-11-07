@@ -40,7 +40,7 @@ import { BuildInfo, useUpdateWaiting } from '@/components/BuildInfo';
 import { useDialog } from '@/components/ConfirmDialog';
 import { PARTICIPANT_ID_PATTERN, canonicalParticipantId, participantIdProblem } from '@/lib/participantId';
 import { useTapGuard, CONSENT_TAP_GUARD_MS } from '@/lib/tapGuard';
-import type { CameraStatus, CameraPipelineRecord, CameraBenchRecord, ExposureOutcome } from '@/storage/types';
+import type { CameraStatus, CameraOffReason, CameraPipelineRecord, CameraBenchRecord, ExposureOutcome } from '@/storage/types';
 
 /**
  * The setup screens must SCROLL when they are taller than the viewport.
@@ -826,8 +826,12 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
   camera: CameraSetupTracking;
   /** The face is centred: go on, with the camera running. */
   onContinue: () => void;
-  /** Continue without the camera. The camera is stopped first. */
-  onSkip: () => void;
+  /**
+   * Continue without the camera, saying why it is off (SessionRecord.camera_off; audit 86 CAM-3): from
+   * the notice before it was started, from the running preview (the camera is stopped first, and is then
+   * 'stopped', not 'active'), or after it could not start — with the library's reason when it failed.
+   */
+  onSkip: (reason: CameraOffReason, error: string | null) => void;
   /** The photo/video grants actually in force, so the privacy notice can tell the truth. */
   retains?: { setupPhotos: boolean; annotationVideo: boolean };
   /**
@@ -848,6 +852,8 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
    * Details line never appeared (round 77) — on exactly the tablet whose tracker cannot start.
    */
   const [showDetails, setShowDetails] = useState(false);
+  /** How the last start ended when it did not run, for the record a skip from that screen writes. */
+  const [startFailure, setStartFailure] = useState<CameraStatus | null>(null);
   const [live, setLive] = useState<LiveTrackingStats | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [comparing, setComparing] = useState<{ backend: TrackerBackend; index: number; total: number } | null>(null);
@@ -916,6 +922,7 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
           + `can be collected — the primary outcome would be empty for every condition. Check the device is `
           + `fully set up (see DEPLOYMENT.md section 4) before running a participant.`);
     setShowDetails(st === 'failed');
+    setStartFailure(st);
     setStep('denied');
   };
 
@@ -965,7 +972,8 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
             <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {onBack && <button type="button" className={btnBack} data-testid="back-to-consent" onClick={onBack}>← Back to consent</button>}
               <button className={btn} style={{ background: '#1a1a2e' }} onClick={requestCamera}>Enable camera →</button>
-              <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" onClick={onSkip}>
+              <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" data-testid="camera-skip"
+                onClick={() => onSkip('skipped_before_start', null)}>
                 Continue without camera
               </button>
             </div>
@@ -1083,8 +1091,8 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
                 }}>
                 My face is centred — continue →
               </button>
-              <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" disabled={comparing != null}
-                onClick={() => { camera.stop(); onSkip(); }}>
+              <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" disabled={comparing != null || benchRunning}
+                data-testid="camera-skip" onClick={() => { camera.stop(); onSkip('skipped_after_start', null); }}>
                 Continue without camera
               </button>
             </div>
@@ -1129,7 +1137,8 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
             <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {onBack && <button type="button" className={btnBack} data-testid="back-to-consent" onClick={onBack}>← Back to consent</button>}
               <button className={btn} style={{ background: '#1a1a2e' }} onClick={() => { setErrMsg(''); setShowDetails(false); setStep('notice'); }}>Retry</button>
-              <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" onClick={onSkip}>
+              <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" data-testid="camera-skip"
+                onClick={() => onSkip(startFailure === 'denied' ? 'permission_denied' : startFailure === 'unavailable' ? 'unavailable' : 'start_failed', camera.startError)}>
                 Continue without camera
               </button>
             </div>

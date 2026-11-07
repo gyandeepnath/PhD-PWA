@@ -152,4 +152,27 @@ describe('useTracking — a camera that stops', () => {
     expect(h.api().status).toBe('active');
     h.unmount();
   });
+
+  /*
+   * "Continue without camera" on the running preview (audit 86 CAM-3). stop() released the camera and left
+   * the status 'active', so calibration and the camera check ran on no frames and every reading row was
+   * written camera_active TRUE with no samples. Switched off, the camera is off: the row says so.
+   */
+  it('a camera the operator switches off is off: not active, and its rows are camera-off rows', async () => {
+    const { track } = fakeCamera();
+    const h = mount();
+    await act(async () => { await h.api().start(); });
+    expect(h.api().status).toBe('active');
+    act(() => { h.api().stop(); });
+    expect(track.stopped).toBe(true);
+    expect(h.api().status).toBe('stopped');
+    expect(h.api().cameraLostAt).toBeNull();            // switched off, not lost: no camera-lost notice
+    expect(h.api().pipelineInfo()).toBeNull();
+    h.api().beginCondition();
+    await act(async () => { await h.api().endCondition('C3', 'S1'); });
+    const row = await get('eye_metrics', 'C3') as EyeMetricsRecord;
+    expect(row.camera_active).toBe(false);
+    expect(row.camera_inactive_reason).toBe('not_running');
+    h.unmount();
+  });
 });
