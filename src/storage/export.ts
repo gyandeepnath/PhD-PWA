@@ -9,7 +9,7 @@ import { normaliseBundle, sessionForExport, type SessionBundle } from './gather'
 import type { CameraBenchRecord, CameraPipelineRecord, ExposureOutcome, EyeMetricsRecord, SessionRecord } from './types';
 import type { MediaRecord } from './media';
 import { summariseLux, LUX_CHECKPOINTS } from '@/experiment/illumination';
-import { buildConditionSummaries, ENGAGEMENT, COMPREHENSION_FLAG, comprehensionFlagReason } from '@/dashboard/aggregate';
+import { buildConditionSummaries, ENGAGEMENT, COMPREHENSION_FLAG, comprehensionFlagReason, pageLockArithmetic } from '@/dashboard/aggregate';
 import { STRAIGHT_LINE, STRAIGHT_LINE_RULE_V1, STRAIGHT_LINE_RULE_V2 } from '@/dashboard/straightLine';
 import { isConditionComplete } from './conditionStatus';
 import { latestCalibration as lastCalibrationTaken } from './calibrationLookup';
@@ -41,6 +41,7 @@ import { screenName } from '@/tracking/measurementSchedule';
 import { GAZE_RULE_BEFORE } from '@/tracking/gazeCalibration';
 import { BLINK_RULE_BEFORE, BLINK_RULE_VERSION, IBI_RULE_BEFORE, IBI_RULE_VERSION, isCutBlink } from '@/tracking/blink';
 import { PARTICIPANT_ID_MAX_LENGTH } from '@/lib/participantId';
+import { appVersionDescription } from '@/lib/versionHistory';
 
 export interface ExportFile {
   filename: string;
@@ -488,6 +489,25 @@ export function exposureCapsText(c: CameraPipelineRecord['camera_capabilities'])
   return parts.join('; ');
 }
 
+/**
+ * The page locks' arithmetic for the codebook, from the corpus and CONFIG (dashboard/aggregate.ts
+ * pageLockArithmetic; audit 86 P7: the sentence said "four unlocks guarantee 80 s" long after passages
+ * became three pages).
+ */
+const PAGE_LOCKS = (() => {
+  const a = pageLockArithmetic();
+  const range = (xs: number[], dp: number, unit: string) => {
+    const lo = Math.min(...xs).toFixed(dp);
+    const hi = Math.max(...xs).toFixed(dp);
+    return lo === hi ? `${lo} ${unit}` : `${lo}-${hi} ${unit}`;
+  };
+  const pages = range(a.pages, 0, '');
+  return {
+    guarantee: `the ${pages.trim()} pages' unlocks (${CONFIG.READING_PAGE_MIN_MS / 1000} s each) guarantee ${range(a.guaranteedS, 0, 's')}`,
+    floor: `${range(a.skimFloorS, 1, 's')} (the passage's word count at ${ENGAGEMENT.SKIM_WPM_CEILING} words a minute)`,
+  };
+})();
+
 const CODEBOOK_ROWS: Record<string, string>[] = [
   // ---- 00_condition_reference.csv
   { file: '00_condition_reference.csv', column: 'condition_label', type: 'string', unit: '-', role: 'id', description: 'Condition code. P1-P5 positive polarity, N1-N5 negative. Synopsis Table 3.4.' },
@@ -587,8 +607,8 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '02_conditions.csv', column: 'reading_wall_clock_ms', type: 'integer', unit: 'ms', role: 'qc', description: 'Unadjusted first-to-last span of the reading task, before hidden time was subtracted. reading_time_ms is this minus reading_hidden_ms; both are exported so the adjustment is auditable rather than silent.' },
   { file: '02_conditions.csv', column: 'reading_hidden_ms', type: 'integer', unit: 'ms', role: 'qc', description: 'Time the app spent backgrounded or the screen off during the passage. Already subtracted from reading_time_ms. Large values mean the participant was not looking at the stimulus for part of the window the ocular measures cover.' },
   { file: '02_conditions.csv', column: 'reading_min_page_dwell_ms', type: 'integer', unit: 'ms', role: 'qc', description: 'Shortest single-page dwell in the passage. A page advanced within about a second of its own 20 s unlock was '
-      + 'waited out, not read — which the whole-passage skim rule could not detect, because the four unlocks guarantee 80 s '
-      + 'against a skim floor of 86-90 s. WALL CLOCK: unlike reading_time_ms beside it, no hidden time is subtracted from '
+      + `waited out, not read — which the whole-passage skim rule cannot reliably detect: ${PAGE_LOCKS.guarantee}, against a whole-passage skim floor of ${PAGE_LOCKS.floor}, so a participant who waits out each unlock and lingers several seconds a page passes it. `
+      + 'WALL CLOCK: unlike reading_time_ms beside it, no hidden time is subtracted from '
       + 'this, so a page the participant was away for looks longer rather than shorter. The direction is conservative — an '
       + 'interrupted page cannot masquerade as a waited-out one — but the two columns are on different clocks and a '
       + 'difference between them is not evidence of anything on its own. Use condition_hidden_ms to tell them apart.' },
@@ -710,7 +730,7 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '01_session_info.csv', column: 'conditions_per_session', type: 'integer', unit: '5 or 10', role: 'meta', description: 'Conditions presented in this sitting. 10 is the whole illumination block in one sitting; 5 means the block was split in two under the feasibility gate.' },
   { file: '01_session_info.csv', column: 'ambient_lux', type: 'number', unit: 'lux', role: 'iv', description: 'Measured room illuminance at the participant eye position for this sitting. The manipulation CHECK for the single 300 lux level (accepted 250-350), NOT a factor: it should be constant by design, and a reading outside the band is a protocol deviation. Use this measured value rather than the nominal level.' },
   { file: '01_session_info.csv', column: 'brightness_percent', type: 'number', unit: '0-100', role: 'covariate', description: 'Display brightness setting. Held fixed across conditions; recorded so any drift between sittings is detectable.' },
-  { file: '01_session_info.csv', column: 'app_version', type: 'string', unit: '-', role: 'provenance', description: 'Instrument version (package.json) of the build that started this sitting. Bumped by hand when a round changes what a participant sees or what the export means: 2.1.0 from the first commit to Round 73 — every deployment in that span reads 2.1.0, so tell them apart by build_time and git_hash — 2.2.0 from Round 74, which fitted the layout to the screen and added the physical calibration; and 2.3.0 from Round 75, which measured the camera pipeline, added the Face Landmarker tracker and took EAR in image-plane proportions (see tracker_backend and ear_baseline).' },
+  { file: '01_session_info.csv', column: 'app_version', type: 'string', unit: '-', role: 'provenance', description: appVersionDescription() },
   { file: '01_session_info.csv', column: 'build_time', type: 'string', unit: 'ISO 8601 UTC', role: 'provenance', description: "When the build that STARTED this sitting was made (Vite's build timestamp, UTC). With app_version and git_hash it is the build identity the app shows on screen — 'VisuLab 2.2.0 · built 4 Oct 2026 09:33 UTC · e05d3c4' — on the landing page, the session manager, pre-flight and the dashboard, so the tablet's screen and the export can be matched. The version number changes only when a round changes what is presented or exported; the build time changes on every deployment. Before Round 74 it was recorded on the session (and so in the session JSON) but not written to this file; sessions from those builds fill the column too. Empty only for a build that recorded none." },
   { file: '01_session_info.csv', column: 'git_hash', type: 'string', unit: '-', role: 'provenance', description: "Short commit hash of the build that STARTED this sitting. It is stamped once, at session creation. If build_changed_mid_sitting is TRUE it does not describe the whole sitting — read session_builds." },
   { file: '01_session_info.csv', column: 'build_changed_mid_sitting', type: 'boolean', unit: '-', role: 'qc', description: "TRUE when the sitting was resumed under a different build from the one that started it. A service worker can activate on its own once every window is closed, so a tablet that slept or rebooted mid-sitting can resume on new code with no operator action. Treat the conditions in such a sitting as collected by two instruments until you have checked what changed between the builds." },

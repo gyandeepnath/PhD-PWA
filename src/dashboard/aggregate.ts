@@ -504,11 +504,13 @@ export function conditionEngagement(args: {
   /**
    * Reading skim, judged PER PAGE rather than over the whole passage.
    *
-   * The whole-passage rule could barely fire. The dwell gate guarantees at least
-   * 4 x 20 s = 80 s, while the corpus skim floor is 85.7-90.2 s, so the flag lived in a 5.6-10.2 s
-   * band: a participant who waited out each countdown and paused two seconds longer per page was
-   * never flagged, and a genuinely fast reader at ~440 wpm was flagged and had their fastest
-   * conditions dropped.
+   * The whole-passage rule could barely fire when it was written. The dwell gate guaranteed at least
+   * 4 x 20 s = 80 s (four pages then), while the corpus skim floor was 85.7-90.2 s, so the flag lived in a
+   * 5.6-10.2 s band: a participant who waited out each countdown and paused two seconds longer per page
+   * was never flagged, and a genuinely fast reader at ~440 wpm was flagged and had their fastest
+   * conditions dropped. Passages have had three pages since Round 63, so the gate now guarantees 60 s
+   * against a floor of 85.7-90.1 s (pageLockArithmetic below); the per-page rule is still the one that
+   * sees a page waited out rather than read.
    *
    * A page finished within a moment of its own unlock was not read — the participant was waiting,
    * not reading — and that is true regardless of how long they lingered on the others. The
@@ -1212,3 +1214,18 @@ export function cohortSummary(
 
 /** The ocular_reliability_checks codes of the R template's §5.3–5.4 checks, which its qc_clean combines. */
 const QC_CHECK_CODES = ['face_in_view', 'head_turned_away', 'exposure_short'];
+
+/**
+ * What the page locks guarantee against the whole-passage skim floor, from the corpus and CONFIG (Round
+ * 92, audit 86 P7). The codebook said "the four unlocks guarantee 80 s" for many rounds after passages
+ * became three pages (Round 63): the arithmetic was prose. Every passage's page count times
+ * READING_PAGE_MIN_MS is the least a passage can take; its word count at SKIM_WPM_CEILING is the
+ * whole-passage skim floor.
+ */
+export function pageLockArithmetic(): { pages: number[]; guaranteedS: number[]; skimFloorS: number[] } {
+  return {
+    pages: PASSAGES.map((p) => p.pages.length),
+    guaranteedS: PASSAGES.map((p) => (p.pages.length * CONFIG.READING_PAGE_MIN_MS) / 1000),
+    skimFloorS: PASSAGES.map((p) => (p.wordCount / ENGAGEMENT.SKIM_WPM_CEILING) * 60),
+  };
+}

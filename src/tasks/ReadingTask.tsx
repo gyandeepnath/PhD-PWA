@@ -76,10 +76,12 @@ export function ReadingTask({ passage, background, text, onComplete, onBegin, on
    * denominator, it silently halved the reported reading speed with no way to locate the gap
    * afterwards.
    *
-   * The per-page array also makes the skim rule work. The dwell gate guarantees at least
-   * 4 x 20 s = 80 s, while the corpus skim floor is 85.7-90.2 s, so the old whole-passage flag
-   * could only fire inside a 5.6-10.2 s band: a participant who waited out each countdown and then
-   * paused a couple of seconds more was never flagged, and a genuinely fast reader was.
+   * The per-page array also makes the skim rule work. When it was written the dwell gate guaranteed
+   * at least 4 x 20 s = 80 s (four pages then), while the corpus skim floor was 85.7-90.2 s, so the old
+   * whole-passage flag could only fire inside a 5.6-10.2 s band: a participant who waited out each
+   * countdown and then paused a couple of seconds more was never flagged, and a genuinely fast reader
+   * was. Three pages since Round 63: 3 x 20 s = 60 s against 85.7-90.1 s (dashboard/aggregate.ts
+   * pageLockArithmetic); a page waited out is still seen only page by page.
    */
   const pageDwells = useRef<number[]>([]);
   /*

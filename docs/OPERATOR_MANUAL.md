@@ -117,7 +117,10 @@ sees or what the export means. 2.4.0 is the first build after 2.3.1, the build t
 tested: it brings the 100 mm rating lines, the grey-field calibration with the three-dot gaze check,
 the camera check that counts only blinks after a flash, the fixed exposure kept on Android, the
 reorganised dashboard and the per-blink files. Builds deployed while these were being made still
-said 2.3.1, so on a sitting labelled 2.3.1 the `git_hash` says which build it really was. The **build time** (always in UTC) changes with every deployment, so it is the part that tells
+said 2.3.1, so on a sitting labelled 2.3.1 the `git_hash` says which build it really was. The fixes of audit 86
+(AUDIT_FINDINGS Rounds 86-92) still say 2.4.0; each rule they changed is named in the export by its own
+`*_version` column. What every version from 2.1.0 to 2.4.0 means is written out in the export's codebook
+(`app_version`), from the one list the app keeps (src/lib/versionHistory.ts). The **build time** (always in UTC) changes with every deployment, so it is the part that tells
 you whether the tablet has the newest build. The **commit** (seven characters) is what the export
 records as `git_hash`. The same three are in `01_session_info.csv` (`app_version`, `build_time`,
 `git_hash`), and the dashboard shows both the build drawing it and the build that recorded the sitting.
