@@ -747,8 +747,11 @@ These are not optional and they come first.
      width and frames deep inside a blink (an EAR of about 0.08) still got an on-screen verdict, which
      the aggregator says a blink should not; whether they did depended on the camera mode Chrome chose.
      `on_screen_ratio` can therefore read slightly higher on a `gaze-r2` row than it would under
-     `gaze-r3`. It is a descriptive quality index in every rule; nothing is modelled on it, and the
-     zone columns stay blank.
+     `gaze-r3`. The gaze check's three dots collect only frames that pass the same test, so under
+     `gaze-r3` on a 16:9 mode a frame inside a blink no longer counts toward a dot's need or enters its
+     median offset: a dot may be shown again a little more often, and the check
+     (`gaze_calibration_valid`) is otherwise judged as before. It is a descriptive quality index in every
+     rule; nothing is modelled on it, and the zone columns stay blank.
 8. **The exposure rule (Round 82): `exp-r2`** (01 `camera_exposure_rule` and 07
    `camera_exposure_rule`; `exp-r1` before). The camera's exposure is still fixed once per sitting on
    the grey field, with the same rate and brightness checks. What changed is how the camera's own
