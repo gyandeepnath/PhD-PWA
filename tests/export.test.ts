@@ -509,7 +509,10 @@ describe('07b and 07c: every blink and the eye-openness trace, kept apart from t
       const n = (tier: string) => String(mine.filter((x) => x.tier === tier).length);
       expect([n('full'), n('micro'), n('incomplete')], row.condition_id).toEqual(
         [row.blink_count_full, row.blink_count_micro, row.blink_count_incomplete]);
-      expect(mine.every((x) => x.window === 'reading' && x.rule_version === 'blink-r1')).toBe(true);
+      // Recorded under blink-r2 (Round 91): every blink of the fixture is observed whole, so none is cut.
+      expect(mine.every((x) => x.window === 'reading' && x.rule_version === 'blink-r2' && x.cut === 'false' && x.started_by === 'onset')).toBe(true);
+      expect(row.blink_count_cut).toBe('0');
+      expect(row.blink_rule_version).toBe('blink-r2');
     }
   });
 

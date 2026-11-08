@@ -17,13 +17,14 @@
  *    integral, not a few sub-samples), plus independent per-frame landmark noise of 2-4% of the
  *    open level (ASSUMED; Round 75 measured 1.6-2.3% frame-to-frame EAR jitter on one still portrait);
  *  - calibration: a 6-s open-eye window at the same sampling, fitted with the shipped fitEarBaseline;
- *  - classification: the shipped classifyBlinks (rule blink-r1) and, where asked, the fitted minimum
+ *  - classification: the shipped classifyBlinks (rule blink-r2 from Round 91; blink-r1 before, which
+ *    classified the same events alike here, since no simulated blink is cut by a run's ends) and, where asked, the fitted minimum
  *    (blinkFit.ts, rule fit-r1) classified against the same baseline and the same 0.60 cut.
  *
  * Common random numbers: within a scenario the same blinks are resampled at every setting, so
  * differences between settings are paired. Seeded (mulberry32), so every number is reproducible.
  */
-import { classifyBlinks, fitEarBaseline, EAR_TIERS, type EarSample } from '@/tracking/blink';
+import { classifyBlinks, fitEarBaseline, isCutBlink, EAR_TIERS, type EarSample } from '@/tracking/blink';
 import { fitBlinkMinimum } from '@/tracking/blinkFit';
 import { OPEN_PRE_WINDOW_MS, OPEN_PRE_MIN_FRAMES } from '@/tracking/blinkLog';
 import { makeRng, gaussian, type Rng } from './rng';
@@ -78,12 +79,14 @@ export interface Scenario {
 export interface CellResult {
   /** Share of true blinks the classifier found. */
   detection: number;
-  /** Per detected blink: 1 incomplete, 0 complete, -1 not detected — by the lowest frame (blink-r1). */
+  /** Per detected blink: 1 incomplete, 0 complete, -1 not detected or cut — by the lowest frame (blink-r2). */
   cls: Int8Array;
   /** The same by the fitted minimum (fit-r1); a blink that could not be fitted keeps its lowest-frame class. Null without a fit. */
   clsFit: Int8Array | null;
   /** Blinks the fit could not be made for (they kept their lowest-frame class). */
   fitFailed: number;
+  /** Detected blinks cut by a run's ends, so not classified (blink-r2). 0 in every scenario: the runs start and end open-eyed. */
+  cut: number;
 }
 
 export interface ScenarioResult {
@@ -195,7 +198,7 @@ export function runScenario(sc: Scenario, cells: Cell[]): ScenarioResult {
   for (const cell of cells) {
     const cls = new Int8Array(nBlinks).fill(-1);
     const clsFit = cell.fit != null ? new Int8Array(nBlinks).fill(-1) : null;
-    let detected = 0, fitFailed = 0, k0 = 0;
+    let detected = 0, fitFailed = 0, k0 = 0, cutSeen = 0;
     const E = exposureOf(cell.plan);
     const fitE = cell.fit === 'true' ? E : cell.fit === 'frame' ? intervalOf(cell.plan) : typeof cell.fit === 'number' ? cell.fit : 0;
     for (const bl of runs) {
@@ -212,6 +215,9 @@ export function runScenario(sc: Scenario, cells: Cell[]): ScenarioResult {
         const e = e0 < events.length && events[e0].onset_ms <= b.t0 + b.down + b.up ? events[e0] : null;
         if (!e || B == null) continue;
         detected++;
+        // blink-r2 (Round 91): a blink whose start or end the run did not observe is registered and not
+        // classified, as the app counts it. The runs leave open eye at both ends, so none is expected here.
+        if (isCutBlink(e)) { cutSeen++; continue; }
         const raw = e.tier === 'incomplete' ? 1 : 0;
         cls[k0 + j] = raw;
         if (clsFit) {
@@ -224,7 +230,7 @@ export function runScenario(sc: Scenario, cells: Cell[]): ScenarioResult {
       }
       k0 += bl.length;
     }
-    out[cell.label] = { detection: detected / nBlinks, cls, clsFit, fitFailed };
+    out[cell.label] = { detection: detected / nBlinks, cls, clsFit, fitFailed, cut: cutSeen };
   }
   return { name: sc.name, nBlinks, truth, depth, cells: out };
 }

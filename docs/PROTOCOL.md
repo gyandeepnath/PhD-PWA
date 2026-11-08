@@ -148,8 +148,10 @@ The camera runs from camera setup to the end of the sitting; its frames are **ke
 windows** — calibration's two steps (the open-eye baseline, the gaze check), the camera self-test, and
 each reading window (from the "Begin reading" tap to the last page's Next). The researcher panel says
 which window is open ("Recording: reading window", …) or "Live only — not recorded". The live blink
-count, the live graph and the stored record use the same classifier (`blink-r1`), the same baseline
-and the same two cuts (`tracking/blinkCount.ts`).
+count, the live graph and the stored record use the same classifier (`blink-r2` from Round 91), the
+same baseline and the same two cuts (`tracking/blinkCount.ts`). A blink already under way when the
+reading window opens or when the face comes back after a gap, or still under way when it closes, is
+counted but not classified complete or incomplete (`blink_count_cut`; docs/ANALYSIS_PLAN.md §5).
 
 <!-- measurement-schedule:start (generated from src/tracking/measurementSchedule.ts; tests/measurementSchedule.test.ts checks this copy) -->
 | Measure | How often | When | Kept in | Shown live |

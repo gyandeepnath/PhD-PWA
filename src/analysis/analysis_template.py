@@ -101,6 +101,11 @@ FPS_GATE_VERSION = "fps-g2"  # the gate the three numbers below stand for (frame
                              # FPS_GATE_DEFINITIONS): change all four together, never one alone.
 FPS_GATE_ADEQUATE = 20  # PRE-REGISTERED (docs/FPS_GATE_SIMULATION.md): tier A at or above
 FPS_GATE_REDUCED = 15   # PRE-REGISTERED: tier B from here to ADEQUATE; tier C below
+# The blink rule the ocular models are fitted under (src/tracking/blink.ts BLINK_RULE_VERSION; Round 91,
+# audit 86 CAM-8): a blink cut by the window's edge or a sampling gap is counted, not classified. A 07 row
+# with no blink_rule_version was counted under blink-r1; rows not under this rule are out of every ocular
+# model and put back in a sensitivity refit of the primary, as in the R template.
+BLINK_RULE_VERSION = "blink-r2"
 FPS_GATE_BAND = 2       # PRE-REGISTERED: fps_consistent within this of the participant's median
 
 
@@ -775,7 +780,14 @@ def main() -> None:
     # ===========================================================================================
     counts = ["blink_count_incomplete", "blink_count_full", "blink_count_micro"]
 
-    def primary_frame(eye_rows: pd.DataFrame, cond_rows: pd.DataFrame, keep_tier_c: bool = False) -> pd.DataFrame:
+    def blink_rule_of(rows: pd.DataFrame) -> pd.Series:
+        """Each row's blink rule; blank (a row recorded before Round 91 that was not recomputed) is blink-r1."""
+        if "blink_rule_version" not in rows.columns:
+            return pd.Series("blink-r1", index=rows.index)
+        return rows["blink_rule_version"].fillna("").astype(str).replace("", "blink-r1")
+
+    def primary_frame(eye_rows: pd.DataFrame, cond_rows: pd.DataFrame, keep_tier_c: bool = False,
+                      keep_old_rule: bool = False) -> pd.DataFrame:
         """Camera-on rows with at least one blink, and the binomial response. Shared by the
         confirmatory fit and every sensitivity refit so they differ in their rows only.
 
@@ -784,6 +796,8 @@ def main() -> None:
         as in the R template. keep_tier_c=True builds the every-tier frame for the sensitivity refit
         that puts it back. eff_fps_c is centred within whichever frame is built."""
         ea = eye_rows[truthy(eye_rows["camera_active"])].merge(cond_rows, on=["participant_id", "condition_id"])
+        if not keep_old_rule:
+            ea = ea[blink_rule_of(ea).eq(BLINK_RULE_VERSION)]
         if not keep_tier_c and "fps_tier" in ea.columns:
             ea = ea[ea["fps_tier"].ne("C")]
         if DROP_DISENGAGED:
@@ -884,6 +898,12 @@ def main() -> None:
               f"{int(m.nobs)} blink rows")
 
     eye_active = eye[truthy(eye["camera_active"])].merge(cond, on=["participant_id", "condition_id"])
+    # One blink rule for every ocular model, as in R: earlier-rule rows out, counted, refitted below.
+    rule_now = blink_rule_of(eye_active)
+    n_blink_old = int(rule_now.ne(BLINK_RULE_VERSION).sum())
+    print(f"\n[{BLINK_RULE_VERSION}] {n_blink_old} camera-on condition-run(s) carry blink counts under an earlier rule "
+          f"({', '.join(sorted(rule_now[rule_now.ne(BLINK_RULE_VERSION)].unique())) or 'none'}) and are out of the ocular models.")
+    eye_active = eye_active[rule_now.eq(BLINK_RULE_VERSION)]
     # The frame-rate gate fps-g2 for every ocular model, as in R: tier C out, counted, refitted below.
     n_tier_c = int(eye_active["fps_tier"].eq("C").sum())
     if n_tier_c:
@@ -1007,6 +1027,8 @@ def main() -> None:
                  "no tier-B row: the tier-A-only refit is the primary itself.")
         refit_if("fps-g2 every tier (tier C put back)", prim_all,
                  "no tier-C row: the every-tier refit is the primary itself.")
+        refit_if(f"blink-r1 rows put back ({n_blink_old})", primary_frame(eye, cond, keep_old_rule=True),
+                 f"every row is under {BLINK_RULE_VERSION}: the earlier-rule refit is the primary itself.")
         refit_if("fps-g2 consistent rows only (within 2 fps)", prim[prim["fps_consistent"].eq(True)],
                  f"every row is within {FPS_GATE_BAND} fps of its participant's median: the consistent-only refit is the primary itself.")
 

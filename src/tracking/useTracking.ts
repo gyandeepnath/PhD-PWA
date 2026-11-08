@@ -1548,10 +1548,10 @@ export function useTracking(): TrackingApi {
       /*
        * Retain what this exposure finished with, so the monitor can report it on the screens that
        * follow. Read from the finalized record, not from the live count: the record counts a blink the
-       * window ended inside (blink-r1), which the live count had not yet (blinkCount.ts). So the number
-       * the operator sees after the window is exactly the number written to the database.
+       * window ended inside (as cut, blink-r2), which the live count had not yet (blinkCount.ts). So the
+       * number the operator sees after the window is exactly the number written to the database.
        */
-      const counted = [record.blink_count_full, record.blink_count_micro, record.blink_count_incomplete];
+      const counted = [record.blink_count_full, record.blink_count_micro, record.blink_count_incomplete, record.blink_count_cut];
       const total = counted.every((n) => typeof n === 'number') ? (counted as number[]).reduce((a, b) => a + b, 0) : null;
       lastConditionCounts.current = { blinks: total, incomplete: record.blink_count_incomplete };
       if (total != null) sessionBlinksDone.current += total;

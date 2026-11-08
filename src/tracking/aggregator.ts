@@ -16,6 +16,8 @@ import {
   computeClosureMetrics,
   interBlinkInterval,
   IBI_RULE_VERSION,
+  BLINK_RULE_VERSION,
+  isCutBlink,
   fitEarBaseline,
   type BlinkEvent,
   type BlinkEventDetail,
@@ -307,7 +309,8 @@ export class EyeMetricsAggregator {
     // properly calibrated run. classifyBlinks() returns no events for a null baseline, and
     // summariseBlinks() then reports a null ratio rather than a clean-looking zero.
     const baseline = args.baselineEarValue;
-    // The record's count: blink-r1 through countBlinks, the function the live count and graph share.
+    // The record's count: blink-r2 through countBlinks, the function the live count and graph share. The
+    // events are every REGISTERED blink; summariseBlinks classifies those observed whole (blink.ts).
     const events = countBlinks(this.ear, baseline, 'final').events;
     /*
      * NO BASELINE, NO BLINK MEASURE — not a count of zero.
@@ -324,7 +327,7 @@ export class EyeMetricsAggregator {
     const blink = blinkMeasurable ? summary : {
       ...summary,
       blink_rate: null, blink_rate_full: null, blink_rate_micro: null,
-      blink_count_full: null, blink_count_micro: null, blink_count_incomplete: null,
+      blink_count_full: null, blink_count_micro: null, blink_count_incomplete: null, blink_count_cut: null,
       incomplete_blink_ratio: null, blink_duration_mean_ms: null,
     };
     /**
@@ -353,13 +356,16 @@ export class EyeMetricsAggregator {
      * The fitted-minimum SENSITIVITY (blinkFit.ts, rule fit-r1; Round 79). The same blinks, each one's
      * depth read off a blink-shaped curve fitted through the frames around its lowest one instead of off
      * the lowest frame: the frame-rate-independent version of the count, for a pre-registered sensitivity
-     * refit (docs/ANALYSIS_PLAN.md §5). It changes nothing above: the primary count is blink-r1's.
+     * refit (docs/ANALYSIS_PLAN.md §5). It changes nothing above: the primary count is the blink rule's.
      */
     // The gate's own rate (frameRateGate.ts), from the two values this row stores.
     const samplingFps = samplingFpsObserved(this.ear.length, Math.round(observedMs));
     const exposure = fitExposure(args.lockedExposure100us, samplingFps);
     const fits = blinkMeasurable ? fitBlinks(this.ear, events, baseline, exposure.ms) : [];
-    const fitted = fittedIncompleteCount(events, fits, baseline);
+    // Over the blinks the primary classifies (blink-r2): a cut blink is fitted and stored, never counted.
+    const whole = events.map((e) => !isCutBlink(e));
+    const classified = events.filter((_, k) => whole[k]);
+    const fitted = fittedIncompleteCount(classified, fits.filter((_, k) => whole[k]), baseline);
 
     const sPitch = smooth(this.pitch);
     const sYaw = smooth(this.yaw);
@@ -433,9 +439,11 @@ export class EyeMetricsAggregator {
       blink_count_full: blink.blink_count_full,
       blink_count_micro: blink.blink_count_micro,
       blink_count_incomplete: blink.blink_count_incomplete,
+      blink_count_cut: blink.blink_count_cut,
+      blink_rule_version: BLINK_RULE_VERSION,
 
       blink_count_incomplete_fit: blinkMeasurable ? fitted.incomplete : null,
-      incomplete_blink_ratio_fit: blinkMeasurable && fitted.incomplete != null && events.length > 0 ? fitted.incomplete / events.length : null,
+      incomplete_blink_ratio_fit: blinkMeasurable && fitted.incomplete != null && classified.length > 0 ? fitted.incomplete / classified.length : null,
       blinks_not_fitted: blinkMeasurable ? fitted.notFitted : null,
       fit_exposure_ms: blinkMeasurable ? Math.round(exposure.ms * 100) / 100 : null,
       fit_exposure_known: blinkMeasurable ? exposure.known : null,
@@ -545,6 +553,8 @@ export function disabledEyeMetrics(
     blink_count_full: null,
     blink_count_micro: null,
     blink_count_incomplete: null,
+    blink_count_cut: null,
+    blink_rule_version: null,
     ear_baseline: null,
     ear_threshold_used: null,
     ear_complete_threshold: null,

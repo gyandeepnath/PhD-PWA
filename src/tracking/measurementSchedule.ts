@@ -22,7 +22,7 @@
  *     this, or if a recording window the code can open has no row here.
  */
 import { CONFIG } from '@/experiment/config';
-import { MIN_EAR_BASELINE_SAMPLES } from './blink';
+import { BLINK_RULE_VERSION, MIN_EAR_BASELINE_SAMPLES } from './blink';
 import { GAZE_DOTS, GAZE_DOT_ATTEMPTS, GAZE_DOT_SAMPLE_MS, GAZE_DOT_SETTLE_MS } from './calibrationSequence';
 import { SELF_TEST } from './selfTest';
 
@@ -35,7 +35,7 @@ export const LIVE_READOUT_HZ = 4;
 /** One name per measure, and where it is stored. Panel, dashboard and docs use `name`. */
 export const MEASURE = {
   eyeOpenness: { name: 'Eye openness', column: 'ear (07c); ear_baseline (07)', note: 'eye-aspect ratio (EAR); live as % of the open-eye baseline' },
-  blinks: { name: 'Blinks', column: 'blink_count_full + blink_count_micro + blink_count_incomplete (07); one row each in 07b', note: 'blink-r1' },
+  blinks: { name: 'Blinks', column: 'blink_count_full + blink_count_micro + blink_count_incomplete + blink_count_cut (07); one row each in 07b', note: BLINK_RULE_VERSION },
   incompleteBlinks: { name: 'Incomplete blinks', column: 'blink_count_incomplete (07)', note: 'the lid did not reach the complete line' },
   incompleteRatio: { name: 'Incomplete-blink ratio', column: 'incomplete_blink_ratio (07)', note: 'primary outcome' },
   blinkRate: { name: 'Blink rate', column: 'blink_rate (07)', note: 'blinks a minute of observed time' },

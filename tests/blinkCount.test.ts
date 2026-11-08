@@ -78,14 +78,15 @@ describe('the cuts', () => {
 });
 
 describe('live and final counts', () => {
-  it('final counts the blink the window ended inside (blink-r1); live leaves it out and says so', () => {
+  it('final counts the blink the window ended inside, as cut (blink-r2); live leaves it out and says so', () => {
     const s = series();
     const fin = countBlinks(s, BASE, 'final');
     const live = countBlinks(s, BASE, 'live');
     expect(fin.blinks).toBe(5);
     expect(fin.events[4].ended_by).toBe('window_end');
-    expect(live).toMatchObject({ blinks: 4, incomplete: 2, complete: 2, inProgress: true });
-    expect(fin.incomplete! + fin.complete!).toBe(fin.blinks);
+    expect(fin.cut).toBe(1);
+    expect(live).toMatchObject({ blinks: 4, incomplete: 2, complete: 2, cut: 0, inProgress: true });
+    expect(fin.incomplete! + fin.complete! + fin.cut!).toBe(fin.blinks);
   });
 
   it('the live count never takes back a blink: blinks and incomplete only ever rise, frame by frame', () => {
@@ -123,7 +124,7 @@ describe('live and final counts', () => {
     const live = countBlinks(s, BASE, 'live');
     const { record } = aggregatorOf(s).finalizeWithEvents(args);
     expect(live.inProgress).toBe(false);
-    expect(live.blinks).toBe((record.blink_count_full ?? 0) + (record.blink_count_micro ?? 0) + (record.blink_count_incomplete ?? 0));
+    expect(live.blinks).toBe((record.blink_count_full ?? 0) + (record.blink_count_micro ?? 0) + (record.blink_count_incomplete ?? 0) + (record.blink_count_cut ?? 0));
     expect(live.incomplete).toBe(record.blink_count_incomplete);
   });
 });

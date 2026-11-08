@@ -31,7 +31,7 @@ import { CONFIG } from '@/experiment/config';
 import { RT_LOCATIONS } from '@/lib/rtLocations';
 import { EyeMetricsAggregator } from '@/tracking/aggregator';
 import { tierCounts } from '@/tracking/blinkLog';
-import { IBI_RULE_VERSION } from '@/tracking/blink';
+import { BLINK_RULE_VERSION, IBI_RULE_VERSION } from '@/tracking/blink';
 import type { EyeMetricsRecord, OcularEventsRecord, RtAccuracy } from '@/storage/types';
 
 export const FIXTURE = {
@@ -352,7 +352,7 @@ function fixtureOcularEvents(conditionIds: string[], sid: string): OcularEventsR
       });
       const n = tierCounts(events);
       if (record.ear_sample_count !== nFace || n.full !== blinkFullFor(i) || n.micro !== blinkMicroFor(i)
-        || n.incomplete !== blinkIncompleteFor(i)) {
+        || n.incomplete !== blinkIncompleteFor(i) || record.blink_count_cut !== 0) {
         throw new Error(`fixture blink trace for condition ${i} does not reproduce its counts`);
       }
       fitsOut.push({
@@ -703,6 +703,9 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       blink_count_full: blinkFullFor(i),
       blink_count_micro: blinkMicroFor(i),
       blink_count_incomplete: blinkIncompleteFor(i),
+      // Every blink observed whole (the fixture's sit well inside the window), under the current rule (Round 91).
+      blink_count_cut: 0,
+      blink_rule_version: BLINK_RULE_VERSION,
       ...fixtureFitFields(conditions.map((x) => x.condition_id), sid, i),
       ear_baseline: 0.312,
       ear_threshold_used: 0.234, ear_complete_threshold: 0.234,

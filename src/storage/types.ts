@@ -1187,6 +1187,19 @@ export interface EyeMetricsRecord extends PipelineWindowFields {
   blink_count_full: number | null;
   blink_count_micro: number | null;
   blink_count_incomplete: number | null;
+  /**
+   * Blinks counted but not classified because their start or end was not observed (rule blink-r2,
+   * Round 91; audit 86 CAM-8): under way at the reading window's first sample or after a sampling gap,
+   * or at its last sample. In blink_rate, not in the three tier counts above or the ratio. Absent on rows
+   * recorded under blink-r1 (no blink_rule_version), which classified every blink; null camera-off and
+   * without a baseline.
+   */
+  blink_count_cut?: number | null;
+  /**
+   * The blink rule the counts are under (tracking/blink.ts BLINK_RULE_VERSION): 'blink-r2' from Round 91.
+   * Absent on rows recorded before it, which were counted under blink-r1; null on camera-off rows.
+   */
+  blink_rule_version?: string | null;
 
   /**
    * The fitted-minimum SENSITIVITY (tracking/blinkFit.ts, rule fit-r1; Round 79): the same blinks, each
@@ -1281,7 +1294,14 @@ export interface StoredBlinkEvent {
   duration_ms: number;
   frames_below: number;
   ended_by: 'reopened' | 'window_end';
-  /** The lowest EAR in the blink (mean of both eyes): the deepest FRAME, which is what rule blink-r1 classifies on. */
+  /**
+   * How its start was seen (Round 91): 'onset' (seen crossing the registration cut), 'window_start'
+   * (under way at the window's first face-solved sample), 'gap' (under way at the first sample after a
+   * sampling gap). With ended_by 'window_end', what makes a blink CUT under blink-r2. Absent on blinks
+   * stored before Round 91, for which it is derived from the trace (blinkLog.ts blinkStarts).
+   */
+  started_by?: 'onset' | 'window_start' | 'gap';
+  /** The lowest EAR in the blink (mean of both eyes): the deepest FRAME, which is what the blink rules classify on. */
   min_ear_raw: number;
   /** min_ear_raw / the calibration baseline the blink was classified against. */
   min_ratio_raw: number | null;

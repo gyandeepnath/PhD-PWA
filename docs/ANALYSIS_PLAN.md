@@ -603,7 +603,8 @@ These are not optional and they come first.
    - **What the analysis does.** The confirmatory ocular models use tiers A and B; **tier C is out**,
      with its count and its split by polarity printed. Three refits are reported beside the primary:
      tier A only; every tier (tier C put back); and `fps_consistent` rows only. The completeness rule
-     (`blink-r1`) is unchanged. Both templates do all of this (`[fps-g2]` lines, and §5.2 in R).
+     was not changed by the gate (`blink-r1` then; `blink-r2` from Round 91 changes which blinks are
+     classified, not the cuts — below). Both templates do all of this (`[fps-g2]` lines, and §5.2 in R).
    - **Checked before inference.** The within-participant mean difference between polarities
      (negative minus positive) in `sampling_fps_observed` and in `mean_face_luma`. If the frame-rate
      difference exceeds 2 fps, say so beside the primary and read the consistent-only refit and the
@@ -640,7 +641,8 @@ These are not optional and they come first.
    separate a camera that delivered too few frames from a tracker that could not keep up. They are
    QC, not covariates: `effective_fps` remains the rate the model adjusts for.
    **The fitted-minimum sensitivity** (Round 79, rule `fit-r1`; pre-registered, never the primary).
-   The primary rule classifies each blink on its lowest sampled frame (`blink-r1`), and a slower
+   The primary rule classifies each blink on its lowest sampled frame (`blink-r1`; `blink-r2` from
+   Round 91 does too, over the blinks observed whole — §5, end), and a slower
    camera misses the true deepest point of more blinks, so the ratio's level rises as the frame rate
    falls. `blink_count_incomplete_fit` (07) counts the same blinks judged instead on a depth
    estimated between frames — a two-phase blink template, averaged over the camera exposure, fitted
@@ -685,7 +687,8 @@ These are not optional and they come first.
      camera self-test (`window`). It holds the blink's times, its depth by the rule that classified
      it (`min_ear_raw`, `min_ratio_raw`), each eye's depth, the open eye just before it (`open_pre`,
      `min_ratio_local_raw`), the widest sampling step across it (`max_gap_ms`), the head pose at its
-     deepest frame, its tier and the rule version (`rule_version`, now `blink-r1`). Self-test rows
+     deepest frame, its tier and the rule version (`rule_version`, `blink-r2` from Round 91, before it
+     `blink-r1`), how its start was seen (`started_by`) and whether it is cut (`cut`). Self-test rows
      also say which blinks the test counted (`cue_matched`: one blink per flash, the nearest within
      1.2 s) and give every flash time (`cue_times_ms`), so the count can be re-run from the file.
    - `07c_ear_trace.csv`: one row per processed frame of each window (time, face found, each eye's
@@ -902,6 +905,59 @@ put back in a sensitivity refit printed beside it (`[ibi-r2 sensitivity] with th
 put back: ...`). Leaving them out is the conservative choice for inference — an `ibi-r1` value can only
 be lengthened by a look-away, in the direction of the hypothesis — and the refit shows what keeping them
 would change. The Python cross-check does not model the interval (§5b), so it cannot apply another rule.
+
+**A blink the window's edge or a sampling gap cuts is counted, not classified (Round 91, rule
+`blink-r2`; a fix made BEFORE DATA COLLECTION).** This changes the primary outcome's classification
+rule, and is recorded here as such. Under `blink-r1` a blink already under way at the reading window's
+first frame was classified on the part left in view — its onset the window's first frame, its depth what
+remained of it — and one still under way at the window's last frame on the part before it. A complete
+blink cut while the lid was 60-75% of the way open therefore read as INCOMPLETE. The window opens on the
+"Begin reading" tap and closes on the last page's tap, moments when a blink is likely. In audit 86
+(CAM-8), through the app's own aggregator at 24 fps, twenty complete blinks over three minutes gave a
+ratio of 0; with the window opening on the reopening tail of one more complete blink, 1/21 = 0.048;
+with it closing as the eye closed, the same. One such blink moves a twenty-blink window's ratio by about
+5 percentage points, against the planned 3-point effect (§5 item 2). The live graph had
+refused to mark exactly that blink since Round 82 (it "could be marked incomplete"); the record kept
+counting it.
+
+*The rule.* A blink is CUT when its start or its end was not observed: it was already under way at the
+window's first face-solved frame (07b `started_by` = window_start) or at the first frame after a
+sampling gap (started_by = gap; the gap rule observed time uses), or it was still under way at the
+window's last frame (`ended_by` = window_end). Its deepest frame may lie outside what was seen, so it is neither
+complete nor incomplete. It stays a registered blink — `blink_rate`, the inter-blink interval, the
+halves and the long closures count it exactly as under `blink-r1` — and it is counted in
+`blink_count_cut` (07) / `n_blinks_cut` (analysis_long). It is left out of `blink_count_full`,
+`blink_count_micro`, `blink_count_incomplete`, the ratio (numerator AND denominator), `blink_rate_full`,
+`blink_duration_mean_ms` (a cut blink's duration is only the part seen) and the
+fitted-minimum sensitivity counts. The registration and completeness cuts (0.75, 0.60), the micro rule
+and the gap rule are unchanged; the blinks found are the same; only which are classified differs.
+
+*Why this is a validity fix, not a choice that favours a result.* Under `blink-r1` the truncation could
+only make a blink look shallower than it was (what is left of a blink has a minimum at or above the
+whole blink's), so the old rule's error had a sign: toward incomplete, the direction of the hypothesis.
+`blink-r2` leaves a cut blink out on WHEN it happened, whichever way its visible part reads. The one
+dependence left is on length: a longer blink is a little likelier to straddle an edge, and complete
+blinks are the longer ones, so the rule keeps a very slightly smaller share of them. The size of that is
+small by arithmetic, not measurement: an edge falls inside a blink with probability about blink rate x
+blink length (0.3 a second x 0.2 s, about 0.06 per edge at 18 blinks a minute), so a window loses a
+blink at its two edges about one time in eight, against about twenty blinks classified. No threshold was
+changed, and no blink that was observed whole is classified differently (tests/blinkEdge.test.ts holds
+the rule against `blink-r1` as it shipped, on random windows with gaps and cut edges). The cost is the
+cut blinks taken from the denominator (the ratio's precision) — the two edges, and one for each look-away
+that ends inside a blink — shown per row in `blink_count_cut`.
+
+*Rows recorded before Round 91.* Nothing stored is rewritten. Every stored blink keeps the tier its
+visible part read, so `blink-r1` stays reproducible from 07b: count every blink by tier. Wherever a row's
+reading window was kept (07b, 07c — every sitting from schema 10), the export **recomputes** its counts,
+ratio, rates by tier, mean duration and fitted counts under `blink-r2` from those blinks (how each began
+is derived from 07c exactly as the classifier decides it; `blink_recomputed` TRUE in 07). Only a row
+whose window was not kept keeps its recorded values, stamped `blink-r1` (`blink_rule_version`); so does
+every row of a 07 file written by a build before Round 91, which has no `blink_rule_version` column —
+re-export such data with the current build. **Default (the investigator's to change):** both templates
+fit every ocular model on `blink-r2` rows; earlier-rule rows are counted (`[blink-r2] n camera-on
+condition-run(s) carry blink counts under an earlier rule ...`), kept out, and put back in a sensitivity
+refit of the primary printed with the others (`blink-r1 rows put back (n)`). The study has not collected
+data, so on the study's own data the line should read 0; the refit exists for pilot or archived data.
 
 ---
 

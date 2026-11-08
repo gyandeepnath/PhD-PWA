@@ -39,7 +39,7 @@ import { planRtBlock } from '@/lib/rtLocations';
 import { summariseRtBlock } from '@/lib/rtSummary';
 import { CONFIG } from '@/experiment/config';
 import { ENGAGEMENT } from '@/dashboard/aggregate';
-import { IBI_RULE_VERSION } from '@/tracking/blink';
+import { BLINK_RULE_VERSION, IBI_RULE_VERSION } from '@/tracking/blink';
 
 export interface CohortOptions {
   /** Participants, P001..Pnnn, enrolments 1..n. */
@@ -196,6 +196,8 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
         mean_inter_blink_interval_ms: Math.round((observed / total) * Math.exp(gaussian(rng, 0, 0.1))),
         // Under the current interval rule (Round 88), every interval observed; derived, rng untouched.
         ibi_interval_count: total - 1, ibi_rule_version: IBI_RULE_VERSION,
+        // Under the current blink rule (Round 91): no blink cut by the window's edge; derived, rng untouched.
+        blink_count_cut: 0, blink_rule_version: BLINK_RULE_VERSION,
         blink_rate_full: Math.round(((total - inc - micro) / (observed / 60_000)) * 100) / 100,
         effective_fps: fps, fps_adequate_for_ratio: fps >= 24, fps_adequate_for_tiers: fps >= 20,
         // The samples behind the row, so the frame-rate gate fps-g2 (Round 79), which reads them and

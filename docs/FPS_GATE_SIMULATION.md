@@ -40,7 +40,9 @@ Pad 6; the only device figure is the investigator's report of at most 23–25 fr
   over its exposure (instantaneous, the whole frame interval, or a fixed 30 ms), computed exactly;
   independent landmark noise of 2%, 3% or 4% of the open eye per frame (Round 75 measured 1.6–2.3%
   on one still portrait). A 30-fps camera whose tracker keeps 80% of frames was also run.
-- **Classifier:** the shipped `classifyBlinks` (rule blink-r1) against a baseline fitted by the
+- **Classifier:** the shipped `classifyBlinks` (rule blink-r1; re-run in full under blink-r2 in Round
+  91, which gave every number below unchanged — every simulated run starts and ends open-eyed, so no
+  blink is cut; the appendix is that re-run, and tests/fpsGateSim.test.ts pins the small run) against a baseline fitted by the
   shipped `fitEarBaseline` on a 6-s open-eye window, as at calibration. The truth is "incomplete"
   when the true lowest openness is 0.60 or more.
 - **Pairing:** within a scenario the same blinks are sampled at every frame rate, so differences
@@ -244,7 +246,7 @@ the camera sees this person's blinks, as before. Nothing was measured on the tab
 
 Runs per cell 150; base seed 20261008; each run a 180-s reading window (about 27 blinks).
 
-#### A. The gate grid — the shipped lowest-frame rule (blink-r1)
+#### A. The gate grid — the shipped lowest-frame rule (blink-r2)
 
 18 scenarios: lid profile {cosine, linear} x exposure {whole frame interval, instant, 30 ms fixed} x per-frame noise {2%, 3%, 4%}.
 
@@ -375,7 +377,7 @@ GATE fps-g2: adequate >= 20; reduced 15 to < 20; exploratory < 15; consistent wi
 - **C2** at 22 fps kappa is at most 0.032 below its 30-fps value in every scenario: **yes** (limit 0.05). At 20 fps: 0.048.
 - **C3** worst slope 0.310 points per fps (cosine, exposure whole frame, noise 4%); 25% of the planned 3-point effect is 0.75 points; band = floor(0.75 / 0.310) = **2 fps** (worst-case shift over the band 0.62 points).
 
-#### B. The fitted minimum (fit-r1) against the lowest frame (blink-r1)
+#### B. The fitted minimum (fit-r1) against the lowest frame (blink-r2)
 
 Noise 3%. The fit assumes the exposure the frames really had (as under the fixed camera exposure). "Bias" is the incomplete share among detected blinks minus the true share. Misclassified: share of detected blinks given the wrong class.
 

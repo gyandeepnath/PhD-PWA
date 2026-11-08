@@ -257,6 +257,11 @@ for (const { root, options } of jobs) {
   //    ibi-r1 (every interval, a dropout's unobserved time included; audit 86 D2), which R must count
   //    and leave out of the inter-blink-interval model.
   const flaggedIbiOld = editColumn(join(at('flagged'), 'P001', '07_eye_metrics.csv'), 'ibi_rule_version', () => '');
+  //    ... and P002's blink counts recorded before Round 91 and not recomputed: blink_rule_version blank,
+  //    read as blink-r1 (a blink cut by the window's edge classified on the part in view; audit 86 CAM-8),
+  //    which both templates must count, keep out of every ocular model and put back in a refit.
+  let flaggedBlinkOld = 0;
+  editColumn(join(at('flagged'), 'P002', '07_eye_metrics.csv'), 'blink_rule_version', (v) => { if (v === 'blink-r2') flaggedBlinkOld++; return ''; });
   //  - r-short: every exposure halved, and no target locations (a pre-Round-66 export);
   cpSync(cohortDir, at('r-short'), { recursive: true });
   const shortMarked = editColumn(join(at('r-short'), 'P001', '07_eye_metrics.csv'), 'observed_duration_ms',
@@ -529,6 +534,19 @@ for (const { root, options } of jobs) {
   for (const label of ['fps-g2 tier A only \\(reduced rows out\\)', 'fps-g2 every tier \\(tier C put back\\)', 'fps-g2 consistent rows only \\(within 2 fps\\)']) {
     ok(`fps-g2: the refit "${label.replace(/\\/g, '')}" runs`, new RegExp(`${label}\\s+polarity_c -?[\\d.]+`).test(r2.stdout), 'no such sensitivity line');
   }
+  /*
+   * The blink rule (Round 91, audit 86 CAM-8): the cohort is wholly blink-r2; in the flagged state P002's
+   * rows are left at blink-r1, counted, out of the ocular models, and put back in a refit of the primary.
+   */
+  const pyBlinkLine = (text) => (/^\[blink-r2\][^\n]*/m.exec(text) ?? ['no [blink-r2] line'])[0];
+  ok('Python: every blink count in the cohort is under the current rule (blink-r2)',
+    /\[blink-r2\] 0 camera-on condition-run\(s\) carry blink counts under an earlier rule \(none\)/.test(r.stdout)
+      && /every row is under blink-r2: the earlier-rule refit is the primary itself/.test(r.stdout), pyBlinkLine(r.stdout));
+  ok('Python (flagged): rows left at blink-r1 are counted, out of the ocular models, and put back in a refit of the primary',
+    flaggedBlinkOld > 0
+      && new RegExp(`\\[blink-r2\\] ${flaggedBlinkOld} camera-on condition-run\\(s\\) carry blink counts under an earlier rule \\(blink-r1\\)`).test(r2.stdout)
+      && new RegExp(`blink-r1 rows put back \\(${flaggedBlinkOld}\\)\\s+polarity_c -?[\\d.]+`).test(r2.stdout),
+    `${pyBlinkLine(r2.stdout)}; P002 rows blanked ${flaggedBlinkOld}`);
   // =========================================================================
   // The R template.
   // =========================================================================
@@ -696,8 +714,22 @@ for (const { root, options } of jobs) {
       const sens = /^\[ibi-r2 sensitivity\] with the (\d+) earlier-rule row\(s\) put back: polarity\S* -?[\d.]+ \(SE [\d.]+\) on the log scale, n = (\d+)\./m.exec(fOut);
       ok('R (flagged): rows left at ibi-r1 are counted, out of the inter-blink-interval model, and put back in its sensitivity refit',
         flaggedIbiOld && /\[ibi-r2\] 8 camera-on condition-run\(s\) carry an inter-blink interval under an earlier rule \(ibi-r1\)/.test(fOut)
-          && ibiGiven(fOut) === ibiGiven(rOut) - 10 && sens?.[1] === '8' && +sens[2] === ibiGiven(rOut) - 2,
-        `${ibiLine(fOut)}; modelled rows ${ibiGiven(fOut)} vs ${ibiGiven(rOut)} in the cohort; sensitivity ${sens?.[0] ?? 'missing'}`);
+          && ibiGiven(fOut) === ibiGiven(rOut) - 10 - flaggedBlinkOld && sens?.[1] === '8' && +sens[2] === ibiGiven(rOut) - 2 - flaggedBlinkOld,
+        `${ibiLine(fOut)}; modelled rows ${ibiGiven(fOut)} vs ${ibiGiven(rOut)} in the cohort (P002's ${flaggedBlinkOld} blink-r1 rows out too); sensitivity ${sens?.[0] ?? 'missing'}`);
+      /*
+       * THE BLINK RULE (Round 91, audit 86 CAM-8). The cohort is wholly blink-r2. In the flagged state
+       * P002's rows are left at blink-r1 (not recomputable): counted, out of every ocular model, and put
+       * back in a refit of the primary.
+       */
+      const blinkLine = (text) => (/^\[blink-r2\][^\n]*/m.exec(text) ?? ['no [blink-r2] line'])[0];
+      ok('R: every blink count in the cohort is under the current rule (blink-r2)',
+        /\[blink-r2\] 0 camera-on condition-run\(s\) carry blink counts under an earlier rule \(none\)/.test(rOut)
+          && /every row is under blink-r2: the earlier-rule refit is the primary itself/.test(rOut), blinkLine(rOut));
+      ok('R (flagged): rows left at blink-r1 are counted, out of the ocular models, and put back in a refit of the primary',
+        flaggedBlinkOld > 0
+          && new RegExp(`\\[blink-r2\\] ${flaggedBlinkOld} camera-on condition-run\\(s\\) carry blink counts under an earlier rule \\(blink-r1\\)`).test(fOut)
+          && new RegExp(`blink-r1 rows put back \\(${flaggedBlinkOld}\\)\\s+polarity -?[\\d.]+`).test(fOut),
+        `${blinkLine(fOut)}; P002 rows blanked ${flaggedBlinkOld}`);
     }
     // m5: Objective 2's three models carry the primary's covariates, and the residual-hue model's
     // collinearity is printed beside its coefficients.

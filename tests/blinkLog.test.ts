@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  BLINK_RULE_VERSION, EAR_TIERS, GAP_MULTIPLE, MIN_GAP_MS, classifyBlinks, type EarSample,
+  BLINK_RULE_VERSION, EAR_TIERS, GAP_MULTIPLE, MIN_GAP_MS, classifyBlinks, summariseBlinks, type EarSample,
 } from '@/tracking/blink';
 import {
   blinkDetail, buildOcularEventsRecord, cueLag, decodeTrace, emptyTrace, encodeTrace, localFps, measuredFrames, ocularRecordId, pageAt,
@@ -46,10 +46,14 @@ describe('the rule version names the rules', () => {
    * BLINK_RULE_VERSION too (tracking/blink.ts), record the change in docs/ANALYSIS_PLAN.md, and only
    * then update the expected values here. Ratios classified under two rule sets are not comparable.
    */
-  it('blink-r1 is: register below 0.75, complete below 0.60, micro under 40 ms, gaps over max(250 ms, 4 x median)', () => {
+  it('blink-r2 is: register below 0.75, complete below 0.60, micro under 40 ms, gaps over max(250 ms, 4 x median), a blink not observed whole not classified', () => {
     expect({ version: BLINK_RULE_VERSION, tiers: EAR_TIERS, gapMultiple: GAP_MULTIPLE, minGapMs: MIN_GAP_MS }).toEqual({
-      version: 'blink-r1', tiers: { full: 0.6, partial: 0.75, micro: 0.88 }, gapMultiple: 4, minGapMs: 250,
+      version: 'blink-r2', tiers: { full: 0.6, partial: 0.75, micro: 0.88 }, gapMultiple: 4, minGapMs: 250,
     });
+    // Round 91 (audit 86 CAM-8): a blink under way at the first sample, or at the last, is cut —
+    // registered, and in no tier count. tests/blinkEdge.test.ts holds the rest of it.
+    const cut = summariseBlinks(classifyBlinks([{ t_ms: 0, ear: 0.2 }, { t_ms: 30, ear: BASE }, { t_ms: 60, ear: 0.1 }, { t_ms: 90, ear: 0.1 }], BASE), 1000);
+    expect(cut).toMatchObject({ blink_count_full: 0, blink_count_micro: 0, blink_count_incomplete: 0, blink_count_cut: 2, incomplete_blink_ratio: null });
     const blinkOf = (reopenAt: number) => classifyBlinks(
       [{ t_ms: 0, ear: BASE }, { t_ms: 10, ear: 0.1 }, { t_ms: reopenAt, ear: BASE }], BASE,
     );

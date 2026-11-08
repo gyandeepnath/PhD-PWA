@@ -44,6 +44,7 @@ import { ANALYSIS_CODEBOOK } from './analysisCodebook';
 import { N_ILLUMINATION_BLOCKS, specFor, LUX_CHECKPOINTS } from '@/experiment/illumination';
 import { fpsConsistent, fpsTier, medianFps, rowGateVersion, samplingFpsObserved } from '@/tracking/frameRateGate';
 import { ocularReliability } from '@/tracking/ocularReliability';
+import { exportedBlinkCounts } from '@/tracking/blinkLog';
 
 /** Illumination blocks a participant completes — ONE under the current protocol. Runs = N x this. */
 // Derived, never a literal: this used to be a hard-coded 2, which would have silently survived the
@@ -63,7 +64,7 @@ export const ANALYSIS_LONG_COLUMNS = [
   'predecessor_condition_label',
   'passage_id', 'passage_repeat_number',
   // --- primary outcome, as counts and as a proportion -------------------------------------
-  'n_incomplete', 'n_blinks_total', 'incomplete_blink_ratio',
+  'n_incomplete', 'n_blinks_total', 'incomplete_blink_ratio', 'n_blinks_cut', 'blink_rule_version',
   // --- the fitted-minimum sensitivity (Round 79): same denominator, a numerator judged between frames
   'n_incomplete_fit', 'fit_exposure_known',
   'blink_rate_per_min', 'observed_duration_ms', 'reading_time_ms', 'reading_speed_wpm',
@@ -224,9 +225,12 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
       // Camera-gated, as buildConditionSummaries already was: records from earlier builds carry
       // blink counts of 0 on camera-off rows, which exported "0 of 0 blinks" as if measured.
       const camOn = e?.camera_active === true;
-      const nInc = camOn ? numOrNull(e?.blink_count_incomplete) : null;
-      const nFull = camOn ? numOrNull(e?.blink_count_full) : null;
-      const nMicro = camOn ? numOrNull(e?.blink_count_micro) : null;
+      // Under the current blink rule wherever the kept window allows (Round 91, blink-r2), exactly as
+      // 07_eye_metrics.csv exports them (blinkLog.ts exportedBlinkCounts).
+      const bl = camOn && e ? exportedBlinkCounts(e, b.ocularEvents) : null;
+      const nInc = bl ? numOrNull(bl.blink_count_incomplete) : null;
+      const nFull = bl ? numOrNull(bl.blink_count_full) : null;
+      const nMicro = bl ? numOrNull(bl.blink_count_micro) : null;
       const nTotal = nInc != null && nFull != null && nMicro != null ? nInc + nFull + nMicro : null;
 
       const prev = ordered.find((x) => x.session_position === sum.session_position - 1);
@@ -318,9 +322,12 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         n_incomplete: nInc,
         n_blinks_total: nTotal,
         incomplete_blink_ratio: round(sum.incomplete_blink_ratio),
+        // Registered blinks left unclassified (blink-r2): in blink_rate_per_min, in neither count above.
+        n_blinks_cut: bl && nTotal != null ? numOrNull(bl.blink_count_cut) : null,
+        blink_rule_version: bl?.blink_rule_version ?? null,
         // Blank on camera-off rows, and where the row predates the fitted minimum (Round 79).
-        n_incomplete_fit: camOn && nTotal != null ? numOrNull(e?.blink_count_incomplete_fit) : null,
-        fit_exposure_known: camOn && nTotal != null && e?.blink_count_incomplete_fit != null ? (e.fit_exposure_known ?? null) : null,
+        n_incomplete_fit: bl && nTotal != null ? numOrNull(bl.blink_count_incomplete_fit) : null,
+        fit_exposure_known: bl && nTotal != null && bl.blink_count_incomplete_fit != null ? (e?.fit_exposure_known ?? null) : null,
         blink_rate_per_min: round(sum.blink_rate),
         observed_duration_ms: e?.observed_duration_ms ?? null,
         reading_time_ms: sum.reading_time_ms,
@@ -336,7 +343,8 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         })(),
 
         perclos_p80: round(sum.perclos_p80),
-        blink_duration_mean_ms: round(e?.blink_duration_mean_ms),
+        // As 07 exports it: over the blinks observed whole (blink-r2), recomputed for a blink-r1 row.
+        blink_duration_mean_ms: round(bl ? bl.blink_duration_mean_ms : e?.blink_duration_mean_ms),
         mean_inter_blink_interval_ms: round(sum.mean_inter_blink_interval_ms),
         // Which interval rule the value above is under (Round 88; blinkLog.ts exportedInterBlinkInterval).
         ibi_rule_version: camOn ? sum.ibi_rule_version : null,

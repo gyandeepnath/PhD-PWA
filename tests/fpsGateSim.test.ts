@@ -86,6 +86,13 @@ describe('a small fixed-seed run', () => {
     expect(deep.detection).toBe(1);
   });
 
+  it('cuts no blink: its runs start and end open-eyed, so blink-r2 gives blink-r1\'s numbers (Round 91)', () => {
+    // The pinned ratios above and docs/FPS_GATE_SIMULATION.md were computed under blink-r1. Re-run under
+    // blink-r2 (a blink cut by a run's end is not classified), they are unchanged because none is cut.
+    const r = run();
+    for (const c of ['20', '30', '60']) expect(r.cells[c].cut, `cut at ${c} fps`).toBe(0);
+  });
+
   it('fits the minimum when asked, and leaves the lowest-frame class alone', () => {
     const r = runScenario({ name: 'pin-fit', shape: 'cosine', sigma: 0.03, runs: 2, seed: 7 },
       [{ label: '24', plan: { kind: 'regular', fps: 24, exposureMs: 'frame' }, fit: 'true' }]);

@@ -21,7 +21,7 @@ import { FPS_GATE, FPS_GATE_V1, FPS_GATE_VERSION } from '@/tracking/frameRateGat
 import { RELIABILITY_GATES, RELIABILITY_RULE_VERSION } from '@/tracking/ocularReliability';
 import { SLIDER_VERSION, SLIDER_VERSION_V1, VAS_LINE_MM } from '@/scales/vas';
 import { ATTEMPT_RULE_VERSION, ATTEMPT_RULE_VERSION_V1 } from '@/experiment/conditionAttempt';
-import { IBI_RULE_BEFORE, IBI_RULE_VERSION } from '@/tracking/blink';
+import { BLINK_RULE_BEFORE, BLINK_RULE_VERSION, IBI_RULE_BEFORE, IBI_RULE_VERSION } from '@/tracking/blink';
 
 // The current protocol's single illumination level, for the prose below — derived, so it cannot say
 // "300 lux" after the protocol changes. See docs/ILLUMINATION_AMENDMENT.md.
@@ -112,11 +112,15 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
 
   // ---------------------------------------------------------------- primary outcome
   { column: 'n_incomplete', role: 'primary', unit: 'count', missing: 'camera not running',
-    description: 'NUMERATOR of the primary outcome: blinks that crossed the registration threshold without reaching full closure.' },
+    description: `NUMERATOR of the primary outcome: blinks that crossed the registration threshold without reaching full closure, among the blinks observed from start to end (${BLINK_RULE_VERSION}; blink_rule_version).` },
   { column: 'n_blinks_total', role: 'primary', unit: 'count', missing: 'any component missing',
-    description: 'DENOMINATOR: incomplete + full + micro. Model the primary outcome as cbind(n_incomplete, n_blinks_total - n_incomplete) in a binomial mixed model. This weights each observation by the information it carries; a ratio from 8 blinks and one from 60 are not the same measurement.' },
+    description: 'DENOMINATOR: incomplete + full + micro — the classified blinks; a cut blink (n_blinks_cut) is in neither count. Model the primary outcome as cbind(n_incomplete, n_blinks_total - n_incomplete) in a binomial mixed model. This weights each observation by the information it carries; a ratio from 8 blinks and one from 60 are not the same measurement.' },
   { column: 'incomplete_blink_ratio', role: 'primary', unit: '0-1', missing: 'camera not running',
     description: 'The proportion itself, for description and plots. Prefer the counts for inference: a Gaussian model of this column treats an 8-blink and a 60-blink observation as equally precise.' },
+  { column: 'n_blinks_cut', role: 'qc', unit: 'count', missing: 'camera not running, no baseline, or a row left under blink-r1',
+    description: `Blinks registered but not classified, because their start or end was not observed (${BLINK_RULE_VERSION}, Round 91; audit 86 CAM-8): already under way when the reading window opened or when the face came back after a sampling gap, or still under way when it closed. Their deepest frame may lie outside what was seen, so they are in blink_rate_per_min and in neither n_incomplete nor n_blinks_total. Under ${BLINK_RULE_BEFORE} they were classified on the part in view, and a complete blink cut by the window's edge counted as incomplete.` },
+  { column: 'blink_rule_version', role: 'qc', unit: '-', missing: 'camera not running',
+    description: `The blink rule the counts are under (07_eye_metrics.csv blink_rule_version): '${BLINK_RULE_VERSION}', or '${BLINK_RULE_BEFORE}' on a row recorded before Round 91 whose blinks and trace were not kept, so it could not be recomputed (a row with them is exported recomputed under ${BLINK_RULE_VERSION}). Ratios under two rules are not comparable: the templates model the ${BLINK_RULE_VERSION} rows and refit with the ${BLINK_RULE_BEFORE} rows put back as a sensitivity (ANALYSIS_PLAN.md §5).` },
   { column: 'n_incomplete_fit', role: 'qc', unit: 'count', missing: 'camera not running, or recorded before Round 79',
     description: 'SENSITIVITY ANALYSIS ONLY, never the primary outcome (rule fit-r1): the same blinks as n_incomplete, each judged on its depth estimated BETWEEN camera frames instead of on its lowest frame, which removes most of the frame-rate dependence of the ratio\'s level (docs/FPS_GATE_SIMULATION.md). Refit the primary with cbind(n_incomplete_fit, n_blinks_total - n_incomplete_fit) as docs/ANALYSIS_PLAN.md §5 item 2 pre-specifies.' },
   { column: 'fit_exposure_known', role: 'qc', unit: 'boolean', missing: 'no n_incomplete_fit on the row',

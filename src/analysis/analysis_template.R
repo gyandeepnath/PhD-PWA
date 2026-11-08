@@ -1870,6 +1870,27 @@ primary_failed <- FALSE
 eye <- eye %>% mutate(
   blink_total = blink_count_incomplete + blink_count_full + blink_count_micro
 ) %>% filter(!is.na(blink_total), blink_total > 0)
+# ONE BLINK RULE (blink-r2, Round 91; audit 86 CAM-8; ANALYSIS_PLAN.md §5). Under blink-r1 a blink cut by
+# the reading window's edge or by a sampling gap was classified on the part in view, so a complete blink
+# cut while the lid was 60-75% open counted as INCOMPLETE; blink-r2 counts it (blink_count_cut) and
+# classifies it in no tier, so it is in neither count of the binomial response. The app exports a row
+# recorded before Round 91 RECOMPUTED under blink-r2 from its kept blinks (07 blink_recomputed TRUE), so
+# the only blink-r1 rows left are those it could not recompute (a sitting before schema 10) — or every
+# row, in a 07 file written by a build before Round 91 (no blink_rule_version column): re-export it with
+# the current build. Such rows are counted, kept out of every ocular model, and put back in a
+# sensitivity refit of the primary (eye_all_rules), so the investigator sees both.
+BLINK_RULE_VERSION <- "blink-r2"  # src/tracking/blink.ts BLINK_RULE_VERSION (tests/blinkEdge.test.ts pins it)
+blink_rule <- if ("blink_rule_version" %in% names(eye)) as.character(eye$blink_rule_version) else rep(NA_character_, nrow(eye))
+blink_rule <- ifelse(is.na(blink_rule) | blink_rule == "", "blink-r1", blink_rule)
+n_blink_old <- sum(blink_rule != BLINK_RULE_VERSION)
+n_blink_recomputed <- if ("blink_recomputed" %in% names(eye)) sum(eye$blink_recomputed %in% c(1, TRUE, "TRUE", "true")) else 0L
+cat(sprintf("\n[%s] %d camera-on condition-run(s) carry blink counts under an earlier rule (%s) and are out of the ocular models; %d were recorded before Round 91 and recomputed by the app.\n",
+            BLINK_RULE_VERSION, n_blink_old,
+            if (n_blink_old > 0) paste(sort(unique(blink_rule[blink_rule != BLINK_RULE_VERSION])), collapse = ", ") else "none",
+            n_blink_recomputed))
+eye_all_rules <- eye
+eye <- eye[blink_rule == BLINK_RULE_VERSION, , drop = FALSE]
+eye_all_rules <- eye_all_rules %>% filter(!(fps_tier %in% "C")) %>% mutate(eff_fps_c = as.numeric(scale(effective_fps, scale = FALSE)))
 # THE FRAME-RATE GATE fps-g2 (ANALYSIS_PLAN.md §5 item 2, pre-registered): tier C — under 15 face-solved
 # samples a second while the face was seen, a rate at which the classifier was not shown to work — is
 # out of the confirmatory ocular models, and every model below that reads `eye` sees tiers A and B only.
@@ -2221,6 +2242,12 @@ if (nrow(eye) == 0) {
       sens_line("fps-g2 every tier (tier C put back)", refit_on(eye_all_tiers))
     } else {
       cat("  no tier-C row: the every-tier refit is the primary itself.\n")
+    }
+    # The blink rule (Round 91): rows left under blink-r1 put back, if there are any.
+    if (n_blink_old > 0) {
+      sens_line(sprintf("blink-r1 rows put back (%d)", n_blink_old), refit_on(eye_all_rules))
+    } else {
+      cat(sprintf("  every row is under %s: the earlier-rule refit is the primary itself.\n", BLINK_RULE_VERSION))
     }
     if (any(eye$fps_consistent %in% FALSE)) {
       sens_line("fps-g2 consistent rows only (within 2 fps)", refit_on(eye %>% filter(fps_consistent %in% TRUE)))

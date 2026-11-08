@@ -15,9 +15,9 @@
  * quietly de-duplicating would hide the upstream bug that produced the duplicate.
  */
 import { QUESTIONS_PER_PASSAGE } from '@/experiment/passages';
-import { cueMatched, measuredFrames, tierCounts } from '@/tracking/blinkLog';
+import { blinkStarts, cueMatched, measuredFrames, tierCounts } from '@/tracking/blinkLog';
 import { SELF_TEST_RULE_V1 } from '@/tracking/selfTest';
-import { EAR_TIERS } from '@/tracking/blink';
+import { BLINK_RULE_BEFORE, EAR_TIERS, isCutBlink } from '@/tracking/blink';
 import type { SessionBundle } from './gather';
 import { MIN_SCALE } from '@/lib/viewportScale';
 import { rowSliderVersion } from '@/scales/vas';
@@ -707,23 +707,32 @@ export function auditBundle(bundle: SessionBundle, opts: AuditOptions = {}): Int
         continue;
       }
       const eye = eyeById.get(cid);
-      const n = tierCounts(o.events);
+      /*
+       * Under the row's own blink rule (Round 91): a blink-r2 row counts by tier only the blinks observed
+       * whole, and its cut ones in blink_count_cut; a blink-r1 row (no blink_rule_version) every blink.
+       */
+      const rule = eye?.blink_rule_version || BLINK_RULE_BEFORE;
+      const starts = blinkStarts(o);
+      const classified = rule === BLINK_RULE_BEFORE ? o.events : o.events.filter((e, k) => !isCutBlink({ ended_by: e.ended_by, started_by: starts[k] }));
+      const n = tierCounts(classified);
+      const cut = rule === BLINK_RULE_BEFORE ? null : o.events.length - classified.length;
       const counted = eye && eye.blink_count_full != null && eye.blink_count_micro != null && eye.blink_count_incomplete != null
-        ? { full: eye.blink_count_full, micro: eye.blink_count_micro, incomplete: eye.blink_count_incomplete }
+        ? { full: eye.blink_count_full, micro: eye.blink_count_micro, incomplete: eye.blink_count_incomplete, cut: eye.blink_count_cut ?? null }
         : null;
       const same = counted
-        ? counted.full === n.full && counted.micro === n.micro && counted.incomplete === n.incomplete
+        ? counted.full === n.full && counted.micro === n.micro && counted.incomplete === n.incomplete && counted.cut === cut
         : o.events.length === 0;
       if (!same) {
         add('warning', 'blink_events_match_summary',
           `Condition "${cid}": 07b lists ${n.full} full, ${n.micro} micro and ${n.incomplete} incomplete `
-          + `blinks, but 07_eye_metrics counts ${counted ? `${counted.full}, ${counted.micro} and ${counted.incomplete}` : 'none (no blink measure)'}. `
+          + `blinks${cut != null ? ` and ${cut} cut` : ''} (${rule}), but 07_eye_metrics counts `
+          + `${counted ? `${counted.full}, ${counted.micro} and ${counted.incomplete}${counted.cut != null ? ` and ${counted.cut} cut` : ''}` : 'none (no blink measure)'}. `
           + 'Do not use 07b/07c for this condition; 07_eye_metrics is unaffected.', [cid]);
       }
       // The fitted-minimum sensitivity count (Round 79) is the same blinks re-judged on min_ratio_fit, an
       // unfitted blink keeping its tier; recounted from 07b it must equal 07's blink_count_incomplete_fit.
       if (eye && eye.blink_count_incomplete_fit != null && o.fit_rule_version) {
-        const fitted = o.events.filter((e) => (e.min_ratio_fit != null ? e.min_ratio_fit >= EAR_TIERS.full : e.tier === 'incomplete')).length;
+        const fitted = classified.filter((e) => (e.min_ratio_fit != null ? e.min_ratio_fit >= EAR_TIERS.full : e.tier === 'incomplete')).length;
         if (fitted !== eye.blink_count_incomplete_fit) {
           add('warning', 'blink_fit_matches_summary',
             `Condition "${cid}": by 07b's min_ratio_fit ${fitted} blinks are incomplete, but 07_eye_metrics `

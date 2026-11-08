@@ -68,18 +68,35 @@ export const RIGHT_EYE_EAR = [362, 385, 387, 263, 373, 380];
 export const EAR_TIERS = { full: 0.6, partial: 0.75, micro: 0.88 } as const;
 
 /**
- * Names the rules `classifyBlinks` applies, so a stored blink can say which rules made it (Round 78).
+ * Names the rules a blink is found and classified by, so a stored blink and a row can say which rules
+ * made them (Round 78; on the eye-metrics row from Round 91).
  *
  * 'blink-r1': a blink starts at the first sample below 0.75 x the open baseline and ends at the first
  * sample back at or above it (or at the end of the window); it is complete ('full') when its deepest
  * sample is below 0.60 x baseline, and 'micro' when complete and shorter than 40 ms; a blink open
  * across a sampling gap (more than max(250 ms, 4 x the median frame interval)) is dropped, not closed.
  *
- * Any change to those rules — a cut, the micro rule, the gap rule — must change this string, so rows
- * made under the old and the new rules can be told apart. tests/blinkLog.test.ts pins the constants
- * to the version: changing one without the other fails it.
+ * 'blink-r2' (Round 91, audit 86 CAM-8; a fix made before data collection): blink-r1, except that a
+ * blink whose start or end was not observed is CUT — counted, but not classified. Under blink-r1 a
+ * blink already under way at the window's first sample, or at the first sample after a sampling gap,
+ * was classified on the part left in view, and one still under way at the window's last sample on the
+ * part before it: a complete blink cut while its lid was 60-75% of the way open read as INCOMPLETE,
+ * in the primary outcome. The window opens on the "Begin reading" tap and closes on the last page's,
+ * moments a blink is likely, and one such blink moves a twenty-blink window's ratio by about 5 points
+ * (the effect the study is powered for is 3). A cut blink's depth is unknown, so it is neither
+ * complete nor incomplete: it stays a registered blink (blink_rate, the inter-blink interval, the
+ * halves, the long closures — every measure that counts registered blinks — are as under blink-r1),
+ * it is counted in blink_count_cut, and it is left out of the tier counts, the incomplete-blink ratio
+ * (numerator and denominator), the rates and mean duration by tier, and the fitted sensitivity. It is
+ * left out whichever way its visible part reads, so leaving it out cannot favour either tier.
+ *
+ * Any change to those rules — a cut, the micro rule, the gap rule, what is classified — must change
+ * this string, so rows made under the old and the new rules can be told apart. tests/blinkLog.test.ts
+ * pins the constants to the version: changing one without the other fails it.
  */
-export const BLINK_RULE_VERSION = 'blink-r1';
+export const BLINK_RULE_VERSION = 'blink-r2';
+/** The rule before BLINK_RULE_VERSION, which a row with no blink_rule_version was counted under. */
+export const BLINK_RULE_BEFORE = 'blink-r1';
 /**
  * Gate g1's floor for the duration-based tiers (fps_adequate_for_tiers). SUPERSEDED from Round 79 by
  * the frame-rate gate fps-g2 (frameRateGate.ts), which every screen, the export and the templates now
@@ -281,6 +298,27 @@ export interface BlinkEventDetail extends BlinkEvent {
   frames_below: number;
   /** 'reopened' when the eye came back above the cut; 'window_end' when the window ended first. */
   ended_by: 'reopened' | 'window_end';
+  /**
+   * How its start was seen (Round 91): 'onset' when the eye was seen crossing the cut (the sample before
+   * was above it, with no sampling gap between); 'window_start' when it was already under way at the
+   * window's first sample; 'gap' when it was already under way at the first sample after a sampling gap.
+   * With ended_by, it decides whether the blink is CUT (isCutBlink; blink-r2).
+   */
+  started_by: BlinkStart;
+}
+
+export type BlinkStart = 'onset' | 'window_start' | 'gap';
+
+/**
+ * A blink whose start or end was not observed (blink-r2): under way at the window's first sample or at
+ * the first sample after a sampling gap, or still under way at the window's last sample. Its depth — the
+ * deepest frame — may lie outside what was seen, so it is not classified complete or incomplete.
+ *
+ * `started_by` absent (a blink stored before Round 91) reads as observed: the caller that has the trace
+ * derives it (blinkLog.ts blinkStarts).
+ */
+export function isCutBlink(e: { ended_by?: string; started_by?: string | null }): boolean {
+  return e.ended_by === 'window_end' || (e.started_by != null && e.started_by !== 'onset');
 }
 
 export interface EarSample {
@@ -387,18 +425,23 @@ export function classifyBlinks(samples: EarSample[], baseline: number | null): B
   let minEar = Infinity;
   let minAt = 0;
   let below = 0;
-  const open = (s: EarSample) => {
+  let startedBy: BlinkStart = 'onset';
+  const open = (s: EarSample, how: BlinkStart) => {
     inBlink = true;
     onset = s.t_ms;
     minEar = s.ear;
     minAt = s.t_ms;
     below = 1;
+    startedBy = how;
   };
 
   for (let i = 0; i < samples.length; i++) {
     const s = samples[i];
     if (!inBlink && s.ear < partialT) {
-      open(s);
+      // Already below the cut where the series begins, or where it resumes after a gap: the eye was not
+      // seen crossing it, so this blink's start is not in view (blink-r2 cuts it; blink-r1 counted it).
+      const prev = samples[i - 1];
+      open(s, !prev ? 'window_start' : s.t_ms - prev.t_ms > gapMs ? 'gap' : 'onset');
     } else if (inBlink) {
       // A gap since the previous sample: the face was absent, so this blink was not observed to
       // its end and cannot be measured. Abandon it.
@@ -407,7 +450,7 @@ export function classifyBlinks(samples: EarSample[], baseline: number | null): B
         inBlink = false;
         minEar = Infinity;
         // Re-test this sample as a possible fresh onset rather than skipping it.
-        if (s.ear < partialT) open(s);
+        if (s.ear < partialT) open(s, 'gap');
         continue;
       }
       if (s.ear < minEar) { minEar = s.ear; minAt = s.t_ms; }
@@ -424,6 +467,7 @@ export function classifyBlinks(samples: EarSample[], baseline: number | null): B
           onset_ms: onset, duration_ms: duration, min_ear: minEar, tier,
           offset_ms: s.t_ms, min_at_ms: minAt, frames_below: below,
           ended_by: s.ear >= partialT ? 'reopened' : 'window_end',
+          started_by: startedBy,
         });
         inBlink = false;
         minEar = Infinity;
@@ -470,8 +514,10 @@ export interface BlinkSummary {
   blink_count_full: number;
   blink_count_micro: number;
   blink_count_incomplete: number;
+  /** blink-r2: registered blinks left unclassified because their start or end was not observed; null under blink-r1. */
+  blink_count_cut: number | null;
   /**
-   * Incomplete blinks / all blinks - the study's PRIMARY OUTCOME.
+   * Incomplete blinks / all CLASSIFIED blinks - the study's PRIMARY OUTCOME (blink-r2: cut blinks are in neither).
    *
    * NULL when no blinks were detected. A proportion of an empty set is undefined, not zero, and
    * reporting 0 here was the most dangerous default in the codebase: a failed camera, an
@@ -483,20 +529,37 @@ export interface BlinkSummary {
   blink_duration_mean_ms: number | null;
 }
 
-export function summariseBlinks(events: BlinkEvent[], durationMs: number): BlinkSummary {
-  const by = (t: BlinkTier) => events.filter((e) => e.tier === t).length;
+/**
+ * The row's blink measures from its blinks, under `rule` (BLINK_RULE_VERSION unless asked otherwise).
+ *
+ * blink-r2: a CUT blink (isCutBlink) is a registered blink — blink_rate counts it — but is not
+ * classified: the tier counts, the ratio, the rates by tier and the mean duration are over the blinks
+ * observed from start to end, and blink_count_cut says how many were left out. blink-r1, kept so a row
+ * recorded under it can be reproduced from its stored blinks: every blink classified by what was seen of
+ * it, and no cut count (null).
+ */
+export function summariseBlinks(
+  events: Array<BlinkEvent & { ended_by?: string; started_by?: string | null }>,
+  durationMs: number,
+  rule: string = BLINK_RULE_VERSION,
+): BlinkSummary {
+  const cutsApply = rule !== BLINK_RULE_BEFORE;
+  const classified = cutsApply ? events.filter((e) => !isCutBlink(e)) : events;
+  const by = (t: BlinkTier) => classified.filter((e) => e.tier === t).length;
   const full = by('full');
   const micro = by('micro');
   const incomplete = by('incomplete');
-  const total = events.length; // full + micro + incomplete
-  const durations = events.map((e) => e.duration_ms);
+  const total = classified.length; // full + micro + incomplete
+  const durations = classified.map((e) => e.duration_ms);
   return {
-    blink_rate: blinkRatePerMinute(total, durationMs),
+    // Every registered blink, cut ones included: a cut blink is a blink whose depth is unknown.
+    blink_rate: blinkRatePerMinute(events.length, durationMs),
     blink_rate_full: blinkRatePerMinute(full, durationMs),
     blink_rate_micro: blinkRatePerMinute(micro, durationMs),
     blink_count_full: full,
     blink_count_micro: micro,
     blink_count_incomplete: incomplete,
+    blink_count_cut: cutsApply ? events.length - classified.length : null,
     incomplete_blink_ratio: total > 0 ? incomplete / total : null,
     blink_duration_mean_ms:
       durations.length > 0 ? durations.reduce((s, d) => s + d, 0) / durations.length : null,

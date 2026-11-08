@@ -25,8 +25,11 @@
  * ten-condition sitting's records are about 1.7 MB (measured: docs/ANALYSIS_PLAN.md §5 item 6, which
  * also gives the backup and export sizes; tests/blinkLog.test.ts fails if they drift).
  */
-import type { BlinkEventDetail, EarSample, InterBlinkInterval } from './blink';
-import { BLINK_RULE_VERSION, EAR_TIERS, IBI_RULE_BEFORE, IBI_RULE_VERSION, interBlinkInterval } from './blink';
+import type { BlinkEventDetail, BlinkStart, EarSample, InterBlinkInterval } from './blink';
+import {
+  BLINK_RULE_BEFORE, BLINK_RULE_VERSION, EAR_TIERS, IBI_RULE_BEFORE, IBI_RULE_VERSION, interBlinkInterval,
+  isCutBlink, samplingGapThreshold, summariseBlinks,
+} from './blink';
 import { fitBlinkMinimum, FIT_RULE_VERSION, type BlinkFit } from './blinkFit';
 import { matchCues } from './selfTest';
 import type { EarTraceColumns, EyeMetricsRecord, OcularEventsRecord, StoredBlinkEvent } from '@/storage/types';
@@ -374,6 +377,7 @@ export function buildOcularEventsRecord(args: {
       duration_ms: round(e.duration_ms, 2),
       frames_below: e.frames_below,
       ended_by: e.ended_by,
+      started_by: e.started_by,
       min_ear_raw: e.min_ear,
       min_ratio_raw: ratio,
       min_ear_left: d.min_ear_left,
@@ -529,4 +533,126 @@ export function exportedInterBlinkInterval(
     ibi_rule_version: IBI_RULE_VERSION,
     ibi_recomputed: true,
   };
+}
+
+/**
+ * How each stored blink's start was seen (blink-r2, Round 91): `started_by` as stored, or — for a blink
+ * stored before Round 91, which has none — derived from the window's trace exactly as classifyBlinks
+ * decides it: 'window_start' when its onset is the window's first face-solved sample, 'gap' when the
+ * face-solved sample before its onset is further back than the window's gap threshold, else 'onset'.
+ * The stored times are rounded to 0.01 ms, so an onset is matched to the nearest sample within 0.01 ms.
+ */
+export function blinkStarts(record: Pick<OcularEventsRecord, 'events' | 'trace'>): BlinkStart[] {
+  if (record.events.every((e) => e.started_by != null)) return record.events.map((e) => e.started_by as BlinkStart);
+  const samples = traceSamples(record.trace);
+  const gap = samplingGapThreshold(samples);
+  return record.events.map((e) => {
+    if (e.started_by != null) return e.started_by;
+    const j = lowerBound(samples, e.onset_ms - 0.01);
+    if (j >= samples.length || Math.abs(samples[j].t_ms - e.onset_ms) > 0.01) return 'onset';
+    if (j === 0) return 'window_start';
+    return samples[j].t_ms - samples[j - 1].t_ms > gap ? 'gap' : 'onset';
+  });
+}
+
+/** A window's blink measures under one blink rule, as the 07 row holds them (recordBlinkCounts). */
+export interface WindowBlinkCounts {
+  blink_count_full: number | null;
+  blink_count_micro: number | null;
+  blink_count_incomplete: number | null;
+  /** Null under blink-r1, which cut nothing. */
+  blink_count_cut: number | null;
+  incomplete_blink_ratio: number | null;
+  blink_rate_full: number | null;
+  blink_rate_micro: number | null;
+  blink_duration_mean_ms: number | null;
+  /** Null when the window's blinks were not fitted (before Round 79). */
+  blink_count_incomplete_fit: number | null;
+  incomplete_blink_ratio_fit: number | null;
+  blinks_not_fitted: number | null;
+}
+
+/**
+ * The blink measures of a kept reading window under `rule`, from its stored blinks — the tier each was
+ * given on what was seen of it, how its start and end were seen, its duration and its fitted depth —
+ * and the row's observed time. Under blink-r2 these are what the aggregator writes; under blink-r1, what
+ * it wrote before Round 91, so a row of either rule is reproducible from 07b (and 07c, for the start of
+ * a blink stored before Round 91). Without a baseline there are no blinks and no measures (all null).
+ */
+export function recordBlinkCounts(
+  record: Pick<OcularEventsRecord, 'events' | 'trace' | 'ear_baseline' | 'fit_rule_version'>,
+  observedMs: number | null,
+  rule: string = BLINK_RULE_VERSION,
+): WindowBlinkCounts {
+  const none: WindowBlinkCounts = {
+    blink_count_full: null, blink_count_micro: null, blink_count_incomplete: null, blink_count_cut: null,
+    incomplete_blink_ratio: null, blink_rate_full: null, blink_rate_micro: null, blink_duration_mean_ms: null,
+    blink_count_incomplete_fit: null, incomplete_blink_ratio_fit: null, blinks_not_fitted: null,
+  };
+  if (record.ear_baseline == null || !(record.ear_baseline > 0)) return none;
+  const starts = blinkStarts(record);
+  const events = record.events.map((e, k) => ({ ...e, min_ear: e.min_ear_raw, started_by: starts[k] }));
+  const sum = summariseBlinks(events, observedMs ?? 0, rule);
+  const classified = rule === BLINK_RULE_BEFORE ? events : events.filter((e) => !isCutBlink(e));
+  // The fitted sensitivity over the same blinks: an unfitted blink keeps its tier (fittedIncompleteCount).
+  const fitted = record.fit_rule_version
+    ? classified.filter((e) => (e.min_ratio_fit != null ? e.min_ratio_fit >= EAR_TIERS.full : e.tier === 'incomplete')).length
+    : null;
+  return {
+    blink_count_full: sum.blink_count_full,
+    blink_count_micro: sum.blink_count_micro,
+    blink_count_incomplete: sum.blink_count_incomplete,
+    blink_count_cut: sum.blink_count_cut,
+    incomplete_blink_ratio: sum.incomplete_blink_ratio,
+    blink_rate_full: sum.blink_rate_full,
+    blink_rate_micro: sum.blink_rate_micro,
+    blink_duration_mean_ms: sum.blink_duration_mean_ms,
+    blink_count_incomplete_fit: fitted,
+    incomplete_blink_ratio_fit: fitted != null && classified.length > 0 ? fitted / classified.length : null,
+    blinks_not_fitted: record.fit_rule_version ? classified.filter((e) => e.min_ratio_fit == null).length : null,
+  };
+}
+
+/** The blink measures a 07 row is exported and analysed with (exportedBlinkCounts). */
+export interface ExportedBlinkCounts extends WindowBlinkCounts {
+  /** The rule they are under; null on camera-off rows. */
+  blink_rule_version: string | null;
+  /** TRUE when a blink-r1 row was recomputed under the current rule from its kept blinks; null camera-off. */
+  blink_recomputed: boolean | null;
+}
+
+/**
+ * The blink measures of an eye-metrics row as every export gives them (07_eye_metrics.csv,
+ * analysis_long.csv, the dashboard): under the CURRENT blink rule wherever the data allow (Round 91,
+ * audit 86 CAM-8), as the inter-blink interval is (exportedInterBlinkInterval).
+ *
+ * A row recorded under blink-r2 is exported as recorded. A row recorded before Round 91 (no
+ * blink_rule_version; blink-r1) classified a blink cut by the window's edge or a sampling gap on the
+ * part in view — and its reading window was kept (07b, 07c; sittings from schema 10). So it is
+ * RECOMPUTED here under blink-r2 from those blinks (recordBlinkCounts), rather than analysed under a rule
+ * known to count a cut complete blink as incomplete. Nothing stored is changed, and the recorded blink-r1
+ * values stay reproducible from 07b (recordBlinkCounts with 'blink-r1'). Only a blink-r1 row with no kept
+ * window keeps its recorded values, stamped blink-r1. Rates by tier are recomputed over the row's stored
+ * observed_duration_ms (whole milliseconds), and durations from times stored to 0.01 ms.
+ */
+export function exportedBlinkCounts(
+  e: EyeMetricsRecord,
+  records: ReadonlyArray<OcularEventsRecord> | undefined,
+): ExportedBlinkCounts {
+  const recorded: WindowBlinkCounts = {
+    blink_count_full: e.blink_count_full, blink_count_micro: e.blink_count_micro,
+    blink_count_incomplete: e.blink_count_incomplete, blink_count_cut: e.blink_count_cut ?? null,
+    incomplete_blink_ratio: e.incomplete_blink_ratio,
+    blink_rate_full: e.blink_rate_full, blink_rate_micro: e.blink_rate_micro,
+    blink_duration_mean_ms: e.blink_duration_mean_ms,
+    blink_count_incomplete_fit: e.blink_count_incomplete_fit ?? null,
+    incomplete_blink_ratio_fit: e.incomplete_blink_ratio_fit ?? null,
+    blinks_not_fitted: e.blinks_not_fitted ?? null,
+  };
+  if (!e.camera_active) return { ...recorded, blink_rule_version: null, blink_recomputed: null };
+  if (e.blink_rule_version) return { ...recorded, blink_rule_version: e.blink_rule_version, blink_recomputed: false };
+  const id = ocularRecordId('reading', e.condition_id);
+  const kept = records?.find((o) => o.record_id === id && o.window === 'reading');
+  if (!kept || !(kept.trace?.frames > 0)) return { ...recorded, blink_rule_version: BLINK_RULE_BEFORE, blink_recomputed: false };
+  return { ...recordBlinkCounts(kept, e.observed_duration_ms), blink_rule_version: BLINK_RULE_VERSION, blink_recomputed: true };
 }

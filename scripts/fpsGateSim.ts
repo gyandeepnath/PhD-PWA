@@ -28,6 +28,7 @@ import {
   runScenario, ratio, kappa, misclassified, pairedDiff, flipRate, slope, exposureOf, detectionByDepth,
   type Cell, type Plan, type Scenario, type ScenarioResult, type Shape,
 } from '../src/sim/fpsGate';
+import { BLINK_RULE_VERSION } from '../src/tracking/blink';
 
 const RUNS = Number(process.argv[2] ?? 150);
 const SEED = 20261008;
@@ -85,7 +86,9 @@ function summaryTable(rows: GridRow[]) {
   }
 }
 
-console.log('## A. The gate grid — the shipped lowest-frame rule (blink-r1)\n');
+// The rule the classifier ran under. Round 91's blink-r2 cuts a blink whose start or end a run does not
+// hold; every simulated run starts and ends open-eyed, so it gave blink-r1's numbers exactly (re-run).
+console.log(`## A. The gate grid — the shipped lowest-frame rule (${BLINK_RULE_VERSION})\n`);
 console.log(`${grid.length} scenarios: lid profile {cosine, linear} x exposure {whole frame interval, instant, 30 ms fixed} x per-frame noise {2%, 3%, 4%}.\n`);
 console.log(`### A1. The ${decisionSet.length} decision scenarios (R2): ranges over them\n`);
 summaryTable(decisionSet);
@@ -163,7 +166,7 @@ console.log(`\n### The same rules on all ${grid.length} scenarios (robustness)\n
 console.log(line(ALL, grid));
 
 // ---- B. The fitted minimum against the lowest frame ----------------------------------------------------
-console.log('\n## B. The fitted minimum (fit-r1) against the lowest frame (blink-r1)\n');
+console.log(`\n## B. The fitted minimum (fit-r1) against the lowest frame (${BLINK_RULE_VERSION})\n`);
 console.log('Noise 3%. The fit assumes the exposure the frames really had (as under the fixed camera exposure). "Bias" is the incomplete share among detected blinks minus the true share. Misclassified: share of detected blinks given the wrong class.\n');
 console.log('| profile | exposure | fps | true share | bias, lowest frame | bias, fitted | shift vs 60, lowest frame | shift vs 60, fitted | misclassified, lowest frame | misclassified, fitted | kappa, lowest frame | kappa, fitted | blinks not fitted |');
 console.log('|---|---|---|---|---|---|---|---|---|---|---|---|---|');

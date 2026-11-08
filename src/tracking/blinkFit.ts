@@ -1,7 +1,7 @@
 /**
  * A blink's deepest point estimated BETWEEN frames — the "fitted minimum" (Round 79, rule 'fit-r1').
  *
- * THE PROBLEM. The primary rule (blink-r1, tracking/blink.ts) calls a blink complete when its LOWEST
+ * THE PROBLEM. The primary rule (blink-r1; blink-r2 from Round 91; tracking/blink.ts) calls a blink complete when its LOWEST
  * SAMPLED frame is below 0.60 x the open-eye baseline. A camera samples a blink every 33-50 ms, and the
  * lid's true deepest point usually falls between two frames, so the lowest frame sits at or above it:
  * the slower the camera, the more blinks read shallower than they were, and the higher the
