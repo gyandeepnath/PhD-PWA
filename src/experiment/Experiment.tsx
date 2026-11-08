@@ -59,6 +59,7 @@ import { LuxCheckpointPanel } from '@/start/LuxCheckpoint';
 import {
   SessionInit, ParticipantProfile, CameraSetup, CameraDeclined, Calibration, AdaptationScreen, SessionComplete,
   Consent, Preflight, Instructions, LaunchCheck, DisplayModeCheck, useDisplayMode, type SessionInitData, type ProfileData,
+  STOPPED_WHAT, STOPPED_AGAIN, type CameraSetupProcedure,
 } from '@/start/setupStages';
 import { CalibrationRoutine } from '@/start/CalibrationRoutine';
 import {
@@ -469,10 +470,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    * through the write of an attempt already taken wholly in landscape: a rotation in that gap was told
    * "stopped, nothing from it is kept" while the attempt was kept and its result shown on return.
    */
-  const [stoppedByPortrait, setStoppedByPortrait] = useState<'calibration' | 'selftest' | null>(null);
+  const [stoppedByPortrait, setStoppedByPortrait] = useState<StoppedByPortrait | null>(null);
   useEffect(() => { if (!portrait) setStoppedByPortrait(null); }, [portrait]);
   const calibrationStopped = useCallback(() => setStoppedByPortrait('calibration'), []);
   const selfTestStopped = useCallback(() => setStoppedByPortrait('selftest'), []);
+  /** Camera setup's exposure step, bench check or tracker measurement, stopped the same way (audit 86 CAM-10). */
+  const cameraSetupStopped = useCallback((what: CameraSetupProcedure) => setStoppedByPortrait(what), []);
   /** The operator chose to continue while the camera image was blocked; re-armed when it clears. */
   const [cameraBlockAccepted, setCameraBlockAccepted] = useState(false);
   useEffect(() => { if (!tracking.cameraBlocked) setCameraBlockAccepted(false); }, [tracking.cameraBlocked]);
@@ -1779,6 +1782,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           onBack={consentRevisitable ? () => goBack('CONSENT') : undefined}
           // The exposure step and the bench check: the card is closed over them (audit 86 CAM-9).
           onRunning={setProcedureRunning}
+          // ... and a rotation to portrait stops them, and the tracker measurement (audit 86 CAM-10).
+          halted={portrait}
+          onStoppedByRotation={cameraSetupStopped}
         />
       ) : (
         <CameraDeclined
@@ -2664,11 +2670,14 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
  * so its 15 and 14 px lines arrived at 9 and 8 CSS px — the one message that has to be read from
  * arm's length while the tablet is being turned. Out here its sizes are real CSS pixels.
  */
+/** A timed setup procedure a rotation to portrait stopped. See stoppedByPortrait. */
+type StoppedByPortrait = 'calibration' | 'selftest' | CameraSetupProcedure;
+
 function PortraitBlock({ stage, calibrated, stopped }: {
   stage: Stage;
   calibrated: boolean;
   /** A timed setup procedure that the rotation stopped. See stoppedByPortrait. */
-  stopped: 'calibration' | 'selftest' | null;
+  stopped: StoppedByPortrait | null;
 }) {
   // Drawn over everything, the chip included: the system Back gesture does nothing while it is up.
   useSystemBack('notice', null);
@@ -2681,7 +2690,10 @@ function PortraitBlock({ stage, calibrated, stopped }: {
    * CameraSelfTest), and this says so.
    */
   if (stopped) {
-    const what = stopped === 'calibration' ? 'eye calibration' : 'camera check';
+    const what = stopped === 'calibration' ? 'eye calibration' : stopped === 'selftest' ? 'camera check' : STOPPED_WHAT[stopped];
+    const again = stopped === 'calibration' ? 'Rotate back, then begin the calibration again from the start.'
+      : stopped === 'selftest' ? 'Rotate back, then start the camera check again.'
+        : `Rotate back. ${STOPPED_AGAIN[stopped]}`;
     return createPortal(
       <div data-testid="portrait-block" style={PORTRAIT_BLOCK_STYLE}>
         <h1 className="font-serif" style={{ fontSize: 30, fontWeight: 300 }}>Rotate the tablet back to landscape</h1>
@@ -2689,9 +2701,7 @@ function PortraitBlock({ stage, calibrated, stopped }: {
           The {what} has to be taken in landscape, so the one that was running has been stopped. Nothing from it is kept.
         </p>
         <p className="font-sans" style={{ fontSize: 17, color: '#c8d8f0', maxWidth: 520, marginTop: 14, lineHeight: 1.55 }}>
-          {stopped === 'calibration'
-            ? 'Rotate back, then begin the calibration again from the start.'
-            : 'Rotate back, then start the camera check again.'}
+          {again}
         </p>
       </div>,
       document.body,

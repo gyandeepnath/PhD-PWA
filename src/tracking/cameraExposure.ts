@@ -129,6 +129,26 @@ export interface ExposureDeps {
   wait: (ms: number) => Promise<void>;
   now?: () => number;
   timing?: ExposureTiming;
+  /**
+   * Aborted when the step must stop where it is — the tablet turned to portrait (audit 86 CAM-10). The
+   * step then puts the camera back on automatic exposure and returns null: nothing it measured is kept.
+   */
+  signal?: AbortSignal;
+}
+
+/** Thrown inside a stopped step (ExposureDeps.signal) and caught by setExposure; never escapes it. */
+const STOPPED = new Error('exposure step stopped');
+
+/**
+ * Back to automatic exposure with no compensation, as far as the camera offers either. Used whenever the
+ * step does not keep what it set: a lock or compensation that failed its check, and a step that was
+ * stopped. Each call is tried on its own; a refusal leaves the camera as it is, which the record shows.
+ */
+export async function restoreAutoExposure(apply: ExposureDeps['apply'], caps: MediaTrackCapabilities | null): Promise<void> {
+  const c = (caps ?? {}) as Record<string, unknown>;
+  const compR = range(c.exposureCompensation);
+  try { await apply({ exposureMode: 'continuous' }); } catch { /* the camera's own state is recorded */ }
+  try { if (compR != null && compR.min < 0) await apply({ exposureCompensation: 0 }); } catch { /* idem */ }
 }
 
 const num = (x: unknown): number | null => (typeof x === 'number' && Number.isFinite(x) ? x : null);
@@ -162,8 +182,41 @@ export function compensationSteps(min: number, max: number, step: number | null)
   return out;
 }
 
-/** Run the procedure above. Never throws: a camera that refuses is left on auto, and the outcome says so. */
-export async function setExposure(d: ExposureDeps): Promise<ExposureOutcome> {
+/**
+ * Run the procedure above. Never throws: a camera that refuses is left on auto, and the outcome says so.
+ *
+ * Null only when `d.signal` stopped it (audit 86 CAM-10): the exposure step on the grey field used to run
+ * to its end whatever happened, so a tablet turned to portrait meanwhile had the sitting's exposure fixed
+ * under the dark "rotate back" screen with the camera on its side, and the record said nothing. A stopped
+ * step checks the signal before and after every camera call, puts the camera back on automatic exposure,
+ * and keeps nothing.
+ */
+export async function setExposure(d: ExposureDeps): Promise<ExposureOutcome | null> {
+  const stop = d.signal;
+  if (!stop) return runExposure(d);
+  const halt = () => { if (stop.aborted) throw STOPPED; };
+  const guarded: ExposureDeps = {
+    ...d,
+    apply: async (set) => { halt(); await d.apply(set); },
+    measure: async (ms) => { halt(); const m = await d.measure(ms); halt(); return m; },
+    wait: async (ms) => { halt(); await d.wait(ms); halt(); },
+  };
+  let out: ExposureOutcome | null = null;
+  try {
+    out = await runExposure(guarded);
+  } catch (err) {
+    if (err !== STOPPED) throw err;
+  }
+  // Checked here too: a stop that landed in one of the step's own fallbacks (which swallow a refusal)
+  // can let it finish with an outcome, and that outcome was not measured on the grey field either.
+  if (!stop.aborted) return out;
+  let caps: MediaTrackCapabilities | null = null;
+  try { caps = d.capabilities(); } catch { caps = null; }
+  await restoreAutoExposure(d.apply, caps);
+  return null;
+}
+
+async function runExposure(d: ExposureDeps): Promise<ExposureOutcome> {
   const t = d.timing ?? EXPOSURE_TIMING;
   const now = d.now ?? (() => Date.now());
   const out: ExposureOutcome = {
@@ -204,10 +257,7 @@ export async function setExposure(d: ExposureDeps): Promise<ExposureOutcome> {
     }
     return `${what} made the picture too dark (${Math.round((100 * m.luma) / (auto.luma as number))}% of its brightness under auto)`;
   };
-  const restoreAuto = async () => {
-    try { await d.apply({ exposureMode: 'continuous' }); } catch { /* the camera's own state is recorded below */ }
-    try { if (canComp) await d.apply({ exposureCompensation: 0 }); } catch { /* idem */ }
-  };
+  const restoreAuto = () => restoreAutoExposure(d.apply, caps);
 
   if (canLock) {
     try {
@@ -262,6 +312,7 @@ export async function setExposure(d: ExposureDeps): Promise<ExposureOutcome> {
         return out;
       }
     } catch (err) {
+      if (err === STOPPED) throw err;
       out.reason = `the camera refused a fixed exposure (${(err as { name?: string })?.name ?? 'error'})`;
     }
     out.iso = null;
@@ -301,6 +352,7 @@ export async function setExposure(d: ExposureDeps): Promise<ExposureOutcome> {
     out.reason = out.reason ?? 'the camera offers no fixed exposure, only compensation';
     return out;
   } catch (err) {
+    if (err === STOPPED) throw err;
     out.reason = [out.reason, `the camera refused exposure compensation (${(err as { name?: string })?.name ?? 'error'})`].filter(Boolean).join('; ');
     await restoreAuto();
     return out;

@@ -29,6 +29,13 @@ interface FakeOpts {
   manualFps?: number;
 }
 
+/** The step run to its end (no signal, so never stopped): its outcome. */
+async function exposeNow(d: ExposureDeps) {
+  const r = await setExposure(d);
+  if (!r) throw new Error('the step returned null without being stopped');
+  return r;
+}
+
 function fakeCamera(o: FakeOpts = {}) {
   const AUTO_MS = 40, AUTO_GAIN = 4, AUTO_LUMA = 120;
   const st: { mode: string; time100: number | null; iso: number | null; comp: number } = { mode: 'continuous', time100: null, iso: null, comp: 0 };
@@ -76,7 +83,7 @@ function fakeCamera(o: FakeOpts = {}) {
 describe('the exposure step', () => {
   it('fixes the exposure at 30 ms and raises the ISO until the picture is as bright as under auto', async () => {
     const cam = fakeCamera({ iso: { min: 100, max: 3200 } });
-    const r = await setExposure(cam.deps);
+    const r = await exposeNow(cam.deps);
     expect(r.policy).toBe('locked-v1');
     expect(r.reason).toBeNull();
     // Auto held 40 ms (25 fps); the lock shortens it to 30 ms, so the camera can run at 30.
@@ -93,18 +100,18 @@ describe('the exposure step', () => {
 
   it('keeps the lock on a camera that reads back "none" for a fixed exposure, as Chrome on Android does (exp-r2)', async () => {
     const cam = fakeCamera({ iso: { min: 100, max: 3200 }, readbackWhenManual: 'none' });
-    const r = await setExposure(cam.deps);
+    const r = await exposeNow(cam.deps);
     expect(r).toMatchObject({ rule: 'exp-r2', policy: 'locked-v1', reason: null, mode_readback: 'none', exposure_time_100us: EXPOSURE.CAP_100US, iso: 800 });
     // Nothing was undone: the last thing sent is the lock itself, not a return to auto.
     expect(cam.applied[cam.applied.length - 1]).toMatchObject({ exposureMode: 'manual' });
     // exp-r1 would have refused this sitting: the raw read-back is what lets a row be judged under both.
-    const clean = await setExposure(fakeCamera({ iso: { min: 100, max: 3200 } }).deps);
+    const clean = await exposeNow(fakeCamera({ iso: { min: 100, max: 3200 } }).deps);
     expect(clean.mode_readback).toBe('manual');
   });
 
   it('still refuses a lock the camera reports as running auto-exposure, and records what it said', async () => {
     for (const said of ['continuous', 'single-shot', 'something-else']) {
-      const r = await setExposure(fakeCamera({ iso: { min: 100, max: 3200 }, readbackWhenManual: said }).deps);
+      const r = await exposeNow(fakeCamera({ iso: { min: 100, max: 3200 }, readbackWhenManual: said }).deps);
       expect(r.policy, said).toBe('auto');
       expect(r.reason, said).toBe(`the camera did not keep the fixed exposure (it reports "${said}")`);
       expect(r.mode_readback, said).toBe(said);
@@ -116,7 +123,7 @@ describe('the exposure step', () => {
   });
 
   it('a "none" read-back does not excuse the measured checks: a darker picture still undoes the lock', async () => {
-    const r = await setExposure(fakeCamera({ iso: null, readbackWhenManual: 'none' }).deps);
+    const r = await exposeNow(fakeCamera({ iso: null, readbackWhenManual: 'none' }).deps);
     expect(r.policy).toBe('auto');
     expect(r.reason).toMatch(/too dark/);
     expect(r.mode_readback).toBe('none');
@@ -126,13 +133,13 @@ describe('the exposure step', () => {
     const cam = fakeCamera({ iso: { min: 100, max: 3200 } });
     // A brighter scene: auto settled at 20 ms. The fake reports the held time once manual is applied.
     cam.deps.settings = () => ({ exposureMode: cam.st.mode, exposureTime: cam.st.time100 ?? 200 });
-    const r = await setExposure(cam.deps);
+    const r = await exposeNow(cam.deps);
     expect(cam.applied.some((a) => 'exposureTime' in a)).toBe(false);
     expect(r.exposure_time_100us).toBe(200);
   });
 
   it('puts auto back, and says why, when the fixed exposure leaves the picture too dark', async () => {
-    const r = await setExposure(fakeCamera({ iso: null }).deps);
+    const r = await exposeNow(fakeCamera({ iso: null }).deps);
     expect(r.policy).toBe('auto');
     expect(r.reason).toMatch(/too dark/);
     expect(r.iso).toBeNull();
@@ -142,24 +149,24 @@ describe('the exposure step', () => {
 
   it('puts auto back when the fixed exposure makes the camera slower than under auto', async () => {
     const cam = fakeCamera({ iso: { min: 100, max: 3200 }, manualFps: 20 });
-    const r = await setExposure(cam.deps);
+    const r = await exposeNow(cam.deps);
     expect(r.policy).toBe('auto');
     expect(r.reason).toMatch(/slower \(20\.0 against 25\.0/);
     expect(cam.applied[cam.applied.length - 1]).toEqual({ exposureMode: 'continuous' });
   });
 
   it('does not call a camera that ignored the request "locked"', async () => {
-    const r = await setExposure(fakeCamera({ ignoresManual: true, iso: { min: 100, max: 3200 } }).deps);
+    const r = await exposeNow(fakeCamera({ ignoresManual: true, iso: { min: 100, max: 3200 } }).deps);
     expect(r.policy).toBe('auto');
     expect(r.reason).toMatch(/did not keep the fixed exposure/);
   });
 
   it('records a refusal, and falls back to compensation when the camera offers it', async () => {
-    const refused = await setExposure(fakeCamera({ refuseManual: true }).deps);
+    const refused = await exposeNow(fakeCamera({ refuseManual: true }).deps);
     expect(refused.policy).toBe('auto');
     expect(refused.reason).toMatch(/refused a fixed exposure \(OverconstrainedError\)/);
 
-    const comp = await setExposure(fakeCamera({ refuseManual: true, comp: { min: -2, max: 2, step: 1 / 3 } }).deps);
+    const comp = await exposeNow(fakeCamera({ refuseManual: true, comp: { min: -2, max: 2, step: 1 / 3 } }).deps);
     expect(comp.policy).toBe('compensated-v1');
     // -1/3 EV keeps 79% of the brightness; -2/3 would keep 63%, under the 70% floor.
     expect(comp.exposure_comp).toBeCloseTo(-1 / 3, 3);
@@ -167,23 +174,73 @@ describe('the exposure step', () => {
   });
 
   it('uses compensation when the camera offers no fixed exposure at all', async () => {
-    const r = await setExposure(fakeCamera({ modes: ['continuous'], time: null, comp: { min: -2, max: 2, step: 1 / 3 } }).deps);
+    const r = await exposeNow(fakeCamera({ modes: ['continuous'], time: null, comp: { min: -2, max: 2, step: 1 / 3 } }).deps);
     expect(r.policy).toBe('compensated-v1');
     expect(r.reason).toMatch(/only compensation/);
   });
 
   it('leaves a camera with no exposure control on auto, and says so', async () => {
-    const r = await setExposure(fakeCamera({ modes: ['continuous'], time: null }).deps);
+    const r = await exposeNow(fakeCamera({ modes: ['continuous'], time: null }).deps);
     expect(r).toMatchObject({ policy: 'auto', reason: 'the camera offers no exposure control to the browser', lock_fps: null, auto_fps: 25 });
   });
 
   it('does not judge a lock it cannot measure', async () => {
     const cam = fakeCamera();
     cam.deps.measure = async () => ({ cameraFps: null, luma: null });
-    const r = await setExposure(cam.deps);
+    const r = await exposeNow(cam.deps);
     expect(r.policy).toBe('auto');
     expect(r.reason).toMatch(/could not be measured/);
     expect(cam.applied).toEqual([]);
+  });
+});
+
+describe('a stopped exposure step keeps nothing and leaves the camera on auto (audit 86 CAM-10)', () => {
+  /*
+   * The step ran to its end whatever happened: a tablet turned to portrait meanwhile had the sitting's
+   * exposure fixed under the dark "rotate back" screen. Camera setup now aborts it on the rotation.
+   */
+  const stoppedAt = async (o: FakeOpts, stopOnMeasure: number) => {
+    const cam = fakeCamera(o);
+    const stop = new AbortController();
+    let measures = 0;
+    const measure = cam.deps.measure;
+    cam.deps.measure = async (ms) => {
+      measures += 1;
+      const m = await measure(ms);
+      if (measures === stopOnMeasure) stop.abort();
+      return m;
+    };
+    const r = await setExposure({ ...cam.deps, signal: stop.signal });
+    return { r, cam, measures };
+  };
+
+  it('stopped while auto is measured: null, no lock tried, the camera on auto', async () => {
+    const { r, cam, measures } = await stoppedAt({ iso: { min: 100, max: 3200 } }, 1);
+    expect(r).toBeNull();
+    expect(measures).toBe(1);
+    expect(cam.applied.some((a) => a.exposureMode === 'manual')).toBe(false);
+    expect(cam.st.mode).toBe('continuous');
+  });
+
+  it('stopped with the lock in place: null, and the lock undone (mode back to continuous, compensation 0)', async () => {
+    // Measures: auto, the brightness after the lock, then the ISO steps; stopped after the second.
+    const { r, cam } = await stoppedAt({ iso: { min: 100, max: 3200 }, comp: { min: -2, max: 2, step: 1 / 3 } }, 2);
+    expect(r).toBeNull();
+    expect(cam.applied.some((a) => a.exposureMode === 'manual')).toBe(true);
+    expect(cam.applied.slice(-2)).toEqual([{ exposureMode: 'continuous' }, { exposureCompensation: 0 }]);
+    expect(cam.st).toMatchObject({ mode: 'continuous', comp: 0, iso: null, time100: null });
+  });
+
+  it('stopped during compensation: null, and compensation back to 0', async () => {
+    const { r, cam } = await stoppedAt({ modes: ['continuous'], time: null, comp: { min: -2, max: 2, step: 1 / 3 } }, 2);
+    expect(r).toBeNull();
+    expect(cam.st.comp).toBe(0);
+  });
+
+  it('a signal never aborted changes nothing', async () => {
+    const plain = await setExposure(fakeCamera({ iso: { min: 100, max: 3200 } }).deps);
+    const signalled = await setExposure({ ...fakeCamera({ iso: { min: 100, max: 3200 } }).deps, signal: new AbortController().signal });
+    expect(signalled).toEqual(plain);
   });
 });
 

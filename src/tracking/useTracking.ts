@@ -234,17 +234,19 @@ interface TrackingApi {
    * Measure every tracker backend on the live camera for a few seconds each, keep the fastest for this
    * device, and switch to it (tracking/trackerChoice.ts). `onProgress` reports which one is running.
    * Resolves to the trials, or null when the tracker is frozen by CONFIG.TRACKER_BACKEND or the camera
-   * is not running.
+   * is not running. `signal` stops it (the tablet turned to portrait; audit 86 CAM-10): nothing is
+   * chosen, stored or recorded, and it resolves to null.
    */
-  compareTrackers: (onProgress?: (p: { backend: TrackerBackend; index: number; total: number }) => void) => Promise<TrackerTrial[] | null>;
+  compareTrackers: (onProgress?: (p: { backend: TrackerBackend; index: number; total: number }) => void, signal?: AbortSignal) => Promise<TrackerTrial[] | null>;
   /**
    * Fix the camera's exposure while the grey field is on screen (tracking/cameraExposure.ts), or record
    * that it is left on auto. Resolves to what was done, which is also kept in the pipeline record and on
-   * every later condition row; null when the camera is not running.
+   * every later condition row; null when the camera is not running, and when `signal` stopped it (the
+   * camera is then back on automatic exposure and nothing is recorded; audit 86 CAM-10).
    */
-  setCameraExposure: () => Promise<ExposureOutcome | null>;
-  /** The bench check: grounds under auto and under a fixed exposure (see runCameraBench). */
-  runCameraBench: (paint: (p: BenchPaint | null) => void) => Promise<CameraBenchRecord | null>;
+  setCameraExposure: (signal?: AbortSignal) => Promise<ExposureOutcome | null>;
+  /** The bench check: grounds under auto and under a fixed exposure (see runCameraBench); `signal` stops it, keeping nothing. */
+  runCameraBench: (paint: (p: BenchPaint | null) => void, signal?: AbortSignal) => Promise<CameraBenchRecord | null>;
   /**
    * Open the dedicated open-eye baseline window while the participant fixates the centre (rule cal-r2:
    * at least `step.ms`, then until `step.minSamples` usable frames, at most `step.maxMs`), report how it
@@ -1083,8 +1085,15 @@ export function useTracking(): TrackingApi {
 
   /** A comparison in progress, so a second tap joins it. */
   const comparingRef = useRef<Promise<TrackerTrial[] | null> | null>(null);
-  const compareTrackers = useCallback((onProgress?: (p: { backend: TrackerBackend; index: number; total: number }) => void) => {
+  const compareTrackers = useCallback((onProgress?: (p: { backend: TrackerBackend; index: number; total: number }) => void, signal?: AbortSignal) => {
     if (comparingRef.current) return comparingRef.current;
+    /*
+     * Stopped (the tablet turned to portrait; audit 86 CAM-10): the trials so far were measured on a
+     * picture the camera now delivers on its side, and the fastest of them would be stored as this
+     * tablet's tracker for every later sitting. So nothing is chosen, stored or recorded, and the tracker
+     * that was running before is started again, as when no trial saw a face.
+     */
+    const stopped = () => signal?.aborted === true;
     const run = async (): Promise<TrackerTrial[] | null> => {
       const info = pipelineRef.current;
       const video = videoRef.current;
@@ -1093,6 +1102,7 @@ export function useTracking(): TrackingApi {
       const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
       for (let i = 0; i < TRACKER_BACKENDS.length; i++) {
         const backend = TRACKER_BACKENDS[i];
+        if (stopped()) break;
         onProgress?.({ backend, index: i, total: TRACKER_BACKENDS.length });
         if (pipelineRef.current !== info) return null; // the camera stopped
         const t0 = now();
@@ -1130,7 +1140,7 @@ export function useTracking(): TrackingApi {
         });
       }
       // Null when none started or none saw a face: nothing to adopt (trackerChoice.ts pickFastest).
-      const best = pickFastest(trials);
+      const best = stopped() ? null : pickFastest(trials);
       if (pipelineRef.current !== info) return null;
       /*
        * Start the winner — or, if none was measured on a face, the one that was running before, so the
@@ -1154,6 +1164,7 @@ export function useTracking(): TrackingApi {
        * nothing is kept on the device, and the export carries no comparison it was not chosen from.
        * The screen tells the operator to measure again with the face in view (setupStages.tsx).
        */
+      if (stopped()) return null;
       if (best) {
         const measuredAt = Date.now();
         saveTrackerChoice({ backend: best, measuredAt, appVersion: APP_VERSION, trials });
@@ -1190,13 +1201,13 @@ export function useTracking(): TrackingApi {
     return { sum: win.close(), luma: lumas.length ? lumas.reduce((a, b) => a + b, 0) / lumas.length : null };
   };
 
-  const setCameraExposure = useCallback((): Promise<ExposureOutcome | null> => {
+  const setCameraExposure = useCallback((signal?: AbortSignal): Promise<ExposureOutcome | null> => {
     if (exposingRef.current) return exposingRef.current;
     const run = async (): Promise<ExposureOutcome | null> => {
       const info = pipelineRef.current;
       const track = videoTrack();
       if (!info || !track) return null;
-      let outcome: ExposureOutcome;
+      let outcome: ExposureOutcome | null;
       if (CONFIG.CAMERA_EXPOSURE_POLICY === 'auto') {
         outcome = {
           rule: EXPOSURE_RULE, policy: 'auto', reason: 'left on auto-exposure for the study (CONFIG.CAMERA_EXPOSURE_POLICY)',
@@ -1216,8 +1227,11 @@ export function useTracking(): TrackingApi {
           wait: sleep,
           // Collapsed under the test harness, like every other protocol duration.
           timing: fast ? { SETTLE_MS: 200, AUTO_MS: E2E_MEASURE_MS, STEP_SETTLE_MS: 50, LUMA_MS: 300, VERIFY_MS: E2E_MEASURE_MS } : EXPOSURE_TIMING,
+          signal,
         });
       }
+      // Stopped (the tablet turned; audit 86 CAM-10): back on auto, and nothing recorded.
+      if (outcome == null || signal?.aborted) return null;
       if (pipelineRef.current !== info) return null; // the camera restarted meanwhile
       info.camera_exposure = outcome;
       // The exposure controls are known by now (Blink loads them after the track starts): record them.
@@ -1238,7 +1252,7 @@ export function useTracking(): TrackingApi {
    * it. `paint` tells the screen which ground to show (null when done). Exposure goes back to auto at
    * the end; camera setup's Continue sets it again for the participant.
    */
-  const runCameraBench = useCallback(async (paint: (p: BenchPaint | null) => void): Promise<CameraBenchRecord | null> => {
+  const runCameraBench = useCallback(async (paint: (p: BenchPaint | null) => void, signal?: AbortSignal): Promise<CameraBenchRecord | null> => {
     const info = pipelineRef.current;
     const track = videoTrack();
     if (!info || !track) return null;
@@ -1249,11 +1263,16 @@ export function useTracking(): TrackingApi {
     const rows: CameraBenchRecord['rows'] = [];
     const grounds: BenchPaint['ground'][] = ['white', 'grey', 'black'];
     const total = grounds.length * 2;
+    /** Stopped (the tablet turned; audit 86 CAM-10): checked after every wait, nothing of the run is kept. */
+    const stopped = () => signal?.aborted === true;
     const runGrounds = async (exposure: BenchPaint['exposure'], offset: number, label?: string) => {
       for (let i = 0; i < grounds.length; i++) {
+        if (stopped()) return;
         paint({ ground: grounds[i], exposure, index: offset + i, total, label });
         await sleep(SETTLE);
+        if (stopped()) return;
         const m = await measureWindow(MEASURE);
+        if (stopped()) return;
         const st = (track.getSettings?.() ?? {}) as Record<string, unknown>;
         const n = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : null);
         rows.push({
@@ -1266,10 +1285,13 @@ export function useTracking(): TrackingApi {
     };
     try {
       await runGrounds('auto', 0);
+      if (stopped()) return null;
       paint({ ground: 'grey', exposure: 'fixed', index: grounds.length, total, setting: true });
-      const lock = await setCameraExposure();
+      const lock = await setCameraExposure(signal);
+      if (stopped()) return null;
       // The second half is named by what the step achieved, not by what it tried (Round 82).
       await runGrounds('fixed', grounds.length, benchLockLabel(lock ?? null).short);
+      if (stopped()) return null;
       const record: CameraBenchRecord = { at: Date.now(), rows, lock: lock ?? null };
       if (pipelineRef.current === info) info.camera_bench = record;
       return record;

@@ -582,7 +582,10 @@ failed. That is gone.
 flashing, the app **stops that step** and keeps nothing from it: with the tablet on its side the
 camera sees the face turned through 90 degrees. The screen says so. Turn the tablet back; the
 step's start screen returns with a note, and you press **Begin calibration** (or **Start**) to run it
-again from the beginning. On the other set-up screens, turning the tablet loses nothing.
+again from the beginning. The same holds on camera setup (from Round 91) for the camera's exposure
+step on the grey field, the bench check and **Measure trackers again**: each is stopped, the camera is
+put back on automatic exposure, nothing from it is kept, and the preview returns with a note saying
+which to begin again. On the other set-up screens, turning the tablet loses nothing.
 
 ---
 

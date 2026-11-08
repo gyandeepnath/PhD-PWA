@@ -703,11 +703,11 @@ export interface CameraSetupTracking {
   subscribeLive: (fn: (s: LiveTrackingStats) => void) => () => void;
   stream: () => MediaStream | null;
   pipelineInfo: () => CameraPipelineRecord | null;
-  compareTrackers: (onProgress?: (p: { backend: TrackerBackend; index: number; total: number }) => void) => Promise<TrackerTrial[] | null>;
-  /** Fix the camera's exposure on the grey field (tracking/cameraExposure.ts). */
-  setExposure: () => Promise<ExposureOutcome | null>;
-  /** The researcher's bench check (useTracking runCameraBench). */
-  runBench: (paint: (p: BenchPaint | null) => void) => Promise<CameraBenchRecord | null>;
+  compareTrackers: (onProgress?: (p: { backend: TrackerBackend; index: number; total: number }) => void, signal?: AbortSignal) => Promise<TrackerTrial[] | null>;
+  /** Fix the camera's exposure on the grey field (tracking/cameraExposure.ts); `signal` stops it, keeping nothing. */
+  setExposure: (signal?: AbortSignal) => Promise<ExposureOutcome | null>;
+  /** The researcher's bench check (useTracking runCameraBench); `signal` stops it, keeping nothing. */
+  runBench: (paint: (p: BenchPaint | null) => void, signal?: AbortSignal) => Promise<CameraBenchRecord | null>;
 }
 
 const BENCH_GROUND: Record<BenchPaint['ground'], { bg: string; ink: string; word: string }> = {
@@ -804,6 +804,18 @@ function ExposureField() {
   );
 }
 
+/** The procedures a rotation stops, as the preview and the portrait block name them. */
+export const STOPPED_WHAT: Record<CameraSetupProcedure, string> = {
+  exposure: "camera's exposure step",
+  bench: 'bench check',
+  trackers: 'tracker measurement',
+};
+export const STOPPED_AGAIN: Record<CameraSetupProcedure, string> = {
+  exposure: 'Tap “My face is centred” again to set the exposure on the grey field.',
+  bench: 'Run the bench check again.',
+  trackers: 'Press “Measure trackers again”.',
+};
+
 type FaceStatus = 'loading' | 'searching' | 'detected';
 const FACE_LABEL: Record<FaceStatus, string> = {
   loading: 'Loading face tracking…',
@@ -834,7 +846,10 @@ const FACE_TONE: Record<FaceStatus, string> = {
  * measure again; the comparison is recorded with the sitting. When CONFIG.TRACKER_BACKEND freezes the
  * tracker, there is nothing to measure and the screen says which one is fixed.
  */
-export function CameraSetup({ camera, onContinue, onSkip, retains, onBack, onRunning }: {
+/** A camera-setup procedure a rotation to portrait stops (audit 86 CAM-10). */
+export type CameraSetupProcedure = 'exposure' | 'bench' | 'trackers';
+
+export function CameraSetup({ camera, onContinue, onSkip, retains, onBack, onRunning, halted = false, onStoppedByRotation }: {
   camera: CameraSetupTracking;
   /** The face is centred: go on, with the camera running. */
   onContinue: () => void;
@@ -856,6 +871,16 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack, onRun
    * the researcher card is closed and the Exit chip withheld, as on the calibration dots (audit 86 CAM-9).
    */
   onRunning?: (running: boolean) => void;
+  /**
+   * The tablet is in portrait. The exposure step, the bench check and the tracker measurement measure the
+   * camera on this screen, and each is STOPPED: the camera goes back on automatic exposure, nothing it
+   * measured is kept, and the preview comes back to begin it again (audit 86 CAM-10). The exposure step
+   * used to run to its end under the portrait block — the sitting's exposure fixed under the block's dark
+   * screen with the camera on its side — and set-up moved on while the block said "Nothing is lost".
+   */
+  halted?: boolean;
+  /** Called when a rotation has actually stopped one of them, so the portrait block can say so. */
+  onStoppedByRotation?: (what: CameraSetupProcedure) => void;
 }) {
   const [step, setStep] = useState<'notice' | 'starting' | 'preview' | 'exposure' | 'denied'>(
     camera.status === 'active' ? 'preview' : 'notice');
@@ -882,12 +907,32 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack, onRun
   const [benchRunning, setBenchRunning] = useState(false);
   useEffect(() => { onRunning?.(step === 'exposure' || benchRunning); }, [step, benchRunning, onRunning]);
   useEffect(() => () => onRunning?.(false), [onRunning]);
+  /** The procedure measuring the camera now, and how to stop it (see `halted`). */
+  const running = useRef<{ what: CameraSetupProcedure; stop: AbortController } | null>(null);
+  /** What the last rotation stopped; said on the preview, which is where it is begun again. */
+  const [stoppedByRotation, setStoppedByRotation] = useState<CameraSetupProcedure | null>(null);
+  const begin = (what: CameraSetupProcedure) => {
+    const stop = new AbortController();
+    running.current = { what, stop };
+    setStoppedByRotation(null);
+    return stop.signal;
+  };
+  useEffect(() => {
+    const r = running.current;
+    if (!halted || !r || r.stop.signal.aborted) return;
+    r.stop.abort();
+    setStoppedByRotation(r.what);
+    onStoppedByRotation?.(r.what);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [halted]);
   const runBench = async () => {
     setBenchRunning(true);
+    const signal = begin('bench');
     try {
-      const b = await camera.runBench(setBenchPaint);
-      if (b) setBench(b);
+      const b = await camera.runBench(setBenchPaint, signal);
+      if (b && !signal.aborted) setBench(b);
     } finally {
+      running.current = null;
       setBenchRunning(false);
       setBenchPaint(null);
       setInfo(camera.pipelineInfo());
@@ -904,13 +949,32 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack, onRun
 
   const measure = async () => {
     setComparing({ backend: 'tasks-gpu', index: 0, total: 3 });
+    const signal = begin('trackers');
     try {
-      const t = await camera.compareTrackers((p) => setComparing(p));
-      if (t) setTrials(t);
+      const t = await camera.compareTrackers((p) => setComparing(p), signal);
+      if (t && !signal.aborted) setTrials(t);
     } finally {
+      running.current = null;
       setComparing(null);
       setInfo(camera.pipelineInfo());
     }
+  };
+
+  /*
+   * "My face is centred": the exposure step on the grey field, then on to calibration. Stopped by a
+   * rotation, it goes back to the preview instead, the camera on automatic exposure and nothing kept.
+   * (Any other failure goes on, as it always has: the step records why it left the camera on auto.)
+   */
+  const exposeAndContinue = async () => {
+    setStep('exposure');
+    const signal = begin('exposure');
+    try {
+      await camera.setExposure(signal);
+    } catch { /* recorded by the step where it can be; set-up goes on */ } finally {
+      running.current = null;
+    }
+    if (signal.aborted) { setStep('preview'); return; }
+    onContinue();
   };
 
   /*
@@ -1009,6 +1073,12 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack, onRun
               Check the preview: your whole face should be centred, in frame, and well-lit. The yellow
               points on the eyelids are what the blink measure is computed from.
             </p>
+            {stoppedByRotation && (
+              <p data-testid="camera-step-stopped" className="mt-3 rounded-xl border border-[#f0d8a8] bg-[#fff6e5] p-3 font-sans text-base leading-relaxed">
+                The {STOPPED_WHAT[stoppedByRotation]} was stopped when the tablet was turned, and nothing from it
+                was kept. {STOPPED_AGAIN[stoppedByRotation]}
+              </p>
+            )}
             <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start', marginTop: 12 }}>
               <div style={{ position: 'relative', width: 480, maxWidth: '100%' }}>
                 <LiveFeed stream={stream} stats={live} width={480} testid="setup-feed" />
@@ -1104,10 +1174,7 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack, onRun
                 shown on the camera check's result.
               */}
               <button className={btn} style={{ background: '#1a1a2e' }} disabled={comparing != null || benchRunning}
-                onClick={async () => {
-                  setStep('exposure');
-                  try { await camera.setExposure(); } finally { onContinue(); }
-                }}>
+                onClick={() => void exposeAndContinue()}>
                 My face is centred — continue →
               </button>
               <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" disabled={comparing != null || benchRunning}

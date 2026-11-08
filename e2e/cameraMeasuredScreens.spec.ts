@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { startNewExperiment, driveUntil } from './helpers';
+import { startNewExperiment, driveUntil, stageNow, dbAll } from './helpers';
 
 /*
  * The two screens camera setup measures the camera under — the bench check's white, grey and black
@@ -10,6 +10,11 @@ import { startNewExperiment, driveUntil } from './helpers';
  * the left 30% of the grey field the sitting's exposure is fixed under (which itself began right of the
  * card). Both screens now report themselves as running procedures, so the card is closed over them and
  * comes back afterwards, and both cover the whole screen with nothing of the app's own on top.
+ *
+ * And they are measured in landscape (audit 86 CAM-10). Turned to portrait during the exposure step, the
+ * tablet used to have the sitting's exposure fixed under the portrait block's dark screen with the camera
+ * on its side; set-up moved on to calibration, and the block said "Nothing is lost". A rotation now stops
+ * the step (and the bench check), keeps nothing, and the preview comes back to begin it again.
  */
 
 /** Through consent and the rest to camera setup, then enable the camera and wait out the measurement. */
@@ -68,4 +73,42 @@ test('the researcher card is closed over the bench check and the exposure step, 
     ground: { left: 0, top: 0, width: exposure.viewport.width, height: exposure.viewport.height },
     card: false, dock: '0px', atCard: 'camera-exposure-step', atCorner: 'camera-exposure-step',
   });
+});
+
+test('turning the tablet stops the bench check and the exposure step; nothing from them is kept (CAM-10)', async ({ page }) => {
+  test.setTimeout(400_000);
+  const landscape = { width: 1280, height: 800 };
+  const portrait = { width: 800, height: 1280 };
+  const block = page.getByTestId('portrait-block');
+  await toCameraRunning(page);
+
+  // The bench check, turned on its first ground.
+  await page.getByTestId('camera-bench-run').click();
+  await page.waitForSelector('[data-testid="camera-bench-ground"]', { timeout: 30_000 });
+  await page.setViewportSize(portrait);
+  await expect(block).toContainText('The bench check has to be taken in landscape, so the one that was running has been stopped');
+  await expect(page.getByTestId('camera-bench-ground')).toHaveCount(0, { timeout: 15_000 });
+  await page.setViewportSize(landscape);
+  await expect(page.getByTestId('camera-step-stopped')).toContainText('bench check was stopped');
+  await expect(page.getByTestId('camera-bench-results')).toHaveCount(0);
+
+  // The exposure step, turned on the grey field and left in portrait past the step's own length.
+  await page.getByRole('button', { name: /My face is centred/ }).click();
+  await page.waitForSelector('[data-testid="camera-exposure-step"]', { timeout: 10_000 });
+  await page.setViewportSize(portrait);
+  await expect(block).toContainText("The camera's exposure step has to be taken in landscape, so the one that was running has been stopped");
+  await expect(block).not.toContainText('Nothing is lost');
+  await page.waitForTimeout(10_000);
+  expect(await stageNow(page)).toBe('CAMERA_SETUP');
+  await page.setViewportSize(landscape);
+  await expect(page.getByTestId('camera-step-stopped')).toContainText("exposure step was stopped");
+  await expect(page.getByTestId('camera-exposure-step')).toHaveCount(0);
+
+  // Begun again in landscape, it runs to its end, and only it is recorded.
+  const againAt = await page.evaluate(() => Date.now());
+  await page.getByRole('button', { name: /My face is centred/ }).click();
+  await page.waitForSelector('[data-stage="CALIBRATION"]', { timeout: 60_000 });
+  const [s] = await dbAll<{ camera_pipeline?: { camera_exposure?: { at: number } | null; camera_bench?: unknown } }>(page, 'sessions');
+  expect(s.camera_pipeline?.camera_exposure?.at).toBeGreaterThanOrEqual(againAt);
+  expect(s.camera_pipeline?.camera_bench ?? null).toBeNull();
 });
