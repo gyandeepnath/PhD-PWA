@@ -8683,3 +8683,349 @@ screen does not scroll, and presses at a quarter, half and three quarters set 25
 | NASA-TLX scale as drawn | 6 px strip at 1.31:1 | 44 px target, 8 px track at 3.75:1; same scale, anchors and values | codebook (14 `raw_tlx`); by build (`git_hash`, 01) |
 | Consent's camera sentence | blinks, eyelids, head position | the same and "roughly whether you are looking at the screen"; nothing collected changed | codebook (01 `consent_camera_metrics`); OPERATOR_MANUAL §3 |
 | Every rule (tap guard, attempt counting, scale freeze, inter-blink interval, reaction window and summary, rating format, typography of the stimuli, straight-lining, frame-rate gate, blink rule, calibration, camera check, gaze, reliability, engagement thresholds) | unchanged | unchanged | as before |
+
+## Round 91 — the camera and the blinks: a camera switched off is off, a blink cut by the window is not called incomplete, and the screens the camera is measured under
+
+The sixth set of fixes for audit 86 (2.4.0 at 26e909c): the camera and ocular findings CAM-1 to CAM-11 and
+the one the second reviewer added (MV-1). Each was reproduced by the auditor and again, independently, by
+the second reviewer. CAM-6 (two taps on the camera check's Continue skipped the baseline CVS-Q) is the
+same defect as the walk-through's F14 and was already fixed in Round 86 (b931069); its end-to-end test
+(`e2e/doubleTap.spec.ts`, the camera check, now with the drawn face of §4) passes in the full
+end-to-end run on this round's code, so it was confirmed and not touched again.
+
+**Three rules changed, each versioned in the data, none to pass more data:**
+- **`blink_rule_version` `blink-r2`** (the PRIMARY OUTCOME's classification; a fix made before data
+  collection) — a blink whose start or end the reading window did not see is counted, not classified
+  (CAM-8). See §2; the investigator's decision is §10, item 1.
+- **`camera_exposure_rule` `exp-r3`** — the exposure step measures "automatic exposure" under automatic
+  exposure (CAM-4). See §6 and §10, item 3.
+- **`gaze_rule_version` `gaze-r3`** — the gaze check's "eye open enough" test is in the eye's own
+  proportions (CAM-11). See §8 and §10, item 4.
+
+No threshold or cut moved, and no rule was changed to keep more data: `blink-r2` changes which blinks are
+classified (it classifies fewer), `exp-r3` what the exposure step starts from, `gaze-r3` the units of one
+test. **No stored record changed shape in a way that needs the database version raised**: the new fields
+(`blink_count_cut` and `blink_rule_version` on a reading row, `started_by` on a stored blink, `camera_off`
+and `camera_selftest_skipped` on the sitting) are optional, `exp-r3` and `gaze-r3` go in fields that already
+held a rule name, and a record without them is read as what it is — recorded under the earlier rule, or
+before the field existed — as Round 88 did for `ibi_rule_version`. Nothing stored is rewritten. Nothing here
+was measured on the Xiaomi Pad 6.
+
+### In plain words
+
+1. **"Continue without camera" switches the camera off (CAM-3).** On camera set-up's running preview it
+   released the camera but left the app believing it was on: calibration then ran its eye routine on no
+   picture, the camera check followed and failed ("No frames arriving"), and every reading row was
+   written *camera on* with nothing measured and no reason. Now the camera is off for the sitting — the
+   plain positioning screen, no camera check, camera-off rows — exactly as when the camera is declined, and
+   the sitting records why (01 `camera_off_reason`).
+2. **A blink cut by the start or end of the reading window is not called incomplete (CAM-8).** The window
+   opens on the *Begin reading* tap and closes on the last page's tap — moments when people blink. A
+   complete blink already half over when the window opened was classified on the half that was left, which
+   looked like a blink that never fully closed: twenty complete blinks and one such edge gave a ratio of
+   1/21 instead of 0, about 5 percentage points against the 3 the study is planned to detect. Such a blink
+   is now counted as a blink but put in neither class (`blink_count_cut`). See §2.
+3. **The researcher card is closed while the camera is measured on camera set-up (CAM-9).** An open card
+   stayed on the screen during the bench check and the camera's exposure step, so the "black" and "grey"
+   screens the camera was measured under had a navy panel with the participant's own bright live picture
+   on them. The card now closes for those two steps (it comes back afterwards), and both screens cover the
+   whole display.
+4. **No baseline, no camera check (CAM-2).** After *Continue without blink measures* the participant was
+   still put through the camera check, which counts blinks and cannot count any without a baseline: it
+   always failed, and blamed the lighting. It is now not run, and the sitting says so (01
+   `selftest_not_run_reason` = `no_baseline`; the dashboard says "not run: no eye baseline").
+5. **Turning the tablet stops the camera's exposure step (CAM-10).** Turned to portrait during the 10-second
+   grey field, the tablet had the sitting's exposure fixed under the dark "rotate back" screen with the
+   camera on its side, and set-up moved on while the screen said "Nothing is lost". Now the step stops, the
+   camera goes back to automatic exposure, nothing is kept, and the preview comes back to do it again. The
+   same for the bench check and *Measure trackers again*.
+6. **The exposure step starts from the camera's own automatic exposure (CAM-4).** Run after the bench check
+   on a camera that offers only exposure compensation, it started from the compensation the bench left
+   behind, so it measured a darker "automatic" picture and could leave the participant filmed darker than
+   its own 70% floor allows.
+7. **A face model that failed is closed (CAM-5); a camera on which no face model can run is called lost
+   (CAM-7).** *Measure trackers* left a failed face model running for the rest of the sitting. And when
+   every face tracker failed on its frames, nothing reported it: the camera stayed "on" and every row was
+   written camera-on with nothing measured. It is now the camera-lost notice, and the rows say `lost`.
+8. **The gaze check's "eye open" test no longer depends on the camera mode (CAM-11).** On the 16:9 camera
+   mode, frames deep inside a blink still counted as "looking at the screen" in the quality index
+   `on_screen_ratio`.
+9. **Rates are not rounded onto the floor they missed, and "no" is not a number (CAM-1, MV-1).** 19.6 eye
+   samples a second read "20 … reduced (15 to 20)"; 14.6 read "15 … below 15". With nothing seen, the camera
+   check said "the face was in view only no of the time".
+
+### 1. "Continue without camera" on the running preview (ad3eda6) — CAM-3
+
+**Found.** `useTracking.stop()` released the camera and the tracker but left `status` 'active'.
+Calibration (Experiment.tsx) and the camera check key on that status, so the eye routine ran on no frames
+and the check failed; the reading rows' end-condition writes a camera-off row only when the status is not
+active, so each row was `camera_active` TRUE with `ear_sample_count` 0 and no reason.
+**Fixed.** `stop()` is a state change: the camera is 'stopped' (a new camera status), so every screen
+treats it as off and rows are camera-off rows (`camera_inactive_reason` `not_running`, as for a declined
+camera). Every way past camera set-up without the camera records why on the sitting
+(`SessionRecord.camera_off`: consent declined, skipped before or after starting, permission refused,
+start failed, no camera API, with the library's error); going on with the camera clears it. 01
+`camera_off_reason`.
+**Tests.** The hook (start, stop: not active, a camera-off row), the screen's skip reasons, the export
+column (`tests/useTrackingLost.test.tsx`, `tests/cameraOffReason.test.tsx`); `e2e/cameraOff.spec.ts`
+drives the skip from the running preview to the first reading row. Run on the final code with `stop()`
+leaving the status 'active' again: the hook test fails, and so does the end-to-end test (no "Camera not
+active" positioning screen). With the fix, the end-to-end test passes in the full run on this round's code
+and again in the final run of the camera specs.
+
+### 2. A blink the window's edge or a gap cuts (8d1ecd7) — CAM-8; rule `blink-r2`
+
+**Found.** `classifyBlinks` opened a blink at the window's first sample if that sample was already below the
+registration cut, with its onset at that sample and its depth only what was left of it, and closed one still
+under way at the last sample there (`ended_by` window_end). Both were counted in the primary outcome. What
+is left of a blink has a minimum at or above the whole blink's, so the error had a sign: toward
+*incomplete*, the direction of the hypothesis. The live graph had refused to mark exactly that blink since
+Round 82; the record kept counting it. The auditor's case, through the app's own aggregator at 24 fps:
+twenty complete blinks give a ratio of 0; with the window opening on the reopening tail of one more, 1/21 =
+0.048; closing as the eye closed, the same.
+**Fixed — the rule `blink-r2`.** A blink is CUT when its start or its end was not observed: under way at the
+window's first face-solved frame (07b `started_by` window_start) or at the first frame after a sampling gap
+(`started_by` gap; the gap rule observed time uses), or still under way at the window's last frame
+(`ended_by` window_end). A cut blink is a registered blink — `blink_rate`, the inter-blink interval, the
+halves and the long closures count it exactly as before — and is counted in `blink_count_cut` (07) /
+`n_blinks_cut` (analysis_long). It is left out of the three tier counts, the ratio (numerator and
+denominator), the rates by tier, the mean blink duration and the fitted-minimum counts. 07b says for every
+blink how its start was seen and whether it is cut. **The registration and completeness cuts (0.75, 0.60),
+the micro rule and the gap rule are unchanged; the blinks found are the same; only which are classified
+differs.**
+**Earlier rows.** Nothing stored is rewritten, and `blink-r1` stays reproducible from 07b (count every blink
+by tier). A row recorded before this round whose reading window was kept (07b/07c; every sitting from schema
+10) is exported **recomputed** under `blink-r2` from its blinks, with how each began derived from 07c as the
+classifier decides it (`blink_recomputed` TRUE); a row without its window keeps its values, stamped
+`blink-r1`. The dashboard, analysis_long and 07 read the same numbers, and the integrity audit counts 07b
+against 07 under the row's own rule. Both templates model `blink-r2` rows, count any earlier-rule rows, keep
+them out and put them back in a sensitivity refit of the primary (`blink-r1 rows put back (n)`);
+`verify:analysis` checks both states in R and Python. docs/ANALYSIS_PLAN.md §5 records the change as a
+pre-data rule fix with its justification, including the one dependence it leaves (a longer blink is a little
+likelier to straddle an edge; estimated, not measured, at about one blink lost to the two edges in eight
+windows).
+**Simulation re-run, not edited.** The frame-rate simulation (`npm run sim:fps`, 150 runs per cell) was
+re-run in full under `blink-r2`: every number is identical to the pinned output (no simulated blink is cut:
+every run starts and ends open-eyed); only the two headings now name the rule. The appendix of
+docs/FPS_GATE_SIMULATION.md is that re-run. The camera-check simulation counts blinks regardless of class
+and is unaffected.
+**Tests.** `tests/blinkEdge.test.ts`: the auditor's three windows; the face coming back mid-blink after a
+gap; cut blinks staying in `blink_rate`; and the rule held against `blink-r1` **as it shipped** (its
+classifier copied from 26e909c) on 300 random windows with jitter, look-aways and cut edges — the same
+blinks with the same times, depths and tiers, `blink-r1`'s summary reproduced exactly, every blink observed
+whole classified as before, and the cut ones exactly those whose start or end the window lacks; how a stored
+blink began derived from 07c equal to the classifier's own on 300 windows (20 after a gap, 8 at the window's
+start); and 07, 07b, analysis_long, the dashboard and the audit agreeing on a recomputed `blink-r1` row.
+Each of six mutations (the summary classifying every blink; the classifier never marking an unobserved
+start; the derivation ignoring gaps; the count classifying every blink; the export not recomputing; the
+audit ignoring the row's rule) failed them when the fix was made. Two were run again on the final code: with
+the classifier never marking an unobserved start, 9 of the 13 tests in the file fail; with the summary
+classifying every blink, 7 of them fail and so does the live-against-final count test in
+`tests/blinkCount.test.ts`.
+
+### 3. The researcher card over the measured screens (dece2d4) — CAM-9
+
+**Found.** The bench check's ground (z 40, full screen) and the exposure step's grey field (z 40, from the
+card's dock column rightwards) were drawn under an open researcher card (z 45). The bench ground's black
+had the card and its live picture over its left; the exposure was fixed under a field covering the right
+70% of the screen, the cream page and the card the rest. Neither step locked the card.
+**Fixed.** Camera set-up reports both as running procedures (`onRunning`), as the calibration dots do: the
+card is closed and the Exit chip withheld while they run, and the card comes back after. Both grounds cover
+the whole screen above the panel's locked indicator, under only the blocking notices and dialogs.
+**Test.** `e2e/cameraMeasuredScreens.spec.ts`: card opened on camera set-up, bench run, then the exposure
+step — on each ground nothing of the app is where the card was or in the indicator's corner; without the
+fix the card's live picture is found there.
+
+### 4. The camera check without a baseline (c66fee3) — CAM-2
+
+**Found.** *Continue without blink measures* went to the camera check. The check counts blinks against the
+calibration baseline; with none it counts none, so it failed every time ("0 of 5 flashes") with the
+lighting reason, and 01 recorded a failed check.
+**Fixed.** Calibration's way on asks the tracker for the baseline blinks are counted against; with none, the
+check is not run, the sitting records `camera_selftest_skipped` (`no_baseline`; 01
+`selftest_not_run_reason`), and set-up goes on as from the check's own Continue (the start photograph
+included). Running a check clears it. The dashboard says "not run: no eye baseline".
+**The end-to-end camera tests.** Chromium's own fake camera shows no face, so calibration never fits a
+baseline; the tests of the camera check itself used to reach it only through *Continue without blink
+measures*. They now give the fake camera a drawn face — a cartoon of ellipses and lines, written to the
+system's temporary folder, never committed — which the face trackers find
+(`e2e/fixtures/syntheticFace.ts`; used by `faceCamera`, `doubleTap` and `setupNavigation`). The test
+build's baseline window may run to 3 s instead of 0.8 s so the face gives its thirty frames on a busy
+machine (test configuration only; the study's window is unchanged). The camera-check tests of
+`cameraDiagnostics` and `cameraLost` moved to `faceCamera.spec.ts`.
+**Tests.** `e2e/cameraCheckNeedsBaseline.spec.ts` (no face: no check, the skip recorded);
+`e2e/faceCamera.spec.ts` (a face: the check runs, nothing skipped); `tests/selfTestNotRun.test.ts` (01
+column, codebook, dashboard). Run again on the final code against their reversion: with the camera check
+run whatever the baseline, the end-to-end test fails (the sitting stays on calibration, under the camera
+check); with the 01 column or the dashboard line set back, one of the three unit tests fails each time.
+
+### 5. A rotation during camera set-up's measurements (75afe8d) — CAM-10
+
+**Found.** The *My face is centred* handler ran the exposure step to its end and then continued, with no
+orientation check; the portrait block's "stopped" wording knew only calibration and the camera check
+(Round 85). The auditor: rotated 1.9 s into the grey field; the step finished 5 s later still in portrait,
+the stage moved to calibration, the stored exposure had no reason, and the screen the camera had been
+measured under was the navy block.
+**Fixed.** The exposure step takes a stop signal: stopped, it checks before and after every camera call,
+puts the camera back on automatic exposure (mode and compensation; one function for every way the step
+gives up) and keeps nothing. The bench check and the tracker comparison take one too (a stopped
+comparison chooses, stores and records nothing and restarts the tracker that ran before). Camera set-up
+stops whichever is running when the tablet turns, returns to the preview with a note saying what to begin
+again, and the portrait block says the step was stopped.
+**Tests.** `tests/cameraExposure.test.ts` (stopped while measuring auto, with the lock in place, during
+compensation; a signal never aborted changes nothing), `tests/compareTrackers.test.tsx` (a stopped
+comparison stores nothing), `e2e/cameraMeasuredScreens.spec.ts` (rotation during the bench and the
+exposure step; the stage stays on camera set-up; only the step begun again is recorded, and no bench).
+Each fails without the fix.
+
+### 6. The exposure step after the bench check (8f92dd1) — CAM-4; rule `exp-r3`
+
+**Found.** The bench check ends by restoring only `exposureMode: continuous`; on a camera that ended it on
+compensation, the compensation stayed. The participant's exposure step then measured "auto" straight
+away: in the auditor's toy camera, an "auto" brightness 79% of the camera's own, and a final picture at
+63% of it, under the 70% floor.
+**Fixed.** The bench ends on a full return to auto (mode continuous and compensation 0). **`exp-r3`**: the
+exposure step first puts the camera back on auto with no compensation when it is not there already (or
+does not say), lets it settle, then measures "auto"; a camera already on auto gets no extra call. Judged
+the same; no threshold changed. An `exp-r2` sitting can differ only where the bench was run before the
+step in the same camera session (01 `camera_bench` not blank) on a camera that ended it compensated or
+fixed. Codebook (01 and 07 `camera_exposure_rule`), ANALYSIS_PLAN §5 item 8, PROTOCOL and the operator
+manual say so.
+**Tests.** `tests/cameraExposure.test.ts`: the bench then the step on a compensation-only camera ("auto" is
+120, the picture above the floor); a camera left compensated or fixed is put back on auto before "auto" is
+measured; a fresh camera gets no extra call. Each fails without the fix.
+
+### 7. Face trackers that fail (4c35ac0, 0e54934, c937e81) — CAM-5, CAM-7
+
+**CAM-5 found.** *Measure trackers* created each backend and ran it on one frame; when that frame threw, the
+trial was recorded as failed and the model left open (WebGL context and wasm heap) for the rest of the
+sitting — on exactly the tablet the fallback chain exists for. **Fixed**: closed, as `startTracker` already
+did. **Test**: `tests/compareTrackers.test.tsx` — every tracker made during a comparison is closed except
+the one left running; fails without the fix.
+**CAM-7 found.** At the end of the fallback chain the code did nothing and left it to the stall watchdog,
+which arms only after a first result and had just been disarmed. **Fixed**: the end of the chain, and a
+next backend that cannot start, mark the camera lost (the notice, the pause, rows with
+`camera_inactive_reason` `lost` and no tracker named), with the reason in the start error — except while
+the trackers are being compared, which restarts a tracker itself. **Test**:
+`tests/trackerFallbackLost.test.tsx` drives the real hook with trackers that throw on every frame (fails
+without the fix), and the answered-once control.
+
+### 8. The gaze check's eye-open test (22ce79d) — CAM-11; rule `gaze-r3`
+
+**Found.** gaze.ts compared an aperture in y with a width in x, both normalised to the frame, so on the
+16:9 mode the 0.12 cut was in effect 0.067 of the eye's width: lids 4.8 px apart on a 60 px eye (0.08, inside
+a blink) gave an on-screen verdict at 1280x720 and none at 640x480.
+**Fixed.** `estimateGaze` takes the frame's aspect, as the eye-aspect ratio and the head pose have since
+Round 75. The horizontal offset — the only thing the on-screen test reads — is unchanged. **`gaze-r3`**:
+`on_screen_ratio` can read slightly higher on a `gaze-r2` row; it is a descriptive quality index in every
+rule, nothing is modelled on it (ANALYSIS_PLAN §5 item 7, codebook). The gaze check's dots collect only
+frames that pass the same test, so on a 16:9 mode a frame inside a blink no longer counts toward a dot's
+need or enters its median offset; a dot may be shown again a little more often. The commit did not say so;
+ANALYSIS_PLAN item 7 and the 01 codebook entry now do (c7db35a).
+**Test.** `tests/gazeAspect.test.ts`: one face in pixels gets the same verdict at both modes, the cut is 0.12
+of the eye's width, `h` is unchanged; with `estimateGaze` ignoring the aspect, 2 of these 4 fail (re-run on
+the final code). That left the fix's other half untested: the tracker calling it without the aspect (which
+defaults to a square frame) kept every gaze test green. A fifth test, added for this write-up (b613d9f),
+reads the hook: the frame's one aspect goes to the eye-aspect ratio, the head pose and every
+`estimateGaze` call; it fails with that half reverted.
+
+### 9. Rates and words (08b48e4) — CAM-1, MV-1
+
+**Found.** The camera check's rate line, its reasons and notes, camera set-up's readout and the researcher
+card rounded the eye's sampling rate to a whole number beside its tier; Round 83's `fpsText` was used only
+by the dashboard. With no face share or no rate, the check's reasons put "no" and "no measurable" into the
+number's place. **Fixed.** `fpsText` (one decimal, or two where one would round onto the floor) wherever a
+rate stands beside its tier or floor; separate sentences when nothing was seen. Stored values were never
+rounded. **Tests.** `tests/selfTest.test.ts`, `tests/cameraSelfTest.test.tsx`,
+`tests/researcherPanel.test.tsx` (14.6, 14.96, 19.6, 19.96; nothing seen); they fail without the fix.
+
+### 10. For the investigator
+
+1. **The blink rule `blink-r2` is a change to the primary outcome's classification rule — please confirm it
+   (or say to go back).** It was made before data collection, for measurement validity: a blink whose
+   deepest frame may lie outside the window cannot be classified, and the old rule's error could only push
+   toward *incomplete*. It changes no cut and no blink observed whole. What it costs: a blink or so at a
+   window's edges and one per look-away ending inside a blink, from the ratio's denominator, shown per row
+   in `blink_count_cut`. The reversible default implemented: the primary is fitted on `blink-r2`, and the
+   templates refit with any `blink-r1` row put back. Going back would be a small code change (the rule name,
+   and the few places that leave a cut blink out), not a data change: the stored blinks of every sitting
+   reproduce either rule. ANALYSIS_PLAN §5 says this is a pre-data rule fix; if the analysis plan has been
+   registered anywhere, the registration should be amended to match before data are collected.
+2. **Rows recorded before this round** (pilot or test sittings): exported **recomputed** under `blink-r2`
+   wherever their reading window was kept, which is every sitting from schema 10; earlier ones stay
+   `blink-r1` and are kept out of the ocular models by default, with the put-back refit printed. A 07 file
+   exported by an earlier build has no `blink_rule_version` column: re-export such data with this build.
+3. **The exposure rule `exp-r3` — please confirm it.** The exposure step now starts by putting the camera
+   back on automatic exposure with no compensation, and measures "auto" there; before, a bench check run
+   earlier in the same camera session could leave compensation behind, and "auto" — what the fixed
+   exposure is judged against — was measured under it. Nothing is judged differently and no threshold
+   moved. Only a sitting whose bench was run before the step (01 `camera_bench` not blank) on a camera
+   that ended it compensated or fixed can differ from `exp-r2`. Default: `exp-r3`; going back means
+   removing that first step (one block in `cameraExposure.ts`) and the rule name.
+4. **The gaze rule `gaze-r3` — please confirm it.** It changes only the units of the "eye open enough"
+   test, so a frame inside a blink gets no gaze verdict whatever camera mode Chrome picks. It touches
+   `on_screen_ratio` (a quality index, not modelled) and which frames the gaze check's dots count; it
+   touches no blink measure and no outcome. Default: `gaze-r3`.
+5. **The drawn face in the end-to-end camera tests.** The tests that need a face in view (the camera check
+   after a baseline, the double tap on its Continue, the rotation during it) now feed Chromium's fake
+   camera a cartoon face drawn by the test code, so no photograph or video of a person is in the
+   repository or the test output. It proves the screens and the data path run with a face in view; it
+   says nothing about how well the tracker measures a real eye. If a recorded clip of a consenting
+   person would be preferred for those tests, that is the investigator's call (and its storage is an
+   ethics question). The test build also lets its baseline window run to 3 s instead of 0.8 s for the
+   drawn face; the study's own baseline window is unchanged.
+6. **"Continue without camera" after the preview started** now gives a camera-off sitting. An operator who
+   tapped it by mistake has to go back to camera set-up (Exit, resume), as for a declined camera.
+7. **On the tablet**: look once at camera set-up with the researcher card open while the exposure step runs
+   (it should close and come back), turn the tablet during the grey field (the preview should come back
+   with the note), and, if a pilot participant cannot be calibrated, check that *Continue without blink
+   measures* goes straight to the questionnaire.
+
+### 11. Not measured on the Xiaomi Pad 6
+
+- Everything above was checked in unit tests and in headless Chromium with its fake camera — Chromium's own
+  test picture, or the drawn face. Not on the tablet: whether its camera ends the bench on compensation
+  (CAM-4), whether its GPU tracker fails on first frames (CAM-5, CAM-7), how often a reading window's edge
+  falls inside a blink there (CAM-8; the estimate in ANALYSIS_PLAN is arithmetic), which camera mode
+  Chrome picks (CAM-11), how the card closing and the full-screen grounds look on its screen (CAM-9), and
+  whether it can be turned to portrait at all while installed (the app asks for landscape; CAM-10 was
+  reproduced with a portrait-shaped window, as in split screen).
+- No timing was changed by these fixes: no tap guard, reading timing or reaction-time path was touched.
+- The drawn face is not a person: it shows that the code paths run with a face in view, not how well the
+  tracker measures a real eye.
+
+### 12. Checks run
+
+- `npm run verify` green on the code of all the fixes (344b88e: 1,879 unit tests) and again on the final
+  code of this round (c7db35a, with the added gaze test and the codebook sentence): lint, types, 138 test
+  files with 1,880 unit tests, the corpus and codebook gates (545 codebook entries over 19 files), the
+  export gate 893/893, and both analysis templates in R and Python, including the new `blink-r2` checks
+  (every blink count in the simulated cohort under `blink-r2`; the earlier-rule rows kept out and put
+  back).
+- **The whole end-to-end suite: 111 of 111 passed, each on its first attempt,** on 344b88e (20.2 min).
+  It had failed once before, on `cameraDiagnostics.spec.ts`, which still expected the exposure rule
+  `exp-r2`; 344b88e updated that one line. Nothing the app does has changed since, apart from one
+  sentence of the codebook it writes; the other later commit adds a unit test. On the final code the
+  camera specs were run again, retries off — no face so no camera check, the drawn face with the check,
+  *Continue without camera*, the card and the rotation on the measured screens: 7 of 7.
+- `npm run build` (the bundle check: 42 assets, all precached), then the production-bundle suite,
+  retries off: 7 of 7.
+- The frame-rate simulation (`npm run sim:fps`) re-run in full three times under `blink-r2` (248 s,
+  224 s, 224 s): every table line of the appendix in docs/FPS_GATE_SIMULATION.md is in the re-run's output
+  unchanged (126 of 126 compared for this write-up).
+- **Each fix fails its tests when reverted.** Each fix was checked against its reversion when it was made.
+  For this write-up the checks were run again on the final code for CAM-3 (§1), CAM-8 (two of its six
+  mutations, §2), CAM-2 (the end-to-end test and two unit tests, §4) and CAM-11 (§8, where the re-run found
+  the untested half that b613d9f now covers). Those of CAM-9, CAM-10, CAM-4, CAM-5, CAM-7, CAM-1 and MV-1
+  were not repeated; their commits record that their tests fail without the fix.
+
+### 13. Versions in the data
+
+| Rule or format | Before | Now | Where it is recorded |
+|---|---|---|---|
+| Blink classification (primary outcome) | `blink-r1`: a blink cut by the window's edge classified on the part in view | `blink-r2`: such a blink (and one resumed after a gap) is counted (`blink_count_cut`) and not classified; cuts unchanged | 07 `blink_rule_version`, `blink_count_cut`, `blink_recomputed`; 07b `rule_version`, `started_by`, `cut`; analysis_long `n_blinks_cut`, `blink_rule_version`; ANALYSIS_PLAN §5 |
+| Exposure step | `exp-r2` | `exp-r3`: "auto" measured under auto (camera put back on auto first); judged the same | 01 and 07 `camera_exposure_rule`; ANALYSIS_PLAN §5 item 8 |
+| Gaze check's eye-open test | `gaze-r2`: frame-stretched units | `gaze-r3`: pixel proportions; touches on_screen_ratio and the frames a gaze dot counts, no blink measure | 01 and 07 `gaze_rule_version`; ANALYSIS_PLAN §5 item 7 |
+| Camera off at set-up | not recorded | why (`camera_off_reason`) | 01 `camera_off_reason` |
+| Camera check not run | ran and failed without a baseline | not run, and why | 01 `selftest_not_run_reason` |
+| Every other rule (tap guard, attempt counting, scale freeze, inter-blink interval, reaction window, rating format, typography, straight-lining, frame-rate gate, calibration, camera check scoring, reliability, engagement thresholds, fitted minimum) | unchanged | unchanged | as before |
