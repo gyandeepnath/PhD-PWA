@@ -1706,6 +1706,20 @@ export interface PreflightResult {
    * preflight_bulk_ticked (Round 78).
    */
   bulkTicked: boolean;
+  /**
+   * What the storage check found when Continue was pressed (storage/storageHealth.ts): its verdict,
+   * whether the browser granted durable storage, and the free space it reported. Stamped on the sitting
+   * (storage_verdict, storage_persisted, storage_free_mb; audit 86 P5): 'warn' and 'unknown' let the
+   * sitting go on, so this is the one record that it ran on storage the browser may clear.
+   */
+  storage: PreflightStorage | null;
+}
+
+/** The parts of the storage check a sitting keeps. */
+export interface PreflightStorage {
+  verdict: StorageHealth['verdict'];
+  persisted: boolean | null;
+  availableMb: number | null;
 }
 
 export function Preflight({ onDone, onBack }: {
@@ -1981,7 +1995,10 @@ export function Preflight({ onDone, onBack }: {
         {onBack && <button type="button" className={btnBack} data-testid="back-to-profile" onClick={onBack}>← Back to the profile</button>}
         <button className={btn} disabled={!all} data-testid="preflight-continue"
           style={btnState(all)}
-          onClick={() => all && onDone({ fontOk: fontOk ?? null, displayMode: mode, displayModeAcknowledged: !installed && modeAck, screen: cal, bulkTicked })}>
+          onClick={() => all && onDone({
+            fontOk: fontOk ?? null, displayMode: mode, displayModeAcknowledged: !installed && modeAck, screen: cal, bulkTicked,
+            storage: storage ? { verdict: storage.verdict, persisted: storage.persisted, availableMb: storage.availableMb } : null,
+          })}>
           {storageBlocks ? 'Storage problem — cannot start' : 'All checks pass — continue →'}
         </button>
       </div>

@@ -21,7 +21,9 @@
  *
  * This module reports on all three BEFORE a session starts, so the failure is caught while it is
  * still an inconvenience rather than a lost participant. The result is also stamped into the
- * session record, so the analyst can tell whether a given sitting ran on durable storage.
+ * session record when pre-flight is passed (storage_verdict, storage_persisted, storage_free_mb in
+ * 01_session_info.csv), so the analyst can tell whether a given sitting ran on durable storage. This
+ * sentence said so for many rounds before it was true (audit 86 P5): the check was shown and dropped.
  *
  * Every API used here is optional in older browsers. Absence is reported as "unknown", never as
  * "fine": a check that cannot run has not passed.

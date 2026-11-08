@@ -264,6 +264,17 @@ export interface SessionRecord {
    */
   stimulus_font_ok?: boolean | null;
   /**
+   * The pre-flight storage check, as it stood when pre-flight was passed (storage/storageHealth.ts;
+   * Round 92, audit 86 P5): 'ok', 'warn' (durable storage not granted, or little free space) or
+   * 'unknown' (the browser could not say); 'blocked' never gets past pre-flight. Whether the browser
+   * granted durable (persisted) storage, null where it gave no answer, and the free space it reported in
+   * MB. The check was shown and never kept, although the module said it was. Absent on sittings
+   * recorded before it, and on a resumed sitting's later parts (pre-flight runs once a sitting).
+   */
+  storage_verdict?: 'ok' | 'warn' | 'blocked' | 'unknown' | null;
+  storage_persisted?: boolean | null;
+  storage_free_mb?: number | null;
+  /**
    * The CSS display mode the app ran in at pre-flight: 'fullscreen' or 'standalone' for the installed
    * home-screen launch, 'browser' or 'minimal-ui' for a tab or window. null where the browser gave no
    * answer; absent on sittings from builds before it was recorded.

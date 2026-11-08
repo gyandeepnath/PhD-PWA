@@ -1615,12 +1615,16 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     case 'PREFLIGHT':
       view = (
         <Preflight
-          onDone={latched('preflight', async ({ fontOk, displayMode, displayModeAcknowledged, screen: measured, bulkTicked }) => {
+          onDone={latched('preflight', async ({ fontOk, displayMode, displayModeAcknowledged, screen: measured, bulkTicked, storage }) => {
             if (displayModeAcknowledged) launchAcks.current.add(displayMode);
             if (session) {
               const c = measured.calibration;
               const fresh = {
                 ...session, preflight_complete: true, preflight_bulk_ticked: bulkTicked, stimulus_font_ok: fontOk,
+                // What the storage check found: 'warn' and 'unknown' let the sitting go on (audit 86 P5).
+                storage_verdict: storage?.verdict ?? null,
+                storage_persisted: storage?.persisted ?? null,
+                storage_free_mb: storage?.availableMb ?? null,
                 display_mode: displayMode, display_mode_acknowledged: displayModeAcknowledged,
                 // The ruler check (Round 74): measured, or skipped with the recorded acknowledgement —
                 // never a substituted figure. See lib/physicalCalibration.ts.
