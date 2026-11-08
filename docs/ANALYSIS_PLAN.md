@@ -741,7 +741,14 @@ These are not optional and they come first.
      participant was looking at the tablet; it is not a covariate and not an exclusion rule, and no
      threshold for it is set here. The deprecated zone columns (`gaze_deviation_ratio`,
      `zone_center_ratio`, `zone_transition_count`) are blank on `gaze-r2` rows, and neither template
-     reads them.
+     reads them. **`gaze-r3` (Round 91, audit 86 CAM-11)** is `gaze-r2` with its eye-open test (an
+     aperture-to-width ratio above 0.12) taken in pixel proportions. Under `gaze-r2` the ratio mixed the
+     frame's two normalised units, so on a 16:9 camera mode the cut was in effect 0.067 of the eye's
+     width and frames deep inside a blink (an EAR of about 0.08) still got an on-screen verdict, which
+     the aggregator says a blink should not; whether they did depended on the camera mode Chrome chose.
+     `on_screen_ratio` can therefore read slightly higher on a `gaze-r2` row than it would under
+     `gaze-r3`. It is a descriptive quality index in every rule; nothing is modelled on it, and the
+     zone columns stay blank.
 8. **The exposure rule (Round 82): `exp-r2`** (01 `camera_exposure_rule` and 07
    `camera_exposure_rule`; `exp-r1` before). The camera's exposure is still fixed once per sitting on
    the grey field, with the same rate and brightness checks. What changed is how the camera's own

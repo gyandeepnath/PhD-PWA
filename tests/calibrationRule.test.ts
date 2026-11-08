@@ -88,7 +88,7 @@ describe('the live state: eyes found, steady', () => {
 
 describe('the gaze check, rule gaze-r2', () => {
   it('three dots on a mid-height reading line: its middle and its two ends', () => {
-    expect(GAZE_RULE).toBe('gaze-r2');
+    expect(GAZE_RULE).toBe('gaze-r3'); // gaze-r2's three dots; the eye-open test in pixel proportions from Round 91
     expect(GAZE_DOTS.map((d) => d.id)).toEqual(['centre', 'left', 'right']);
     expect(GAZE_DOTS.map((d) => d.dx)).toEqual([0, -STIMULUS_COLUMN_PX / 2, STIMULUS_COLUMN_PX / 2]);
     // The ends are inside the screen: 520 of the 576 root px to the edge.

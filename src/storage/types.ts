@@ -1278,7 +1278,7 @@ export interface EyeMetricsRecord extends PipelineWindowFields {
    */
   on_screen_ratio?: number | null;
   /** The gaze rule this row's gaze columns follow; absent before Round 80 (the nine-point gaze-r1). */
-  gaze_rule_version?: 'gaze-r2';
+  gaze_rule_version?: 'gaze-r2' | 'gaze-r3';
 
   face_presence_ratio: number | null;
   face_size_ratio: number | null;
@@ -1504,7 +1504,7 @@ export interface CalibrationRecord {
    * check failed. Absent on gaze-r1 records, whose nine-point fields are the ones above.
    * samples_per_target, targets_detected and targets_total count the three dots under gaze-r2.
    */
-  gaze_rule?: 'gaze-r2';
+  gaze_rule?: 'gaze-r2' | 'gaze-r3';
   gaze_check?: {
     h_centre: number | null;
     h_left: number | null;

@@ -41,7 +41,7 @@ describe('a check from frames, then reading', () => {
   const fit = fitGazeCheck({ centre: jitter(0.05, 20), left: jitter(-0.07, 20), right: jitter(0.17, 20) }, { centre: 12, left: 12, right: 12 });
 
   it('passes, with a range wider than the line', () => {
-    expect(GAZE_RULE).toBe('gaze-r2');
+    expect(GAZE_RULE).toBe('gaze-r3'); // gaze-r2's check, the eye-open test in pixel proportions (Round 91)
     expect(fit.valid).toBe(true);
     expect(fit.range!.lo).toBeLessThan(-0.07);
     expect(fit.range!.hi).toBeGreaterThan(0.17);
@@ -63,7 +63,7 @@ describe('a check from frames, then reading', () => {
     for (let i = 0; i < 10; i++) frame((t += 40), 0.05, false);                   // a long blink
     const rec = agg.finalize({ conditionId: 'c', sessionId: 's', cameraActive: true, baselineEarValue: 0.3, earThresholdUsed: 0.225, gazeCalibrated: true, headPitchCalibrated: true, calibrationId: 'k' });
     expect(rec.on_screen_ratio).toBeCloseTo(60 / 100, 6);
-    expect(rec.gaze_rule_version).toBe('gaze-r2');
+    expect(rec.gaze_rule_version).toBe(GAZE_RULE);
     // The nine-point zones are not measured any more: null, never the "best" value 0.
     expect(rec.gaze_deviation_ratio).toBeNull();
     expect(rec.zone_center_ratio).toBeNull();

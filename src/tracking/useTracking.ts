@@ -495,8 +495,9 @@ export function useTracking(): TrackingApi {
    * The frame's horizontal iris offset and its on-screen verdict. estimateGaze is called without
    * thresholds: only its offset is used (its 3x3 zone was gaze-r1's, and is not stored any more).
    */
-  const gazeFor = (lm: Point[], offAxis: boolean) => {
-    const g = estimateGaze(lm);
+  const gazeFor = (lm: Point[], offAxis: boolean, aspect: number) => {
+    // In pixel proportions (gaze-r3): the eye-open test reads the frame's aspect, as the EAR does.
+    const g = estimateGaze(lm, undefined, undefined, 0, 0, aspect);
     return { h: g.h, onScreen: onScreenFrame(g.h, offAxis, gazeCalRef.current?.range ?? null) };
   };
 
@@ -654,7 +655,7 @@ export function useTracking(): TrackingApi {
       }
       const pose = estimateHeadPose(lm, pitchBaselineFracRef.current, aspect);
       const offAxis = isOffAxis(pose);
-      const gazeNow = gazeFor(lm, offAxis);
+      const gazeNow = gazeFor(lm, offAxis, aspect);
       if (gazeCollectingTarget.current) {
         const id = gazeCollectingTarget.current;
         gazeTimesRef.current.face.push(t);

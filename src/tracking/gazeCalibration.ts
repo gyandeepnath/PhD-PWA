@@ -45,8 +45,14 @@ const meanAbs = (xs: number[]): number => (xs.length ? xs.reduce((s, x) => s + M
  * ---------------------------------------------------------------------------------------------------
  */
 
-/** The rule the gaze check ran under. 'gaze-r1' is the nine-point fit (records before Round 80). */
-export const GAZE_RULE = 'gaze-r2' as const;
+/**
+ * The rule the gaze check ran under. 'gaze-r1' is the nine-point fit (records before Round 80). 'gaze-r2'
+ * is the three-dot check (Round 80). 'gaze-r3' (Round 91, audit 86 CAM-11) is gaze-r2 with the eye-open
+ * test in pixel proportions (gaze.ts): under gaze-r2 it was in frame-stretched units, so on a 16:9 camera
+ * mode frames deep in a blink still got an on-screen verdict, and on_screen_ratio counted them. The check,
+ * its dots, its range and the on-screen test are otherwise the same.
+ */
+export const GAZE_RULE = 'gaze-r3' as const;
 export const GAZE_RULE_BEFORE = 'gaze-r1' as const;
 
 /** The three dots of the gaze check, by where they sit on the reading line. */

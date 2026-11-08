@@ -47,13 +47,15 @@ export interface GazeResult {
 }
 
 /** Normalised iris offset within the eye box, averaged across both eyes.
- *  `h0`/`v0` are the fitted neutral bias from calibration (default 0 = uncalibrated). */
+ *  `h0`/`v0` are the fitted neutral bias from calibration (default 0 = uncalibrated).
+ *  `aspect` is the frame's width / height, as for eyeEars (blink.ts): see "IN PIXEL PROPORTIONS" below. */
 export function estimateGaze(
   lm: Point[],
   hThreshold = DEFAULT_GAZE_THRESHOLD,
   vThreshold = DEFAULT_GAZE_THRESHOLD,
   h0 = 0,
   v0 = 0,
+  aspect = 1,
 ): GazeResult {
   const irisL = lm[IRIS.left];
   const irisR = lm[IRIS.right];
@@ -92,8 +94,18 @@ export function estimateGaze(
    *
    * Calibration consumes the same function, so the fitted thresholds are in these same units.
    */
-  const leftAperture = lm[EYE_BOX.botL].y - lm[EYE_BOX.topL].y;
-  const rightAperture = lm[EYE_BOX.botR].y - lm[EYE_BOX.topR].y;
+  /*
+   * IN PIXEL PROPORTIONS (rule gaze-r3, Round 91; audit 86 CAM-11). Landmarks are normalised to the frame,
+   * x to its width and y to its height, so an aperture in y over a width in x is the eye's own ratio only
+   * on a square frame: on the 16:9 camera mode it is 0.56 of it, the cut below became 0.067 of the eye's
+   * width instead of 0.12, and frames deep inside a blink (an EAR of 0.08, below the blink cuts) still got
+   * an on-screen verdict — at 1280x720 but not at 640x480, so on whichever mode Chrome picked. Vertical
+   * distances are divided by the aspect, putting both axes in the frame's width, as eyeEars and the head
+   * pose have done since Round 75. The horizontal offset `h` is a ratio of x distances and is unchanged.
+   */
+  const a = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  const leftAperture = (lm[EYE_BOX.botL].y - lm[EYE_BOX.topL].y) / a;
+  const rightAperture = (lm[EYE_BOX.botR].y - lm[EYE_BOX.topR].y) / a;
   const leftWidth = Math.abs(leftBoxW);
   const rightWidth = Math.abs(rightBoxW);
 
@@ -108,8 +120,8 @@ export function estimateGaze(
 
   const leftCentreY = (lm[EYE_BOX.topL].y + lm[EYE_BOX.botL].y) / 2;
   const rightCentreY = (lm[EYE_BOX.topR].y + lm[EYE_BOX.botR].y) / 2;
-  const vL = ((irisL.y - leftCentreY) / (leftWidth + 1e-6)) * 2;
-  const vR = ((irisR.y - rightCentreY) / (rightWidth + 1e-6)) * 2;
+  const vL = (((irisL.y - leftCentreY) / a) / (leftWidth + 1e-6)) * 2;
+  const vR = (((irisR.y - rightCentreY) / a) / (rightWidth + 1e-6)) * 2;
   const v = (vL + vR) / 2;
 
   // Subtract the fitted neutral bias before thresholding.
