@@ -78,7 +78,11 @@ export function sittingChecks(bundle: SessionBundle): SittingCheck[] {
 
   // The camera check: its own verdict, as its screen showed it.
   const st = bundle.session.camera_selftest;
-  if (!st) {
+  if (bundle.session.camera_selftest_skipped) {
+    // Not run after the last calibration, because there was no baseline to count blinks against (CAM-2).
+    checks.push({ key: 'camera_check', label: MEASURE.cameraCheck.name, status: 'none', value: 'not run: no eye baseline', rule: null,
+      detail: 'Calibration fitted no open-eye baseline and the operator went on without blink measures. The check counts blinks, so it was not run: it says nothing about the camera.' });
+  } else if (!st) {
     checks.push({ key: 'camera_check', label: MEASURE.cameraCheck.name, status: 'none', value: 'not run', rule: null, detail: 'No camera check recorded (camera not used, or a sitting from before the check).' });
   } else {
     const rule = st.rule ?? SELF_TEST_RULE_V1;

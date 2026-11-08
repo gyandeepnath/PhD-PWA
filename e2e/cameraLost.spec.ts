@@ -75,20 +75,8 @@ test('continuing without the camera records the rows as camera lost', async ({ p
   expect(reason).toEqual({ active: false, reason: 'lost' });
 });
 
-test('the camera self-test runs after calibration and its result is saved with the session', async ({ page }) => {
-  test.setTimeout(240_000);
-  await startNewExperiment(page);
-  await driveUntil(page, 'CAMERA_SETUP');
-  await throughCameraAndCalibration(page);
-  const st = await page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>((res, rej) => { const r = indexedDB.open('VisualErgonomicsDB'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
-    const rows = await new Promise<{ camera_selftest?: { cued: number; pass: boolean } }[]>((res) => { const q = db.transaction('sessions').objectStore('sessions').getAll(); q.onsuccess = () => res(q.result); });
-    return rows[0]?.camera_selftest ?? null;
-  });
-  expect(st?.cued).toBe(5);
-  // The fake camera shows no face, so the test must NOT pass — a pass here would mean it checks nothing.
-  expect(st?.pass).toBe(false);
-});
+// That the camera check runs after calibration and its result is saved with the session is tested in
+// faceCamera.spec.ts: it runs only after a calibration that fitted a baseline (audit 86 CAM-2).
 
 /*
  * The camera lost on a SET-UP screen after camera set-up (audit 86 F7). The notice was raised only where

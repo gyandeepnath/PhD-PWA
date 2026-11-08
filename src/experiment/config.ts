@@ -444,7 +444,12 @@ const E2E_OVERRIDES: Partial<typeof BASE_CONFIG> = {
   ADAPTATION_SWITCH_POLARITY_MS: 300,
   ANNOTATION_SEGMENT_MS: 400,
   EAR_BASELINE_MS: 400,
-  EAR_BASELINE_MAX_MS: 800,
+  /*
+   * Long enough for the drawn face of the camera specs (e2e/fixtures/syntheticFace.ts) to give its
+   * thirty usable frames on a busy machine: the tracker solved it 12-28 times a second in headless
+   * Chromium, and at 800 ms the window closed on 19 (audit 86 CAM-2). Without a face it runs to here.
+   */
+  EAR_BASELINE_MAX_MS: 3000,
   TRACKER_TRIAL_MS: 1500,
   TRACKER_TRIAL_WARMUP_MS: 300,
 };

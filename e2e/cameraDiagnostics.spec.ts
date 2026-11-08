@@ -162,54 +162,8 @@ test('camera setup measures the trackers and shows what the camera and the track
   expect(p.camera_request_fallback).toMatch(/OverconstrainedError/);
 });
 
-test('the self-test result shows the pipeline and names the stage that was short', async ({ page }) => {
-  test.setTimeout(300_000);
-  await toCameraRunning(page);
-  await page.getByRole('button', { name: /My face is centred/ }).click();
-  await page.waitForFunction(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') === 'CALIBRATION');
-  await page.getByRole('button', { name: /Begin calibration/ }).click();
-  await page.waitForFunction(() =>
-    !!document.querySelector('[data-testid="calibration-accept-thin"], [data-testid="calibration-continue-anyway"], [data-testid="selftest-start"]'),
-  null, { timeout: 120_000 });
-  for (const id of ['calibration-accept-thin', 'calibration-continue-anyway']) {
-    const b = page.getByTestId(id);
-    if (await b.isVisible().catch(() => false)) await b.click();
-  }
-  await page.getByTestId('selftest-start').click();
-  await page.waitForSelector('[data-testid="selftest-continue"], [data-testid="selftest-continue-anyway"]', { timeout: 90_000 });
-
-  await expect(page.getByTestId('selftest-pipeline')).toHaveText(/Camera delivered \d+ fps at \d+×\d+ · tracker processed \d+ fps, \d+ ms a frame/);
-  const verdict = await page.getByTestId('selftest-verdict').innerText();
-  if (/did not pass/.test(verdict)) {
-    // The fake camera has no face, so the test fails — and the frame-rate reason must say which stage.
-    const body = await page.getByTestId('camera-selftest').innerText();
-    expect(body).toMatch(/CAMERA delivered only|TRACKER processed only|found the face in only some|cannot be told apart/);
-    expect(body).not.toMatch(/below 25 — close other apps and check the light/); // the old one-size sentence
-  }
-  const pass = page.getByTestId('selftest-continue');
-  if (await pass.isVisible().catch(() => false)) await pass.click();
-  else await page.getByTestId('selftest-continue-anyway').click();
-  await page.waitForFunction(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') !== 'CALIBRATION', null, { timeout: 30_000 });
-
-  const st = (await sessionRecord(page)).camera_selftest as Record<string, unknown>;
-  const pipe = st.pipeline as Record<string, number | string>;
-  expect(Number(pipe.camera_fps_delivered)).toBeGreaterThan(0);
-  expect(Number(pipe.frames_processed)).toBeGreaterThan(0);
-  expect(['tasks-gpu', 'tasks-cpu', 'legacy']).toContain(pipe.tracker_backend);
-  if (st.pass === false) expect(['camera', 'camera_and_tracker', 'tracker', 'face', 'undetermined']).toContain(st.limit);
-
-  /*
-   * The accepted attempt's blinks and trace, kept as the sitting's self-test record (Round 78): filed
-   * under the session, in no condition, with the five cue times and one trace row per processed
-   * frame. Its blinks are the ones the test scored (cued + extra).
-   */
-  const s = await sessionRecord(page);
-  const rec = (await ocularRecords(page)).find((r) => r.window === 'selftest');
-  expect(rec).toMatchObject({ record_id: `selftest:${String(s.session_id)}`, condition_id: null, session_id: s.session_id });
-  expect((rec!.cues as number[]).length).toBe(Number(st.cued));
-  expect((rec!.events as unknown[]).length).toBe(Number(st.detected) + Number(st.extra));
-  expect((rec!.trace as { frames: number }).frames).toBeGreaterThan(0);
-});
+// The camera check's own result screen is tested in faceCamera.spec.ts: it runs only after a calibration
+// that fitted an open-eye baseline (audit 86 CAM-2), and this camera shows no face, so it fits none.
 
 test('the researcher card shows the live picture on set-up screens and never on a condition screen', async ({ page }) => {
   test.setTimeout(360_000);

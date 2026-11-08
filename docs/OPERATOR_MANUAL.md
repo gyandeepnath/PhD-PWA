@@ -493,7 +493,8 @@ camera appears). It goes through the same browser camera path, so it would not b
 exposure problem, and a different camera changes the protocol and the consent: tell the investigator,
 who would notify the ethics committee.
 
-**The camera check** after calibration (*Quick camera check*: blink when the dot flashes). From
+**The camera check** after calibration (*Quick camera check*: blink when the dot flashes), when the
+calibration fitted an open-eye baseline (from Round 91; without one it is not run). From
 Round 79 it runs on the grey field — the same mid-grey as before each display — and the dot turns
 from black to white for each flash. It takes about 18 seconds. It passes when all three hold:
 
@@ -569,7 +570,7 @@ calibration spoils the blink measures for the whole sitting. Take the time. It r
 
 | Screen | What it means | What to do |
 |---|---|---|
-| *No eye baseline* | No blink can be counted in this sitting without it. The reason is on the screen: no frames, a face in under half the frames, the eyes not measured (glare, spectacles, half-closed eyes), or too few frames. | Fix the cause (light, seating, glare) and press **Try the eye baseline again**. **Continue without blink measures** is allowed, but only as a deliberate choice. |
+| *No eye baseline* | No blink can be counted in this sitting without it. The reason is on the screen: no frames, a face in under half the frames, the eyes not measured (glare, spectacles, half-closed eyes), or too few frames. | Fix the cause (light, seating, glare) and press **Try the eye baseline again**. **Continue without blink measures** is allowed, but only as a deliberate choice. The camera check is then not run (from Round 91: it counts blinks, and without a baseline it can count none), and the sitting records why (01 `selftest_not_run_reason` = `no_baseline`). |
 | *Gaze check incomplete* | Only the on-screen ratio — a quality check — is affected. The baseline was measured and every blink is counted. The reason is on the screen: a dot where the eyes were not found often enough (✗ on the tick row), or, with every dot ticked, eyes that did not move far enough between the two ends of the line (the head turned instead, or the eyes did not follow the dot). | Press **Repeat the gaze check** (the three dots only), or **Continue**. |
 
 The old calibration (nine tap targets on a dark screen) failed in good light on the study tablet: at

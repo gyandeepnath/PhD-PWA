@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { faceCameraLaunchOptions } from './fixtures/syntheticFace';
 import { stageNow, handleStage, dbAll, startNewExperiment, setInput, validLux, waitStageChange, driveUntil } from './helpers';
 import { TAP_GUARD_MS, CONSENT_TAP_GUARD_MS, TAP_GUARD_VERSION } from '../src/lib/tapGuard';
 
@@ -20,6 +21,12 @@ import { TAP_GUARD_MS, CONSENT_TAP_GUARD_MS, TAP_GUARD_VERSION } from '../src/li
  * reproductions did; the rest of the suite clicks with a mouse, which the tap guard leaves alone.
  */
 test.use({ viewport: { width: 1152, height: 720 }, hasTouch: true });
+/*
+ * The camera check runs only after a calibration that fitted an open-eye baseline (audit 86 CAM-2), so
+ * the fake camera shows a drawn face the tracker finds (fixtures/syntheticFace.ts). No other test here
+ * turns the camera on.
+ */
+test.use({ launchOptions: faceCameraLaunchOptions() });
 
 /** Two touches `gap` ms apart at the centre of `box`. */
 async function doubleTapAt(page: Page, box: { x: number; y: number; width: number; height: number }, gap: number) {

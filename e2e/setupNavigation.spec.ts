@@ -1,5 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
+import { faceCameraLaunchOptions } from './fixtures/syntheticFace';
 import { stageNow, startNewExperiment, driveUntil, handleStage, setInput, waitStageChange, dbCounts, measureScreen } from './helpers';
+
+/*
+ * The one test here that turns the camera on stops the camera check by a rotation, and the check runs
+ * only after a calibration that fitted an open-eye baseline (audit 86 CAM-2): the fake camera shows a
+ * drawn face the tracker finds (fixtures/syntheticFace.ts).
+ */
+test.use({ launchOptions: faceCameraLaunchOptions() });
 
 /**
  * The operator's way back and way out of setup, and what each leaves in the database.
@@ -311,9 +319,9 @@ test('turning the tablet to portrait stops a running calibration or camera check
   await page.getByRole('button', { name: /My face is centred/ }).click({ timeout: 60_000 });
   await page.waitForSelector('[data-stage="CALIBRATION"]', { timeout: 30_000 });
 
-  // Under ?e2e the calibration (rule cal-r2) samples for only about a second — a 250 ms settle and a
-  // 400-800 ms baseline window, with no face in the fake camera — so the rotation follows the tap
-  // without a pause, as the camera check's does below. It used to wait 600 ms, which left a few
+  // Under ?e2e the calibration (rule cal-r2) samples for only a second or two — a 250 ms settle and a
+  // baseline window of at least 400 ms, until thirty usable frames of the drawn face — so the rotation
+  // follows the tap without a pause, as the camera check's does below. It used to wait 600 ms, which left a few
   // hundred ms of margin: on a busy machine the window closed first, the attempt was recorded in
   // landscape, and the test read that as a stop that kept its data (Round 85). The block's sentence
   // confirms the rotation caught it running: it says "stopped" only when the routine stopped a run.
@@ -329,7 +337,7 @@ test('turning the tablet to portrait stops a running calibration or camera check
   await expect(page.getByTestId('calibration-stopped')).toBeVisible();
   // Begun again from the start, it runs to its end and stores one calibration.
   await page.getByTestId('calibration-begin').click({ timeout: 30_000 });
-  await page.waitForSelector('[data-testid="calibration-accept-thin"], [data-testid="calibration-continue-anyway"]', { timeout: 120_000 });
+  await page.waitForSelector('[data-testid="calibration-accept-thin"], [data-testid="calibration-continue-anyway"], [data-testid="selftest-start"]', { timeout: 120_000 });
   expect((await dbCounts(page, ['calibration_data'])).calibration_data).toBe(1);
   for (const id of ['calibration-accept-thin', 'calibration-continue-anyway']) {
     const b = page.getByTestId(id);

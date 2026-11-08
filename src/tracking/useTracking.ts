@@ -252,6 +252,12 @@ interface TrackingApi {
    * Resolves to the fit, the evidence behind it and, when there is no baseline, the reason.
    */
   measureEarBaseline: (step: Pick<EarBaselineStep, 'ms' | 'maxMs' | 'minSamples'>, onProgress?: (p: BaselineProgress) => void) => Promise<BaselineResult>;
+  /**
+   * The open-eye baseline every blink is now counted against: the last baseline window's fit, or null
+   * when it fitted none (or none has run). Without it no blink is counted, by the camera check either,
+   * so the check is not run (audit 86 CAM-2).
+   */
+  earBaseline: () => number | null;
   /** Live video element + stream for CONSENTED capture; null when the camera is not running. */
   mediaSource: () => { video: HTMLVideoElement; stream: MediaStream } | null;
   /**
@@ -1288,6 +1294,8 @@ export function useTracking(): TrackingApi {
    * Head pitch zero is captured from the same window for the same reason: it defines "frontal" for
    * this participant, and the nine-point routine is the one moment the head is least likely to be.
    */
+  const earBaseline = useCallback((): number | null => baselineEarRef.current, []);
+
   const measureEarBaseline = useCallback(async (
     step: Pick<EarBaselineStep, 'ms' | 'maxMs' | 'minSamples'>,
     onProgress?: (p: BaselineProgress) => void,
@@ -1591,7 +1599,7 @@ export function useTracking(): TrackingApi {
 
   return {
     status,
-    subscribeLive, start, stop, measureEarBaseline, mediaSource,
+    subscribeLive, start, stop, measureEarBaseline, earBaseline, mediaSource,
     startError, pipelineInfo, compareTrackers, setCameraExposure, runCameraBench,
     beginGazeCalibration, sampleGazeTarget, endGazeCalibration,
     beginCondition, endCondition, markReadingPage,

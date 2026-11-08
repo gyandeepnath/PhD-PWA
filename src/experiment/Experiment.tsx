@@ -876,6 +876,25 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     }
   }, [session, tracking]);
 
+  /*
+   * Calibration ended without an open-eye baseline: the camera check is not run (see the CALIBRATION
+   * stage), the sitting says so, and set-up goes on exactly as from the check's own Continue — the
+   * session-start photograph, then the next stage. Latched: one record and one advance per screen.
+   */
+  const skipSelfTest = latched('selftest-skip', async () => {
+    if (session) {
+      const base = await get('sessions', session.session_id) ?? session;
+      const fresh = { ...base, camera_selftest_skipped: { reason: 'no_baseline', at: Date.now() }, camera_pipeline: tracking.pipelineInfo() ?? base.camera_pipeline ?? null } as SessionRecord;
+      await put('sessions', fresh);
+      setSession(fresh);
+    }
+    try {
+      await captureMedia('session_start');
+    } finally {
+      advanceOrResume('CALIBRATION');
+    }
+  });
+
   // --- SESSION INIT ---
   const beginSession = useCallback(async (d: SessionInitData) => {
     if (creatingSession.current) return; // guard against double-submit creating duplicate sessions
@@ -1790,7 +1809,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
               const base = await get('sessions', session.session_id) ?? session;
               // The pipeline record is refreshed too: a tracker that fell back since camera setup is
               // recorded as the one that actually ran.
-              const fresh = { ...base, camera_selftest: { ...r, at: Date.now() }, camera_pipeline: tracking.pipelineInfo() ?? base.camera_pipeline ?? null } as SessionRecord;
+              const fresh = { ...base, camera_selftest: { ...r, at: Date.now() }, camera_selftest_skipped: null, camera_pipeline: tracking.pipelineInfo() ?? base.camera_pipeline ?? null } as SessionRecord;
               await put('sessions', fresh);
               // The same attempt's blinks and trace, as the sitting's closed-eye reference (07b/07c, Round 78).
               await tracking.saveSelfTestLog(session.session_id);
@@ -1820,7 +1839,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           beginGazeCalibration={tracking.beginGazeCalibration}
           sampleGazeTarget={tracking.sampleGazeTarget}
           endGazeCalibration={tracking.endGazeCalibration}
-          onDone={() => setSelfTesting(true)}
+          /*
+           * The camera check counts blinks, so it runs only when calibration left a baseline to count
+           * them against (audit 86 CAM-2). After "Continue without blink measures" it used to run anyway,
+           * see 0 of 5 blinks, fail and blame the lighting, on a camera that may have been fine. Now the
+           * sitting records that it was not run and why, and goes on as the check's Continue would.
+           */
+          onDone={() => (tracking.earBaseline() != null ? setSelfTesting(true) : void skipSelfTest())}
           onRunning={setProcedureRunning}
           halted={portrait}
           onStoppedByRotation={calibrationStopped}

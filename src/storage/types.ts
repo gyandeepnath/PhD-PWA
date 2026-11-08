@@ -316,6 +316,15 @@ export interface SessionRecord {
     earlier?: Array<{ verdict: 'working' | 'reduced' | 'failed'; cued: number; detected: number; samplingFps: number | null; facePresence: number | null }>;
   } | null;
   /**
+   * The camera check was NOT run after the last calibration of this sitting, and why (audit 86 CAM-2):
+   * 'no_baseline' — calibration fitted no open-eye baseline and the operator went on without blink
+   * measures. The check counts blinks, and without a baseline it cannot count one: it used to run anyway,
+   * fail on "0 of 5 blinks" and blame the lighting, and the sitting was recorded as a failed check of a
+   * camera that may have been fine. Cleared when a check is run; camera_selftest, if present, is then
+   * from an earlier calibration of the sitting. Absent on sittings recorded before it existed.
+   */
+  camera_selftest_skipped?: { reason: 'no_baseline'; at: number } | null;
+  /**
    * The camera and face tracker this sitting ran on, as recorded when the camera last started (or when
    * the trackers were last compared at camera setup). See tracking/useTracking.ts. Absent when the
    * camera was not used and on sittings recorded before it existed.
