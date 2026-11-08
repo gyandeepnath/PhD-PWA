@@ -52,7 +52,7 @@ export const LATENCY_MS: [number, number] = [250, 900];
 /** ASSUMED depth of a deliberate blink, fraction of the open eye (uniform). */
 export const DELIBERATE_DEPTH: [number, number] = [0.05, 0.40];
 /** The check's length, as CameraSelfTest.tsx runs it: the first flash, five, then 1.5 s for the last. */
-export const CHECK_MS = SELF_TEST.FIRST_CUE_MS + SELF_TEST.CUES * SELF_TEST.CUE_EVERY_MS + 1500;
+export const CHECK_MS = SELF_TEST.FIRST_CUE_MS + SELF_TEST.CUES * SELF_TEST.CUE_EVERY_MS + SELF_TEST.TAIL_MS;
 /** st-r1's frame-rate floor (effective_fps over the whole window), for the comparison. */
 export const ST_R1_MIN_FPS = 25;
 /** ASSUMED shortest gap between the end of one spontaneous blink and the start of the next, ms. */

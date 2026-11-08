@@ -393,9 +393,13 @@ const BASE_CONFIG = {
    * 90 min to 2 h" while the consent screen told the participant "roughly 75–120 minutes"; the consent
    * wording is ethics-approved, so where the two disagreed it is the one that stands, and the operator
    * screens now say what the participant was told. (Earlier the landing page said "~60-90 min".) The
-   * basis is docs/TIMING_MODEL.md — a modelled single sitting of about 93 minutes of contact against
-   * the feasibility gate's 120-minute ceiling — and the synopsis's simulated median of 98 minutes
-   * with a 95th percentile of 119 lies inside it. Changing this string changes the consent text.
+   * basis is the session-length model (scripts/simulateParticipant.ts, docs/TIMING_MODEL.md). Its Round
+   * 92 run — the first to charge the camera check and the reading and word-search intro cards (audit 86
+   * P3) — gives a median of 102.1 minutes, a 95th percentile of 126.3 and 9.8% of sittings over two
+   * hours: the range covers the median and about nine sittings in ten, not the slowest tenth. (The
+   * synopsis quotes an earlier run, median 98 and 95th percentile 119.) Whether the consent wording
+   * should change is the investigator's and the ethics committee's decision, so it is left as approved.
+   * Changing this string changes the consent text.
    */
   SINGLE_SITTING_DURATION: '75–120 minutes',
 };

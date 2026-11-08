@@ -74,6 +74,12 @@ export const SELF_TEST = {
   FIRST_CUE_MS: 2500,
   CUE_EVERY_MS: 3000,
   /**
+   * The check runs on this long after the last cue's slot (FIRST_CUE_MS + CUES x CUE_EVERY_MS) before it
+   * scores, and never before the last flash has had its full WINDOW_MS. It was a literal 1500 in the
+   * screen and in the simulator.
+   */
+  TAIL_MS: 1500,
+  /**
    * How long the matching window is: from st-r3 a blink beginning up to this long AFTER a flash counts
    * for it; under st-r1 and st-r2, this long either side (cueWindow).
    */
@@ -93,6 +99,17 @@ export function cueWindow(rule: string = SELF_TEST_RULE): { before: number; afte
   return rule === SELF_TEST_RULE_V1 || rule === SELF_TEST_RULE_R2
     ? { before: SELF_TEST.WINDOW_MS, after: SELF_TEST.WINDOW_MS }
     : { before: 0, after: SELF_TEST.WINDOW_MS };
+}
+
+/**
+ * How long one run of the camera check occupies the tablet, ms, excluding what the participant and the
+ * operator do (its intro card, the result screen, a repeat): the five flashes and the tail after them,
+ * 19 s. The session-length model charges it from here (scripts/lib/timingModel.ts; audit 86 P3: the model
+ * left the camera check out), as it charges the calibration from calibrationMachineMs().
+ */
+export function selfTestMachineMs(): number {
+  const lastCueEnd = SELF_TEST.FIRST_CUE_MS + (SELF_TEST.CUES - 1) * SELF_TEST.CUE_EVERY_MS + SELF_TEST.WINDOW_MS;
+  return Math.max(SELF_TEST.FIRST_CUE_MS + SELF_TEST.CUES * SELF_TEST.CUE_EVERY_MS + SELF_TEST.TAIL_MS, lastCueEnd);
 }
 
 /** How many of `cues` flashes must be seen: the share, rounded up (4 of 5). */

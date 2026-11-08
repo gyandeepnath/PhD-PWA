@@ -16,36 +16,49 @@ tiers, and only the third can be argued down:
 
 | Tier | What it is | Minutes | Share |
 |---|---|---|---|
-| **Enforced** | The app will not advance before this much time has elapsed. Read from `src/experiment/config.ts`. | 26.3 | 27% |
-| **Corpus arithmetic** | Words in the reading corpus divided by a reading rate. The word count is exact. | 29.6 | 30% |
-| **Estimated** | Per-item guesses for a motivated young adult. | 42.5 | 43% |
+| **Enforced** | The app will not advance before this much time has elapsed. Read from `src/experiment/config.ts`. | 26.7 | 26% |
+| **Corpus arithmetic** | Words in the reading corpus divided by a reading rate. The word count is exact. | 29.7 | 29% |
+| **Estimated** | Per-item guesses for a motivated young adult. | 46.3 | 45% |
+
+Figures from the Round 92 run (AUDIT_FINDINGS; `docs/TIMING_SIMULATION_OUTPUT.txt`). That round added
+what the model had never charged (audit 86 P3): the **camera check** after calibration — 19 s of
+machine time from `selfTestMachineMs()` (five flashes and the tail after them), counted as enforced like
+the calibration's own sequence, plus an estimated 35 s for its intro card and result screen; a repeat of
+the check is not modelled — and the **intro cards** of the reading (10 s) and the word search (8 s) at
+every display, estimates like the reaction task's card. The calibration's human half is still the
+140 s estimate set when the calibration was nine taps; it is now labelled for what the participant does
+(the instruction card, the seating, a dot shown again), since gaze-r2 waits for the eyes and nobody taps.
+Together they add about 4 minutes to a sitting (98.7 → 102.8 min modelled).
+`tests/protocolFigures.test.ts` runs the model and fails when this section or PROTOCOL.md quotes another
+figure.
 
 Enforced is `adaptation` (15.0 min at the MAXIMA: five 120 s polarity switches and five 60 s
 same-polarity fields; since the field became participant-paced the participant may continue from
 30 s, so the floor is 5.0 min and the model deliberately charges the maximum) plus `rt_block` (10.9 min: 32 trials × 10 conditions, where each trial's fixation, delay,
-response window and ITI all come from CONFIG). Corpus arithmetic is `reading`: the ten passages
+response window and ITI all come from CONFIG), the practice block, and the machine halves of the
+calibration and the camera check. Corpus arithmetic is `reading`: the ten passages
 hold **5,851 words** (585.1 mean, verified by `countWords` over `PASSAGES`), so at 215 wpm that is
 27.2 minutes and there is no rate at which it becomes small — 300 wpm still costs 19.5 minutes.
 
-Together the two tiers that are **not** estimates come to **55.9 minutes**. Setting every one of my
+Together the two tiers that are **not** estimates come to **56.4 minutes**. Setting every one of my
 behavioural estimates to zero — consent instantaneous, questionnaires instantaneous, calibration
-instantaneous — leaves 55.9 minutes. Replacing the reading rate with a brisk 300 wpm on top of that
-leaves **45.8 minutes**. That is the design's floor, and it is a property of the protocol rather
+instantaneous — leaves 56.4 minutes. Replacing the reading rate with a brisk 300 wpm on top of that
+leaves **46.2 minutes**. That is the design's floor, and it is a property of the protocol rather
 than of how fast the participant is.
 
 ## Sensitivity of the total to my estimates being wrong
 
 ```
-estimates   0% too high ->  98.4 min   <- as modelled
-estimates  20% too high ->  89.9 min
-estimates  30% too high ->  85.6 min
-estimates  50% too high ->  77.1 min
-estimates  70% too high ->  68.6 min
-estimates 100% too high ->  55.9 min   <- estimates set to zero
+estimates   0% too high ->  102.8 min   <- as modelled
+estimates  20% too high ->   93.5 min
+estimates  30% too high ->   88.9 min
+estimates  50% too high ->   79.6 min
+estimates  70% too high ->   70.3 min
+estimates 100% too high ->   56.4 min   <- estimates set to zero
 ```
 
 So the challenge is well aimed at the right tier and still does not reach the target. If every
-behavioural estimate in the model is **half** what I claimed, a sitting is 77 minutes. If they are
+behavioural estimate in the model is **half** what I claimed, a sitting is 80 minutes. If they are
 all **zero**, it is 56.
 
 ## Sitting structure and setup burden
@@ -53,8 +66,8 @@ all **zero**, it is 56.
 Illumination is no longer a factor, so the two-cell analysis this section used to carry — a dim and
 a bright sitting per participant, crossed with visit order — no longer has a second cell. A
 participant attends **once** and the whole protocol is one sitting. Total contact is therefore the
-single first-visit figure, **98.4 minutes**, not the 188.9 minutes this section reported when it
-summed two visits.
+single first-visit figure, **102.8 minutes** (Round 92; 98.4 before the camera check and the intro
+cards were charged), not the 188.9 minutes this section reported when it summed two visits.
 
 What survives from that analysis is the part about setup burden, which still governs what a split
 sitting costs.
@@ -64,11 +77,12 @@ read from two different scopes. `consent_given`, `cvsq.stage === 'baseline'` and
 fatigue row are **session** fields, so they repeat every sitting. `participantRow` and
 `cvd_screen_total` are **participant** fields, so `PARTICIPANT_PROFILE` and `COLOR_VISION` run once
 in a participant's life. The saving on a second sitting is therefore a property of the code, not an
-assumption — measured at **8.2 minutes**.
+assumption — about **8.5 minutes** in the Round 92 run (8.2 before).
 
 That number is what makes a split sitting cost more in total than a single one: dividing the ten
 conditions into two visits of five pays the session-scoped setup twice. Simulated across the
-protocol frontier, a single sitting is 93 minutes of contact and a 5/5 split is 112. The split is a
+protocol frontier, a single sitting is 97 minutes of contact and a 5/5 split is 116 (Round 92 run of
+`scripts/protocolFrontier.ts`, whose participant stream differs from the main simulation's). The split is a
 scheduling accommodation for a participant who cannot sit the full session, not an optimisation.
 
 The dim-reading-penalty knob that this section used to sweep is retained in
@@ -78,7 +92,7 @@ dim sitting. It stays because the model must still run against archived two-leve
 ## Consequence for the 20-minute target
 
 Twenty minutes per sitting is not reachable by sharpening the behavioural estimates, because the
-estimates are 43% of the total and the target is below the 26% that the app enforces plus the 30%
+estimates are 45% of the total and the target is below the 26% that the app enforces plus the 29%
 that the corpus fixes. Reaching it requires changing the design in one or both of the two places
 where the non-negotiable minutes live:
 
@@ -94,7 +108,7 @@ where the non-negotiable minutes live:
 Reading exposure is the third lever and the most expensive one to pull, because it trades directly
 against the precision of the primary outcome. `scripts/simulateParticipant.ts` prints that trade:
 at the shipped 178 s per condition the incomplete-blink ratio carries SE = 0.059, and dropping to
-73 s raises it to 0.092 while only saving 18 minutes.
+73 s raises it to 0.092 while only saving 17 minutes.
 
 ## Reproducing every number here
 
@@ -109,6 +123,15 @@ is stated in the script's header comment. Nothing in the table above is typed in
 ---
 
 # The frontier: what each way of shortening a sitting costs
+
+> **Round 92.** The model now charges the camera check and the reading and word-search intro cards
+> (audit 86 P3), about 4 minutes a full sitting: 1.1 more minutes of overhead before the first
+> condition (23.1 on a first visit, 16.5 on a repeat) and 0.26 more per condition (7.37). The variant
+> and overhead tables below are regenerated from `docs/PROTOCOL_FRONTIER_OUTPUT.txt` (Round 92 run). The
+> conclusions do not move: every variant keeps its power, the ordering of contact time is the same, and a
+> 20-minute sitting still affords no condition as shipped (with the CVS-Q at the end only it now affords
+> none rather than one). The prose figures further down this section (the dropout tables, "93-minute
+> visits") were written for earlier runs; the output file holds the current ones.
 
 `scripts/protocolFrontier.ts` prices every shortening lever against the same simulated participant
 stream and the same power assumptions the main simulation uses (both now read them from one
@@ -136,16 +159,16 @@ derived from it — the shipped variant used to read 2 visits and 186 minutes fo
 
 | variant | cond | sitting | visits | contact | blinks | SE | power main | power interaction |
 |---|---|---|---|---|---|---|---|---|
-| **as shipped** | 10 | 93m | **1** | **93m** | 38 | 0.059 | 89% | 45% |
-| CVS-Q once per participant | 10 | 87m | 1 | 87m | 38 | 0.059 | 89% | 45% |
-| CVS-Q end of sitting only | 10 | 90m | 1 | 90m | 39 | 0.059 | 89% | 45% |
-| 5 cond/sitting | 5 | 56m | 2 | 112m | 38 | 0.059 | 89% | 45% |
-| 5 cond + CVS-Q once | 5 | 49m | 2 | 99m | 38 | 0.059 | 89% | 45% |
-| 4 cond/sitting | 4 | 41m | 3 | 124m | 39 | 0.059 | 89% | 45% |
-| 2 cond/sitting | 2 | 26m | 5 | 130m | 38 | 0.059 | 89% | 45% |
-| 4 cond, 60% passage | 4 | 37m | 3 | 110m | 23 | 0.076 | 87% | 34% |
-| 4 cond, 40% passage | 4 | 34m | 3 | 103m | 15 | 0.093 | 84% | 26% |
-| 2 cond, 40% passage | 2 | 22m | 5 | 112m | 15 | 0.093 | 84% | 26% |
+| **as shipped** | 10 | 97m | **1** | **97m** | 39 | 0.059 | 89% | 45% |
+| CVS-Q once per participant | 10 | 92m | 1 | 92m | 39 | 0.058 | 89% | 45% |
+| CVS-Q end of sitting only | 10 | 94m | 1 | 94m | 39 | 0.059 | 89% | 45% |
+| 5 cond/sitting | 5 | 58m | 2 | 116m | 39 | 0.059 | 89% | 45% |
+| 5 cond + CVS-Q once | 5 | 52m | 2 | 105m | 38 | 0.059 | 89% | 45% |
+| 4 cond/sitting | 4 | 43m | 3 | 130m | 38 | 0.059 | 89% | 45% |
+| 2 cond/sitting | 2 | 28m | 5 | 137m | 38 | 0.059 | 89% | 45% |
+| 4 cond, 60% passage | 4 | 39m | 3 | 116m | 23 | 0.076 | 87% | 34% |
+| 4 cond, 40% passage | 4 | 36m | 3 | 109m | 15 | 0.094 | 84% | 26% |
+| 2 cond, 40% passage | 2 | 24m | 5 | 120m | 15 | 0.094 | 84% | 26% |
 
 **The shipped design is now the cheapest variant in the table.** Splitting the sitting no longer
 saves contact time — it costs it, because the session-scoped setup is paid once per visit. That was
@@ -163,13 +186,13 @@ per side (`CONTRAST.interaction` is `2 × se`; `CONTRAST.main` is `se × √2/�
 
 ## The fixed-overhead wall
 
-A sitting costs `T(k) = overhead + 7.13 × k` minutes for `k` conditions.
+A sitting costs `T(k) = overhead + 7.37 × k` minutes for `k` conditions.
 
 | overhead variant | first visit | repeat visit | conditions a 20-min sitting affords |
 |---|---|---|---|
-| as shipped | 22.0 min | 16.0 min | 0 |
-| CVS-Q end of sitting only | 18.5 min | 12.8 min | 1 |
-| CVS-Q once per participant | 15.6 min | 10.1 min | 1 |
+| as shipped | 23.1 min | 16.5 min | 0 |
+| CVS-Q end of sitting only | 19.4 min | 13.4 min | 0 |
+| CVS-Q once per participant | 16.5 min | 10.8 min | 1 |
 
 The overhead alone exceeds 20 minutes on a first visit and nearly exhausts it on a repeat. Twenty
 minutes is therefore not reachable by trimming; it is reachable only by moving the CVS-Q out of the
@@ -210,29 +233,30 @@ observed `d_z` from the power table above, at each modelled reading exposure:
 
 | read/cond | median sitting | interaction power at n=130 | n for 81% interaction | participant-hours |
 |---|---|---|---|---|
-| 73 s | 80 min | 27% | 569 | 759 |
-| 120 s | 88 min | 37% | 394 | 578 |
-| **177 s (as shipped)** | **98 min** | **45%** | **311** | **508** |
-| 240 s | 108 min | 51% | 263 | 473 |
-| 300 s | 118 min | 56% | 236 | 464 |
+| 73 s | 85 min | 27% | 569 | 806 |
+| 120 s | 92 min | 37% | 394 | 604 |
+| **178 s (as shipped)** | **102 min** | **45%** | **311** | **529** |
+| 240 s | 112 min | 51% | 263 | 491 |
+| 300 s | 122 min | 56% | 236 | 480 |
 
-**Timing is not the binding constraint.** The feasibility gate (median ≤ 120 min) passes with 22
-minutes of headroom, and nothing in the protocol is close to breaching it. The binding constraint is
-the interaction, and **no feasible session length rescues it at the planned n**: even at 300 s per
-condition — the longest exposure modelled, median sitting 118 min, still inside the gate — power
-reaches only 56% against a target of 81%.
+(Median sittings from the Round 92 run; participant-hours are n × median sitting.)
+
+**Timing is not the binding constraint.** The feasibility gate (median ≤ 120 min) passes with 18
+minutes of headroom. The binding constraint is the interaction, and **no feasible session length
+rescues it at the planned n**: at 300 s per condition — the longest exposure modelled — the median
+sitting is 122 min, past the gate, and power still reaches only 56% against a target of 81%.
 
 Two consequences worth stating plainly.
 
 **Longer sittings are CHEAPER in total contact time, not dearer.** Reaching 81% interaction power
-costs 508 participant-hours at the shipped 177 s (n = 311) and 464 at 300 s (n = 236) — 44 hours
+costs 529 participant-hours at the shipped 178 s (n = 311) and 480 at 300 s (n = 236) — 49 hours
 less, and 75 fewer participants to recruit, despite each sitting running 20 minutes longer. The
 intuition that shortening the sitting saves effort is wrong once the target is a fixed power rather
 than a fixed n: exposure buys precision per participant more cheaply than recruitment buys it.
 
 **The two outcomes pull in opposite directions.** The polarity main effect is robust — it needs
 n = 144 for 92% power at the shipped exposure, barely above the 130 planned, and its cheapest route
-is the *shortest* exposure (225 participant-hours at 73 s). The interaction's cheapest route is the
+is the *shortest* exposure (239 participant-hours at 73 s, n = 169). The interaction's cheapest route is the
 longest. A protocol optimised for one is not optimised for the other.
 
 ### The decision this forces, which is the investigator's

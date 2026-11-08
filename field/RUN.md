@@ -64,23 +64,28 @@ For one sitting, ten conditions, an average university participant:
 
 | | minutes |
 |---|---|
-| Setup before the first condition | 17.4 |
-| Waiting/admin between conditions | 19.6 |
+| Setup before the first condition | 18.3 |
+| Waiting/admin between conditions | 22.7 |
 | Closing after the last condition | 4.5 |
-| **Overhead subtotal** | **41.5** |
-| Actual testing | 56.9 |
-| **Total** | **98.4** |
+| **Overhead subtotal** | **45.5** |
+| Actual testing | 57.3 |
+| **Total** | **102.8** |
+
+(The session-length model's Round 92 run, `docs/TIMING_SIMULATION_OUTPUT.txt`; each figure is rounded to
+0.1 min, so the rows below need not add exactly. That round charged what the model had left out: the
+camera check after calibration and the reading and word-search intro cards at every display.)
 
 The overhead splits like this:
 
 | Before the first condition | | Between conditions | | After the last |  |
 |---|---|---|---|---|---|
-| CVS-Q baseline (16 items) | 3.5 | Adaptation (grey screen) | 15.0 | CVS-Q end (16 items) | 2.9 |
+| CVS-Q baseline (16 items) | 3.5 | Adaptation (grey screen, at its maximum) | 15.0 | CVS-Q end (16 items) | 2.9 |
 | Consent | 2.8 | Breaks | 3.1 | NASA-TLX | 1.0 |
-| Calibration | 2.5 | RT instructions | 1.5 | Session complete | 0.6 |
-| Participant profile | 1.9 | | | | |
-| Session init (researcher) | 1.8 | | | | |
+| Calibration (baseline + 3 gaze dots) | 2.5 | Reading intro cards | 1.8 | Session complete | 0.6 |
+| Participant profile | 1.9 | RT instructions | 1.5 | | |
+| Session init (researcher) | 1.8 | Word-search intro cards | 1.3 | | |
 | Camera setup | 1.5 | | | | |
+| Camera check (5 flashes) | 0.9 | | | | |
 | Colour vision (5 plates) | 1.3 | | | | |
 | Instructions | 0.9 | | | | |
 | Preflight checklist | 0.9 | | | | |
@@ -89,8 +94,8 @@ The overhead splits like this:
 **Where I am most likely to be wrong.** Two of the three tiers are not estimates at all: adaptation
 and the RT blocks are read straight from the config and the app will not advance sooner, and reading
 is the corpus word count (5,851 words) divided by a reading rate. The genuinely estimated part is
-42.5 minutes — the questionnaires, sliders, consent, calibration and breaks. If my per-item guesses
-are 30% too generous the session is 85.6 minutes; if they are 50% too generous it is 77.1. That is
+46.3 minutes — the questionnaires, sliders, consent, calibration, intro cards and breaks. If my per-item
+guesses are 30% too generous the session is 88.9 minutes; if they are 50% too generous it is 79.6. That is
 the range I would expect your stopwatch to land in if I have over-estimated.
 
 `TIMING-SHEET.md` has a blank column to fill in.
@@ -114,10 +119,13 @@ dashboard.
 The two changes that cost nothing are in `src/experiment/config.ts` in the repository (not in this
 built package — a rebuild is needed):
 
-- `ADAPTATION_SWITCH_POLARITY_MS: 120000` → `90000` — saves 2.5 min/sitting
-- Move the CVS-Q to once per participant instead of twice per session — saves 6.4 min/sitting
+- Move the CVS-Q to once per participant instead of twice per session — saves about 6 min/sitting
 
-Together about 9 minutes off every sitting with no effect on any outcome. I have **not** applied
+(This list also offered `ADAPTATION_SWITCH_POLARITY_MS: 120000` → `90000` as saving 2.5 min a sitting.
+That was true while the grey field ran its full length. It has been participant-paced since Round 57 —
+Continue from 30 s — so the 120 s is only a ceiling for those who wait, and lowering it saves at most
+that, and nothing for a participant who continues at 30 s; the model charges the ceiling, which is why
+it still prints a saving.) I have **not** applied
 either to this build: they change the protocol, and that is your decision, not mine. This build is
 exactly the protocol as it currently stands, so your stopwatch measures the real thing.
 

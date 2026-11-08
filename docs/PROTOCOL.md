@@ -218,7 +218,7 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
    recorded as a deviation.
 3. Run **colour-vision screening**, allow the **camera**, complete **calibration**, then the
    baseline questionnaires. The participant then completes the 10 conditions of the assigned
-   illumination block (median ~98 min, p95 ~121 min), closing with the end CVS-Q and NASA-TLX.
+   illumination block (median ~102 min, p95 ~126 min), closing with the end CVS-Q and NASA-TLX.
 4. At the end, open the session from the manager → **Export** the CSV + JSON bundle.
 5. Analyse with the **mixed-model templates** in `src/analysis/analysis_template.{R,py}` (random
    intercept per participant; contrast as a covariate; d′ aggregated across conditions). Point them
@@ -316,7 +316,7 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
 - **Contrast confound**: P4 (yellow-on-white) is below WCAG AA (2.39:1); treat WCAG ratio as a
   covariate or reframe as polarity × contrast.
 - **Per-condition d′** rests on ~20 signal (go) trials of 32, so one block's d′ is imprecise (its SE cannot fall below about 0.46). It is not read block by block: the analysis template fits a trial-level probit GLMM to `08_reaction_trials.csv` (d′ and criterion effects together, with the ring terms of ANALYSIS_PLAN.md §4a), and an unweighted per-block LMM as a cross-check (Round 71).
-- **Session length** (median ~98 min) accumulates fatigue; `session_position` (0 … conditions_per_session − 1, so 0–9 for a full sitting) is recorded as a covariate.
+- **Session length** (median ~102 min) accumulates fatigue; `session_position` (0 … conditions_per_session − 1, so 0–9 for a full sitting) is recorded as a covariate.
 
 ## 7. Boredom / disengagement vs. fatigue
 
@@ -418,12 +418,21 @@ Brysbaert's (2019) meta-analytic 238 wpm for dense expository prose, blink rate 
 reading, and two participant-level multipliers so a slow, careful participant is slow throughout
 rather than independently slow at each step.
 
-Result over 2,000 simulated participants: **median 97.7 min, p95 120.7 min, p99 132.5 min**. The
-120-minute gate applies to the median and passes, but 5.5% of simulated participants (110/2000)
-exceed two hours, so the pilot needs to watch the tail rather than the centre.
+Result over 2,000 simulated participants: **median 102.1 min, p95 126.3 min, p99 139.0 min**. The
+120-minute gate applies to the median and passes, but 9.8% of simulated participants (196/2000)
+exceed two hours, so the pilot needs to watch the tail rather than the centre. The consent text's
+"75–120 minutes" (CONFIG.SINGLE_SITTING_DURATION, the ethics-approved wording) therefore covers the
+median sitting and about nine in ten, not the slowest tenth; whether to change that wording is the
+investigator's and the ethics committee's decision (AUDIT_FINDINGS Round 92).
 
-Where the time goes: reading 29.5 min (29.9%), adaptation 15.0 min (15.2%), RT blocks 10.9 min
-(11.1%), comprehension 7.1 min (7.1%), visual search 5.0 min, CVS-Q ×2 6.5 min. Polarity switching
+Since Round 92 the model charges what it had left out (audit 86 P3): the camera check after calibration
+(19 s of machine time, from the check's own constants, plus an estimated 35 s for its intro and result
+screens; a repeat is not modelled) and the intro cards of the reading and the word search at every
+display (estimated 10 s and 8 s). With them the modelled sitting is about 4 minutes longer than the
+97.7-minute median of Round 89.
+
+Where the time goes: reading 29.7 min (28.9%), adaptation 15.0 min (14.6%), RT blocks 10.9 min
+(10.6%), comprehension 7.0 min (6.8%), visual search 5.0 min, CVS-Q ×2 6.4 min. Polarity switching
 costs ~6.0 min per sitting on top of the baseline adaptation, since a Williams row averages 5
 switches over 9 transitions.
 

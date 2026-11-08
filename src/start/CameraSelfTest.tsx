@@ -107,7 +107,7 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false, 
         window.setTimeout(() => setFlash(false), 350);
       }
       // End only after the last cue has been shown AND its blink has had the full matching window.
-      if (shown === SELF_TEST.CUES - 1 && el >= first + SELF_TEST.CUES * every + (fast ? 150 : 1500)
+      if (shown === SELF_TEST.CUES - 1 && el >= first + SELF_TEST.CUES * every + (fast ? 150 : SELF_TEST.TAIL_MS)
         && (fast || now() - cues.current[shown] >= SELF_TEST.WINDOW_MS)) {
         const obs = end(cues.current);
         attempts.current += 1;

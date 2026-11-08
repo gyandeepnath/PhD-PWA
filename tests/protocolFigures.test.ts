@@ -13,9 +13,11 @@ import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { SELF_TEST, selfTestMachineMs } from '@/tracking/selfTest';
 
 const root = resolve(__dirname, '..');
 const protocol = readFileSync(resolve(root, 'docs/PROTOCOL.md'), 'utf8').replace(/\s+/g, ' ');
+const timingDoc = readFileSync(resolve(root, 'docs/TIMING_MODEL.md'), 'utf8');
 
 function model(): string {
   return execFileSync(process.execPath, [resolve(root, 'node_modules/tsx/dist/cli.mjs'), resolve(root, 'scripts/simulateParticipant.ts')], {
@@ -61,5 +63,49 @@ describe('PROTOCOL.md quotes the timing model it names (audit 86 D11)', () => {
     expect(protocol).not.toMatch(/\| \d[\d,]* unit and property tests/);
     expect(protocol).not.toMatch(/runs \d[\d,]* checks over the export pipeline/);
     expect(protocol).not.toMatch(/\d+ end-to-end tests across \d+ spec files/);
+  });
+});
+
+/*
+ * docs/TIMING_MODEL.md's headline figures are the model's too (Round 92, audit 86 P3, P6 addendum): its
+ * tiers and sensitivity table had drifted from the script (26.3/29.6/42.5 min, "98.4 min as modelled"
+ * against 26.2/29.5/42.9 and 98.7), and Round 92 changed the model again when it charged the camera
+ * check and the intro cards.
+ */
+describe('TIMING_MODEL.md quotes the timing model it names (Round 92)', () => {
+  const out = model();
+  const tier = (label: string) => new RegExp(`${label}[^\\n]*?([\\d.]+) min\\s+(\\d+)%`).exec(out)!;
+
+  it('the three tiers, minutes and shares', () => {
+    const [, eMin, eShare] = tier('ENFORCED by CONFIG');
+    const [, cMin, cShare] = tier('CORPUS arithmetic');
+    const [, gMin, gShare] = tier('ESTIMATED by me');
+    expect(timingDoc).toContain(`| ${eMin} | ${eShare}% |`);
+    expect(timingDoc).toContain(`| ${cMin} | ${cShare}% |`);
+    expect(timingDoc).toContain(`| ${gMin} | ${gShare}% |`);
+    expect(timingDoc).toContain(`**${(Number(eMin) + Number(cMin)).toFixed(1)} minutes**`);
+  });
+
+  it('the sensitivity table and the floors', () => {
+    for (const pct of [0, 20, 30, 50, 70, 100]) {
+      const v = num(out, new RegExp(`estimates\\s+${pct}% too high ->\\s+([\\d.]+) min`));
+      expect(timingDoc, `${pct}%`).toMatch(new RegExp(`estimates\\s+${pct}% too high ->\\s+${v.replace('.', '\\.')} min`));
+    }
+    const floor = num(out, /zero deliberation = ([\d.]+) min/);
+    expect(timingDoc).toContain(`leaves **${floor} minutes**`);
+    expect(timingDoc).toContain(`**${num(out, /^\s+TOTAL\s+([\d.]+) min/m)} minutes**`);
+  });
+
+  it('the camera check and the calibration are charged, and named for what happens', () => {
+    expect(out).toMatch(/camera_check \(machine: five flashes\)/);
+    expect(out).toMatch(/camera_check \(human: intro, result\)/);
+    expect(out).not.toMatch(/9 taps/);
+    const src = readFileSync(resolve(root, 'scripts/lib/timingModel.ts'), 'utf8');
+    expect(src).toMatch(/selfTestMachineMs\(\) \/ S/);
+    // The camera check's machine time is the screen's own: five flashes and the tail, 19 s.
+    expect(selfTestMachineMs()).toBe(SELF_TEST.FIRST_CUE_MS + SELF_TEST.CUES * SELF_TEST.CUE_EVERY_MS + SELF_TEST.TAIL_MS);
+    expect(selfTestMachineMs()).toBe(19_000);
+    const screen = readFileSync(resolve(root, 'src/start/CameraSelfTest.tsx'), 'utf8');
+    expect(screen).toMatch(/first \+ SELF_TEST\.CUES \* every \+ \(fast \? 150 : SELF_TEST\.TAIL_MS\)/);
   });
 });

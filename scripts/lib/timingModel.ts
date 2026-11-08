@@ -16,6 +16,7 @@ import { PASSAGES, QUESTIONS_PER_PASSAGE } from '../../src/experiment/passages';
 import { blockPlan } from '../../src/experiment/counterbalance';
 import { nonAgingDelay } from '../../src/lib/foreperiod';
 import { calibrationMachineMs } from '../../src/tracking/calibrationSequence';
+import { selfTestMachineMs } from '../../src/tracking/selfTest';
 
 // ---------------------------------------------------------------- rng
 let seed = 20260817;
@@ -114,6 +115,10 @@ export const PROVENANCE: Record<string, Provenance> = {
   'adaptation': 'enforced',
   'rt_block': 'enforced',
   'rt_practice (once)': 'enforced',
+  // The machine halves of the calibration and of the camera check are sums of the app's own constants
+  // (calibrationMachineMs, selfTestMachineMs), not estimates.
+  'calibration (machine: sequence)': 'enforced',
+  'camera_check (machine: five flashes)': 'enforced',
   'reading': 'corpus',
 };
 export const provenanceOf = (k: string): Provenance => PROVENANCE[k] ?? 'estimated';
@@ -195,7 +200,21 @@ export function simulateSitting(
    * can see which half a future change moved.
    */
   add('calibration (machine: sequence)', calibrationMachineMs() / S);
-  add('calibration (human: intro, seating, 9 taps)', gauss(140, 40) * care);
+  /*
+   * The human half was labelled "intro, seating, 9 taps" long after the calibration became a baseline
+   * window and three gaze dots that wait for the eyes (gaze-r2, Round 80): nobody taps. The estimate
+   * is unchanged — it was set when there were taps, so it now also covers a dot shown again, which
+   * calibrationMachineMs() does not count — and it is not re-measured (audit 86 P3).
+   */
+  add('calibration (human: intro, seating, dots shown again)', gauss(140, 40) * care);
+  /*
+   * THE CAMERA CHECK (audit 86 P3). It runs after every calibration that fitted an open-eye baseline —
+   * every camera sitting that works — and the model never charged it: five flashes and the tail after
+   * them, 19 s of machine time from selfTestMachineMs(), plus its intro card and result screen. The human
+   * half is an estimate; a repeat (selftest_attempts > 1) adds roughly the whole again and is not modelled.
+   */
+  add('camera_check (machine: five flashes)', selfTestMachineMs() / S);
+  add('camera_check (human: intro, result)', gauss(35, 12) * care);
   // CVS-Q: 16 items, each a frequency choice plus a conditional intensity choice.
   const cvsq = spec.cvsq ?? 'both';
   if (cvsq === 'both') add('cvsq_baseline (16 items)', 16 * gauss(13, 3) * care / 1);
@@ -218,6 +237,10 @@ export function simulateSitting(
     // The MAXIMUM field. Since the field became participant-paced (Continue from ADAPTATION_MIN_MS)
     // this is an upper bound: the model stays conservative rather than guessing when people continue.
     add('adaptation', (switched ? cfg.ADAPTATION_SWITCH_POLARITY_MS : cfg.ADAPTATION_SAME_POLARITY_MS) / S);
+
+    // The intro cards of the reading and the word search (audit 86 P3: not charged before). Estimates.
+    add('reading_intro (card)', gauss(10, 4) * care * (i === 0 && spec.first ? 1.5 : 1));
+    add('search_intro (card)', gauss(8, 3) * care);
 
     // Reading: self-paced above a per-page floor.
     const frac = spec.readingFraction ?? 1;
