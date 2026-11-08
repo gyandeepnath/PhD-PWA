@@ -250,7 +250,8 @@ export function measurementSchedule(): ScheduleRow[] {
     {
       measure: 'Questions, ratings, fatigue scale, word search, reaction task, grey field, breaks',
       cadence: 'Not measured',
-      when: 'The camera keeps running',
+      // The tracker sits out the reaction trials (useTracking holdFrames; Round 92, audit 86 P1).
+      when: "The camera keeps running; while the reaction task's dots are shown the face tracker does not look at its frames, so its work cannot delay a dot or its timestamp",
       kept: 'Not kept',
       live: `Panel: "${RECORDING_LABEL.none}"`,
     },

@@ -984,6 +984,32 @@ cat("\n=== RT mixed model ===\n"); print(summary(m_rt)); report_n(m_rt, rt, "RT"
 add_to_family("RT", m_rt, "ms")
 cat("\nMarginal means by polarity:\n"); print(emmeans(m_rt, ~ polarity))
 
+# ONE ONSET RULE (rt-t2, Round 92; audit 86 P1). Under rt-t1 the dot's onset was the clock read in the
+# stamping frame's callback, AFTER any face-tracker work the browser ran earlier in that frame, so with
+# the camera on a reaction time could be short by up to one tracker call — an amount not recorded, so
+# not recoverable. Camera-off rt-t1 rows agree with rt-t2 to about 1 ms. A 02 file written before Round
+# 92 has no rt_timing_version column: every row is rt-t1. Those camera-on rows stay IN the model above
+# (it is unchanged); they are counted here and the model is refitted without them, so the investigator
+# sees both (ANALYSIS_PLAN.md §5; the default is theirs to change).
+RT_TIMING_VERSION <- "rt-t2"  # src/lib/rtOnset.ts RT_TIMING_VERSION (tests/rtOnset.test.ts pins it)
+rt_timing <- if ("rt_timing_version" %in% names(rt)) as.character(rt$rt_timing_version) else rep(NA_character_, nrow(rt))
+rt_timing <- ifelse(is.na(rt_timing) | rt_timing == "", "rt-t1", rt_timing)
+rt_cam_keys <- with(eye_metrics, paste(participant_id, condition_id)[as.character(camera_active) %in% c("TRUE", "true", "1")])
+rt_t1_cam <- rt_timing != RT_TIMING_VERSION & paste(rt$participant_id, rt$condition_id) %in% rt_cam_keys
+cat(sprintf("\n[%s] %d of %d RT condition-run(s) were timed under the earlier onset rule with the camera on (reaction times short by up to one tracker call each); they are in the RT model above.\n",
+            RT_TIMING_VERSION, sum(rt_t1_cam), nrow(rt)))
+if (sum(rt_t1_cam) > 0) {
+  # The same formula fitted afresh on the rows that are left, never update(m, data =): see refit() below.
+  m_rt_t2 <- tryCatch(lmer(formula(m_rt), data = rt[!rt_t1_cam, , drop = FALSE]), error = function(err) NULL)
+  if (is.null(m_rt_t2)) cat(sprintf("[%s sensitivity] the refit without them did not fit.\n", RT_TIMING_VERSION)) else {
+    fe <- fixef(m_rt_t2); se <- sqrt(diag(vcov(m_rt_t2)))
+    for (term in grep("^(log_contrast|polarity)", names(fe), value = TRUE)) {
+      cat(sprintf("[%s sensitivity] without them: %s %.2f ms (SE %.2f), n = %d (with them: %.2f).\n",
+                  RT_TIMING_VERSION, term, fe[[term]], se[[term]], nobs(m_rt_t2), fixef(m_rt)[[term]]))
+    }
+  }
+}
+
 # --- RT polarity x serial position (ANALYSIS_PLAN.md §3) ------------------------------------------
 # §3: a sitting runs past both of Pattyn et al.'s time-on-task thresholds, so "a polarity_c x
 # position_c interaction is worth testing explicitly: an effect that appears only late in the sitting

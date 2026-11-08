@@ -86,6 +86,14 @@ export function startFramePump(
     host?: PumpHost;
     /** Called for EVERY presented frame, before the busy check: the delivered count. */
     onPresented?: (meta: FrameMeta) => void;
+    /**
+     * While this answers true, a presented frame is counted (onPresented) and handed to `onHeldFrame`,
+     * never to `onFrame`: the tracker is held (Round 92, audit 86 P1 — the reaction task's trials run
+     * without it; useTracking holdFrames). Asked per frame, so a pump restarted under a hold is held too.
+     */
+    held?: () => boolean;
+    /** Called for each frame that arrives while held: a frame arriving is what says the camera is alive. */
+    onHeldFrame?: (meta: FrameMeta) => void;
     /** The clock for the rAF fallback's metadata. */
     clock?: () => number;
   } = {},
@@ -104,6 +112,10 @@ export function startFramePump(
   const deliver = async (meta: FrameMeta): Promise<void> => {
     if (stopped) return;
     try { opts.onPresented?.(meta); } catch { /* a counter must never stop the pump */ }
+    if (opts.held?.()) {
+      try { opts.onHeldFrame?.(meta); } catch { /* nor must the watchdog's feed */ }
+      return;
+    }
     if (busy) { busySkips += 1; return; }
     counter += 1;
     if (counter % everyN !== 0) return;

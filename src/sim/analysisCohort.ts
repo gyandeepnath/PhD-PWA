@@ -38,6 +38,7 @@ import { scoreCvsq } from '@/scales/cvsq';
 import { planRtBlock } from '@/lib/rtLocations';
 import { summariseRtBlock } from '@/lib/rtSummary';
 import { CONFIG } from '@/experiment/config';
+import { RT_TIMING_VERSION } from '@/lib/rtOnset';
 import { ENGAGEMENT } from '@/dashboard/aggregate';
 import { BLINK_RULE_VERSION, IBI_RULE_VERSION } from '@/tracking/blink';
 
@@ -166,6 +167,8 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
         ink_name: def.inkName, passage_id: step.passageIndex, wcag_contrast_ratio: def.wcag_contrast_ratio,
         wcag_level: def.wcag_level, michelson_contrast: def.michelson_contrast, below_wcag_aa: def.below_wcag_aa,
         reading_time_ms: 150_000 + Math.round(rng() * 60_000),
+        // The current build's onset rule (lib/rtOnset.ts); the analysis gate's flagged state blanks P001's.
+        rt_timing_version: RT_TIMING_VERSION,
       });
     });
     b.session.condition_order = plan.map((p) => p.conditionIndex);

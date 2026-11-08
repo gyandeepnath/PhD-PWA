@@ -31,6 +31,7 @@ import {
 import { priorParticipantProgress, enrolmentAtConsent } from '@/storage/gather';
 import { logLuxReading } from '@/storage/luxLog';
 import { RT_WINDOW_VERSION } from '@/lib/rtResponse';
+import { RT_TIMING_VERSION } from '@/lib/rtOnset';
 import { currentProvenance } from '@/storage/buildStamp';
 import { canonicalParticipantId } from '@/lib/participantId';
 import { saveResume, clearResume } from '@/storage/sessionPersistence';
@@ -1273,6 +1274,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       tap_guard_version: TAP_GUARD_VERSION,
       // How the reaction block's response window closes: at its deadline (lib/rtResponse.ts; audit 86 D15).
       rt_window_version: RT_WINDOW_VERSION,
+      // When the reaction block's dot onset is taken: the frame's own timestamp (lib/rtOnset.ts; audit 86 P1).
+      rt_timing_version: RT_TIMING_VERSION,
       // The CSS pixel's size depends on it, and the ruler calibration was taken at pre-flight's.
       device_pixel_ratio: Number.isFinite(window.devicePixelRatio) && window.devicePixelRatio > 0 ? window.devicePixelRatio : null,
       // Per condition, because a resume can come back in a different launch (a tab, or the installed
@@ -2094,7 +2097,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
            * positions equally often, so the alternation never follows a condition.
            */
           blockIndex={step?.position ?? machine.stepIndex}
-          onTrialsRunning={(running) => setRtPhase(running ? 'trials' : 'saving')}
+          onTrialsRunning={(running) => {
+            // The face tracker sits out the trials, so its work cannot delay a dot or its onset
+            // (useTracking holdFrames; audit 86 P1). Synchronous: the first dot is 700 ms away at least.
+            tracking.holdFrames(running);
+            setRtPhase(running ? 'trials' : 'saving');
+          }}
           onComplete={latched('reaction', async (res) => {
             // Trials are over; only writes remain, so Pause becomes available again.
             setRtPhase('saving');
@@ -2289,6 +2297,10 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   const rtTrialsRunning = machine.stage === 'REACTION_TIME' && rtPhase === 'trials';
   /** The reaction-time trials are over and their results are being written. */
   const rtSaving = machine.stage === 'REACTION_TIME' && rtPhase === 'saving';
+  // Whatever ends the trials — their last one, or the stage leaving under them — gives the tracker its
+  // frames back (useTracking holdFrames; audit 86 P1).
+  const holdTrackerFrames = tracking.holdFrames;
+  useEffect(() => { if (!rtTrialsRunning) holdTrackerFrames(false); }, [rtTrialsRunning, holdTrackerFrames]);
   const pausable = (isInLoop(machine.stage) || machine.stage === 'BREAK_SCREEN')
     && !rtTrialsRunning
     && !!session;

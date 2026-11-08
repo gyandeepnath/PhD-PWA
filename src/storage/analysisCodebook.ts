@@ -22,6 +22,7 @@ import { RELIABILITY_GATES, RELIABILITY_RULE_VERSION } from '@/tracking/ocularRe
 import { SLIDER_VERSION, SLIDER_VERSION_V1, VAS_LINE_MM } from '@/scales/vas';
 import { ATTEMPT_RULE_VERSION, ATTEMPT_RULE_VERSION_V1 } from '@/experiment/conditionAttempt';
 import { BLINK_RULE_BEFORE, BLINK_RULE_VERSION, IBI_RULE_BEFORE, IBI_RULE_VERSION } from '@/tracking/blink';
+import { RT_TIMING_VERSION, RT_TIMING_VERSION_V1 } from '@/lib/rtOnset';
 
 // The current protocol's single illumination level, for the prose below — derived, so it cannot say
 // "300 lux" after the protocol changes. See docs/ILLUMINATION_AMENDMENT.md.
@@ -201,6 +202,8 @@ export const ANALYSIS_CODEBOOK: AnalysisColumn[] = [
     description: 'Response bias. A polarity effect on criterion without one on d_prime is a bias shift, not a sensitivity change — a distinction worth making explicitly.' },
   { column: 'rt_lapses', role: 'qc', unit: 'count', missing: 'block not completed',
     description: 'Responses slower than the lapse threshold. A proxy for disengagement in that block.' },
+  { column: 'rt_timing_version', role: 'qc', unit: '-', missing: 'no reaction block summarised',
+    description: `When the block's dot onsets — the zero of rt_mean_hits_ms, rt_median_hits_ms and rt_lapses — were taken (02_conditions.csv rt_timing_version): '${RT_TIMING_VERSION}' (Round 92), the begin time of the frame after the one that painted the dot; '${RT_TIMING_VERSION_V1}' before, the clock read after any face-tracker work in that frame, so on a camera-on row (camera_active) reaction times may be SHORT by up to one tracker call per trial, an amount not recorded and not recoverable (audit 86 P1). Camera-off ${RT_TIMING_VERSION_V1} rows agree with ${RT_TIMING_VERSION} to about 1 ms. The R template reports how many ${RT_TIMING_VERSION_V1} camera-on rows the RT model holds and refits it without them as a sensitivity (ANALYSIS_PLAN.md §5).` },
 
   // ---------------------------------------------------------------- stimulus properties
   { column: 'wcag_contrast_ratio', role: 'covariate', unit: 'ratio', missing: 'never empty',

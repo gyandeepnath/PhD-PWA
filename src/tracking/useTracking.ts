@@ -300,6 +300,12 @@ interface TrackingApi {
    * record is the attempt the session's selftest_* describe. A no-op when no finished test is held.
    */
   saveSelfTestLog: (sessionId: string) => Promise<void>;
+  /**
+   * True while the reaction task's trials run: the camera keeps running and its frames are counted as
+   * delivered, but none goes to the face tracker, whose main-thread work would otherwise delay the dot
+   * and its onset stamp (audit 86 P1). False gives it the frames back.
+   */
+  holdFrames: (held: boolean) => void;
   /** Finalise the current condition and persist an EyeMetricsRecord. */
   endCondition: (conditionId: string, sessionId: string) => Promise<void>;
   /**
@@ -429,6 +435,8 @@ export function useTracking(): TrackingApi {
   const lostRef = useRef(false);
   /** When the tracker last produced a result (face or not). The liveness signal for the stall check. */
   const lastResultAtRef = useRef<number | null>(null);
+  /** True while the reaction task's trials run: frames are counted, not tracked (holdFrames). */
+  const framesHeldRef = useRef(false);
   /** Teardown for the stall watchdog and its visibility listener, while the camera runs. */
   const watchdogStopRef = useRef<(() => void) | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -838,6 +846,29 @@ export function useTracking(): TrackingApi {
    */
   const holdWatchdog = () => { lastResultAtRef.current = null; };
 
+  /*
+   * THE REACTION TASK'S TRIALS RUN WITHOUT THE FACE TRACKER (Round 92, audit 86 P1).
+   *
+   * Both trackers do their work synchronously on the main thread, inside the browser's video-frame
+   * callback, which runs in the same rendering step as the page's animation-frame callbacks and before
+   * them (framePump.ts). In the reaction task that work sat between the dot's paint and its onset stamp,
+   * and inside the frames that time the foreperiod and draw the dot: every reaction time whose stamping
+   * frame the tracker worked in came out short by the tracker's time (95-140 ms per call in the audit's
+   * headless run, 23-35 ms on the development machine). Nothing the tracker computes during the reaction
+   * task is kept — it is outside every recording window (measurementSchedule.ts: "Not measured") — so
+   * while the trials run the tracker is not given the frames: the camera keeps running and every frame
+   * is still counted as delivered, and a frame arriving is what keeps the stall watchdog quiet, since no
+   * result can. Released when the last trial ends; the first frame after it goes to the tracker as
+   * before. The onset is also taken from the frame's own timestamp (lib/rtOnset.ts), so other work in
+   * the stamping frame cannot move it either.
+   */
+  const holdFrames = useCallback((held: boolean) => {
+    if (framesHeldRef.current === held) return;
+    framesHeldRef.current = held;
+    // Released: the stall clock restarts now, so the frame or two before the next result is no stall.
+    if (!held && lastResultAtRef.current != null) lastResultAtRef.current = now();
+  }, []);
+
   /** Put `tracker` in charge of the frames; the previous one, if any, is closed. */
   const installTracker = useCallback((tracker: FaceTracker) => {
     const old = trackerRef.current;
@@ -1024,6 +1055,10 @@ export function useTracking(): TrackingApi {
         {
           everyN: CONFIG.PROCESS_EVERY_N_FRAMES,
           onPresented: (meta) => meterRef.current.delivered(meta.now, meta.presentedFrames),
+          // Held while the reaction task's trials run (holdFrames): counted, not tracked, and a frame
+          // arriving is then what says the camera is alive, since no result can.
+          held: () => framesHeldRef.current,
+          onHeldFrame: () => { if (lastResultAtRef.current != null) lastResultAtRef.current = now(); },
         },
       );
 
@@ -1658,6 +1693,7 @@ export function useTracking(): TrackingApi {
     beginGazeCalibration, sampleGazeTarget, endGazeCalibration,
     beginCondition, endCondition, markReadingPage,
     beginSelfTest, endSelfTest, saveSelfTestLog,
+    holdFrames,
     cameraLostAt,
     cameraBlocked,
   };

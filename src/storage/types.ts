@@ -654,6 +654,14 @@ export interface ConditionRecord {
    */
   rt_window_version?: string;
   /**
+   * When the reaction block's dot onset was taken (lib/rtOnset.ts RT_TIMING_VERSION): 'rt-t2' from Round
+   * 92, the begin time of the frame after the one that painted the dot, from the frame's own timestamp.
+   * Absent on rows recorded before it, which the export names 'rt-t1': the clock read in the stamping
+   * frame's callback, after any face-tracker work in that frame, so with the camera on a reaction time
+   * could be short by up to one tracker call.
+   */
+  rt_timing_version?: string;
+  /**
    * Page 1's distance from one line of the passage to the next as the screen drew it, CSS px
    * (lib/renderedText.ts). 22 x 1.4 x stimulus_scale when the browser drew the declared size.
    */

@@ -14,7 +14,10 @@
  * or twice each.
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { startFramePump, frameTimestamp, type PumpVideo, type PumpHost } from '@/tracking/framePump';
+import { startLivenessCheck } from '@/tracking/cameraLiveness';
 
 /** A display that ticks on demand, so a test can run 60 Hz against a 30 fps camera deterministically. */
 function fakeHost() {
@@ -230,5 +233,84 @@ describe('frameTimestamp', () => {
     expect(frameTimestamp({ now: 1000, captureTime: 1.7e12 })).toEqual({ t: 1000, source: 'callback' });
     expect(frameTimestamp({ now: 5000, captureTime: 100 })).toEqual({ t: 5000, source: 'callback' });
     expect(frameTimestamp({ now: 1000, captureTime: NaN })).toEqual({ t: 1000, source: 'callback' });
+  });
+});
+
+/*
+ * THE REACTION TASK'S TRIALS RUN WITHOUT THE TRACKER (Round 92, audit 86 P1). Both trackers work on the
+ * main thread inside the video-frame callback, before the page's animation-frame callbacks, so their work
+ * delayed the reaction task's dot and its onset stamp. While useTracking holds the frames, each is counted
+ * as delivered and goes nowhere near the tracker; a frame arriving then keeps the stall watchdog quiet.
+ */
+describe('a held pump counts frames and sends none', () => {
+  function metaVideo() {
+    let cb: ((now: number, meta?: { presentedFrames?: number }) => void) | null = null;
+    const video: PumpVideo = {
+      currentTime: 0,
+      requestVideoFrameCallback: (fn) => { cb = fn; return 1; },
+      cancelVideoFrameCallback: () => { cb = null; },
+    };
+    return { video, present: (now: number, n: number) => { const f = cb; cb = null; f?.(now, { presentedFrames: n }); } };
+  }
+
+  it('while held: onPresented and onHeldFrame for every frame, onFrame for none; released: sent again', async () => {
+    const { video, present } = metaVideo();
+    let held = false;
+    const sent: number[] = [];
+    const presented: number[] = [];
+    const heldFrames: number[] = [];
+    const pump = startFramePump(video, (m) => { sent.push(m.presentedFrames!); }, {
+      held: () => held,
+      onPresented: (m) => presented.push(m.presentedFrames!),
+      onHeldFrame: (m) => heldFrames.push(m.presentedFrames!),
+    });
+    present(0, 1); await flush();
+    held = true;
+    for (let n = 2; n <= 6; n++) { present(n * 33, n); await flush(); }
+    held = false;
+    present(7 * 33, 7); await flush();
+    pump.stop();
+    expect(presented).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(heldFrames).toEqual([2, 3, 4, 5, 6]);
+    expect(sent).toEqual([1, 7]);
+  });
+
+  it('wired as useTracking wires it, a minute of held frames is no stall, and a camera that stops while held is still lost', async () => {
+    const { video, present } = metaVideo();
+    let clock = 0;
+    let tick: (() => void) | null = null;
+    const lastResultAt = { current: null as number | null };
+    let stalled = 0;
+    const stopWatch = startLivenessCheck({
+      lastResultAt, isVisible: () => true, now: () => clock, stallMs: 5000, onStall: () => { stalled += 1; },
+      every: (fn) => { tick = fn; return () => { tick = null; }; }, visibilityTarget: null,
+    });
+    let held = false;
+    const pump = startFramePump(video, () => { lastResultAt.current = clock; }, {
+      held: () => held,
+      onHeldFrame: () => { if (lastResultAt.current != null) lastResultAt.current = clock; },
+    });
+    present(clock, 1); await flush();
+    expect(lastResultAt.current).toBe(0);
+    held = true;
+    // 60 s of trials, a frame every 33 ms, the watchdog ticking every second.
+    for (let n = 2; clock < 60_000; n++) {
+      clock += 33;
+      present(clock, n); await flush();
+      if (clock % 1000 < 33) tick!();
+    }
+    expect(stalled).toBe(0);
+    // The camera stops (muted, covered by the OS) while still held: no frame, so the stall is seen.
+    for (let s = 0; s < 8; s++) { clock += 1000; tick!(); }
+    expect(stalled).toBe(1);
+    pump.stop();
+    stopWatch();
+  });
+
+  it('useTracking holds through the pump and feeds the watchdog from held frames', () => {
+    const src = readFileSync(resolve(__dirname, '../src/tracking/useTracking.ts'), 'utf8');
+    expect(src).toMatch(/held: \(\) => framesHeldRef\.current,/);
+    expect(src).toMatch(/onHeldFrame: \(\) => \{ if \(lastResultAtRef\.current != null\) lastResultAtRef\.current = now\(\); \},/);
+    expect(src).toMatch(/const holdFrames = useCallback\(\(held: boolean\) => \{[\s\S]*?framesHeldRef\.current = held;/);
   });
 });

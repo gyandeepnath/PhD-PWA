@@ -45,6 +45,7 @@ import { N_ILLUMINATION_BLOCKS, specFor, LUX_CHECKPOINTS } from '@/experiment/il
 import { fpsConsistent, fpsTier, medianFps, rowGateVersion, samplingFpsObserved } from '@/tracking/frameRateGate';
 import { ocularReliability } from '@/tracking/ocularReliability';
 import { exportedBlinkCounts } from '@/tracking/blinkLog';
+import { RT_TIMING_VERSION_V1 } from '@/lib/rtOnset';
 
 /** Illumination blocks a participant completes — ONE under the current protocol. Runs = N x this. */
 // Derived, never a literal: this used to be a hard-coded 2, which would have silently survived the
@@ -75,7 +76,7 @@ export const ANALYSIS_LONG_COLUMNS = [
   'fatigue_mean', 'fatigue_delta', 'comfort_score', 'clarity_score', 'slider_version',
   'comprehension_correct', 'comprehension_items',
   'search_time_ms', 'search_accuracy', 'search_d_prime', 'search_d_prime_se', 'search_false_detections', 'search_termination',
-  'rt_mean_hits_ms', 'rt_median_hits_ms', 'd_prime', 'criterion', 'rt_lapses',
+  'rt_mean_hits_ms', 'rt_median_hits_ms', 'd_prime', 'criterion', 'rt_lapses', 'rt_timing_version',
   // --- stimulus properties, as continuous predictors ---------------------------------------
   'wcag_contrast_ratio', 'michelson_contrast', 'below_wcag_aa',
   // --- participant covariates -------------------------------------------------------------
@@ -406,6 +407,9 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
         d_prime: round(sum.d_prime),
         criterion: round(sum.criterion),
         rt_lapses: numOrNull(r?.lapse_count),
+        // When the block's onsets were taken (lib/rtOnset.ts): rt-t1 rows of a camera-on sitting carry
+        // reaction times short by up to one tracker call (audit 86 P1). Blank where no block was summarised.
+        rt_timing_version: r ? (c?.rt_timing_version || RT_TIMING_VERSION_V1) : null,
 
         wcag_contrast_ratio: round(sum.wcag_contrast_ratio),
         michelson_contrast: round(c?.michelson_contrast),

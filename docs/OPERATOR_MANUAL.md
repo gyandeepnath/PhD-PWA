@@ -54,7 +54,7 @@ rises just after each blink, never during it.
 | Incomplete-blink ratio, Blink rate, Inter-blink interval, PERCLOS, Long closures, Eye sampling rate, Face in view, On-screen ratio, Head position | Each reading window | Summarised when the last page is turned | 07_eye_metrics, one row per condition | Panel "last reading" on the screens after it |
 | Annotation video (validation subsample only, its own consent) | Each polarity | The first reading window of each polarity: up to 3 min from "Begin reading"; kept only if that reading is completed | A video file, one per polarity (15_media_inventory, reading_segment) | Nothing on screen |
 | Setup photographs (their own consent) | Start and end | One when the camera check is accepted (a resumed sitting keeps its first), one when the last questionnaire (NASA-TLX) is submitted | Two photo files (15_media_inventory, session_start and session_end) | Nothing on screen |
-| Questions, ratings, fatigue scale, word search, reaction task, grey field, breaks | Not measured | The camera keeps running | Not kept | Panel: "Live only — not recorded" |
+| Questions, ratings, fatigue scale, word search, reaction task, grey field, breaks | Not measured | The camera keeps running; while the reaction task's dots are shown the face tracker does not look at its frames, so its work cannot delay a dot or its timestamp | Not kept | Panel: "Live only — not recorded" |
 | Live picture, last-10-s graph and its blink marks, live frame rates | Live only | While the researcher card is open (4 updates a second) | Never kept (the only camera images kept are the two consented items above) | Card |
 <!-- measurement-schedule:end -->
 

@@ -9,7 +9,8 @@
  * speeded detection of the condition's own colour on its own background (see `rtStimulusColours`
  * in experiment/conditions.ts for why this replaced an achromatic target, and what it costs).
  * Design choices for accuracy & reliability:
- *  - onset is timestamped at the actual painted frame (rAF), not one frame early;
+ *  - onset is the begin time of the frame after the one that painted the dot, read from the frame's own
+ *    timestamp, so the face tracker's work in that frame cannot move it (lib/rtOnset.ts, rt-t2);
  *  - the response time comes from the hardware pointer-event timestamp (low jitter);
  *  - responses < RT_MIN_VALID_RT are anticipations — excluded from RT means, counted separately;
  *  - the trial ends the instant a response is made (only no-go trials wait the window out);
@@ -28,6 +29,7 @@ import { relativeLuminance } from '@/lib/contrast';
 import { rafDelay, randInt, now } from '@/lib/timing';
 import { summariseRtBlock, type RtBlockSummary } from '@/lib/rtSummary';
 import { classifyRtTouch } from '@/lib/rtResponse';
+import { stampOnsetAfterPaint } from '@/lib/rtOnset';
 import { STIMULUS_FONT_STACK } from '@/lib/fonts';
 import { displayStepLabel, type DisplayPosition } from '@/experiment/taskSteps';
 import type { RtAccuracy } from '@/storage/types';
@@ -205,6 +207,8 @@ export function ReactionTimeTask({
   const records = useRef<RawTrial[]>([]);
   const phaseRef = useRef<Phase>('instruction');
   const onsetRef = useRef(0);
+  // The dot's element while it is in the document: how the onset stamp sees which frame paints it.
+  const dotRef = useRef<HTMLDivElement | null>(null);
   const respondedAtRef = useRef<number | null>(null);
   const falseStartRef = useRef(false);
   const current = useRef<Trial | null>(null);
@@ -238,9 +242,11 @@ export function ReactionTimeTask({
     }
   };
 
+  // Counted from the onset, where the window opens (classifyRtTouch judges each touch against the same
+  // instant), not from whenever the stamping frame's callback got to run.
   const waitForResponseOrTimeout = (ms: number): Promise<void> =>
     new Promise((resolve) => {
-      const start = now();
+      const start = onsetRef.current;
       const tick = () => {
         if (respondedAtRef.current != null || now() - start >= ms) resolve();
         else requestAnimationFrame(tick);
@@ -257,21 +263,26 @@ export function ReactionTimeTask({
    * inflated by roughly 17-50 ms once the display pipeline is included. That offset is constant
    * across conditions, so it does not confound the contrasts — but it silently moved two ABSOLUTE
    * thresholds: the 600 ms PVT-style lapse cutoff was really cutting at ~550-583 ms of true
-   * latency, and the 150 ms anticipation cutoff moved the same way. The nested rAF resolves after
-   * the frame is composited.
+   * latency, and the 150 ms anticipation cutoff moved the same way. The stamp is taken in the frame
+   * AFTER the one that painted the dot.
    *
    * Worse, `phaseRef` was flipped to 'stimulus' synchronously while `onsetRef` was written a frame
    * later, so a tap landing in between was accepted as a response and timestamped BEFORE the onset
    * — producing a negative reaction time, scored as a hit or a false alarm, with false_start still
    * reading false. The phase flip now happens in the same callback as the timestamp, so no response
    * can be accepted before an onset exists.
+   *
+   * And the stamp is that frame's OWN timestamp, not the clock read in its callback (Round 92, audit
+   * 86 P1; rt_timing_version rt-t2): with the camera on, the face tracker's work runs earlier in the
+   * same frame, and the clock read after it made every such reaction time short by it. The frame that
+   * paints the dot is the first whose callback finds it in the document, not assumed to be the next
+   * one. See lib/rtOnset.ts.
    */
-  const markOnsetAtPaint = (): Promise<void> =>
-    new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
-      onsetRef.current = now();
+  const markOnsetAtPaint = (): Promise<number> =>
+    stampOnsetAfterPaint(() => dotRef.current?.isConnected === true, (frameTime) => {
+      onsetRef.current = frameTime;
       phaseRef.current = 'stimulus';
-      resolve();
-    })));
+    });
 
   const runTrial = async (t: Trial, index: number, isPractice: boolean) => {
     current.current = t;
@@ -507,6 +518,7 @@ export function ReactionTimeTask({
          * container is the full root, so the 50% is the cross's own centre.
          */
         <div
+          ref={dotRef}
           aria-hidden
           data-testid="rt-dot"
           data-location={t!.location.id}

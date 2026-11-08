@@ -861,6 +861,26 @@ differs between them; response times, accuracy, every summary and every model ar
 template reads `false_start`. On `rw-v1` rows a false start may be such a late touch and cannot be told
 apart.
 
+**The reaction onset is the frame's own timestamp (Round 92).** Every reaction time is the touch's own
+timestamp minus the dot's onset. Up to Round 91 the onset was the clock read inside the second
+animation-frame callback after the dot was rendered (`rt-t1`). With the camera on, the face tracker works
+on the main thread in the browser's video-frame callback, which runs in the same frame and before that
+callback, so whenever it processed a camera frame there the onset was read after its work and the reaction
+time came out short by it: 95-140 ms per affected trial in the audit's headless run, about 23-28 ms with
+the development machine's tracker, unmeasured on the Xiaomi Pad 6, and with it the 150 ms anticipation and
+600 ms lapse cutoffs moved (audit 86 P1). From Round 92 (`rt-t2`, lib/rtOnset.ts) the onset is the begin
+time of the first frame after the frame that painted the dot, read from the timestamp the browser gives
+that frame before any work in it runs, and the frame that painted the dot is the first whose callback finds
+it in the document; and the face tracker is not given the camera's frames while the trials run (nothing it
+computes in the reaction task is kept), so its work can delay neither the dot's paint nor the foreperiod.
+With the camera off `rt-t1` and `rt-t2` agree to about 1 ms. `rt_timing_version`
+(02_conditions.csv, analysis_long.csv) says which rule a block ran under. `rt-t1` rows of a camera-on
+sitting are biased short by an amount that was not recorded and cannot be recovered; the confirmatory RT
+model keeps them (it is unchanged), and the R template counts them and refits the RT model without them as
+a sensitivity. Whether they should instead be left out of the RT, lapse and signal-detection models is the
+investigator's decision (not pre-specified here). e2e/rtOnsetTiming.spec.ts measures the onset against the
+paint with the camera on and off; on the tablet it was not measured.
+
 **A display's size is fixed for its own stimulus only (Round 87).** The display scale (`stimulus_scale`,
 which with the sitting's ruler calibration gives every visual angle) may shrink while a stimulus is on
 screen, if the screen genuinely gets smaller, and never grows under a reader. Up to Round 86 it was

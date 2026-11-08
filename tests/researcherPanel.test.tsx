@@ -209,7 +209,7 @@ describe('researcher panel', () => {
     const src = readFileSync(resolve(__dirname, '..', 'src/experiment/Experiment.tsx'), 'utf8');
     expect(src).toMatch(/const rtTrialsRunning = machine\.stage === 'REACTION_TIME' && rtPhase === 'trials';/);
     expect(src).toMatch(/<ResearcherPanel\b[\s\S]*?\bhidden=\{rtTrialsRunning\}[\s\S]*?\/>/);
-    expect(src).toMatch(/onTrialsRunning=\{\(running\) => setRtPhase\(running \? 'trials' : 'saving'\)\}/);
+    expect(src).toMatch(/onTrialsRunning=\{\(running\) => \{[^}]*?tracking\.holdFrames\(running\);\s*setRtPhase\(running \? 'trials' : 'saving'\);\s*\}\}/);
   });
 
   it('a locked indicator over a set-up procedure is the same quiet look, in that screen\'s ink', () => {
