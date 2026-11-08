@@ -27,6 +27,72 @@
 
 type Listener = (waiting: boolean) => void;
 
+/**
+ * WHETHER THIS TABLET HOLDS AN OFFLINE COPY OF THE APP (Round 92, audit 86 P4, P9).
+ *
+ * The app works without a network only once its service worker has installed and precached every
+ * asset — about 45 MB since the second face tracker was bundled — and nothing on screen said whether
+ * that had happened. An operator who switched on aeroplane mode before the download finished had no
+ * offline app and no warning; and a tablet that ran from the field package's own HTTPS server never
+ * got one at all, because Chrome refuses to install a service worker from a site whose certificate it
+ * does not trust, even after the warning has been accepted (the field server's certificate is
+ * self-signed). The registration's failure was swallowed, and "Check for updates" blamed "a development
+ * server". The state is now kept and shown beside the build (components/BuildInfo.tsx):
+ *
+ *   ready       — a service worker controls this page, or has just finished precaching: the app will
+ *                 open with the network off.
+ *   installing  — a worker is installing: the download is under way; keep the tablet online.
+ *   none        — no worker could be installed here (`reason` says what is known), or the browser has
+ *                 none: the app needs the server it was loaded from for every reload.
+ *   checking    — not yet known (the first moments after start-up).
+ */
+export type OfflineCopy = 'checking' | 'ready' | 'installing' | 'none';
+export interface OfflineCopyState { state: OfflineCopy; reason: string | null }
+type OfflineListener = (s: OfflineCopyState) => void;
+
+let offline: OfflineCopyState = { state: 'checking', reason: null };
+/** How long after start-up a missing registration is taken to mean none is coming. */
+export const OFFLINE_SETTLE_MS = 8000;
+const offlineListeners = new Set<OfflineListener>();
+
+function setOffline(next: OfflineCopyState): void {
+  // 'ready' is final for this page: the copy exists whatever a later check finds.
+  if (offline.state === 'ready' && next.state !== 'ready') return;
+  offline = next;
+  for (const l of offlineListeners) l(offline);
+}
+
+/** Subscribe to the offline copy's state. Returns an unsubscribe function. */
+export function onOfflineCopy(l: OfflineListener): () => void {
+  offlineListeners.add(l);
+  l(offline);
+  return () => offlineListeners.delete(l);
+}
+
+/** The offline copy's state now. */
+export function offlineCopy(): OfflineCopyState {
+  return offline;
+}
+
+/** Why a registration failed, as far as the error says. Chrome names a certificate error in the console only. */
+function registrationFailure(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+  return /certificate|SSL/i.test(msg)
+    ? 'the browser refused this site\'s certificate for the offline copy'
+    : `the browser would not install the offline copy here${msg ? ` (${msg.slice(0, 160)})` : ''}`;
+}
+
+/**
+ * The state from the browser itself: a page a service worker controls was served by it, so the copy
+ * exists; a registration with a worker installing is downloading it.
+ */
+function offlineFromBrowser(r: ServiceWorkerRegistration | null): void {
+  const sw = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined;
+  if (sw?.controller) { setOffline({ state: 'ready', reason: null }); return; }
+  if (r?.installing || r?.waiting) { setOffline({ state: 'installing', reason: null }); return; }
+  if (r?.active) { setOffline({ state: 'ready', reason: null }); }
+}
+
 let updateWaiting = false;
 const listeners = new Set<Listener>();
 let applyFn: ((reload: boolean) => Promise<void>) | null = null;
@@ -59,6 +125,10 @@ export function isUpdateWaiting(): boolean {
 export async function installUpdateWatch(): Promise<void> {
   if (registered) return;
   registered = true;
+  const swSupported = typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
+  if (!swSupported) setOffline({ state: 'none', reason: 'this browser has no service workers' });
+  // A page already controlled was served from the copy: say so before the registration resolves.
+  else offlineFromBrowser(null);
   try {
     // Virtual module from vite-plugin-pwa. Absent in dev unless devOptions are enabled, and absent
     // in unit tests, so the import is guarded rather than assumed.
@@ -69,12 +139,40 @@ export async function installUpdateWatch(): Promise<void> {
         updateWaiting = true;
         announce();
       },
+      // The first install has precached everything: the copy exists (audit 86 P4).
+      onOfflineReady() {
+        setOffline({ state: 'ready', reason: null });
+      },
       onRegisteredSW(_url: string, r: ServiceWorkerRegistration | undefined) {
         registration = r ?? null;
+        offlineFromBrowser(registration);
+        // A first install reports itself through onOfflineReady; one that fails while installing leaves
+        // no worker at all, which this catches.
+        registration?.installing?.addEventListener?.('statechange', (e) => {
+          if ((e.target as ServiceWorker | null)?.state === 'redundant' && !navigator.serviceWorker?.controller) {
+            setOffline({ state: 'none', reason: 'the offline copy started to download and failed' });
+          }
+        });
+      },
+      // Registration refused — a self-signed certificate is the case that matters (audit 86 P9).
+      onRegisterError(err: unknown) {
+        setOffline({ state: 'none', reason: registrationFailure(err) });
       },
     });
+    // The development server's registerSW does nothing and calls nothing back. If no registration
+    // exists after a while, there is no offline copy coming; a slow one that turns up later still
+    // moves this on (only 'ready' is final).
+    if (swSupported) setTimeout(() => {
+      if (offline.state !== 'checking') return;
+      void navigator.serviceWorker.getRegistration().then((r) => {
+        if (offline.state !== 'checking') return;
+        if (r) offlineFromBrowser(r);
+        else setOffline({ state: 'none', reason: 'no service worker was registered from this server' });
+      }).catch(() => setOffline({ state: 'none', reason: 'no service worker was registered from this server' }));
+    }, OFFLINE_SETTLE_MS);
   } catch {
-    /* No service worker in this environment; the app runs online-only. */
+    /* No service worker in this environment (the development server); the app runs online-only. */
+    setOffline({ state: 'none', reason: 'this server provides no service worker (a development server)' });
   }
 }
 

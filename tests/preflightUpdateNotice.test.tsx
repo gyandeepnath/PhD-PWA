@@ -21,6 +21,7 @@ vi.mock('@/lib/swUpdate', () => ({
   checkForUpdate: async () => (waiting ? 'waiting' : 'current'),
   applyUpdate: async () => { throw new Error('pre-flight must never apply an update'); },
   installUpdateWatch: async () => {},
+  onOfflineCopy: (l: (s: { state: string; reason: string | null }) => void) => { l({ state: 'ready', reason: null }); return () => {}; },
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

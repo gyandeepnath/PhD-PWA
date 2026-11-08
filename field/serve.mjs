@@ -125,6 +125,10 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log('        stop this and run:  node serve.mjs --https');
   } else {
     console.log('\n  The tablet will warn about the self-signed certificate. Accept it once.');
+    // Chrome will not install the app's service worker from a self-signed site (audit 86 P9).
+    console.log('  From this address the tablet gets NO offline copy of the app: keep this laptop awake');
+    console.log('  and on the same Wi-Fi for the whole sitting. For sittings with no network, use the');
+    console.log('  deployed HTTPS address and wait for "Offline copy: ready" (docs/DEPLOYMENT.md).');
   }
   console.log('\n  Ctrl-C to stop.\n');
 });

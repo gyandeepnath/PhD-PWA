@@ -15,10 +15,13 @@ npm run verify  # lint, typecheck, tests, corpus, codebook, export gates
 npm run build   # prebuild vendors MediaPipe, then tsc -b && vite build
 ```
 
-`npm run build` writes `dist/`, which is about **21 MB on disk**. Most of that is the self-hosted
-MediaPipe FaceMesh runtime and the source maps. The service worker precaches **44 entries, roughly
-17 MB**; that number is printed at the end of the build and is worth reading, because it is what
-determines whether the app works with the network off.
+`npm run build` writes `dist/`, which is about **50 MB on disk**. Most of that is the two self-hosted
+face trackers (the MediaPipe FaceMesh runtime and, since Round 75, the Face Landmarker's wasm binaries
+and model) and the source maps. The service worker precaches **42 files, about 44 MB** (the build
+prints `[verify-bundle] … MB total`, in MiB, and Workbox's own "precache 58 entries", which lists some
+files twice); that is what a tablet downloads before it works with the network off, and the build
+fails if this paragraph's figure is more than 10% away from the bundle's (scripts/verifyBundle.mjs).
+Until Round 92 this said 44 entries, roughly 17 MB — the bundle before the second tracker.
 
 `dist/` is a plain static directory. There is no server-side component and no database: everything
 the app stores lives in the browser's IndexedDB on that device.
@@ -122,7 +125,7 @@ a lab room with no reliable connection, and it is the one section 5 assumes.
 ## 4. Offline and the service worker
 
 `vite-plugin-pwa` runs in `generateSW` mode and precaches every `js, css, html, ico, png, svg,
-woff2, wasm, tflite, binarypb, data` asset up to 12 MB each. That glob is what pulls in the
+woff2, wasm, tflite, binarypb, data, task` asset up to 12 MB each (`task` is the Face Landmarker model). That glob is what pulls in the
 MediaPipe model files, which is deliberate: MediaPipe is normally fetched from a CDN, and a CDN
 fetch in a room with no network means no face tracking and therefore no primary outcome. The same
 reasoning covers `woff2`: the reading passage's typeface is an experimental control, it is served
@@ -132,7 +135,14 @@ and records the answer as `stimulus_font_ok` in `01_session_info.csv`.
 
 **Confirming a device is genuinely offline-ready** — do this once per tablet, before it is used:
 
-1. Load the app over HTTPS and wait. First load pulls roughly 17 MB and is not instant.
+1. Load the app over HTTPS from the deployed address and wait until the landing page's build box
+   says **"Offline copy: ready"**. First load pulls about 44 MB and is not instant; until then it says
+   "downloading", and switching the network off before it says ready leaves no offline app. If it
+   says **"NOT installed"**, this tablet cannot run offline from that address: the field package's
+   HTTPS server (`node serve.mjs --https`, a self-signed certificate) is the known case — Chrome does
+   not install a service worker from a site whose certificate it does not trust, even after its
+   warning has been accepted (audit 86 P9, measured in desktop Chromium; on the tablet expected, not
+   tested). Use the deployed HTTPS address for sittings without a network.
 2. Run one throwaway session all the way through the camera-setup stage, so the FaceMesh model is
    actually exercised rather than merely downloaded.
 3. Put the device in aeroplane mode.

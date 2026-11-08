@@ -13,7 +13,7 @@
  */
 import { useEffect, useState, type CSSProperties } from 'react';
 import { buildIdentity } from '@/lib/env';
-import { checkForUpdate, onUpdateWaiting, type UpdateCheck } from '@/lib/swUpdate';
+import { checkForUpdate, onOfflineCopy, onUpdateWaiting, type OfflineCopyState, type UpdateCheck } from '@/lib/swUpdate';
 
 /** "VisuLab 2.2.0 · built 4 Oct 2026 09:33 UTC · e05d3c4", as text. */
 export function BuildIdentity({ testId = 'build-identity', style }: { testId?: string; style?: CSSProperties }) {
@@ -35,7 +35,7 @@ const CHECK_TEXT: Record<UpdateCheck, string> = {
   waiting: 'A newer build is ready and waiting — see the notice.',
   installing: 'A newer build was found and is downloading. A notice appears when it is ready.',
   current: 'This is the newest build the server has.',
-  unavailable: 'Updates cannot be checked here: no service worker (a development server, or a browser without one).',
+  unavailable: 'Updates cannot be checked here: no service worker controls this page — so there is no offline copy either (see the line above).',
   offline: 'Could not reach the server. Connect the tablet to the internet and try again.',
 };
 
@@ -80,22 +80,57 @@ export function UpdateCheckButton({ auto = false }: { auto?: boolean }) {
   );
 }
 
+/** The offline copy's state (swUpdate.onOfflineCopy), kept live. */
+export function useOfflineCopy(): OfflineCopyState {
+  const [s, setS] = useState<OfflineCopyState>({ state: 'checking', reason: null });
+  useEffect(() => onOfflineCopy(setS), []);
+  return s;
+}
+
+/**
+ * WHETHER THE APP WILL OPEN WITH THE NETWORK OFF (Round 92, audit 86 P4, P9). Nothing said so: the
+ * operator could switch on aeroplane mode before the 45 MB download had finished, and a tablet run from
+ * the field package's HTTPS server never had a copy at all — Chrome will not install one from a site
+ * with a self-signed certificate, even once its warning has been accepted — with nothing on screen.
+ */
+export function OfflineCopyStatus() {
+  const { state, reason } = useOfflineCopy();
+  const text = state === 'ready'
+    ? 'Offline copy: ready — the app opens with the network off.'
+    : state === 'installing'
+      ? 'Offline copy: downloading — keep the tablet online until this says ready.'
+      : state === 'none'
+        ? `Offline copy: NOT installed — ${reason ?? 'no service worker here'}. Every reload needs the server this page came from. `
+          + 'For sittings without a network, open the study\'s HTTPS address (DEPLOYMENT.md); the field server\'s self-signed HTTPS cannot install one.'
+        : 'Offline copy: checking…';
+  return (
+    <span data-testid="offline-copy" data-state={state} role="status" className="font-sans text-[15px]"
+      style={{ color: state === 'none' ? '#8a1c1c' : '#3a3a4a', fontWeight: state === 'none' ? 600 : 400 }}>
+      {text}
+    </span>
+  );
+}
+
 /**
  * The identity line and the check, together: the landing page's footer, the session manager's header
- * and pre-flight's device box all use this, so the three cannot disagree about the build.
+ * and pre-flight's device box all use this, so the three cannot disagree about the build. The offline
+ * copy's state sits under them (Round 92).
  */
 export function BuildInfo({ auto = false, testId = 'build-stamp' }: { auto?: boolean; testId?: string }) {
   const waiting = useUpdateWaiting();
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-      <BuildIdentity testId={testId} />
-      {waiting && (
-        <span data-testid="update-waiting-flag" className="font-sans text-[15px] font-medium"
-          style={{ padding: '4px 10px', borderRadius: 8, background: '#1a1a2e', color: '#fff' }}>
-          Newer build waiting
-        </span>
-      )}
-      <UpdateCheckButton auto={auto} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <BuildIdentity testId={testId} />
+        {waiting && (
+          <span data-testid="update-waiting-flag" className="font-sans text-[15px] font-medium"
+            style={{ padding: '4px 10px', borderRadius: 8, background: '#1a1a2e', color: '#fff' }}>
+            Newer build waiting
+          </span>
+        )}
+        <UpdateCheckButton auto={auto} />
+      </div>
+      <OfflineCopyStatus />
     </div>
   );
 }

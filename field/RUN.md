@@ -34,6 +34,13 @@ node serve.mjs --https
 It prints an address like `https://192.168.1.42:8443`. Open that on the tablet, on the same Wi-Fi.
 The tablet will warn about the certificate — accept it once.
 
+**Keep the laptop awake and on the same Wi-Fi for the whole sitting.** From this address the tablet
+never gets an offline copy of the app: Chrome does not install the app's service worker from a site
+with a self-signed certificate, even after its warning is accepted, so every reload needs the laptop
+(the landing page's build box says "Offline copy: NOT installed"). That is fine for timing. For a
+sitting with no network at all, use the study's deployed HTTPS address instead and wait for
+"Offline copy: ready" (docs/DEPLOYMENT.md §4).
+
 **Do not use plain HTTP on the tablet.** Browsers only allow camera access on a secure context, and
 `localhost` is the only exception. Over LAN HTTP the app will load and look completely normal, but
 `getUserMedia` is never granted, so every blink, EAR and PERCLOS field comes out empty. You would

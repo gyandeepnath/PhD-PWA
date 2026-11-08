@@ -117,6 +117,21 @@ for (const [file, minBytes] of REQUIRED_TRACKING) {
 const wasm = shipped.filter((f) => /^(mediapipe|tasks-vision)\/.*\.wasm$/.test(f) && statSync(join(dist, f)).size > 1024 * 1024);
 if (!wasm.length) problems.push('no usable MediaPipe wasm binary in the bundle');
 
+/*
+ * 4. THE DEPLOYMENT GUIDE'S DOWNLOAD SIZE IS THIS BUNDLE'S (Round 92, audit 86 P4). It said "44 entries,
+ *    roughly 17 MB" while the build precached about 44 MB: the operator was told to wait for a download a
+ *    third of the real size before switching the network off. Within 10%, so a small asset does not fail
+ *    the build but a second tracker does.
+ */
+const bytesAll = shipped.reduce((a, f) => a + statSync(join(dist, f)).size, 0);
+const totalMb = bytesAll / 1024 / 1024;
+const guide = readFileSync(join(root, 'docs', 'DEPLOYMENT.md'), 'utf8');
+const quoted = /precaches \*\*\d+ files, about (\d+(?:\.\d+)?) MB\*\*/.exec(guide);
+if (!quoted) problems.push('docs/DEPLOYMENT.md no longer states the precache size as "precaches **N files, about X MB**"');
+else if (Math.abs(Number(quoted[1]) - totalMb) > 0.1 * totalMb) {
+  problems.push(`docs/DEPLOYMENT.md says the precache is about ${quoted[1]} MB; this bundle's is ${totalMb.toFixed(1)} MB — update the guide`);
+}
+
 if (problems.length) {
   console.error('[verify-bundle] this bundle is not safe to take into the field:');
   problems.forEach((p) => console.error(`  - ${p}`));

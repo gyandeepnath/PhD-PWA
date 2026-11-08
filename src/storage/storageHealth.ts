@@ -45,8 +45,9 @@ export interface StorageHealth {
 
 /**
  * Headroom a full sitting needs. A session without media runs to a few megabytes; the annotation
- * video dominates when it is consented. 300 MB is comfortable for one sitting plus the ~17 MB
- * precache, and small enough not to fail on a modest tablet.
+ * video dominates when it is consented. 300 MB is comfortable for one sitting plus the precache (about
+ * 44 MB since the second face tracker was bundled; docs/DEPLOYMENT.md, checked by verifyBundle), and
+ * small enough not to fail on a modest tablet.
  */
 const REQUIRED_HEADROOM_MB = 300;
 
