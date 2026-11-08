@@ -1,5 +1,5 @@
 /**
- * The exposure step (Round 79; rule exp-r2 from Round 82): fix the exposure on the grey field and keep it only if the
+ * The exposure step (Round 79; rule exp-r2 from Round 82, exp-r3 from Round 91): fix the exposure on the grey field and keep it only if the
  * camera stays at least as fast and the picture bright enough; otherwise compensation, otherwise auto —
  * and always say which and why.
  *
@@ -7,7 +7,7 @@
  * grey field; a fixed exposure of t ms runs at min(30, 1000 / t) fps; brightness is exposure x gain.
  */
 import { describe, it, expect } from 'vitest';
-import { setExposure, isoLadder, compensationSteps, autoExposureState, benchLockLabel, EXPOSURE, type ExposureDeps } from '@/tracking/cameraExposure';
+import { setExposure, isoLadder, compensationSteps, autoExposureState, benchLockLabel, restoreAutoExposure, EXPOSURE, EXPOSURE_RULE, type ExposureDeps } from '@/tracking/cameraExposure';
 
 interface FakeOpts {
   modes?: string[];
@@ -63,6 +63,7 @@ function fakeCamera(o: FakeOpts = {}) {
       exposureMode: o.ignoresManual ? 'continuous' : (st.mode === 'manual' && o.readbackWhenManual) || st.mode,
       ...(st.mode === 'manual' ? { exposureTime: st.time100 ?? AUTO_MS * 10 } : {}),
       ...(st.iso != null ? { iso: st.iso } : {}),
+      ...(o.comp ? { exposureCompensation: st.comp } : {}),
     }),
     apply: async (set) => {
       applied.push(set);
@@ -101,7 +102,7 @@ describe('the exposure step', () => {
   it('keeps the lock on a camera that reads back "none" for a fixed exposure, as Chrome on Android does (exp-r2)', async () => {
     const cam = fakeCamera({ iso: { min: 100, max: 3200 }, readbackWhenManual: 'none' });
     const r = await exposeNow(cam.deps);
-    expect(r).toMatchObject({ rule: 'exp-r2', policy: 'locked-v1', reason: null, mode_readback: 'none', exposure_time_100us: EXPOSURE.CAP_100US, iso: 800 });
+    expect(r).toMatchObject({ rule: EXPOSURE_RULE, policy: 'locked-v1', reason: null, mode_readback: 'none', exposure_time_100us: EXPOSURE.CAP_100US, iso: 800 });
     // Nothing was undone: the last thing sent is the lock itself, not a return to auto.
     expect(cam.applied[cam.applied.length - 1]).toMatchObject({ exposureMode: 'manual' });
     // exp-r1 would have refused this sitting: the raw read-back is what lets a row be judged under both.
@@ -191,6 +192,51 @@ describe('the exposure step', () => {
     expect(r.policy).toBe('auto');
     expect(r.reason).toMatch(/could not be measured/);
     expect(cam.applied).toEqual([]);
+  });
+});
+
+describe('the step measures "auto" under automatic exposure, whatever was left before it (exp-r3; audit 86 CAM-4)', () => {
+  /*
+   * The bench check runs this step between its halves, and used to end by setting only the mode back. On
+   * a camera that ended the bench compensated, the participant's step then began from that compensation:
+   * it recorded a darker "auto" than the camera's own and went darker again, below its own 70% floor.
+   */
+  const compOnly = () => fakeCamera({ modes: ['continuous'], time: null, comp: { min: -2, max: 2, step: 1 / 3 } });
+
+  it('the bench, then the participant\'s step: "auto" is the camera\'s own, and the picture stays above the floor', async () => {
+    const cam = compOnly();
+    const bench = await exposeNow(cam.deps);
+    expect(bench).toMatchObject({ policy: 'compensated-v1', auto_luma: 120 });
+    expect(cam.st.comp).toBeCloseTo(-1 / 3, 3);
+    // The bench's end: back to auto, the mode and the compensation (useTracking runCameraBench).
+    await restoreAutoExposure(cam.deps.apply, cam.deps.capabilities());
+    expect(cam.st.comp).toBe(0);
+    const sitting = await exposeNow(cam.deps);
+    expect(sitting).toMatchObject({ rule: EXPOSURE_RULE, policy: 'compensated-v1', auto_luma: 120 });
+    expect(120 * 2 ** cam.st.comp).toBeGreaterThanOrEqual(EXPOSURE.LUMA_FLOOR * 120);
+  });
+
+  it('a camera still compensated when the step begins is put back on auto before "auto" is measured', async () => {
+    const cam = compOnly();
+    await cam.deps.apply({ exposureCompensation: -1 / 3 });
+    cam.applied.length = 0;
+    const r = await exposeNow(cam.deps);
+    expect(cam.applied[0]).toEqual({ exposureMode: 'continuous' });
+    expect(cam.applied[1]).toEqual({ exposureCompensation: 0 });
+    expect(r.auto_luma).toBe(120);
+    expect(r.auto_fps).toBe(25);
+  });
+
+  it('a camera left on a fixed exposure is put back on auto too; one already on auto gets no extra call', async () => {
+    const locked = fakeCamera({ iso: { min: 100, max: 3200 } });
+    await locked.deps.apply({ exposureMode: 'manual', exposureTime: 100 });
+    locked.applied.length = 0;
+    const r = await exposeNow(locked.deps);
+    expect(locked.applied[0]).toEqual({ exposureMode: 'continuous' });
+    expect(r.auto_fps).toBe(25);
+    const fresh = fakeCamera({ iso: { min: 100, max: 3200 } });
+    await exposeNow(fresh.deps);
+    expect(fresh.applied[0]).toEqual({ exposureMode: 'manual' });
   });
 });
 

@@ -457,6 +457,10 @@ so on the tablet the exposure was never kept fixed. An export from those builds 
 the camera said (`camera_exposure_mode_readback`). This comes from Chrome's source code; it has not
 been seen on the tablet yet — the bench check below is how to see it.
 
+*From Round 91 (rule `exp-r3`).* The step first puts the camera back on automatic exposure, so the
+brightness it compares against is the camera's own even right after a bench check (which used to
+leave any exposure compensation behind). Nothing to do differently.
+
 **The bench check (researcher only, before the pilot).** On camera setup, *Run: white, grey, black
 (2 min)* shows white, grey and black screens for about 20 seconds each under automatic exposure, then
 tries to fix the exposure and shows the three screens again. It gives one row per screen: camera fps,

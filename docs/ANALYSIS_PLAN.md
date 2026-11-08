@@ -758,6 +758,17 @@ These are not optional and they come first.
    automatic or compensated exposure, which `camera_exposure_policy` already says, and every analysis
    that reads the policy reads it the same way. Not measured on the tablet: this follows from the
    browser's source, and the bench check is how it is confirmed on the device.
+   **`exp-r3` (Round 91, audit 86 CAM-4)** is `exp-r2` measured from automatic exposure: the step
+   first puts the camera back on auto with no compensation (when it is not there already) and lets it
+   settle, so `camera_auto_luma` / `camera_auto_fps`, against which the lock or compensation is judged,
+   are the camera's own. Under `exp-r2` the bench check — which runs the same step between its halves
+   and set only the mode back afterwards — could leave compensation behind, and a participant's step in
+   the same camera session then measured "auto" under it: in a toy camera, an "auto" brightness 79% of
+   the true one and a picture left at 63% of it, below the 70% floor. No threshold changed and nothing
+   new is modelled. An `exp-r2` sitting can differ only where the bench was run before the step in the
+   same camera session (01 `camera_bench` not blank) on a camera that ended it compensated or fixed;
+   the bench is a researcher's check before the pilot, so on the study's own data none should.
+   Not measured on the tablet.
 9. **The blink-data verdict, rule `rel-r1` (Round 83).** One word per condition-run for "is this
    row's blink data reliable?", shown on the dashboard and written to `analysis_long.csv` and
    `10_wide_summary.csv` as `ocular_reliability`, with `ocular_reliability_checks` (the codes of the

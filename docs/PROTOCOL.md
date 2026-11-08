@@ -256,9 +256,11 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
   Nothing about the tablet's camera or tracker throughput has been measured on the device yet.
   From Round 79 (after the investigator saw at most 23–25 frames a second on the tablet):
   - the camera is asked for a 30-fps mode, and its **exposure is fixed** on the grey field at camera
-    setup where the camera allows it (rule `exp-r2` from Round 82, which reads Chrome on Android's
-    report of a fixed exposure correctly; `exp-r1` before), so white-page and black-page conditions
-    are filmed the same way;
+    setup where the camera allows it (rule `exp-r3` from Round 91, which measures the camera's own
+    automatic exposure first even after the bench check; `exp-r2` from Round 82, which reads Chrome on
+    Android's report of a fixed exposure correctly; `exp-r1` before), so white-page and black-page
+    conditions are filmed the same way. Turning the tablet to portrait stops the step; it is begun
+    again in landscape and nothing from the stopped one is kept;
   - every condition is judged by one **frame-rate gate, `fps-g2`**: face-solved samples a second while
     the face was seen (`sampling_fps_observed`) — adequate at 20 or more, reduced at 15–20 (kept,
     flagged), too slow under 15 (exploratory) — and flagged when it differs by more than 2 from that

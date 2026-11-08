@@ -1,6 +1,7 @@
 /**
  * Fix the camera's exposure once per sitting, on the grey field, so every condition is filmed the same
- * way (Round 79, rule 'exp-r1'; Round 82, rule 'exp-r2' — see "WHAT COUNTS AS FIXED" below).
+ * way (Round 79, rule 'exp-r1'; Round 82, rule 'exp-r2' — see "WHAT COUNTS AS FIXED" below; Round 91,
+ * rule 'exp-r3' — see "FROM AUTOMATIC EXPOSURE").
  *
  * WHY. The investigator measured at most 23-25 frames a second on the study tablet, even in good light.
  * Chrome leaves the camera's auto-exposure free to lengthen each frame when it judges the picture dark
@@ -45,6 +46,16 @@
  * unchanged. The raw mode is kept (`mode_readback`), so a row can be re-judged under either rule. Not
  * measured on the study tablet: this is what the browser's source says it reports.
  *
+ * FROM AUTOMATIC EXPOSURE (exp-r3, Round 91; audit 86 CAM-4). exp-r2, except that the step first puts the
+ * camera back on automatic exposure with no compensation when it is not there already, and lets it settle,
+ * so "auto" (step 1) is measured under auto. The bench check runs this step between its halves and used to
+ * finish by setting only the mode back: on a camera that ended the bench on compensation, a participant's
+ * step in the same camera session started from it, recorded that darker picture as "auto", judged the 70%
+ * floor against it and could leave the picture at about 63% of the true auto brightness. The bench now
+ * ends on the same full return to auto (restoreAutoExposure). Judged the same; no threshold changed. An
+ * exp-r2 sitting can differ only where the bench was run before the step in the same camera session
+ * (01 camera_bench not blank) on a camera that ended it compensated or fixed.
+ *
  * WHERE THE LOCK IS NOT OFFERED. Some cameras offer only exposure compensation. Then the most negative
  * compensation step (down to -1 EV) that keeps the picture at least 70% as bright is used
  * ('compensated-v1'): auto-exposure stays on but aims darker, so it needs shorter exposures. That is a
@@ -67,7 +78,7 @@ import type { ExposureOutcome } from '@/storage/types';
 
 export type { ExposureOutcome };
 
-export const EXPOSURE_RULE = 'exp-r2';
+export const EXPOSURE_RULE = 'exp-r3';
 /** The rule before Round 82: kept the lock only on a read-back of 'manual' (see the header). */
 export const EXPOSURE_RULE_BEFORE = 'exp-r1';
 
@@ -232,6 +243,23 @@ async function runExposure(d: ExposureDeps): Promise<ExposureOutcome> {
   const compR = range(c.exposureCompensation);
   const canLock = modes.includes('manual');
   const canComp = compR != null && compR.min < 0;
+
+  /*
+   * exp-r3 (Round 91, audit 86 CAM-4): "auto" is measured under automatic exposure. The bench check runs
+   * this same step between its two halves and used to finish by setting only the mode back, so on a
+   * camera that ended it on compensation the participant's step started from that compensation: it
+   * recorded a darker "auto" than the camera's own, judged the 70% floor against it, and could leave the
+   * picture darker than the floor allows. Whatever an earlier step left, the camera is put back on
+   * automatic exposure with no compensation before it settles — only when it is not there already (or
+   * does not say), so a camera already on auto sees no extra call.
+   */
+  if (canLock || canComp) {
+    let st: ReturnType<ExposureDeps['settings']> = {};
+    try { st = d.settings(); } catch { st = {}; }
+    const offAuto = st.exposureMode !== undefined && st.exposureMode !== 'continuous';
+    const compensated = canComp && num(st.exposureCompensation) !== 0;
+    if (offAuto || compensated) await restoreAutoExposure(d.apply, caps);
+  }
 
   await d.wait(t.SETTLE_MS);
   const auto = await d.measure(t.AUTO_MS);

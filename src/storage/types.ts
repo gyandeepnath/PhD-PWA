@@ -1028,8 +1028,12 @@ export interface CameraBenchRecord {
 
 /** The exposure step's result; see tracking/cameraExposure.ts. */
 export interface ExposureOutcome {
-  /** 'exp-r2' from Round 82 (a read-back of 'none' counts as fixed); 'exp-r1' before. */
-  rule: 'exp-r1' | 'exp-r2';
+  /**
+   * 'exp-r3' from Round 91 (exp-r2, measured from automatic exposure: the camera is put back on auto with
+   * no compensation before the step; audit 86 CAM-4); 'exp-r2' from Round 82 (a read-back of 'none'
+   * counts as fixed); 'exp-r1' before.
+   */
+  rule: 'exp-r1' | 'exp-r2' | 'exp-r3';
   policy: 'auto' | 'locked-v1' | 'compensated-v1';
   /** Why the camera was left on auto, or why compensation was used instead of a lock; null for a clean lock. */
   reason: string | null;
@@ -1089,7 +1093,7 @@ export interface PipelineWindowFields {
    */
   camera_exposure_policy?: 'auto' | 'locked-v1' | 'compensated-v1' | null;
   /** The exposure rule that set it (ExposureOutcome.rule); absent before Round 82. */
-  camera_exposure_rule?: 'exp-r1' | 'exp-r2' | null;
+  camera_exposure_rule?: 'exp-r1' | 'exp-r2' | 'exp-r3' | null;
   camera_exposure_time_100us?: number | null;
   camera_iso?: number | null;
   camera_exposure_comp?: number | null;

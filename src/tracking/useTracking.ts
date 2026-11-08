@@ -25,7 +25,7 @@ import {
 } from './trackerChoice';
 import { APP_VERSION } from '@/lib/env';
 import { openCamera, describeCapabilities } from './cameraRequest';
-import { setExposure, benchLockLabel, EXPOSURE_RULE, EXPOSURE_TIMING, type ExposureOutcome } from './cameraExposure';
+import { setExposure, restoreAutoExposure, benchLockLabel, EXPOSURE_RULE, EXPOSURE_TIMING, type ExposureOutcome } from './cameraExposure';
 
 /**
  * How often the operator's live readout updates, in hertz.
@@ -1297,8 +1297,15 @@ export function useTracking(): TrackingApi {
       return record;
     } finally {
       paint(null);
-      // Back to auto; the participant's exposure is set at Continue, on the grey field, as always.
-      try { await track.applyConstraints({ advanced: [{ exposureMode: 'continuous' } as MediaTrackConstraintSet] }); } catch { /* recorded as auto below */ }
+      /*
+       * Back to auto — the mode AND the compensation (audit 86 CAM-4): only the mode used to be set back, so
+       * a camera that ended the bench compensated stayed darker for the participant's step. The
+       * participant's exposure is set at Continue, on the grey field, as always (and that step starts from
+       * auto too, exp-r3).
+       */
+      let caps: MediaTrackCapabilities | null = null;
+      try { caps = track.getCapabilities?.() ?? null; } catch { caps = null; }
+      await restoreAutoExposure((set) => track.applyConstraints({ advanced: [set as MediaTrackConstraintSet] }), caps);
       if (pipelineRef.current === info) info.camera_exposure = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
