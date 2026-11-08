@@ -1758,6 +1758,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
             annotationVideo: session?.media_consent?.annotation_video === true,
           }}
           onBack={consentRevisitable ? () => goBack('CONSENT') : undefined}
+          // The exposure step and the bench check: the card is closed over them (audit 86 CAM-9).
+          onRunning={setProcedureRunning}
         />
       ) : (
         <CameraDeclined
@@ -2460,7 +2462,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
    * the reading task and the grey field, whose bottom-left corner nothing else uses; locked — an ink
    * indicator that cannot be tapped — on every other display screen, where an open panel sat over the
    * answers or the rating lines or where a target could appear, and during the measured set-up procedures:
-   * the calibration dots and self-test (the whole calibration stage) and the colour-vision plates.
+   * the calibration dots and self-test (the whole calibration stage), the colour-vision plates, and camera
+   * setup's exposure step and bench check (audit 86 CAM-9: the screens the camera is measured under).
    */
   /*
    * The calibration stage is locked only while a measured procedure RUNS (the dots, the flashing self-

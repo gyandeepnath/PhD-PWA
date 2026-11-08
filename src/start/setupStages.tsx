@@ -716,12 +716,24 @@ const BENCH_GROUND: Record<BenchPaint['ground'], { bg: string; ink: string; word
   black: { bg: '#000000', ink: '#ffffff', word: 'black' },
 };
 
+/*
+ * The two screens the camera is MEASURED under on this page — the bench check's grounds and the
+ * exposure step's grey field — cover the whole screen and sit above the researcher panel's locked
+ * indicator (45), under only the blocking notices and dialogs (90-100). Camera setup reports both as
+ * running procedures (onRunning), which closes the researcher card and withholds the Exit chip, as on
+ * the calibration dots (audit 86 CAM-9). An open card used to stay docked over them: a navy column with
+ * the participant's own bright live picture over the left of the "black" bench ground, and over the left
+ * 30% of the grey field the exposure is fixed under — so the camera was measured under a brighter, mixed
+ * screen than the one the record names, and the participant watched their own face meanwhile.
+ */
+const MEASURED_GROUND_Z = 46;
+
 /** The bench check's full-screen ground, with a small note for the researcher at the bottom. */
 function BenchGround({ p }: { p: BenchPaint }) {
   const g = BENCH_GROUND[p.ground];
   return (
     <div data-testid="camera-bench-ground" data-ground={p.ground} style={{
-      position: 'fixed', inset: 0, zIndex: 40, background: g.bg, color: g.ink,
+      position: 'fixed', inset: 0, zIndex: MEASURED_GROUND_Z, background: g.bg, color: g.ink,
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
     }}>
       <div style={{ width: 14, height: 14, borderRadius: '50%', background: g.ink }} />
@@ -778,7 +790,7 @@ function BenchTable({ b }: { b: CameraBenchRecord }) {
 function ExposureField() {
   return (
     <div data-testid="camera-exposure-step" style={{
-      position: 'fixed', inset: 0, left: 'var(--vl-panel-dock, 0px)', zIndex: 40,
+      position: 'fixed', inset: 0, zIndex: MEASURED_GROUND_Z,
       background: CONFIG.ADAPTATION_COLOR, color: CONFIG.ADAPTATION_INK,
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32,
     }}>
@@ -822,7 +834,7 @@ const FACE_TONE: Record<FaceStatus, string> = {
  * measure again; the comparison is recorded with the sitting. When CONFIG.TRACKER_BACKEND freezes the
  * tracker, there is nothing to measure and the screen says which one is fixed.
  */
-export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
+export function CameraSetup({ camera, onContinue, onSkip, retains, onBack, onRunning }: {
   camera: CameraSetupTracking;
   /** The face is centred: go on, with the camera running. */
   onContinue: () => void;
@@ -839,6 +851,11 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
    * or measured under it (see Experiment.tsx); not while the preview is running.
    */
   onBack?: () => void;
+  /**
+   * True while the camera is measured on a full-screen ground — the exposure step, the bench check — so
+   * the researcher card is closed and the Exit chip withheld, as on the calibration dots (audit 86 CAM-9).
+   */
+  onRunning?: (running: boolean) => void;
 }) {
   const [step, setStep] = useState<'notice' | 'starting' | 'preview' | 'exposure' | 'denied'>(
     camera.status === 'active' ? 'preview' : 'notice');
@@ -863,6 +880,8 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack }: {
   const [bench, setBench] = useState<CameraBenchRecord | null>(null);
   const [benchPaint, setBenchPaint] = useState<BenchPaint | null>(null);
   const [benchRunning, setBenchRunning] = useState(false);
+  useEffect(() => { onRunning?.(step === 'exposure' || benchRunning); }, [step, benchRunning, onRunning]);
+  useEffect(() => () => onRunning?.(false), [onRunning]);
   const runBench = async () => {
     setBenchRunning(true);
     try {
