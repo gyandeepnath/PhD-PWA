@@ -9,6 +9,7 @@
  * the cut is the 0.12 its comment describes.
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { estimateGaze, IRIS, EYE_BOX } from '@/tracking/gaze';
 import { GAZE_RULE } from '@/tracking/gazeCalibration';
 
@@ -52,5 +53,18 @@ describe('the eye-open test in pixel proportions (gaze-r3)', () => {
     lm[IRIS.left] = { x: lm[IRIS.left].x + 6 / 1280, y: lm[IRIS.left].y };
     lm[IRIS.right] = { x: lm[IRIS.right].x + 6 / 1280, y: lm[IRIS.right].y };
     expect(estimateGaze(lm, undefined, undefined, 0, 0, 16 / 9).h).toBeCloseTo(estimateGaze(lm).h, 12);
+  });
+
+  it('is given the frame\'s aspect by the tracker, the same one the eye-aspect ratio and the head pose get', () => {
+    // estimateGaze defaults to a square frame, so a call that leaves the aspect out is the gaze-r2 test
+    // again on a 16:9 mode, and every test above would still pass. The hook is where the frame is known.
+    const hook = readFileSync('src/tracking/useTracking.ts', 'utf8');
+    expect(hook).toMatch(/const aspect = v && v\.videoWidth > 0 && v\.videoHeight > 0 \? v\.videoWidth \/ v\.videoHeight : 1;/);
+    expect(hook).toMatch(/eyeEars\(lm, aspect\)/);
+    expect(hook).toMatch(/estimateHeadPose\(lm, pitchBaselineFracRef\.current, aspect\)/);
+    expect(hook).toMatch(/gazeFor\(lm, offAxis, aspect\)/);
+    const calls = [...hook.matchAll(/estimateGaze\(([^)]*)\)/g)].map((m) => m[1].split(',').map((a) => a.trim()));
+    expect(calls.length).toBeGreaterThan(0);
+    for (const args of calls) expect(args[5], `estimateGaze(${args.join(', ')})`).toBe('aspect');
   });
 });
