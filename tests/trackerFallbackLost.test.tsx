@@ -84,7 +84,8 @@ describe('when no face tracker can run', () => {
     expect(r.lostAt).not.toBeNull();
     expect(r.startError).toMatch(/No face tracker could run on this device: legacy failed on its first frames/);
     // No tracker measured the row, so none is named on it (it used to carry the last one that failed).
-    expect(r.row).toMatchObject({ camera_active: false, camera_inactive_reason: 'lost', tracker_backend: null });
+    expect(r.row).toMatchObject({ camera_active: false, camera_inactive_reason: 'lost' });
+    expect((r.row as { tracker_backend?: string | null } | undefined)?.tracker_backend ?? null).toBeNull();
   }, 20_000);
 
   it('control: a tracker that answered once and then stopped is lost too, through the stall watchdog', async () => {
