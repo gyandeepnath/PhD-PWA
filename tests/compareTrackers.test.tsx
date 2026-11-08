@@ -2,6 +2,9 @@
  * "Measure trackers" on camera setup (useTracking compareTrackers), driven through the real hook with
  * fake face trackers and no frame pump.
  *
+ * A backend that constructs and then fails on its first frame is closed, not left running for the rest
+ * of the sitting (audit 86 CAM-5).
+ *
  * Stopped by a rotation to portrait (audit 86 CAM-10): the trials so far were measured on a picture the
  * camera now delivers on its side, and the fastest of them used to be stored as this tablet's tracker for
  * every later sitting. A stopped comparison chooses, stores and records nothing, and the tracker that was
@@ -12,13 +15,18 @@ import { createElement, act } from 'react';
 import { createRoot } from 'react-dom/client';
 import 'fake-indexeddb/auto';
 
-const made = vi.hoisted(() => ({ list: [] as Array<{ backend: string; closed: boolean }>, saved: [] as unknown[] }));
+const made = vi.hoisted(() => ({ list: [] as Array<{ backend: string; closed: boolean }>, saved: [] as unknown[], gpuFails: false }));
 vi.mock('@/tracking/trackers', async (orig) => {
   const real = await orig<typeof import('@/tracking/trackers')>();
   const make = (backend: string) => {
     const rec = { backend, closed: false };
     made.list.push(rec);
-    return { backend, detect: () => null, close: () => { rec.closed = true; } };
+    return {
+      backend,
+      // gpuFails: the GPU delegate constructs, then throws on its first frame (an unusable WebGL context).
+      detect: () => { if (made.gpuFails && backend === 'tasks-gpu') throw new Error('GPU: reading activeTexture'); return null; },
+      close: () => { rec.closed = true; },
+    };
   };
   return {
     ...real,
@@ -63,7 +71,7 @@ async function running() {
   return { api, root };
 }
 
-beforeEach(() => { made.list.length = 0; made.saved.length = 0; });
+beforeEach(() => { made.list.length = 0; made.saved.length = 0; made.gpuFails = false; });
 
 describe('measuring the trackers', () => {
   it('run to its end, keeps and records the choice', async () => {
@@ -91,6 +99,22 @@ describe('measuring the trackers', () => {
     expect(after.tracker_trials ?? null).toBeNull();
     // The tracker running now is the one requested before the comparison, started again.
     expect(after.tracker_backend).toBe(before.tracker_requested);
+    act(() => root.unmount());
+  });
+
+  it('closes a tracker that was created but failed on its first frame (CAM-5)', async () => {
+    const { api, root } = await running();
+    made.gpuFails = true;
+    made.list.length = 0;
+    let trials: Array<{ backend: string; ok: boolean }> | null = null;
+    await act(async () => { trials = await api.current!.compareTrackers() as typeof trials; });
+    expect(trials!.find((t) => t.backend === 'tasks-gpu')).toMatchObject({ ok: false });
+    const gpu = made.list.filter((m) => m.backend === 'tasks-gpu');
+    expect(gpu.length).toBeGreaterThan(0);
+    expect(gpu.every((m) => m.closed)).toBe(true);
+    // Every tracker made during the comparison is closed, except the one left running.
+    const running_ = api.current!.pipelineInfo()!.tracker_backend;
+    expect(made.list.filter((m) => !m.closed).map((m) => m.backend)).toEqual([running_]);
     act(() => root.unmount());
   });
 });

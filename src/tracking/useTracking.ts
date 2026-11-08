@@ -1106,7 +1106,7 @@ export function useTracking(): TrackingApi {
         onProgress?.({ backend, index: i, total: TRACKER_BACKENDS.length });
         if (pipelineRef.current !== info) return null; // the camera stopped
         const t0 = now();
-        let tracker: FaceTracker;
+        let tracker: FaceTracker | null = null;
         try {
           // The one being measured runs ALONE: the previous tracker is closed first, so two models
           // never compete for the main thread inside one measurement.
@@ -1116,6 +1116,14 @@ export function useTracking(): TrackingApi {
           tracker = await createTracker(backend);
           if (video.readyState >= 2) await tracker.detect(video);
         } catch (err) {
+          /*
+           * A tracker that was created but failed on its first frame is closed here (audit 86 CAM-5). It
+           * was left open: a Face Landmarker with its WebGL context and wasm heap alive for the rest of
+           * the sitting, at every first-setup measurement and every "Measure trackers again" on a tablet
+           * whose GPU delegate constructs and then fails — the case the fallback chain exists for.
+           * startTracker (trackers.ts) already closed it in the same case.
+           */
+          try { tracker?.close(); } catch { /* closing what failed must not end the comparison */ }
           trials.push({ backend, ok: false, error: errorSummary(err), initMs: null,
             cameraFps: null, trackerFps: null, faceFps: null, processMsP50: null, processMsP95: null, faceShare: null, earNoise: null });
           continue;
