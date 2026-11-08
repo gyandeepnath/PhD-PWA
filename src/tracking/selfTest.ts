@@ -22,7 +22,7 @@
 import { pipelineLimit, type PipelineLimit } from './pipelineStats';
 import type { PipelineWindowFields } from '@/storage/types';
 import { CONFIG } from '@/experiment/config';
-import { FPS_GATE, fpsTier, type FpsTier } from './frameRateGate';
+import { FPS_GATE, fpsText, fpsTier, type FpsTier } from './frameRateGate';
 
 /**
  * The pass rule of Rounds 79-81, 'st-r2'; sittings before it were scored under 'st-r1', and from Round
@@ -189,7 +189,13 @@ export function fpsReason(
   floor: number = SELF_TEST.MIN_FPS,
 ): string {
   const size = p?.camera_setting_width && p?.camera_setting_height ? ` at ${p.camera_setting_width}×${p.camera_setting_height}` : '';
-  const face = `${faceFps == null ? 'no measurable' : Math.round(faceFps)} face frames per second, below ${floor}`;
+  /*
+   * The rate beside its floor is fpsText's (audit 86 CAM-1): Math.round put 14.6 on screen as "15 ... below
+   * 15". With no rate at all it is its own sentence (audit 86 MV-1), not "no measurable" in the number's slot.
+   */
+  const face = faceFps == null
+    ? `no face frames were measured, so the eye's sampling rate could not be judged (it needs ${floor} a second)`
+    : `${fpsText(faceFps)} face frames per second, below ${floor}`;
   switch (limit) {
     case 'camera':
       return `${face}: the CAMERA delivered only ${n0(p?.camera_fps_delivered)} frames per second${size}, and the tracker kept up with them `
@@ -221,7 +227,9 @@ export function fpsReason(
       return `${face}; this browser did not report how many frames the camera delivered, so camera and processor cannot be told apart — `
         + 'try more light on the face first, then close other apps and plug in the charger';
     default:
-      return `the camera ran at ${faceFps == null ? 'no measurable' : Math.round(faceFps)} frames per second, below ${floor} — close other apps and check the light`;
+      return faceFps == null
+        ? 'no frames reached the face tracker, so the frame rate could not be measured — check that the camera is running and nothing covers it'
+        : `the camera ran at ${fpsText(faceFps)} frames per second, below ${floor} — close other apps and check the light`;
   }
 }
 
@@ -315,7 +323,10 @@ export function scoreSelfTest(
   const reasons: string[] = [];
   const notes: string[] = [];
   if (coverage.facePresence == null || coverage.facePresence < SELF_TEST.MIN_FACE) {
-    reasons.push(`the face was in view only ${coverage.facePresence == null ? 'no' : Math.round(coverage.facePresence * 100) + '%'} of the time (needs ${Math.round(SELF_TEST.MIN_FACE * 100)}%) — check seating, distance and that nothing covers the camera`);
+    // No face share at all is its own sentence, not "only no of the time" (audit 86 MV-1).
+    reasons.push(coverage.facePresence == null
+      ? `the face was not seen at all (it needs to be in view ${Math.round(SELF_TEST.MIN_FACE * 100)}% of the time) — check that the camera is running, the seating and distance, and that nothing covers the camera`
+      : `the face was in view only ${Math.round(coverage.facePresence * 100)}% of the time (needs ${Math.round(SELF_TEST.MIN_FACE * 100)}%) — check seating, distance and that nothing covers the camera`);
   }
   const pipeline = coverage.pipeline ?? null;
   const rate = coverage.samplingFps;
@@ -338,7 +349,7 @@ export function scoreSelfTest(
   if (tier == null || tier === 'C') {
     reasons.push(fpsReason(rate, pipeline, limit));
   } else if (tier === 'B') {
-    notes.push(`Reduced frame rate: the eye was sampled ${Math.round(rate!)} times a second (${FPS_GATE.ADEQUATE} or more is adequate). `
+    notes.push(`Reduced frame rate: the eye was sampled ${fpsText(rate!)} times a second (${FPS_GATE.ADEQUATE} or more is adequate). `
       + 'The check passes and blinks are measured; a reading at this rate is kept and flagged "reduced".');
     const why = limitShort(limit, pipeline);
     if (why) notes.push(`Why: ${why}.`);

@@ -3,7 +3,7 @@ import type { LiveTrackingStats } from '@/tracking/useTracking';
 import { setMonitorOpen } from '@/lib/hiddenTime';
 import { UI_TEXT } from '@/lib/uiPalette';
 import { LiveFeed, EarTrace, PipelineReadout } from '@/components/LiveCamera';
-import { FPS_TIER_WORD, fpsTier } from '@/tracking/frameRateGate';
+import { FPS_TIER_WORD, fpsText, fpsTier } from '@/tracking/frameRateGate';
 import { MEASURE, recordingLabel, recordingShort } from '@/tracking/measurementSchedule';
 import { ScrollCue } from '@/components/ScrollCue';
 
@@ -373,7 +373,7 @@ export function ResearcherPanel(p: ResearcherPanelProps) {
         {/* The per-frame test behind the reading window's MEASURE.onScreen (on_screen_ratio). */}
         {row('On screen now', s?.onScreen == null ? '—' : s.onScreen ? 'yes' : 'no', 'researcher-on-screen')}
         {/* The frame-rate gate fps-g2 on the last reading (frameRateGate.ts): its rate and tier, amber below tier A. */}
-        {row(`${MEASURE.samplingRate.name} (last reading)`, <span data-testid="researcher-last-fps" style={{ color: s?.exposureFps != null && s.exposureFps < p.fpsFloor ? '#ffd27a' : undefined }}>{s?.exposureFps != null ? `${num(s.exposureFps)} a second · ${FPS_TIER_WORD[fpsTier(s.exposureFps)!].toLowerCase()}` : '—'}</span>)}
+        {row(`${MEASURE.samplingRate.name} (last reading)`, <span data-testid="researcher-last-fps" style={{ color: s?.exposureFps != null && s.exposureFps < p.fpsFloor ? '#ffd27a' : undefined }}>{s?.exposureFps != null ? `${fpsText(s.exposureFps)} a second · ${FPS_TIER_WORD[fpsTier(s.exposureFps)!].toLowerCase()}` : '—'}</span>)}
         {row(MEASURE.pictureBrightness.name, s?.luma != null ? `${s.luma}/255` : '—')}
       </div>
       <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.18)' }}>

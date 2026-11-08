@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { LiveTrackingStats } from '@/tracking/useTracking';
 import { blinkCuts } from '@/tracking/blinkCount';
-import { FPS_GATE, fpsTier } from '@/tracking/frameRateGate';
+import { FPS_GATE, fpsText, fpsTier } from '@/tracking/frameRateGate';
 import { TRACKER_LABEL } from '@/tracking/trackers';
 import { pipelineLimit } from '@/tracking/pipelineStats';
 import { MEASURE } from '@/tracking/measurementSchedule';
@@ -198,8 +198,8 @@ export function PipelineReadout({ stats, floor = FPS_GATE.ADEQUATE, compact = fa
   const tierText = tier === 'C' ? `too slow (under ${FPS_GATE.REDUCED})` : tier === 'B' ? `reduced (${FPS_GATE.REDUCED}–${FPS_GATE.ADEQUATE}: kept, flagged)` : null;
   const verdict = !s ? '—'
     : limit == null ? (s.faceFps == null ? '—'
-      : tier === 'A' ? `eye sampled ${r0(s.faceFps)} times a second — adequate (${FPS_GATE.ADEQUATE} or more)`
-        : `eye sampled ${r0(s.faceFps)} times a second — ${tierText}`)
+      : tier === 'A' ? `eye sampled ${fpsText(s.faceFps!)} times a second — adequate (${FPS_GATE.ADEQUATE} or more)`
+        : `eye sampled ${fpsText(s.faceFps!)} times a second — ${tierText}`)
       : `${tierText ? `${tierText[0].toUpperCase()}${tierText.slice(1)}. ` : ''}${
         limit === 'camera' ? `The CAMERA is the limit: it delivers ${r0(s.cameraFps)} frames a second — more light on the face`
           : limit === 'camera_and_tracker' ? `The camera AND the tracker are short: ${r0(s.cameraFps)} delivered, ${r0(s.trackerFps)} processed at ${r0(s.processMsP50)} ms — close other apps, charge the tablet, and more light`
@@ -216,7 +216,8 @@ export function PipelineReadout({ stats, floor = FPS_GATE.ADEQUATE, compact = fa
       {row('Camera delivers', <>{r0(s?.cameraFps)} fps{s?.captureWidth ? ` · ${s.captureWidth}×${s.captureHeight}` : ''}</>, 'diag-camera')}
       {row('Tracker processes', <>{r0(s?.trackerFps)} fps · {r0(s?.processMsP50)} ms{!compact && <> (95%: {r0(s?.processMsP95)} ms)</>}</>, 'diag-tracker')}
       {/* Frames with the face found, a second: the eye's sampling rate (MEASURE.samplingRate; per reading, sampling_fps_observed). */}
-      {row(MEASURE.samplingRate.name, <span style={{ color: s?.faceFps != null && s.faceFps < floor ? '#ffd27a' : undefined }}>{r0(s?.faceFps)} fps</span>, 'diag-face')}
+      {/* Beside its floor, so fpsText (audit 86 CAM-1): a rounded 19.6 read "20" in amber. */}
+      {row(MEASURE.samplingRate.name, <span style={{ color: s?.faceFps != null && s.faceFps < floor ? '#ffd27a' : undefined }}>{s?.faceFps != null && Number.isFinite(s.faceFps) ? fpsText(s.faceFps) : '—'} fps</span>, 'diag-face')}
       {!compact && row('Face width', s?.faceWidthPx != null ? `${s.faceWidthPx} px of the camera picture` : '—', 'diag-face-width')}
       {row('Tracker', s?.backend ? TRACKER_LABEL[s.backend] : '—', 'diag-backend')}
       <div data-testid="diag-verdict" data-tier={tier ?? ''} style={{ marginTop: 4, fontSize: 14, color: limit || (tier != null && tier !== 'A') ? '#ffd27a' : '#bfe8cf' }}>{verdict}</div>

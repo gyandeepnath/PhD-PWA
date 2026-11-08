@@ -146,15 +146,35 @@ describe('the frame rate is judged by the frame-rate gate fps-g2', () => {
   it('a reduced rate (tier B, 15 to 20) passes as "reduced", with a note — never a reason', () => {
     const r = scoreSelfTest(cues, blinks, { fps: 17, samplingFps: 17, facePresence: 0.99 });
     expect(r).toMatchObject({ pass: true, verdict: 'reduced', tier: 'B', reasons: [] });
-    expect(r.notes!.join(' ')).toMatch(/Reduced frame rate: the eye was sampled 17 times a second \(20 or more is adequate\)/);
+    expect(r.notes!.join(' ')).toMatch(/Reduced frame rate: the eye was sampled 17\.0 times a second \(20 or more is adequate\)/);
     expect(r.notes!.join(' ')).toMatch(/flagged "reduced"/);
   });
 
   it('under 15 (tier C), or no rate at all, fails', () => {
     const slow = scoreSelfTest(cues, blinks, { fps: 12, samplingFps: 12, facePresence: 0.99 });
     expect(slow).toMatchObject({ pass: false, verdict: 'failed', tier: 'C' });
-    expect(slow.reasons.join(' ')).toMatch(/12 frames per second, below 15/);
+    expect(slow.reasons.join(' ')).toMatch(/12\.0 frames per second, below 15/);
     expect(scoreSelfTest(cues, blinks, { fps: null, samplingFps: null, facePresence: 0.99 })).toMatchObject({ pass: false, tier: null });
+  });
+
+  // A rate just under a floor is said to be under it (audit 86 CAM-1): "15 ... below 15" read as a contradiction.
+  it('never rounds a rate onto the floor it missed', () => {
+    expect(scoreSelfTest(cues, blinks, { fps: 14.6, samplingFps: 14.6, facePresence: 0.99 }).reasons.join(' ')).toMatch(/14\.6 frames per second, below 15/);
+    expect(scoreSelfTest(cues, blinks, { fps: 14.96, samplingFps: 14.96, facePresence: 0.99 }).reasons.join(' ')).toMatch(/14\.96 frames per second, below 15/);
+    expect(scoreSelfTest(cues, blinks, { fps: 19.6, samplingFps: 19.6, facePresence: 0.99 }).notes!.join(' ')).toMatch(/sampled 19\.6 times a second \(20 or more is adequate\)/);
+  });
+
+  /*
+   * No face share and no rate at all — the camera stopped, or no tracker ran — are sentences of their own
+   * (audit 86 MV-1). The words "no" and "no measurable" were put into the number's slot: "the face was in
+   * view only no of the time", "the camera ran at no measurable frames per second, below 15".
+   */
+  it('says plainly when nothing was seen, rather than putting "no" where a number goes', () => {
+    const none = scoreSelfTest(cues, [], { fps: null, samplingFps: null, facePresence: null });
+    const text = none.reasons.join(' | ');
+    expect(text).toMatch(/the face was not seen at all \(it needs to be in view 90% of the time\)/);
+    expect(text).toMatch(/no face frames were measured, so the eye's sampling rate could not be judged \(it needs 15 a second\)|no frames reached the face tracker/);
+    expect(text).not.toMatch(/only no |no measurable|at no /);
   });
 
   it('its floors are the gate\'s: pass from the reduced floor, "working" from the adequate one', () => {
@@ -306,7 +326,7 @@ describe('a low frame rate says which stage was short', () => {
     const r = at(18, { camera_fps_delivered: 18, tracker_fps: 18 });
     expect(r).toMatchObject({ pass: true, verdict: 'reduced', limit: 'camera', reasons: [] });
     expect(r.notes).toEqual([
-      expect.stringMatching(/^Reduced frame rate: the eye was sampled 18 times a second/),
+      expect.stringMatching(/^Reduced frame rate: the eye was sampled 18\.0 times a second/),
       'Why: the camera delivered only 18 frames a second — more light on the face.',
     ]);
     expect(at(18, { camera_fps_delivered: 30, tracker_fps: 18 }).notes![1]).toMatch(/the tracker processed only 18 of the camera's 30 frames a second/);

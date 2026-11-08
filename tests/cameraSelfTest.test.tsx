@@ -75,7 +75,7 @@ describe('the camera self-test screen', () => {
     expect(m.q('selftest-attempt')!.textContent).toBe('Attempt 1');
     expect(m.q('selftest-crit-blinks')!.textContent).toMatch(/Blinks seen: 5 of 5 flashes \(needs 4\)/);
     expect(m.q('selftest-crit-face')!.textContent).toMatch(/Face in view: 97% of the time \(needs 90%\)/);
-    expect(m.q('selftest-crit-rate')!.textContent).toMatch(/24 times a second while the face was seen — adequate \(20 or more\)/);
+    expect(m.q('selftest-crit-rate')!.textContent).toMatch(/24\.0 times a second while the face was seen — adequate \(20 or more\)/);
     expect(m.q('selftest-crit-rate')!.dataset.ok).toBe('true');
     const chips = m.q('selftest-cues')!.querySelectorAll('[data-seen]');
     expect(chips.length).toBe(5);
@@ -192,10 +192,22 @@ describe('the result screen\'s words and trace', () => {
   });
 
   it('states the rate with its tier and the floor that applies', () => {
-    expect(rateLine(24.2, 'A')).toMatch(/24 times a second .* adequate \(20 or more\)/);
+    expect(rateLine(24.2, 'A')).toMatch(/24\.2 times a second .* adequate \(20 or more\)/);
     expect(rateLine(17, 'B')).toMatch(/reduced \(15 to 20\): passes, flagged/);
     expect(rateLine(12, 'C')).toMatch(/too slow \(needs 15\)/);
     expect(rateLine(null, null)).toMatch(/no rate could be measured/);
+  });
+
+  /*
+   * The rate beside its tier is never rounded onto the floor it missed (audit 86 CAM-1). Math.round gave
+   * "Eye sampled 20 times a second — reduced (15 to 20)" for 19.6 and "15 ... too slow (needs 15)" for
+   * 14.6; fpsText gives one decimal, or two where one would round onto the floor.
+   */
+  it('shows a rate under a floor as under it, never rounded onto it', () => {
+    expect(rateLine(19.6, 'B')).toBe('Eye sampled 19.6 times a second — reduced (15 to 20): passes, flagged');
+    expect(rateLine(14.6, 'C')).toBe('Eye sampled 14.6 times a second — too slow (needs 15)');
+    expect(rateLine(19.96, 'B')).toMatch(/^Eye sampled 19\.96 times a second/);
+    expect(rateLine(14.96, 'C')).toMatch(/^Eye sampled 14\.96 times a second/);
   });
 
   it('draws openness as a fraction of the baseline, and breaks the line where the face was lost', () => {

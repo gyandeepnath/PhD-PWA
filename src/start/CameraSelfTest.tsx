@@ -4,7 +4,7 @@ import { CONFIG, isE2ETimingActive } from '@/experiment/config';
 import {
   SELF_TEST, scoreSelfTest, minHits, attemptSummary, cueWindow, type SelfTestResult, type SelfTestAttemptSummary,
 } from '@/tracking/selfTest';
-import { FPS_GATE } from '@/tracking/frameRateGate';
+import { FPS_GATE, fpsText } from '@/tracking/frameRateGate';
 import { EAR_TIERS, MIN_GAP_MS } from '@/tracking/blink';
 import type { SelfTestObservation } from '@/tracking/useTracking';
 import { TRACKER_LABEL, type TrackerBackend } from '@/tracking/trackers';
@@ -344,7 +344,8 @@ export function lagText(lagMs: number): string {
 /** The rate criterion in words: the rate, its tier, and the floor that applies. */
 export function rateLine(fps: number | null, tier: 'A' | 'B' | 'C' | null): string {
   if (fps == null || tier == null) return 'Eye sampled: no rate could be measured (no face seen for long enough)';
-  const r = Math.round(fps);
+  // fpsText, not Math.round (audit 86 CAM-1): 19.6 is tier B, and "20 ... reduced (15 to 20)" contradicted itself.
+  const r = fpsText(fps);
   if (tier === 'A') return `Eye sampled ${r} times a second while the face was seen — adequate (${FPS_GATE.ADEQUATE} or more)`;
   if (tier === 'B') return `Eye sampled ${r} times a second — reduced (${FPS_GATE.REDUCED} to ${FPS_GATE.ADEQUATE}): passes, flagged`;
   return `Eye sampled ${r} times a second — too slow (needs ${FPS_GATE.REDUCED})`;

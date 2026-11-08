@@ -335,8 +335,11 @@ describe('camera state in words', () => {
         m.unmount();
         return out;
       };
-      expect(verdictAt(31)).toEqual({ text: 'eye sampled 31 times a second — adequate (20 or more)', tier: 'A' });
-      expect(verdictAt(24)).toEqual({ text: 'eye sampled 24 times a second — adequate (20 or more)', tier: 'A' });
+      expect(verdictAt(31)).toEqual({ text: 'eye sampled 31.0 times a second — adequate (20 or more)', tier: 'A' });
+      expect(verdictAt(24)).toEqual({ text: 'eye sampled 24.0 times a second — adequate (20 or more)', tier: 'A' });
+      // A rate just under a floor is shown under it (audit 86 CAM-1): fpsText, not Math.round.
+      expect(verdictAt(19.96).text).toMatch(/^Reduced/);
+      expect(verdictAt(20.04)).toEqual({ text: 'eye sampled 20.0 times a second — adequate (20 or more)', tier: 'A' });
       // Below 20 the stage that is short is named, after the tier.
       const reduced = verdictAt(18);
       expect(reduced.tier).toBe('B');
@@ -350,9 +353,12 @@ describe('camera state in words', () => {
       const m = mount({ getStream: () => stream, fpsFloor: 20 });
       act(() => { m.q('researcher-panel-collapsed')!.click(); });
       m.push(stats({ exposureFps: 23.6 }));
-      expect(m.q('researcher-last-fps')?.textContent).toBe('24 a second · adequate');
+      expect(m.q('researcher-last-fps')?.textContent).toBe('23.6 a second · adequate');
       m.push(stats({ exposureFps: 17.2 }));
-      expect(m.q('researcher-last-fps')?.textContent).toBe('17 a second · reduced');
+      expect(m.q('researcher-last-fps')?.textContent).toBe('17.2 a second · reduced');
+      // Never rounded onto the floor it is under (audit 86 CAM-1): 19.96 is reduced, not "20".
+      m.push(stats({ exposureFps: 19.96 }));
+      expect(m.q('researcher-last-fps')?.textContent).toBe('19.96 a second · reduced');
       expect(m.q('researcher-last-fps')?.getAttribute('style')).toMatch(/color/);
       m.unmount();
     });
