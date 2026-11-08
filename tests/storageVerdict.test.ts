@@ -36,7 +36,7 @@ describe('the storage check in 01_session_info.csv', () => {
     const b = buildFixtureBundle();
     const s = { ...b.session } as Record<string, unknown>;
     delete s.storage_verdict; delete s.storage_persisted; delete s.storage_free_mb;
-    b.session = s as typeof b.session;
+    b.session = s as unknown as typeof b.session;
     const get = cells(b);
     expect([get('storage_verdict'), get('storage_persisted'), get('storage_free_mb')]).toEqual(['', '', '']);
   });
