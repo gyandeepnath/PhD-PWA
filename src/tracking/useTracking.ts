@@ -847,6 +847,21 @@ export function useTracking(): TrackingApi {
     if (pipelineRef.current) pipelineRef.current.tracker_backend = tracker.backend;
   }, []);
 
+  /*
+   * NO FACE TRACKER LEFT TO RUN IS A CAMERA THAT MEASURES NOTHING (audit 86 CAM-7). The end of the
+   * fallback chain used to do nothing — "the stall watchdog reports the camera lost" — but the watchdog
+   * arms only once a result has arrived (cameraLiveness.ts), and holdWatchdog had just disarmed it, so it
+   * never did. The camera stayed 'active' and every row was written camera_active TRUE, with no samples,
+   * no reason and the last failed tracker's name. It is now what it is: the camera is lost (the notice,
+   * the pause, rows with camera_inactive_reason 'lost'), and startError says why. Not while the trackers
+   * are being compared at camera setup: that comparison starts a tracker of its own when it ends.
+   */
+  const noTrackerLeft = (info: CameraPipelineRecord, why: string) => {
+    if (pipelineRef.current !== info || comparingRef.current) return;
+    setStartError(`No face tracker could run on this device: ${why}`);
+    markLost();
+  };
+
   /** The tracker failed on its first frames: record why and start the next backend in its chain. */
   fallBackRef.current = (reason: string) => {
     const failed = trackerRef.current;
@@ -857,13 +872,14 @@ export function useTracking(): TrackingApi {
     failed.close();
     info.tracker_failures.push({ backend: failed.backend, error: `failed on its first frames: ${reason}` });
     const next = TRACKER_BACKENDS[TRACKER_BACKENDS.indexOf(failed.backend) + 1];
-    if (!next) return; // nothing left: no results, and the stall watchdog reports the camera lost
+    if (!next) { noTrackerLeft(info, `${failed.backend} failed on its first frames (${reason})`); return; }
     void startTracker(next, null).then(({ tracker, failures }) => {
       if (pipelineRef.current !== info) { tracker.close(); return; }
       info.tracker_failures.push(...failures);
       installTracker(tracker);
     }).catch((err) => {
       info.tracker_failures.push({ backend: next, error: errorSummary(err) });
+      noTrackerLeft(info, errorSummary(err));
     });
   };
 
