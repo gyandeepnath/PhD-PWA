@@ -77,6 +77,7 @@ import { CameraSelfTest } from '@/start/CameraSelfTest';
 import { FPS_GATE } from '@/tracking/frameRateGate';
 import { backTarget, operatorExitFor, EXIT_LABEL } from './navigation';
 import { displayStepLabel } from './taskSteps';
+import { adaptationPrecededBy, greyFieldMaximum, type AdaptationPrecededBy } from './adaptationContext';
 
 interface ExperimentProps {
   /** When set, rehydrate and resume an in-progress session at the given condition index. */
@@ -259,6 +260,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   /** The minimum before Continue was offered, and who ended the field. See AdaptationScreen. */
   const adaptationMin = useRef(0);
   const adaptationEndedBy = useRef<'participant' | 'timer' | null>(null);
+  /**
+   * Which screen the grey field followed: the previous display's reaction task, a break, or a set-up or
+   * resume screen (adaptationContext.ts; audit 86 P8). The stage before the current one is tracked for it.
+   */
+  const adaptationAfter = useRef<AdaptationPrecededBy | null>(null);
+  const stageBefore = useRef<string | null>(null);
+  const stageNowRef = useRef<string | null>(null);
 
   /**
    * The annotation clip in progress. `finish(true)` when its reading run completes, `finish(false)`
@@ -304,6 +312,13 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
   useEffect(() => {
     if (machine.stage === 'REACTION_TIME') setRtPhase('card');
   }, [machine]);
+
+  // The stage shown before this one, for what a grey field followed (adaptationContext.ts).
+  useEffect(() => {
+    if (stageNowRef.current === machine.stage) return;
+    stageBefore.current = stageNowRef.current;
+    stageNowRef.current = machine.stage;
+  }, [machine.stage]);
 
   /**
    * A measured procedure is running on a setup screen — the colour-vision plates, the calibration
@@ -1209,10 +1224,12 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
     const adaptationPlan = adaptationPlanned.current;
     const adaptationMinimum = adaptationMin.current;
     const adaptationEnd = adaptationEndedBy.current;
+    const adaptationFollowed = adaptationAfter.current;
     adaptationDelivered.current = 0;
     adaptationPlanned.current = 0;
     adaptationMin.current = 0;
     adaptationEndedBy.current = null;
+    adaptationAfter.current = null;
     /*
      * A redo must leave a trace.
      *
@@ -1240,6 +1257,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       started_at: Date.now(), completed_at: null, condition_duration_sec: null,
       adaptation_ms_before: adaptationBefore, adaptation_ms_planned: adaptationPlan,
       adaptation_ms_min: adaptationMinimum, adaptation_ended_by: adaptationEnd,
+      adaptation_preceded_by: adaptationFollowed,
       reading_time_ms: null,
       /*
        * Counted from the PASS, not the illumination block.
@@ -2169,9 +2187,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       // so it is never a "switch", and the next step is condition 0.
       const prev = machine.stepIndex >= 0 ? plan[machine.stepIndex] : undefined;
       const nextStep = plan[machine.stepIndex + 1];
-      const switched = prev && nextStep && CONDITIONS[prev.conditionIndex].polarity !== CONDITIONS[nextStep.conditionIndex].polarity;
-      // The MAXIMUM; from CONFIG.ADAPTATION_MIN_MS the participant may continue. See config.ts.
-      const dur = switched ? CONFIG.ADAPTATION_SWITCH_POLARITY_MS : CONFIG.ADAPTATION_SAME_POLARITY_MS;
+      // The MAXIMUM; from CONFIG.ADAPTATION_MIN_MS the participant may continue. See config.ts. Keyed to
+      // the previous display, not to a break or set-up screen in between (adaptationContext.ts, audit 86 P8).
+      const { maxMs: dur } = greyFieldMaximum(prev && CONDITIONS[prev.conditionIndex].polarity, nextStep && CONDITIONS[nextStep.conditionIndex].polarity);
       const minDur = Math.min(CONFIG.ADAPTATION_MIN_MS, dur);
       const label = nextStep ? `Next: ${CONDITIONS[nextStep.conditionIndex].polarity === 'positive' ? 'Light' : 'Dark'} background` : '';
       view = <AdaptationScreen minMs={minDur} maxMs={dur} nextLabel={label} onDone={latched('adaptation', (delivered) => {
@@ -2182,6 +2200,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
         adaptationPlanned.current = dur;
         adaptationMin.current = minDur;
         adaptationEndedBy.current = delivered.endedBy;
+        adaptationAfter.current = adaptationPrecededBy(stageBefore.current);
         advance();
       })} />;
       break;

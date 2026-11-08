@@ -61,7 +61,7 @@ export const ANALYSIS_LONG_COLUMNS = [
   'polarity_c', 'illumination_c',
   // --- position and order, which carry fatigue and practice -------------------------------
   'session_position', 'global_position', 'position_c',
-  'illumination_block', 'illumination_order_first', 'adaptation_ms_before', 'adaptation_ended_by', 'polarity_switched',
+  'illumination_block', 'illumination_order_first', 'adaptation_ms_before', 'adaptation_ended_by', 'polarity_switched', 'adaptation_preceded_by',
   'predecessor_condition_label',
   'passage_id', 'passage_repeat_number',
   // --- primary outcome, as counts and as a proportion -------------------------------------
@@ -305,6 +305,8 @@ function buildLongRows(contexts: RowContext[]): Record<string, unknown>[] {
          * different absences cannot share one encoding silently; here they share it loudly.
          */
         polarity_switched: prev ? prev.polarity !== sum.polarity : null,
+        // What the grey field followed: a display's reaction task, a break or a set-up screen (audit 86 P8).
+        adaptation_preceded_by: c?.adaptation_preceded_by ?? null,
         /*
          * The condition that immediately preceded this one IN TIME, or empty when nothing did.
          *

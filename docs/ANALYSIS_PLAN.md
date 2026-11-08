@@ -461,7 +461,9 @@ is not fitted: it needs a package (`survival`) that is not in the install line o
   Round 87 — see `attempt_rule_version`, §5); without interrupted runs
   (`condition_interrupted`); serial position as a factor rather than a line; and first-order carryover —
   `polarity_switched` (the run before, in the same sitting, had the other polarity) added, tested by
-  likelihood ratio against the primary refitted on the runs that have a predecessor.
+  likelihood ratio against the primary refitted on the runs that have a predecessor. It is the previous
+  RUN's polarity, a carryover code, not the adaptation state the eye brought to the grey field: after a
+  break (a light screen) the eye is light-adapted whatever the previous run was (audit 86 P8; §5).
 - **Moderation** (Objective 3; synopsis §3.9, "condition-by-moderator interactions"): each recorded
   moderator — `daily_screen_hours` (standardised), `lighting_habit`, `device_familiarity` — with its
   polarity interaction, one at a time, by likelihood ratio against the primary plus the moderator's
@@ -860,6 +862,23 @@ which rule a condition's block ran under: `rw-v2` at the deadline, `rw-v1` befor
 differs between them; response times, accuracy, every summary and every model are the same, and no
 template reads `false_start`. On `rw-v1` rows a false start may be such a late touch and cannot be told
 apart.
+
+**What the grey field followed, and an open decision (Round 92).** The grey field's maximum (60 s, 120 s
+"when polarity switches") and `polarity_switched` are both keyed to the previous display's polarity. A break
+— a light screen the participant may sit at for minutes — and the set-up screens before the first display
+are not looked at, although after them the eye is light-adapted whatever the previous display was: over the
+ten Williams rows, 20 of the 40 post-break fields carry the opposite of the adaptation step the eye makes
+(a dark display after a break gets 60 s and FALSE; a light display after a break that followed a dark one
+gets 120 s and TRUE), and the 5 rows that open on a dark display get 60 s (audit 86 P8). For
+`polarity_switched` as defined above — a first-order carryover code — the present rule is right, and the
+protocol does not say which reference the field's maximum means, so the behaviour is unchanged. From Round
+92 each condition records the screen its grey field followed, `adaptation_preceded_by` (02_conditions.csv,
+analysis_long.csv; its values reaction_task, break, setup_or_resume), so an adaptation-state switch — a dark
+display after a light screen, or `polarity_switched` after a display — can be derived and used in place of,
+or beside, `polarity_switched` in the carryover sensitivity. Whether the grey field's maximum should follow
+the screen the eye last saw, and which code the carryover sensitivity should use, are the investigator's
+decisions (not pre-specified here). Rows before Round 92 have no `adaptation_preceded_by`; for an
+uninterrupted sitting it is position 0 → set-up, every second position → break, the rest → reaction task.
 
 **The reaction onset is the frame's own timestamp (Round 92).** Every reaction time is the touch's own
 timestamp minus the dot's onset. Up to Round 91 the onset was the clock read inside the second

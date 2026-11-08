@@ -665,6 +665,14 @@ export interface ConditionRecord {
    */
   rt_window_version?: string;
   /**
+   * The screen in front of the participant just before this condition's grey field
+   * (experiment/adaptationContext.ts; Round 92, audit 86 P8): 'reaction_task' (the previous display's own
+   * background), 'break' or 'setup_or_resume' (light screens). Recorded so an adaptation-state rule can
+   * be applied in analysis; the field's maximum still follows the previous display's polarity. null when
+   * no grey field was delivered; absent on rows recorded before it.
+   */
+  adaptation_preceded_by?: 'reaction_task' | 'break' | 'setup_or_resume' | null;
+  /**
    * When the reaction block's dot onset was taken (lib/rtOnset.ts RT_TIMING_VERSION): 'rt-t2' from Round
    * 92, the begin time of the frame after the one that painted the dot, from the frame's own timestamp.
    * Absent on rows recorded before it, which the export names 'rt-t1': the clock read in the stamping

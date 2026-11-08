@@ -120,6 +120,14 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                              before the next condition — after the break, never before it. (The
                              break is a light screen; placed after the grey field it left every
                              post-break condition light-adapted, at 4 of 9 transitions.)
+                             "Polarity switches" means this display's polarity differs from the
+                             PREVIOUS DISPLAY's; a break or the set-up screens in between are not
+                             looked at, so after a break a dark display gets 60 s and a light one
+                             after a dark display 120 s (20 of the 40 post-break fields over the ten
+                             Williams rows), and a dark first display 60 s. Each condition records
+                             the screen its field followed (adaptation_preceded_by). Whether the
+                             maximum should follow the screen the eye last saw is the
+                             investigator's open decision (AUDIT_FINDINGS Round 92, audit 86 P8).
   → CVSQ_END            validated CVS-Q again (Δ from baseline = primary validated fatigue outcome)
   → NASA_TLX            NASA-TLX, six raw subscales, workload over the whole session; the session
                         is marked complete when it is submitted

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { stageNow, handleStage, startNewExperiment, dbCounts } from './helpers';
+import { stageNow, handleStage, startNewExperiment, dbCounts, dbAll } from './helpers';
+import { CONFIG } from '../src/experiment/config';
 import { N_CONDITIONS } from '../src/experiment/conditions';
 import { QUESTIONS_PER_PASSAGE } from '../src/experiment/passages';
 
@@ -54,5 +55,16 @@ test('full experiment run writes data and reaches the dashboard', async ({ page 
   // terminate just as happily after one item, so without this assertion a regression that
   // administered or persisted only the first item would leave the whole suite green.
   expect(c.comprehension_results).toBe(N_CONDITIONS * QUESTIONS_PER_PASSAGE);
+
+  /*
+   * Each grey field says which screen it followed (audit 86 P8): the set-up screens before the first
+   * display, a break after every BREAK_EVERY_N_CONDITIONS displays, the previous display's reaction task
+   * otherwise. The field's maximum still follows the previous display (adaptation_ms_planned).
+   */
+  const rows = (await dbAll<{ session_position: number; adaptation_preceded_by?: string | null }>(page, 'conditions'))
+    .sort((a, b) => a.session_position - b.session_position);
+  const every = CONFIG.BREAK_EVERY_N_CONDITIONS;
+  expect(rows.map((r) => r.adaptation_preceded_by)).toEqual(rows.map((r) => (
+    r.session_position === 0 ? 'setup_or_resume' : r.session_position % every === 0 ? 'break' : 'reaction_task')));
   expect(errors).toEqual([]);
 });
