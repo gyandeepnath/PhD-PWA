@@ -9268,9 +9268,9 @@ state moves nothing. For that, the reasons for "NOT installed" are a fixed list 
 browser's own error text, which varies, goes to the console instead of the screen. **Tests.**
 `e2e/offlineCopySteady.spec.ts` measures the line and the main button (Enter on the landing page, New
 Session on the session manager) while the line says "checking" and again after "NOT installed": it fails
-with the room not kept (the line moved and grew). `tests/offlineCopy.test.tsx` checks that every state and reason is among the
-wordings room is kept for, and that a refusal's own words stay off the screen; each fails with its half
-reverted. Pre-flight uses the same component and was not measured separately.
+with the room not kept (the line moved and grew). `tests/offlineCopy.test.tsx` checks that every state
+and reason is among the wordings room is kept for, and that a refusal's own words stay off the screen; each
+fails with its half reverted. Pre-flight uses the same component and was not measured separately.
 
 ### 8. MISSED-1 — already fixed
 
