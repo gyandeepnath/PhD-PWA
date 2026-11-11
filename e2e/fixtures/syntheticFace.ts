@@ -117,30 +117,32 @@ function toI420(rgb: Uint8ClampedArray): Buffer {
 /**
  * Chromium's launch options with the drawn face as its fake camera: `test.use({ launchOptions:
  * faceCameraLaunchOptions() })` in a spec that needs the tracker to find a face. The same flags and the
- * same pre-installed Chromium as playwright.config.ts, with the face file added.
+ * same pre-installed Chromium as playwright.config.ts, with the face file added. `fps` is the rate the
+ * fake camera delivers (Chromium plays the file at its header's rate): 30, or a slow camera — a rate
+ * under the gate's 15 — for a spec that needs the camera to be the stage that is short.
  */
-export function faceCameraLaunchOptions(): { args: string[]; executablePath?: string } {
+export function faceCameraLaunchOptions(opts: { fps?: number } = {}): { args: string[]; executablePath?: string } {
   const chrome = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', process.env.CHROME_PATH ?? ''].find((p) => p && existsSync(p));
   return {
-    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-video-capture=${syntheticFaceY4m()}`],
+    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-video-capture=${syntheticFaceY4m(opts.fps ?? 30)}`],
     ...(chrome ? { executablePath: chrome } : {}),
   };
 }
 
 /**
  * The face's y4m path, written on first use. In the system's temporary folder, not test-results/,
- * which Playwright empties at the start of a run; the name carries a version, so a changed drawing
- * is written afresh.
+ * which Playwright empties at the start of a run; the name carries a version (and the rate, when it is
+ * not 30), so a changed drawing is written afresh.
  */
-export function syntheticFaceY4m(): string {
-  const file = join(tmpdir(), 'visulab-e2e', 'synthetic-face-v1.y4m');
+export function syntheticFaceY4m(fps = 30): string {
+  const file = join(tmpdir(), 'visulab-e2e', fps === 30 ? 'synthetic-face-v1.y4m' : `synthetic-face-v1-${fps}fps.y4m`);
   if (!existsSync(file)) {
     mkdirSync(dirname(file), { recursive: true });
     const frame = toI420(drawFace());
-    const header = Buffer.from(`YUV4MPEG2 W${W} H${H} F30:1 Ip A1:1 C420jpeg\n`, 'ascii');
+    const header = Buffer.from(`YUV4MPEG2 W${W} H${H} F${fps}:1 Ip A1:1 C420jpeg\n`, 'ascii');
     const parts: Buffer[] = [header];
     // A second of identical frames: Chromium loops the file, and a one-frame file is read as a still.
-    for (let f = 0; f < 30; f++) parts.push(Buffer.from('FRAME\n', 'ascii'), frame);
+    for (let f = 0; f < fps; f++) parts.push(Buffer.from('FRAME\n', 'ascii'), frame);
     writeFileSync(file, Buffer.concat(parts));
   }
   return file;

@@ -213,9 +213,12 @@ export function fpsReason(
   /*
    * The rate beside its floor is fpsText's (audit 86 CAM-1): Math.round put 14.6 on screen as "15 ... below
    * 15". With no rate at all it is its own sentence (audit 86 MV-1), not "no measurable" in the number's slot.
+   * "No rate" is fewer than two face frames OR under a second of face seen (samplingFpsObserved), so the
+   * sentence does not say no face frame was measured (Round 93: a check that saw the face in ten frames
+   * over 0.9 s said "no face frames were measured").
    */
   const face = faceFps == null
-    ? `no face frames were measured, so the eye's sampling rate could not be judged (it needs ${floor} a second)`
+    ? `the eye's sampling rate could not be judged: the face was found in too few frames to measure it (it needs ${floor} a second)`
     : `${fpsText(faceFps)} face frames per second, below ${floor}`;
   switch (limit) {
     case 'camera':

@@ -51,7 +51,10 @@ test('after a calibration that fitted a baseline the camera check is run, and no
   expect(s.camera_selftest_skipped ?? null).toBeNull();
 });
 
-test('the self-test result shows the pipeline and names the stage that was short', async ({ page }) => {
+// What the result shows when the rate is not short (the drawn face at 30 a second): the pipeline line,
+// the verdict, and the attempt's record. Naming the short stage on screen is cameraShortStage.spec.ts's,
+// with a camera slow enough to be short (Round 93, review R5).
+test('the self-test result shows the pipeline, and the attempt\'s blinks and trace are kept', async ({ page }) => {
   test.setTimeout(300_000);
   await toCameraCheck(page);
   await page.getByTestId('selftest-start').click();

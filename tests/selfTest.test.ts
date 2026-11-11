@@ -173,7 +173,12 @@ describe('the frame rate is judged by the frame-rate gate fps-g2', () => {
     const none = scoreSelfTest(cues, [], { fps: null, samplingFps: null, facePresence: null });
     const text = none.reasons.join(' | ');
     expect(text).toMatch(/the face was not seen at all \(it needs to be in view 90% of the time\)/);
-    expect(text).toMatch(/no face frames were measured, so the eye's sampling rate could not be judged \(it needs 15 a second\)|no frames reached the face tracker/);
+    expect(text).toMatch(/the eye's sampling rate could not be judged: the face was found in too few frames to measure it \(it needs 15 a second\)|no frames reached the face tracker/);
+    // With a pipeline measured, the no-rate sentence is the one used, and it claims no count of frames.
+    const short = scoreSelfTest(cues, [], { fps: 9.9, samplingFps: null, facePresence: 1, pipeline: {
+      camera_fps_delivered: 10, tracker_fps: 10, process_ms_p50: 20, process_ms_p95: 28, frame_count_source: 'presented-frames' } });
+    expect(short.reasons.join(' ')).toMatch(/^the eye's sampling rate could not be judged: the face was found in too few frames to measure it \(it needs 15 a second\): the CAMERA delivered only 10 frames per second/);
+    expect(short.reasons.join(' ')).not.toMatch(/no face frames were measured/);
     expect(text).not.toMatch(/only no |no measurable|at no /);
   });
 
