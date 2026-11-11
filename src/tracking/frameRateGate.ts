@@ -118,13 +118,40 @@ export function fpsTier(fps: number | null | undefined): FpsTier | null {
 }
 
 /**
+ * `x` written with the fewest decimals, from `fromDigits` up to two, that keep it on its own side of every
+ * floor in `floors`; a value that two decimals would still round up onto a floor (14.996) is cut, not
+ * rounded (14.99). One rule for both formatters below.
+ */
+function keepingSide(x: number, floors: readonly number[], fromDigits: number): string {
+  const side = (v: number) => floors.map((f) => (v >= f ? 1 : 0)).join('');
+  for (let d = fromDigits; d <= 2; d++) {
+    const s = x.toFixed(d);
+    if (side(Number(s)) === side(x)) return s;
+  }
+  return (Math.floor(x * 100) / 100).toFixed(2);
+}
+
+/**
  * A rate for the screen: one decimal, or the stored two when one decimal would round it onto a tier floor
  * it is below — 19.96 is tier B, and "20.0" would read as adequate (Round 83). Used wherever a rate is
  * shown beside its tier.
  */
 export function fpsText(fps: number): string {
-  const one = fps.toFixed(1);
-  return fpsTier(Number(one)) === fpsTier(fps) ? one : fps.toFixed(2);
+  if (!Number.isFinite(fps)) return fps.toFixed(1);
+  return keepingSide(fps, [FPS_GATE.REDUCED, FPS_GATE.ADEQUATE], 1);
+}
+
+/**
+ * A STAGE's rate — what the camera delivers, what the tracker processes — for a sentence that names that
+ * stage as the reason the eye's rate missed a floor. A whole number, as those lines have always given it,
+ * unless rounding would carry it onto a floor it is under: the gate's two (15, 20) and `floor`, the one
+ * the screen judges against. Then one decimal, or two (Round 93, review R2): Math.round made a camera at
+ * 14.7 "the CAMERA delivered only 15 frames per second" beside "below 15", and one at 19.8 "only 20
+ * frames a second" as the reason for a reduced rate. '—' when there is no rate.
+ */
+export function stageFpsText(fps: number | null | undefined, floor?: number): string {
+  if (fps == null || !Number.isFinite(fps)) return '—';
+  return keepingSide(fps, floor == null ? [FPS_GATE.REDUCED, FPS_GATE.ADEQUATE] : [FPS_GATE.REDUCED, FPS_GATE.ADEQUATE, floor], 0);
 }
 
 /** Median of the finite values; null when there are none. */
@@ -181,14 +208,4 @@ export function gateParticipant(rows: Array<{ cameraActive: boolean; sampleCount
 export function rowGateVersion(e: { camera_active: boolean; fps_gate_version?: string | null }): string | null {
   if (!e.camera_active) return null;
   return e.fps_gate_version || FPS_GATE_V1;
-}
-
-/** One line for an operator: the rate, its tier in words, and the floor it is judged against. */
-export function fpsTierSentence(fps: number | null | undefined): string {
-  const t = fpsTier(fps);
-  if (t == null || fps == null) return 'no frame rate yet';
-  const r = Math.round(fps);
-  if (t === 'A') return `${r} a second — adequate (${FPS_GATE.ADEQUATE} or more)`;
-  if (t === 'B') return `${r} a second — reduced (${FPS_GATE.REDUCED} to ${FPS_GATE.ADEQUATE}): kept, flagged`;
-  return `${r} a second — too slow (under ${FPS_GATE.REDUCED}): blink data from it are exploratory only`;
 }

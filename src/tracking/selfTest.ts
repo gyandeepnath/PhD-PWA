@@ -22,7 +22,7 @@
 import { pipelineLimit, type PipelineLimit } from './pipelineStats';
 import type { PipelineWindowFields } from '@/storage/types';
 import { CONFIG } from '@/experiment/config';
-import { FPS_GATE, fpsText, fpsTier, type FpsTier } from './frameRateGate';
+import { FPS_GATE, fpsText, fpsTier, stageFpsText, type FpsTier } from './frameRateGate';
 
 /**
  * The pass rule of Rounds 79-81, 'st-r2'; sittings before it were scored under 'st-r1', and from Round
@@ -206,6 +206,10 @@ export function fpsReason(
   floor: number = SELF_TEST.MIN_FPS,
 ): string {
   const size = p?.camera_setting_width && p?.camera_setting_height ? ` at ${p.camera_setting_width}×${p.camera_setting_height}` : '';
+  // The stages' rates are never rounded onto the floor the eye's rate missed (stageFpsText; Round 93,
+  // review R2 of CAM-1): "the CAMERA delivered only 15" beside "below 15" named a camera that met it.
+  const cam = stageFpsText(p?.camera_fps_delivered, floor);
+  const trk = stageFpsText(p?.tracker_fps, floor);
   /*
    * The rate beside its floor is fpsText's (audit 86 CAM-1): Math.round put 14.6 on screen as "15 ... below
    * 15". With no rate at all it is its own sentence (audit 86 MV-1), not "no measurable" in the number's slot.
@@ -215,14 +219,14 @@ export function fpsReason(
     : `${fpsText(faceFps)} face frames per second, below ${floor}`;
   switch (limit) {
     case 'camera':
-      return `${face}: the CAMERA delivered only ${n0(p?.camera_fps_delivered)} frames per second${size}, and the tracker kept up with them `
-        + `(${n0(p?.tracker_fps)} processed) — the camera is the limit. `
+      return `${face}: the CAMERA delivered only ${cam} frames per second${size}, and the tracker kept up with them `
+        + `(${trk} processed) — the camera is the limit. `
         + 'Give the face more light (tablet cameras slow down in dim light), keep bright light behind the participant out of the picture, '
         + 'and close any other app that may be using the camera';
     case 'camera_and_tracker':
       // Both short: more light alone cannot lift a rate the processor caps lower still (round 77).
-      return `${face}: the camera delivered only ${n0(p?.camera_fps_delivered)} frames per second${size}, and the TRACKER processed only `
-        + `${n0(p?.tracker_fps)} of them, taking about ${n0(p?.process_ms_p50)} ms a frame (slowest 5%: ${n0(p?.process_ms_p95)} ms) — `
+      return `${face}: the camera delivered only ${cam} frames per second${size}, and the TRACKER processed only `
+        + `${trk} of them, taking about ${n0(p?.process_ms_p50)} ms a frame (slowest 5%: ${n0(p?.process_ms_p95)} ms) — `
         + 'BOTH the camera and the tablet\'s processor are short, and fixing the light alone will not be enough. '
         + 'Close other apps, plug in the charger and turn off battery saver, let a hot tablet cool down, and give the face more light'
         + (trackerFrozen
@@ -230,7 +234,7 @@ export function fpsReason(
           : '. If it fails this way with every participant, compare the trackers again at the bench '
             + '(camera setup, "Measure trackers again") — not between one participant\'s sittings');
     case 'tracker':
-      return `${face}: the camera delivered ${n0(p?.camera_fps_delivered)} frames per second but the TRACKER processed only ${n0(p?.tracker_fps)}, `
+      return `${face}: the camera delivered ${cam} frames per second but the TRACKER processed only ${trk}, `
         + `taking about ${n0(p?.process_ms_p50)} ms a frame (slowest 5%: ${n0(p?.process_ms_p95)} ms) — the tablet's processor is the limit, not the camera. `
         + 'Close other apps, plug in the charger and turn off battery saver, and let a hot tablet cool down'
         + (trackerFrozen
@@ -238,7 +242,7 @@ export function fpsReason(
           : '. If it fails this way with every participant, compare the trackers again at the bench '
             + '(camera setup, "Measure trackers again") — not between one participant\'s sittings');
     case 'face':
-      return `${face}: the tracker processed ${n0(p?.tracker_fps)} frames per second but found the face in only some of them — `
+      return `${face}: the tracker processed ${trk} frames per second but found the face in only some of them — `
         + 'check seating, distance, the light on the face, glare on spectacles, and that nothing covers the face';
     case 'undetermined':
       return `${face}; this browser did not report how many frames the camera delivered, so camera and processor cannot be told apart — `
@@ -255,13 +259,16 @@ export function fpsReason(
  * first thing to try, not the full advice a fail gets (fpsReason): the numbers are on the line above it.
  */
 export function limitShort(limit: PipelineLimit, p: PipelineWindowFields | null): string | null {
+  // A reduced rate missed the 20: the stage's rate is never rounded onto it (stageFpsText; Round 93).
+  const cam = stageFpsText(p?.camera_fps_delivered);
+  const trk = stageFpsText(p?.tracker_fps);
   switch (limit) {
     case 'camera':
-      return `the camera delivered only ${n0(p?.camera_fps_delivered)} frames a second — more light on the face`;
+      return `the camera delivered only ${cam} frames a second — more light on the face`;
     case 'camera_and_tracker':
-      return `the camera delivered ${n0(p?.camera_fps_delivered)} frames a second and the tracker processed ${n0(p?.tracker_fps)} — more light on the face, and close other apps and charge the tablet`;
+      return `the camera delivered ${cam} frames a second and the tracker processed ${trk} — more light on the face, and close other apps and charge the tablet`;
     case 'tracker':
-      return `the tracker processed only ${n0(p?.tracker_fps)} of the camera's ${n0(p?.camera_fps_delivered)} frames a second — close other apps, charge the tablet, let it cool`;
+      return `the tracker processed only ${trk} of the camera's ${cam} frames a second — close other apps, charge the tablet, let it cool`;
     case 'face':
       return 'the face was found in too few of the frames — seating, the light on the face, glare on spectacles';
     case 'undetermined':

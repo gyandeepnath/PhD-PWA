@@ -57,7 +57,7 @@ test('the self-test result shows the pipeline and names the stage that was short
   await page.getByTestId('selftest-start').click();
   await page.waitForSelector('[data-testid="selftest-continue"], [data-testid="selftest-continue-anyway"]', { timeout: 90_000 });
 
-  await expect(page.getByTestId('selftest-pipeline')).toHaveText(/Camera delivered \d+ fps at \d+×\d+ · tracker processed \d+ fps, \d+ ms a frame/);
+  await expect(page.getByTestId('selftest-pipeline')).toHaveText(/Camera delivered \d+(\.\d+)? fps at \d+×\d+ · tracker processed \d+(\.\d+)? fps, \d+ ms a frame/);
   const verdict = await page.getByTestId('selftest-verdict').innerText();
   // The drawn face never blinks, so the check does not pass: a pass here would mean it checks nothing.
   expect(verdict).toMatch(/did not pass/);

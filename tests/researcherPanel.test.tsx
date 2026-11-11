@@ -343,10 +343,36 @@ describe('camera state in words', () => {
       // Below 20 the stage that is short is named, after the tier.
       const reduced = verdictAt(18);
       expect(reduced.tier).toBe('B');
-      expect(reduced.text).toMatch(/^Reduced \(15–20: kept, flagged\)\. The face is found in only 18 frames a second/);
+      expect(reduced.text).toMatch(/^Reduced \(15–20: kept, flagged\)\. The face is found in only 18\.0 frames a second/);
       const slow = verdictAt(12, 12);
       expect(slow.tier).toBe('C');
       expect(slow.text).toMatch(/^Too slow \(under 15\)\. The CAMERA is the limit: it delivers 12 frames a second/);
+    });
+
+    /*
+     * Rates next to a floor, in the sentence that names the short stage and in the rows (Round 93, review
+     * R2 of CAM-1): the 'face' sentence rounded 19.6 to "20" after "Reduced (15–20)" and 14.6 to "15"
+     * after "Too slow (under 15)", and a camera at 14.7 was said to deliver 15.
+     */
+    it('never rounds a rate onto the floor it is under: the face, the camera and the tracker', () => {
+      const at = (o: Partial<LiveTrackingStats>) => {
+        const m = mount({ getStream: () => stream });
+        act(() => { m.q('researcher-panel-collapsed')!.click(); });
+        m.push(stats({ cameraFps: 30, trackerFps: 30, ...o }));
+        const out = { verdict: m.q('diag-verdict')?.textContent ?? '', camera: m.q('diag-camera')?.textContent ?? '', tracker: m.q('diag-tracker')?.textContent ?? '' };
+        m.unmount();
+        return out;
+      };
+      expect(at({ faceFps: 19.6 }).verdict).toMatch(/^Reduced \(15–20: kept, flagged\)\. The face is found in only 19\.6 frames a second/);
+      expect(at({ faceFps: 14.6 }).verdict).toMatch(/^Too slow \(under 15\)\. The face is found in only 14\.6 frames a second/);
+      const cam = at({ faceFps: 14.6, cameraFps: 14.7, trackerFps: 14.7 });
+      expect(cam.verdict).toMatch(/^Too slow \(under 15\)\. The CAMERA is the limit: it delivers 14\.7 frames a second/);
+      expect(cam.camera).toMatch(/Camera delivers\s*14\.7 fps/);
+      expect(cam.tracker).toMatch(/Tracker processes\s*14\.7 fps/);
+      const cam20 = at({ faceFps: 19.6, cameraFps: 19.8, trackerFps: 19.8 });
+      expect(cam20.verdict).toMatch(/^Reduced \(15–20: kept, flagged\)\. The CAMERA is the limit: it delivers 19\.8 frames a second/);
+      const both = at({ faceFps: 14.2, cameraFps: 19.7, trackerFps: 14.6, processMsP50: 68 });
+      expect(both.verdict).toMatch(/The camera AND the tracker are short: 19\.7 delivered, 14\.6 processed at 68 ms/);
     });
 
     it('shows the last reading\'s rate with its tier, amber below 20', () => {

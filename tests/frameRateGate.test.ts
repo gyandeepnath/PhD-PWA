@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  FPS_GATE, FPS_GATE_DEFINITIONS, FPS_GATE_V1, FPS_GATE_VERSION, fpsConsistent, fpsText, fpsTier, gateParticipant, medianFps,
+  FPS_GATE, FPS_GATE_DEFINITIONS, FPS_GATE_V1, FPS_GATE_VERSION, fpsConsistent, fpsText, fpsTier, stageFpsText, gateParticipant, medianFps,
   rowGateVersion, samplingFpsObserved,
 } from '@/tracking/frameRateGate';
 import { EyeMetricsAggregator } from '@/tracking/aggregator';
@@ -61,6 +61,25 @@ describe('fps-g2: the numbers the simulation fixed', () => {
     expect(fpsText(14.96)).toBe('14.96');
     expect(fpsText(20)).toBe('20.0');
     expect(fpsText(19.94)).toBe('19.9');
+    // Two decimals would still round onto the floor: cut, not rounded (Round 93).
+    expect(fpsText(19.996)).toBe('19.99');
+  });
+
+  // A stage's rate named as the reason a floor was missed (Round 93, review R2 of CAM-1).
+  it('a stage\'s rate is a whole number unless rounding would put it on a floor it is under', () => {
+    expect(stageFpsText(30)).toBe('30');
+    expect(stageFpsText(12.4)).toBe('12');
+    expect(stageFpsText(18.4)).toBe('18');
+    expect(stageFpsText(14.7)).toBe('14.7');
+    expect(stageFpsText(19.8)).toBe('19.8');
+    expect(stageFpsText(14.96)).toBe('14.96');
+    expect(stageFpsText(19.996)).toBe('19.99');
+    expect(stageFpsText(15.2)).toBe('15');
+    // The screen's own floor counts too: 24.7 is under a floor of 25.
+    expect(stageFpsText(24.7)).toBe('25');
+    expect(stageFpsText(24.7, 25)).toBe('24.7');
+    expect(stageFpsText(null)).toBe('—');
+    expect(stageFpsText(Number.NaN)).toBe('—');
   });
 });
 

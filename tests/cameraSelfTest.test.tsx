@@ -92,6 +92,18 @@ describe('the camera self-test screen', () => {
     m.unmount();
   });
 
+  // The stage rates on the result agree with the reason under them (Round 93, review R2 of CAM-1).
+  it('shows the camera\'s and the tracker\'s rates under 15 as under it, in the line and in the reason', () => {
+    fake();
+    const base = observer(5, 14.6);
+    const m = mount((c) => { const o = base(c); return { ...o, pipeline: { ...o.pipeline!, camera_fps_delivered: 14.7, tracker_fps: 14.7 } }; });
+    m.click('selftest-start');
+    m.runCheck();
+    expect(m.q('selftest-pipeline')!.textContent).toMatch(/Camera delivered 14\.7 fps at 1280×720 · tracker processed 14\.7 fps, 20 ms a frame/);
+    expect(m.q('selftest-reasons')!.textContent).toMatch(/the CAMERA delivered only 14\.7 frames per second/);
+    m.unmount();
+  });
+
   it('st-r3: blinks just BEFORE the flashes do not count, and each such flash says "too early"', () => {
     fake();
     const m = mount(observer(5, 24, -400));

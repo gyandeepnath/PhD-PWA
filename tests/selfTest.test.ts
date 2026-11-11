@@ -334,6 +334,33 @@ describe('a low frame rate says which stage was short', () => {
     expect(scoreSelfTest(cues, blinks, { fps: 18, samplingFps: 18, facePresence: 0.99 }).notes).toHaveLength(1);
   });
 
+  /*
+   * The STAGE's rate given as the reason is never rounded onto the floor the eye's rate missed (Round 93,
+   * review R2 of CAM-1). Math.round made a camera at 14.7 "the CAMERA delivered only 15 frames per second"
+   * beside "14.6 face frames per second, below 15", and one at 19.8 the reason for a reduced rate as "only
+   * 20 frames a second". The tests above use 12 and 18, which never come near a floor.
+   */
+  it('never rounds the camera\'s or the tracker\'s rate onto the floor it is named as the reason for missing', () => {
+    const fail = at(14.6, { camera_fps_delivered: 14.7, tracker_fps: 14.7 });
+    expect(fail.limit).toBe('camera');
+    const why = fail.reasons.join(' ');
+    expect(why).toMatch(/14\.6 face frames per second, below 15: the CAMERA delivered only 14\.7 frames per second at 1280×720, and the tracker kept up with them \(14\.7 processed\)/);
+    expect(why).not.toMatch(/\b15 frames per second|\(15 processed\)/);
+    const both = at(10.6, { camera_fps_delivered: 14.96, tracker_fps: 11, process_ms_p50: 80, process_ms_p95: 110 });
+    expect(both.limit).toBe('camera_and_tracker');
+    expect(both.reasons.join(' ')).toMatch(/camera delivered only 14\.96 frames per second at 1280×720, and the TRACKER processed only 11 of them/);
+    const trk = at(14.6, { camera_fps_delivered: 30, tracker_fps: 14.7 });
+    expect(trk.limit).toBe('tracker');
+    expect(trk.reasons.join(' ')).toMatch(/camera delivered 30 frames per second but the TRACKER processed only 14\.7,/);
+    // A reduced pass missed the 20: its reason never says the camera delivered 20.
+    const reduced = at(19.6, { camera_fps_delivered: 19.8, tracker_fps: 19.8 });
+    expect(reduced).toMatchObject({ pass: true, verdict: 'reduced', limit: 'camera' });
+    expect(reduced.notes![1]).toBe('Why: the camera delivered only 19.8 frames a second — more light on the face.');
+    expect(at(19.6, { camera_fps_delivered: 30, tracker_fps: 19.8 }).notes![1]).toMatch(/the tracker processed only 19\.8 of the camera's 30 frames a second/);
+    // A rate that does not come near a floor stays a whole number.
+    expect(at(18, { camera_fps_delivered: 30, tracker_fps: 18.4 }).notes![1]).toMatch(/processed only 18 of the camera's 30/);
+  });
+
   it('will not blame the camera when the browser gave no frame counter', () => {
     const r = at(11, { camera_fps_delivered: 12, tracker_fps: 12, frame_count_source: 'callbacks' });
     expect(r.limit).toBe('undetermined');

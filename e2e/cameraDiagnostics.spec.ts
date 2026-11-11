@@ -80,8 +80,8 @@ test('camera setup measures the trackers and shows what the camera and the track
   await toCameraRunning(page);
 
   // The three rates and the tracker, from the running pipeline.
-  await expect(page.getByTestId('diag-camera')).toHaveText(/Camera delivers\s*\d+ fps · \d+×\d+/);
-  await expect(page.getByTestId('diag-tracker')).toHaveText(/Tracker processes\s*\d+ fps · \d+ ms/);
+  await expect(page.getByTestId('diag-camera')).toHaveText(/Camera delivers\s*\d+(\.\d+)? fps · \d+×\d+/);
+  await expect(page.getByTestId('diag-tracker')).toHaveText(/Tracker processes\s*\d+(\.\d+)? fps · \d+ ms/);
   await expect(page.getByTestId('diag-backend')).toHaveText(/Face Landmarker \((GPU|CPU)\)|FaceMesh \(legacy\)/);
   /*
    * Asked for a 30-fps mode (Round 79). Chromium's fake camera runs at 20 at most, so it refuses the
@@ -178,7 +178,7 @@ test('the researcher card shows the live picture on set-up screens and never on 
   await page.getByTestId('researcher-panel-collapsed').click();
   await expect(page.getByTestId('researcher-feed')).toBeVisible();
   await expect(page.getByTestId('ear-trace')).toBeVisible();
-  await expect(page.getByTestId('diag-camera')).toHaveText(/\d+ fps · \d+×\d+/, { timeout: 10_000 });
+  await expect(page.getByTestId('diag-camera')).toHaveText(/\d+(\.\d+)? fps · \d+×\d+/, { timeout: 10_000 });
   const feed = await page.evaluate(() => {
     const v = document.querySelector('[data-testid="researcher-feed-video"]') as HTMLVideoElement;
     const hidden = document.querySelector('video[aria-hidden="true"]') as HTMLVideoElement;

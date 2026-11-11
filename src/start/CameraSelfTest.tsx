@@ -4,7 +4,7 @@ import { CONFIG, isE2ETimingActive } from '@/experiment/config';
 import {
   SELF_TEST, scoreSelfTest, minHits, attemptSummary, cueWindow, type SelfTestResult, type SelfTestAttemptSummary,
 } from '@/tracking/selfTest';
-import { FPS_GATE, fpsText } from '@/tracking/frameRateGate';
+import { FPS_GATE, fpsText, stageFpsText } from '@/tracking/frameRateGate';
 import { EAR_TIERS, MIN_GAP_MS } from '@/tracking/blink';
 import type { SelfTestObservation } from '@/tracking/useTracking';
 import { TRACKER_LABEL, type TrackerBackend } from '@/tracking/trackers';
@@ -274,13 +274,14 @@ export function CameraSelfTest({ begin, end, onDone, onRunning, halted = false, 
         The three stages behind the frame rate, so a low one says which stage is short (round 75): what
         the camera delivered, what the tracker processed and how long a frame took, which tracker ran,
         and the exposure in force. Shown on a pass as well — it is what the investigator reads off the
-        tablet.
+        tablet. The two stage rates as in the reason below them, never rounded onto the 15 or the 20 (stageFpsText;
+        Round 93): "Camera delivered 15 fps" over "the CAMERA delivered only 14.7" would contradict it.
       */}
       {r.pipeline && (
         <p data-testid="selftest-pipeline" className="font-sans" style={{ fontSize: 14, marginTop: 8, maxWidth: 760, lineHeight: 1.5 }}>
-          Camera delivered {num(r.pipeline.camera_fps_delivered)} fps
+          Camera delivered {stageFpsText(r.pipeline.camera_fps_delivered)} fps
           {r.pipeline.camera_setting_width ? ` at ${r.pipeline.camera_setting_width}×${r.pipeline.camera_setting_height}` : ''} ·
-          tracker processed {num(r.pipeline.tracker_fps)} fps, {num(r.pipeline.process_ms_p50)} ms a frame
+          tracker processed {stageFpsText(r.pipeline.tracker_fps)} fps, {num(r.pipeline.process_ms_p50)} ms a frame
           (95%: {num(r.pipeline.process_ms_p95)} ms) · {r.pipeline.tracker_backend ? (TRACKER_LABEL[r.pipeline.tracker_backend as TrackerBackend] ?? r.pipeline.tracker_backend) : '—'}
           {ex ? ` · ${ex === 'locked-v1' ? `exposure fixed${r.pipeline.camera_exposure_time_100us != null ? ` (${r.pipeline.camera_exposure_time_100us / 10} ms)` : ''}` : ex === 'compensated-v1' ? 'exposure compensated' : 'automatic exposure'}` : ''}
         </p>

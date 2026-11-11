@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { LiveTrackingStats } from '@/tracking/useTracking';
 import { blinkCuts } from '@/tracking/blinkCount';
-import { FPS_GATE, fpsText, fpsTier } from '@/tracking/frameRateGate';
+import { FPS_GATE, fpsText, fpsTier, stageFpsText } from '@/tracking/frameRateGate';
 import { TRACKER_LABEL } from '@/tracking/trackers';
 import { pipelineLimit } from '@/tracking/pipelineStats';
 import { MEASURE } from '@/tracking/measurementSchedule';
@@ -195,17 +195,24 @@ export function PipelineReadout({ stats, floor = FPS_GATE.ADEQUATE, compact = fa
   const s = stats;
   const limit = s ? pipelineLimit({ cameraFps: s.cameraFps, trackerFps: s.trackerFps, faceFps: s.faceFps, deliveredSource: s.frameCountSource }, floor) : null;
   const tier = fpsTier(s?.faceFps);
+  /*
+   * The camera's and the tracker's rates are never rounded onto a floor they are under — `floor` or the
+   * gate's 15 and 20 (stageFpsText) — in the rows or in the sentence that names one as the limit; and
+   * the face rate in the 'face' sentence is fpsText's, as on its own row (Round 93, review R2 of CAM-1).
+   */
+  const cam = stageFpsText(s?.cameraFps, floor);
+  const trk = stageFpsText(s?.trackerFps, floor);
   const tierText = tier === 'C' ? `too slow (under ${FPS_GATE.REDUCED})` : tier === 'B' ? `reduced (${FPS_GATE.REDUCED}–${FPS_GATE.ADEQUATE}: kept, flagged)` : null;
   const verdict = !s ? '—'
     : limit == null ? (s.faceFps == null ? '—'
       : tier === 'A' ? `eye sampled ${fpsText(s.faceFps!)} times a second — adequate (${FPS_GATE.ADEQUATE} or more)`
         : `eye sampled ${fpsText(s.faceFps!)} times a second — ${tierText}`)
       : `${tierText ? `${tierText[0].toUpperCase()}${tierText.slice(1)}. ` : ''}${
-        limit === 'camera' ? `The CAMERA is the limit: it delivers ${r0(s.cameraFps)} frames a second — more light on the face`
-          : limit === 'camera_and_tracker' ? `The camera AND the tracker are short: ${r0(s.cameraFps)} delivered, ${r0(s.trackerFps)} processed at ${r0(s.processMsP50)} ms — close other apps, charge the tablet, and more light`
+        limit === 'camera' ? `The CAMERA is the limit: it delivers ${cam} frames a second — more light on the face`
+          : limit === 'camera_and_tracker' ? `The camera AND the tracker are short: ${cam} delivered, ${trk} processed at ${r0(s.processMsP50)} ms — close other apps, charge the tablet, and more light`
           : limit === 'tracker' ? `The TRACKER is the limit: ${r0(s.processMsP50)} ms a frame — close other apps, charge the tablet`
             : limit === 'undetermined' ? `Below ${floor} a second; this browser does not say whether the camera or the tracker is short`
-              : `The face is found in only ${r0(s.faceFps)} frames a second — seating, framing, light`}`;
+              : `The face is found in only ${s.faceFps != null && Number.isFinite(s.faceFps) ? fpsText(s.faceFps) : '—'} frames a second — seating, framing, light`}`;
   const row = (k: string, v: React.ReactNode, testid?: string) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }} data-testid={testid}>
       <span style={{ opacity: 0.78 }}>{k}</span><span style={{ textAlign: 'right' }}>{v}</span>
@@ -213,8 +220,8 @@ export function PipelineReadout({ stats, floor = FPS_GATE.ADEQUATE, compact = fa
   );
   return (
     <div data-testid="pipeline-readout" style={{ fontSize: compact ? 14 : 15, lineHeight: 1.45 }}>
-      {row('Camera delivers', <>{r0(s?.cameraFps)} fps{s?.captureWidth ? ` · ${s.captureWidth}×${s.captureHeight}` : ''}</>, 'diag-camera')}
-      {row('Tracker processes', <>{r0(s?.trackerFps)} fps · {r0(s?.processMsP50)} ms{!compact && <> (95%: {r0(s?.processMsP95)} ms)</>}</>, 'diag-tracker')}
+      {row('Camera delivers', <>{cam} fps{s?.captureWidth ? ` · ${s.captureWidth}×${s.captureHeight}` : ''}</>, 'diag-camera')}
+      {row('Tracker processes', <>{trk} fps · {r0(s?.processMsP50)} ms{!compact && <> (95%: {r0(s?.processMsP95)} ms)</>}</>, 'diag-tracker')}
       {/* Frames with the face found, a second: the eye's sampling rate (MEASURE.samplingRate; per reading, sampling_fps_observed). */}
       {/* Beside its floor, so fpsText (audit 86 CAM-1): a rounded 19.6 read "20" in amber. */}
       {row(MEASURE.samplingRate.name, <span style={{ color: s?.faceFps != null && s.faceFps < floor ? '#ffd27a' : undefined }}>{s?.faceFps != null && Number.isFinite(s.faceFps) ? fpsText(s.faceFps) : '—'} fps</span>, 'diag-face')}
