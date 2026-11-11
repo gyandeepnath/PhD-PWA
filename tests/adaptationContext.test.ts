@@ -41,7 +41,7 @@ describe('which screen a grey field followed', () => {
 
 describe('the post-break fields over the ten Williams rows (the open decision, counted)', () => {
   const walk = () => {
-    const fields: { after: string; switched: boolean; next: string }[] = [];
+    const fields: { after: string; switched: boolean; next: string; prev: string | undefined }[] = [];
     for (let enrolment = 1; enrolment <= 10; enrolment++) {
       const plan = blockPlan(enrolment, 0);
       let st: MachineState = { stage: 'INSTRUCTIONS', stepIndex: 0 } as MachineState;
@@ -52,7 +52,7 @@ describe('the post-break fields over the ten Williams rows (the open decision, c
           const upcoming = plan[next.stepIndex + 1];
           const nextPolarity = CONDITIONS[upcoming.conditionIndex].polarity;
           const { switched } = greyFieldMaximum(prev && CONDITIONS[prev.conditionIndex].polarity, nextPolarity);
-          fields.push({ after: adaptationPrecededBy(st.stage), switched, next: nextPolarity });
+          fields.push({ after: adaptationPrecededBy(st.stage), switched, next: nextPolarity, prev: prev && CONDITIONS[prev.conditionIndex].polarity });
         }
         st = next;
       }
@@ -73,6 +73,13 @@ describe('the post-break fields over the ten Williams rows (the open decision, c
     // From a light screen the eye steps down only to a dark display.
     const opposite = f.filter((x) => x.after === 'break' && x.switched !== (x.next === 'negative'));
     expect(opposite).toHaveLength(20);
+    // They are exactly the post-break fields whose previous display was dark, as the documents say: a dark
+    // display after it (8: 60 s, FALSE) and a light one (12: 120 s, TRUE). After a light display the code
+    // and the eye's step agree.
+    expect(opposite.every((x) => x.prev === 'negative')).toBe(true);
+    expect(f.filter((x) => x.after === 'break' && x.prev === 'negative')).toHaveLength(20);
+    expect(opposite.filter((x) => x.next === 'negative' && !x.switched)).toHaveLength(8);
+    expect(opposite.filter((x) => x.next === 'positive' && x.switched)).toHaveLength(12);
     const darkFirst = f.filter((x) => x.after === 'setup_or_resume' && x.next === 'negative');
     expect(darkFirst).toHaveLength(5);
     expect(darkFirst.every((x) => !x.switched)).toBe(true);

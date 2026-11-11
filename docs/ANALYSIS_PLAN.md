@@ -868,8 +868,9 @@ apart.
 — a light screen the participant may sit at for minutes — and the set-up screens before the first display
 are not looked at, although after them the eye is light-adapted whatever the previous display was: over the
 ten Williams rows, 20 of the 40 post-break fields carry the opposite of the adaptation step the eye makes
-(a dark display after a break gets 60 s and FALSE; a light display after a break that followed a dark one
-gets 120 s and TRUE), and the 5 rows that open on a dark display get 60 s (audit 86 P8). For
+(a dark display after a break that followed a dark one gets 60 s and FALSE; a light display after a break
+that followed a dark one gets 120 s and TRUE), and the 5 rows that open on a dark display get 60 s (audit 86
+P8). For
 `polarity_switched` as defined above — a first-order carryover code — the present rule is right, and the
 protocol does not say which reference the field's maximum means, so the behaviour is unchanged. From Round
 92 each condition records the screen its grey field followed, `adaptation_preceded_by` (02_conditions.csv,

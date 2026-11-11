@@ -7,10 +7,11 @@
  * previous DISPLAY. But a grey field does not always follow a display: after every second display there is
  * a break, a light (cream) screen the participant may sit at for minutes, and the first field of a sitting
  * follows the light set-up screens, as a resumed sitting's does. There the eye comes to the field
- * light-adapted whatever the previous display was. So a dark display after a break gets the 60 s maximum
- * and polarity_switched FALSE, although the eye steps from light to dark; a light display after a break that
- * followed a dark one gets 120 s and TRUE, although it steps from light to light. Over the ten Williams rows
- * that is 20 of the 40 post-break fields, and the 5 rows that open on a dark display (60 s, flag blank).
+ * light-adapted whatever the previous display was. So a dark display after a break that followed a dark one
+ * gets the 60 s maximum and polarity_switched FALSE, although the eye steps from light to dark; a light
+ * display after a break that followed a dark one gets 120 s and TRUE, although it steps from light to light.
+ * Over the ten Williams rows that is 20 of the 40 post-break fields (8 and 12), and the 5 rows that open on a
+ * dark display (60 s, flag blank).
  *
  * Which rule is right is the investigator's decision. docs/ANALYSIS_PLAN.md defines polarity_switched as a
  * first-order CARRYOVER code — the previous run's polarity, the crossover design's "previous treatment" —
