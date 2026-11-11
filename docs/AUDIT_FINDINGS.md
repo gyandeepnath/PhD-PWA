@@ -9029,3 +9029,331 @@ rounded. **Tests.** `tests/selfTest.test.ts`, `tests/cameraSelfTest.test.tsx`,
 | Camera off at set-up | not recorded | why (`camera_off_reason`) | 01 `camera_off_reason` |
 | Camera check not run | ran and failed without a baseline | not run, and why | 01 `selftest_not_run_reason` |
 | Every other rule (tap guard, attempt counting, scale freeze, inter-blink interval, reaction window, rating format, typography, straight-lining, frame-rate gate, calibration, camera check scoring, reliability, engagement thresholds, fitted minimum) | unchanged | unchanged | as before |
+
+## Round 92 — the reaction onset with the camera on, the storage check kept, what the grey field followed, an honest session length, and the offline copy
+
+The seventh set of fixes for audit 86 (2.4.0 at 26e909c): the PWA, timing and protocol findings P1 to P9.
+Each was reproduced by the auditor and again, independently, by the second reviewer, who added one more
+(MISSED-1). MISSED-1 (a touch just after the reaction window recorded as a "false start") is the same
+defect as the data audit's D15 and was already fixed in Round 89 (758ddbd, `rt_window_version` `rw-v2`);
+its unit test passes on this round's code and nothing in it was changed. P6 (PROTOCOL quoting an older run
+of the session-length model) was fixed in Round 89 (D11); this round's change to the model moved those
+figures again, and they are updated with the rest (§5). The commits: 3e1e245 (P1), 3fc4cac and 446ba79
+(P5), 41cdf8a and 6b77599 (P8), bd4f895 (P2, P7), 72129f7 (P3, P6), d5aacf2 (P4, P9), and two follow-ups,
+ebacc9b and 4ebcbd8 (§7).
+
+**One measured value changed meaning, versioned in the data; no threshold moved and nothing was changed to
+keep more data:**
+- **`rt_timing_version` `rt-t2`** — the reaction task's dot onset, the zero of every reaction time, is when
+  the dot reached the screen, whatever the face tracker was doing (P1). See §1 and §9, item 1.
+
+**No stored record changed shape in a way that needs the database version raised:** the new fields
+(`rt_timing_version` and `adaptation_preceded_by` on a condition row; `storage_verdict`,
+`storage_persisted` and `storage_free_mb` on the sitting) are optional, and a record without them is read
+as what it is — recorded before the field existed — as Rounds 88-91 did. Nothing stored is rewritten.
+Nothing here was measured on the Xiaomi Pad 6.
+
+### In plain words
+
+1. **With the camera on, reaction times were too short (P1, the one major finding).** The face tracker does
+   its work on the tablet's main thread, in each screen frame in which a camera frame arrives, before the
+   reaction task's own code runs in that frame. The moment the dot appeared was read from the clock *after*
+   that work, so every reaction time whose frame the tracker worked in came out short by the tracker's
+   time — 95-140 ms per affected trial in the audit's run, 23-28 ms on two trials of four in this round's
+   test on the development machine; on the tablet, never measured. It was always in the same direction, it
+   touched only sittings with the camera on, and in effect it moved the 150 ms "anticipation" and 600 ms
+   "lapse" cut-offs (a true 160 ms response could be scored an anticipation). Now the onset is the time the
+   browser gives the frame itself, fixed before any work in it runs, and the tracker is not given the
+   camera's frames while the dots are shown (the camera keeps running; nothing the tracker computes during
+   the reaction task was ever kept). Measured: with the camera on and off, every onset is the start of the
+   frame after the dot was painted, 11-16 ms after that paint finished. Rows from before say `rt-t1` (§1).
+2. **Whether the sitting ran on durable storage is now kept (P5).** Pre-flight checks whether the browser has
+   promised to keep the tablet's data ("durable storage") and lets a sitting go on after "warn" or
+   "unknown"; the result was shown and dropped, although the code said it was stored. It is now in
+   01_session_info.csv (`storage_verdict`, `storage_persisted`, `storage_free_mb`).
+3. **After a break the grey field's length follows the display before the break — left as it is, and now
+   recorded (P8).** The grey field lasts at most 120 s when the next display's polarity differs from the
+   previous display's, else 60 s. After a break (a light cream screen) the eye is light-adapted whatever the
+   previous display was. So when the display before the break was dark, the code is the opposite of the
+   eye's step: a dark display after it gets 60 s and "no switch" (the eye steps from light to dark), and a
+   light display after it gets 120 s and "switch" (light to light) — 20 of the 40 post-break fields over the
+   ten Williams rows (8 and 12). After a light display the code and the eye agree. The analysis plan
+   defines `polarity_switched` as the previous run's polarity — a carryover code, for which the present rule
+   is right — and the protocol does not say which the 120 s means, so nothing was changed: each condition
+   now records which screen its grey field followed (`adaptation_preceded_by`), so either rule can be
+   applied in analysis. This is your decision (§9, item 3).
+4. **The export says what its own version means (P2), and what the page locks guarantee (P7).** The
+   codebook's `app_version` entry stopped at 2.3.0 while 2.4.0 shipped; it is now built from one list in
+   the app (2.1.0 to 2.4.0, including 2.3.1 and the note that the audit 86 fixes are still 2.4.0). The
+   reading column's entry said "four unlocks guarantee 80 s"; passages have three pages, so 60 s against a
+   skim floor of 85.7-90.1 s — now computed from the passages.
+5. **The session-length model now charges the camera check and the intro cards (P3).** It never counted the
+   camera check that follows calibration (19 s of flashes plus its two screens), nor the reading and
+   word-search intro cards of each display, and it still described the calibration as nine taps (it is a
+   baseline and three gaze dots that wait for the eyes). Re-run: median **102.1 min**, 95th percentile
+   **126.3 min**, **9.8%** of simulated sittings over two hours (it said 97.7, 120.7 and 5.5%). The
+   consent's ethics-approved "roughly 75–120 minutes" covers the median and about nine sittings in ten, not
+   the slowest tenth — the documents now say so; whether to change the wording is yours (§9, item 4).
+6. **The screen says whether the tablet holds an offline copy of the app (P4, P9).** The app works without
+   a network only once it has downloaded about 44 MB (the guide said 17 MB), and nothing said when that had
+   happened. The build box on the landing page, the session manager and pre-flight now says "Offline copy:
+   ready", "downloading — keep the tablet online until this says ready", or "NOT installed" with the reason.
+   And a tablet that opens the app from the field package's HTTPS server (`node serve.mjs --https`) never
+   gets an offline copy: Chrome will not install it from a site with a self-signed certificate, even after
+   its warning is accepted. The screen, the field README, RUN.md and the server's own start-up text now say
+   so plainly, with the supported route: the study's deployed HTTPS address for sittings without a network.
+7. **Two follow-ups (§7).** A test that occasionally clicked a box while it was still moving now waits for
+   it (test only). And the new offline-copy line no longer moves the buttons under it when it changes from
+   "checking" to its final wording a few seconds after start-up.
+
+### 1. The reaction onset (3e1e245) — P1; `rt_timing_version` `rt-t2`
+
+**Found.** `markOnsetAtPaint` (ReactionTimeTask.tsx) stamped the onset with `performance.now()` inside the
+second `requestAnimationFrame` callback after rendering the dot. Both face trackers work synchronously on
+the main thread inside `requestVideoFrameCallback` (tracking/framePump.ts), which the browser runs in the
+same rendering step as, and before, the animation-frame callbacks. Reproduced again on the code before the
+fix, with the drawn-face camera (e2e, development server): the stamp 23.9 and 27.9 ms after its frame began
+on two of four trials, the tracker's work in that frame 22.9 and 26.9 ms; camera off, 0.4-0.7 ms. While
+fixing it, a second fault showed: the tracker's work also runs in the frame that *paints* the dot, before
+the paint, so with the frame timestamp alone (the tracker still working) the onset fell up to 27 ms before
+the paint had finished in the same harness, on one trial in each of two runs a whole frame early.
+
+**Fixed, two parts.** (a) The onset is the timestamp the browser passes the animation-frame callback — fixed
+when the frame begins, the same for every callback in it, on the same clock as the touch's own timestamp —
+of the first frame after the frame that painted the dot; and the frame that paints it is the first whose
+callback finds the dot in the document, not assumed to be the next one (lib/rtOnset.ts). (b) While the
+trials run, the frame pump counts each camera frame as delivered and hands none to the tracker
+(`useTracking.holdFrames`, `framePump` `held`); a frame arriving keeps the stall watchdog quiet; the tracker
+has its frames back when the last trial ends (and if the stage leaves under the trials). The response
+window's poll is counted from the onset. Touches inside the window are taken exactly as before, with their
+own timestamps (the double-tap e2e's timestamp check passes unchanged).
+
+**Measured** (`e2e/rtOnsetTiming.spec.ts`, eight scored trials in two blocks, independent of the app's
+logic: a MutationObserver on the dot, a frame loop with one event counter, a message posted from each frame
+to mark the end of its rendering, the synchronous time of every video-frame callback):
+
+| | onset − begin of the frame after the paint | onset − end of the paint | tracker work inside the trials |
+|---|---|---|---|
+| camera off, before (4 trials) | +0.4 to +0.7 ms | +15.7 to +16.1 ms | none |
+| camera on, before (4 trials) | +2.0 to +27.9 ms | +0.1 to +27.3 ms (2 of 4 trials over one frame) | every video-frame callback (129 of 129 over 2 ms; median 23 ms) |
+| camera off, after (8 trials, two runs) | 0.0 ms (8 of 8) | +11.5 to +15.8 ms | none |
+| camera on, after (8 trials, two runs) | 0.0 ms (8 of 8) | +14.0 to +15.7 ms | none (0 of 120 callbacks over 2 ms); 68-83 busy callbacks between the blocks |
+
+One frame is 16.7 ms there. The test fails on the old code (camera on), and with the hold removed (the
+tracker works during the trials).
+
+**Versioned.** Each condition is stamped `rt_timing_version` (02_conditions.csv, analysis_long; `rt-t1`
+for rows recorded before). An `rt-t1` row of a camera-on sitting carries reaction times short by up to one
+tracker call per trial, an amount not recorded and not recoverable; camera-off `rt-t1` rows agree with
+`rt-t2` to about 1 ms. The confirmatory RT model is unchanged and keeps them; the R template counts them and
+refits the RT model without them as a sensitivity (the analysis gate checks both: none in the simulated
+cohort, P001's blocks counted and refitted in the flagged state). Both codebooks and ANALYSIS_PLAN §5 say
+so.
+
+**Tests.** `tests/rtOnset.test.ts` (frames driven by hand with 0, 23 and 110 ms of tracker work: the onset
+is the next frame's begin time, never the clock; a late commit; the phase flips in the stamping callback; a
+dot never drawn cannot hang the block; the version in 02 and analysis_long; the R template's refit),
+`tests/framePump.test.ts` (a held pump counts and sends nothing; wired as useTracking wires it, a minute of
+held frames is no stall and a camera that stops while held is still lost), `e2e/rtOnsetTiming.spec.ts`.
+Each fails with its part reverted.
+
+### 2. The storage check (3fc4cac, 446ba79) — P5
+
+**Found.** storage/storageHealth.ts: "The result is also stamped into the session record." It was held in
+the pre-flight screen's state only; `PreflightResult` had no storage field.
+
+**Fixed.** Pre-flight hands on the verdict, the durable-storage grant and the free space; the sitting keeps
+them (blank on earlier sittings, never a guessed "ok"); 01_session_info.csv carries them, documented.
+
+**Tests.** `e2e/storageVerdict.spec.ts` replaces the browser's storage API to force "warn" and "unknown":
+the screen, the session row and the export agree; both fail with the stamp removed.
+`tests/storageVerdict.test.ts` (the columns, blank before, the codebook). 446ba79 only makes that test
+type-check.
+
+### 3. What the grey field followed (41cdf8a, 6b77599) — P8, left to the investigator
+
+**Found.** The field's maximum (Experiment.tsx) and `polarity_switched` (analysisExport.ts) are keyed to the
+previous condition, not to the break (a light screen) or the set-up screens in between. Walked from the
+real state machine over the ten Williams rows: 100 fields, 40 after a break, 20 of them with the opposite
+of the adaptation step the eye makes — exactly those whose previous display was dark (8 dark displays at
+60 s coded "no switch", 12 light ones at 120 s coded "switch"); and the 5 rows that open dark get 60 s.
+
+**Not changed, and why.** ANALYSIS_PLAN defines `polarity_switched` as "the run before, in the same sitting,
+had the other polarity" — a first-order carryover code, for which the present rule is right; PROTOCOL's
+"120 s when polarity switches" does not say which reference it means. So the physically motivated
+alternative (the maximum following the screen the eye last saw) was not implemented.
+
+**What changed.** The rule moved unchanged into experiment/adaptationContext.ts, and each condition records
+`adaptation_preceded_by` (`reaction_task`, `break`, `setup_or_resume`; 02 and analysis_long), so an
+adaptation-state switch can be derived. PROTOCOL, ANALYSIS_PLAN §4b and §5 and both codebooks name the open
+decision. While checking this write-up, their sentence "after a break a dark display gets 60 s" was found
+true only when the display before the break was dark too; 6b77599 corrects it in all five places
+(PROTOCOL, ANALYSIS_PLAN, both codebooks, adaptationContext.ts). **Tests.**
+`tests/adaptationContext.test.ts` (the walk, the counts quoted in the documents — now including the 8/12
+split — and the columns); the full-run e2e checks the pattern a sitting records (set-up, a break every
+second display, the reaction task otherwise) and fails with the recording removed.
+
+### 4. The codebook's version history and page locks (bd4f895) — P2, P7
+
+`app_version`'s description is built from lib/versionHistory.ts; a test fails when package.json names a
+version the list does not end with or the operator manual omits one. `reading_min_page_dwell_ms`'s sentence
+is computed from the passages and CONFIG (`pageLockArithmetic`): "the 3 pages' unlocks (20 s each)
+guarantee 60 s, against a whole-passage skim floor of 85.7-90.1 s". Two code comments that quoted the
+four-page arithmetic say which era it was from. **Tests.** `tests/versionHistory.test.ts`,
+`tests/pageLockArithmetic.test.ts`.
+
+### 5. The session-length model (72129f7) — P3 (and the P6 addendum)
+
+**Found.** scripts/lib/timingModel.ts had no camera-check entry and labelled the calibration "9 taps";
+the reading and word-search intro cards were not charged. TIMING_MODEL.md had drifted from the script
+(26.3/29.6/42.5 min, "98.4 min as modelled"), and docs/TIMING_SIMULATION_OUTPUT.txt was from a much older
+build (it printed a 40 s search limit; the limit is 60 s).
+
+**Fixed.** The camera check's machine time comes from its own constants (`selfTestMachineMs()`, 19 s; the
+tail after the last flash is `SELF_TEST.TAIL_MS`, no longer a literal in the screen and the simulator), plus
+an estimated 35 s for its two screens; a repeat is not modelled. The intro cards are charged at 10 s and
+8 s (estimates, like the reaction card's). The calibration keeps its 140 s human estimate, relabelled. The
+machine halves of calibration and camera check count as enforced time. Re-run (2,000 simulated sittings,
+deterministic): **median 102.1 min, p95 126.3, p99 139.0, 9.8% (196/2000) over two hours**; enforced
+26.7 min, corpus 29.7, estimated 46.3. PROTOCOL, TIMING_MODEL (tiers, sensitivity, the exposure table,
+the frontier tables — the frontier's dropout prose is marked as from earlier runs), both generated output
+files, field/RUN.md and the stopwatch sheet (now with a camera-check row and the three-dot calibration)
+carry the new figures; RUN.md no longer offers a shorter switch field as a fixed 2.5-minute saving (the
+field has been participant-paced since Round 57). `tests/protocolFigures.test.ts` now runs the model
+against TIMING_MODEL's headline figures too. The consent wording and `CONFIG.SINGLE_SITTING_DURATION` are
+unchanged (§9, item 4); the constant's comment, which quoted the synopsis's run as the model's, now quotes
+this run. The synopsis (read-only) still quotes "a median of 98 minutes and a 95th percentile of 119"
+(§9, item 5).
+
+### 6. The offline copy (d5aacf2) — P4, P9
+
+**Found.** P4: DEPLOYMENT.md "44 entries, roughly 17 MB"; the build precaches 42 files, 44.0 MB (MiB), and
+nothing in the app said when precaching had finished. P9: Chromium refuses to fetch a service-worker script
+over a certificate error even after the warning is accepted, so the field server's `--https` gives no
+offline copy; the failure was swallowed and the update check blamed "a development server".
+
+**Fixed.** lib/swUpdate.ts keeps the copy's state from the plugin's `onOfflineReady` and `onRegisterError`,
+the page's own controller and the registration (with a settle check, after 8 s, for a server that registers
+nothing); `OfflineCopyStatus` shows it in the build box on the landing page, the session manager and
+pre-flight. The guide gives the real figures and its §4 offline check now says to wait for "Offline copy:
+ready"; the build fails when the guide's figure is more than 10% from the bundle's (scripts/verifyBundle.mjs;
+re-checked for this write-up by setting the guide back to 17 MB: the check fails, and passes again at 44).
+The field README, RUN.md §1 and serve.mjs's start-up text say the laptop must stay reachable and give the
+supported route (the deployed address, or a locally trusted certificate such as mkcert's, which the package
+does not install).
+
+**Tests.** `e2e-prod/offlineCopy.spec.ts` against the production bundle: over http://localhost the page
+says "ready" and then opens with the network off; over the field server's self-signed HTTPS (a copy of
+serve.mjs in a scratch folder, so its certificate stays out of the repository) it says "NOT installed"
+with the route, and no worker exists. `tests/offlineCopy.test.tsx` (each state, the certificate reason,
+the screen's words; fails with the handlers removed).
+
+### 7. Two follow-ups (ebacc9b, 4ebcbd8)
+
+**A test that clicked too early (ebacc9b; test only, no app code).** In the full end-to-end run on d5aacf2
+one test failed once (114 of 115 passed): `e2e/physicalCalibration.spec.ts`, "Clicking the checkbox did
+not change its state". The test changes the display size at pre-flight and then ticked "No ruler" with a
+forced click; the app re-fits the screen on the next frame, so the box could still be moving and the forced
+click landed beside it (once in about 16 full runs; 10 of 10 alone). The click is no longer forced, so the
+test waits until the box has stopped moving.
+
+**The offline-copy line no longer moves the controls under it (4ebcbd8).** The line of §6 starts as
+"Offline copy: checking…", one short line, and settles seconds later — on a server with no service worker
+(the development server, the field server's self-signed HTTPS) about 8 s after start-up, as "NOT installed"
+with its reason and the supported route, three lines at pre-flight's width. Grown in place, it pushed down
+every control under it on the session manager and pre-flight, and moved the landing page's centred Enter
+button, while the operator might be reaching for one. Now every wording the line can show is laid out,
+unseen, in the same place, so the line is as tall as its tallest wording from the start and a change of
+state moves nothing. For that, the reasons for "NOT installed" are a fixed list (lib/offlineReasons.ts); the
+browser's own error text, which varies, goes to the console instead of the screen. **Tests.**
+`e2e/offlineCopySteady.spec.ts` measures the line and the main button (Enter on the landing page, New
+Session on the session manager) while the line says "checking" and again after "NOT installed": it fails
+with the room not kept (the line moved and grew). `tests/offlineCopy.test.tsx` checks that every state and reason is among the
+wordings room is kept for, and that a refusal's own words stay off the screen; each fails with its half
+reverted. Pre-flight uses the same component and was not measured separately.
+
+### 8. MISSED-1 — already fixed
+
+A touch just after the reaction window was recorded as `false_start` TRUE. Fixed in Round 89 (758ddbd,
+`rw-v2`, `tests/rtResponseWindow.test.ts`). With `rt-t2` the window is judged against the same onset as the
+response time, and the trial loop's poll now counts from it too.
+
+### 9. For the investigator
+
+1. **The onset rule `rt-t2` — please confirm it.** It is a fix to how a measured value is taken, made for
+   measurement validity: the old onset could be late by the tracker's work, never early, and only with the
+   camera on. It changes no cut-off. Camera-off sittings are unaffected to about 1 ms. The safest
+   reversible default implemented: the confirmatory RT model keeps `rt-t1` rows (unchanged), and the R
+   template refits without the `rt-t1` camera-on rows as a sensitivity. Whether those rows should instead
+   leave the RT, lapse and signal-detection models is your decision; it matters only if pilot sittings
+   with the camera on are to be analysed. The tracker sitting out the trials also means its own counters
+   (frames processed, face found) do not move during the reaction trials; the camera's delivered frames are
+   still counted, and nothing the tracker computes there was ever recorded.
+2. **The parked RT redesign** (rtplan, out of scope here) reuses the old double-frame stamp and proposes
+   keeping the tracker running during the reaction task (its D12). If it goes ahead, it should keep
+   lib/rtOnset.ts's stamp and the hold, or measure again with e2e/rtOnsetTiming.spec.ts.
+3. **The grey field after a break (P8) — a protocol decision.** Keep the rule (the maximum and
+   `polarity_switched` follow the previous display) or let the maximum follow the screen the eye last saw
+   (a dark display after a break or set-up gets 120 s), and which code the carryover sensitivity should
+   use. `adaptation_preceded_by` now makes either analysable; for rows before Round 92 it can be inferred
+   from position in an uninterrupted sitting.
+4. **The consent duration.** The re-run model puts 9.8% of sittings over two hours against the consent's
+   "roughly 75–120 minutes". The wording is ethics-approved and was not changed; PROTOCOL and the constant's
+   comment now say what it covers. Whether to amend it is yours and the ethics committee's.
+5. **The synopsis** (read-only here) still quotes "a median of 98 minutes and a 95th percentile of 119"
+   (SYNOPSIS_AdtU.md, line 353) and a fixed "60 s (120 s when polarity switches)" grey field (line 346).
+   Both are now out of date.
+6. **The version number.** The audit 86 fixes (Rounds 86-92) changed both what participants see and what
+   the export means, and the app still says 2.4.0 (each changed rule has its own `*_version` column, and
+   `git_hash` names the build). Whether to call the next deployment 2.5.0 is yours; it is one line in
+   package.json plus an entry in lib/versionHistory.ts (a test insists on both).
+7. **Field sittings without a network** need the deployed HTTPS address; the field server is for timing
+   with the laptop at hand. On the tablet, please look once at the landing page after the first load from
+   the deployed address (it should go from "downloading" to "ready") and once from `serve.mjs --https` (it
+   should say "NOT installed").
+
+### 10. Not measured on the Xiaomi Pad 6
+
+- The tracker's time per frame on the tablet, and so the size of the `rt-t1` error there (P1); the onset
+  was measured in headless desktop Chromium only, with the drawn face, where the tracker took about 23-35 ms
+  a frame.
+- Whether the tablet's Chrome refuses the service worker from the self-signed field server as desktop
+  Chromium does (P9: expected, not tested), and how long the 44 MB download takes there.
+- Whether the offline-copy line keeps its place in the tablet's own browser and fonts (measured in desktop
+  Chromium at a 1280 × 800 viewport).
+- The new session-length figures are a model with stated estimates; the stopwatch sheet is the way to
+  check them.
+- Not changed, so not re-measured: reading timing, the tap guard and touch timestamps; the response window
+  still closes on the touch's own timestamp.
+
+### 11. Checks run
+
+On 4ebcbd8 (all the code of this round; the orchestrator's run, logs kept):
+- `npm run verify` passed: lint, types, 144 unit test files with 1,919 tests, the corpus gate, the codebook
+  gate (550 entries over 19 files), the export gate (898/898), and the R and Python analysis gates
+  (including the `rt-t2` checks of §1).
+- The full end-to-end suite with `--retries=0`: 117 of 117 passed (21.9 min), among them
+  `rtOnsetTiming`, `storageVerdict`, `offlineCopySteady`, `doubleTap`, `fullRun` and `physicalCalibration`.
+- `npm run build` passed: verify-bundle 42 assets, all precached, 44.0 MB; Workbox precache 58 entries,
+  45,014 KiB.
+- `npm run test:e2e:prod` with `--retries=0`: 9 of 9 passed, both `offlineCopy` tests among them.
+
+Earlier, on d5aacf2: `npm run verify` passed (144 files, 1,916 tests); the full end-to-end suite passed 114
+of 115, the one failure being the test fixed in ebacc9b.
+
+On this write-up's commits (6b77599, which corrects the post-break sentence and adds the 8/12 check to
+`tests/adaptationContext.test.ts`, and the documents of this round): `npm run verify` passed (lint, types,
+144 unit test files with 1,919 tests, the corpus gate, the codebook gate with 550 entries over 19 files, the
+export gate 898/898, and the R and Python analysis gates). No end-to-end run was repeated for them: they
+change documents, codebook sentences, a code comment and one unit test, not behaviour.
+
+Each fix's own test was seen to fail with the fix reverted, as recorded in its section.
+
+### 12. Versions in the data
+
+| Rule or format | Before | Now | Where it is recorded |
+|---|---|---|---|
+| Reaction onset | `rt-t1`: the clock read in the second frame callback after rendering, after any tracker work in that frame | `rt-t2`: the begin time of the frame after the one that painted the dot (frame timestamp), and the tracker held during the trials | 02 and analysis_long `rt_timing_version`; ANALYSIS_PLAN §5 |
+| Pre-flight storage check | shown, not kept | kept | 01 `storage_verdict`, `storage_persisted`, `storage_free_mb` |
+| What the grey field followed | not recorded | recorded; the field's maximum unchanged | 02 and analysis_long `adaptation_preceded_by` |
+| Every other rule (tap guard, attempt counting, scale freeze, inter-blink interval, blink classification, reaction window, rating format, typography, straight-lining, frame-rate gate, calibration, gaze, exposure, camera check scoring, reliability, engagement thresholds, fitted minimum) | unchanged | unchanged | as before |

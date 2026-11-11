@@ -36,7 +36,7 @@
  * out of the stamp, but the tracker's work also ran in the frame that PAINTS the dot (video-frame
  * callbacks come before paint), delaying the paint itself while the frame's timestamp stayed put, and in
  * the frames that time the foreperiod. Measured with the frame stamp alone (headless Chromium, tracker
- * about 23-35 ms a frame), the onset fell up to 23 ms before the dot's paint had finished. So the tracker
+ * about 23-35 ms a frame), the onset fell up to 27 ms before the dot's paint had finished. So the tracker
  * also sits out the trials (useTracking holdFrames): nothing it computes during the reaction task is kept
  * (measurementSchedule.ts), the camera keeps running and its frames are still counted, and the tracker
  * gets them back when the last trial ends. With both, e2e/rtOnsetTiming.spec.ts measures the onset at the
