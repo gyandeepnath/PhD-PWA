@@ -138,7 +138,11 @@ test.describe('pixel ratio 2.0 at the profile, 1.5 by pre-flight', () => {
     await expect.poll(() => page.evaluate(() => `${screen.width}x${screen.height}@${devicePixelRatio}`)).toBe('1920x1200@1.5');
     expect(await stageNow(page)).toBe('PREFLIGHT');
 
-    await page.getByTestId('calibration-skip-ack').check({ force: true });
+    // NOT forced. The display-size change re-fits the canvas a frame or more later (viewportScale.ts
+    // applies on the next animation frame, and pre-flight re-reads its scale on the resize), so the
+    // checkbox can still be moving: a forced click aims at where it was and can land beside it. An
+    // unforced check waits until the box has stopped moving and the point would hit it.
+    await page.getByTestId('calibration-skip-ack').check();
     await expect(page.getByTestId('preflight-continue')).toBeDisabled();   // no distance typed yet
     await setInput(page, 'viewing-distance', '57');
     await finishPreflight(page);
