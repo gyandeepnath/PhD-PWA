@@ -9,8 +9,9 @@
  * speeded detection of the condition's own colour on its own background (see `rtStimulusColours`
  * in experiment/conditions.ts for why this replaced an achromatic target, and what it costs).
  * Design choices for accuracy & reliability:
- *  - onset is the begin time of the frame after the one that painted the dot, read from the frame's own
- *    timestamp, so the face tracker's work in that frame cannot move it (lib/rtOnset.ts, rt-t2);
+ *  - onset is the begin time of the first frame that begins after the frame that painted the dot was
+ *    rendered, read from the frame's own timestamp, so no work in that frame can move it and a long paint
+ *    frame cannot put it before the paint (lib/rtOnset.ts, rt-t3);
  *  - the response time comes from the hardware pointer-event timestamp (low jitter);
  *  - responses < RT_MIN_VALID_RT are anticipations — excluded from RT means, counted separately;
  *  - the trial ends the instant a response is made (only no-go trials wait the window out);
@@ -63,6 +64,13 @@ export interface RawTrial {
   stim_ecc_px: number;
   stim_scale_at_onset: number;
   stimulus_onset_time: number;
+  /**
+   * How far the rendering of the frame that painted the dot ran past the begin time of the frame after it,
+   * ms (lib/rtOnset.ts, rt-t3; Round 93): 0 normally; more means the onset was moved to a later frame,
+   * because the dot could not be on the screen at that frame's begin time. Null if the end of the paint
+   * was not seen.
+   */
+  onset_paint_overrun_ms: number | null;
   response_time_ms: number | null;
   accuracy: RtAccuracy;
   false_start: boolean;
@@ -207,6 +215,7 @@ export function ReactionTimeTask({
   const records = useRef<RawTrial[]>([]);
   const phaseRef = useRef<Phase>('instruction');
   const onsetRef = useRef(0);
+  const overrunRef = useRef<number | null>(null);
   // The dot's element while it is in the document: how the onset stamp sees which frame paints it.
   const dotRef = useRef<HTMLDivElement | null>(null);
   const respondedAtRef = useRef<number | null>(null);
@@ -273,19 +282,22 @@ export function ReactionTimeTask({
    * can be accepted before an onset exists.
    *
    * And the stamp is that frame's OWN timestamp, not the clock read in its callback (Round 92, audit
-   * 86 P1; rt_timing_version rt-t2): with the camera on, the face tracker's work runs earlier in the
-   * same frame, and the clock read after it made every such reaction time short by it. The frame that
-   * paints the dot is the first whose callback finds it in the document, not assumed to be the next
-   * one. See lib/rtOnset.ts.
+   * 86 P1): with the camera on, the face tracker's work runs earlier in the same frame, and the clock
+   * read after it made every such reaction time short by it. The frame that paints the dot is the first
+   * whose callback finds it in the document, not assumed to be the next one; and the stamping frame is
+   * the first to begin after that paint was rendered, so a long paint frame cannot put the onset before
+   * the dot could be seen (Round 93, review REVA-1; rt_timing_version rt-t3). See lib/rtOnset.ts.
    */
   const markOnsetAtPaint = (): Promise<number> =>
-    stampOnsetAfterPaint(() => dotRef.current?.isConnected === true, (frameTime) => {
+    stampOnsetAfterPaint(() => dotRef.current?.isConnected === true, (frameTime, paintOverrunMs) => {
       onsetRef.current = frameTime;
+      overrunRef.current = paintOverrunMs;
       phaseRef.current = 'stimulus';
     });
 
   const runTrial = async (t: Trial, index: number, isPractice: boolean) => {
     current.current = t;
+    overrunRef.current = null;
     respondedAtRef.current = null;
     falseStartRef.current = false;
 
@@ -356,6 +368,7 @@ export function ReactionTimeTask({
         stim_ecc_px: t.location.eccPx,
         stim_scale_at_onset: scaleAtOnset,
         stimulus_onset_time: onsetRef.current,
+        onset_paint_overrun_ms: overrunRef.current,
         response_time_ms: rt,
         accuracy,
         false_start: falseStartRef.current,

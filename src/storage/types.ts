@@ -683,8 +683,10 @@ export interface ConditionRecord {
    */
   adaptation_preceded_by?: 'reaction_task' | 'break' | 'setup_or_resume' | null;
   /**
-   * When the reaction block's dot onset was taken (lib/rtOnset.ts RT_TIMING_VERSION): 'rt-t2' from Round
-   * 92, the begin time of the frame after the one that painted the dot, from the frame's own timestamp.
+   * When the reaction block's dot onset was taken (lib/rtOnset.ts RT_TIMING_VERSION): 'rt-t3' from Round
+   * 93, the begin time of the first frame that begins after the frame that painted the dot was rendered,
+   * from that frame's own timestamp; 'rt-t2' in Round 92, the begin time of the frame after the paint
+   * frame however long the paint ran (early when the paint frame overran; review REVA-1).
    * Absent on rows recorded before it, which the export names 'rt-t1': the clock read in the stamping
    * frame's callback, after any face-tracker work in that frame, so with the camera on a reaction time
    * could be short by up to one tracker call.
@@ -907,6 +909,13 @@ export interface ReactionTrialRecord {
    */
   stim_ecc_deg_55cm?: number;
   stimulus_onset_time: number;
+  /**
+   * How far the rendering of the frame that painted the dot ran past the begin time of the frame after it,
+   * ms (Round 93, rt_timing_version rt-t3; lib/rtOnset.ts): 0 normally; more means the onset was moved to
+   * the first frame beginning after the paint was rendered. Absent on rows recorded before rt-t3 (never
+   * measured); null if the end of the paint was not seen.
+   */
+  onset_paint_overrun_ms?: number | null;
   response_time_ms: number | null;
   accuracy: RtAccuracy;
   false_start: boolean;

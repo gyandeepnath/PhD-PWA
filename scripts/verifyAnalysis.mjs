@@ -273,7 +273,12 @@ for (const { root, options } of jobs) {
   //    onset read after any face-tracker work in its frame; audit 86 P1), which R must count among the
   //    camera-on runs, keep in the RT model, and refit it without.
   let flaggedRtOld = 0;
-  editColumn(join(at('flagged'), 'P001', '02_conditions.csv'), 'rt_timing_version', (v) => { if (v === 'rt-t2') { flaggedRtOld++; return ''; } return v; });
+  editColumn(join(at('flagged'), 'P001', '02_conditions.csv'), 'rt_timing_version', (v) => { if (v === 'rt-t3') { flaggedRtOld++; return ''; } return v; });
+  //    ... and P003's reaction blocks timed under Round 92's rule, rt-t2 (an onset that a paint frame running
+  //    past the next frame's begin time put early; review REVA-1): counted on their own line, and kept in
+  //    the RT model and in the refit without the rt-t1 camera-on rows.
+  let flaggedRtT2 = 0;
+  editColumn(join(at('flagged'), 'P003', '02_conditions.csv'), 'rt_timing_version', (v) => { if (v === 'rt-t3') { flaggedRtT2++; return 'rt-t2'; } return v; });
   //  - r-short: every exposure halved, and no target locations (a pre-Round-66 export);
   cpSync(cohortDir, at('r-short'), { recursive: true });
   const shortMarked = editColumn(join(at('r-short'), 'P001', '07_eye_metrics.csv'), 'observed_duration_ms',
@@ -743,20 +748,26 @@ for (const { root, options } of jobs) {
        * back in a refit of the primary.
        */
       /*
-       * THE ONSET RULE (Round 92, audit 86 P1). The cohort is wholly rt-t2: nothing to count, no refit. In
-       * the flagged state P001's blocks are left at rt-t1: those with the camera on are counted, stay in
-       * the RT model, and the model is refitted without them on the rows that are left.
+       * THE ONSET RULE (Round 92, audit 86 P1; rt-t3 from Round 93, review REVA-1). The cohort is wholly
+       * rt-t3: nothing to count, no refit. In the flagged state P001's blocks are left at rt-t1: those with
+       * the camera on are counted, stay in the RT model, and the model is refitted without them on the rows
+       * that are left — which keep P003's blocks, timed under rt-t2 and counted on a line of their own.
        */
-      const rtLine = (text) => (/^\[rt-t2\][^\n]*/m.exec(text) ?? ['no [rt-t2] line'])[0];
-      ok('R: every reaction block in the cohort is under the current onset rule (rt-t2), with no refit',
-        /\[rt-t2\] 0 of \d+ RT condition-run\(s\) were timed under the earlier onset rule with the camera on/.test(rOut)
-          && !/\[rt-t2 sensitivity\]/.test(rOut), rtLine(rOut));
+      const rtLine = (text) => (/^\[rt-t3\][^\n]*/m.exec(text) ?? ['no [rt-t3] line'])[0];
+      ok('R: every reaction block in the cohort is under the current onset rule (rt-t3), with no refit',
+        /\[rt-t3\] 0 of \d+ RT condition-run\(s\) were timed under rule rt-t1 with the camera on/.test(rOut)
+          && /\[rt-t3\] 0 of \d+ RT condition-run\(s\) were timed under rule rt-t2/.test(rOut)
+          && !/\[rt-t3 sensitivity\]/.test(rOut), rtLine(rOut));
       {
-        const m = /^\[rt-t2\] (\d+) of (\d+) RT condition-run\(s\) were timed under the earlier onset rule/m.exec(fOut);
-        const sensN = [...fOut.matchAll(/^\[rt-t2 sensitivity\] without them: \S+ -?[\d.]+ ms \(SE [\d.]+\), n = (\d+)/gm)].map((x) => +x[1]);
+        const m = /^\[rt-t3\] (\d+) of (\d+) RT condition-run\(s\) were timed under rule rt-t1 with the camera on/m.exec(fOut);
+        const t2 = /^\[rt-t3\] (\d+) of (\d+) RT condition-run\(s\) were timed under rule rt-t2/m.exec(fOut);
+        const sensN = [...fOut.matchAll(/^\[rt-t3 sensitivity\] without them: \S+ -?[\d.]+ ms \(SE [\d.]+\), n = (\d+)/gm)].map((x) => +x[1]);
         ok('R (flagged): camera-on reaction blocks left at rt-t1 are counted, kept in the RT model, and refitted without',
           flaggedRtOld > 0 && !!m && +m[1] > 0 && +m[1] <= flaggedRtOld && sensN.length > 0 && sensN.every((n) => n === +m[2] - +m[1]),
           `${rtLine(fOut)}; ${flaggedRtOld} P001 rows blanked; refit n ${sensN.join(', ') || 'missing'}`);
+        ok('R (flagged): reaction blocks timed under rt-t2 are counted on their own line, and stay in the model and its refit',
+          flaggedRtT2 > 0 && !!t2 && +t2[1] === flaggedRtT2,
+          `${t2?.[0] ?? 'no rt-t2 line'}; ${flaggedRtT2} P003 rows set to rt-t2`);
       }
       const blinkLine = (text) => (/^\[blink-r2\][^\n]*/m.exec(text) ?? ['no [blink-r2] line'])[0];
       ok('R: every blink count in the cohort is under the current rule (blink-r2)',

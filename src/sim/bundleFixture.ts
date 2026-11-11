@@ -264,6 +264,8 @@ function rtTrialsFor(conditionId: string, sid: string, i: number) {
       // The fixture's sessions run at stimulus_scale 1.
       stim_scale_at_onset: 1,
       stimulus_onset_time: 1000 + t * 1500,
+      // rt-t3: the paint ended before the next frame began, as in every ordinary trial.
+      onset_paint_overrun_ms: 0,
       response_time_ms: anticipation ? 110 + (t % 5) * 6 : responded ? 320 + i + (t % 7) * 6 : null,
       accuracy: accuracy as RtAccuracy,
       false_start: false,

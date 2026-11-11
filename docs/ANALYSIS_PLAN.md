@@ -881,7 +881,7 @@ the screen the eye last saw, and which code the carryover sensitivity should use
 decisions (not pre-specified here). Rows before Round 92 have no `adaptation_preceded_by`; for an
 uninterrupted sitting it is position 0 → set-up, every second position → break, the rest → reaction task.
 
-**The reaction onset is the frame's own timestamp (Round 92).** Every reaction time is the touch's own
+**The reaction onset is a frame's own timestamp, after the dot's paint (Rounds 92 and 93).** Every reaction time is the touch's own
 timestamp minus the dot's onset. Up to Round 91 the onset was the clock read inside the second
 animation-frame callback after the dot was rendered (`rt-t1`). With the camera on, the face tracker works
 on the main thread in the browser's video-frame callback, which runs in the same frame and before that
@@ -893,13 +893,34 @@ time of the first frame after the frame that painted the dot, read from the time
 that frame before any work in it runs, and the frame that painted the dot is the first whose callback finds
 it in the document; and the face tracker is not given the camera's frames while the trials run (nothing it
 computes in the reaction task is kept), so its work can delay neither the dot's paint nor the foreperiod.
-With the camera off `rt-t1` and `rt-t2` agree to about 1 ms. `rt_timing_version`
-(02_conditions.csv, analysis_long.csv) says which rule a block ran under. `rt-t1` rows of a camera-on
-sitting are biased short by an amount that was not recorded and cannot be recovered; the confirmatory RT
-model keeps them (it is unchanged), and the R template counts them and refits the RT model without them as
-a sensitivity. Whether they should instead be left out of the RT, lapse and signal-detection models is the
-investigator's decision (not pre-specified here). e2e/rtOnsetTiming.spec.ts measures the onset against the
-paint with the camera on and off; on the tablet it was not measured.
+With the camera off `rt-t1` and `rt-t2` agree to about 1 ms.
+
+*Round 93 (`rt-t3`; review REVA-1).* Round 92 said the `rt-t2` onset could never come before the dot was
+painted. That held only while the frame that paints the dot finished before the next frame began. Other
+main-thread work in that frame (a garbage collection, a database write finishing, a long render) delays
+the paint itself, and when it runs past the next vsync the browser hands the next frame that vsync's
+timestamp although the frame starts only after the paint: the `rt-t2` onset then came before the dot could
+be on the screen, and the reaction time out long by up to about a frame (measured with 30 ms of injected
+work: 14.2-14.6 ms before the paint ended). Not seen without injected work (36 trials at 4x and 6x CPU
+slowdown, camera off and on); not measured on the tablet. From Round 93 the onset is the begin time of the
+first frame that begins no earlier than the end of the paint frame's rendering (the arrival of a message
+posted from that frame). In an ordinary trial that is the very frame `rt-t2` took — the next one, about
+11-16 ms after the paint ended — so nothing changes there; only a trial whose paint frame overran moves to
+the frame after, and 08 `onset_paint_overrun_ms` records by how much the paint ran past the next frame's
+begin time (0 normally), so such trials can be found. What is guaranteed is therefore: the onset is a
+frame's begin time, never before the end of the main-thread rendering of the frame that drew the dot, and
+no more than one frame after it. When the compositor and the panel then put that frame on the glass is not
+measured by the browser and not claimed. `rt-t2` rows are the same as `rt-t3` except on such a trial,
+where they are long by up to about a frame and are not marked; the R template counts them on a line of its
+own and keeps them, in the RT model and in its refit.
+
+`rt_timing_version` (02_conditions.csv, analysis_long.csv) says which rule a block ran under. `rt-t1` rows
+of a camera-on sitting are biased short by an amount that was not recorded and cannot be recovered; the
+confirmatory RT model keeps them (it is unchanged), and the R template counts them and refits the RT model
+without them as a sensitivity. Whether they should instead be left out of the RT, lapse and
+signal-detection models is the investigator's decision (not pre-specified here). e2e/rtOnsetTiming.spec.ts
+measures the onset against the paint with the camera on and off, and with a long paint frame; on the
+tablet it was not measured.
 
 **A display's size is fixed for its own stimulus only (Round 87).** The display scale (`stimulus_scale`,
 which with the sitting's ruler calibration gives every visual angle) may shrink while a stimulus is on

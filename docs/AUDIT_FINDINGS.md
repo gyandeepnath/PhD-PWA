@@ -9067,6 +9067,9 @@ Nothing here was measured on the Xiaomi Pad 6.
    camera's frames while the dots are shown (the camera keeps running; nothing the tracker computes during
    the reaction task was ever kept). Measured: with the camera on and off, every onset is the start of the
    frame after the dot was painted, 11-16 ms after that paint finished. Rows from before say `rt-t1` (§1).
+   *[Corrected in Round 93: that holds only while the frame that paints the dot finishes before the next
+   frame begins. When other work makes that frame run past the next vsync, the `rt-t2` onset came before
+   the paint had finished. Rule `rt-t3` waits for the first frame that begins after the paint.]*
 2. **Whether the sitting ran on durable storage is now kept (P5).** Pre-flight checks whether the browser has
    promised to keep the tablet's data ("durable storage") and lets a sitting go on after "warn" or
    "unknown"; the result was shown and dropped, although the code said it was stored. It is now in
@@ -9282,7 +9285,8 @@ response time, and the trial loop's poll now counts from it too.
 
 1. **The onset rule `rt-t2` — please confirm it.** It is a fix to how a measured value is taken, made for
    measurement validity: the old onset could be late by the tracker's work, never early, and only with the
-   camera on. It changes no cut-off. Camera-off sittings are unaffected to about 1 ms. The safest
+   camera on. *[Round 93: "never early" is true of `rt-t1`. `rt-t2` itself could be early, by up to about a
+   frame, on a trial whose paint frame ran past the next frame's begin time; rule `rt-t3` corrects it.]* It changes no cut-off. Camera-off sittings are unaffected to about 1 ms. The safest
    reversible default implemented: the confirmatory RT model keeps `rt-t1` rows (unchanged), and the R
    template refits without the `rt-t1` camera-on rows as a sensitivity. Whether those rows should instead
    leave the RT, lapse and signal-detection models is your decision; it matters only if pilot sittings
