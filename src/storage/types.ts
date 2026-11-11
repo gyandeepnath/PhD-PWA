@@ -192,6 +192,16 @@ export interface SessionRecord {
   brightness_percent: number | null;
   session_start_time: number;
   session_end_time: number | null;
+  /**
+   * The tablet's UTC offset, in minutes EAST of UTC (India +330), at session_start_time and at
+   * session_end_time (Round 93, review R3), taken on the tablet as each was stamped. The export writes
+   * the sitting's local date and times with these, so a backup restored and exported on a device in
+   * another time zone still dates the sitting by the tablet's clock. Absent on sittings recorded before
+   * they existed (the export then falls back to the exporting device's offset and says so); the end one
+   * also while the sitting has not ended.
+   */
+  session_start_utc_offset_min?: number;
+  session_end_utc_offset_min?: number;
   /** Deterministic order driver. */
   randomisation_seed: number;
   /** Ordered condition indices (into CONDITIONS) for this participant. */

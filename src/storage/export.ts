@@ -20,6 +20,7 @@ import { CONDITIONS } from '@/experiment/conditions';
 import { auditBundle } from './integrity';
 import { RT_WINDOW_VERSION, RT_WINDOW_VERSION_V1 } from '@/lib/rtResponse';
 import { RT_TIMING_VERSION, RT_TIMING_VERSION_V1 } from '@/lib/rtOnset';
+import { utcOffsetMin } from '@/lib/localClock';
 import { endReadingDelayMin } from './luxLog';
 import { serialiseSessionBackup } from './backup';
 import { requiredGrant, fnv1aBytes } from './media';
@@ -288,17 +289,18 @@ export function cameraJudgements(e: Pick<EyeMetricsRecord, 'camera_active' | 'fp
 }
 
 /**
- * A stored epoch time as the tablet's wall clock: ISO 8601 with the device's UTC offset, e.g.
- * 2026-10-29T04:30:00+05:30.
+ * A stored epoch time as a wall clock: ISO 8601 with a UTC offset, e.g. 2026-10-29T04:30:00+05:30.
  *
  * experiment_date was the UTC date (`toISOString().slice(0, 10)`), so a sitting started before 05:30
  * in India was dated the day before, while the session manager and the dashboard showed the tablet's
- * date; and no file gave the time of day at all (audit 86 D8). The offset is the exporting device's
- * for that instant (`getTimezoneOffset`, which follows any daylight saving), and it is written into
- * the value, so the instant is unambiguous wherever the file is read. The tablet records and exports
- * the sitting, so this is the clock the sitting ran by.
+ * date; and no file gave the time of day at all (audit 86 D8). The offset is written into the value, so
+ * the instant is unambiguous wherever the file is read. Which offset is the caller's: the sitting's
+ * times use the one the TABLET stored with them (sittingClock). Without one, the default is the
+ * device running this code, for that instant (`getTimezoneOffset`, which follows daylight saving) — the
+ * exporting device, which is the tablet only if the sitting was not restored and exported elsewhere
+ * (Round 93, review R3: a backup exported in London dated a Kolkata sitting by London's clock).
  */
-export function localIso(epochMs: number, offsetMin: number = -new Date(epochMs).getTimezoneOffset()): string {
+export function localIso(epochMs: number, offsetMin: number = utcOffsetMin(epochMs)): string {
   const shifted = new Date(epochMs + offsetMin * 60_000);
   const p2 = (n: number) => String(n).padStart(2, '0');
   const sign = offsetMin < 0 ? '-' : '+';
@@ -306,6 +308,27 @@ export function localIso(epochMs: number, offsetMin: number = -new Date(epochMs)
   return `${shifted.getUTCFullYear()}-${p2(shifted.getUTCMonth() + 1)}-${p2(shifted.getUTCDate())}`
     + `T${p2(shifted.getUTCHours())}:${p2(shifted.getUTCMinutes())}:${p2(shifted.getUTCSeconds())}`
     + `${sign}${p2(Math.floor(abs / 60))}:${p2(abs % 60)}`;
+}
+
+/**
+ * The sitting's start and end on the tablet's clock (Round 93, review R3). Each uses the UTC offset the
+ * tablet stored when it was stamped; a sitting that stored only one of the two (started on a build before
+ * the field, ended on one with it) uses that one for both — the same tablet, and a daylight-saving change
+ * inside one sitting is the only thing it can miss. A sitting that stored neither falls back to the
+ * exporting device's offset, and `source` says so (01 session_utc_offset_source), because then the
+ * date and the times are the exporting device's clock, which is the tablet's only if it exported it.
+ */
+export function sittingClock(s: Pick<SessionRecord, 'session_start_time' | 'session_end_time' | 'session_start_utc_offset_min' | 'session_end_utc_offset_min'>): {
+  startLocal: string; endLocal: string; source: 'tablet' | 'export_device';
+} {
+  const ok = (x: number | null | undefined): x is number => typeof x === 'number' && Number.isFinite(x);
+  const start = ok(s.session_start_utc_offset_min) ? s.session_start_utc_offset_min : ok(s.session_end_utc_offset_min) ? s.session_end_utc_offset_min : undefined;
+  const end = ok(s.session_end_utc_offset_min) ? s.session_end_utc_offset_min : start;
+  return {
+    startLocal: localIso(s.session_start_time, start),
+    endLocal: s.session_end_time != null ? localIso(s.session_end_time, end) : '',
+    source: start != null ? 'tablet' : 'export_device',
+  };
 }
 
 /** Make a string safe for a filename on every platform (Windows forbids " < > : | ? * \ /). */
@@ -719,9 +742,10 @@ const CODEBOOK_ROWS: Record<string, string>[] = [
   { file: '00_condition_reference.csv', column: 'background_color', type: 'string', unit: 'hex', role: 'iv', description: 'Background colour as an sRGB hex triplet, exactly as rendered.' },
   { file: '00_condition_reference.csv', column: 'text_color', type: 'string', unit: 'hex', role: 'iv', description: 'Text colour as an sRGB hex triplet, exactly as rendered.' },
   { file: '00_condition_reference.csv', column: 'wcag_level', type: 'string', unit: '-', role: 'covariate', description: 'Accessibility band implied by the contrast ratio: AAA, AA, AA Large, or Fail. Descriptive; model the continuous ratio, not this band.' },
-  { file: '01_session_info.csv', column: 'experiment_date', type: 'string', unit: 'ISO 8601', role: 'meta', description: "Date the sitting started, on the tablet's clock: the date part of session_start_local. Under the single-sitting protocol there is no between-visit spacing to check; retained for earlier two-visit data and for split sittings. Until Round 89 this was the UTC date, so a sitting started before 05:30 in India was dated the day before (audit 86 D8); re-export an older file to get the tablet's date." },
-  { file: '01_session_info.csv', column: 'session_start_local', type: 'datetime', unit: 'ISO 8601', role: 'meta', description: "When the sitting started, on the tablet's clock, with its UTC offset (e.g. 2026-10-29T04:30:00+05:30), to the second. The time of day is a candidate covariate for visual fatigue; no file carried it before Round 89. The offset is the exporting device's for that instant — the tablet that ran the sitting, unless a backup was restored and exported elsewhere." },
-  { file: '01_session_info.csv', column: 'session_end_local', type: 'datetime', unit: 'ISO 8601', role: 'meta', description: 'When the sitting ended (the closing questionnaires submitted), on the same clock and offset as session_start_local. Blank while the sitting has not ended.' },
+  { file: '01_session_info.csv', column: 'experiment_date', type: 'string', unit: 'ISO 8601', role: 'meta', description: "Date the sitting started, on the tablet's clock: the date part of session_start_local. Under the single-sitting protocol there is no between-visit spacing to check; retained for earlier two-visit data and for split sittings. Until Round 89 this was the UTC date, so a sitting started before 05:30 in India was dated the day before (audit 86 D8); re-export an older file to get the tablet's date. Where session_utc_offset_source is export_device, it is the exporting device's date for that instant." },
+  { file: '01_session_info.csv', column: 'session_start_local', type: 'datetime', unit: 'ISO 8601', role: 'meta', description: "When the sitting started, on the tablet's clock, with its UTC offset (e.g. 2026-10-29T04:30:00+05:30), to the second. The time of day is a candidate covariate for visual fatigue; no file carried it before Round 89. From Round 93 the offset is the one the tablet stored when the sitting started, so the value is the same whichever device exports it (review R3: a backup restored and exported in another time zone used to get that device's clock and date). On a sitting recorded before Round 93 it is the exporting device's offset for that instant (session_utc_offset_source export_device). Either way the instant itself is exact." },
+  { file: '01_session_info.csv', column: 'session_end_local', type: 'datetime', unit: 'ISO 8601', role: 'meta', description: "When the sitting ended (the closing questionnaires submitted), on the tablet's clock with the offset it stored when the sitting ended (from Round 93; the start's when only that one was stored, the exporting device's when neither was — session_utc_offset_source). Blank while the sitting has not ended." },
+  { file: '01_session_info.csv', column: 'session_utc_offset_source', type: 'factor(2)', unit: '-', role: 'provenance', description: "Whose clock experiment_date, session_start_local and session_end_local are on (Round 93, review R3). tablet = the UTC offset the tablet stored with the sitting's start or end: the same file from whichever device exports it. export_device = the sitting stored no offset (recorded before Round 93), so the exporting device's offset for each instant was used: the tablet's clock when the tablet exported it, but another time zone's date and times if a backup was restored and exported there. The instant is exact either way; only the wall-clock reading and the date depend on it." },
   { file: '01_session_info.csv', column: 'session_status', type: 'factor(2)', unit: '-', role: 'qc', description: 'in_progress or complete. An export may be taken at any time, including from a withdrawn or interrupted sitting, so this states whether the sitting actually finished. It does NOT say whether the participant withdrew: see withdrawn.' },
   { file: '01_session_info.csv', column: 'withdrawn', type: 'boolean', unit: '-', role: 'qc', description: 'TRUE means the PARTICIPANT WITHDREW from the study. Recording a withdrawal marks every sitting of that participant on the device, so each of their bundles carries it. Not a quality flag — a standing instruction: no row of this bundle, nor of any other bundle for the same participant_id, may be analysed, under any sensitivity analysis. The measurements are kept and exported so the withdrawal is auditable, which is what the participant agreed to when they withdrew without asking for deletion. This column used to be absent, so a withdrawn sitting exported CSVs identical to an ordinary paused one. The shipped R and Python templates drop every sitting of a participant with any withdrawn sitting before modelling, which also covers a sitting exported from another device before the withdrawal was recorded.' },
   { file: '01_session_info.csv', column: 'withdrawn_at', type: 'datetime', unit: 'ISO 8601', role: 'qc', description: 'When the withdrawal was recorded. Blank when the participant did not withdraw.' },
@@ -1193,8 +1217,10 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
   const bundle = normaliseBundle(input);
   const { session, participant } = bundle;
   const pid = session.participant_id;
-  // The tablet's date, not the UTC date (audit 86 D8): the date part of session_start_local.
-  const startLocal = localIso(session.session_start_time);
+  // The tablet's date, not the UTC date (audit 86 D8): the date part of session_start_local, on the
+  // offset the tablet stored, not the exporting device's (Round 93, review R3).
+  const clock = sittingClock(session);
+  const startLocal = clock.startLocal;
   const date = startLocal.slice(0, 10);
   const summaries = buildConditionSummaries(bundle);
   // Most recent calibration by the time it was taken, falling back to document order for records
@@ -1229,11 +1255,12 @@ export function buildExportFiles(input: SessionBundle): ExportFile[] {
 
   // 01 — session info
   csv('01_session_info.csv',
-    ['participant_id', 'experiment_date', 'session_start_local', 'session_end_local', 'enrolment_number', 'session_index', 'session_status', 'withdrawn', 'withdrawn_at', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'protocol_pass', 'repeat_run_note', 'sitting_split_reason', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_end_min_after_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'build_time', 'build_changed_mid_sitting', 'session_builds', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'device_pixel_ratio', 'stimulus_scale', 'layout_viewport', 'viewing_distance_cm', 'calibration_bar_design_px', 'calibration_bar_mm', 'calibration_scale', 'mm_per_css_px', 'calibration_skipped', 'physical_size_source', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'consent_revisions', 'preflight_complete', 'preflight_bulk_ticked', 'e2e_timing', 'display_mode', 'display_mode_acknowledged', 'stimulus_font_ok', 'storage_verdict', 'storage_persisted', 'storage_free_mb', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'gaze_trust', 'gaze_targets_well_covered', 'gaze_threshold_floored', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected', 'calibration_ear_samples', 'calibration_runs', 'calibration_rule_version', 'calibration_ground', 'calibration_baseline_ms', 'calibration_baseline_reason', 'gaze_rule_version', 'gaze_check_reason', 'selftest_cued', 'selftest_detected', 'selftest_extra', 'selftest_fps', 'selftest_face_presence', 'selftest_pass', 'selftest_camera_fps', 'selftest_tracker_fps', 'selftest_process_ms_p50', 'selftest_process_ms_p95', 'selftest_frames_delivered', 'selftest_frames_processed', 'selftest_frames_skipped', 'selftest_limit', 'selftest_rule', 'selftest_sampling_fps', 'selftest_fps_tier', 'selftest_verdict', 'selftest_attempts', 'selftest_ground', 'selftest_not_run_reason', 'camera_off_reason', 'tracker_backend', 'tracker_requested', 'tracker_selection', 'tracker_trials', 'tracker_failures', 'camera_requested', 'camera_setting_width', 'camera_setting_height', 'camera_setting_fps', 'camera_cap_fps_max', 'camera_cap_width_max', 'camera_cap_height_max', 'timestamp_source', 'camera_fps_min_requested', 'camera_request_fallback', 'camera_facing', 'camera_exposure_caps', 'camera_exposure_policy', 'camera_exposure_rule', 'camera_exposure_reason', 'camera_exposure_mode_readback', 'camera_exposure_time_100us', 'camera_iso', 'camera_exposure_comp', 'camera_auto_fps', 'camera_auto_luma', 'camera_lock_fps_check', 'camera_lock_luma', 'camera_bench'],
+    ['participant_id', 'experiment_date', 'session_start_local', 'session_end_local', 'session_utc_offset_source', 'enrolment_number', 'session_index', 'session_status', 'withdrawn', 'withdrawn_at', 'conditions_completed', 'session_complete', 'conditions_per_session', 'condition_offset', 'ambient_lux', 'ambient_illumination_level', 'illumination_block', 'protocol_pass', 'repeat_run_note', 'sitting_split_reason', 'illumination_order_first', 'lux_start', 'lux_middle', 'lux_end', 'lux_end_min_after_end', 'lux_n_readings', 'lux_checkpoints_logged', 'lux_complete', 'lux_mean', 'lux_max_deviation', 'lux_logged_all_in_range', 'lux_deviation_note', 'screen_white_luminance_cd_m2', 'brightness_percent', 'session_duration_min', 'app_version', 'git_hash', 'build_time', 'build_changed_mid_sitting', 'session_builds', 'condition_def_hash', 'schema_version', 'device_type', 'screen_resolution', 'device_pixel_ratio', 'stimulus_scale', 'layout_viewport', 'viewing_distance_cm', 'calibration_bar_design_px', 'calibration_bar_mm', 'calibration_scale', 'mm_per_css_px', 'calibration_skipped', 'physical_size_source', 'consent_given', 'consent_camera_metrics', 'consent_setup_photos', 'consent_annotation_video', 'media_items_retained', 'consent_revisions', 'preflight_complete', 'preflight_bulk_ticked', 'e2e_timing', 'display_mode', 'display_mode_acknowledged', 'stimulus_font_ok', 'storage_verdict', 'storage_persisted', 'storage_free_mb', 'caffeine_today_session', 'hours_since_sleep_session', 'gaze_calibration_valid', 'gaze_trust', 'gaze_targets_well_covered', 'gaze_threshold_floored', 'calibration_ear_baseline', 'calibration_pitch_baseline_frac', 'calibration_targets_detected', 'calibration_ear_samples', 'calibration_runs', 'calibration_rule_version', 'calibration_ground', 'calibration_baseline_ms', 'calibration_baseline_reason', 'gaze_rule_version', 'gaze_check_reason', 'selftest_cued', 'selftest_detected', 'selftest_extra', 'selftest_fps', 'selftest_face_presence', 'selftest_pass', 'selftest_camera_fps', 'selftest_tracker_fps', 'selftest_process_ms_p50', 'selftest_process_ms_p95', 'selftest_frames_delivered', 'selftest_frames_processed', 'selftest_frames_skipped', 'selftest_limit', 'selftest_rule', 'selftest_sampling_fps', 'selftest_fps_tier', 'selftest_verdict', 'selftest_attempts', 'selftest_ground', 'selftest_not_run_reason', 'camera_off_reason', 'tracker_backend', 'tracker_requested', 'tracker_selection', 'tracker_trials', 'tracker_failures', 'camera_requested', 'camera_setting_width', 'camera_setting_height', 'camera_setting_fps', 'camera_cap_fps_max', 'camera_cap_width_max', 'camera_cap_height_max', 'timestamp_source', 'camera_fps_min_requested', 'camera_request_fallback', 'camera_facing', 'camera_exposure_caps', 'camera_exposure_policy', 'camera_exposure_rule', 'camera_exposure_reason', 'camera_exposure_mode_readback', 'camera_exposure_time_100us', 'camera_iso', 'camera_exposure_comp', 'camera_auto_fps', 'camera_auto_luma', 'camera_lock_fps_check', 'camera_lock_luma', 'camera_bench'],
     [{
       participant_id: pid, experiment_date: date, enrolment_number: session.enrolment_number,
       session_start_local: startLocal,
-      session_end_local: session.session_end_time != null ? localIso(session.session_end_time) : '',
+      session_end_local: clock.endLocal,
+      session_utc_offset_source: clock.source,
       session_index: session.session_index,
       // Completeness, declared rather than inferred. An export can now be taken from a session that
       // is still running or that a participant withdrew from part-way, and such a session is a

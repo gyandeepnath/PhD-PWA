@@ -485,6 +485,9 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       brightness_percent: 78,
       session_start_time: t0,
       session_end_time: t0 + 7_500_000,
+      // A sitting recorded by this build: the tablet's offset (India) stored with its start and end.
+      session_start_utc_offset_min: 330,
+      session_end_utc_offset_min: 330,
       randomisation_seed: enrolment,
       condition_order: plan.map((s) => s.conditionIndex),
       preflight_complete: true, e2e_timing: false,

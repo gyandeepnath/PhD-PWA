@@ -32,6 +32,7 @@ import { priorParticipantProgress, enrolmentAtConsent } from '@/storage/gather';
 import { logLuxReading } from '@/storage/luxLog';
 import { RT_WINDOW_VERSION } from '@/lib/rtResponse';
 import { RT_TIMING_VERSION } from '@/lib/rtOnset';
+import { utcOffsetMin } from '@/lib/localClock';
 import { currentProvenance } from '@/storage/buildStamp';
 import { canonicalParticipantId } from '@/lib/participantId';
 import { saveResume, clearResume } from '@/storage/sessionPersistence';
@@ -985,6 +986,7 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
      */
     resetRtTargetMemory();
 
+    const startedAt = Date.now();
     const rec: SessionRecord = {
       session_id: sid,
       participant_id: participantId,
@@ -1004,7 +1006,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
       lux_deviation_note: d.luxDeviationNote,
       screen_white_luminance_cd_m2: d.whiteLuminance,
       brightness_percent: d.brightnessPercent,
-      session_start_time: Date.now(),
+      session_start_time: startedAt,
+      // The tablet's own offset, so the sitting is dated by its clock wherever it is exported (Round 93).
+      session_start_utc_offset_min: utcOffsetMin(startedAt),
       session_end_time: null,
       randomisation_seed: enrol,
       condition_order: sittingPlan.map((s) => s.conditionIndex),
@@ -1738,7 +1742,8 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
              * Resume to "finish it off" re-administered the closing CVS-Q and TLX with nobody left
              * to answer them.
              */
-            await put('sessions', { ...session, status: 'complete', session_end_time: Date.now() });
+            const endedAt = Date.now();
+            await put('sessions', { ...session, status: 'complete', session_end_time: endedAt, session_end_utc_offset_min: utcOffsetMin(endedAt) });
             clearResume(session.session_id);
             /*
              * The closing photograph, HERE, while the participant is still at the device and before the
@@ -2296,7 +2301,11 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           if (session) {
             const fresh = await get('sessions', session.session_id);
             if (fresh && (fresh.status !== 'complete' || fresh.session_end_time == null)) {
-              await put('sessions', { ...fresh, status: 'complete', session_end_time: fresh.session_end_time ?? Date.now() });
+              const endedAt = fresh.session_end_time ?? Date.now();
+              await put('sessions', {
+                ...fresh, status: 'complete', session_end_time: endedAt,
+                session_end_utc_offset_min: fresh.session_end_utc_offset_min ?? utcOffsetMin(endedAt),
+              });
             }
             clearResume(session.session_id);
           }

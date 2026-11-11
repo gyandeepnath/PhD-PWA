@@ -1114,7 +1114,15 @@ Stating these protects the thesis more than any additional analysis would.
 
 Every export carries `app_version`, `git_hash`, `condition_def_hash` and `schema_version`. Report the
 git hash of the build that collected the data. The CSV files are byte-reproducible — none carries the
-time of export, so re-exporting the same session yields identical CSVs. Their sizes and checksums are
+time of export, so re-exporting the same session yields identical CSVs. One thing depended on WHERE it
+was exported: the sitting's date and wall-clock times in 01 (`experiment_date`, `session_start_local`,
+`session_end_local`; audit 86 D8) were written with the exporting device's UTC offset, so a backup
+restored and exported in another time zone gave a different date and times for the same sitting. From
+Round 93 (review R3) the tablet stores its offset with the sitting's start and end and the export uses
+it, so the files are the same from any device. A sitting recorded before Round 93 has no stored offset
+and still takes the exporting device's (01 `session_utc_offset_source` reads *export_device*): its 01 is
+reproducible only when re-exported in the same time zone. Its other files, and the instants themselves,
+do not depend on it. Their sizes and checksums are
 in the manifests, `export_manifest.json` (one sitting) and `analysis_manifest.json` (the pooled
 files): for each file its size in bytes and `checksum_fnv1a`, the 32-bit FNV-1a hash of the file's
 UTF-8 bytes as written, which any FNV-1a tool can recompute from the file on disk (Round 89, audit 86
