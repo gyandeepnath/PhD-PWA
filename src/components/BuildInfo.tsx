@@ -13,7 +13,8 @@
  */
 import { useEffect, useState, type CSSProperties } from 'react';
 import { buildIdentity } from '@/lib/env';
-import { checkForUpdate, onOfflineCopy, onUpdateWaiting, type OfflineCopyState, type UpdateCheck } from '@/lib/swUpdate';
+import { checkForUpdate, onOfflineCopy, onUpdateWaiting, type OfflineCopy, type OfflineCopyState, type UpdateCheck } from '@/lib/swUpdate';
+import { OFFLINE_NONE_REASONS } from '@/lib/offlineReasons';
 
 /** "VisuLab 2.2.0 · built 4 Oct 2026 09:33 UTC · e05d3c4", as text. */
 export function BuildIdentity({ testId = 'build-identity', style }: { testId?: string; style?: CSSProperties }) {
@@ -87,6 +88,28 @@ export function useOfflineCopy(): OfflineCopyState {
   return s;
 }
 
+/** What the offline-copy line says in each state. */
+export function offlineCopyText(state: OfflineCopy, reason: string | null): string {
+  return state === 'ready'
+    ? 'Offline copy: ready — the app opens with the network off.'
+    : state === 'installing'
+      ? 'Offline copy: downloading — keep the tablet online until this says ready.'
+      : state === 'none'
+        ? `Offline copy: NOT installed — ${reason ?? 'no service worker here'}. Every reload needs the server this page came from. `
+          + 'For sittings without a network, open the study\'s HTTPS address (DEPLOYMENT.md); the field server\'s self-signed HTTPS cannot install one.'
+        : 'Offline copy: checking…';
+}
+
+/** Everything the line can say: the room it keeps is the tallest of these at the width it is given. */
+export const OFFLINE_COPY_TEXTS: readonly string[] = [
+  offlineCopyText('checking', null),
+  offlineCopyText('installing', null),
+  offlineCopyText('ready', null),
+  ...Object.values(OFFLINE_NONE_REASONS).map((r) => offlineCopyText('none', r)),
+];
+
+const OFFLINE_TEXT_CLASS = 'font-sans text-[15px]';
+
 /**
  * WHETHER THE APP WILL OPEN WITH THE NETWORK OFF (Round 92, audit 86 P4, P9). Nothing said so: the
  * operator could switch on aeroplane mode before the 45 MB download had finished, and a tablet run from
@@ -95,18 +118,26 @@ export function useOfflineCopy(): OfflineCopyState {
  */
 export function OfflineCopyStatus() {
   const { state, reason } = useOfflineCopy();
-  const text = state === 'ready'
-    ? 'Offline copy: ready — the app opens with the network off.'
-    : state === 'installing'
-      ? 'Offline copy: downloading — keep the tablet online until this says ready.'
-      : state === 'none'
-        ? `Offline copy: NOT installed — ${reason ?? 'no service worker here'}. Every reload needs the server this page came from. `
-          + 'For sittings without a network, open the study\'s HTTPS address (DEPLOYMENT.md); the field server\'s self-signed HTTPS cannot install one.'
-        : 'Offline copy: checking…';
+  const text = offlineCopyText(state, reason);
+  /*
+   * THE LINE NEVER CHANGES HEIGHT. It starts as one short line ("checking…") and settles seconds later,
+   * as "NOT installed" plus its reason and the supported route — three lines at pre-flight's width.
+   * Grown in place, that pushed every control under it down while the operator might be reaching for
+   * one (and, on the landing page, whose content is centred, moved the Start button up). Every wording
+   * is laid out, unseen, in the same grid cell as the one shown, so the cell is as tall as the tallest
+   * from the first frame at whatever width it gets, and a change of state moves nothing. The unseen
+   * copies are bold, the weight "NOT installed" is shown in, so none is shorter than what it stands for.
+   */
   return (
-    <span data-testid="offline-copy" data-state={state} role="status" className="font-sans text-[15px]"
-      style={{ color: state === 'none' ? '#8a1c1c' : '#3a3a4a', fontWeight: state === 'none' ? 600 : 400 }}>
-      {text}
+    <span data-testid="offline-copy-slot" style={{ display: 'grid' }}>
+      {OFFLINE_COPY_TEXTS.map((t) => (
+        <span key={t} aria-hidden className={OFFLINE_TEXT_CLASS}
+          style={{ gridArea: '1 / 1', visibility: 'hidden', fontWeight: 600 }}>{t}</span>
+      ))}
+      <span data-testid="offline-copy" data-state={state} role="status" className={OFFLINE_TEXT_CLASS}
+        style={{ gridArea: '1 / 1', color: state === 'none' ? '#8a1c1c' : '#3a3a4a', fontWeight: state === 'none' ? 600 : 400 }}>
+        {text}
+      </span>
     </span>
   );
 }

@@ -25,6 +25,10 @@
  * while giving the update somewhere to happen.
  */
 
+import { OFFLINE_NONE_REASONS } from '@/lib/offlineReasons';
+
+export { OFFLINE_NONE_REASONS };
+
 type Listener = (waiting: boolean) => void;
 
 /**
@@ -77,9 +81,9 @@ export function offlineCopy(): OfflineCopyState {
 /** Why a registration failed, as far as the error says. Chrome names a certificate error in the console only. */
 function registrationFailure(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err ?? '');
-  return /certificate|SSL/i.test(msg)
-    ? 'the browser refused this site\'s certificate for the offline copy'
-    : `the browser would not install the offline copy here${msg ? ` (${msg.slice(0, 160)})` : ''}`;
+  if (/certificate|SSL/i.test(msg)) return OFFLINE_NONE_REASONS.certificate;
+  if (msg) console.warn(`[visulab] offline copy: the service worker's registration failed: ${msg}`);
+  return OFFLINE_NONE_REASONS.refused;
 }
 
 /**
@@ -126,7 +130,7 @@ export async function installUpdateWatch(): Promise<void> {
   if (registered) return;
   registered = true;
   const swSupported = typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
-  if (!swSupported) setOffline({ state: 'none', reason: 'this browser has no service workers' });
+  if (!swSupported) setOffline({ state: 'none', reason: OFFLINE_NONE_REASONS.noServiceWorkers });
   // A page already controlled was served from the copy: say so before the registration resolves.
   else offlineFromBrowser(null);
   try {
@@ -150,7 +154,7 @@ export async function installUpdateWatch(): Promise<void> {
         // no worker at all, which this catches.
         registration?.installing?.addEventListener?.('statechange', (e) => {
           if ((e.target as ServiceWorker | null)?.state === 'redundant' && !navigator.serviceWorker?.controller) {
-            setOffline({ state: 'none', reason: 'the offline copy started to download and failed' });
+            setOffline({ state: 'none', reason: OFFLINE_NONE_REASONS.installFailed });
           }
         });
       },
@@ -167,12 +171,12 @@ export async function installUpdateWatch(): Promise<void> {
       void navigator.serviceWorker.getRegistration().then((r) => {
         if (offline.state !== 'checking') return;
         if (r) offlineFromBrowser(r);
-        else setOffline({ state: 'none', reason: 'no service worker was registered from this server' });
-      }).catch(() => setOffline({ state: 'none', reason: 'no service worker was registered from this server' }));
+        else setOffline({ state: 'none', reason: OFFLINE_NONE_REASONS.notRegistered });
+      }).catch(() => setOffline({ state: 'none', reason: OFFLINE_NONE_REASONS.notRegistered }));
     }, OFFLINE_SETTLE_MS);
   } catch {
     /* No service worker in this environment (the development server); the app runs online-only. */
-    setOffline({ state: 'none', reason: 'this server provides no service worker (a development server)' });
+    setOffline({ state: 'none', reason: OFFLINE_NONE_REASONS.devServer });
   }
 }
 

@@ -13,6 +13,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createElement, act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 type Opts = {
   onOfflineReady?: () => void;
@@ -81,6 +83,23 @@ describe('the offline copy', () => {
     expect(m.offlineCopy().reason).toMatch(/certificate/);
   });
 
+  it('any other refusal gives the fixed reason, and the browser\'s own words go to the console', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    setServiceWorker({ controller: null, getRegistration: async () => undefined });
+    const m = await fresh();
+    opts.onRegisterError?.(new Error('Failed to register a ServiceWorker: The operation is insecure.'));
+    expect(m.offlineCopy()).toEqual({ state: 'none', reason: m.OFFLINE_NONE_REASONS.refused });
+    expect(warn.mock.calls.flat().join(' ')).toMatch(/The operation is insecure/);
+    warn.mockRestore();
+  });
+
+  it('every reason it can give is one of the closed set, so the screen can keep room for the longest', () => {
+    const src = readFileSync(resolve(__dirname, '../src/lib/swUpdate.ts'), 'utf8');
+    // No reason written in place: each comes from OFFLINE_NONE_REASONS (or is null).
+    expect(src).not.toMatch(/reason:\s*['`"]/);
+    expect(src.match(/reason: OFFLINE_NONE_REASONS\.\w+|reason: registrationFailure\(/g)?.length).toBeGreaterThanOrEqual(5);
+  });
+
   it('a server that registers nothing (the development server) settles on "none"', async () => {
     vi.useFakeTimers();
     noop = true;
@@ -95,7 +114,8 @@ describe('the offline copy', () => {
 describe('what the screen says', () => {
   const say = async (state: string, reason: string | null) => {
     vi.resetModules();
-    vi.doMock('@/lib/swUpdate', () => ({
+    vi.doMock('@/lib/swUpdate', async (orig) => ({
+      ...(await orig<typeof import('@/lib/swUpdate')>()),
       onUpdateWaiting: (l: (w: boolean) => void) => { l(false); return () => {}; },
       checkForUpdate: async () => 'current',
       onOfflineCopy: (l: (s: { state: string; reason: string | null }) => void) => { l({ state, reason }); return () => {}; },
@@ -112,6 +132,38 @@ describe('what the screen says', () => {
     vi.doUnmock('@/lib/swUpdate');
     return out;
   };
+
+  it('lays out every wording, unseen, in the line\'s own cell, so a change of state moves nothing', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/swUpdate', async (orig) => ({
+      ...(await orig<typeof import('@/lib/swUpdate')>()),
+      onOfflineCopy: (l: (s: { state: string; reason: string | null }) => void) => { l({ state: 'checking', reason: null }); return () => {}; },
+    }));
+    const { OfflineCopyStatus, OFFLINE_COPY_TEXTS, offlineCopyText } = await import('@/components/BuildInfo');
+    const { OFFLINE_NONE_REASONS } = await import('@/lib/offlineReasons');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    await act(async () => { root.render(createElement(OfflineCopyStatus)); });
+    const slot = host.querySelector('[data-testid="offline-copy-slot"]') as HTMLElement;
+    expect(slot.style.display).toBe('grid');
+    const spacers = [...slot.querySelectorAll('[aria-hidden]')] as HTMLElement[];
+    expect(spacers.map((e) => e.textContent)).toEqual([...OFFLINE_COPY_TEXTS]);
+    for (const e of spacers) {
+      expect(e.style.visibility).toBe('hidden');
+      expect(e.style.gridArea).toMatch(/^1 \/ 1/);
+    }
+    const shown = slot.querySelector('[data-testid="offline-copy"]') as HTMLElement;
+    expect(shown.style.gridArea).toMatch(/^1 \/ 1/);
+    // Every state and every reason the browser can give is among the wordings room is kept for.
+    for (const t of [offlineCopyText('checking', null), offlineCopyText('installing', null), offlineCopyText('ready', null),
+      ...Object.values(OFFLINE_NONE_REASONS).map((r) => offlineCopyText('none', r))]) {
+      expect(OFFLINE_COPY_TEXTS).toContain(t);
+    }
+    act(() => root.unmount());
+    host.remove();
+    vi.doUnmock('@/lib/swUpdate');
+  });
 
   it('ready, downloading, and NOT installed with the reason and the supported route', async () => {
     expect((await say('ready', null)).text).toMatch(/Offline copy: ready — the app opens with the network off/);
