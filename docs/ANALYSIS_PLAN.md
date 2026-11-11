@@ -966,6 +966,15 @@ put back in a sensitivity refit printed beside it (`[ibi-r2 sensitivity] with th
 put back: ...`). Leaving them out is the conservative choice for inference — an `ibi-r1` value can only
 be lengthened by a look-away, in the direction of the hypothesis — and the refit shows what keeping them
 would change. The Python cross-check does not model the interval (§5b), so it cannot apply another rule.
+**Which rows the interval rule is applied to (Round 93, review R1).** The camera-on tier-A/B runs
+*before* the blink-rule filter (§5, `blink-r2`): the interval does not depend on the blink rule — a cut
+blink counts in it exactly as under `blink-r1` — so a run whose blink counts are `blink-r1` keeps its
+`ibi-r2` interval in this model, and R prints how many such runs it holds (`[ibi-r2] the interval does
+not depend on the blink rule (Round 91): n of the m run(s) ...`). Until Round 93 the template read the
+interval from the rows left after the blink-rule filter; in the app's own export an `ibi-r1` row is
+always a `blink-r1` row (both fall back when a sitting's blinks could not be recomputed), so every
+`ibi-r1` row was dropped before it was counted: R printed 0, the refit with them put back never ran,
+and they were silently out of the model. Data recorded by builds from Round 91 on hold no such rows.
 
 **A blink the window's edge or a sampling gap cuts is counted, not classified (Round 91, rule
 `blink-r2`; a fix made BEFORE DATA COLLECTION).** This changes the primary outcome's classification

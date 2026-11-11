@@ -197,8 +197,13 @@ describe('the templates model the current rule', () => {
     const { readFileSync } = await import('node:fs');
     const R = readFileSync('src/analysis/analysis_template.R', 'utf8');
     expect(/^ {2}IBI_RULE_VERSION <- "([^"]+)"/m.exec(R)?.[1]).toBe(IBI_RULE_VERSION);
-    expect(R).toMatch(/eye_ibi <- eye\[has_ibi & ibi_rule == IBI_RULE_VERSION, , drop = FALSE\]/);
-    expect(R).toMatch(/m_ibi_all <- tryCatch\(lmer\(f_ibi, data = eye\[has_ibi, , drop = FALSE\]\)/);
+    // The rows come from before the blink-rule filter (Round 93, review R1): an ibi-r1 row is always a
+    // blink-r1 row in the app's export, and reading `eye` dropped it before it was counted.
+    expect(R).toMatch(/eye_ibi_frame <- eye_all_rules\n/);
+    expect(R).toMatch(/eye_ibi <- eye_ibi_frame\[has_ibi & ibi_rule == IBI_RULE_VERSION, , drop = FALSE\]/);
+    expect(R).toMatch(/m_ibi_all <- tryCatch\(lmer\(f_ibi, data = eye_ibi_frame\[has_ibi, , drop = FALSE\]\)/);
+    // eye_all_rules is the camera-on tier-A/B frame with every blink rule in it.
+    expect(R).toMatch(/eye_all_rules <- eye\neye <- eye\[blink_rule == BLINK_RULE_VERSION, , drop = FALSE\]\neye_all_rules <- eye_all_rules %>% filter\(!\(fps_tier %in% "C"\)\)/);
   });
 
   it('Python models no inter-blink interval, so it cannot apply a different rule (ANALYSIS_PLAN.md §5b)', async () => {

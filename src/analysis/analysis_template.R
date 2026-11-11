@@ -2558,24 +2558,37 @@ if (nrow(eye) == 0) {
   # 88 (no ibi_rule_version column): re-export it with the current build. Such rows are counted, kept
   # out of this model, and put back in the sensitivity refit below, so the investigator sees both
   # (ANALYSIS_PLAN.md §5; the default is theirs to change).
+  #
+  # THE ROWS IT IS JUDGED ON (Round 93, review R1): the camera-on tier-A/B runs BEFORE the blink-rule
+  # filter (eye_all_rules), not `eye`. The interval does not depend on the blink rule — a blink cut by the
+  # window's edge or a gap counts in it exactly as under blink-r1 (Round 91) — and in the app's own export
+  # an ibi-r1 row is always a blink-r1 row (both fall back when a sitting's blinks could not be
+  # recomputed), so reading `eye`, from which blink-r1 rows are gone, dropped every ibi-r1 row before it
+  # was counted: the line below said 0, and the refit with them put back never ran. Only the interval
+  # rule decides here; how many modelled rows carry blink-r1 counts is printed.
   IBI_RULE_VERSION <- "ibi-r2"  # src/tracking/blink.ts IBI_RULE_VERSION (tests/interBlinkInterval.test.ts pins it)
-  ibi_rule <- if ("ibi_rule_version" %in% names(eye)) as.character(eye$ibi_rule_version) else rep(NA_character_, nrow(eye))
+  eye_ibi_frame <- eye_all_rules
+  ibi_rule <- if ("ibi_rule_version" %in% names(eye_ibi_frame)) as.character(eye_ibi_frame$ibi_rule_version) else rep(NA_character_, nrow(eye_ibi_frame))
   ibi_rule <- ifelse(is.na(ibi_rule) | ibi_rule == "", "ibi-r1", ibi_rule)
-  has_ibi <- is.finite(eye$mean_inter_blink_interval_ms) & eye$mean_inter_blink_interval_ms > 0
+  has_ibi <- is.finite(eye_ibi_frame$mean_inter_blink_interval_ms) & eye_ibi_frame$mean_inter_blink_interval_ms > 0
   n_ibi_old <- sum(ibi_rule != IBI_RULE_VERSION & has_ibi)
-  n_ibi_recomputed <- if ("ibi_recomputed" %in% names(eye)) sum(eye$ibi_recomputed %in% c(1, TRUE, "TRUE", "true") & has_ibi) else 0L
+  n_ibi_recomputed <- if ("ibi_recomputed" %in% names(eye_ibi_frame)) sum(eye_ibi_frame$ibi_recomputed %in% c(1, TRUE, "TRUE", "true") & has_ibi) else 0L
   cat(sprintf("\n[%s] %d camera-on condition-run(s) carry an inter-blink interval under an earlier rule (%s) and are out of the inter-blink-interval model; %d were recorded before Round 88 and recomputed by the app.\n",
               IBI_RULE_VERSION, n_ibi_old,
               if (n_ibi_old > 0) paste(sort(unique(ibi_rule[ibi_rule != IBI_RULE_VERSION & has_ibi])), collapse = ", ") else "none",
               n_ibi_recomputed))
-  eye_ibi <- eye[has_ibi & ibi_rule == IBI_RULE_VERSION, , drop = FALSE]
+  eye_ibi <- eye_ibi_frame[has_ibi & ibi_rule == IBI_RULE_VERSION, , drop = FALSE]
+  ibi_blink_rule <- if ("blink_rule_version" %in% names(eye_ibi)) as.character(eye_ibi$blink_rule_version) else rep(NA_character_, nrow(eye_ibi))
+  n_ibi_blink_old <- sum(is.na(ibi_blink_rule) | ibi_blink_rule != BLINK_RULE_VERSION)
+  cat(sprintf("[%s] the interval does not depend on the blink rule (Round 91): %d of the %d run(s) in the inter-blink-interval model carry blink counts under an earlier blink rule and are in it.\n",
+              IBI_RULE_VERSION, n_ibi_blink_old, nrow(eye_ibi)))
   f_ibi <- as.formula(paste0("log(mean_inter_blink_interval_ms) ~ polarity * colour", il_term,
                              " + session_position + (1 | participant_id)", re_passage))
   m_ibi <- tryCatch(lmer(f_ibi, data = eye_ibi), error = function(err) NULL)
   cat("\n=== Inter-blink interval, log scale (secondary) ===\n")
   if (is.null(m_ibi)) cat("the inter-blink-interval model did not fit.\n") else { print(summary(m_ibi)); report_n(m_ibi, eye_ibi, "inter-blink interval") }
   if (n_ibi_old > 0) {
-    m_ibi_all <- tryCatch(lmer(f_ibi, data = eye[has_ibi, , drop = FALSE]), error = function(err) NULL)
+    m_ibi_all <- tryCatch(lmer(f_ibi, data = eye_ibi_frame[has_ibi, , drop = FALSE]), error = function(err) NULL)
     if (is.null(m_ibi_all)) cat(sprintf("[%s sensitivity] the refit with the earlier-rule rows put back did not fit.\n", IBI_RULE_VERSION)) else {
       pol <- grep("^polarity", names(fixef(m_ibi_all)), value = TRUE)[1]
       cat(sprintf("[%s sensitivity] with the %d earlier-rule row(s) put back: %s %.3f (SE %.3f) on the log scale, n = %d.\n",
