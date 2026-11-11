@@ -464,6 +464,19 @@ been seen on the tablet yet — the bench check below is how to see it.
 brightness it compares against is the camera's own even right after a bench check (which used to
 leave any exposure compensation behind). Nothing to do differently.
 
+**"Continue without camera" ends camera measurement for the sitting (from Round 91).** Beside *My
+face is centred — continue* is a second button, **Continue without camera**. Once *Enable camera* has
+started the camera, one tap on it — there is no confirmation — switches the camera and the face tracker
+off for the rest of the sitting: calibration and the camera check are skipped, every reading is
+recorded with no eye measurements (07 `camera_active` FALSE, `camera_inactive_reason` *not_running*),
+and 01 says why (`camera_off_reason` *skipped_after_start*). Use it only when the camera cannot be
+used for this participant. **If it was tapped by mistake**, nothing on that screen brings the camera
+back: tap **Exit — resume later**, confirm, then **Resume** the sitting in the Session Manager —
+camera set-up runs again on every resume, so *Enable camera* is offered afresh and the sitting goes on
+from the first screen not yet done. Do this before the first display starts; a display already run
+without the camera stays a camera-off row. (Before Round 91 the same tap left the app treating the
+camera as on with no frames; see `camera_off_reason` in the codebook.)
+
 **The bench check (researcher only, before the pilot).** On camera setup, *Run: white, grey, black
 (2 min)* shows white, grey and black screens for about 20 seconds each under automatic exposure, then
 tries to fix the exposure and shows the three screens again. It gives one row per screen: camera fps,
