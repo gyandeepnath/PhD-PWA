@@ -9361,3 +9361,232 @@ Each fix's own test was seen to fail with the fix reverted, as recorded in its s
 | Pre-flight storage check | shown, not kept | kept | 01 `storage_verdict`, `storage_persisted`, `storage_free_mb` |
 | What the grey field followed | not recorded | recorded; the field's maximum unchanged | 02 and analysis_long `adaptation_preceded_by` |
 | Every other rule (tap guard, attempt counting, scale freeze, inter-blink interval, blink classification, reaction window, rating format, typography, straight-lining, frame-rate gate, calibration, gaze, exposure, camera check scoring, reliability, engagement thresholds, fitted minimum) | unchanged | unchanged | as before |
+
+## Round 93 — an independent review of Rounds 86-92: the reaction onset after a long paint, earlier-rule inter-blink intervals, the sitting's own clock, and four smaller fixes
+
+Rounds 86 to 92 were reviewed at a5414b8 by two reviewers, each in its own copy of the code and each
+starting from the code, not from the write-ups. One took the flow, the screens, the offline copy and the
+reaction timing (Rounds 86, 87, 90, 92 and the flow items of 89); the other took the data, the analysis
+and the camera (Rounds 88, 91 and the data items of 89). Both re-ran the auditors' reproductions on the
+fixed code (each defect was gone) and reverted fixes one at a time to see their tests fail (15 fixes
+between them; each failed). The data reviewer also re-derived the figures quoted in Rounds 88 and 91 from
+the code (each matched). Between them they ran verify, the full end-to-end suite (117 of 117), the build
+and the production-bundle suite (9 of 9) on a5414b8. They
+found no blocker, one major problem and seven minor ones. All eight are fixed here: 1e4a012 (R4), 651fb47
+(R2), 98db0ba (R5), 4ee5ade (R3), 0606f63 (R1), c69a2a6 (REVA-1 to REVA-3), and a follow-up to c69a2a6's
+wording, 346f9a1 (§1).
+
+**One measured value changed meaning, versioned in the data; no threshold moved and nothing was changed to
+keep more data:**
+- **`rt_timing_version` `rt-t3`** — the reaction onset can no longer come before the dot's paint has
+  finished, which under `rt-t2` it could when the frame that paints the dot ran long (§1).
+
+**No stored record changed shape in a way that needs the database version raised.** The new fields
+(`onset_paint_overrun_ms` on a reaction trial; `session_start_utc_offset_min` and
+`session_end_utc_offset_min` on the sitting) are optional, and a record without them is read as recorded
+before they existed. Nothing stored is rewritten. Nothing here was measured on the Xiaomi Pad 6.
+
+### In plain words
+
+1. **A long paint frame could put the reaction onset before the dot was drawn (REVA-1, minor).** Round 92
+   took the onset as the start of the frame after the one that paints the dot, and said it could never be
+   early. That holds only while the painting frame finishes before the next frame starts. If other work on
+   the page (a garbage collection, a database write finishing) makes that frame run past the next screen
+   refresh, the browser still gives the next frame the time of the refresh it missed, and that time is
+   before the dot was painted. The reaction time then comes out long by up to about a frame. The reviewer
+   showed it with 30 ms of added work in that frame (onsets 14 ms before the paint had finished). Without
+   added work it was not seen, in 36 trials with the processor slowed 4 and 6 times. Now the app also
+   notes when the painting frame's work has finished and takes the first frame that starts after that. In
+   an ordinary trial this is the same frame as before; only a trial whose painting frame overran moves,
+   and the trial records by how much (`onset_paint_overrun_ms`), so such trials can be found.
+2. **Old inter-blink intervals were dropped without being counted (R1, major, old data only).** The R
+   template is meant to count inter-blink intervals recorded under the earlier rule (`ibi-r1`), keep them
+   out of that model, and put them back in a sensitivity refit. It looked for them only after removing the
+   rows whose blink counts are under the earlier blink rule (`blink-r1`). In the app's own export an
+   `ibi-r1` row is always a `blink-r1` row, so every such row had already gone: R printed 0, the refit
+   never ran, and the rows were silently out of the model. The interval does not depend on the blink rule,
+   so it is now read before that filter. Data recorded by this build holds no such rows; pilot or archived
+   data does. The analysis gate missed it because it blanked one rule column on a participant while
+   keeping the other, a row the app never writes; it now blanks both, as the app does.
+3. **The sitting's date could depend on where it was exported (R3, minor).** Round 89 dated each sitting
+   by the tablet's clock, but used the time zone of whatever device ran the export. A backup restored and
+   exported in another time zone gave a different `experiment_date` and different times in 01. The tablet
+   now stores its own UTC offset with the start and the end of the sitting, and the export uses it. A
+   sitting recorded before this has no stored offset and still uses the exporting device's; a new 01
+   column, `session_utc_offset_source`, says which.
+4. **Smaller fixes.**
+   - R2: a camera or tracker rate just under a floor was rounded onto it in some sentences ("the CAMERA
+     delivered only 15 frames per second" beside "below 15"). Every such rate is now written so that it
+     stays on its own side of the floor.
+   - R5: the end-to-end test that the camera check names the stage that was short no longer checked it
+     on screen. A new test runs the fake camera at 10 frames a second and requires the camera set-up readout
+     and the camera check to name the camera.
+   - R4: the operator manual now says that *Continue without camera*, after *Enable camera*, turns the
+     camera off for the sitting, and how to undo a mistaken tap (Exit, then Resume).
+   - REVA-2 and REVA-3: the onset test accepted an onset up to a frame on either side of the paint; it is
+     now one-sided, and a new test with a long painting frame fails on `rt-t2`. A figure in the code's
+     documentation (14-16 ms) is replaced by the measured 11-16 ms.
+
+### 1. The reaction onset after a long paint (c69a2a6, 346f9a1) — REVA-1, REVA-2, REVA-3; `rt-t3`
+
+**What was wrong.** Round 92's onset (`rt-t2`) is the begin time of the frame after the first frame whose
+animation-frame callback finds the dot in the document. A frame's begin time is the vsync it was scheduled
+for. When the frame that paints the dot runs past the next vsync, Chromium starts the next frame only
+after the paint, but hands it the earlier vsync's time. The reviewer measured it on the app with 30 ms of
+extra main-thread work in the painting frame: the stored onset was 14.2-14.6 ms before the paint had
+finished (9.4-16.8 ms before it in an earlier run). With no injected work, at 4x and 6x CPU slowdown, camera
+off and on, 36 trials, the onset was 8.5-15.0 ms after the paint. lib/rtOnset.ts, the codebook, ANALYSIS_PLAN
+§5 and Round 92 all said it could never be early. The e2e test could not catch it: it checked the onset
+against the paint's end within one frame either way, and a copy of it with the long paint frame passed.
+And the module quoted 14-16 ms for the normal margin where Round 92's own table gave 11.5-15.8 ms.
+
+**What changed.** In the callback that finds the dot, the app now also posts a message on a
+MessageChannel. A message posted during a frame is handled only after that frame's rendering (style,
+layout, paint) has finished, because the browser renders a frame as one task; so the time the message
+arrives is no earlier than the end of the paint's main-thread work. The onset is the begin time of the
+first frame that begins no earlier than that arrival, and the phase that lets a touch count as a response
+flips in the same callback, as before. If the message has not arrived by the next frame, the stamp waits a
+frame; it never guesses. Each trial stores `onset_paint_overrun_ms`: how far the arrival was past the begin
+time of the frame after the paint (0 in an ordinary trial; blank on rows recorded before `rt-t3`). The e2e
+check is now one-sided (the onset no earlier than the paint's end, allowing 0.5 ms for clock coarsening,
+and no more than one frame after it), and a third test injects 30 ms of work into each painting frame.
+
+The follow-up (346f9a1) corrects one claim in c69a2a6's own text: that the message is "the next task"
+after the frame, so that its arrival is exactly when the paint ended. It is a task of its own, but a task
+already in the queue can run before it; the arrival can then be later than the paint's end. The onset
+then errs late, never early: it may be a frame later than the dot could first have been shown, and the
+reaction time short by up to about a frame. Such a trial shows an overrun above 0, exactly as a trial with
+a long paint frame does, so it is marked either way. The module, the 08 codebook entry, ANALYSIS_PLAN §5
+and the comments on the stored field now say so. Nothing in the code changed.
+
+**What was measured** (headless desktop Chromium, e2e/rtOnsetTiming.spec.ts, the drawn face):
+
+| Run | Onset minus the paint's end | Stored overrun |
+|---|---|---|
+| camera off, 16 trials (two runs) | +14.9 to +16.1 ms (the next frame each time) | 0 |
+| camera on, tracker held, 16 trials (two runs) | +15.3 to +15.8 ms (the next frame each time) | 0 |
+| camera off, 30 ms of work in the painting frame, 16 trials (two runs) | +1.8 to +2.7 ms (the frame after the next) | 14.0-15.0 ms, within 0.1 ms of the probe's own measure |
+| the same, with the comparison against the paint's end taken out (so the stamp is the next frame, as under `rt-t2`) | -14.3 to -15.7 ms | the test fails: "onset stamped before the dot's paint had finished" |
+
+**Mutation checks.** With lib/rtOnset.ts reverted to Round 92's, 10 unit tests in tests/rtOnset.test.ts
+fail; the long-paint e2e test fails too, but on a timeout before its onset check, so the meaningful check
+is the next one. With only the comparison against the paint's end taken out (the table's last row), the
+long-paint test fails on its one-sided check.
+
+**What the analysis does.** The R template counts `rt-t2` rows on a line of its own and keeps them, in the
+RT model and in its refit; they equal `rt-t3` rows except on a trial whose painting frame overran, where
+they are long by up to about a frame and are not marked. Its refit still leaves out only the camera-on
+`rt-t1` rows (Round 92). The analysis gate checks both lines.
+
+### 2. Earlier-rule inter-blink intervals in the R template (0606f63) — R1
+
+**What was wrong.** analysis_template.R filters `blink-r1` rows out of the ocular frame `eye` before the
+inter-blink-interval block, and that block counted `ibi-r1` rows only inside `eye`. Both rule columns fall
+back under the same condition in the app's export (no kept 07b/07c window, or a 07 written before Round 88;
+blinkLog.ts), so an `ibi-r1` row is always a `blink-r1` row. On such data R printed "[ibi-r2] 0 camera-on
+condition-run(s) carry an inter-blink interval under an earlier rule (none)", and the pre-specified refit
+with them put back never ran (reviewer's reproduction through the app's own writers; logs kept). ANALYSIS_PLAN
+§5, the R comment and Round 88 promise that these rows are counted and put back.
+
+**What changed.** The interval frame is now the camera-on, tier-A/B runs before the blink-rule filter, and
+only the interval rule decides there; R also prints how many runs in the interval model carry blink counts
+under an earlier blink rule. The gate's flagged cohort now blanks both rule columns on one participant (the
+shape the app writes) and requires the right count and the put-back refit, and blanks only the blink rule
+on another, whose `ibi-r2` interval must stay in the model.
+
+**Mutation check.** With the template reverted, the analysis gate fails exactly three checks: the count,
+the put-back refit, and the run whose interval must stay in.
+
+### 3. The sitting's own clock (4ee5ade) — R3
+
+**What was wrong.** export.ts wrote `experiment_date`, `session_start_local` and `session_end_local` with
+the exporting device's UTC offset. The reviewer exported one fixture sitting (started 2026-10-28T23:30Z)
+under three time-zone settings: `experiment_date` was 2026-10-29 in Kolkata and 2026-10-28 in London and New
+York, and the 01 files differed. ANALYSIS_PLAN §7's statement that a re-export gives identical files no
+longer held.
+
+**What changed.** The tablet stores its offset (minutes east of UTC) when the sitting starts and when it
+ends (`session_start_utc_offset_min`, `session_end_utc_offset_min`; lib/localClock.ts). The export uses
+them; a sitting that stored only one uses it for both; one that stored neither falls back to the exporting
+device's offset, and 01 `session_utc_offset_source` reads *tablet* or *export_device*. A backup keeps the
+fields (restore copies the record). ANALYSIS_PLAN §7 now says when a 01 is reproducible.
+
+**Mutation check.** With the stored offset ignored, the test that exports one sitting under three time
+zones and requires identical files fails, and so does the one-stored-offset case.
+
+### 4. Rates never rounded onto a floor (651fb47) — R2
+
+The CAM-1 fix of Round 91 covered the eye's own rate but not every sentence. The face rate in the camera
+set-up readout's "face" sentence, and the camera's and tracker's rates where they are named as the reason
+the eye's rate missed a floor (selfTest.ts, LiveCamera.tsx, CameraSelfTest.tsx), were still rounded:
+19.6 read "20" beside the 15-20 tier, and a camera at 14.7 "only 15 frames per second" beside "below 15".
+frameRateGate.ts now has `stageFpsText`, which writes a whole number unless rounding would carry the rate
+onto a floor it is under (15, 20, or the floor the screen judges against), and then one or two decimals.
+The unused `fpsTierSentence` is gone. Unit tests at 14.6, 14.7, 19.6 and 19.8 fail with the old code (three
+in researcherPanel and selfTest, one in cameraSelfTest).
+
+### 5. The short stage named on screen (98db0ba) — R5
+
+When the camera-check tests moved to faceCamera.spec.ts (c66fee3), the assertion that the reason names the
+short stage was dropped, but the test kept its title. That test is renamed to what it checks.
+e2e/cameraShortStage.spec.ts plays the same drawn face at 10 frames a second, so the camera is the limit;
+it requires the live readout to say "The CAMERA is the limit" with a rate under 15, the camera check's reason
+to name the camera with its rate and the light advice, and the stored check to say `limit` camera. With the
+camera sentence replaced it fails. One sentence for a check too short to judge a rate was also corrected: it
+said no face frames were measured when ten had been.
+
+### 6. The operator manual (1e4a012) — R4
+
+OPERATOR_MANUAL's camera set-up section now says that *Continue without camera*, once the camera has been
+started, switches the camera off for the rest of the sitting (no confirmation; 07 `camera_active` FALSE;
+01 `camera_off_reason` *skipped_after_start*), and that a mistaken tap is undone by *Exit — resume later*
+and *Resume*, before the first display starts.
+
+### 7. For the investigator
+
+1. **The onset rule `rt-t3` — please confirm it**, with `rt-t2` (Round 92). It changes no cut-off and no
+   ordinary trial. Sittings run on this build carry `rt-t3`. `rt-t2` was in the builds from Round 92 to
+   this one; any sitting run on one of those says `rt-t2`, and the R template keeps it (§1).
+2. **`onset_paint_overrun_ms`.** A trial with a value above 0 had its onset moved later by up to a frame.
+   Whether such trials need any handling (none is pre-specified; they stay in) is yours. On the tablet,
+   please look at this column after the first real sittings: if it is often above 0, the tablet's main
+   thread is busier during the reaction task than in any run measured here.
+3. **Archived or pilot data** with old inter-blink intervals: R now counts them and runs the refit with them
+   put back (§2). Data recorded by this build are unaffected.
+4. **A backup exported on another device** now dates the sitting by the tablet's clock, if it was recorded
+   with this build; older sittings say *export_device* in 01 `session_utc_offset_source`.
+
+### 8. Not measured on the Xiaomi Pad 6
+
+- How often the painting frame overruns on the tablet, or whether it ever does (REVA-1). Every figure above
+  is from headless desktop Chromium.
+- The camera-rate wording was checked with desktop Chromium's fake camera at 10 and 30 frames a second, not
+  with the tablet's camera.
+
+### 9. Checks run
+
+On c69a2a6 (all the code of this round):
+- `npm run verify` passed: lint, types, 144 unit test files with 1,933 tests, the corpus gate, the codebook
+  gate (552 entries over 19 files), the export gate (900/900), and the R and Python analysis gates
+  (including the `ibi-r2` and `rt-t3` checks of §1 and §2).
+- The full end-to-end suite with `--retries=0`: 119 of 119 passed (21.8 min), among them the three
+  `rtOnsetTiming` tests (camera off, camera on, long paint frame) and the new `cameraShortStage` test.
+
+On 346f9a1 (the wording follow-up; comments, codebook sentences and ANALYSIS_PLAN only):
+- `npm run verify` passed with the same counts as above.
+- `npm run build` passed: verify-bundle 42 assets, all precached, 44.0 MB; Workbox precache 58 entries,
+  45,019 KiB.
+- `npm run test:e2e:prod` with `--retries=0`: 9 of 9 passed.
+No end-to-end run was repeated for 346f9a1: it changes no behaviour.
+
+This write-up was checked with `npm run verify` before it was committed (the unit tests read these documents).
+
+Each fix's own test was seen to fail with the fix reverted, as recorded in its section.
+
+### 10. Versions in the data
+
+| Rule or format | Before | Now | Where it is recorded |
+|---|---|---|---|
+| Reaction onset | `rt-t2`: the begin time of the frame after the one that painted the dot | `rt-t3`: the begin time of the first frame that begins no earlier than the end of that frame's rendering; the overrun kept per trial | 02 and analysis_long `rt_timing_version`; 08 `onset_paint_overrun_ms`; ANALYSIS_PLAN §5 |
+| The sitting's local date and times | the exporting device's UTC offset | the offset the tablet stored, where it did | 01 `session_utc_offset_source` |
+| Every other rule | unchanged | unchanged | as before |
