@@ -53,16 +53,20 @@
  * roughly 9-17 ms or more of extra work inside that one frame; it was not seen without injected work (36
  * trials at 4x and 6x CPU slowdown, camera off and on), and it has not been measured on the tablet. Now the
  * frame that finds the dot also posts a message: a message posted from an animation-frame callback is
- * handled once that frame's rendering has finished (the browser renders a frame in one task, and the
- * message is the next task), so its arrival time is when the paint's main-thread work ended. The onset is
- * the begin time of the first frame that begins no earlier than that; the phase flips in the same
- * callback, as before. Measured in headless Chromium the message arrives before the next frame's callback
+ * handled only after that frame's rendering has finished (the browser renders a frame in one task, and the
+ * message is a task of its own), so its arrival time is no earlier than the end of the paint's main-thread
+ * work. It is not always the moment that work ended: a task already in the queue can run first, and the
+ * arrival is then later. The onset is the begin time of the first frame that begins no earlier than the
+ * arrival; the phase flips in the same callback, as before. So the onset errs late, never early: if a
+ * queued task held the message past the next frame's begin time while the paint itself had finished in
+ * time, the onset is a frame later than the dot could first have been shown, the reaction time short by up
+ * to about a frame, and the trial shows an overrun above 0, as a trial with a long paint frame does. Measured in headless Chromium the message arrives before the next frame's callback
  * every time (0 to 40 ms of extra work); if it has not, the stamp waits a frame, never guesses. In every
  * ordinary trial the next frame begins well after the paint ended (e2e/rtOnsetTiming.spec.ts: about 11-16
  * ms after it, set by how long the paint frame took; its log prints each trial), so the onset is the very
  * frame rt-t2 took; only a trial whose paint frame overran moves, to the frame after, and how far the paint
  * ran past the next frame's begin time is stored on the trial (08 onset_paint_overrun_ms, 0 when it did
- * not), so such trials can be found.
+ * not), so such trials can be found — whichever of the two moved them.
  *
  * WHAT IS NOT CHANGED. The response is still the touch's own timestamp; the response window still closes
  * on it (lib/rtResponse.ts); touches are still taken as responses only from the stamping frame's callback
@@ -92,8 +96,9 @@ export const RT_TIMING_VERSION_V1 = 'rt-t1';
 export interface FrameHost {
   requestAnimationFrame: (cb: (frameTime: number) => void) => number;
   /**
-   * Queue `cb` as a task of its own, now. Called from an animation-frame callback, it runs once that
-   * frame's rendering (style, layout, paint) has finished: the browser renders a frame in one task.
+   * Queue `cb` as a task of its own, now. Called from an animation-frame callback, it runs no earlier than
+   * the end of that frame's rendering (style, layout, paint), since the browser renders a frame in one
+   * task — and later if another task was queued before it.
    */
   postTask: (cb: () => void) => void;
   /** The performance clock: the one frame timestamps and touch timestamps are on. */

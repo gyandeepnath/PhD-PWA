@@ -66,9 +66,10 @@ export interface RawTrial {
   stimulus_onset_time: number;
   /**
    * How far the rendering of the frame that painted the dot ran past the begin time of the frame after it,
-   * ms (lib/rtOnset.ts, rt-t3; Round 93): 0 normally; more means the onset was moved to a later frame,
-   * because the dot could not be on the screen at that frame's begin time. Null if the end of the paint
-   * was not seen.
+   * ms (lib/rtOnset.ts, rt-t3; Round 93), as seen by a message posted from that frame: 0 normally; more
+   * means the onset was moved to a later frame — because the paint overran, or because the message was
+   * held behind another task (then the onset is late by up to a frame; never early). Null if the end of
+   * the paint was not seen.
    */
   onset_paint_overrun_ms: number | null;
   response_time_ms: number | null;

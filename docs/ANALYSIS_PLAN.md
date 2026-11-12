@@ -907,10 +907,14 @@ first frame that begins no earlier than the end of the paint frame's rendering (
 posted from that frame). In an ordinary trial that is the very frame `rt-t2` took — the next one, about
 11-16 ms after the paint ended — so nothing changes there; only a trial whose paint frame overran moves to
 the frame after, and 08 `onset_paint_overrun_ms` records by how much the paint ran past the next frame's
-begin time (0 normally), so such trials can be found. What is guaranteed is therefore: the onset is a
-frame's begin time, never before the end of the main-thread rendering of the frame that drew the dot, and
-no more than one frame after it. When the compositor and the panel then put that frame on the glass is not
-measured by the browser and not claimed. `rt-t2` rows are the same as `rt-t3` except on such a trial,
+begin time (0 normally), so such trials can be found. The message is handled after the paint frame's
+rendering, but a task already queued can run before it, so its arrival can be later than the paint's end;
+an overrun above 0 can therefore also mean that the paint finished in time and the message was held, and
+then the onset is a frame later than the dot could first have been shown and the reaction time short by up
+to about a frame. What is guaranteed is therefore: the onset is a frame's begin time, never before the end
+of the main-thread rendering of the frame that drew the dot; it is the next frame on a trial whose overrun
+is 0, and at most one frame after the message's arrival on any trial. When the compositor and the panel
+then put that frame on the glass is not measured by the browser and not claimed. `rt-t2` rows are the same as `rt-t3` except on such a trial,
 where they are long by up to about a frame and are not marked; the R template counts them on a line of its
 own and keeps them, in the RT model and in its refit.
 
