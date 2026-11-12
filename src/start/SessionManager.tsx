@@ -21,6 +21,7 @@ import { useDialog } from '@/components/ConfirmDialog';
 import { UI_TEXT } from '@/lib/uiPalette';
 import { sameParticipant } from '@/lib/participantId';
 import type { SessionRecord } from '@/storage/types';
+import { clockText, sittingStartText } from '@/lib/localClock';
 
 interface Props {
   onNew: () => void;
@@ -277,7 +278,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
   const withdraw = async (s: SessionRecord) => {
     const label = sessionLabel(s);
     if (s.withdrawn_at != null) {
-      await dialog.alert({ title: 'Already withdrawn', body: `${label} is already recorded as withdrawn (${new Date(s.withdrawn_at).toLocaleString()}).`, confirmLabel: 'Close' });
+      await dialog.alert({ title: 'Already withdrawn', body: `${label} is already recorded as withdrawn (${clockText(s.withdrawn_at)}).`, confirmLabel: 'Close' });
       return;
     }
     // Matched as recordWithdrawal matches them: letter case does not make another person (Round 87).
@@ -425,7 +426,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
             <Row key={s.session_id} s={s}
               note={superseded.has(s.session_id)
                 ? `not resumable: sitting ${superseded.get(s.session_id)!.session_index} of this participant, started `
-                  + `${new Date(superseded.get(s.session_id)!.session_start_time).toLocaleString()}, came after it — `
+                  + `${sittingStartText(superseded.get(s.session_id)!)}, came after it — `
                   + 'resuming this one would repeat displays. Export it, or Delete it.'
                 : undefined}>
               {resumable[s.session_id] && (
@@ -474,7 +475,7 @@ export function SessionManager({ onNew, onResume, onOpen, onHome }: Props) {
           <Section title={`Withdrawn (${withdrawn.length})`}>
             {withdrawn.map((s) => (
               <Row key={s.session_id} s={s}
-                note={`withdrew ${new Date(s.withdrawn_at as number).toLocaleString()} · ${s.status === 'complete' ? 'sitting had finished' : 'sitting had not finished'}`}>
+                note={`withdrew ${clockText(s.withdrawn_at as number)} · ${s.status === 'complete' ? 'sitting had finished' : 'sitting had not finished'}`}>
                 {/* Export stays: the measurements are kept, and the export carries withdrawn=TRUE,
                     which is what makes both analysis templates drop the participant. No Resume, no
                     Rename, no media controls — the media was destroyed when this was recorded.
@@ -570,7 +571,7 @@ function Row({ s, children, note }: { s: SessionRecord; children: React.ReactNod
         {/* The participant code stays in DM Mono — it is a code; the date line under it is not. */}
         <div className="font-lab" style={{ fontSize: 17 }}>{sessionLabel(s)}</div>
         <div className="font-sans" style={{ fontSize: 14, color: UI_TEXT.muted, marginTop: 2 }}>
-          {new Date(s.session_start_time).toLocaleString()}{note && <span data-testid="row-note">{` · ${note}`}</span>}
+          {sittingStartText(s)}{note && <span data-testid="row-note">{` · ${note}`}</span>}
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{children}</div>

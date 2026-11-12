@@ -20,7 +20,7 @@ import { CONDITIONS } from '@/experiment/conditions';
 import { auditBundle } from './integrity';
 import { RT_WINDOW_VERSION, RT_WINDOW_VERSION_V1 } from '@/lib/rtResponse';
 import { RT_TIMING_VERSION, RT_TIMING_VERSION_T2, RT_TIMING_VERSION_V1 } from '@/lib/rtOnset';
-import { utcOffsetMin } from '@/lib/localClock';
+import { utcOffsetMin, sittingOffsets } from '@/lib/localClock';
 import { endReadingDelayMin } from './luxLog';
 import { serialiseSessionBackup } from './backup';
 import { requiredGrant, fnv1aBytes } from './media';
@@ -321,9 +321,8 @@ export function localIso(epochMs: number, offsetMin: number = utcOffsetMin(epoch
 export function sittingClock(s: Pick<SessionRecord, 'session_start_time' | 'session_end_time' | 'session_start_utc_offset_min' | 'session_end_utc_offset_min'>): {
   startLocal: string; endLocal: string; source: 'tablet' | 'export_device';
 } {
-  const ok = (x: number | null | undefined): x is number => typeof x === 'number' && Number.isFinite(x);
-  const start = ok(s.session_start_utc_offset_min) ? s.session_start_utc_offset_min : ok(s.session_end_utc_offset_min) ? s.session_end_utc_offset_min : undefined;
-  const end = ok(s.session_end_utc_offset_min) ? s.session_end_utc_offset_min : start;
+  // The same choice the screens show the sitting's times on (lib/localClock.ts sittingOffsets).
+  const { start, end } = sittingOffsets(s);
   return {
     startLocal: localIso(s.session_start_time, start),
     endLocal: s.session_end_time != null ? localIso(s.session_end_time, end) : '',

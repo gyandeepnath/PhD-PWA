@@ -112,7 +112,7 @@ describe('the store: who is between sittings, and whose earlier sitting was anot
     await put('sessions', sitting('old', 'OLD1', 1000, { provenance: OLDER }));
     await finished('old', 5);
     const p = await priorParticipantProgress('old1');
-    expect(p.earlierBuilds).toEqual([{ session_index: 1, started_at: 1000, build: describeBuild(buildKey(OLDER)) }]);
+    expect(p.earlierBuilds).toEqual([{ session_index: 1, started_at: 1000, started_utc_offset_min: 330, build: describeBuild(buildKey(OLDER)) }]);
     // An unstamped sitting (a restored backup) is not quietly given this build's stamp.
     await put('sessions', sitting('bare', 'BARE1', 1000, { provenance: undefined as unknown as Provenance }));
     expect((await priorParticipantProgress('BARE1')).earlierBuilds[0]?.build).toMatch(/unknown version @ unknown commit/);

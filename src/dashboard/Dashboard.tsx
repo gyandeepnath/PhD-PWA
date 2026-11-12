@@ -25,6 +25,7 @@ import { ScrollCue } from '@/components/ScrollCue';
 import { useDialog } from '@/components/ConfirmDialog';
 import { BuildIdentity } from '@/components/BuildInfo';
 import { buildIdentity } from '@/lib/env';
+import { clockText, sittingStartText } from '@/lib/localClock';
 
 /** How long the recycle bin keeps a deleted session before a confirmed one may be purged (gather.ts). */
 const BIN_RETENTION_DAYS = Math.round(BIN_RETENTION_MS / (24 * 60 * 60 * 1000));
@@ -331,7 +332,8 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
         >
           {sessions.map((s) => (
             <option key={s.session_id} value={s.session_id}>
-              {s.participant_id} · {new Date(s.session_start_time).toLocaleString()}
+              {/* The sitting's start on the clock its 01 is written on (the tablet's), with the offset (Round 94, B93-6). */}
+              {s.participant_id} · {sittingStartText(s)}
             </option>
           ))}
         </select>
@@ -474,7 +476,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
           className="font-sans text-base"
           style={{ margin: '0 0 14px', padding: '12px 14px', borderRadius: 10, border: '1px solid #b83a3a', background: '#fdeeee', color: '#5a1414', lineHeight: 1.55 }}
         >
-          <strong>The participant withdrew</strong> — recorded {new Date(bundle.session.withdrawn_at).toLocaleString()}.
+          <strong>The participant withdrew</strong> — recorded {clockText(bundle.session.withdrawn_at)}.
           Nothing on this page may be analysed.
           <More tone="#5a1414">
             The measurements are kept so the withdrawal is auditable, and every export of this sitting

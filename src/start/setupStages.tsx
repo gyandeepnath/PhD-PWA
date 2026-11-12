@@ -41,6 +41,7 @@ import { useDialog } from '@/components/ConfirmDialog';
 import { PARTICIPANT_ID_PATTERN, canonicalParticipantId, participantIdProblem } from '@/lib/participantId';
 import { useTapGuard, CONSENT_TAP_GUARD_MS } from '@/lib/tapGuard';
 import type { CameraStatus, CameraOffReason, CameraPipelineRecord, CameraBenchRecord, ExposureOutcome } from '@/storage/types';
+import { clockText } from '@/lib/localClock';
 
 /**
  * The setup screens must SCROLL when they are taller than the viewport.
@@ -336,7 +337,7 @@ export function SessionInit({
             <div data-testid="participant-withdrawn" className="font-sans text-base"
               style={{ border: '1px solid #b83a3a', background: '#fdeeee', color: '#5a1414', borderRadius: 10, padding: 12 }}>
               <strong>Participant {pid} withdrew from the study</strong> on{' '}
-              {new Date(assigned!.withdrawnAt as number).toLocaleDateString()}. A new sitting cannot be
+              {clockText(assigned!.withdrawnAt as number)}. A new sitting cannot be
               started under this ID.
             </div>
           )}
@@ -352,7 +353,7 @@ export function SessionInit({
               <p className={eyebrow}>This participant&apos;s earlier sitting was recorded by another build</p>
               {assigned!.earlierBuilds!.map((b) => (
                 <p key={`${b.session_index}-${b.started_at}`} className="mt-1 font-sans text-[15px]">
-                  Sitting {b.session_index} ({new Date(b.started_at).toLocaleDateString()}): {b.build}
+                  Sitting {b.session_index} (started {clockText(b.started_at, b.started_utc_offset_min)}): {b.build}
                 </p>
               ))}
               <p className="mt-1 font-sans text-[15px]">This tablet now runs: {describeBuild(buildKey(currentProvenance()))}</p>
@@ -369,7 +370,7 @@ export function SessionInit({
               style={{ border: '1px solid #e0a33c', background: '#fdf6e8', borderRadius: 10, padding: '14px 16px', color: UI_TEXT.ink }}>
               <p className={eyebrow}>A sitting of this participant is still in progress</p>
               <p className="mt-1 font-serif text-xl">
-                Sitting {open.session_index}, started {new Date(open.started_at).toLocaleString()}
+                Sitting {open.session_index}, started {clockText(open.started_at, open.started_utc_offset_min)}
                 {' · '}{open.conditions_completed} of {open.conditions_per_session} display{open.conditions_per_session === 1 ? '' : 's'} finished in it
               </p>
               <p className={help} style={{ marginTop: 6 }}>

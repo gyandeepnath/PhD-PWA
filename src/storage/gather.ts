@@ -17,6 +17,7 @@ import { buildKey, currentProvenance, describeBuild, sameBuild } from './buildSt
 import { participantProgress } from '@/experiment/participantProgress';
 import { canonicalParticipantId } from '@/lib/participantId';
 import { exportNeedsKeptWindow, ocularRecordId } from '@/tracking/blinkLog';
+import { sittingOffsets } from '@/lib/localClock';
 
 export interface SessionBundle {
   session: SessionRecord;
@@ -255,6 +256,8 @@ export interface PriorParticipantProgress {
 export interface EarlierBuild {
   session_index: number;
   started_at: number;
+  /** The UTC offset the tablet stored with the start (localClock.ts sittingOffsets); undefined before Round 93. */
+  started_utc_offset_min?: number;
   /** describeBuild() of the build that recorded it. */
   build: string;
 }
@@ -264,6 +267,8 @@ export interface OpenSitting {
   session_id: string;
   session_index: number;
   started_at: number;
+  /** The UTC offset the tablet stored with the start (localClock.ts sittingOffsets); undefined before Round 93. */
+  started_utc_offset_min?: number;
   conditions_per_session: number;
   /** Displays this sitting finished. */
   conditions_completed: number;
@@ -301,6 +306,7 @@ export async function priorParticipantProgress(participantId: string): Promise<P
     if (s.status === 'in_progress' && !isWithdrawn(s) && !superseded.has(s.session_id)) {
       openSittings.push({
         session_id: s.session_id, session_index: s.session_index, started_at: s.session_start_time,
+        started_utc_offset_min: sittingOffsets(s).start,
         conditions_per_session: s.conditions_per_session, conditions_completed: done,
       });
     }
@@ -311,7 +317,7 @@ export async function priorParticipantProgress(participantId: string): Promise<P
   const earlierBuilds: EarlierBuild[] = sessions
     .filter((s) => !sameBuild(s.provenance, now))
     .sort((a, b) => a.session_start_time - b.session_start_time)
-    .map((s) => ({ session_index: s.session_index, started_at: s.session_start_time, build: describeBuild(buildKey(s.provenance)) }));
+    .map((s) => ({ session_index: s.session_index, started_at: s.session_start_time, started_utc_offset_min: sittingOffsets(s).start, build: describeBuild(buildKey(s.provenance)) }));
   return {
     participantId: stored, spellings,
     enrolment: Number.isFinite(enrolment) ? enrolment : null, conditionsCompleted, sittings: sessions.length, withdrawnAt,

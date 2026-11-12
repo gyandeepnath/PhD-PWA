@@ -79,7 +79,7 @@ describe('the store: resumable and open sittings', () => {
     await put('sessions', sitting('open', 1000, { session_index: 2, conditions_per_session: 5 }));
     await put('conditions', { ...buildFixtureBundle().conditions[0], condition_id: 'c1', session_id: 'open', completed_at: 1100 });
     const p = await priorParticipantProgress('dup1');
-    expect(p.openSittings).toEqual([{ session_id: 'open', session_index: 2, started_at: 1000, conditions_per_session: 5, conditions_completed: 1 }]);
+    expect(p.openSittings).toEqual([{ session_id: 'open', session_index: 2, started_at: 1000, started_utc_offset_min: 330, conditions_per_session: 5, conditions_completed: 1 }]);
     // Superseded: no longer open, and so no longer blocks.
     await put('sessions', sitting('later', 2000, { session_index: 3 }));
     expect((await priorParticipantProgress('DUP1')).openSittings.map((o) => o.session_id)).toEqual(['later']);

@@ -29,6 +29,7 @@ import { fnv1a } from './export';
 import { ocularRecordId } from '@/tracking/blinkLog';
 import type { SessionBundle } from './gather';
 import type { StoreName, StoreMap } from './types';
+import { sittingEndText, type SittingOffsetFields } from '@/lib/localClock';
 
 /** Bumped when the payload shape changes in a way an older reader could misread. */
 export const BACKUP_FORMAT_VERSION = 2;
@@ -690,9 +691,11 @@ export async function importSessionBackup(
      */
     const onDevice = await countDeviceRows(sessionId);
     const inFile = countBackupRows(data);
+    // On the clock the sitting's 01 is written on — the offset the tablet stored, printed — not the
+    // clock of the device the backup is being restored to (Round 94, review B93-6).
     const ended = (r: unknown) => {
-      const t = (r as { session_end_time?: number | null } | null)?.session_end_time;
-      return t ? new Date(t).toLocaleString() : 'not finished';
+      const s = r as SittingOffsetFields | null;
+      return (s && s.session_end_time ? sittingEndText(s) : null) ?? 'not finished';
     };
     const exported = (existing as unknown as { export_confirmed_at?: number | null }).export_confirmed_at;
     return {
