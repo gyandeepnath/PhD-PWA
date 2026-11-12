@@ -10,7 +10,7 @@ import {
   type ReliabilityInput,
 } from '@/tracking/ocularReliability';
 import { ENGAGEMENT } from '@/dashboard/aggregate';
-import { FPS_GATE } from '@/tracking/frameRateGate';
+import { FPS_GATE, fpsConsistent, fpsBandDistanceText } from '@/tracking/frameRateGate';
 
 const ok: ReliabilityInput = {
   hasEyeRecord: true, cameraActive: true, blinkTotal: 40, hasBaseline: true,
@@ -110,5 +110,51 @@ describe('the verdict', () => {
     expect(rate.consequence).toBe('Kept; left out of the tier-A-only re-check.');
     expect(v.checks.find((c) => c.key === 'face')!.gate).toBe('face in view (plan §5.3)');
     expect(RELIABILITY_WORD).toEqual({ good: 'Good', usable: 'Usable', not_usable: 'Not usable' });
+  });
+});
+
+/*
+ * Review B93-4 (Round 94): the consistency line wrote both rates to one decimal, so a run flagged as more
+ * than 2 from its usual rate could show two numbers exactly 2.0 apart, and a passing run the same two.
+ */
+describe('the consistency line never shows numbers that contradict its verdict (review B93-4)', () => {
+  const line = (fps: number, median: number) => {
+    const consistent = fpsConsistent(fps, median);
+    const v = ocularReliability({ ...ok, fps, fpsMedian: median, fpsConsistent: consistent });
+    return { consistent, check: v.checks.find((c) => c.key === 'consistency')! };
+  };
+
+  it('20.00 against a usual 22.04 is flagged, and says 2.04 from the usual 22.04', () => {
+    const { consistent, check } = line(20.0, 22.04);
+    expect(consistent).toBe(false);
+    expect(check.status).toBe('flag');
+    expect(check.value).toBe('20.00 against a usual 22.04 (2.04 apart)');
+    expect(check.phrase).toBe('eye sampling rate 20.00, 2.04 from the usual 22.04 (more than 2)');
+    expect(check.value).not.toMatch(/\b20\.0 against a usual 22\.0\b/);
+  });
+
+  it('20.04 against a usual 22.00 passes, and says 1.96 apart (it read "20.0 against a usual 22.0" too)', () => {
+    const { consistent, check } = line(20.04, 22.0);
+    expect(consistent).toBe(true);
+    expect(check.status).toBe('pass');
+    expect(check.value).toBe('20.04 against a usual 22.00 (1.96 apart)');
+  });
+
+  it('the median of two middle rates keeps its third decimal, and the distance stays on its side of the band', () => {
+    // 20.00 against 22.005: 2.005 apart, flagged; two decimals could print 2.00 or 2.01.
+    const { consistent, check } = line(20.0, 22.005);
+    expect(consistent).toBe(false);
+    expect(check.value).toBe('20.00 against a usual 22.005 (2.005 apart)');
+  });
+
+  it('over a sweep of stored rates, the printed distance is above the band exactly when the run is flagged', () => {
+    for (let m = 2000; m <= 2400; m += 1) {
+      for (const fps of [20.0, 20.01, 19.99, 22.0, 24.0]) {
+        const median = m / 100;
+        const off = !fpsConsistent(fps, median);
+        const shown = Number(fpsBandDistanceText(fps, median, off));
+        expect(shown > FPS_GATE.CONSISTENCY_BAND, `${fps} vs ${median}`).toBe(off);
+      }
+    }
   });
 });

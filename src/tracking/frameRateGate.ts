@@ -154,6 +154,29 @@ export function stageFpsText(fps: number | null | undefined, floor?: number): st
   return keepingSide(fps, floor == null ? [FPS_GATE.REDUCED, FPS_GATE.ADEQUATE] : [FPS_GATE.REDUCED, FPS_GATE.ADEQUATE, floor], 0);
 }
 
+/**
+ * How far a rate is from the participant's usual one, for the consistency line of the Data Quality verdict
+ * (Round 94, review B93-4). The two rates were written to one decimal each, so a flagged run could read
+ * "20.0 against a usual 22.0, more than 2 from it" (20.00 against 22.04) and a passing run the same two
+ * numbers (20.04 against 22.00). The distance itself is written instead, to two decimals, or three when two
+ * would carry it onto the band from the side the verdict `off` puts it (the median of two-decimal rates has
+ * at most three, so three decimals are exact); never past the band from the wrong side.
+ */
+export function fpsBandDistanceText(fps: number, participantMedian: number, off: boolean): string {
+  const d = Math.abs(fps - participantMedian);
+  const band = FPS_GATE.CONSISTENCY_BAND + 1e-9;
+  for (let k = 2; k <= 3; k++) {
+    const s = d.toFixed(k);
+    if ((Number(s) > band) === off) return s;
+  }
+  return (off ? Math.ceil(d * 1000 - 1e-6) / 1000 : Math.floor(d * 1000 + 1e-6) / 1000).toFixed(3);
+}
+
+/** A stored rate or median at its own precision: two decimals, or three for the mean of two middle rates. */
+export function fpsExactText(fps: number): string {
+  return fps.toFixed(Math.abs(fps * 100 - Math.round(fps * 100)) < 1e-6 ? 2 : 3);
+}
+
 /** Median of the finite values; null when there are none. */
 export function medianFps(values: Array<number | null | undefined>): number | null {
   const v = values.filter((x): x is number => x != null && Number.isFinite(x)).sort((a, b) => a - b);

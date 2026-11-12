@@ -56,7 +56,7 @@ describe('camera verdict (rule rel-r1)', () => {
     expect(unknown.problems).toEqual(['eye sampling rate not measurable']);
     const off = cameraVerdict(eye, { ...fine, fps: 24, consistent: false, median: 28.5 });
     expect(off.reliability).toBe('usable');
-    expect(off.problems).toEqual(['eye sampling rate 24.0, more than 2 from the usual 28.5']);
+    expect(off.problems).toEqual(['eye sampling rate 24.00, 4.50 from the usual 28.50 (more than 2)']);
   });
 
   it('flags the §5.3-5.4 checks the R template applies, at its thresholds, as usable, never as not usable', () => {

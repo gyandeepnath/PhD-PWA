@@ -38,7 +38,7 @@
  * Pure: the same function serves the dashboard (from a sitting's records) and the export (from the
  * columns of analysis_long.csv), so the screen and the file cannot disagree.
  */
-import { FPS_GATE, fpsText, fpsTier } from './frameRateGate';
+import { FPS_GATE, fpsText, fpsTier, fpsBandDistanceText, fpsExactText } from './frameRateGate';
 import { MEASURE } from './measurementSchedule';
 
 /** Any change to a check, a threshold or the mapping to the three words must change this string. */
@@ -195,17 +195,23 @@ export function ocularReliability(x: ReliabilityInput): ReliabilityResult {
   // 4. Consistency with the participant's usual rate, the second part of fps-g2.
   const consNeeded = `within ${FPS_GATE.CONSISTENCY_BAND} a second of the usual`;
   const consGate = 'fps-g2 consistency (plan §5.2)';
-  const usual = x.fpsMedian == null ? null : x.fpsMedian.toFixed(1);
+  // The two rates at the precision they are judged at, and the distance itself, written so it stays on the
+  // side of the band the verdict puts it (Round 94, review B93-4): one decimal each made a flagged run read
+  // "20.0 against a usual 22.0" beside "more than 2 from the usual", and a passing run the same.
+  const rateExact = x.fps == null ? '?' : fpsExactText(x.fps);
+  const usual = x.fpsMedian == null ? '?' : fpsExactText(x.fpsMedian);
+  const apart = x.fps == null || x.fpsMedian == null || x.fpsConsistent == null ? null
+    : fpsBandDistanceText(x.fps, x.fpsMedian, !x.fpsConsistent);
   if (!on || x.fpsConsistent == null) checks.push(NOT_JUDGED('consistency', `${MEASURE.samplingRate.name}, steady`, consNeeded, consGate));
   else if (!x.fpsConsistent) {
     checks.push({
       key: 'consistency', label: `${MEASURE.samplingRate.name}, steady`, status: 'flag', code: 'fps_off_usual',
-      value: `${r} against a usual ${usual ?? '?'}`, needed: consNeeded, gate: consGate,
+      value: `${rateExact} against a usual ${usual}${apart == null ? '' : ` (${apart} apart)`}`, needed: consNeeded, gate: consGate,
       consequence: 'Kept; left out of the consistent-rows re-check.',
-      phrase: `eye sampling rate ${r}, more than ${FPS_GATE.CONSISTENCY_BAND} from the usual ${usual ?? '?'}`,
+      phrase: `eye sampling rate ${rateExact}, ${apart ?? '?'} from the usual ${usual} (more than ${FPS_GATE.CONSISTENCY_BAND})`,
     });
   } else {
-    checks.push({ key: 'consistency', label: `${MEASURE.samplingRate.name}, steady`, status: 'pass', value: `${r} against a usual ${usual ?? '?'}`, needed: consNeeded, gate: consGate, ...PASS });
+    checks.push({ key: 'consistency', label: `${MEASURE.samplingRate.name}, steady`, status: 'pass', value: `${rateExact} against a usual ${usual}${apart == null ? '' : ` (${apart} apart)`}`, needed: consNeeded, gate: consGate, ...PASS });
   }
 
   // 5-7. The R template's §5.3–5.4 checks, each a strict inequality as R writes it, and a missing value
