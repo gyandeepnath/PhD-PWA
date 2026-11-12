@@ -991,10 +991,13 @@ cat("\nMarginal means by polarity:\n"); print(emmeans(m_rt, ~ polarity))
 # written before Round 92 has no rt_timing_version column: every row is rt-t1. Those camera-on rows stay
 # IN the model above (it is unchanged); they are counted here and the model is refitted without them, so
 # the investigator sees both (ANALYSIS_PLAN.md §5; the default is theirs to change). rt-t2 rows (Round 92)
-# equal rt-t3 except on a trial whose paint frame ran past the next frame's begin time, where the onset was
-# early and the reaction time long by up to about a frame (review REVA-1); such trials were not marked and
-# were not seen in ordinary runs, so rt-t2 rows are counted on their own line and kept, in the model and
-# in its refit.
+# carry the onset rt-t3 would have stamped on every trial where the message posted from the paint frame
+# arrived before the next frame's begin time (every ordinary trial). The two differ where it arrived later:
+# where the paint frame overran, the rt-t2 onset was early and the reaction time long by up to about a frame
+# (review REVA-1); where the message was held behind another task, the rt-t2 onset is right and rt-t3's is
+# late, its reaction time short by 08 onset_moved_ms (Round 94, review REVA93-A1); the data cannot tell the
+# two apart. rt-t2 rows mark neither and no paint overrun was seen in ordinary runs, so they are counted on
+# their own line and kept, in the model and in its refit.
 RT_TIMING_VERSION <- "rt-t3"  # src/lib/rtOnset.ts RT_TIMING_VERSION (tests/rtOnset.test.ts pins it)
 rt_timing <- if ("rt_timing_version" %in% names(rt)) as.character(rt$rt_timing_version) else rep(NA_character_, nrow(rt))
 rt_timing <- ifelse(is.na(rt_timing) | rt_timing == "", "rt-t1", rt_timing)

@@ -905,26 +905,45 @@ work: 14.2-14.6 ms before the paint ended). Not seen without injected work (36 t
 slowdown, camera off and on); not measured on the tablet. From Round 93 the onset is the begin time of the
 first frame that begins no earlier than the end of the paint frame's rendering (the arrival of a message
 posted from that frame). In an ordinary trial that is the very frame `rt-t2` took — the next one, about
-11-16 ms after the paint ended — so nothing changes there; only a trial whose paint frame overran moves to
-the frame after, and 08 `onset_paint_overrun_ms` records by how much the paint ran past the next frame's
-begin time (0 normally), so such trials can be found. The message is handled after the paint frame's
-rendering, but a task already queued can run before it, so its arrival can be later than the paint's end;
-an overrun above 0 can therefore also mean that the paint finished in time and the message was held, and
-then the onset is a frame later than the dot could first have been shown and the reaction time short by up
-to about a frame. What is guaranteed is therefore: the onset is a frame's begin time, never before the end
-of the main-thread rendering of the frame that drew the dot; it is the next frame on a trial whose overrun
-is 0, and at most one frame after the message's arrival on any trial. When the compositor and the panel
-then put that frame on the glass is not measured by the browser and not claimed. `rt-t2` rows are the same as `rt-t3` except on such a trial,
-where they are long by up to about a frame and are not marked; the R template counts them on a line of its
-own and keeps them, in the RT model and in its refit.
+11-16 ms after the paint ended — so nothing changes there.
+
+*When the onset moves, and by how much (Round 94, review REVA93-A1 and A2; the rule is `rt-t3` as before,
+its bound was misstated).* The onset is a later frame whenever the message arrives after the next frame's
+begin time, for one of two reasons the data cannot tell apart: the paint frame overran, or the paint
+finished in time and the message was held behind a task already queued ahead of it (a database callback, a
+timer, another message). 08 `onset_paint_overrun_ms` is that message's lateness past the next frame's begin
+time (0 normally), whichever the reason; 08 `onset_moved_ms` (from Round 94) is how far the onset moved
+past the next frame — `rt-t2`'s onset — in whole frames. Where the paint overran, the onset is right and
+`rt-t2`'s was early by up to about a frame. Where the message was held, the onset is **late** — by the
+overrun rounded up to whole frames, under the overrun plus one frame, with no bound of its own — and
+`rt-t2`'s was right, so `response_time_ms` is short by `onset_moved_ms`: enough to put a real hit under the
+150 ms anticipation cutoff, and a touch made between the two onsets counts as a false start. The review
+measured it in headless Chromium at 60 Hz, with the paint ending about 15 ms before the next frame: tasks of
+25, 45 and 120 ms queued ahead of the message moved the onset 1, 2 and 7 frames (overrun 9.5-9.7, 29.6-29.8
+and 105.0-105.1 ms). At the tablet's 144 Hz a frame is about 7 ms. Round 93's text said such an onset is "a
+frame later" and the reaction time "short by up to about a frame"; that held only for a task shorter than a
+frame. So `rt-t2` and `rt-t3` differ on every trial whose overrun is above 0, by `onset_moved_ms`, and on
+such a trial the reaction time lies between `response_time_ms` and `response_time_ms + onset_moved_ms`; a
+sensitivity analysis can bound it both ways from those two columns. None is pre-specified, no cutoff or rule
+uses either column, and such trials stay in (the investigator's decision). `onset_moved_ms` is blank on rows
+recorded before Round 94, `rt-t3` rows of Round 93's build included; on those the move can be taken as the
+overrun rounded up to whole frames of the tablet's refresh interval.
+
+What is guaranteed is therefore: the onset is a frame's begin time, never before the end of the main-thread
+rendering of the frame that drew the dot; it is the next frame on a trial whose overrun is 0, and the first
+frame that begins no earlier than the message's arrival on any trial. When the compositor and the panel
+then put that frame on the glass is not measured by the browser and not claimed. `rt-t2` rows equal `rt-t3` wherever the overrun
+would have been 0; where the paint overran they are long by up to about a frame, where the message would
+have been held they are right, and neither kind is marked. The R template counts `rt-t2` rows on a line of
+its own and keeps them, in the RT model and in its refit.
 
 `rt_timing_version` (02_conditions.csv, analysis_long.csv) says which rule a block ran under. `rt-t1` rows
 of a camera-on sitting are biased short by an amount that was not recorded and cannot be recovered; the
 confirmatory RT model keeps them (it is unchanged), and the R template counts them and refits the RT model
 without them as a sensitivity. Whether they should instead be left out of the RT, lapse and
 signal-detection models is the investigator's decision (not pre-specified here). e2e/rtOnsetTiming.spec.ts
-measures the onset against the paint with the camera on and off, and with a long paint frame; on the
-tablet it was not measured.
+measures the onset against the paint with the camera on and off, with a long paint frame, and with the
+paint-end message held behind a queued task (Round 94); on the tablet it was not measured.
 
 **A display's size is fixed for its own stimulus only (Round 87).** The display scale (`stimulus_scale`,
 which with the sitting's ruler calibration gives every visual angle) may shrink while a stimulus is on

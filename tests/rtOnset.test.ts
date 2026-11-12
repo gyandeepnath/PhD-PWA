@@ -15,7 +15,9 @@
  * clock; its rendering takes RENDER_MS; a task posted from one of its callbacks runs once it is rendered;
  * a frame cannot start before the previous one has finished, and when it starts late it is handed the
  * timestamp of the latest vsync it missed (25 ms of extra work: the next timestamp 16.7 ms after the paint
- * frame's; 40 ms: 33.3 ms).
+ * frame's; 40 ms: 33.3 ms). That timestamp is fixed when the previous frame's RENDERING ends: a task that
+ * runs after the rendering (a queued task, review REVA93-A1) delays when the next frame starts, not its
+ * timestamp — the review measured a frame whose callbacks ran 104.8 ms late with its original vsync's time.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -38,12 +40,18 @@ interface FrameWork {
   before?: number;
   /** Other main-thread work after them in the same frame: a garbage collection, a long render. */
   after?: number;
+  /**
+   * A task of this many ms queued during the frame AHEAD of the tasks its callbacks post (another message,
+   * a database callback, a timer): it runs after the frame's rendering and before them (review REVA93-A1).
+   */
+  queued?: number;
 }
 
 /** A page's frames, run one at a time. `work(k)` is frame k's extra work; `lateTasks` defers posted tasks a frame. */
 function frames(work: (k: number) => FrameWork = () => ({}), lateTasks = false) {
   let clock = BASE;
   let lastTs = BASE - FRAME_MS;
+  let lastRenderEnd = BASE;
   let frame = 0;
   let queue: Array<(ts: number) => void> = [];
   let tasks: Array<() => void> = [];
@@ -56,11 +64,12 @@ function frames(work: (k: number) => FrameWork = () => ({}), lateTasks = false) 
     now: () => clock,
   };
   const runFrame = () => {
-    const ts = Math.max(lastTs + FRAME_MS, BASE + Math.floor((clock - BASE + 1e-9) / FRAME_MS) * FRAME_MS);
+    const ts = Math.max(lastTs + FRAME_MS, BASE + Math.floor((lastRenderEnd - BASE + 1e-9) / FRAME_MS) * FRAME_MS);
     lastTs = ts;
     begins.push(ts);
     clock = Math.max(clock, ts);
     const w = work(frame);
+    if (w.queued) tasks.push(() => { clock += w.queued!; });
     clock += w.before ?? 0;
     const run = queue;
     queue = [];
@@ -70,6 +79,7 @@ function frames(work: (k: number) => FrameWork = () => ({}), lateTasks = false) 
     }
     clock += (w.after ?? 0) + RENDER_MS;
     paintEnds.push(clock);
+    lastRenderEnd = clock;
     for (const t of deferred) t();
     deferred = [];
     if (lateTasks) deferred = tasks;
@@ -84,12 +94,13 @@ function frames(work: (k: number) => FrameWork = () => ({}), lateTasks = false) 
 async function stampWith(f: ReturnType<typeof frames>) {
   let onset = NaN;
   let overrun: number | null | undefined;
+  let moved = NaN;
   let stampedAtClock = NaN;
   let done = false;
-  const p = stampOnsetAfterPaint(() => true, (ts, o) => { onset = ts; overrun = o; stampedAtClock = f.now(); done = true; }, f.host);
+  const p = stampOnsetAfterPaint(() => true, (ts, o, m) => { onset = ts; overrun = o; moved = m; stampedAtClock = f.now(); done = true; }, f.host);
   for (let k = 0; k < 20 && !done; k++) f.runFrame();
   await p;
-  return { onset, overrun, stampedAtClock };
+  return { onset, overrun, moved, stampedAtClock };
 }
 
 describe('the onset is the frame after the paint, from the frame\'s own timestamp (audit 86 P1)', () => {
@@ -100,6 +111,7 @@ describe('the onset is the frame after the paint, from the frame\'s own timestam
       const r = await stampWith(f);
       expect(r.onset).toBe(f.begins[1]);
       expect(r.overrun).toBe(0);
+      expect(r.moved).toBe(0);
       // The callback ran after the tracker's work; the stamp does not carry it.
       expect(r.stampedAtClock - r.onset).toBeGreaterThanOrEqual(tracker);
     });
@@ -146,10 +158,10 @@ describe('the onset is the frame after the paint, from the frame\'s own timestam
   it('the task stamps through it, with the frame time and the overrun, and flips the phase in the same callback', () => {
     const src = readFileSync(resolve(__dirname, '../src/tasks/ReactionTimeTask.tsx'), 'utf8');
     const mark = src.slice(src.indexOf('const markOnsetAtPaint ='), src.indexOf('const runTrial ='));
-    expect(mark).toMatch(/stampOnsetAfterPaint\(\(\) => dotRef\.current\?\.isConnected === true, \(frameTime, paintOverrunMs\) => \{/);
-    expect(mark).toMatch(/onsetRef\.current = frameTime;\s*overrunRef\.current = paintOverrunMs;\s*phaseRef\.current = 'stimulus';/);
+    expect(mark).toMatch(/stampOnsetAfterPaint\(\(\) => dotRef\.current\?\.isConnected === true, \(frameTime, paintOverrunMs, movedMs\) => \{/);
+    expect(mark).toMatch(/onsetRef\.current = frameTime;\s*overrunRef\.current = paintOverrunMs;\s*movedRef\.current = movedMs;\s*phaseRef\.current = 'stimulus';/);
     expect(mark).not.toMatch(/now\(\)/);
-    expect(src).toMatch(/stimulus_onset_time: onsetRef\.current,\s*onset_paint_overrun_ms: overrunRef\.current,/);
+    expect(src).toMatch(/stimulus_onset_time: onsetRef\.current,\s*onset_paint_overrun_ms: overrunRef\.current,\s*onset_moved_ms: movedRef\.current,/);
     expect(src).toMatch(/ref=\{dotRef\}\s*aria-hidden\s*data-testid="rt-dot"/);
   });
 });
@@ -180,6 +192,8 @@ describe('the onset never comes before the paint has finished (review REVA-1, rt
       expect(r.onset).toBeGreaterThanOrEqual(f.paintEnds[0]);
       expect(r.overrun).toBeCloseTo(f.paintEnds[0] - f.begins[1], 2);
       expect(r.overrun!).toBeGreaterThan(14);
+      // Moved one frame past rt-t2's onset, and the trial says so.
+      expect(r.moved).toBeCloseTo(f.begins[2] - f.begins[1], 2);
     });
   }
 
@@ -209,6 +223,62 @@ describe('the onset never comes before the paint has finished (review REVA-1, rt
     const r = await stampWith(f);
     expect(r.onset).toBe(f.begins[2]);
     expect(r.overrun!).toBeGreaterThan(0);
+  });
+});
+
+/*
+ * A HELD MESSAGE (Round 94, review REVA93-A1 and A2). The message posted from the paint frame is a task of
+ * its own, and a task already queued ahead of it runs first. The paint then ended in time and rt-t2's onset
+ * (the next frame) was right, but the message arrives late, the onset moves to the first frame after its
+ * arrival, and the reaction time is SHORT by however many frames that is: not by up to a frame, as Round
+ * 93's text said, but by the overrun rounded up to whole frames, which is unbounded. The review measured it
+ * in headless Chromium: 25, 45 and 120 ms queued tasks moved the onset 1, 2 and 7 frames. tests above
+ * modelled every posted task as running straight after the frame, and missed it.
+ */
+describe('a task queued ahead of the paint-end message moves the onset late, by whole frames (review REVA93-A1)', () => {
+  for (const [queued, frames_] of [[25, 1], [45, 2], [120, 7]] as const) {
+    it(`a ${queued} ms task queued in the paint frame: the onset moves ${frames_} frame(s), the paint having ended in time`, async () => {
+      const f = frames((k) => (k === 0 ? { queued } : {}));
+      const r = await stampWith(f);
+      // The paint itself ended well before the next frame began: rt-t2's onset, begins[1], was right.
+      expect(f.paintEnds[0]).toBeLessThan(f.begins[1]);
+      // The overrun is the message's lateness, not the paint's.
+      expect(r.overrun!).toBeGreaterThan(0);
+      expect(r.overrun).toBeCloseTo(f.paintEnds[0] + queued - f.begins[1], 2);
+      // The onset is late by whole frames: the overrun rounded up, under the overrun plus one frame.
+      expect(r.moved).toBeCloseTo(r.onset - f.begins[1], 2);
+      expect(r.moved / FRAME_MS).toBeCloseTo(frames_, 2); // stored to 0.01 ms
+      expect(r.moved).toBeGreaterThanOrEqual(r.overrun!);
+      expect(r.moved).toBeLessThan(r.overrun! + FRAME_MS);
+      // ... and never before the paint ended.
+      expect(r.onset).toBeGreaterThanOrEqual(f.paintEnds[0]);
+    });
+  }
+
+  it('for any queued task, the onset is never early, and onset_moved_ms is the overrun rounded up to whole frames', async () => {
+    for (let ms = 0; ms <= 130; ms += 0.5) {
+      const f = frames((k) => (k === 0 ? { queued: ms } : {}));
+      const r = await stampWith(f);
+      expect(r.onset, `${ms} ms`).toBeGreaterThanOrEqual(f.paintEnds[0]);
+      expect(r.moved, `${ms} ms`).toBeCloseTo(r.onset - f.begins[1], 2);
+      if (r.overrun === 0) {
+        expect(r.moved, `${ms} ms`).toBe(0);
+      } else {
+        expect(r.moved / FRAME_MS, `${ms} ms`).toBeCloseTo(Math.ceil(r.overrun! / FRAME_MS - 1e-6), 1);
+        expect(r.moved, `${ms} ms`).toBeLessThan(r.overrun! + FRAME_MS);
+      }
+    }
+  });
+
+  it('a paint overrun and a held message together: the onset is still between rt-t2\'s and rt-t2\'s plus onset_moved_ms', async () => {
+    const f = frames((k) => (k === 0 ? { after: 25, queued: 25 } : {}));
+    const r = await stampWith(f);
+    // The first frame the dot could be shown at: the first to begin after the paint ended.
+    const firstAfterPaint = f.begins.find((b) => b >= f.paintEnds[0])!;
+    expect(firstAfterPaint).toBeGreaterThan(f.begins[1]);
+    expect(r.onset).toBeGreaterThan(firstAfterPaint); // late, by the held part
+    expect(firstAfterPaint).toBeGreaterThanOrEqual(r.onset - r.moved);
+    expect(firstAfterPaint).toBeLessThanOrEqual(r.onset);
   });
 });
 
@@ -268,6 +338,54 @@ describe('versioned: rt_timing_version', () => {
     const notT3 = new Set(c02.slice(1).map(splitCsvRow).filter((r) => r[h02.indexOf('rt_timing_version')] !== RT_TIMING_VERSION).map((r) => r[h02.indexOf('condition_id')]));
     expect(notT3).toEqual(new Set([old]));
     for (const r of rows.filter((x) => notT3.has(x[cidCol]))) expect(r[col]).toBe('');
+  });
+
+  /*
+   * Review REVA93-A1/A2 (Round 94): every document said a held message made the onset "a frame later" and the
+   * reaction time "short by up to about a frame", and that only a trial whose paint overran moves. Both are
+   * wrong for a task longer than a frame. Held here as each document now states it.
+   */
+  it('the documents state when the onset moves and by how much as the code does it (review REVA93-A1/A2)', () => {
+    const flat = (f: string) => readFileSync(resolve(__dirname, '..', f), 'utf8').replace(/\n\s*(\*|#|\/\/)?\s?/g, ' ').replace(/\s+/g, ' ');
+    const stale = [/short by up to about a frame(?!")/, /a frame later than the dot could first have been shown/, /only a trial whose paint frame overran moves/,
+      /by how much the paint overran/, /late by up to a frame/, /the same except on a trial whose paint frame overran/];
+    const entry = (file: string, column: string) => CODEBOOK.find((r) => r.file === file && r.column === column)!.description;
+    const texts: Record<string, string> = {
+      'lib/rtOnset.ts': flat('src/lib/rtOnset.ts'),
+      'ReactionTimeTask.tsx': flat('src/tasks/ReactionTimeTask.tsx'),
+      'types.ts': flat('src/storage/types.ts'),
+      'analysis_template.R': flat('src/analysis/analysis_template.R'),
+      'ANALYSIS_PLAN.md': flat('docs/ANALYSIS_PLAN.md'),
+      '02 rt_timing_version': entry('02_conditions.csv', 'rt_timing_version'),
+      '08 response_time_ms': entry('08_reaction_trials.csv', 'response_time_ms'),
+      '08 onset_paint_overrun_ms': entry('08_reaction_trials.csv', 'onset_paint_overrun_ms'),
+      'analysis rt_timing_version': ANALYSIS_CODEBOOK.find((r) => r.column === 'rt_timing_version')!.description,
+    };
+    for (const [where, text] of Object.entries(texts)) for (const re of stale) expect(text, `${where}: ${re}`).not.toMatch(re);
+    expect(texts['08 onset_paint_overrun_ms']).toMatch(/held behind a task already queued ahead of it/);
+    expect(texts['08 onset_paint_overrun_ms']).toMatch(/no bound of its own/);
+    expect(texts['02 rt_timing_version']).toMatch(/held behind a task queued ahead of it/);
+    expect(texts['analysis rt_timing_version']).toMatch(/the data cannot tell the two apart/);
+    expect(texts['lib/rtOnset.ts']).toMatch(/the overrun rounded up to whole frames/);
+    expect(texts['ANALYSIS_PLAN.md']).toMatch(/the reaction time lies between `response_time_ms` and `response_time_ms \+ onset_moved_ms`/);
+    expect(entry('08_reaction_trials.csv', 'onset_moved_ms')).toMatch(/Blank on rows recorded before Round 94/);
+  });
+
+  it('08 onset_moved_ms: blank where it was not recorded, 0 and whole frames as recorded', () => {
+    const b = buildFixtureBundle();
+    const cid = b.conditions[0].condition_id;
+    const ts = b.reactionTrials.filter((t) => t.condition_id === cid);
+    delete (ts[0] as { onset_moved_ms?: number | null }).onset_moved_ms; // recorded by Round 93's build
+    ts[1].onset_paint_overrun_ms = 29.64; ts[1].onset_moved_ms = 33.333;
+    const lines = buildExportFiles(b).find((f) => f.filename === '08_reaction_trials.csv')!.content.trim().split('\n');
+    const head = splitCsvRow(lines[0]);
+    const rows = lines.slice(1).map(splitCsvRow).filter((r) => r[head.indexOf('condition_id')] === cid);
+    const at = (n: number) => rows.find((r) => r[head.indexOf('trial_number')] === String(n))!;
+    const mcol = head.indexOf('onset_moved_ms');
+    expect(mcol).toBe(head.indexOf('onset_paint_overrun_ms') + 1);
+    expect(at(ts[0].trial_number)[mcol]).toBe('');
+    expect(at(ts[1].trial_number)[mcol]).toBe('33.33');
+    expect(at(ts[2].trial_number)[mcol]).toBe('0');
   });
 
   it('the R template pins the same version and refits the RT model without rt-t1 camera-on rows', () => {

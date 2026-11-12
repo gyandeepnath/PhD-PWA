@@ -45,28 +45,40 @@
  * frame after the paint frame, and said it could never come before the dot was painted. That holds only
  * while the paint frame finishes before the next frame's begin time. Any other main-thread work in the
  * paint frame — a garbage collection, a database write finishing, a long React render — delays the paint
- * itself, and when it runs past the next vsync, Chromium hands the next frame that vsync's timestamp
- * although the frame starts only once the paint is done: the stamp then fell BEFORE the dot could be on
- * the screen, and the reaction time came out long by up to about a frame. The review measured it on the
- * app: with 30 ms of extra work in the paint frame the stored onset was 14.2-14.6 ms before the paint had
+ * itself, and when it runs past the next vsync, Chromium hands the next frame the latest vsync it missed
+ * although the frame starts only once the paint is done: the stamp then fell BEFORE the dot could be on the
+ * screen, and the reaction time came out long by up to about a frame. The review measured it on the app:
+ * with 30 ms of extra work in the paint frame the stored onset was 14.2-14.6 ms before the paint had
  * finished (rule rt-t1's clock, read after the paint, would have landed about 0.1 ms after it). It needs
  * roughly 9-17 ms or more of extra work inside that one frame; it was not seen without injected work (36
  * trials at 4x and 6x CPU slowdown, camera off and on), and it has not been measured on the tablet. Now the
  * frame that finds the dot also posts a message: a message posted from an animation-frame callback is
  * handled only after that frame's rendering has finished (the browser renders a frame in one task, and the
  * message is a task of its own), so its arrival time is no earlier than the end of the paint's main-thread
- * work. It is not always the moment that work ended: a task already in the queue can run first, and the
- * arrival is then later. The onset is the begin time of the first frame that begins no earlier than the
- * arrival; the phase flips in the same callback, as before. So the onset errs late, never early: if a
- * queued task held the message past the next frame's begin time while the paint itself had finished in
- * time, the onset is a frame later than the dot could first have been shown, the reaction time short by up
- * to about a frame, and the trial shows an overrun above 0, as a trial with a long paint frame does. Measured in headless Chromium the message arrives before the next frame's callback
- * every time (0 to 40 ms of extra work); if it has not, the stamp waits a frame, never guesses. In every
- * ordinary trial the next frame begins well after the paint ended (e2e/rtOnsetTiming.spec.ts: about 11-16
- * ms after it, set by how long the paint frame took; its log prints each trial), so the onset is the very
- * frame rt-t2 took; only a trial whose paint frame overran moves, to the frame after, and how far the paint
- * ran past the next frame's begin time is stored on the trial (08 onset_paint_overrun_ms, 0 when it did
- * not), so such trials can be found — whichever of the two moved them.
+ * work. The onset is the begin time of the first frame that begins no earlier than the arrival; the phase
+ * flips in the same callback, as before. So the onset is never before the paint ended. If the message has
+ * not arrived by the next frame, the stamp waits a frame; it never guesses.
+ *
+ * WHEN THE ONSET MOVES, AND BY HOW MUCH (Round 94, review REVA93-A1 and A2: the rule is rt-t3 as before;
+ * its error bound was misstated). The onset is a later frame than the next one whenever the message
+ * arrives after the next frame's begin time, for one of two reasons the data cannot tell apart: the paint
+ * frame overran, or the paint finished in time and the message was HELD behind a task already queued ahead
+ * of it (any task: a database callback, a timer, another message). onset_paint_overrun_ms is that message's
+ * lateness past the next frame's begin time, whichever the reason; onset_moved_ms is how far the onset was
+ * moved past that frame (rt-t2's onset), a whole number of frames. Where the paint overran, the onset is
+ * right and rt-t2's was early by up to about a frame. Where the message was held, the onset is LATE, by the
+ * overrun rounded up to whole frames — less than the overrun plus one frame, and with no bound of its own:
+ * the review queued 25, 45 and 120 ms tasks ahead of the message (headless Chromium, 60 Hz) while the paint
+ * had ended about 15 ms before the next frame, and the onset moved 1, 2 and 7 frames (overrun 9.5-9.7,
+ * 29.6-29.8 and 105.0-105.1 ms) — and rt-t2's onset was right, so the reaction time is SHORT by
+ * onset_moved_ms: enough to put a real hit under the 150 ms anticipation cutoff, and a touch made between
+ * the two onsets counts as a false start. (At the tablet's 144 Hz a frame is about 7 ms.) So rt-t2 and
+ * rt-t3 differ on every trial whose overrun is above 0, by onset_moved_ms, the one early or the other late
+ * as the cause was, and that trial's reaction time lies between response_time_ms and response_time_ms +
+ * onset_moved_ms. In every ordinary trial the next frame begins well after the paint ended
+ * (e2e/rtOnsetTiming.spec.ts: about 11-16 ms after it, set by how long the paint frame took; its log prints
+ * each trial) and the message has arrived by then, so the onset is the very frame rt-t2 took, and both
+ * fields are 0.
  *
  * WHAT IS NOT CHANGED. The response is still the touch's own timestamp; the response window still closes
  * on it (lib/rtResponse.ts); touches are still taken as responses only from the stamping frame's callback
@@ -76,10 +88,12 @@
  * VERSIONED, because stored reaction times change meaning: rt_timing_version (02_conditions.csv,
  * analysis_long). 'rt-t1' rows with the camera on carry reaction times short by an unknown amount up to one
  * tracker call per trial, which cannot be recovered (the tracker's time per frame was not recorded);
- * 'rt-t1' rows with the camera off differ from 'rt-t2' by about a millisecond. 'rt-t2' rows equal 'rt-t3'
- * except on a trial whose paint frame overran into the next frame's begin time: there the 'rt-t2' onset
- * was early by up to about a frame and the reaction time long by as much; such trials were not marked
- * (onset_paint_overrun_ms is blank on them) and were not seen in ordinary runs.
+ * 'rt-t1' rows with the camera off differ from 'rt-t2' by about a millisecond. 'rt-t2' rows are the onset
+ * rt-t3 would have stamped wherever the paint-end message arrived before the next frame's begin time —
+ * every ordinary trial; on a trial where the paint overran, the 'rt-t2' onset was early by up to about a
+ * frame and the reaction time long by as much, and on one where the message would have been held, the
+ * 'rt-t2' onset is the right one. Neither kind was marked (onset_paint_overrun_ms and onset_moved_ms are
+ * blank on rt-t2 rows), and no paint overrun was seen in ordinary runs.
  */
 
 /**
@@ -98,7 +112,7 @@ export interface FrameHost {
   /**
    * Queue `cb` as a task of its own, now. Called from an animation-frame callback, it runs no earlier than
    * the end of that frame's rendering (style, layout, paint), since the browser renders a frame in one
-   * task — and later if another task was queued before it.
+   * task — and later, by as long as they take, if other tasks were queued before it.
    */
   postTask: (cb: () => void) => void;
   /** The performance clock: the one frame timestamps and touch timestamps are on. */
@@ -140,17 +154,21 @@ export const ONSET_SEARCH_MAX_FRAMES = 120;
 
 /**
  * Wait for the frame that paints the stimulus, then call `onOnset` with the begin time of the first frame
- * that begins no earlier than the end of that frame's rendering — from inside that frame's callback, so
- * whatever the caller flips there (the phase that lets a touch count as a response) flips at the same
- * instant as the stamp, as before — and with how far the paint frame's rendering ran past the begin time of
- * the frame after it: 0 when it ended before (every ordinary trial), more when the onset was moved to a
- * later frame for it, null if the end of the paint was never seen (not met in any run).
+ * that begins no earlier than the arrival of a message posted from that frame (no earlier than the end of
+ * its rendering) — from inside that frame's callback, so whatever the caller flips there (the phase that
+ * lets a touch count as a response) flips at the same instant as the stamp, as before — and with:
+ *   - `paintOverrunMs`, how far that arrival was past the begin time of the frame after the paint frame:
+ *     0 when it came before (every ordinary trial); above 0 when the paint overran OR the message was held
+ *     behind a task queued ahead of it, which cannot be told apart; null if it never arrived (not met in
+ *     any run);
+ *   - `movedMs`, the onset minus the begin time of the frame after the paint frame (rt-t2's onset): 0 in
+ *     an ordinary trial, else the whole frames the onset was moved (Round 94, review REVA93-A1).
  *
  * `isDrawn` answers "is the stimulus in the document now?"; it is asked in each frame's callback.
  */
 export function stampOnsetAfterPaint(
   isDrawn: () => boolean,
-  onOnset: (frameTime: number, paintOverrunMs: number | null) => void,
+  onOnset: (frameTime: number, paintOverrunMs: number | null, movedMs: number) => void,
   host: FrameHost = browserFrameHost(),
 ): Promise<number> {
   return new Promise((resolve) => {
@@ -158,7 +176,7 @@ export function stampOnsetAfterPaint(
     let waited = 0;
     /** When the paint frame's rendering had finished: the arrival of the message posted from it. */
     let paintEnded: number | null = null;
-    /** The begin time of the frame after the paint frame: rt-t2's onset, and what an overrun is measured from. */
+    /** The begin time of the frame after the paint frame: rt-t2's onset, what an overrun and a move are measured from. */
     let nextBegin: number | null = null;
     const stamp = (frameTime: number) => {
       if (nextBegin == null) nextBegin = frameTime;
@@ -173,7 +191,9 @@ export function stampOnsetAfterPaint(
         console.error('[visulab] reaction-time onset: the end of the dot\'s paint was not seen; the onset is the frame the wait stopped in.');
       }
       const overrun = paintEnded == null ? null : Math.round(Math.max(0, paintEnded - nextBegin) * 100) / 100;
-      onOnset(frameTime, overrun);
+      // rt-t2's onset was nextBegin: how far this one is past it (the two bracket a moved trial's onset).
+      const moved = Math.round((frameTime - nextBegin) * 100) / 100;
+      onOnset(frameTime, overrun, moved);
       resolve(frameTime);
     };
     const look = () => {

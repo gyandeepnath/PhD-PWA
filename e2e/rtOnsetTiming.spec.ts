@@ -34,7 +34,12 @@ import { RT_TIMING_VERSION } from '../src/lib/rtOnset';
  * app has found the dot (a garbage collection or a long render stands in). The next frame is then handed
  * the timestamp of the vsync it missed, before the paint had finished; under rt-t2 that was the onset
  * (review REVA-1: 14.2-14.6 ms before the paint's end). Under rt-t3 the onset is the frame after, and the
- * trial says by how much the paint overran (onset_paint_overrun_ms).
+ * trial says by how much the message from the paint frame was late (onset_paint_overrun_ms).
+ *
+ * The fourth holds the message instead (Round 94, review REVA93-A1): the paint ends in time, but a task of
+ * 25 or 45 ms is queued ahead of the app's message, so the onset moves to a later frame although rt-t2's
+ * (the next frame) was right — by whole frames, two for the 45 ms task, not "up to a frame". It requires
+ * the stored overrun and onset_moved_ms, and the bound as the code states it.
  */
 
 // The drawn face, so the tracker finds a face and does its full work in the camera-on run. The camera-off
@@ -44,27 +49,36 @@ test.use({ launchOptions: faceCameraLaunchOptions() });
 interface Probe {
   seq: number;
   frames: { ts: number; at: number; seq: number; done: number | null }[];
-  dots: { at: number; seq: number }[];
+  dots: { at: number; seq: number; queuedMs: number }[];
   vfc: { s: number; e: number }[];
 }
 
 /**
  * Watch the page from now on: frames, the dot's insertions, video-frame callbacks. With `paintWorkMs`, the
  * frame that paints each dot also gets that much other main-thread work, in an animation-frame callback
- * queued when the dot enters the document — after the app's own, which was queued a frame earlier.
+ * queued when the dot enters the document — after the app's own, which was queued a frame earlier. With
+ * `queuedWorkMs` (cycled over the dots), the probe's own callback in the paint frame — which runs before the
+ * app's, having been registered first — posts, after its paint-done message, a message whose handler works
+ * that long: a task queued AHEAD of the message the app posts later in the same frame (review REVA93-A1).
  */
-async function installProbe(page: Page, paintWorkMs = 0): Promise<void> {
-  await page.evaluate((PAINT_WORK_MS) => {
+async function installProbe(page: Page, paintWorkMs = 0, queuedWorkMs: number[] = []): Promise<void> {
+  await page.evaluate(([PAINT_WORK_MS, QUEUED]) => {
     const p: Probe = { seq: 0, frames: [], dots: [], vfc: [] };
     (window as unknown as { __rtProbe: Probe }).__rtProbe = p;
+    const busy = (ms: number) => { const t0 = performance.now(); while (performance.now() - t0 < ms) { /* work */ } };
+    const workCh = new MessageChannel();
+    workCh.port1.onmessage = (e: MessageEvent<number>) => busy(e.data);
+    let pendingQueued = 0;
     new MutationObserver((records) => {
       const at = performance.now();
       for (const r of records) {
         for (const n of Array.from(r.addedNodes)) {
           if (n instanceof HTMLElement && (n.matches('[data-testid="rt-dot"]') || n.querySelector('[data-testid="rt-dot"]'))) {
-            p.dots.push({ at, seq: ++p.seq });
+            const queuedMs = QUEUED.length ? QUEUED[p.dots.length % QUEUED.length] : 0;
+            p.dots.push({ at, seq: ++p.seq, queuedMs });
+            pendingQueued = queuedMs;
             if (PAINT_WORK_MS > 0) {
-              requestAnimationFrame(() => { const t0 = performance.now(); while (performance.now() - t0 < PAINT_WORK_MS) { /* work in the paint frame */ } });
+              requestAnimationFrame(() => busy(PAINT_WORK_MS));
             }
           }
         }
@@ -75,6 +89,9 @@ async function installProbe(page: Page, paintWorkMs = 0): Promise<void> {
     const loop = (ts: number) => {
       p.frames.push({ ts, at: performance.now(), seq: ++p.seq, done: null });
       ch.port2.postMessage(p.frames.length - 1);
+      // The first frame after the dot entered the document paints it: queue the work behind our own
+      // paint-done message and ahead of the app's.
+      if (pendingQueued > 0) { workCh.port2.postMessage(pendingQueued); pendingQueued = 0; }
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
@@ -91,7 +108,7 @@ async function installProbe(page: Page, paintWorkMs = 0): Promise<void> {
         });
       };
     }
-  }, paintWorkMs);
+  }, [paintWorkMs, queuedWorkMs] as [number, number[]]);
 }
 
 /**
@@ -99,7 +116,7 @@ async function installProbe(page: Page, paintWorkMs = 0): Promise<void> {
  * blocks, eight scored trials under the harness's timing: with the camera on, the tracker used to work in
  * some frames and not others, and the old stamp was late only on a trial whose stamping frame it worked in.
  */
-async function measureTwoBlocks(page: Page, withCamera: boolean, paintWorkMs = 0) {
+async function measureTwoBlocks(page: Page, withCamera: boolean, paintWorkMs = 0, queuedWorkMs: number[] = []) {
   await startNewExperiment(page);
   let blocks = 0;
   for (let i = 0; i < 600 && blocks < 2; i++) {
@@ -109,7 +126,7 @@ async function measureTwoBlocks(page: Page, withCamera: boolean, paintWorkMs = 0
       continue;
     }
     if (stage === 'REACTION_TIME' && (await page.getByRole('button', { name: /Start/ }).count()) > 0) {
-      if (blocks === 0) await installProbe(page, paintWorkMs);
+      if (blocks === 0) await installProbe(page, paintWorkMs, queuedWorkMs);
       await page.waitForTimeout(400);
       await page.getByRole('button', { name: /Start/ }).first().click();
       await page.waitForFunction(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') !== 'REACTION_TIME', null, { timeout: 120_000 });
@@ -122,7 +139,7 @@ async function measureTwoBlocks(page: Page, withCamera: boolean, paintWorkMs = 0
 
   const probe = await page.evaluate(() => (window as unknown as { __rtProbe: Probe }).__rtProbe);
   const conditions = await dbAll<{ condition_id: string; session_position: number; rt_timing_version?: string }>(page, 'conditions');
-  const trials = (await dbAll<{ condition_id: string; trial_number: number; stimulus_onset_time: number; onset_paint_overrun_ms?: number | null }>(page, 'reaction_trials'))
+  const trials = (await dbAll<{ condition_id: string; trial_number: number; stimulus_onset_time: number; onset_paint_overrun_ms?: number | null; onset_moved_ms?: number | null }>(page, 'reaction_trials'))
     .sort((a, b) => a.stimulus_onset_time - b.stimulus_onset_time);
   const eye = await dbAll<{ condition_id: string; camera_active: boolean }>(page, 'eye_metrics');
 
@@ -143,6 +160,8 @@ async function measureTwoBlocks(page: Page, withCamera: boolean, paintWorkMs = 0
       // How far the paint ran past the next frame's begin time, as this probe saw it.
       probe_overrun_ms: paint?.done != null && next ? paint.done - next.ts : NaN,
       stored_overrun_ms: t.onset_paint_overrun_ms,
+      stored_moved_ms: t.onset_moved_ms,
+      queued_ms: dom.queuedMs,
       // The onset is some frame's own begin time.
       onset_is_a_frame_begin: probe.frames.some((f) => f.ts === onset),
       tracker_in_stamp_frame_ms: trackerBeforeStamp,
@@ -163,16 +182,22 @@ async function measureTwoBlocks(page: Page, withCamera: boolean, paintWorkMs = 0
 
 function logRows(r: Awaited<ReturnType<typeof measureTwoBlocks>>, label: string) {
   console.log(`[rt onset, ${label}] one frame = ${r.frameMs.toFixed(1)} ms; per trial (onset - next frame begin, onset - paint done, paint overrun seen / stored, tracker in the stamping frame):`,
-    r.rows.map((x) => `${x.onset_minus_next_frame_ms.toFixed(1)} / ${x.onset_minus_paint_done_ms.toFixed(1)} / ${x.probe_overrun_ms.toFixed(1)}:${x.stored_overrun_ms ?? 'null'} / ${x.tracker_in_stamp_frame_ms.toFixed(1)}`).join('; '));
+    r.rows.map((x) => `${x.onset_minus_next_frame_ms.toFixed(1)} / ${x.onset_minus_paint_done_ms.toFixed(1)} / ${x.probe_overrun_ms.toFixed(1)}:${x.stored_overrun_ms ?? 'null'} / ${x.tracker_in_stamp_frame_ms.toFixed(1)}${x.queued_ms ? ` [queued ${x.queued_ms} ms, moved ${x.stored_moved_ms}]` : ''}`).join('; '));
 }
 
-/** Never before the paint ended (half a millisecond for clock coarsening), and no more than a frame after it. */
-function assertNeverBeforePaint(r: Awaited<ReturnType<typeof measureTwoBlocks>>) {
+/**
+ * Never before the paint ended (half a millisecond for clock coarsening), and — unless the paint-end
+ * message was held behind a queued task (`held`) — no more than a frame after it. onset_moved_ms is the
+ * onset minus the next frame's begin time, as the probe sees it.
+ */
+function assertNeverBeforePaint(r: Awaited<ReturnType<typeof measureTwoBlocks>>, held = false) {
   expect(r.trials.length).toBeGreaterThanOrEqual(8);
   for (const x of r.rows) {
     expect(x.onset_minus_paint_done_ms, `trial ${x.trial}: onset stamped before the dot's paint had finished`).toBeGreaterThanOrEqual(-0.5);
-    expect(x.onset_minus_paint_done_ms, `trial ${x.trial}: onset more than one frame after the dot's paint`).toBeLessThanOrEqual(r.frameMs + 1);
+    if (!held) expect(x.onset_minus_paint_done_ms, `trial ${x.trial}: onset more than one frame after the dot's paint`).toBeLessThanOrEqual(r.frameMs + 1);
     expect(x.onset_is_a_frame_begin, `trial ${x.trial}: the onset is not a frame's begin time`).toBe(true);
+    expect(typeof x.stored_moved_ms, `trial ${x.trial}: no onset_moved_ms stored`).toBe('number');
+    expect(Math.abs((x.stored_moved_ms as number) - x.onset_minus_next_frame_ms), `trial ${x.trial}: onset_moved_ms ${x.stored_moved_ms} against ${x.onset_minus_next_frame_ms}`).toBeLessThanOrEqual(0.01);
   }
   // Each condition says which onset rule its block ran under.
   expect(r.conditions.filter((c) => r.trials.some((t) => t.condition_id === c.condition_id)).map((c) => c.rt_timing_version)).toEqual([RT_TIMING_VERSION, RT_TIMING_VERSION]);
@@ -236,5 +261,39 @@ test.describe('the reaction onset, with a long paint frame', () => {
       expect(x.stored_overrun_ms, `trial ${x.trial}: no overrun stored`).not.toBeNull();
       expect(Math.abs((x.stored_overrun_ms as number) - x.probe_overrun_ms), `trial ${x.trial}: stored overrun differs from the probe's`).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+/*
+ * A HELD MESSAGE (Round 94, review REVA93-A1 and A2). The paint ends a millisecond or two into its frame,
+ * but a 25 or 45 ms task is queued ahead of the app's paint-end message. The next frame — rt-t2's onset —
+ * was right; rt-t3's onset moves to the first frame after the message arrives: one frame for 25 ms, two for
+ * 45 ms. Round 93's text said such an onset is late "by up to a frame"; the bound is the overrun rounded up
+ * to whole frames, and the trial says so (onset_paint_overrun_ms above 0, onset_moved_ms the frames moved).
+ */
+test.describe('the reaction onset, with the paint-end message held behind a queued task', () => {
+  test('is late by the overrun rounded up to whole frames, never early, and the trial carries both', async ({ page }) => {
+    test.setTimeout(400_000);
+    const r = await measureTwoBlocks(page, false, 0, [25, 45]);
+    logRows(r, 'camera off, a 25 or 45 ms task queued ahead of the paint-end message');
+    assertNeverBeforePaint(r, true);
+    for (const x of r.rows) {
+      // The paint itself ended before the next frame began: rt-t2's onset was right.
+      expect(x.probe_overrun_ms, `trial ${x.trial}: the paint itself overran`).toBeLessThan(0);
+      // The message was held past it, and the onset moved.
+      expect(x.stored_overrun_ms, `trial ${x.trial}: no overrun stored for a held message`).toBeGreaterThan(0);
+      expect(x.onset_minus_next_frame_ms, `trial ${x.trial}: the onset stayed on the frame after the paint frame`).toBeGreaterThan(5);
+      // The bound as stated: late by the overrun rounded up to whole frames — at least the overrun,
+      // under the overrun plus one frame — and within a frame of the message's arrival.
+      const moved = x.stored_moved_ms as number;
+      const overrun = x.stored_overrun_ms as number;
+      expect(moved, `trial ${x.trial}: moved less than the message was late`).toBeGreaterThanOrEqual(overrun - 0.5);
+      expect(moved, `trial ${x.trial}: moved more than the overrun plus a frame`).toBeLessThan(overrun + r.frameMs + 1);
+      expect(Math.abs(moved / r.frameMs - Math.round(moved / r.frameMs)), `trial ${x.trial}: not a whole number of frames`).toBeLessThan(0.05);
+    }
+    // More than a frame where the task was longer than one: 'up to a frame' does not hold.
+    const long = r.rows.filter((x) => x.queued_ms === 45);
+    expect(long.length).toBeGreaterThan(0);
+    for (const x of long) expect(x.stored_moved_ms as number, `trial ${x.trial}: a 45 ms task moved the onset less than two frames`).toBeGreaterThan(r.frameMs * 1.5);
   });
 });

@@ -65,13 +65,19 @@ export interface RawTrial {
   stim_scale_at_onset: number;
   stimulus_onset_time: number;
   /**
-   * How far the rendering of the frame that painted the dot ran past the begin time of the frame after it,
-   * ms (lib/rtOnset.ts, rt-t3; Round 93), as seen by a message posted from that frame: 0 normally; more
-   * means the onset was moved to a later frame — because the paint overran, or because the message was
-   * held behind another task (then the onset is late by up to a frame; never early). Null if the end of
-   * the paint was not seen.
+   * How late a message posted from the frame that painted the dot arrived past the begin time of the frame
+   * after it, ms (lib/rtOnset.ts, rt-t3; Round 93): 0 normally; above 0, the onset was moved to a later
+   * frame — because the paint overran (the onset is then right) or because the message was held behind a
+   * task queued ahead of it (the onset is then late by onset_moved_ms; never early). The two cannot be told
+   * apart. Null if the message never arrived.
    */
   onset_paint_overrun_ms: number | null;
+  /**
+   * The onset minus the begin time of the frame after the paint frame — rt-t2's onset — ms (Round 94,
+   * review REVA93-A1): 0 normally, else the whole frames the onset was moved. The trial's reaction time lies
+   * between response_time_ms and response_time_ms + this.
+   */
+  onset_moved_ms: number;
   response_time_ms: number | null;
   accuracy: RtAccuracy;
   false_start: boolean;
@@ -217,6 +223,7 @@ export function ReactionTimeTask({
   const phaseRef = useRef<Phase>('instruction');
   const onsetRef = useRef(0);
   const overrunRef = useRef<number | null>(null);
+  const movedRef = useRef(0);
   // The dot's element while it is in the document: how the onset stamp sees which frame paints it.
   const dotRef = useRef<HTMLDivElement | null>(null);
   const respondedAtRef = useRef<number | null>(null);
@@ -290,15 +297,17 @@ export function ReactionTimeTask({
    * the dot could be seen (Round 93, review REVA-1; rt_timing_version rt-t3). See lib/rtOnset.ts.
    */
   const markOnsetAtPaint = (): Promise<number> =>
-    stampOnsetAfterPaint(() => dotRef.current?.isConnected === true, (frameTime, paintOverrunMs) => {
+    stampOnsetAfterPaint(() => dotRef.current?.isConnected === true, (frameTime, paintOverrunMs, movedMs) => {
       onsetRef.current = frameTime;
       overrunRef.current = paintOverrunMs;
+      movedRef.current = movedMs;
       phaseRef.current = 'stimulus';
     });
 
   const runTrial = async (t: Trial, index: number, isPractice: boolean) => {
     current.current = t;
     overrunRef.current = null;
+    movedRef.current = 0;
     respondedAtRef.current = null;
     falseStartRef.current = false;
 
@@ -370,6 +379,7 @@ export function ReactionTimeTask({
         stim_scale_at_onset: scaleAtOnset,
         stimulus_onset_time: onsetRef.current,
         onset_paint_overrun_ms: overrunRef.current,
+        onset_moved_ms: movedRef.current,
         response_time_ms: rt,
         accuracy,
         false_start: falseStartRef.current,

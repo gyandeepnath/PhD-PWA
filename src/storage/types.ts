@@ -910,14 +910,20 @@ export interface ReactionTrialRecord {
   stim_ecc_deg_55cm?: number;
   stimulus_onset_time: number;
   /**
-   * How far the rendering of the frame that painted the dot ran past the begin time of the frame after it,
-   * ms (Round 93, rt_timing_version rt-t3; lib/rtOnset.ts), as seen by a message posted from that frame: 0
-   * normally; more means the onset was moved to the first frame beginning after the message arrived — the
-   * paint overran, or the message was held behind another task (lib/rtOnset.ts says what each means for
-   * the reaction time). Absent on rows recorded before rt-t3 (never measured); null if the end of the paint
-   * was not seen.
+   * How late a message posted from the frame that painted the dot arrived past the begin time of the frame
+   * after it, ms (Round 93, rt_timing_version rt-t3; lib/rtOnset.ts): 0 normally; above 0 the onset was
+   * moved to the first frame beginning after the message arrived — because the paint overran, or because
+   * the message was held behind a task queued ahead of it, which cannot be told apart (lib/rtOnset.ts says
+   * what each means for the reaction time). Absent on rows recorded before rt-t3 (never measured); null if
+   * the message never arrived.
    */
   onset_paint_overrun_ms?: number | null;
+  /**
+   * The onset minus the begin time of the frame after the paint frame (rt-t2's onset), ms (Round 94, review
+   * REVA93-A1): 0 normally, else the whole frames the onset was moved; the trial's reaction time lies
+   * between response_time_ms and response_time_ms + this. Absent on rows recorded before Round 94.
+   */
+  onset_moved_ms?: number | null;
   response_time_ms: number | null;
   accuracy: RtAccuracy;
   false_start: boolean;
