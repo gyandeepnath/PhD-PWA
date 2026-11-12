@@ -744,8 +744,10 @@ for (const { root, options } of jobs) {
         `${ibiBlinkOld?.[0] ?? 'no such line'}; P003 blanked ${flaggedBlinkOnly}`);
       /*
        * THE BLINK RULE (Round 91, audit 86 CAM-8). The cohort is wholly blink-r2. In the flagged state
-       * P002's rows (not recomputable) and P003's (an older 07) are left at blink-r1: counted, out of every ocular model, and put
-       * back in a refit of the primary.
+       * P002's rows (not recomputable) and P003's (an older 07) are left at blink-r1: counted, out of every
+       * ocular model but the inter-blink-interval model (judged by its own rule, Round 93), and put back in a
+       * refit of the primary. The blink-rate model keeps them out, and R says how many, since the interval
+       * model can hold them (Round 94, review B93-2).
        */
       /*
        * THE ONSET RULE (Round 92, audit 86 P1; rt-t3 from Round 93, review REVA-1). The cohort is wholly
@@ -773,11 +775,16 @@ for (const { root, options } of jobs) {
       ok('R: every blink count in the cohort is under the current rule (blink-r2)',
         /\[blink-r2\] 0 camera-on condition-run\(s\) carry blink counts under an earlier rule \(none\)/.test(rOut)
           && /every row is under blink-r2: the earlier-rule refit is the primary itself/.test(rOut), blinkLine(rOut));
-      ok('R (flagged): rows left at blink-r1 are counted, out of the ocular models, and put back in a refit of the primary',
+      ok('R (flagged): rows left at blink-r1 are counted, out of every ocular model but the inter-blink-interval model, and put back in a refit of the primary',
         flaggedBlinkOld > 0 && flaggedBlinkOnly > 0
           && new RegExp(`\\[blink-r2\\] ${flaggedBlinkOld + flaggedBlinkOnly} camera-on condition-run\\(s\\) carry blink counts under an earlier rule \\(blink-r1\\)`).test(fOut)
           && new RegExp(`blink-r1 rows put back \\(${flaggedBlinkOld + flaggedBlinkOnly}\\)\\s+polarity -?[\\d.]+`).test(fOut),
         `${blinkLine(fOut)}; P002 and P003 rows blanked ${flaggedBlinkOld} + ${flaggedBlinkOnly}`);
+      const rateLine = (text) => (/^\[blink-r2\] blink rate: [^\n]*/m.exec(text) ?? ['no [blink-r2] blink rate line'])[0];
+      const rateOld = (text) => +(/^\[blink-r2\] blink rate: (\d+) tier-A\/B camera-on run\(s\) with blink counts under an earlier rule are out of the blink-rate model/m.exec(text)?.[1] ?? NaN);
+      ok('R: the blink-rate model\'s rows are stated: none left out in the cohort, and P002\'s and P003\'s blink-r1 runs in the flagged state',
+        rateOld(rOut) === 0 && rateOld(fOut) === flaggedBlinkOld + flaggedBlinkOnly && /except the inter-blink-interval model, which is judged by ibi_rule_version alone/.test(blinkLine(fOut)),
+        `${rateLine(rOut)} | ${rateLine(fOut)} | ${blinkLine(fOut)}`);
     }
     // m5: Objective 2's three models carry the primary's covariates, and the residual-hue model's
     // collinearity is printed beside its coefficients.

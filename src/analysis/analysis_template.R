@@ -1912,14 +1912,15 @@ eye <- eye %>% mutate(
 # recorded before Round 91 RECOMPUTED under blink-r2 from its kept blinks (07 blink_recomputed TRUE), so
 # the only blink-r1 rows left are those it could not recompute (a sitting before schema 10) — or every
 # row, in a 07 file written by a build before Round 91 (no blink_rule_version column): re-export it with
-# the current build. Such rows are counted, kept out of every ocular model, and put back in a
-# sensitivity refit of the primary (eye_all_rules), so the investigator sees both.
+# the current build. Such rows are counted, kept out of every ocular model except the
+# inter-blink-interval model, which is judged by ibi_rule_version alone (Round 93, review R1; see there),
+# and put back in a sensitivity refit of the primary (eye_all_rules), so the investigator sees both.
 BLINK_RULE_VERSION <- "blink-r2"  # src/tracking/blink.ts BLINK_RULE_VERSION (tests/blinkEdge.test.ts pins it)
 blink_rule <- if ("blink_rule_version" %in% names(eye)) as.character(eye$blink_rule_version) else rep(NA_character_, nrow(eye))
 blink_rule <- ifelse(is.na(blink_rule) | blink_rule == "", "blink-r1", blink_rule)
 n_blink_old <- sum(blink_rule != BLINK_RULE_VERSION)
 n_blink_recomputed <- if ("blink_recomputed" %in% names(eye)) sum(eye$blink_recomputed %in% c(1, TRUE, "TRUE", "true")) else 0L
-cat(sprintf("\n[%s] %d camera-on condition-run(s) carry blink counts under an earlier rule (%s) and are out of the ocular models; %d were recorded before Round 91 and recomputed by the app.\n",
+cat(sprintf("\n[%s] %d camera-on condition-run(s) carry blink counts under an earlier rule (%s) and are out of every ocular model except the inter-blink-interval model, which is judged by ibi_rule_version alone (Round 93); %d were recorded before Round 91 and recomputed by the app.\n",
             BLINK_RULE_VERSION, n_blink_old,
             if (n_blink_old > 0) paste(sort(unique(blink_rule[blink_rule != BLINK_RULE_VERSION])), collapse = ", ") else "none",
             n_blink_recomputed))
@@ -2551,6 +2552,15 @@ if (nrow(eye) == 0) {
   cat("\n=== Blink-rate mixed model (secondary) ===\n")
   if (is.null(m_blink)) cat("the blink-rate model did not fit.\n") else { print(summary(m_blink)); report_n(m_blink, eye, "blink rate") }
   add_to_family("blink rate", m_blink, "blinks/min")
+  # THE BLINK-RATE MODEL'S ROWS (Round 94, review B93-2). It keeps the default: blink-r2 rows only. A blink
+  # rate counts a cut blink exactly as blink-r1 did, the reason Round 93 gave for judging the interval by
+  # its own rule, so the interval model below can hold runs this model leaves out, and the ocular family's
+  # two members may rest on different runs. Said here, not decided: whether blink rate (and its halves)
+  # should follow the interval is the investigator's decision (ANALYSIS_PLAN.md §5).
+  rate_blink_rule <- if ("blink_rule_version" %in% names(eye_all_rules)) as.character(eye_all_rules$blink_rule_version) else rep(NA_character_, nrow(eye_all_rules))
+  n_rate_old <- sum(is.na(rate_blink_rule) | rate_blink_rule != BLINK_RULE_VERSION)
+  cat(sprintf("[%s] blink rate: %d tier-A/B camera-on run(s) with blink counts under an earlier rule are out of the blink-rate model (the default), although a blink rate counts a cut blink as blink-r1 did; the inter-blink-interval model is judged by its own rule (Round 93) and can hold them. Whether blink rate should follow it is the investigator's decision (ANALYSIS_PLAN.md §5).\n",
+              BLINK_RULE_VERSION, n_rate_old))
 
   # Inter-blink interval: the ocular family's second member, never modelled. On the log scale (an
   # interval is positive and right-skewed), so the effect is a RATIO of intervals. It is close to the

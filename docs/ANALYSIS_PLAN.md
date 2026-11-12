@@ -1068,10 +1068,25 @@ is derived from 07c exactly as the classifier decides it; `blink_recomputed` TRU
 whose window was not kept keeps its recorded values, stamped `blink-r1` (`blink_rule_version`); so does
 every row of a 07 file written by a build before Round 91, which has no `blink_rule_version` column —
 re-export such data with the current build. **Default (the investigator's to change):** both templates
-fit every ocular model on `blink-r2` rows; earlier-rule rows are counted (`[blink-r2] n camera-on
-condition-run(s) carry blink counts under an earlier rule ...`), kept out, and put back in a sensitivity
-refit of the primary printed with the others (`blink-r1 rows put back (n)`). The study has not collected
-data, so on the study's own data the line should read 0; the refit exists for pilot or archived data.
+fit every ocular model on `blink-r2` rows except the inter-blink-interval model, which is judged by
+`ibi_rule_version` alone (Round 93, review R1; §5 above); earlier-rule rows are counted (`[blink-r2] n
+camera-on condition-run(s) carry blink counts under an earlier rule ...`), kept out, and put back in a
+sensitivity refit of the primary printed with the others (`blink-r1 rows put back (n)`). The study has not
+collected data, so on the study's own data the line should read 0; the refit exists for pilot or archived
+data.
+
+*The two members of the ocular family can rest on different runs (Round 94, review B93-2).* Round 93 put
+runs whose blink counts are `blink-r1` and whose interval is `ibi-r2` into the inter-blink-interval model,
+because the interval does not depend on the blink rule. Before it, the default above kept them out of
+every ocular model, so Round 93 changed which rows that model is fitted on (it said every other rule was
+unchanged and did not list this). The reason was the measure's validity, not the number of rows: an
+`ibi-r2` interval is computed the same way whatever rule classified the blinks. The same reason holds for
+blink rate, which counts a cut blink exactly as under `blink-r1`, but the blink-rate model, in the same
+Holm family, still keeps the default and leaves those runs out; R says how many (`[blink-r2] blink rate: n
+tier-A/B camera-on run(s) with blink counts under an earlier rule are out of the blink-rate model ...`).
+On data recorded from Round 91 on, both counts are 0 and the two models rest on the same runs. **Whether
+blink rate (and its halves) should follow the interval, or the interval should return to the blink-rule
+default, is the investigator's decision**; nothing was changed for it here.
 
 ---
 
