@@ -813,8 +813,10 @@ describe('pooled columns that described the sitting instead of the row, or said 
 
 /*
  * Round 81. The dashboard's cohort view and the pooled download gather every sitting WITHOUT its
- * blink records (gatherSession blinkRecords: false), because the pooled set uses none of them. This
- * holds that true: the same sittings with and without their records give the same files, byte for byte.
+ * blink records (gatherSession blinkRecords: false). This holds that true for a sitting recorded by the
+ * current build, whose rows carry both rule stamps: with and without its records it gives the same files,
+ * byte for byte. A row recorded before Round 88 or 91 is recomputed from its kept reading window, which a
+ * lean gather therefore still reads (Round 94, review B93-1; tests/gather.test.ts).
  */
 describe('the pooled set does not depend on the blink records', () => {
   it('writes the same files whether or not the sittings carry them', async () => {

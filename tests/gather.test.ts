@@ -5,7 +5,10 @@ import { gatherSession, listSessions, purgeSession, normaliseBundle } from '@/st
 import { buildFixtureBundle } from '@/sim/bundleFixture';
 import { buildExportFiles } from '@/storage/export';
 import { buildConditionSummaries } from '@/dashboard/aggregate';
-import type { Provenance } from '@/storage/types';
+import type { Provenance, EyeMetricsRecord } from '@/storage/types';
+import { serialiseSessionBackup, parseSessionBackup, importSessionBackup } from '@/storage/backup';
+import { buildAnalysisDataset } from '@/storage/analysisExport';
+import { splitCsvRow } from './helpers/csv';
 
 const prov: Provenance = { app_version: 't', git_hash: 't', build_time: 't', condition_def_hash: 'h', schema_version: 6 };
 
@@ -176,5 +179,71 @@ describe('rows within a condition are in administration order', () => {
     );
     expect(z.reactionTrials.map((t) => t.trial_id)).toEqual(a.reactionTrials.map((t) => t.trial_id));
     expect(z.comprehension.map((r) => r.comprehension_id)).toEqual(a.comprehension.map((r) => r.comprehension_id));
+  });
+});
+
+/*
+ * Review B93-1 (Round 94). The pooled analysis set and the cohort view gather every sitting WITHOUT its
+ * blink records (blinkRecords: false). A camera-on row recorded before Round 88 or 91 (no ibi_rule_version
+ * or blink_rule_version) is exported RECOMPUTED from its kept reading window: in 07, gathered with the
+ * records, as ibi-r2/blink-r2; in analysis_long, gathered without them, it kept the recorded ibi-r1/blink-r1
+ * values (the reviewer: 07 'blink-r2|ibi-r2|0.0571|4921.97', analysis_long 'blink-r1|ibi-r1|0.0571|4200').
+ */
+describe('a lean gather carries the reading windows the export recomputes from, and only those (review B93-1)', () => {
+  const rows = (text: string) => {
+    const lines = text.trim().split('\n');
+    const head = splitCsvRow(lines[0]);
+    return lines.slice(1).map((l) => Object.fromEntries(splitCsvRow(l).map((v, i) => [head[i], v])));
+  };
+
+  async function stored(strip: boolean) {
+    const b = buildFixtureBundle();
+    if (strip) {
+      // A sitting recorded before Round 88: no stamp of either rule, its windows kept.
+      for (const e of b.eyeMetrics as Array<Partial<EyeMetricsRecord>>) {
+        delete e.ibi_rule_version; delete e.ibi_interval_count; delete e.blink_rule_version; delete e.blink_count_cut;
+      }
+    }
+    const parsed = parseSessionBackup(serialiseSessionBackup(b));
+    const res = await importSessionBackup(parsed.backup!);
+    expect(res.ok).toBe(true);
+    return { id: res.sessionId!, b };
+  }
+
+  it('analysis_long and the condition summaries of an unstamped sitting equal 07\'s recomputed values', async () => {
+    const { id } = await stored(true);
+    const full = (await gatherSession(id))!;                       // the per-sitting export
+    const lean = (await gatherSession(id, { blinkRecords: false }))!; // the pooled set and the cohort view
+    const e07 = rows(buildExportFiles(full).find((f) => f.filename === '07_eye_metrics.csv')!.content).filter((r) => r.camera_active === 'true');
+    expect(e07.length).toBeGreaterThan(0);
+    // 07 recomputes them (the premise of the check).
+    expect(new Set(e07.map((r) => `${r.blink_rule_version}|${r.ibi_rule_version}`))).toEqual(new Set(['blink-r2|ibi-r2']));
+    const long = rows(buildAnalysisDataset([lean]).files.find((f) => f.filename === 'analysis_long.csv')!.content);
+    // analysis_long is keyed by the condition's label within the sitting.
+    const labelOf = new Map(full.conditions.map((c) => [c.condition_id, c.condition_label]));
+    for (const r of e07) {
+      const l = long.find((x) => x.condition_label === labelOf.get(r.condition_id));
+      expect(l, r.condition_id).toBeTruthy();
+      expect(l!.blink_rule_version, r.condition_id).toBe(r.blink_rule_version);
+      expect(l!.ibi_rule_version, r.condition_id).toBe(r.ibi_rule_version);
+      // analysis_long rounds the ratio to 4 decimals and the interval to 2; 07 writes them unrounded.
+      expect(Number(l!.incomplete_blink_ratio), r.condition_id).toBeCloseTo(Number(r.incomplete_blink_ratio), 4);
+      expect(Number(l!.mean_inter_blink_interval_ms), r.condition_id).toBeCloseTo(Number(r.mean_inter_blink_interval_ms), 2);
+    }
+    // The dashboard's own summaries read the same values.
+    const sums = buildConditionSummaries(lean);
+    const sumsFull = buildConditionSummaries(full);
+    expect(sums.map((x) => [x.ibi_rule_version, x.incomplete_blink_ratio, x.mean_inter_blink_interval_ms]))
+      .toEqual(sumsFull.map((x) => [x.ibi_rule_version, x.incomplete_blink_ratio, x.mean_inter_blink_interval_ms]));
+    // Only the reading windows of those rows were read, not the self-test's or anything else.
+    expect(lean.ocularEvents!.length).toBeGreaterThan(0);
+    expect(lean.ocularEvents!.every((o) => o.window === 'reading')).toBe(true);
+    expect(lean.ocularEvents!.length).toBeLessThan(full.ocularEvents!.length);
+  });
+
+  it('a sitting stamped by the current build reads no blink record at all', async () => {
+    const { id } = await stored(false);
+    const lean = (await gatherSession(id, { blinkRecords: false }))!;
+    expect(lean.ocularEvents).toEqual([]);
   });
 });

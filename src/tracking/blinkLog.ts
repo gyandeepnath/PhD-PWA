@@ -491,6 +491,17 @@ export interface ExportedInterBlinkInterval {
 }
 
 /**
+ * Does this eye-metrics row's exported blink counts or inter-blink interval come from its kept reading
+ * window (07b/07c)? True exactly where exportedBlinkCounts or exportedInterBlinkInterval looks the window
+ * up: a camera-on row recorded without one of the two rule stamps (before Round 91 or Round 88). A caller
+ * that gathers a sitting without its blink records must still carry those windows, or it exports the
+ * recorded earlier-rule values where 07 exports them recomputed (Round 94, review B93-1).
+ */
+export function exportNeedsKeptWindow(e: Pick<EyeMetricsRecord, 'camera_active' | 'blink_rule_version' | 'ibi_rule_version'>): boolean {
+  return e.camera_active === true && (!e.blink_rule_version || !e.ibi_rule_version);
+}
+
+/**
  * The inter-blink interval of an eye-metrics row, as every export gives it (07_eye_metrics.csv,
  * analysis_long.csv, the dashboard): under the CURRENT rule wherever the data allow (Round 88, audit
  * 86 D2).

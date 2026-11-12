@@ -16,6 +16,7 @@ import { supersededSittings } from './sessionPersistence';
 import { buildKey, currentProvenance, describeBuild, sameBuild } from './buildStamp';
 import { participantProgress } from '@/experiment/participantProgress';
 import { canonicalParticipantId } from '@/lib/participantId';
+import { exportNeedsKeptWindow, ocularRecordId } from '@/tracking/blinkLog';
 
 export interface SessionBundle {
   session: SessionRecord;
@@ -45,10 +46,14 @@ export interface SessionBundle {
 /**
  * Everything one sitting holds, from every store.
  *
- * `blinkRecords: false` leaves out ocular_events — about 1.7 MB a sitting — for a caller that never
- * reads it: the dashboard's cohort view and the pooled analysis set, which gather EVERY sitting on the
- * device each time and use none of 07b/07c (Round 81). The per-sitting export, the backup and
- * purgeSession gather everything, the default.
+ * `blinkRecords: false` leaves out ocular_events — about 1.7 MB a sitting — for a caller that writes
+ * none of 07b/07c: the dashboard's cohort view and the pooled analysis set, which gather EVERY sitting on
+ * the device each time (Round 81). It keeps one kind of record: the reading window of a camera-on row
+ * recorded before Round 88 or 91 (no ibi_rule_version or blink_rule_version), which the export recomputes
+ * its interval and blink counts from. Without it the pooled set and the cohort view gave such a row's
+ * recorded ibi-r1/blink-r1 values while 07 gave the recomputed ibi-r2/blink-r2 ones (Round 94, review
+ * B93-1; blinkLog.ts exportNeedsKeptWindow). A sitting recorded by a build from Round 91 on needs none,
+ * and none is read. The per-sitting export, the backup and purgeSession gather everything, the default.
  */
 export async function gatherSession(sessionId: string, opts: { blinkRecords?: boolean } = {}): Promise<SessionBundle | null> {
   const session = await get('sessions', sessionId);
@@ -78,11 +83,21 @@ export async function gatherSession(sessionId: string, opts: { blinkRecords?: bo
     bySession<CalibrationRecord>('calibration_data'),
   ]);
 
+  // A lean gather still carries the reading windows the export recomputes earlier-rule rows from, and
+  // only those: the same records exportedBlinkCounts and exportedInterBlinkInterval look up.
+  let ocular = ocularEvents;
+  if (opts.blinkRecords === false) {
+    const needed = new Set(eyeMetrics.filter(exportNeedsKeptWindow).map((e) => ocularRecordId('reading', e.condition_id)));
+    if (needed.size > 0) {
+      ocular = (await bySession<OcularEventsRecord>('ocular_events')).filter((o) => o.window === 'reading' && needed.has(o.record_id));
+    }
+  }
+
   return normaliseBundle({
     session,
     participant: participant as ParticipantRecord | undefined,
     conditions, fatigue, cvsq, tlx, media, comprehension, visualSearch,
-    perception, eyeMetrics, ocularEvents, reactionTrials, rtSummaries, calibration,
+    perception, eyeMetrics, ocularEvents: ocular, reactionTrials, rtSummaries, calibration,
   });
 }
 

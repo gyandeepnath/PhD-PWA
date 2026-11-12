@@ -110,7 +110,8 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
     (async () => {
       const bundles = [];
       for (const s of sessions) {
-        // Without the blink records: the cohort view reads none of them (Round 81).
+        // Without the blink records (Round 81), except the reading windows an earlier-rule row is
+        // recomputed from, so the view gives the values 07 gives (Round 94, review B93-1).
         const b = await gatherSession(s.session_id, { blinkRecords: false });
         if (cancelled) return;
         if (b) bundles.push(b);
@@ -251,7 +252,8 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
     setBusy('analysis');
     try {
       const sessions = await listSessions();
-      // The pooled set carries no 07b/07c, so the blink records are not read (Round 81).
+      // The pooled set carries no 07b/07c, so the blink records are not read (Round 81), except the
+      // reading windows an earlier-rule row is recomputed from, as 07 does (Round 94, review B93-1).
       const bundles = (await Promise.all(sessions.map((x) => gatherSession(x.session_id, { blinkRecords: false }))))
         .filter((b): b is SessionBundle => b != null);
       const dataset = buildAnalysisDataset(bundles);
