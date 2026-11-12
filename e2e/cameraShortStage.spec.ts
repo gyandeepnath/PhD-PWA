@@ -10,8 +10,16 @@ import { faceCameraLaunchOptions } from './fixtures/syntheticFace';
  * stage on screen was exercised by unit tests only. Here Chromium's fake camera plays the same drawn face
  * at 10 frames a second — under the gate's 15 — so the tracker keeps up with every frame and the camera is
  * the limit: the camera set-up readout and the camera check's reason must both say so, with the camera's
- * own rate, never rounded onto 15 (review R2). Its own file because the fake camera's rate is a launch
- * option, which Playwright sets per file.
+ * own rate (under 15). Its own file because the fake camera's rate is a launch option, which Playwright
+ * sets per file.
+ *
+ * WHAT IT DOES NOT CHECK (Round 94, review B93-5): that a rate just under a floor is never rounded onto it
+ * (review R2). At 10 frames a second rounding cannot reach 15, and with the old Math.round restored this
+ * test still passes. The edge cannot be reached with this camera: Chromium reads the y4m header's rate as a
+ * whole number (measured, Round 94: a file headed F149:10 or F59:4 played at 14.000 frames a second and
+ * reported frameRate 14), so no fake camera here runs at 14.5-14.99. The rounding is held by the unit tests
+ * (tests/researcherPanel, selfTest and cameraSelfTest at 14.6, 14.7, 19.6 and 19.8, which fail with
+ * Math.round).
  */
 test.use({ launchOptions: faceCameraLaunchOptions({ fps: 10 }) });
 

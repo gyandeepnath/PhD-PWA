@@ -119,7 +119,8 @@ function toI420(rgb: Uint8ClampedArray): Buffer {
  * faceCameraLaunchOptions() })` in a spec that needs the tracker to find a face. The same flags and the
  * same pre-installed Chromium as playwright.config.ts, with the face file added. `fps` is the rate the
  * fake camera delivers (Chromium plays the file at its header's rate): 30, or a slow camera — a rate
- * under the gate's 15 — for a spec that needs the camera to be the stage that is short.
+ * under the gate's 15 — for a spec that needs the camera to be the stage that is short. A whole number:
+ * Chromium reads the header's rate as an integer, so a header of F149:10 plays at 14 (measured, Round 94).
  */
 export function faceCameraLaunchOptions(opts: { fps?: number } = {}): { args: string[]; executablePath?: string } {
   const chrome = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', process.env.CHROME_PATH ?? ''].find((p) => p && existsSync(p));
