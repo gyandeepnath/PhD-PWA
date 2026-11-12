@@ -9376,10 +9376,20 @@ found no blocker, one major problem and seven minor ones. All eight are fixed he
 (R2), 98db0ba (R5), 4ee5ade (R3), 0606f63 (R1), c69a2a6 (REVA-1 to REVA-3), and a follow-up to c69a2a6's
 wording, 346f9a1 (§1).
 
-**One measured value changed meaning, versioned in the data; no threshold moved and nothing was changed to
-keep more data:**
+*Corrected in Round 94 (review of this round): the error bound of `rt-t3` when the paint-end message is
+held (§1, §7), which rows the inter-blink-interval model holds (below and §10), what the app writes in the
+rule columns and which gate checks failed (§2), a mutation count (§1), and what the slow-camera test checks
+(§8). Each corrected sentence is marked. Round 94 says what was wrong and what changed.*
+
+**One measured value changed meaning, versioned in the data; no threshold moved:**
 - **`rt_timing_version` `rt-t3`** — the reaction onset can no longer come before the dot's paint has
   finished, which under `rt-t2` it could when the frame that paints the dot ran long (§1).
+
+**One analysis default changed, not listed here until Round 94:** the inter-blink-interval model now holds
+runs whose blink counts are `blink-r1` and whose interval is `ibi-r2` (§2); the blink-rule default had kept
+them out of every ocular model. The reason was the measure's validity (the interval does not depend on the
+blink rule), not the number of rows; the blink-rate model still keeps them out (corrected in Round 94,
+review B93-2; this said "nothing was changed to keep more data").
 
 **No stored record changed shape in a way that needs the database version raised.** The new fields
 (`onset_paint_overrun_ms` on a reaction trial; `session_start_utc_offset_min` and
@@ -9397,8 +9407,11 @@ before they existed. Nothing stored is rewritten. Nothing here was measured on t
    showed it with 30 ms of added work in that frame (onsets 14 ms before the paint had finished). Without
    added work it was not seen, in 36 trials with the processor slowed 4 and 6 times. Now the app also
    notes when the painting frame's work has finished and takes the first frame that starts after that. In
-   an ordinary trial this is the same frame as before; only a trial whose painting frame overran moves,
-   and the trial records by how much (`onset_paint_overrun_ms`), so such trials can be found.
+   an ordinary trial this is the same frame as before. A trial moves whenever the note that the painting
+   is done arrives after the next frame has begun — because the painting frame overran, or because the note
+   was held behind other work already waiting, and then the onset is late by whole frames — and the trial
+   records by how much (`onset_paint_overrun_ms`), so such trials can be found (corrected in Round 94,
+   review REVA93-A2: this said only a trial whose painting frame overran moves).
 2. **Old inter-blink intervals were dropped without being counted (R1, major, old data only).** The R
    template is meant to count inter-blink intervals recorded under the earlier rule (`ibi-r1`), keep them
    out of that model, and put them back in a sensitivity refit. It looked for them only after removing the
@@ -9407,7 +9420,9 @@ before they existed. Nothing stored is rewritten. Nothing here was measured on t
    never ran, and the rows were silently out of the model. The interval does not depend on the blink rule,
    so it is now read before that filter. Data recorded by this build holds no such rows; pilot or archived
    data does. The analysis gate missed it because it blanked one rule column on a participant while
-   keeping the other, a row the app never writes; it now blanks both, as the app does.
+   keeping the other, a row the app never writes; it now blanks both, which the templates read exactly as
+   the stamps the app writes there, the literal `ibi-r1` and `blink-r1` (corrected in Round 94, review
+   B93-3: this said the app blanks both).
 3. **The sitting's date could depend on where it was exported (R3, minor).** Round 89 dated each sitting
    by the tablet's clock, but used the time zone of whatever device ran the export. A backup restored and
    exported in another time zone gave a different `experiment_date` and different times in 01. The tablet
@@ -9454,8 +9469,10 @@ and no more than one frame after it), and a third test injects 30 ms of work int
 The follow-up (346f9a1) corrects one claim in c69a2a6's own text: that the message is "the next task"
 after the frame, so that its arrival is exactly when the paint ended. It is a task of its own, but a task
 already in the queue can run before it; the arrival can then be later than the paint's end. The onset
-then errs late, never early: it may be a frame later than the dot could first have been shown, and the
-reaction time short by up to about a frame. Such a trial shows an overrun above 0, exactly as a trial with
+then errs late, never early: it is late by the overrun rounded up to whole frames, with no bound of its
+own, and the reaction time short by as much (corrected in Round 94, review REVA93-A1: this said "a frame
+later" and "short by up to about a frame", which holds only for a task shorter than a frame; a 120 ms
+queued task moved the onset 7 frames). Such a trial shows an overrun above 0, exactly as a trial with
 a long paint frame does, so it is marked either way. The module, the 08 codebook entry, ANALYSIS_PLAN §5
 and the comments on the stored field now say so. Nothing in the code changed.
 
@@ -9468,14 +9485,16 @@ and the comments on the stored field now say so. Nothing in the code changed.
 | camera off, 30 ms of work in the painting frame, 16 trials (two runs) | +1.8 to +2.7 ms (the frame after the next) | 14.0-15.0 ms, within 0.1 ms of the probe's own measure |
 | the same, with the comparison against the paint's end taken out (so the stamp is the next frame, as under `rt-t2`) | -14.3 to -15.7 ms | the test fails: "onset stamped before the dot's paint had finished" |
 
-**Mutation checks.** With lib/rtOnset.ts reverted to Round 92's, 10 unit tests in tests/rtOnset.test.ts
-fail; the long-paint e2e test fails too, but on a timeout before its onset check, so the meaningful check
-is the next one. With only the comparison against the paint's end taken out (the table's last row), the
+**Mutation checks.** With lib/rtOnset.ts reverted to Round 92's, 11 unit tests in tests/rtOnset.test.ts
+fail (corrected in Round 94, review REVA93-A4: this said 10); the long-paint e2e test fails too, but on a
+timeout before its onset check, so the meaningful check is the next one. With only the comparison against the paint's end taken out (the table's last row), the
 long-paint test fails on its one-sided check.
 
 **What the analysis does.** The R template counts `rt-t2` rows on a line of its own and keeps them, in the
-RT model and in its refit; they equal `rt-t3` rows except on a trial whose painting frame overran, where
-they are long by up to about a frame and are not marked. Its refit still leaves out only the camera-on
+RT model and in its refit; they equal `rt-t3` rows except on a trial whose paint-end message arrived after
+the next frame's begin time: where the paint overran they are long by up to about a frame, and where the
+message was held they are right and `rt-t3` is late; neither is marked on `rt-t2` rows (corrected in Round
+94, review REVA93-A2: this named the paint overrun only). Its refit still leaves out only the camera-on
 `rt-t1` rows (Round 92). The analysis gate checks both lines.
 
 ### 2. Earlier-rule inter-blink intervals in the R template (0606f63) — R1
@@ -9490,12 +9509,15 @@ with them put back never ran (reviewer's reproduction through the app's own writ
 
 **What changed.** The interval frame is now the camera-on, tier-A/B runs before the blink-rule filter, and
 only the interval rule decides there; R also prints how many runs in the interval model carry blink counts
-under an earlier blink rule. The gate's flagged cohort now blanks both rule columns on one participant (the
-shape the app writes) and requires the right count and the put-back refit, and blanks only the blink rule
+under an earlier blink rule. The gate's flagged cohort now blanks both rule columns on one participant (read
+by the templates as the literal `ibi-r1`/`blink-r1` the app writes there; corrected in Round 94, review
+B93-3) and requires the right count and the put-back refit, and blanks only the blink rule
 on another, whose `ibi-r2` interval must stay in the model.
 
-**Mutation check.** With the template reverted, the analysis gate fails exactly three checks: the count,
-the put-back refit, and the run whose interval must stay in.
+**Mutation check.** With the template reverted, the analysis gate fails three checks: the unflagged
+cohort's interval check (only because the old template does not print the new line on the blink rule), the
+flagged count with its put-back refit (one check), and the run whose interval must stay in (corrected in
+Round 94, review B93-3, and re-run there: this named the count and the refit as two of the three).
 
 ### 3. The sitting's own clock (4ee5ade) — R3
 
@@ -9544,13 +9566,18 @@ and *Resume*, before the first display starts.
 
 ### 7. For the investigator
 
-1. **The onset rule `rt-t3` — please confirm it**, with `rt-t2` (Round 92). It changes no cut-off and no
-   ordinary trial. Sittings run on this build carry `rt-t3`. `rt-t2` was in the builds from Round 92 to
-   this one; any sitting run on one of those says `rt-t2`, and the R template keeps it (§1).
-2. **`onset_paint_overrun_ms`.** A trial with a value above 0 had its onset moved later by up to a frame.
-   Whether such trials need any handling (none is pre-specified; they stay in) is yours. On the tablet,
-   please look at this column after the first real sittings: if it is often above 0, the tablet's main
-   thread is busier during the reaction task than in any run measured here.
+1. **The onset rule `rt-t3` — please confirm it**, with `rt-t2` (Round 92), on its bound as Round 94
+   states it: a held paint-end message makes the onset late by whole frames, not by up to a frame. It
+   changes no cut-off and no ordinary trial. Sittings run on this build carry `rt-t3`. `rt-t2` was in the
+   builds from Round 92 to this one; any sitting run on one of those says `rt-t2`, and the R template keeps
+   it (§1).
+2. **`onset_paint_overrun_ms`.** A trial with a value above 0 had its onset moved to a later frame: right
+   if the painting frame overran, late by whole frames if the message was held behind another task; the two
+   cannot be told apart, and from Round 94 `onset_moved_ms` says how far it moved (corrected in Round 94,
+   review REVA93-A1: this said "later by up to a frame"). Whether such trials need any handling (none is
+   pre-specified; they stay in) is yours. On the tablet, please look at this column after the first real
+   sittings: if it is often above 0, the tablet's main thread is busier during the reaction task than in
+   any run measured here.
 3. **Archived or pilot data** with old inter-blink intervals: R now counts them and runs the refit with them
    put back (§2). Data recorded by this build are unaffected.
 4. **A backup exported on another device** now dates the sitting by the tablet's clock, if it was recorded
@@ -9560,8 +9587,10 @@ and *Resume*, before the first display starts.
 
 - How often the painting frame overruns on the tablet, or whether it ever does (REVA-1). Every figure above
   is from headless desktop Chromium.
-- The camera-rate wording was checked with desktop Chromium's fake camera at 10 and 30 frames a second, not
-  with the tablet's camera.
+- The camera-rate wording was checked end to end with desktop Chromium's fake camera at 10 and 30 frames a
+  second, not with the tablet's camera. Neither rate reaches the rounding edge (a fake camera here plays
+  only at whole-number rates), so that the rate is never rounded onto a floor is checked by unit tests
+  only (corrected in Round 94, review B93-5).
 
 ### 9. Checks run
 
@@ -9589,4 +9618,5 @@ Each fix's own test was seen to fail with the fix reverted, as recorded in its s
 |---|---|---|---|
 | Reaction onset | `rt-t2`: the begin time of the frame after the one that painted the dot | `rt-t3`: the begin time of the first frame that begins no earlier than the end of that frame's rendering; the overrun kept per trial | 02 and analysis_long `rt_timing_version`; 08 `onset_paint_overrun_ms`; ANALYSIS_PLAN §5 |
 | The sitting's local date and times | the exporting device's UTC offset | the offset the tablet stored, where it did | 01 `session_utc_offset_source` |
+| The inter-blink-interval model's rows (row added in Round 94, review B93-2) | camera-on tier-A/B runs with `blink-r2` counts (the blink-rule default), then the interval rule | camera-on tier-A/B runs, judged by `ibi_rule_version` alone: a run with `blink-r1` counts and an `ibi-r2` interval is in it | R output (`[ibi-r2] ... carry blink counts under an earlier blink rule and are in it`); ANALYSIS_PLAN §5 |
 | Every other rule | unchanged | unchanged | as before |
