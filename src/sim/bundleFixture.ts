@@ -29,6 +29,7 @@ import { summariseRtBlock } from '@/lib/rtSummary';
 import { fnv1a } from '@/storage/export';
 import { CONFIG } from '@/experiment/config';
 import { RT_LOCATIONS } from '@/lib/rtLocations';
+import { RT_TIMING_VERSION } from '@/lib/rtOnset';
 import { EyeMetricsAggregator } from '@/tracking/aggregator';
 import { tierCounts } from '@/tracking/blinkLog';
 import { BLINK_RULE_VERSION, IBI_RULE_VERSION } from '@/tracking/blink';
@@ -462,6 +463,10 @@ export function buildFixtureBundle(opts: FixtureOptions = {}): SessionBundle {
       stimulus_scale: 1,
       layout_viewport: '1152x720',
       device_pixel_ratio: 2.5,
+      // The onset rule the trials below were stamped under (review REVA93-A3): their
+      // onset_paint_overrun_ms is a measured 0, which only an rt-t3 row carries; a row with no version is
+      // rt-t1 and its overrun is blank.
+      rt_timing_version: RT_TIMING_VERSION,
     };
   });
 

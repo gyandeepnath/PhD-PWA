@@ -14,6 +14,7 @@ import { buildExportFiles, manifestEntry, MANIFEST_CHECKSUM_BASIS, CODEBOOK, cou
 import { buildFixtureBundle, FIXTURE, readingMs, fatigueMean, ibrFor, rtFor } from '../src/sim/bundleFixture';
 import { CONDITIONS } from '../src/experiment/conditions';
 import { PASSAGES } from '../src/experiment/passages';
+import { RT_TIMING_VERSION } from '../src/lib/rtOnset';
 import { summariseLux, specFor } from '../src/experiment/illumination';
 
 const QUIET = process.argv.includes('--quiet');
@@ -232,6 +233,35 @@ for (const f of files.filter((x) => x.filename.endsWith('.csv'))) {
   ok('the integrity audit finds the sitting sound, anticipations and all', m.integrity?.joins_sound === true && m.integrity?.errors === 0,
     (F.get('16_integrity_report.csv') ?? '').split('\n').filter((l) => l.includes(',error,')).slice(0, 3).join(' | '));
   log(`   08_reaction_trials.csv: ${antGo} go and ${antNoGo} no-go anticipation(s); 16_integrity_report.csv: ${m.integrity?.errors} error(s)`);
+}
+
+/*
+ * 08 onset_paint_overrun_ms is measured only under rt-t3 (Round 93): on a row of a condition timed under an
+ * earlier rule it must be blank, never 0 (review REVA93-A3, Round 94). Checked on the fixture as exported,
+ * and on a copy whose first condition is a pre-rt-t3 one (no rt_timing_version, no field on its trials).
+ */
+{
+  const strayOverruns = (fs: typeof files) => {
+    const reaction = table(fs.find((f) => f.filename === '08_reaction_trials.csv')!.content);
+    const c02 = table(fs.find((f) => f.filename === '02_conditions.csv')!.content);
+    const ruleOf = new Map(c02.rows.map((r) => [r.condition_id, r.rt_timing_version]));
+    const notT3 = reaction.rows.filter((r) => ruleOf.get(r.condition_id) !== RT_TIMING_VERSION);
+    return { notT3: notT3.length, stray: notT3.filter((r) => r.onset_paint_overrun_ms !== '').length,
+      t3Blank: reaction.rows.filter((r) => ruleOf.get(r.condition_id) === RT_TIMING_VERSION && r.onset_paint_overrun_ms === '').length };
+  };
+  const asIs = strayOverruns(files);
+  ok('08 onset_paint_overrun_ms: the fixture\'s rt-t3 trials each carry their measured overrun', asIs.t3Blank === 0 && asIs.stray === 0, JSON.stringify(asIs));
+  const old = buildFixtureBundle();
+  const oldId = old.conditions[0].condition_id;
+  old.conditions = old.conditions.map((c, i) => (i === 0 ? { ...c, rt_timing_version: undefined } : c));
+  old.reactionTrials = old.reactionTrials.map((t) => {
+    if (t.condition_id !== oldId) return t;
+    const { onset_paint_overrun_ms: _drop, ...rest } = t;
+    return rest;
+  });
+  const withOld = strayOverruns(buildExportFiles(old));
+  ok('08 onset_paint_overrun_ms is blank, never 0, on every row of a condition timed before rt-t3', withOld.notT3 > 0 && withOld.stray === 0, JSON.stringify(withOld));
+  log(`   08_reaction_trials.csv: onset_paint_overrun_ms blank on all ${withOld.notT3} row(s) of a pre-${RT_TIMING_VERSION} condition`);
 }
 
 // ================================================================ 6. NASA-TLX

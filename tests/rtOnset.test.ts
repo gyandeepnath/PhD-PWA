@@ -231,6 +231,45 @@ describe('versioned: rt_timing_version', () => {
     expect(ANALYSIS_CODEBOOK.find((r) => r.column === 'rt_timing_version')).toBeTruthy();
   });
 
+  /*
+   * Review REVA93-A3 (Round 94): nothing tested that the overrun is blank, never 0, on a row recorded before
+   * rt-t3, and the fixture wrote the one combination the app never writes (every condition rt-t1, every
+   * trial overrun 0). Exported with '?? 0' in place of '?? null', every test and the export gate passed.
+   */
+  it('08 onset_paint_overrun_ms: blank where it was not measured, never a 0 it did not see; 0 and fractions as measured', () => {
+    const b = buildFixtureBundle();
+    // The fixture's conditions say which rule their trials were stamped under.
+    expect(new Set(b.conditions.map((c) => c.rt_timing_version))).toEqual(new Set([RT_TIMING_VERSION]));
+    const old = b.conditions[0].condition_id;
+    b.conditions = b.conditions.map((c, i) => (i === 0 ? { ...c, rt_timing_version: undefined } : c));
+    const cur = b.conditions[1].condition_id;
+    const ofOld = b.reactionTrials.filter((t) => t.condition_id === old);
+    const ofCur = b.reactionTrials.filter((t) => t.condition_id === cur);
+    // A trial recorded before rt-t3 has no field at all.
+    for (const t of ofOld) delete (t as { onset_paint_overrun_ms?: number | null }).onset_paint_overrun_ms;
+    ofCur[0].onset_paint_overrun_ms = null;    // the end of the paint not seen
+    ofCur[1].onset_paint_overrun_ms = 0;       // an ordinary trial
+    ofCur[2].onset_paint_overrun_ms = 14.456;  // a moved one
+    const lines = buildExportFiles(b).find((f) => f.filename === '08_reaction_trials.csv')!.content.trim().split('\n');
+    const head = splitCsvRow(lines[0]);
+    const rows = lines.slice(1).map(splitCsvRow);
+    const col = head.indexOf('onset_paint_overrun_ms');
+    const cidCol = head.indexOf('condition_id');
+    const trialCol = head.indexOf('trial_number');
+    const cell = (cid: string, n: number) => rows.find((r) => r[cidCol] === cid && r[trialCol] === String(n))![col];
+    expect(col).toBeGreaterThan(-1);
+    expect(new Set(rows.filter((r) => r[cidCol] === old).map((r) => r[col]))).toEqual(new Set(['']));
+    expect(cell(cur, ofCur[0].trial_number)).toBe('');
+    expect(cell(cur, ofCur[1].trial_number)).toBe('0');
+    expect(cell(cur, ofCur[2].trial_number)).toBe('14.46');
+    // And over the export: every row of a condition not stamped under rt-t3 is blank.
+    const c02 = buildExportFiles(b).find((f) => f.filename === '02_conditions.csv')!.content.trim().split('\n');
+    const h02 = splitCsvRow(c02[0]);
+    const notT3 = new Set(c02.slice(1).map(splitCsvRow).filter((r) => r[h02.indexOf('rt_timing_version')] !== RT_TIMING_VERSION).map((r) => r[h02.indexOf('condition_id')]));
+    expect(notT3).toEqual(new Set([old]));
+    for (const r of rows.filter((x) => notT3.has(x[cidCol]))) expect(r[col]).toBe('');
+  });
+
   it('the R template pins the same version and refits the RT model without rt-t1 camera-on rows', () => {
     const r = readFileSync(resolve(__dirname, '../src/analysis/analysis_template.R'), 'utf8');
     expect(r).toContain(`RT_TIMING_VERSION <- "${RT_TIMING_VERSION}"`);
