@@ -47,7 +47,8 @@ session, and the known limitations a PhD write-up should disclose.
 ```
 SESSION_INIT            researcher: participant ID, ambient lux, (optional) screen luminance + brightness,
                         session structure (single 10-condition sitting, or split 5+5)
-  → CONSENT             participant: informed consent (recorded here, not pre-emptively)
+  → CONSENT             participant: informed consent (recorded here, not pre-emptively); the enrolment
+                        number, which fixes the condition order, is allocated here, not at Begin setup (Round 89)
   → PARTICIPANT_PROFILE demographics + vision covariates (age 18–35 per protocol, correction, self-report CVD…)
   → PREFLIGHT           researcher: display/room configured (brightness fixed, night-shift OFF, …),
                         ticked one by one or with "Tick all" after confirming each was checked
@@ -55,12 +56,17 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                         the screen's physical size measured with a ruler (a 500 design-px bar →
                         mm per CSS px) and the eye-to-screen distance tape-measured (Round 74);
                         the device's viewport, pixel ratio, scale and build shown
-  → COLOR_VISION        digital colour-vision SCREEN, not the Ishihara test (runs AFTER night-shift is off)
-  → CAMERA_SETUP        the tablet's front camera: permission and preview (or skip → no eye tracking)
+  → COLOR_VISION        digital colour-vision SCREEN, not the Ishihara test (runs AFTER night-shift is off);
+                        when it does not pass, its notice records the formal-plate result (normal / deficient /
+                        not done; deficient at any sitting stands, not done never replaces a result; Round 90)
+  → CAMERA_SETUP        the tablet's front camera: permission and preview (or Continue without camera, before
+                        or after Enable camera → no eye tracking for the sitting; 01 camera_off_reason says
+                        why, Round 91)
   → CALIBRATION         on the grey field (Round 80): centre-fixation open-eye EAR + frontal-pitch baseline
                           (at least 6 s, on until 30 usable frames, at most 12 s; rule cal-r2), then a
                           three-dot gaze check across a reading line (rule gaze-r3 from Round 91; gaze-r2 from Round 80) / positioning check;
-                          then the camera self-test (st-r3)
+                          then the camera self-test (st-r3), not run when no eye baseline was fitted
+                          (01 selftest_not_run_reason = no_baseline, Round 91)
   → CVSQ_BASELINE       CVS-Q (16 items), validated habitual frame — see the CVS-Q note below
   → BASELINE_FATIGUE    5-item VAS baseline (100 mm lines from Round 84)
   → INSTRUCTIONS        participant overview of the per-condition tasks
@@ -210,7 +216,9 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
 ## 5. Running a session (researcher)
 
 1. **Enter Research Console → New Session.** Enter participant ID, measured ambient lux, and
-   (recommended) white-screen luminance in cd/m² + locked brightness %.
+   (recommended) white-screen luminance in cd/m² + locked brightness %. The form refuses a new
+   sitting while one of the participant's sittings is open: resume it, or Delete it in the Session
+   Manager first (Round 87).
 2. Obtain **consent**; complete the **profile** and **pre-flight checklist** (fix brightness, turn
    **off** auto-brightness and night-shift/blue-light filter, clean screen, ~50–60 cm distance,
    landscape, no backlight), including the **ruler check** of the screen (measure the bar in mm) and
@@ -275,7 +283,8 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
     flagged), too slow under 15 (exploratory) — and flagged when it differs by more than 2 from that
     participant's own median. The values come from a simulation of the app's own blink measure
     (`docs/FPS_GATE_SIMULATION.md`; `docs/ANALYSIS_PLAN.md` §5 item 2), not from a measurement;
-  - the **camera self-test** after calibration (blink once at each of 5 flashes) runs on the grey
+  - the **camera self-test** after calibration (blink once at each of 5 flashes; not run when
+    calibration fitted no eye baseline, 01 `selftest_not_run_reason`, Round 91) runs on the grey
     field and judges the same rate (rule `st-r3` from Round 82; `st-r2` before): at least 4 of 5 blinks
     seen beginning in the 1.2 s after their flash (`st-r2`: 1.2 s either side), the face in view 90%
     of the time, and at least 15 samples a second ("working" from 20).
@@ -332,7 +341,7 @@ additional measures target the *data-quality* and *participant-experience* probl
 gets an **engagement flag** (`good`/`warn`/`bad`) and a 0–1 `quality_score` composed from existing
 signals plus newly recorded questionnaire response times: reading **skim** (reading faster than the
 word-count ÷ 400 wpm floor), **rushed** fatigue/perception ratings, **straight-lined** fatigue
-ratings, RT **disengagement** (high false-alarm/error/lapse rate), comprehension with fewer than half of the three items correct (0 or 1 of 3; not "below chance", which with four options would be 0 of 3), and
+ratings, RT **disengagement** (high false-alarm/error/lapse rate), comprehension with fewer than half of the three items correct (0 or 1 of 3, the default; not "below chance", which with four options would be 0 of 3; a flag that fires only at 0 of 3 would be a new, versioned rule and is the investigator's decision, AUDIT_FINDINGS Round 89 §8 item 1), and
 low camera face-presence. Exported in `10_wide_summary.csv` (`engagement_flag`, `quality_score`) and
 the dedicated **`12_quality_flags.csv`** (per-signal booleans + reasons). The analysis templates run
 a **sensitivity analysis**: fit on all data and on the clean subset (drop `bad`); agreement means
@@ -349,7 +358,9 @@ order — is **reused across sittings**, and the next sitting resumes at the glo
 where the last stopped, so each condition is still run exactly once. `session_index` (sitting
 number) is recorded; it enters no confirmatory model, so the analysis does not depend on who was
 scheduled in two sittings, and the primary is refitted with it as a covariate as a pre-specified
-sensitivity (ANALYSIS_PLAN.md §2, Round 88); baseline fatigue and CVS-Q are
+sensitivity (ANALYSIS_PLAN.md §2, Round 88); whether the sitting refit should instead be the
+confirmatory model, if many participants are split, is the investigator's decision, before unblinding;
+baseline fatigue and CVS-Q are
 re-measured each sitting (fatigue resets between sittings — documented, not assumed away).
 - The **app's digital colour-vision screen** is a screening aid, not a clinical diagnosis and not
   the Ishihara test: seven home-made plates (one greyscale control, six red-green confusion plates)
@@ -392,7 +403,7 @@ numeric ocular measures and the pixels are discarded. Two things need pixels, an
 
 | Grant | What it permits | Why it exists |
 |---|---|---|
-| `camera_metrics` | Numeric blink / head-pose measures. No pixels stored. | The ocular outcomes. Refusable — §3.10 requires it. **Enforced at the camera stage**, not merely recorded: a refusal skips the camera path entirely, and `auditBundle` reports any camera-active row on a session lacking the grant. |
+| `camera_metrics` | Numeric blink, eyelid, head-position and gaze (`on_screen_ratio`) measures; from Round 90 the consent names all four (`src/start/cameraMeasures.ts`; the investigator is to check that wording against the approved consent, AUDIT_FINDINGS Round 90 §9 item 1). No pixels stored. | The ocular outcomes. Refusable — §3.10 requires it. **Enforced at the camera stage**, not merely recorded: a refusal skips the camera path entirely, and `auditBundle` reports any camera-active row on a session lacking the grant. |
 | `setup_photos` | One still at session start, one at session end. | Documents seating distance and room lighting, so setup compliance is evidenced rather than asserted. |
 | `annotation_video` | One reading segment of up to 3 minutes per polarity — two per sitting (corrected in Round 82; the app has recorded one per polarity since `annotationSegmentSteps`). | Objective 4 cannot be met without video a human can code frame by frame. Validation subsample only — membership is derived from the enrolment number (`isAnnotationSubsample`), fixed before the participant arrives, so the subsample is not selected at the bench on whatever the operator noticed about the participant. |
 
@@ -409,6 +420,9 @@ Enforcement is in `src/storage/media.ts`, not the UI:
 - `15_media_inventory.csv` lists every retained file with an FNV-1a checksum over its bytes.
 - A capture that fails, or finds no frame yet, is a silent no-op. A black placeholder is never
   stored as "proof", and a media failure never aborts a session.
+- Photographs and video need the camera. When camera measurement is declined, a photo or video grant
+  cannot be used: the *Camera measurement declined* screen tells the operator, and
+  `16_integrity_report.csv` reports `grant_not_exercisable` (Round 89).
 
 ## Timing and the feasibility gate
 
@@ -494,7 +508,9 @@ values, and none of them means "not measured".
 
 ### What the export now guarantees
 
-- **Reproducible.** The same data always produces the same bytes, so the manifest's per-file
+- **Reproducible.** The same data always produces the same bytes (except the dates and local times in
+  01_session_info.csv for a sitting recorded before Round 93, which follow the exporting device's time
+  zone; ANALYSIS_PLAN.md §7), so the manifest's per-file
   checksums identify content. Record order is normalised at the boundary; the export timestamp
   lives in the manifest, not in the data.
 - **Self-auditing.** `16_integrity_report.csv` states whether the joins in that dataset can be
