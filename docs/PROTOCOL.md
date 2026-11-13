@@ -59,7 +59,7 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
   → CAMERA_SETUP        the tablet's front camera: permission and preview (or skip → no eye tracking)
   → CALIBRATION         on the grey field (Round 80): centre-fixation open-eye EAR + frontal-pitch baseline
                           (at least 6 s, on until 30 usable frames, at most 12 s; rule cal-r2), then a
-                          three-dot gaze check across a reading line (rule gaze-r2) / positioning check;
+                          three-dot gaze check across a reading line (rule gaze-r3 from Round 91; gaze-r2 from Round 80) / positioning check;
                           then the camera self-test (st-r3)
   → CVSQ_BASELINE       CVS-Q (16 items), validated habitual frame — see the CVS-Q note below
   → BASELINE_FATIGUE    5-item VAS baseline (100 mm lines from Round 84)
@@ -295,7 +295,7 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
   blink counts and the incomplete-blink ratio follow the frame-rate gate `fps-g2` (adequate from 20
   face frames a second, a simulation result: docs/FPS_GATE_SIMULATION.md). Webcam EAR is a
   **screening-grade** proxy; an IR eye-tracker remains the reference standard for definitive data.
-- **Gaze is a quality check only** (Round 80, rule `gaze-r2`). A three-dot check across a reading
+- **Gaze is a quality check only** (Round 80, rule `gaze-r2`; `gaze-r3` from Round 91, ANALYSIS_PLAN §5 item 7). A three-dot check across a reading
   line fits the range of horizontal iris offset between the line's two ends; `on_screen_ratio` (07) is
   the share of open-eye frames with the head not turned away and the offset inside that range
   (widened to about the screen edge plus 3°). A blink is neither on nor off screen. It answers "was the

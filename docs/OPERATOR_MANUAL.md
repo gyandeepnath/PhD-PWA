@@ -16,9 +16,9 @@ setup is in [`DEPLOYMENT.md`](DEPLOYMENT.md), and must already be done.
 
 ## 1. What you are measuring, and why the details matter
 
-Each participant reads under ten display conditions, twice: once with the room dim, once with it at
-a moderate level. The manipulated variables are **display polarity**, **text colour** and **ambient
-illumination**. Everything else has to be held constant, because anything that varies alongside a
+Each participant reads under ten display conditions in one sitting at 300 lux. The manipulated
+variables are **display polarity** and **text colour**; ambient illumination is held constant and
+measured (`ILLUMINATION_AMENDMENT.md`). Everything else has to be held constant, because anything that varies alongside a
 condition becomes indistinguishable from it.
 
 The primary outcome is the **proportion of blinks that fail to close fully**, measured by the
@@ -112,14 +112,20 @@ one line:
 
 > `VisuLab 2.2.0 · built 4 Oct 2026 09:33 UTC · e05d3c4`
 
-The **version** (2.4.0 at the time of writing) changes only when a change alters what a participant
-sees or what the export means. 2.4.0 is the first build after 2.3.1, the build the investigator
+The **version** (2.4.0 at the time of writing) is changed by hand, in package.json, and is meant to
+change when a round alters what a participant sees or what the export means. 2.4.0 is the first build after 2.3.1, the build the investigator
 tested: it brings the 100 mm rating lines, the grey-field calibration with the three-dot gaze check,
 the camera check that counts only blinks after a flash, the fixed exposure kept on Android, the
 reorganised dashboard and the per-blink files. Builds deployed while these were being made still
 said 2.3.1, so on a sitting labelled 2.3.1 the `git_hash` says which build it really was. The fixes of audit 86
-(AUDIT_FINDINGS Rounds 86-92) still say 2.4.0; each rule they changed is named in the export by its own
-`*_version` column. What every version from 2.1.0 to 2.4.0 means is written out in the export's codebook
+and of the two reviews after it (AUDIT_FINDINGS Rounds 86-94) still say 2.4.0, although they change what
+a participant sees and what the export means; whether the next deployment is called 2.5.0 is the
+investigator's decision (AUDIT_FINDINGS Round 92 §9 item 6). Until then `git_hash` names the build, and
+each measurement rule they changed is named per row in the export (`tap_guard_version`,
+`attempt_rule_version`, `scale_freeze_version`, `rt_window_version`, `rt_timing_version`,
+`ibi_rule_version`, `blink_rule_version`, `gaze_rule_version`, and `camera_exposure_rule` for the
+exposure step). The participant-code, Back-gesture, enrolment-at-consent and typed-hours changes have no
+such column. What every version from 2.1.0 to 2.4.0 means is written out in the export's codebook
 (`app_version`), from the one list the app keeps (src/lib/versionHistory.ts). The **build time** (always in UTC) changes with every deployment, so it is the part that tells
 you whether the tablet has the newest build. The **commit** (seven characters) is what the export
 records as `git_hash`. The same three are in `01_session_info.csv` (`app_version`, `build_time`,
@@ -132,8 +138,15 @@ by itself, because that would reload the app in the middle of a sitting. So:
 1. **At the start of each study day, before New Session**, open the app from its icon (with the
    tablet online, before switching on aeroplane mode) and stay on the landing page. It checks for a
    newer build by itself; you can also tap **Check for updates**. It answers *This is the newest
-   build the server has*, *A newer build was found and is downloading*, or *Could not reach the
-   server*.
+   build the server has*, *A newer build was found and is downloading*, *Could not reach the
+   server*, *A newer build is ready and waiting — see the notice*, or *Updates cannot be checked
+   here: no service worker controls this page — so there is no offline copy either*. Under the build
+   line a second line says whether the tablet holds an **offline copy** of the app (Round 92; on the
+   landing page, the Session Manager and pre-flight). *Offline copy: ready — the app opens with the
+   network off.* is what you want before aeroplane mode goes on. *Offline copy: downloading — keep
+   the tablet online until this says ready.* means wait. *Offline copy: NOT installed*, with its
+   reason, means every reload needs the server, so do not run a sitting offline from that address;
+   the field server's self-signed HTTPS is the known case (DEPLOYMENT.md §4).
 2. If a newer build is ready, a dark notice appears at the bottom: **A newer version of VisuLab is
    ready — Update now.** Tap **Update now**. The app reloads into the new build; check that the build
    line now shows the new build time.
@@ -308,8 +321,10 @@ set-up screen is always the way out, and it always says what it does:
   sitting has done them: each sitting records its own caffeine, hours since waking, correction and
   colour-vision answers, so stopping on the profile brings you back to the profile.
 - The button disappears while the colour-vision plates are on screen, while the calibration dots
-  are running and while the camera self-test dot is flashing. It comes back as soon as that step
-  ends. Leaving in the middle of those would mean repeating them, and a second look at the same
+  are running, while the camera self-test dot is flashing, and on camera set-up while the exposure
+  step (the grey field with a dot) or the bench check runs (from Round 91; the researcher card closes
+  for these two as well, so the camera is measured under the screen that is recorded). It comes back
+  as soon as that step ends. Leaving in the middle of those would mean repeating them, and a second look at the same
   colour-vision plates tests memory rather than colour vision.
 
 A **← Back** button sits next to *Continue* on three screens only:
@@ -328,8 +343,8 @@ there would change what is being measured.
 of whatever screen is up, and asks first wherever that button does (Round 87). On a set-up screen it
 is **Exit — resume later**, with its confirmation — not *← Back to consent* or *← Back to the profile*,
 which you press yourself when you mean them; inside a display it is **Pause**, with its confirmation.
-While the colour-vision plates, the calibration dots, the self-test or the reaction trials run, and
-on the thank-you screen, it does nothing. With a confirmation box open it is **Keep going** / **Stay
+While the colour-vision plates, the calibration dots, the self-test, camera set-up's exposure step or
+bench check, or the reaction trials run, and on the thank-you screen, it does nothing. With a confirmation box open it is **Keep going** / **Stay
 here**: Back never confirms leaving. So a swipe made by accident — a hand resting on the edge of the
 tablet — at most raises the box; answer it. Only on the app's first screen (*Enter Research Console*)
 does Back close the app, as it does in any app. It used to close the app from any screen, mid-display,
@@ -344,6 +359,12 @@ test, near point of convergence.
 on a test day and colour-vision deficiency are exclusions, and the app records them as such: a
 participant who reports either is written out with `eligible=false` and the reasons listed, so the
 confirmatory analysis can drop them. Enter what is true rather than what will let you proceed.
+
+**Typed numbers (Round 90).** *Daily screen hours* and *Hours since you woke up today* take a number
+from 0 to 24 (6, 6.5 or 6,5); anything else keeps Continue off and the field says *Type a number of
+hours from 0 to 24, such as 6 or 6.5.* The age, the session form's lux and pre-flight's bar length are
+read by the same rule, so a space or a word is never stored as 0. A participant awake for more than 24
+hours cannot be entered (AUDIT_FINDINGS Round 90 §9 item 2).
 
 **Colour vision — two separate things, and only one of them excludes.**
 
@@ -564,7 +585,8 @@ result, the line under the verdict (*Camera delivered … · tracker processed �
 study room with the lights as they will be, and once more with the tablet on charge and nothing else
 open.
 
-**Calibration** (from Round 80, rules `cal-r2` and `gaze-r2`) measures this participant's own
+**Calibration** (from Round 80, rules `cal-r2` and `gaze-r2`; `gaze-r3` from Round 91, which takes the
+eye-open test in pixel proportions, so a frame deep in a blink gets no on-screen verdict) measures this participant's own
 open eye, the head's straight-ahead position, and where the eyes point at the two ends of a line of
 text. Every blink line is a fraction of the open-eye baseline, not a population default, so a rushed
 calibration spoils the blink measures for the whole sitting. Take the time. It runs on the grey field
@@ -678,8 +700,8 @@ data hold). *On screen now* says whether this frame passes the gaze check's test
 gaze check, or the eyes closed). It can be opened on the calibration and camera-check screens before and after the
 dots run, which is where to look when one of them has just failed. It never shows the picture on a
 display screen: there the participant would be watching their own face. During a display, on
-the grey field, and while the calibration, the camera self-test or the colour-vision plates run, it
-is only a small square outline in that screen's own colour with a dot inside — no clock, no colour
+the grey field, and while the calibration, the camera self-test, the colour-vision plates or camera
+set-up's exposure step or bench check run, it is only a small square outline in that screen's own colour with a dot inside — no clock, no colour
 of its own, no words. A **filled** dot means the camera is working (or off by consent); an **empty
 ring** means a problem that has lasted: the camera stopped or sees black, no frames, no face for 8
 seconds, or blinks not being counted because calibration fitted no eye baseline. A face lost for a
@@ -692,7 +714,8 @@ the word search and the reaction task it cannot be opened, because there it woul
 participant answers or looks. While the reaction-time trials run — from **Start** to the last dot —
 it is not shown at all, because it is drawn in the display's own colour and that is the colour the
 participant is looking for; it is back when "Block complete" appears. While the calibration dots,
-the camera self-test or the colour-vision plates are running it does not change at all. The
+the camera self-test, the colour-vision plates or camera set-up's exposure step or bench check are
+running it does not change at all. The
 camera-stopped and black-picture notices are what to act on, and they still appear by themselves —
 during the reaction task, on its instruction card and once the trials are over.
 
@@ -741,15 +764,15 @@ If it does happen, note it on the session sheet; do not re-run the condition.
 
 ---
 
-**If a red bar appears saying the device has run out of storage**
+**If the red panel at the foot of the screen says the device has run out of storage**
 
 Stop the sitting. Not at the end of the condition — now. From the moment that message appears
 nothing the participant does is being recorded, and the tablet is the only copy, so the rest of the
 sitting would be work done for nothing.
 
 What is already saved is safe. Export the sessions on the tablet, copy the files off it and open
-them to check they are really there, then delete those sessions from the Session Manager to free
-space. Re-run the pre-flight check before starting anyone else; it reports free space and will block
+them to check they are really there, then in the Session Manager Delete those sessions and Purge
+them from the recycle bin: Delete alone frees no space, Purge does (the panel's own message says so). Re-run the pre-flight check before starting anyone else; it reports free space and will block
 you if there is not enough.
 
 Prevent it rather than meet it: export and clear the tablet regularly instead of letting sessions
@@ -768,7 +791,7 @@ else a sitting produces put together.
 | "Low frame rate" or a QC warning | Read **which** rate is low (camera set-up, the camera check's result, or the researcher panel) | *Camera delivers* low: more light on the face, close other camera apps. *Tracker processes* low: close other apps, charge, let it cool, use the fastest tracker. *Eye sampling rate* low (the face found in too few frames): seating and light. Under 20 face frames a second a reading is flagged *reduced*; under 15, *too slow* (its blink data are exploratory only). |
 | Glasses reflecting the screen | Lamp or screen reflecting off the lenses | Tilt the tablet slightly, or move the lamp. Do not ask them to remove correction. |
 | App reloads mid-session | Browser reclaimed memory, or the tablet slept | Reopen. Session Manager offers **Resume** for every session still in progress, each at its own next condition. Data already written is safe. Note the interruption. |
-| **"The camera has stopped"** on the calibration, a baseline questionnaire or the instructions | A call or another app took the camera, or the tablet slept | Tap **Exit — resume later (camera set up again)** on the notice, then **Resume**: the camera is set up and calibrated again and the sitting goes on from the first set-up screen not yet done. **Continue without the camera** skips the calibration and records every condition with no eye measurements (marked camera lost) — only if the camera cannot be brought back. Inside a display the same notice offers **Pause** instead. |
+| **"The camera has stopped"** on the calibration, a baseline questionnaire or the instructions | A call or another app took the camera, or the tablet slept; from Round 91 also when every face tracker failed (the notice's text names only the camera causes) | Tap **Exit — resume later (camera set up again)** on the notice, then **Resume**: the camera is set up and calibrated again and the sitting goes on from the first set-up screen not yet done. **Continue without the camera** skips the calibration and records every condition with no eye measurements (marked camera lost) — only if the camera cannot be brought back. Inside a display the same notice offers **Pause** instead. |
 | After a resume, the app asks for the camera and runs calibration again | Expected | The blink thresholds are fractions of *this participant's* own open-eye baseline, and a reload clears it. Re-running calibration is required for the resumed conditions to carry any ocular data at all. Take it at the normal pace. |
 | A tap straight after a new screen appears does nothing | Expected (Round 86). A touch that starts in the first 0.3 s of a new screen — the first second of the consent screen — is ignored, because on a touch screen it is almost always the second tap of a double tap on the button before, and it used to tick a consent option or answer the next question by itself | Tap again. Nothing is recorded from the ignored touch. |
 | A red panel at the foot of the screen: **"Something failed in the background"** | A save the app tried did not go through — most often the tablet's storage is full, or the browser closed the database while the app was in the background. The panel names the time and the reason | Write down the time and the reason. Read the reason's own instruction: for a full device it says **stop the sitting now**, and nothing the participant does from then on is saved. Otherwise press **Noted — hide** and let the participant go on; if the same panel comes back, stop with **Exit — resume later** and tell the investigator. Do not reload the app mid-condition: a reload costs the condition. While the panel is up, the set-up and closing screens keep their buttons above it; on a display screen it covers the bottom of the page until it is hidden (Round 90). |
@@ -793,8 +816,9 @@ else a sitting produces put together.
    thank-you screen closed early does not lose it. A resumed sitting keeps its first start
    photograph; the camera check of a resume takes no second one. Log the end illuminance on the
    thank-you screen (or, if that screen was lost, from the Session Manager, above).
-3. **Export.** Dashboard → Export. This writes 20 CSVs (two of them, 07b and 07c, are per-blink validation files the main analysis does not need), an analysis JSON, a codebook, a provenance
-   manifest and a `backup_*.json`. A full camera sitting comes to about 6 MB, most of it `07c`; the
+3. **Export.** Dashboard → Export. This writes 20 CSVs (one of them the codebook, `00_CODEBOOK.csv`;
+   two of them, 07b and 07c, are per-blink validation files the main analysis does not need), an
+   analysis JSON, a provenance manifest and a `backup_*.json`: 23 files. A full camera sitting comes to about 6 MB, most of it `07c`; the
    backup alone is about 2 MB. If the session was consented for photographs or video, a second
    button, **Download media files**, writes the picture and video files themselves; they are not in
    the data bundle. Each is named in `15_media_inventory.csv`, so a file can always be traced back
@@ -855,6 +879,10 @@ will do with that condition:
 - Each column of the row is one check: **✓** passed, **!** flagged, **✕** failed, **–** not measured.
   The line under the row names the check that was not met. **Details ▾** shows every check: what
   was measured, what was needed, the rule, and what the analysis does.
+- The *Eye sampling rate, steady* check gives both rates to two decimals and the distance between
+  them, on the side of the 2-a-second band its verdict is on: *20.00 against a usual 22.04 (2.04
+  apart)* (Round 94). One decimal could show *20.0 against a usual 22.0* beside a flag for *more
+  than 2*.
 - A **Note** (few blinks, a dim or over-lit face, the camera covered, the open eye narrower than at
   calibration) is worth knowing but never changes the verdict. **Engagement** is about the
   participant, not the camera, and does not change it either.
@@ -881,6 +909,14 @@ stays short as the study grows. The list scrolls: a dark **More below ↓** labe
 there is more under it. Every button that deletes or changes something asks first in a box whose
 buttons say what they do — for example **Move to recycle bin** / **Keep it**, or **Delete
 permanently** / **Keep it in the bin**. Read the button, not just its colour.
+
+**Times on the screens (Round 94).** A sitting's start and end — on the Session Manager rows, the
+dashboard's sitting picker, the New Session form's earlier-build and in-progress lines and the restore
+message — are shown on the clock of the tablet that ran the sitting, with its offset printed:
+*2026-10-29 05:00 UTC+05:30*. A sitting recorded before Round 93 stored no offset, and a withdrawal
+time never has one; those are shown on this tablet's clock, again with the offset printed. The
+export's `session_start_local`, `session_end_local` and `experiment_date` use the same stored offset
+(`session_utc_offset_source` says whose).
 
 **If a tablet is lost or wiped:** the `backup_*.json` from the last export restores the session on
 any device — Session Manager → *Restore session from backup file*. The plain `session_*.json` is
@@ -910,10 +946,10 @@ divides the same ten conditions across two shorter visits. If you use it:
 - **If the New Session form says the earlier sitting was recorded by another build** (a yellow box
   naming both builds), the tablet was updated between the halves. The build cannot be put back. Run
   the second half anyway — its data are kept, and nothing is gained by sending the participant away —
-  but tell the investigator the same day, and write on the session sheet: the participant's code, both
+  but tell the investigator before you begin, as the box asks, and write on the session sheet: the participant's code, both
   build lines as the box shows them, and why the update was applied. The join report will mark the
   participant `mixed_build_within_participant`; whether they count, and on which build, is the
-  investigator's decision (docs/DEPLOYMENT.md).
+  investigator's decision (AUDIT_FINDINGS Round 88 §8 item 4).
 
 **If the setup screen says the ID already has a record**
 
@@ -970,6 +1006,7 @@ Print this.
 - [ ] Screen timeout off; Do Not Disturb on; aeroplane mode on
 - [ ] Landscape, fullscreen, launched from home screen
 - [ ] Landing page: **Check for updates**; if a newer build is ready, **Update now** before New Session — but NOT if the notice names a participant between sittings (**Update anyway**; section 8); build line noted on the sheet
+- [ ] Landing page reads **Offline copy: ready** before aeroplane mode goes on
 - [ ] Viewing distance measured at 50 to 60 cm with a tape, and typed into pre-flight
 - [ ] Pre-flight ruler check: bar measured in mm (about 103 mm on the study tablet) and typed in
 - [ ] Battery above 80 per cent or on charge

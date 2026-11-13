@@ -27,7 +27,7 @@ the calibration's own sequence, plus an estimated 35 s for its intro card and re
 the check is not modelled — and the **intro cards** of the reading (10 s) and the word search (8 s) at
 every display, estimates like the reaction task's card. The calibration's human half is still the
 140 s estimate set when the calibration was nine taps; it is now labelled for what the participant does
-(the instruction card, the seating, a dot shown again), since gaze-r2 waits for the eyes and nobody taps.
+(the instruction card, the seating, a dot shown again), since the gaze check (gaze-r2, gaze-r3 from Round 91) waits for the eyes and nobody taps.
 Together they add about 4 minutes to a sitting (98.7 → 102.8 min modelled).
 `tests/protocolFigures.test.ts` runs the model and fails when this section or PROTOCOL.md quotes another
 figure.
