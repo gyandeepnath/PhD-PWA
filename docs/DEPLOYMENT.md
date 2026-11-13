@@ -11,7 +11,7 @@ build (`npm run build`) on the current commit.
 
 ```bash
 npm ci          # exact dependency tree from package-lock.json
-npm run verify  # lint, typecheck, tests, corpus, codebook, export gates
+npm run verify  # lint, typecheck, tests, corpus, codebook, export and analysis-template gates
 npm run build   # prebuild vendors MediaPipe, then tsc -b && vite build
 ```
 

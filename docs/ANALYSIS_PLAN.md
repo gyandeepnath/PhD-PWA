@@ -82,7 +82,9 @@ of both sets; the dashboard's cohort tab counts the same two sets from `analysis
 **Incomplete-blink ratio during reading.**
 
 `incomplete_blink_ratio` is a proportion, and it is exported alongside its two components:
-`n_incomplete` (numerator) and `n_blinks_total` (denominator). **Model the counts, not the ratio.**
+`n_incomplete` (numerator) and `n_blinks_total` (denominator). Under rule `blink-r2` (Round 91, §5)
+both count only the blinks observed from start to end; a blink cut by the window's edge or by a
+sampling gap is counted in `n_blinks_cut` and in neither. **Model the counts, not the ratio.**
 
 A proportion of 0.20 from 5 blinks and a proportion of 0.20 from 60 blinks are not the same
 measurement. The first is one blink away from 0.0 or 0.4; the second is a stable estimate. A
@@ -681,7 +683,11 @@ These are not optional and they come first.
    look entirely normal.
 5. **Careless responding.** `12_quality_flags.csv` carries straight-lining and rushed-response
    signals per condition. Straight-lining is judged by the rule `straight_line_rule` names, one per
-   rating format (§4c).
+   rating format (§4c). The comprehension penalty, `comprehension_wrong`, fires at fewer than half of
+   the three items correct (0 or 1 of 3). It is not a below-chance rule: chance with four options is
+   0.75 of 3 (Round 89, audit 86 D7). It feeds `engagement_flag`, and through it the primary's refit
+   without the runs flagged bad. Whether it should fire only at 0 of 3 is the investigator's decision;
+   that would be a new, versioned rule.
 6. **Per-blink records (from schema 10, Round 78) — optional, for validation only.** The main
    analysis does not change: it reads the per-condition totals in `07_eye_metrics.csv`, and neither
    template reads the two files below.
@@ -838,8 +844,9 @@ tap on Start, a word of the search passage counted as a false alarm after a doub
 ticked, outside the analysis). From Round 86 a touch that *starts* within 300 ms of a screen change is
 dropped whole before the app sees it (lib/tapGuard.ts; 300 ms is Android's own double-tap window), and
 `tap_guard_version` (02_conditions.csv) says which rule a condition's touches were taken under: `tg-v2`
-with the guard, `tg-v1` before it. Inside a task the guard is armed only by the instruction card handing
-over to the task, never by a stimulus: the reaction task's first dot comes at least 700 ms after Start
+with the guard, `tg-v1` before it. Inside a task the guard is armed by the instruction card handing over
+to the task, by each new comprehension question and by a dialog such as the Pause box opening or closing,
+never by a stimulus: the reaction task's first dot comes at least 700 ms after Start
 (a fixed 400 ms fixation cross, then a delay of at least 300 ms), so no response to a dot can fall in it.
 What it does take is a touch in the first 300 ms of trial 1's fixation cross, which a `tg-v1` row scored
 as a false start; inside the double-tap window that touch cannot be told from the second tap of Start.
@@ -861,7 +868,8 @@ and such a touch is ignored like a touch between trials. `rt_window_version` (02
 which rule a condition's block ran under: `rw-v2` at the deadline, `rw-v1` before. Only `false_start`
 differs between them; response times, accuracy, every summary and every model are the same, and no
 template reads `false_start`. On `rw-v1` rows a false start may be such a late touch and cannot be told
-apart.
+apart. Nothing is pre-specified for `rw-v1` rows; whether a count of false starts should leave them out is
+the investigator's decision.
 
 **What the grey field followed, and an open decision (Round 92).** The grey field's maximum (60 s, 120 s
 "when polarity switches") and `polarity_switched` are both keyed to the previous display's polarity. A break
@@ -935,7 +943,9 @@ frame that begins no earlier than the message's arrival on any trial. When the c
 then put that frame on the glass is not measured by the browser and not claimed. `rt-t2` rows equal `rt-t3` wherever the overrun
 would have been 0; where the paint overran they are long by up to about a frame, where the message would
 have been held they are right, and neither kind is marked. The R template counts `rt-t2` rows on a line of
-its own and keeps them, in the RT model and in its refit.
+its own and keeps them, in the RT model and in its refit. **Investigator decision:** whether `rt-t3`, on the
+bound stated above, is the study's onset rule (AUDIT_FINDINGS Round 94, "For the investigator" item 1;
+Round 93 asked on a bound that was wrong). The app runs it meanwhile.
 
 `rt_timing_version` (02_conditions.csv, analysis_long.csv) says which rule a block ran under. `rt-t1` rows
 of a camera-on sitting are biased short by an amount that was not recorded and cannot be recovered; the
@@ -958,7 +968,10 @@ and `stimulus_scale`, `layout_viewport` and `stimulus_scale_changes` are read fr
 Nothing is rescaled in the data. On an `sf-v1` row `stimulus_scale` was read when the reading screen
 mounted, a shrink on its instruction card after that being counted in `stimulus_scale_changes`; an
 inherited shrink shows there as a lower `stimulus_scale` (and the sitting as `stimulus_scale_stable` in
-the integrity report), and the physical columns (`reading_x_height_*`) already follow it. On an `sf-v2`
+the integrity report), and the physical columns (`reading_x_height_*`) already follow it. By default no
+`sf-v1` row is dropped or rescaled; whether a sensitivity analysis should leave out the displays of a
+sitting the integrity report flags under `stimulus_scale_stable` is the investigator's decision (not
+pre-specified here). On an `sf-v2`
 row it is the scale the passage appeared at, and `stimulus_scale_changes` no longer counts a shrink on
 the instruction card, where no stimulus was up. In the installed app, which is locked to landscape, none of this should
 arise; it was found in a browser tab.
@@ -976,7 +989,9 @@ Round 87 a run counts only once its passage was shown ("Begin reading" stamps it
 counts. **`at-v1` rows cannot be recounted** — whether the earlier run reached the passage was not
 recorded — so an `at-v1` row above 1 is a second exposure or a first reading after a pause on the card;
 the templates treat it as restarted, as before, which can only drop a run, never keep a second reading
-as a first. A run following an `at-v1` row is counted the old way for the same reason.
+as a first. A run following an `at-v1` row is counted the old way for the same reason. Whether a
+sensitivity analysis should treat `at-v1` rows above 1 differently is the investigator's decision (not
+pre-specified here).
 
 **The inter-blink interval counts only what was observed (Round 88).** Blink rate has divided by
 observed time — the exposure minus every sampling gap, the face not seen — since its own fix; the
@@ -1194,7 +1209,9 @@ do not depend on it. Their sizes and checksums are
 in the manifests, `export_manifest.json` (one sitting) and `analysis_manifest.json` (the pooled
 files): for each file its size in bytes and `checksum_fnv1a`, the 32-bit FNV-1a hash of the file's
 UTF-8 bytes as written, which any FNV-1a tool can recompute from the file on disk (Round 89, audit 86
-D1). The manifests themselves are not reproducible: each records when it was written (`exported_at`).
+D1). Both manifests say so in the field `checksum_basis` (fnv1a32_utf8_bytes). A manifest without that
+field was written before Round 89: its checksums are over the text's UTF-16 code units, and the pooled
+manifest's byte counts are code units, so they do not match the file on disk. The manifests themselves are not reproducible: each records when it was written (`exported_at`).
 (This section used to say the export "contains no timestamps" and that the checksums are in
 `16_integrity_report.csv`, which has none.)
 

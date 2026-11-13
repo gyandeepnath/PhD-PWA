@@ -23,7 +23,7 @@ are preserved under `reference/` as the parity oracle.
 ```bash
 npm ci
 npm run dev          # dev server (vendors MediaPipe assets first)
-npm run verify       # the whole gate: lint, typecheck, tests, corpus, codebook, export
+npm run verify       # the whole gate: lint, typecheck, tests, corpus, codebook, export, analysis templates
 npm run build        # typecheck + production PWA build
 ```
 
@@ -36,6 +36,9 @@ npm run stress           # adversarial / pipeline / state-machine / metamorphic 
 npm run verify:corpus    # reading-passage length, difficulty match, item completeness
 npm run verify:codebook  # every exported column documented, and vice versa
 npm run verify:export    # referential integrity + reproducibility of the export
+npm run verify:analysis  # R and Python templates on simulated cohorts (needs python3 with pandas, numpy and
+                         # statsmodels, and Rscript with the template's packages; without Python it prints
+                         # SKIPPED (not passed) and exits 0, and without R only the R half is skipped)
 npm run sim              # Monte-Carlo simulation + power analysis
 npm run simulate:timing  # session-length distribution against the feasibility gate
 npm run fuzz             # degenerate-input soak
@@ -77,9 +80,13 @@ file**. A 30-day recycle bin holds soft-deleted sessions.
 and `npm run verify:codebook` fails the build if a column is added without a description or a
 description survives its column.
 
-`export_manifest.json` carries the app version, git hash, condition-definition hash and a per-file
-checksum. Those checksums are meaningful because the export is byte-reproducible: the same data
-always produces the same bytes, which is enforced by `tests/reproducibility.test.ts`.
+`export_manifest.json` carries the app version, git hash, condition-definition hash and, for each
+file, its size in bytes and an FNV-1a checksum of its UTF-8 bytes as written (`checksum_basis`), which
+any FNV-1a tool can recompute. Those checksums are meaningful because every file but the manifest is
+byte-reproducible: the same data gives the same bytes, which `tests/reproducibility.test.ts` enforces;
+the manifest itself records when it was written. One exception: a sitting recorded before Round 93
+stored no UTC offset, so the dates and local times in its `01_session_info.csv` follow the exporting
+device's time zone (`session_utc_offset_source` = export_device; docs/ANALYSIS_PLAN.md §7).
 
 Consented photographs and video are **not** in the bundle: the CSV carries the inventory — id,
 checkpoint, condition, byte count, checksum and the filename — and *Export → Download media files*
@@ -132,6 +139,15 @@ with an explanation if you try.
 - **A new build cannot take over a running session.** The service worker installs and waits rather
   than claiming an open page, because claiming it would break the two lazily-loaded chunks: the
   dashboard, which is the only export path, and MediaPipe, which produces the primary outcome.
+- **A blink cut by the reading window's edge or by a sampling gap is counted, not classified** (rule
+  `blink-r2`, Round 91, before data collection). Its deepest frame may lie outside what the camera
+  saw, so it is in the blink rate (`blink_count_cut`) and on neither side of the incomplete-blink
+  ratio. Each row names the blink and inter-blink-interval rules it is under (`blink_rule_version`,
+  `ibi_rule_version`; docs/ANALYSIS_PLAN.md §5).
+- **The reaction onset is a frame's own timestamp, never before the dot's paint has finished**
+  (`rt_timing_version` `rt-t3`, Round 93; the investigator has still to confirm it as the study's
+  rule), and the face tracker is given no camera frames during the trials. Where the onset moved past
+  the next frame, 08 `onset_moved_ms` bounds the true reaction time (docs/ANALYSIS_PLAN.md §5).
 - Front-camera metrics are reported honestly: uncalibrated-gaze flag, sub-Nyquist blink tiers gated, and
   the blink count behind each primary-outcome ratio exported alongside it.
 
@@ -150,6 +166,7 @@ outdated.)
 | Stress rounds | `npm run stress` | adversarial input, pipeline joins, state machine, metamorphic properties, crash recovery |
 | Export verification | `npm run verify:export` | referential integrity, reproducibility, codebook coverage, filename portability |
 | Corpus and codebook gates | `npm run verify:corpus`, `npm run verify:codebook` | passage length and difficulty matching; complete data dictionary |
+| Analysis templates | `npm run verify:analysis` | both templates on simulated cohorts with known effects: signs recovered, R and Python agree, the confirmatory and sensitivity sets match the export's verdict, a split cohort changes no formula; SKIPPED (not passed) without Python, and the R half skipped without R |
 
 CI runs all of it on every push: [`.github/workflows/verify.yml`](.github/workflows/verify.yml).
 

@@ -27,6 +27,7 @@ const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 const NOT_A_COLUMN: Record<string, string> = {
   exported_at: 'a key of export_manifest.json and analysis_manifest.json (§7 says the manifests carry it)',
   checksum_fnv1a: 'a key of each file entry in the two manifests (§7)',
+  checksum_basis: 'a key of both manifests (§7)',
 };
 
 function columns(): Set<string> {
