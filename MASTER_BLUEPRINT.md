@@ -8,16 +8,21 @@
 Authoritative, self-contained specification of the build: scientific rationale, experimental
 design, every task and parameter, the physiological/behavioural metrics and their formulae, the
 data model and exports, the software architecture, the verification harness, and the full decision
-log. Paired with the complete source tree in this archive (`ALL_SOURCE.md` = every code line
-concatenated; the original files are also present under their paths).
+log. Read it with the source tree.
 
-- **Version:** package `visulab@2.3.0` (2.1.0 until Round 74, which fitted the layout to the screen
-  and added the ruler calibration; 2.2.0 in Round 74; 2.3.0 from Round 75, which measured the camera
-  pipeline, added the Face Landmarker tracker and changed EAR to image-plane proportions; the build
-  time on screen tells deployments apart); IndexedDB schema v9 (`DB_VERSION`).
+- **Scope.** Last revised in full in Round 84 (commit 7d5ac64); Round 95 corrected the version, the
+  flow, the export list and the source map below. Rounds 85-94 changed the flow, the rules and the
+  export described here; where this blueprint and the code disagree, the code, docs/PROTOCOL.md,
+  docs/ANALYSIS_PLAN.md, docs/OPERATOR_MANUAL.md and the export's codebook are current, and
+  docs/AUDIT_FINDINGS.md records every change.
+- **Version:** package `visulab@2.4.0` (2.1.0 to Round 73, 2.2.0 from Round 74, 2.3.0 from Round 75,
+  2.3.1 from Round 76, 2.4.0 from Round 85; the audit-86 fixes, Rounds 86-94, still say 2.4.0, and
+  whether to call them 2.5.0 is the investigator's decision; src/lib/versionHistory.ts); IndexedDB
+  schema v11 (`DB_VERSION`, src/storage/schemaEnums.ts).
 - **Commit at packaging:** branch `claude/build-review-refinement-3z0nrm` (see `CHANGELOG` section §16).
-- **Status:** 169 unit/property tests, `tsc`+`vite` production build, ESLint, a harsh stress
-  harness, and 6 Playwright E2E specs — all green.
+- **Status:** `npm run verify` (lint, typecheck, unit and property tests, corpus, codebook, export
+  and analysis gates), the stress rounds and the Playwright suites (`e2e/`, `e2e-prod/`); each prints
+  its own count.
 - **Stack:** Vite + React 18 + TypeScript; MediaPipe FaceMesh; IndexedDB (`idb`); Recharts;
   vite-plugin-pwa (offline). No backend — all data is on-device until exported.
 
@@ -162,7 +167,8 @@ stamped into every export so a dataset is tied to the exact condition definition
 SESSION_INIT            researcher: participant ID, ambient lux, (optional) white-screen luminance
                         cd/m² + locked brightness %, session structure (10 conditions in one sitting,
                         or a 5 + 5 split with the reason recorded; CONDITIONS_PER_SESSION_DEFAULT = 10)
-  → CONSENT             informed consent (recorded HERE, not at session creation)
+  → CONSENT             informed consent (recorded HERE, not at session creation); the enrolment
+                        number, which fixes the condition order, is allocated here (Round 89)
   → PARTICIPANT_PROFILE age (18–35: MIN_AGE / MAX_AGE), gender, daily screen hours, device
                         familiarity, lighting habit, vision correction, self-report CVD, caffeine
                         (≤4 h), hours since waking
@@ -170,12 +176,14 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) whit
                         screen clean, lux entered, no tinted lenses, no backlight, ~50–60 cm,
                         landscape; and the display-mode check (the installed full-screen app)
   → COLOR_VISION        digital Ishihara screening (AFTER night-shift is off)
-  → CAMERA_SETUP        webcam permission (or skip → camera_active=false; every ocular column is then
-                        missing, not zero)
+  → CAMERA_SETUP        the tablet's front camera: permission and preview, or Continue without camera
+                        before or after Enable camera → camera_active=false, every ocular column missing,
+                        not zero, and the reason in 01 camera_off_reason (Round 91)
   → CALIBRATION         on the grey field: EAR open-eye baseline + per-person frontal-pitch baseline
                         (head frontal → pitch zero; rule cal-r2: at least 6 s, until 30 usable
-                        frames, at most 12 s), a three-dot gaze check (rule gaze-r2), then the
-                        camera self-test (rule st-r3)  /
+                        frames, at most 12 s), a three-dot gaze check (rule gaze-r3 from Round 91;
+                        gaze-r2 from Round 80), then the camera self-test (rule st-r3; not run when no
+                        eye baseline was fitted: 01 selftest_not_run_reason = no_baseline, Round 91)  /
                         positioning check if no camera
   → CVSQ_BASELINE       validated CVS-Q (16 items)
   → BASELINE_FATIGUE    5-item visual-fatigue VAS (100 mm lines from Round 84; stored 0–10)
@@ -216,8 +224,11 @@ is a pure transition function; `Experiment.tsx` is the driver.
   Ishihara plates.
 - **Display-perception and post-fatigue are captured immediately after reading** (the exposure and
   strongest fatigue inducer), so perception is fresh — not deferred to the end.
-- A **transition lock** + session-creation re-entry guard prevent double-tap from skipping a stage
-  or creating duplicate sessions.
+- Every stage move names the screen it leaves and is refused once that screen has gone
+  (`experiment/useStageTransitions.ts`, Round 86); completion handlers are latched; session creation
+  has a re-entry guard; a touch that starts within 300 ms of a screen change (1 s on consent) is
+  dropped (`lib/tapGuard.ts`, `tap_guard_version`). The system Back gesture is the screen's top-left
+  chip, with its confirmation (`lib/systemBack.ts`, Round 87).
 - An interrupted condition is **restarted** (not stitched) and reuses its stored `condition_id`, so
   no duplicate/orphan rows are produced.
 
@@ -289,7 +300,10 @@ is a pure transition function; `Experiment.tsx` is the driver.
   has ended.
 - **32 trials/condition**, go-rate **0.625** (≈ 20 go / 12 no-go). **6 unscored practice trials**
   run once, before the first scored block only.
-- Onset is timestamped at the **actual painted frame** (rAF); RT uses the hardware pointer-event
+- The onset is the begin time of the first frame that begins no earlier than the paint-end
+  message's arrival (`lib/rtOnset.ts`, `rt_timing_version` `rt-t3` from Round 93, awaiting the
+  investigator's confirmation; per trial `onset_paint_overrun_ms` and `onset_moved_ms`), and the face
+  tracker is handed no camera frames while the trials run; RT uses the hardware pointer-event
   timestamp (low jitter). The trial **ends on response** (only no-go trials wait the 1 s window out).
 - Responses `< RT_MIN_VALID_RT_MS=150 ms` are **anticipations** (excluded from RT means, counted
   separately); valid hits `> RT_LAPSE_THRESHOLD_MS=600 ms` are **attention lapses** (PVT-style).
@@ -347,7 +361,8 @@ was seen — tier A ≥ 20, B 15–20, C < 15 — and within 2 fps of the partic
   are preferred over the dichotomised flag.
 
 ### 5.6 Gaze (`gaze.ts`, `gazeCalibration.ts`) — a quality check only
-- **Three-dot gaze check, rule `gaze-r2` (Round 80)**: the middle and two ends of a mid-height reading
+- **Three-dot gaze check, rule `gaze-r2` (Round 80); `gaze-r3` from Round 91 (ANALYSIS_PLAN §5 item 7),
+  with the eye-open test in pixel proportions**: the middle and two ends of a mid-height reading
   line, each settled 0.5 s and sampled 1 s, needing half the frames the camera delivered, a short dot
   shown again on its own (up to 3 times). The two ends must separate from the middle (1.5 x its
   scatter, on opposite sides); they give a range of horizontal iris offset, widened to about the
@@ -394,7 +409,7 @@ was seen — tier A ≥ 20, B 15–20, C < 15 — and within 2 fps of the partic
 
 ---
 
-## 8. Data model (IndexedDB `VisualErgonomicsDB`, schema v8)
+## 8. Data model (IndexedDB `VisualErgonomicsDB`, schema v11)
 
 **Stores:** `participants`, `sessions`, `conditions`, `reaction_trials`, `rt_summaries`,
 `visual_search`, `eye_metrics`, `fatigue_scores`, `display_perception`, `comprehension_results`,
@@ -409,13 +424,16 @@ in-progress condition, flagged `completed_at:null` and restarted). Soft-delete =
 **Provenance:** every session/export is stamped with app version, git hash, condition-definition
 hash, schema version; the export manifest carries **per-file FNV-1a checksums**.
 
-### 8.1 Export bundle (`src/storage/export.ts`) — 14 CSVs + JSON + codebook + manifest
-`00_MASTER_CODEBOOK` (condition key), `01_session_info`, `02_conditions` (+ reading wpm),
-`03_fatigue_scores`, `04_comprehension`, `05_visual_search`, `06_display_perception`,
-`07_eye_metrics`, `08_reaction_trials`, `09_rt_summary` (incl. d′, d′_se, criterion),
+### 8.1 Export bundle (`src/storage/export.ts`) — 23 files: 20 CSVs, the analysis JSON, the backup and the manifest
+`00_CODEBOOK` (every column), `00_condition_reference` (condition key), `01_session_info`,
+`02_conditions` (+ reading wpm), `03_fatigue_scores`, `04_comprehension`, `05_visual_search`,
+`06_display_perception`, `07_eye_metrics`, `07b_blink_events` and `07c_ear_trace` (per blink and per
+frame; validation only), `08_reaction_trials`, `09_rt_summary` (incl. d′, d′_se, criterion),
 `10_wide_summary` (one joined row per condition + QC + engagement), `11_participant`
 (demographics + caffeine/sleep covariates), `12_quality_flags` (engagement/careless-responding),
-`13_cvsq` (baseline + end, per-item). CSV writer is RFC-4180-safe (quotes `" , \n \r`).
+`13_cvsq` (baseline + end, per-item), `14_nasa_tlx`, `15_media_inventory`, `16_integrity_report`;
+`session_*.json`, `backup_*.json`, `export_manifest.json`. README.md gives the same count
+(tests/readmeFigures.test.ts). CSV writer is RFC-4180-safe (quotes `" , \n \r`).
 
 ---
 
@@ -463,7 +481,17 @@ src/
   sim/          rng, effects (ground truth), participant (synthetic data via the REAL scoring code),
                 analysis (recovery + power), fuzz (adversarial soak), runSimulation/runFuzz/runStress
   analysis/     analysis_template.{R,py} (mixed models a researcher runs on the export)
-docs/           PROTOCOL.md (authoritative), DEPLOY.md
+  added in Rounds 86-94:
+  lib/          tapGuard (touch guard at a screen change), systemBack (Back gesture = top-left chip),
+                rtOnset, rtResponse, rtSummary (reaction onset, window, summary), localClock (times on
+                the sitting's stored UTC offset), swUpdate, offlineReasons (updates and the offline
+                copy), asyncFailure (background-failure panel), numberEntry, participantId,
+                versionHistory
+  experiment/   useStageTransitions, scaleFreeze, conditionAttempt, adaptationContext, CameraLostNotice
+  storage/      buildStamp, luxLog
+  start/        cameraMeasures
+docs/           PROTOCOL.md (authoritative), ANALYSIS_PLAN.md, OPERATOR_MANUAL.md, DEPLOYMENT.md,
+                DEPLOY.md, AUDIT_FINDINGS.md and the rest
 spec/           CONSTANTS.md (provenance of every value/refinement)
 tests/, e2e/    unit/property/stress tests (Vitest) + Playwright E2E
 ```
@@ -471,7 +499,7 @@ tests/, e2e/    unit/property/stress tests (Vitest) + Playwright E2E
 ---
 
 ## 11. Engagement / boredom mitigation & QC (`dashboard/aggregate.ts`, `12_quality_flags.csv`)
-The 4-task loop repeats ×8, so **boredom/disengagement accumulate with time-on-task and mimic
+The 4-task loop repeats ×10, so **boredom/disengagement accumulate with time-on-task and mimic
 fatigue**. The build:
 - **Detects** per condition: reading **skim** (faster than word-count ÷ 400 wpm), **rushed** rating
   response times, **straight-lined** fatigue ratings, RT **disengagement** (high FA/error/lapse),
@@ -484,9 +512,13 @@ fatigue**. The build:
 ---
 
 ## 12. Split-session support
-A sitting can be **split (4 + 4)**. The enrolment number (which drives the Williams order) is
+A sitting can be **split (5 + 5)**. The enrolment number (which drives the Williams order) is
 **reused** across sittings; the next sitting resumes at the **global serial position** where the last
-stopped, so each condition runs exactly once. `session_index` is recorded as a covariate; baseline
+stopped, so each condition runs exactly once. `session_index` is recorded; no confirmatory model
+carries it, and when anyone is split the primary is refitted with it as a pre-specified sensitivity
+(ANALYSIS_PLAN §2, Round 88; whether it should be confirmatory is the investigator's decision). A new
+sitting is refused while one of the participant's sittings is open (Round 87), and all of a
+participant's sittings should run on one build (`mixed_build_within_participant`, Round 88); baseline
 fatigue + CVS-Q are re-measured each sitting (fatigue resets — documented, not assumed away).
 
 ---
@@ -502,9 +534,10 @@ fatigue + CVS-Q are re-measured each sitting (fatigue resets — documented, not
 - **Harsh stress run** (`npm run stress`): large-cohort numeric invariants (no NaN/Inf/out-of-range),
   CSV RFC-4180 round-trip integrity, head-pitch dynamic-range/frontal-zero, incomplete-blink
   reachability.
-- **Unit/property tests** (Vitest, **169**): scoring, Williams balance, contrast, storage, screening,
+- **Unit/property tests** (Vitest; `npm test` prints the count): scoring, Williams balance, contrast, storage, screening,
   gaze + head-pose calibration, ocular metrics, engagement, CSV torture.
-- **E2E** (Playwright, **6**, fake camera): full 56-stage run, input gating, double-click→single
+- **E2E** (Playwright, `e2e/` and the production-bundle `e2e-prod/`; `npx playwright test --list`
+  counts them): full sittings, input gating, double-click→single
   session, reload→resume, split session.
 
 ---
@@ -616,7 +649,7 @@ in `spec/CONSTANTS.md` and `docs/PROTOCOL.md`.
 npm install
 npm run dev        # dev server (vendors MediaPipe first)
 npm run build      # tsc + vite production PWA
-npm test           # 169 unit/property tests
+npm test           # unit and property tests (prints the count)
 npm run test:e2e   # Playwright E2E (fake camera)
 npm run sim        # Monte-Carlo + power analysis
 npm run fuzz       # adversarial soak
@@ -631,8 +664,6 @@ provenance printed first).
 
 ## 19. Archive contents
 - `MASTER_BLUEPRINT.md` — this document.
-- `ALL_SOURCE.md` — **every source file concatenated** (each under a `### path` header) for linear
-  reading.
 - The full project tree: `src/`, `tests/`, `e2e/`, `docs/`, `spec/`, `scripts/`,
   `src/analysis/`, config files (`package.json`, `tsconfig*`, `vite.config.*`, `vitest.config.ts`,
   `playwright.config.ts`, `.eslintrc.cjs`, `tailwind`/`postcss`), `README.md`, and
@@ -646,8 +677,8 @@ provenance printed first).
 ## 20. Reviewer brief — YOUR TASK (read and follow this)
 
 You are a senior peer reviewer and methodologist for a PhD-level human-vision / visual-ergonomics
-study. You have been given the complete specification (this document) and the full source code
-(`ALL_SOURCE.md`). **Your job is to REVIEW against the scientific literature — not to build.**
+study. You have been given the complete specification (this document) and the full source code.
+**Your job is to REVIEW against the scientific literature — not to build.**
 Do **not** write, rewrite, or "fix" code, and do not produce an implementation. If you propose a
 change, describe it in prose with justification and citations — never as code to ship.
 
