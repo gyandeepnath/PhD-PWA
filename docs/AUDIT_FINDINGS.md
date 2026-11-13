@@ -9699,8 +9699,9 @@ In every trial the onset was a frame's begin time and never before the paint end
 matched the onset minus the next frame's begin time to 0.01 ms.
 
 **Mutation checks** (each new test was seen to fail with its fix taken out):
-- REVA93-A1: with lib/rtOnset.ts and the task as in Round 93, 13 unit tests in tests/rtOnset.test.ts fail,
-  and the new end-to-end test fails ("onset_moved_ms undefined"). With ANALYSIS_PLAN and the analysis
+- REVA93-A1: with lib/rtOnset.ts, tasks/ReactionTimeTask.tsx and storage/export.ts as in Round 93, 13 unit
+  tests in tests/rtOnset.test.ts fail (12 with only the first two) [corrected in Round 95: this said 13
+  with lib/rtOnset.ts and the task alone], and the new end-to-end test fails ("onset_moved_ms undefined"). With ANALYSIS_PLAN and the analysis
   codebook as in Round 93, the documents test fails on the old "short by up to about a frame".
 - REVA93-A3: with the export writing `?? 0`, the new unit test and one export-gate check fail; with the
   fixture's version taken out, the unit test fails.
