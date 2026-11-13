@@ -104,7 +104,8 @@ FPS_GATE_REDUCED = 15   # PRE-REGISTERED: tier B from here to ADEQUATE; tier C b
 # The blink rule the ocular models are fitted under (src/tracking/blink.ts BLINK_RULE_VERSION; Round 91,
 # audit 86 CAM-8): a blink cut by the window's edge or a sampling gap is counted, not classified. A 07 row
 # with no blink_rule_version was counted under blink-r1; rows not under this rule are out of every ocular
-# model and put back in a sensitivity refit of the primary, as in the R template.
+# model this file fits, and put back in a sensitivity refit of the primary; the R template also keeps them
+# in its inter-blink-interval model, which this file does not fit.
 BLINK_RULE_VERSION = "blink-r2"
 FPS_GATE_BAND = 2       # PRE-REGISTERED: fps_consistent within this of the participant's median
 
