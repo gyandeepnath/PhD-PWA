@@ -242,24 +242,33 @@ test.describe('the reaction onset, camera on', () => {
 
 /*
  * A LONG PAINT FRAME (Round 93, review REVA-1 and REVA-2). 30 ms of other work in the frame that paints each
- * dot. The frame after it is handed the vsync it missed, ~14 ms before the paint ends; rt-t2 stored that
- * as the onset, and this test fails on it. rt-t3 waits for the first frame that begins after the paint,
- * and stores the overrun.
+ * dot. The frame after it is usually handed the vsync it missed, ~14 ms before the paint ends; rt-t2 stored
+ * that as the onset, and this test fails on it. rt-t3 waits for the first frame that begins after the paint,
+ * and stores the overrun. Not always: the browser may hand the next frame a later vsync, nearer the paint's
+ * end (one trial of eight in a Round 94 run: 0.5 ms before it), or after it. So each trial is held to the
+ * rule — an overrun stored as the probe saw it, the onset moved exactly when one is stored, never before the
+ * paint — and the long paint itself (an overrun of more than 5 ms) is required on most trials, not all, so
+ * that the test cannot pass without exercising it (Round 94).
  */
 test.describe('the reaction onset, with a long paint frame', () => {
   test('is the first frame that begins after the dot\'s paint has finished, and the trial says the paint overran', async ({ page }) => {
     test.setTimeout(400_000);
     const r = await measureTwoBlocks(page, false, 30);
     logRows(r, 'camera off, 30 ms of work in the paint frame');
-    // The work did overrun the next frame's begin time, as the probe saw it, on every trial.
-    for (const x of r.rows) expect(x.probe_overrun_ms, `trial ${x.trial}: the injected work did not overrun`).toBeGreaterThan(5);
+    // The work ran well past the next frame's begin time, as the probe saw it, on most trials: the long
+    // paint was exercised (the browser picks the next frame's vsync, so not on every one).
+    expect(r.rows.filter((x) => x.probe_overrun_ms > 5).length, 'the injected work overran the next frame on fewer than half the trials')
+      .toBeGreaterThanOrEqual(Math.ceil(r.rows.length / 2));
     assertNeverBeforePaint(r);
     for (const x of r.rows) {
-      // Moved past the frame after the paint frame...
-      expect(x.onset_minus_next_frame_ms, `trial ${x.trial}: the onset stayed on the frame after the paint frame`).toBeGreaterThan(5);
-      // ... and the stored overrun is the one the probe saw, within a millisecond (two messages, one frame).
+      // The stored overrun is the one the probe saw — 0 where the paint ended before the next frame began —
+      // within a millisecond (two messages, one frame)...
       expect(x.stored_overrun_ms, `trial ${x.trial}: no overrun stored`).not.toBeNull();
-      expect(Math.abs((x.stored_overrun_ms as number) - x.probe_overrun_ms), `trial ${x.trial}: stored overrun differs from the probe's`).toBeLessThanOrEqual(1);
+      const stored = x.stored_overrun_ms as number;
+      expect(Math.abs(stored - Math.max(0, x.probe_overrun_ms)), `trial ${x.trial}: stored overrun ${stored} differs from the probe's ${x.probe_overrun_ms.toFixed(2)}`).toBeLessThanOrEqual(1);
+      // ... and the onset moved past the frame after the paint frame exactly when an overrun was stored.
+      if (stored > 0) expect(x.onset_minus_next_frame_ms, `trial ${x.trial}: an overrun stored, but the onset stayed on the frame after the paint frame`).toBeGreaterThan(5);
+      else expect(x.onset_minus_next_frame_ms, `trial ${x.trial}: no overrun, but the onset moved`).toBeCloseTo(0, 6);
     }
   });
 });

@@ -82,8 +82,10 @@
  *
  * WHAT IS NOT CHANGED. The response is still the touch's own timestamp; the response window still closes
  * on it (lib/rtResponse.ts); touches are still taken as responses only from the stamping frame's callback
- * on, which is where the phase flips, as before — a touch before it, while the dot cannot yet be on the
- * screen, is a false start, as a touch before the dot always was.
+ * on, which is where the phase flips, as before — a touch before it is a false start, as a touch before
+ * the dot always was. On an ordinary trial and where the paint overran, the dot cannot yet be on the screen
+ * then; where the paint-end message was held, it could already have been (above), so a touch between the
+ * two onsets is a false start although it came after the dot could first be seen.
  *
  * VERSIONED, because stored reaction times change meaning: rt_timing_version (02_conditions.csv,
  * analysis_long). 'rt-t1' rows with the camera on carry reaction times short by an unknown amount up to one
