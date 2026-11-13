@@ -1609,6 +1609,14 @@ was read; and every specification of the Xiaomi Pad 6's camera.
 - Craig & Klein (2019), Lin, C. J. et al. (2008), Muhamad et al. (2023), Huang et al. (2025),
   Molloy et al. (2012), Jost et al. (2022), Walsh et al. (2022).
   (Buchner & Baumgartner 2007, Luzsa & Mayr 2025 and Sethi & Ziat 2023 are now CONFIRMED above.)
+- Android `ViewConfiguration.DOUBLE_TAP_TIMEOUT` (300 ms), cited in src/lib/tapGuard.ts and
+  ANALYSIS_PLAN.md §5 (Round 86) as Android's double-tap window, the basis of the 300 ms tap guard.
+  Not read at source for this register; the study tablet's Android was not checked. (Added in
+  Round 95.)
+- Chromium `docs/history_manipulation_intervention.md`, cited in src/lib/systemBack.ts (Round 87)
+  for Chrome skipping history entries added without a user activation; the comment says it was read
+  in summary only. Not read at source for this register; the tablet's Chrome was not checked. (Added
+  in Round 95.)
 
 ## EXCLUDED
 

@@ -237,7 +237,8 @@ Text Colour on Visual Fatigue, Ocular Behaviour and Task Performance under Contr
 Illumination"* — illumination remains in the title because it is still controlled and measured, and
 only its status as a manipulated factor has changed. The consent document now describes a single
 visit; participant burden falls from roughly 189 minutes across two visits to roughly 98 minutes in
-one.
+one (the timing model at the time; since Round 92, which charged the camera check and the intro cards,
+its median is about 102 minutes: PROTOCOL.md, *Timing and the feasibility gate*).
 
 **Still outstanding, and neither blocks collection.**
 

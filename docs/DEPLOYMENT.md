@@ -175,7 +175,9 @@ copy an export off it.
 If an update genuinely must go out mid-study:
 
 - Do it between participants, never between the two sittings of one participant. The pooled export
-  blocks such a participant (`mixed_build_within_participant`). Since Round 88 the operator sees the
+  blocks such a participant (`mixed_build_within_participant`), by default even when only the commit
+  differs; a narrower rule (block only when the condition table, the schema or a versioned scoring rule
+  differs) is the investigator's open decision (AUDIT_FINDINGS Round 88 §8 item 4). Since Round 88 the operator sees the
   rule too: the update notice names any participant between sittings and its button reads **Update
   anyway**, and the New Session form names the earlier sitting's build when it differs from the
   tablet's (OPERATOR_MANUAL.md §2 step 3a and §8; both use the join check's own comparison,
@@ -226,7 +228,10 @@ the private window, open the app normally from the home-screen icon, and re-run 
 
 Pre-flight also asks the browser for durable storage and reports the free space. A `warn` verdict
 means the data is evictable under storage pressure rather than doomed, and the fix is to install the
-app to the home screen and reopen it from there.
+app to the home screen and reopen it from there. The verdict (ok, warn or unknown; a blocked one stops
+pre-flight), whether durable storage was granted and the free space are kept on the sitting and exported in
+01_session_info.csv (`storage_verdict`, `storage_persisted`, `storage_free_mb`; Round 92), so a
+sitting run on storage the browser may clear can be found afterwards.
 
 
 
@@ -265,7 +270,7 @@ Sign this off once per device, before it is used with a participant.
 - [ ] Screen timeout disabled; Do Not Disturb on
 - [ ] Landscape locked; app launched fullscreen from the home screen
 - [ ] Display white-point luminance measured and recorded
-- [ ] Lux meter present, and the room reaches both target levels
+- [ ] Lux meter present, and the room reaches 300 lux (250–350) at the eye position
 - [ ] One complete throwaway session run, exported, and the export opened and checked
 - [ ] Backup restore tested: import that throwaway export onto a second device
 - [ ] Device left in aeroplane mode

@@ -29,8 +29,12 @@ npx http-server dist -S -C cert.pem -K key.pem -p 8443 -a 0.0.0.0
 # then open https://<laptop-LAN-IP>:8443 on the tablet and accept the certificate
 ```
 
-Or use `vite preview --host` behind a local TLS proxy (e.g. `caddy`, `local-ssl-proxy`). Once loaded
-once, the service worker caches everything (incl. MediaPipe), so subsequent runs work fully offline.
+Or use `vite preview --host` behind a local TLS proxy (e.g. `caddy`, `local-ssl-proxy`). Chrome
+installs no service worker from a certificate it does not trust, even after its warning is accepted,
+so a self-signed certificate (either route above) gives no offline copy: the landing page says
+*Offline copy: NOT installed* and every reload needs the laptop. For offline sittings, load the app
+from the deployed HTTPS address (Option A), or use a certificate the tablet trusts, and wait for
+*Offline copy: ready* (DEPLOYMENT.md §4).
 
 ## Pre-session device checklist (also enforced in-app at PREFLIGHT)
 
@@ -42,5 +46,6 @@ once, the service worker caches everything (incl. MediaPipe), so subsequent runs
 ## Data
 
 Everything is stored **on the device** in IndexedDB (`VisualErgonomicsDB`). Export per session from
-the dashboard (14 CSVs + JSON + codebook + provenance manifest). Back up exports off-device; the
+the dashboard (23 files: 20 CSVs with the codebook, an analysis JSON, a backup and a provenance
+manifest). Back up exports off-device; the
 container/browser storage is the only copy until exported.

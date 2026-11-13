@@ -842,7 +842,9 @@ drawn under it: trial 1 of the reaction task scored as a false start or an antic
 tap on Start, a word of the search passage counted as a false alarm after a double tap on Begin search
 (audit 86 M1, M2; also a colour-vision plate answered unseen and the consent screen's camera option
 ticked, outside the analysis). From Round 86 a touch that *starts* within 300 ms of a screen change is
-dropped whole before the app sees it (lib/tapGuard.ts; 300 ms is Android's own double-tap window), and
+dropped whole before the app sees it (lib/tapGuard.ts; 300 ms is the double-tap window the guard assumes,
+Android's ViewConfiguration.DOUBLE_TAP_TIMEOUT, not yet read at source: docs/CITATION_VERIFICATION.md,
+UNRESOLVED), and
 `tap_guard_version` (02_conditions.csv) says which rule a condition's touches were taken under: `tg-v2`
 with the guard, `tg-v1` before it. Inside a task the guard is armed by the instruction card handing over
 to the task, by each new comprehension question and by a dialog such as the Pause box opening or closing,

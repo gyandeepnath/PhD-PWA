@@ -3,14 +3,15 @@
 Six dimensions over the recently-changed code. **The verification pass did not complete:** 158 of
 168 agents failed on a session rate limit, so only ONE finding below carries independent
 adversarial verification. Everything else is an auditor's claim that I have not yet checked, and
-must be treated as a lead rather than a fact. Five have since been verified by hand and fixed;
-they are marked. The rest are open.
+must be treated as a lead rather than a fact. Each finding's STATUS line says whether it was fixed;
+two marked NOT YET FIXED were fixed later (notes in brackets, added in Round 95), and the round-2
+triage at the end of this file records the re-check.
 
 Total findings: 54
 
 ## [critical] resetRtTargetMemory() is never called on the RESUME path, so the 'target colour CHANGED' banner is suppressed exactly when the rule inverts — or fires spuriously from the previous participant
 
-**STATUS: VERIFIED (3/3 verifiers), NOT YET FIXED.** All three verifiers confirmed the mechanism and independently argued severity is medium, not critical: the instruction screen always names the target colour and shows the real dot, so the rule is stated even when the emphasis banner is wrong; exposure is one block per resume.
+[Later: FIXED in 2d2fb6d, the same day. The resume path seeds the target memory from the previous condition (src/experiment/Experiment.tsx, `setRtTargetMemory`).] **STATUS: VERIFIED (3/3 verifiers), NOT YET FIXED.** All three verifiers confirmed the mechanism and independently argued severity is medium, not critical: the instruction screen always names the target colour and shows the real dot, so the rule is stated even when the emphasis banner is wrong; exposure is one block per resume.
 
 `src/experiment/Experiment.tsx`:428
 
@@ -385,7 +386,7 @@ Extending `scripts/verifyExport.ts` to cover the analysis path is likewise still
 
 ## [high] stimulus_scale is stamped once at session creation and never re-recorded when the scale later changes
 
-**STATUS: CONFIRMED — NOT YET FIXED.** Verified: the only write is `Experiment.tsx:488` inside `beginSession`, and every later `put('sessions', ...)` spreads the stale record forward. Two paths still move the scale afterwards, both requiring the un-installed Chrome route (the installed PWA is `display: fullscreen`, `orientation: landscape` and locks orientation): the address bar revealing after load, and a rotation. This matters MORE now that the geometry findings above are fixed, because `stimulus_scale` has become the complete description of the difference between devices rather than a partial one — so a stale value is the whole error rather than part of it. The right grain is the CONDITION record, since that is where a stimulus was actually presented; deferred to its own change rather than bundled into the geometry fix.
+[Later: FIXED in the round-2 triage (9c004c3; see the end of this file). Each condition row carries its own `stimulus_scale` and `layout_viewport`; from Round 87 they are read at Begin reading (`scale_freeze_version` sf-v2).] **STATUS: CONFIRMED — NOT YET FIXED.** Verified: the only write is `Experiment.tsx:488` inside `beginSession`, and every later `put('sessions', ...)` spreads the stale record forward. Two paths still move the scale afterwards, both requiring the un-installed Chrome route (the installed PWA is `display: fullscreen`, `orientation: landscape` and locks orientation): the address bar revealing after load, and a rotation. This matters MORE now that the geometry findings above are fixed, because `stimulus_scale` has become the complete description of the difference between devices rather than a partial one — so a stale value is the whole error rather than part of it. The right grain is the CONDITION record, since that is where a stimulus was actually presented; deferred to its own change rather than bundled into the geometry fix.
 
 
 `src/experiment/Experiment.tsx`:467
