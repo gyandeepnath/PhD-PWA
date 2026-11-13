@@ -9781,3 +9781,185 @@ This write-up was checked with `npm run verify` before it was committed (the uni
 | Reaction onset | `rt-t3` | `rt-t3` (unchanged; its bound restated) | 02 and analysis_long `rt_timing_version` |
 | How far a trial's onset moved | not stored | 08 `onset_moved_ms` (blank before Round 94) | 08 codebook; ANALYSIS_PLAN §5 |
 | Every other rule | unchanged | unchanged | as before |
+
+## Round 95 — the documentation brought up to date with Rounds 86-94
+
+Rounds 86-94 (87 commits after 26e909c, where 2.4.0 was set) changed the app's rules, screens and export,
+and each round wrote itself up here. The documents a reader opens first did not always follow. Two
+auditors read every document against the code at 0e3d418 and reported 41 findings: 18 on the data
+documents and the codebooks (A-01 to A-18) and 23 on the operator, deployment and design documents
+(B-01 to B-23). Each was checked against the code before it was applied. All 41 held. One fix was
+applied differently from its proposal (B-23, below), and none was skipped. The fixes are 25ad6c4
+(codebooks and version history), 751541e (operator manual), f21bab3 (README and analysis plan),
+9b6e931 (PROTOCOL), fce5b89 (deployment, amendment, round-2 audit, citation register), c7f98df
+(Round 94's mutation count) and 18be241 (master blueprint).
+
+**No code path, rule, threshold or measured value changed.** The changes to src/ are text: codebook
+descriptions in storage/export.ts and storage/analysisCodebook.ts, the version list in
+lib/versionHistory.ts (which writes 01 `app_version`'s codebook entry), and one comment in
+analysis/analysis_template.py; in tests/, one name allowed by hand (§ "What was verified"). The
+exported 00_CODEBOOK.csv and analysis_codebook.csv now read
+differently; no data column does. package.json still says 2.4.0.
+
+### What was missing, wrong or stale, and where
+
+1. **The exported codebook described old behaviour as current.**
+   - 07b `condition_id` said the blinks there, by tier, equal 07's tier counts. Under `blink-r2` that holds
+     only for the rows with `cut` FALSE; the cut rows equal `blink_count_cut`. The same file's `cut` entry
+     already said so (A-01).
+   - 08 `accuracy` described the "clock fault" path, a late touch recorded as a false start with no time,
+     as current. It is the `rw-v1` path; from `rw-v2` (Round 89) such a touch is ignored (A-02).
+   - 08 `false_start` did not say that on an `rt-t3` trial whose paint-end message was held, a touch
+     between the frame after the paint and the stamped onset is a false start, although the dot could
+     already have been on the screen (A-03).
+   - 01 `camera_exposure_rule` lists three rules and ended "the same in both" (A-04).
+   - 07 and analysis `blink_rule_version`, and the Python template's comment, said the templates model
+     only `blink-r2` rows. Since Rounds 93-94 R's inter-blink-interval model keeps `blink-r1` runs, judged
+     by `ibi_rule_version` alone (A-06).
+   - 01 and analysis `participant_id` did not say that from Round 87 codes are kept in capitals, looked up
+     regardless of letter case, and that two codes differing only in case are warned about
+     (`participant_code_case_variants`) and not merged (A-16).
+   - 01 `app_version` (from lib/versionHistory.ts) said the audit-86 fixes are Rounds 86-92 and that each
+     changed rule has a `*_version` column. They are Rounds 86-94; the exposure rule is
+     `camera_exposure_rule`; the new columns, the participant code, the enrolment number taken at consent,
+     the typed-number ranges and the Back gesture have no column and are told apart by `git_hash`. It now
+     also says that whether to call these 2.5.0 is the investigator's decision (A-05, B-01).
+2. **The operator manual** (B-01 to B-12): its opening still described two sittings with illumination
+   manipulated (one sitting at 300 lux now); its version paragraph had the same Rounds 86-92 wording; it
+   did not mention the offline-copy line or two of Check for updates' five answers; its lists of when the
+   top-left button, the Back gesture and the researcher card are withheld left out camera set-up's
+   exposure step and bench check (Round 91); its storage-full advice said Delete frees space (only Purge
+   does, as the app's own message says); the camera-lost row did not name the case where every face
+   tracker failed; it did not explain the typed-number rule, the two-decimal steadiness line or the
+   "UTC+05:30" on sitting times; it told the operator to tell the investigator "the same day" about a
+   mixed build where the screen says "before you begin"; and its export list counted the codebook twice.
+3. **README** (A-07 to A-09, B-16): it said the export always gives the same bytes; a sitting recorded
+   before Round 93 has no stored UTC offset, so its 01 dates and local times follow the exporting device.
+   It described the manifest as "a per-file checksum" without saying over what (`checksum_basis`). Its key
+   decisions left out `blink-r2` and `rt-t3`, which change the primary outcome's classification and the
+   zero of every reaction time. Its gate list, its verification table and DEPLOYMENT §1 left out the
+   analysis-template gate, and nothing said that without Python that gate prints SKIPPED and exits 0.
+4. **The analysis plan** (A-08, A-10 to A-14, A-17): §2 did not say that under `blink-r2` both counts of
+   the primary leave out cut blinks; item 5 did not name the comprehension penalty, its threshold or the
+   open decision; the tap-guard paragraph said the guard is armed inside a task "only" by the
+   instruction card (each comprehension question and a dialog opening or closing arm it too); the open
+   sensitivity choices for `rw-v1`, `sf-v1` and `at-v1` rows, and the open confirmation of `rt-t3`, were
+   not shown as open; §7 did not name `checksum_basis` or say what a manifest without it hashed; and the
+   300 ms window was stated as Android's own, a source no register entry covers (A-10, below).
+5. **PROTOCOL** (A-07, B-20, B-21): the flow lacked the enrolment number taken at consent, the colour
+   notice recording the formal plates, Continue without camera with `camera_off_reason`, the camera check
+   not run without a baseline, and the refusal of a second open sitting; the camera grant named only
+   blink and head-pose measures; photo and video grants were not said to need the camera; the
+   comprehension threshold and the sitting term were stated as settled.
+6. **Deployment documents** (B-09, B-13 to B-15): DEPLOY.md said a self-signed certificate gives a full
+   offline copy (Round 92 found Chrome installs none) and quoted "14 CSVs"; DEPLOYMENT.md stated the
+   mixed-build block as fixed, did not say the storage verdict is now exported, and its checklist still
+   asked for "both target levels" of light.
+7. **Other documents.** ILLUMINATION_AMENDMENT quoted about 98 minutes as the current burden (about 102
+   since Round 92; B-22). AUDIT_ROUND2 still marked two findings NOT YET FIXED and said the rest are open
+   (B-23). The citation register had no entry for Android's DOUBLE_TAP_TIMEOUT (cited in lib/tapGuard.ts
+   and ANALYSIS_PLAN §5) or for Chromium's history-manipulation note (cited in lib/systemBack.ts) (A-10).
+   The master blueprint, untouched since Round 84, still gave 2.3.0, schema v8 and v9, 169 tests, a
+   14-CSV export, `gaze-r2`, a "transition lock", a 4 + 4 split, the RT onset "at the painted frame", and
+   pointed to an ALL_SOURCE.md that is not in the repository (A-15, B-11, B-17 to B-19, B-21). PROTOCOL,
+   the manual and TIMING_MODEL named `gaze-r2` as the gaze rule in force (B-11). Round 94's own write-up
+   gave one mutation count that does not reproduce as worded (A-18).
+
+### What was corrected
+
+Each document was corrected in its own style, and what was right was left as it was.
+- The codebook entries above now say what the code does, with the old rule's behaviour named by its
+  version. The version list names Rounds 86-94, the rule columns, the changes without one, and the open
+  version decision; the manual's version paragraph says the same.
+- The open investigator decisions are now presented as open wherever these documents state the rule:
+  `rt-t3` confirmation (ANALYSIS_PLAN §5, README, blueprint §4.6), the comprehension threshold
+  (ANALYSIS_PLAN item 5, PROTOCOL), the sitting term (PROTOCOL, blueprint §12), the mixed-build scope
+  (DEPLOYMENT §5, manual §8), the version number (manual §2, the codebook, blueprint header), and the
+  sensitivity choices for `rw-v1`, `sf-v1` and `at-v1` rows (ANALYSIS_PLAN §5, beside the existing
+  `tg-v1` and `rt-t1` ones). The consent wording for the camera grant is pointed to Round 90 §9 item 1.
+- The citation register lists the two new sources under UNRESOLVED, with nothing beyond what the code
+  states, and ANALYSIS_PLAN now says the 300 ms window is assumed, not read at source.
+- AUDIT_ROUND2: the auditor proposed noting both findings as fixed in Round 87. The history says
+  otherwise: the resume path was seeded in 2d2fb6d (the day of that audit), and `stimulus_scale` moved to
+  each condition in the round-2 triage (9c004c3), recorded at the end of that file; Round 87 only moved
+  the reading to Begin reading (`sf-v2`). The bracketed notes say that.
+- The blueprint now says it was last revised in full in Round 84 and that the code and the current
+  documents win where they differ; its version, schema, flow, export list, source map and split rule are
+  corrected, and its test counts are replaced by the commands that print them.
+- Round 94's mutation sentence is corrected in place and marked "[corrected in Round 95]".
+
+### What was verified, and how
+
+- **Every codebook change** against the code it describes: lib/rtResponse.ts `classifyRtTouch` (a touch
+  outside the window is "ignored"), tasks/ReactionTimeTask.tsx (only a "response" sets the response
+  time), lib/rtOnset.ts (the held-message false start), storage/integrity.ts (cut blinks checked against
+  `blink_count_cut`), analysis_template.R (the inter-blink-interval exception; Python fits no such
+  model), storage/joinIntegrity.ts (`participant_code_case_variants`), lib/participantId.ts.
+- **The export's time-zone exception, by running it.** The bundled fixture through `buildExportFiles`
+  under TZ=Asia/Kolkata and TZ=Europe/London: with the stored offsets, 01 gave `experiment_date`
+  2023-11-15 and `session_start_local` 2023-11-15T03:43:20+05:30 in both, and the CSVs were identical;
+  with the two offset fields removed, London gave 2023-11-14 and 2023-11-14T22:13:20+00:00
+  (`session_utc_offset_source` export_device) and the CSVs differed. The run's export_manifest.json
+  carried `checksum_basis` = fnv1a32_utf8_bytes; the pooled manifest writes the same field
+  (storage/analysisExport.ts).
+- **The session length.** `npx tsx scripts/simulateParticipant.ts` at 0e3d418: median 102.1 min, p95
+  126.3 min, total 102.8 min, as PROTOCOL, TIMING_MODEL and docs/TIMING_SIMULATION_OUTPUT.txt give.
+- **Round 94's mutation count.** In a separate worktree at ab9cc0b with files from aa6c265,
+  `npx vitest run tests/rtOnset.test.ts`: with lib/rtOnset.ts and tasks/ReactionTimeTask.tsx, 12 failed
+  and 11 passed; with storage/export.ts as well, 13 failed and 10 passed.
+- **The screens the manual describes**, against their source: components/BuildInfo.tsx (the five check
+  answers and the offline-copy line), storage/db.ts `STORAGE_FULL_MESSAGE`, start/setupStages.tsx (the
+  exposure step and bench check reported as running, the build box's "before you begin", the hour
+  fields), experiment/Experiment.tsx (the chip and the researcher card withheld while a procedure runs),
+  tracking/useTracking.ts (camera lost when no tracker is left), tracking/ocularReliability.ts and
+  frameRateGate.ts (the two-decimal line), lib/localClock.ts (times with their offset),
+  lib/tapGuard.ts and components/ConfirmDialog.tsx (where the guard is armed).
+- **The analysis-template gate's behaviour** from scripts/verifyAnalysis.mjs: without a Python
+  interpreter or its packages it prints SKIPPED (not passed) and exits 0; without R only the R half is
+  skipped, and the exit code follows the Python checks.
+- tests/analysisPlanColumns.test.ts now allows `checksum_basis` as a manifest key (it fails on any
+  backticked name in the plan that is not a column, check code or template variable).
+
+### For the investigator: stale lines in synopsis/ (read-only here, not edited)
+
+- synopsis/SYNOPSIS_AdtU.md:346 and SYNOPSIS_FULL_REFERENCE.md:376 — "Adaptation on neutral grey, 60 s
+  (120 s when polarity switches)": these are the field's maximum (Continue from 30 s), and which display
+  the switch follows after a break is open (Round 92, P8).
+- SYNOPSIS_AdtU.md:353 and SYNOPSIS_FULL_REFERENCE.md:383 — "a median of 98 minutes and a 95th percentile
+  of 119": the model now gives 102.1 and 126.3 (Round 92). The same figures are in synopsis/GUIDE.html:1245
+  and :1636.
+- SYNOPSIS_AdtU.md:377 and SYNOPSIS_FULL_REFERENCE.md:407 — the camera computes "blink metrics and head
+  position": the consent names eyelid closure and gaze as well (Round 90, UI-5).
+- SYNOPSIS_AdtU.md:395 — "limited to gaze zones": the zones went with `gaze-r1` (Round 80); what is
+  estimated is whether the eyes are on the screen.
+- SYNOPSIS_AdtU.md:335 and SYNOPSIS_FULL_REFERENCE.md:365 — "Passages of four pages": three pages since
+  Round 63 (older than audit 86, found while checking).
+
+### Not done, and why
+
+- package.json's version was not changed: 2.4.0 against 2.5.0 is the investigator's decision.
+- The two UNRESOLVED sources were not read at source; they stay marked until someone does.
+- The camera-lost notice still names only the camera causes; whether it should name the tracker case is a
+  change to what the operator sees, left to the investigator (the manual now says it).
+- Only the documents and statements the auditors reported were changed. The other open decisions (the
+  frame-rate floor of 20 against 22, the colour-vision rule, the consent duration, the grey field after a
+  break, the blink-rate rows of old-rule data) were not re-audited here; their existing text was left as
+  it is.
+
+### Checks run
+
+On 18be241 (every fix of this round; this write-up was added afterwards, and no test reads
+AUDIT_FINDINGS.md):
+- `npm run verify` passed (exit 0, 9 min): lint, types, 145 unit test files with 1,952 tests (the
+  documents tests among them), the corpus gate, the codebook gate (553 entries over 19 files, every
+  column documented), the export gate (903/903), and the analysis gate with both R and Python run (no
+  SKIPPED line).
+- No code path changed, so no end-to-end spec was re-run and no build was made; the changed strings in
+  src/ are codebook text, one comment and the version list, which the unit and codebook gates read.
+
+### Versions in the data
+
+| Rule or format | Before | Now | Where it is recorded |
+|---|---|---|---|
+| Every rule | unchanged | unchanged | as before |
+| Codebook text | Round 94's | corrected entries (A-01 to A-06, A-16, app_version) | 00_CODEBOOK.csv, analysis_codebook.csv |
