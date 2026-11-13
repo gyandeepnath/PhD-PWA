@@ -9620,3 +9620,163 @@ Each fix's own test was seen to fail with the fix reverted, as recorded in its s
 | The sitting's local date and times | the exporting device's UTC offset | the offset the tablet stored, where it did | 01 `session_utc_offset_source` |
 | The inter-blink-interval model's rows (row added in Round 94, review B93-2) | camera-on tier-A/B runs with `blink-r2` counts (the blink-rule default), then the interval rule | camera-on tier-A/B runs, judged by `ibi_rule_version` alone: a run with `blink-r1` counts and an `ibi-r2` interval is in it | R output (`[ibi-r2] ... carry blink counts under an earlier blink rule and are in it`); ANALYSIS_PLAN §5 |
 | Every other rule | unchanged | unchanged | as before |
+
+## Round 94 — a review of Round 93's fixes: a held onset message, the pooled blink rows, and eight smaller corrections
+
+Two reviewers re-checked Round 93 (a5414b8..aa6c265) and reported ten problems: two major, eight minor.
+Each was checked here before it was fixed; all ten held, and none was skipped. The fixes are 672c215
+(B93-4), e609673 (REVA93-A3), 4f37334 (B93-1), 89bf649 (B93-6), 9783b41 (B93-5), ab9cc0b and 79c95dd
+(REVA93-A1, A2), 1bd01d9 (B93-2) and 2d7c287 (Round 93's own text: A1, A2, A4, B93-2, B93-3, B93-5).
+Round 93's write-up is corrected in place; each corrected sentence there says "corrected in Round 94".
+One more commit, 80b3591, came out of the final checks: an end-to-end test that assumed something the
+browser does not promise (§ "The long-paint test", below).
+
+**No rule and no threshold changed, and no row was added to or taken out of any model.** One measured value
+is new: 08 `onset_moved_ms`, an optional field on a reaction trial, blank on rows recorded before this
+round. No stored record changed shape in a way that needs the database version raised. Nothing here was
+measured on the Xiaomi Pad 6.
+
+### In plain words
+
+1. **A held message can make the reaction onset late by several frames (REVA93-A1, major; A2).** Since
+   Round 93 the app waits for a message, sent from the frame that draws the dot, to say the drawing is
+   done, and takes the next frame that starts after it. Round 93 said that if the message comes late, the
+   onset is at most one frame late. That is wrong. The message can wait behind any other piece of work
+   already queued (a database callback, a timer, another message), and the onset is then late by that
+   wait rounded up to whole frames, with no limit of its own. Measured here: a 25 ms task queued ahead of
+   the message moved the onset one frame, a 45 ms task two frames, and once three. The reviewer saw seven
+   frames for a 120 ms task. On such a trial the reaction time is too short by as much, enough to turn a
+   real hit into an "anticipation" (under 150 ms). Every such trial already has `onset_paint_overrun_ms`
+   above 0, but a value above 0 can also mean the drawing itself ran long, in which case the onset is
+   right; the data cannot tell the two apart. The rule is unchanged. What changed: each trial now also
+   stores `onset_moved_ms`, how far its onset moved from the next frame (where Round 92's rule put it), so
+   for every such trial the true reaction time lies between `response_time_ms` and `response_time_ms +
+   onset_moved_ms`. The bound is now stated correctly in the code, both codebooks, the R template's
+   comment and ANALYSIS_PLAN §5. At the tablet's 144 Hz a frame is about 7 ms.
+2. **The pooled analysis file and the cohort view gave old blink values for old sittings (B93-1, major,
+   old data only).** Both read every sitting without its blink records, to save memory. For a sitting
+   recorded before Round 88 or 91, the per-sitting export (07) recomputes the blink counts and the
+   inter-blink interval from those records under the current rules; without them, `analysis_long.csv` and
+   the cohort view kept the old values and the old rule names. Now, for such a sitting only, the app also
+   reads the records those values are recomputed from, and the two files agree. Sittings recorded from
+   Round 91 on read nothing extra. The R and Python templates read 07, so they were not affected.
+3. **Smaller fixes.**
+   - REVA93-A3: nothing tested that `onset_paint_overrun_ms` is blank, not 0, on rows recorded before
+     `rt-t3`; a unit test and the export gate now do, and the test fixture's conditions say `rt-t3`.
+   - B93-2: Round 93 put runs with old-rule blink counts but a current-rule interval into the
+     inter-blink-interval model and did not say so; three places still said such runs are out of every eye
+     model. They now say what the rule is, and R prints how many such runs the blink-rate model leaves
+     out, since the same reason would let it keep them. Which way to go is the investigator's choice.
+   - B93-4: the Data Quality line on frame-rate steadiness could show "20.0 against a usual 22.0" both on
+     a run flagged as more than 2 away and on one that passed. It now prints both rates to two decimals and
+     the distance itself ("20.00 against a usual 22.04 (2.04 apart)").
+   - B93-5: the slow-camera end-to-end test claimed to check that a rate is never rounded onto 15, which
+     at 10 frames a second it cannot. The claim is gone. A fake camera just under 15 cannot be made here:
+     Chromium plays a fake camera only at whole-number rates (a file headed 14.9 or 14.75 frames a second
+     played at 14.000). The unit tests hold the rounding.
+   - B93-6: the dashboard's sitting picker, the Session Manager, the session form and the restore message
+     showed a sitting's times on the viewing device's clock. They now use the tablet's stored clock, as the
+     01 file does, and print the UTC offset ("2026-10-29 05:00 UTC+05:30").
+   - REVA93-A4 and B93-3: Round 93's write-up gave one mutation count as 10 (it is 11), said the app
+     writes blank rule columns (it writes `ibi-r1` and `blink-r1`), and named the wrong three failing gate
+     checks. Corrected there.
+
+### What was measured
+
+Headless desktop Chromium, 60 Hz, e2e/rtOnsetTiming.spec.ts with `--retries=0`, two runs (while fixing,
+and the final full run on 2d7c287). The probe queues a busy message ahead of the app's message in the
+frame that draws the dot; the app's stored values are compared with what the probe saw.
+
+| Run (8 trials each, two runs) | The paint ended before the next frame | Stored overrun | Stored `onset_moved_ms` (frames) |
+|---|---|---|---|
+| ordinary, camera off | 15.2-15.9 ms | 0 | 0 |
+| ordinary, camera on | 15.2-15.8 ms | 0 | 0 |
+| 30 ms of extra work in the paint frame | it overran by 13.8-15.8 ms; once by 0.5 ms | 13.8-15.8 ms; once 0.5 ms | 16.6-16.7 ms (1) |
+| 25 ms task queued ahead of the message | 15.0-15.9 ms | 9.1-10.0 ms | 16.6-16.7 ms (1) |
+| 45 ms task queued ahead of the message | 15.2-15.7 ms; once 4.0 ms | 29.3-29.8 ms; once 41 ms | 33.2-33.4 ms (2); once 50 ms (3) |
+
+In every trial the onset was a frame's begin time and never before the paint ended, and `onset_moved_ms`
+matched the onset minus the next frame's begin time to 0.01 ms.
+
+**Mutation checks** (each new test was seen to fail with its fix taken out):
+- REVA93-A1: with lib/rtOnset.ts and the task as in Round 93, 13 unit tests in tests/rtOnset.test.ts fail,
+  and the new end-to-end test fails ("onset_moved_ms undefined"). With ANALYSIS_PLAN and the analysis
+  codebook as in Round 93, the documents test fails on the old "short by up to about a frame".
+- REVA93-A3: with the export writing `?? 0`, the new unit test and one export-gate check fail; with the
+  fixture's version taken out, the unit test fails.
+- B93-1: with the old gather, tests/gather.test.ts fails (`blink-r1` where 07 says `blink-r2`).
+- B93-2: with the old R template, the analysis gate fails one check (no blink-rate line, and the old line
+  says "out of the ocular models").
+- B93-4: with the old wording, 3 unit tests fail.
+- B93-5: no new test; with `stageFpsText` replaced by `Math.round`, the existing 3 unit tests fail.
+- B93-6: with the screens as in Round 93, 3 tests in tests/sittingClockDisplay.test.tsx fail.
+- Re-checked for Round 93's text: Round 92's lib/rtOnset.ts against aa6c265's tests gives "11 failed, 4
+  passed"; 0606f63's R change reverted on aa6c265 gives "FAIL — 3 check(s)", the three named in §2.
+
+### The long-paint test (80b3591)
+
+In the final full run, e2e/rtOnsetTiming.spec.ts's long-paint test failed on one trial of eight: it
+required the injected 30 ms of work to run more than 5 ms past the next frame's begin time on every trial,
+and on that trial it ran 0.5 ms past it. The browser had handed the next frame a later vsync than the one
+the paint missed, as it is free to. The app was right on that trial: it stored 0.5 ms (the probe saw 0.5),
+moved the onset one frame, and the onset was 16.2 ms after the paint ended. The test came from Round 93
+and had passed in each earlier run. It now holds every trial to the rule itself — the stored overrun
+equal to the probe's (0 where the paint ended first) within a millisecond, the onset moved exactly when an
+overrun is stored, never before the paint — and requires an overrun above 5 ms on at least half the trials,
+so it still cannot pass without exercising a long paint. With the comparison against the paint's end taken
+out of lib/rtOnset.ts it still fails ("onset stamped before the dot's paint had finished", every onset
+14.3-14.7 ms early). The same commit corrects one sentence in lib/rtOnset.ts: a touch before the stamp is
+a false start, and where the message was held the dot could already have been on the screen then.
+After it, the whole spec passed three runs in a row (4 of 4 each); in the long-paint test every trial
+overran by 14.2-15.4 ms and every onset came 1.3-2.4 ms after the paint ended.
+
+### Not measured on the Xiaomi Pad 6
+
+- How often `onset_paint_overrun_ms` is above 0 on the tablet, and how far onsets move there. Every
+  figure above is from headless desktop Chromium at 60 Hz.
+- The screens' times on a device in another time zone: tested in jsdom with the device's offset mocked,
+  not on a second device.
+- The pooled export of a real pre-Round-91 sitting: tested with the export fixture, its rule stamps taken
+  out, restored through the backup importer into a test database.
+
+### For the investigator
+
+1. **`rt-t3`, on its corrected bound.** Round 93 asked you to confirm `rt-t3` on a bound that was wrong
+   (§1 above). The rule is unchanged; please confirm it on this statement. A different way to send the
+   message (`scheduler.postTask` at user-blocking priority) would stop ordinary queued tasks from holding
+   it, but not input or other high-priority work (the reviewer's probe showed a 60 ms user-blocking task
+   still moving it 3 frames). It was not made: it would be a new rule version, and the reaction task's
+   design is under a separate plan.
+2. **A sensitivity analysis on moved trials** can bound each such trial's reaction time both ways from
+   `response_time_ms` and `onset_moved_ms`. None is pre-specified; whether to run one is yours.
+3. **Blink rate and the inter-blink interval rest on different runs** when old-rule blink counts are
+   present (pilot or archived data only). Should blink rate (and its halves) follow the interval, or the
+   interval go back to the blink-rule default? Nothing was changed for it (ANALYSIS_PLAN §5).
+4. After the first real sittings, please look at `onset_paint_overrun_ms` and `onset_moved_ms` in 08.
+
+### Checks run
+
+On 2d7c287 (all of this round's fixes but the test correction):
+- `npm run verify` passed: lint, types, 145 unit test files with 1,952 tests, the corpus gate, the codebook
+  gate (553 entries over 19 files), the export gate (903/903), and the R and Python analysis gates.
+- The full end-to-end suite with `--retries=0`: 119 of 120 passed (21.5 min). The one failure was the
+  long-paint test's assumption, corrected in 80b3591 (above); the held-message test and every other test
+  passed.
+
+On 80b3591 (the test correction and one comment):
+- e2e/rtOnsetTiming.spec.ts with `--retries=0`: 4 of 4, three runs in a row; with the paint-end comparison
+  taken out of lib/rtOnset.ts, the long-paint test fails.
+- `npm run verify` passed with the same counts as above.
+- `npm run build` passed: verify-bundle 42 assets, all precached, 44.0 MB; Workbox precache 58 entries,
+  45,023 KiB.
+- `npm run test:e2e:prod` with `--retries=0`: 9 of 9 passed.
+
+This write-up was checked with `npm run verify` before it was committed (the unit tests read these documents).
+
+### Versions in the data
+
+| Rule or format | Before | Now | Where it is recorded |
+|---|---|---|---|
+| Reaction onset | `rt-t3` | `rt-t3` (unchanged; its bound restated) | 02 and analysis_long `rt_timing_version` |
+| How far a trial's onset moved | not stored | 08 `onset_moved_ms` (blank before Round 94) | 08 codebook; ANALYSIS_PLAN §5 |
+| Every other rule | unchanged | unchanged | as before |
