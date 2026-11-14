@@ -22,13 +22,14 @@
  * the sitting, a task's instruction card handing over to the task, a new colour-vision plate or question,
  * a dialog opening or closing.
  *
- * WHY 300 ms. It is Android's own double-tap window (ViewConfiguration.DOUBLE_TAP_TIMEOUT): the platform
- * counts a second touch within 300 ms of the first one's release as the second tap of a double tap, and a
- * screen can change no earlier than that release, so every second tap the platform would call one falls
- * inside the guard. A deliberate tap on a screen that has just appeared needs it to have been seen and
- * read first, which takes longer. The window is measured on each event's own timestamp (the clock the
- * reaction task times responses on), so a touch made before a busy frame let it through is judged by when
- * it was made.
+ * WHY 300 ms. It is Android's own double-tap window (ViewConfiguration.DOUBLE_TAP_TIMEOUT, the
+ * framework's default as read in the Android source; docs/CITATION_VERIFICATION.md #70, the tablet's
+ * value not checked): the platform counts a second touch within 300 ms of the first one's release as the
+ * second tap of a double tap, and a screen can change no earlier than that release, so every second tap
+ * the platform would call one falls inside the guard. A deliberate tap on a screen that has just
+ * appeared needs it to have been seen and read first, which takes longer. The window is measured on each
+ * event's own timestamp (the clock the reaction task times responses on), so a touch made before a busy
+ * frame let it through is judged by when it was made.
  *
  * WHAT IT CANNOT SWALLOW. Inside a timed task the guard is armed by the instruction card's hand-over and
  * never by the task's own stimuli: the reaction task's dot, its fixation cross and its feedback are not
@@ -41,8 +42,9 @@
  * the platform's double-tap window it cannot be told from the second tap of "Start", and that is what it
  * was in the audit's reproduction. Onset and response timestamps are untouched: the guard drops events
  * or lets them through unchanged and stamps nothing — the response time is still the touch's own
- * timeStamp minus the onset taken at paint (e2e/doubleTap.spec.ts measures it), and the listener costs
- * about a microsecond an event in desktop Chromium (Round 86; not measured on the tablet).
+ * timeStamp minus the dot's onset (lib/rtOnset.ts, rt_timing_version; e2e/doubleTap.spec.ts measures
+ * it), and the listener costs about a microsecond an event in desktop Chromium (Round 86; not measured
+ * on the tablet).
  *
  * VERSIONED. What reaches a task changed, so the condition row says which rule it was recorded under:
  * tap_guard_version (02_conditions.csv), TAP_GUARD_VERSION below.

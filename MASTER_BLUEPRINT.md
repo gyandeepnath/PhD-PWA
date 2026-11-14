@@ -330,8 +330,9 @@ was seen — tier A ≥ 20, B 15–20, C < 15 — and within 2 fps of the partic
   - **complete blink** (lid fully closes): min-EAR ratio `< 0.60 × baseline`;
   - **incomplete blink** (lid does *not* fully close): `0.60 ≤ ratio < 0.75` — **a primary CVS
     marker** (Portello & Rosenfield, 2013);
-  - very short complete closures (`< ~40–80 ms`) are tagged **micro** (diagnostic only).
-- **`incomplete_blink_ratio` = incomplete / classified blinks (complete + micro + incomplete).** Under
+  - very short complete closures (`< 40 ms`) are tagged **micro** (diagnostic only).
+- **`incomplete_blink_ratio` = incomplete / classified blinks (complete, micro included, + incomplete;
+  in 07, full + micro + incomplete).** Under
   rule `blink-r2` (Round 91) a blink whose start or end the reading window did not see is counted in the
   blink rate and in `blink_count_cut`, and on neither side of the ratio (ANALYSIS_PLAN §2, §5). The
   incomplete branch is genuinely reachable (a prior bug made it unreachable so the ratio was always 0;

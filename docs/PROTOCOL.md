@@ -58,8 +58,9 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                         the device's viewport, pixel ratio, scale and build shown
   → COLOR_VISION        digital colour-vision SCREEN, not the Ishihara test (runs AFTER night-shift is off);
                         when it does not pass, its notice records the formal-plate result (normal / deficient /
-                        not done; deficient at any sitting stands, not done never replaces a result; Round 90; the rule
-                        is the investigator's to confirm, AUDIT_FINDINGS Round 90 §9 item 4)
+                        not done; deficient at any sitting stands, not done never replaces a result;
+                        Round 90; the rule is open for the investigator: AUDIT_FINDINGS Round 95,
+                        Not done; reported in Round 90 §9 item 4)
   → CAMERA_SETUP        the tablet's front camera: permission and preview (or Continue without camera, before
                         or after Enable camera → no eye tracking for the sitting; 01 camera_off_reason says
                         why, Round 91)
@@ -538,7 +539,7 @@ the `frame` column of `13_cvsq.csv`:
 
 - **Baseline** — the validated habitual frame, with the per-week anchor definitions shown.
 - **Session close** — re-anchored to the session just completed, so that "occasionally" means
-  something over ninety minutes.
+  something over a sitting of about 100 minutes.
 
 The closing administration is a **documented deviation**: its total must not be compared with the
 published >= 6 cut-off or with published norms, and a baseline-to-close difference is a difference
