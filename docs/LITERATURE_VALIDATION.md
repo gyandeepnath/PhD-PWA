@@ -1232,7 +1232,9 @@ The frame is now explicit and differs by stage:
 - **Baseline** carries the validated habitual frame, anchored to computer work, with the per-week
   anchor definitions shown to the participant.
 - **Session close** is deliberately re-anchored to the session just completed, with anchors that
-  mean something over ninety minutes.
+  mean something over ninety minutes. [Round 95: the sitting is now modelled at a median of about 102
+  minutes, p95 about 126 (PROTOCOL.md, *Timing and the feasibility gate*); the ninety minutes here and
+  in the review above were the estimate when this was written.]
 
 Each row records which frame was used, in a new `frame` column on `13_cvsq.csv`, and the codebook
 states that a `this_session` total must not be read against the published cut-off or against

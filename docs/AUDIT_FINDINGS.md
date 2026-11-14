@@ -9792,7 +9792,10 @@ documents and the codebooks (A-01 to A-18) and 23 on the operator, deployment an
 applied differently from its proposal (B-23, below), and none was skipped. The fixes are 25ad6c4
 (codebooks and version history), 751541e (operator manual), f21bab3 (README and analysis plan),
 9b6e931 (PROTOCOL), fce5b89 (deployment, amendment, round-2 audit, citation register), c7f98df
-(Round 94's mutation count) and 18be241 (master blueprint).
+(Round 94's mutation count) and 18be241 (master blueprint). Three further checks of the result found ten
+more (C-01 to C-10, 46a5c6e), eight more (D-01 to D-08, 4b8b4f8) and three more (E-01 to E-03, in the
+commit of this addendum); see *Second, third and fourth passes* below. The two outside sources the
+first pass could only list as unresolved were then read (register items 70 and 71).
 
 **No code path, rule, threshold or measured value changed.** The changes to src/ are text: codebook
 descriptions in storage/export.ts and storage/analysisCodebook.ts, the version list in
@@ -9877,8 +9880,9 @@ Each document was corrected in its own style, and what was right was left as it 
   (DEPLOYMENT §5, manual §8), the version number (manual §2, the codebook, blueprint header), and the
   sensitivity choices for `rw-v1`, `sf-v1` and `at-v1` rows (ANALYSIS_PLAN §5, beside the existing
   `tg-v1` and `rt-t1` ones). The consent wording for the camera grant is pointed to Round 90 §9 item 1.
-- The citation register lists the two new sources under UNRESOLVED, with nothing beyond what the code
-  states, and ANALYSIS_PLAN now says the 300 ms window is assumed, not read at source.
+- The citation register first listed the two new sources under UNRESOLVED and ANALYSIS_PLAN called the
+  300 ms window assumed; both sources were then read (second pass, below) and are register items 70
+  and 71.
 - AUDIT_ROUND2: the auditor proposed noting both findings as fixed in Round 87. The history says
   otherwise: the resume path was seeded in 2d2fb6d (the day of that audit), and `stimulus_scale` moved to
   each condition in the round-2 triage (9c004c3), recorded at the end of that file; Round 87 only moved
@@ -9938,13 +9942,79 @@ Each document was corrected in its own style, and what was right was left as it 
 ### Not done, and why
 
 - package.json's version was not changed: 2.4.0 against 2.5.0 is the investigator's decision.
-- The two UNRESOLVED sources were not read at source; they stay marked until someone does.
+- The two sources were read through GitHub mirrors, not at their primary hosts (android.googlesource.com
+  and chromium.googlesource.com were refused by this environment's proxy), and the mirror copies were not
+  compared with the primary hosts. The study tablet's Android double-tap window and its Chrome's Back
+  behaviour were not checked.
 - The camera-lost notice still names only the camera causes; whether it should name the tracker case is a
   change to what the operator sees, left to the investigator (the manual now says it).
 - Only the documents and statements the auditors reported were changed. The other open decisions (the
-  frame-rate floor of 20 against 22, the colour-vision rule, the consent duration, the grey field after a
+  frame-rate floor of 20 against 22, the colour-vision rule (now marked open where it is stated: C-05,
+  D-06), the consent duration, the grey field after a
   break, the blink-rate rows of old-rule data) were not re-audited here; their existing text was left as
   it is.
+
+### Second, third and fourth passes
+
+Each pass was a fresh, read-only checker given the previous result and the code, told to report only
+with evidence. Every finding was checked against the code before it was applied, and all held.
+
+**Second pass, on bc570ac: ten findings (C-01 to C-10), applied in 46a5c6e.**
+- C-01: both codebooks defined 07 `camera_inactive_reason` 'lost' as a camera that stopped, without the
+  Round 91 case where no face tracker was left to run although the camera still delivered frames
+  (useTracking.ts `noTrackerLeft`; such rows name no `tracker_backend`).
+- C-02: ten export-codebook gaze entries described only `gaze-r2` and `gaze-r1`; every current row is
+  `gaze-r3`, which the writers do not treat differently. They now name both.
+- C-04: the 08 `accuracy` sentence rewritten in the first pass said any touch outside the window is
+  ignored; only a touch after it is (lib/rtResponse.ts `classifyRtTouch`).
+- C-05: the formal-plate rule was stated as settled in PROTOCOL, the manual and 11 `cvd_clinical`,
+  though Round 90 §9 item 4 reports it to the investigator and this round lists it as open. It is now
+  marked open in all three.
+- C-03, C-07: the blueprint gave the primary ratio's denominator as all blinks (blink-r2 leaves cut
+  blinks out of both counts), omitted `ibi-r2`, and gave the sitting as ~60-90 minutes.
+- C-06, C-08, C-09: ANALYSIS_PLAN gave the sitting as ~93 minutes, did not mention an end lux reading
+  logged after the sitting or `lux_end_min_after_end`, and still said the onset is "taken at paint".
+- C-10: README called the end-to-end suite the "no-camera path"; it also runs camera specs on
+  Chromium's fake camera, several with a drawn face.
+
+**The two outside sources, read (A-10's follow-up), in 46a5c6e and 4b8b4f8.** Both primary hosts were
+refused by this environment's proxy, so each file was read from its GitHub mirror and its SHA-256
+recorded. Android's `ViewConfiguration.java` gives `DOUBLE_TAP_TIMEOUT = 300`, defined from the first
+tap's release to the second tap's touch-down (item 70). Chromium's
+`docs/history_manipulation_intervention.md`, read in full, supports the three statements
+lib/systemBack.ts makes (item 71); it says Back "will close the current tab", and that an installed app's
+window closes the same way is marked as a reading the document does not state. Neither entry licenses any
+claim about the study tablet.
+
+**Third pass, on 46a5c6e: eight findings (D-01 to D-08), applied in 4b8b4f8.**
+- D-01: three exported codebook entries (07 `open_ear_measured`, 13 `frame`, 13 `symptomatic`) and
+  PROTOCOL's CVS-Q close still described a sitting of about ninety minutes; now about 100 minutes.
+- D-03, D-08: two of the second pass's own sentences overstated. The 08 `accuracy` parenthetical now
+  defers to `false_start` (the tap guard's dropped touch, the held-message case). 'lost' now says no face
+  tracker was left to run (the one in charge and every later one in its chain), not "every face tracker".
+- D-04: item 70's mirror copy lacks the instance getter `getDoubleTapTimeoutMillis()` that the reference
+  page lists as "Added in version 36.1"; that method was not read, and the entry now says so.
+- D-05, D-06: lib/systemBack.ts's app-window reading marked as not stated and not checked; the
+  formal-plate pointer now cites this round's open decisions as well as Round 90 §9 item 4.
+- D-07: the blueprint's new denominator wording counted micro blinks twice and gave micro as
+  < ~40-80 ms; the code has < 40 ms.
+- D-02: lib/tapGuard.ts's comment still said "the onset taken at paint" (comments only).
+
+**Fourth pass, on 4b8b4f8: three findings (E-01 to E-03), applied with this addendum.**
+- E-01: PROTOCOL's drowsiness line still said "a session of roughly an hour and a half".
+- E-02: LITERATURE_VALIDATION's undated CVS-Q addendum said "ninety minutes"; a bracketed note now gives
+  the current model figures and says the ninety minutes was the estimate when it was written.
+- E-03: item 70 stated as fact that the mirror copy predates version 36.1; that is an inference, and the
+  copy's date was not established.
+
+This pass also reported a code gap, not a documentation one: when measuring the trackers at camera
+set-up ends with none running and the restart fails, the camera stayed "on" measuring nothing. It is
+fixed and checked separately (Round 96).
+
+Approximate "ninety minutes" figures remain in code comments (lib/wakeLock.ts, lib/foreperiod.ts,
+tracking/useTracking.ts, scales/Cvsq.tsx and others) and in one operator message
+(storage/storageHealth.ts: "A 90-minute sitting needs room for several hundred rows"). None states a
+measured value, and none was changed here.
 
 ### Checks run
 

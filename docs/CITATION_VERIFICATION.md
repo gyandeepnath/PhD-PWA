@@ -1599,9 +1599,9 @@ the primary host.
   `private static final int DOUBLE_TAP_TIMEOUT = 300;`, and `getDoubleTapTimeout()` returns it.
 - developer.android.com's ViewConfiguration reference page lists `getDoubleTapTimeout()` (fetched the same
   day); the page does not print the value. It also lists an instance method,
-  `getDoubleTapTimeoutMillis()`, "Added in version 36.1", which the mirror copy does not contain: the
-  copy predates that version, and that method was not read, so whether a device can now set its own
-  window through it is not known.
+  `getDoubleTapTimeoutMillis()`, "Added in version 36.1", which the mirror copy does not contain
+  (presumably an older snapshot; the copy's date was not established), and that method was not read,
+  so whether a device can now set its own window through it is not known.
 
 **What this licenses:** that the Android framework's default double-tap window is 300 ms, counted from the
 first tap's release to the second tap's touch-down, which is what lib/tapGuard.ts and ANALYSIS_PLAN.md §5
