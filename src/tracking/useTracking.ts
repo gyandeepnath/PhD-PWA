@@ -1203,8 +1203,10 @@ export function useTracking(): TrackingApi {
       const best = stopped() ? null : pickFastest(trials);
       if (pipelineRef.current !== info) return null;
       /*
-       * Start the winner — or, if none was measured on a face, the one that was running before, so the
-       * camera is not left with no tracker at all (the stall watchdog would then report it lost).
+       * Start the winner — or, if none was measured on a face, the tracker asked for when the camera
+       * started (info.tracker_requested; startTracker falls back along its chain from it), so the camera
+       * is not left with no tracker at all. The stall watchdog would not report that: holdWatchdog has
+       * disarmed it (Round 96, below).
        */
       const next = best ?? info.tracker_requested;
       if (trackerRef.current?.backend !== next) {
@@ -1221,10 +1223,11 @@ export function useTracking(): TrackingApi {
            * the last trial's tracker started, it is still installed and keeps measuring. If the last
            * trial failed, none is running: noTrackerLeft does not act while a comparison runs, and
            * holdWatchdog has disarmed the stall watchdog, so the camera stayed 'active' measuring
-           * nothing. It is lost, as at the end of the fallback chain, and startError says why.
+           * nothing. It is lost, as at the end of the fallback chain. startError holds why, though the
+           * set-up screen does not show it (Round 96, Not done).
            */
           if (!trackerRef.current && pipelineRef.current === info) {
-            setStartError(`No face tracker could run on this device: ${next} could not start after the trackers were measured (${errorSummary(err)})`);
+            setStartError(`No face tracker could run on this device: none could be started after the trackers were measured (${errorSummary(err)})`);
             markLost();
           }
         }

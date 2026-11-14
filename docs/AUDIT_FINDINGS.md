@@ -10053,52 +10053,89 @@ and this file; `npm run verify` was run again on the round's last commit before 
 ## Round 96 — measuring the trackers that ends with none running loses the camera
 
 Found while checking Round 95's documentation (its fourth pass), and not a documentation finding: a code
-path that Round 91 (audit 86 CAM-7) fixed in one place and not in the other.
+path that Round 91 (audit 86 CAM-7) fixed in one place and not in the other. An independent review of the
+fix (below) found seven points; all were checked against the code, and what was done with each is listed.
 
 ### The gap
 
 *Measure trackers* at camera set-up (tracking/useTracking.ts `compareTrackers`) runs each face tracker
-alone for a few seconds, so it closes the tracker before each trial. When the last trial fails, none is
-running. The comparison then starts the winner, or, when no trial measured a face, the tracker that ran
-before. If that start also failed, its `catch` only recorded the failure. `noTrackerLeft` does not act
-while a comparison runs, and `holdWatchdog` had disarmed the stall watchdog, so the camera stayed
-'active' measuring nothing: the state CAM-7 removed from the fallback chain. Every row of the sitting
-would have been written `camera_active` TRUE with no samples and no reason. It needs every trial to fail
-on its first frame and the restart to fail as well, on a tablet whose camera had started a tracker
-moments before, so it is rare. It was not met in any run, and it is not measured on the tablet.
+alone for a few seconds, so it closes the tracker before each trial and installs only a trial that
+starts. When the last trial (legacy) fails, at construction or on its first frame, none is running,
+whatever the earlier trials did. The comparison then starts the winner, or, when no trial measured a
+face, the tracker asked for when the camera started (`info.tracker_requested`), and `startTracker` falls
+back along its chain from it. If that whole start failed, its `catch` only recorded the failure.
+`noTrackerLeft` does not act while a comparison runs, and `holdWatchdog` had disarmed the stall watchdog,
+so the camera stayed 'active' measuring nothing: the state CAM-7 removed from the fallback chain. Every
+row of the sitting would have been written `camera_active` TRUE with no samples and no reason. In
+practice it needs every tracker to fail, moments after one had started on the same camera, so it is
+rare. It was not met in any run, and nothing was measured on the tablet.
 
-### The fix (f29e7bc)
+### The fix
 
-In that `catch`, when no tracker is installed and the camera is the same one, the camera is lost
-(`markLost`), with `startError` "No face tracker could run on this device: … could not start after the
-trackers were measured (…)". When the last trial's tracker started, it is still installed and keeps
-measuring, as before. A camera lost on the camera set-up screen raises *The camera has stopped* on the
-next set-up screen (audit 86 F7, unchanged), and the rows are written `camera_inactive_reason` 'lost'
-with no `tracker_backend`, as in Round 91's case. The codebooks' 'lost' entry already covers it ("the
-one in charge and every later one in its fallback chain failed on their first frames or could not
-start"). The operator manual's tracker paragraph (§4) and its camera-lost row (§6) now name it.
+In that `catch`, when no tracker is installed and the camera is still the one the comparison began on,
+the camera is lost (`markLost`), and `startError` reads "No face tracker could run on this device: none
+could be started after the trackers were measured (…)", with each backend's failure. When the last
+trial's tracker started, it is still installed and keeps measuring, as before. A camera lost on the
+camera set-up screen raises *The camera has stopped* on the next set-up screen (audit 86 F7, unchanged),
+and the rows are written `camera_inactive_reason` 'lost' with no `tracker_backend`, as in Round 91's
+case. The codebooks' 'lost' entry already covers it ("the one in charge and every later one in its
+fallback chain failed on their first frames or could not start"). The code comment above the restart,
+which said it restarts "the one that was running before" and that the stall watchdog would report a
+camera with no tracker, now says what the code does. The operator manual's tracker paragraph (§4) and
+camera-lost row (§6) name the case and what to do.
 
 ### Verified
 
 - tests/compareTrackersNoneLeft.test.tsx drives the real hook with fake trackers that construct and then
-  fail on their first frame. Every trial fails and the restart fails: the camera is 'failed', with a
-  lost time and the start error. Without the fix that test fails, the camera reading 'active'. Two
-  controls pass with and without it: every trial fails and the restart works, so the camera stays on;
-  and the trials run and the restart fails, so the last trial's tracker keeps running and the camera
-  stays on.
+  fail on their first frame:
+  - every trial fails and the restart fails: the camera is 'failed', with a lost time and the start
+    error;
+  - control: every trial fails and the restart works: the camera stays on;
+  - control: the trials run and the restart fails: the last trial's tracker keeps running and the camera
+    stays on;
+  - the camera is stopped while the restart is pending, and the restart then fails: the camera stays
+    'stopped' and is not marked lost.
+- Mutations, each run on that file: with the fix removed, the first test fails (the camera reads
+  'active'); with the guard reduced to "no tracker installed", dropping the check that the camera is the
+  same one, the fourth fails (the stopped camera becomes 'failed'). Both pass with the fix.
 - tests/compareTrackers.test.tsx, tests/trackerFallbackLost.test.tsx and
   tests/cameraSetupStartError.test.tsx pass unchanged.
 
-### Not done
+### The review, point by point
 
-- The camera set-up screen itself does not show the failure when the camera is lost under it; the next
-  set-up screen does (audit 86 F7). That holds for every way a camera can be lost on that screen, and
-  was left as it is.
+- The write-up said every trial must fail; only the last must, and then the restart's whole chain.
+  Corrected above.
+- The manual said a camera is lost whenever no tracker can be started again; not when the last trial's
+  tracker is still running. Corrected in §4 and §6.
+- The restart is of the tracker asked for at camera start, not "the one that ran before". Corrected in
+  the comment, the start error (which no longer names one backend as the only one tried) and above.
+- No test covered the "same camera" half of the guard. The fourth test does, and the mutation above
+  shows it.
+- This round's checks section had a placeholder pointing to nothing; it is filled in below.
+- Left open, with the two points below: when the camera is lost under the camera set-up screen, that
+  screen does not show it, and the reason reaches neither the screen nor the export.
+
+### Not done, and why
+
+- **The camera set-up screen does not react to a camera lost under it.** The picture stops updating,
+  *Measure trackers again* does nothing, and a no-face message from an earlier measurement can still
+  tell the operator to press it; the next set-up screen raises the notice (audit 86 F7). This holds for
+  every way a camera can be lost on that screen, not only this one. The manual now says what to do.
+  The fix would move the screen to its failure panel (*Retry*, which starts the camera afresh and clears
+  the lost state, or *Continue without camera*). It was not made here because the second choice records
+  why the camera is off (01 `camera_off_reason`), and none of the existing reasons describes a camera
+  that started and was then lost at set-up ('start_failed' says it never started). That is a new value,
+  or a decision to reuse one, in an exported column, which this project versions and records rather than
+  slips in. It is for the next round, with the investigator's agreement on the value.
+- **The reason does not reach the data in this path.** The sitting's pipeline record (01 `tracker_*`,
+  the comparison and the trackers passed over) is taken from the running camera when set-up is
+  completed, and after a loss there is none, so those columns are blank; `startError` is shown only on
+  the failure panel. Same for every loss at set-up; the fix above would carry it.
 - The camera-lost notice still names only the camera causes (Round 95, Not done).
 
 ### Checks run
 
-(Filled in when the checks below have run on this round's last commit.)
+(Recorded when they have run on this round's last commit.)
 
 ### Versions in the data
 

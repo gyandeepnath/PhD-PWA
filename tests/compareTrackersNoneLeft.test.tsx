@@ -14,7 +14,11 @@ import { createElement, act } from 'react';
 import { createRoot } from 'react-dom/client';
 import 'fake-indexeddb/auto';
 
-const mode = vi.hoisted(() => ({ startFails: false, detectFails: true, starts: 0 }));
+const mode = vi.hoisted(() => ({
+  startFails: false, detectFails: true, starts: 0,
+  /** Set: the next start is held until the test rejects it (the camera can be stopped meanwhile). */
+  hold: null as null | { entered: () => void; reject: (e: Error) => void },
+}));
 vi.mock('@/tracking/trackers', async (orig) => {
   const real = await orig<typeof import('@/tracking/trackers')>();
   const make = (backend: string) => ({
@@ -28,6 +32,11 @@ vi.mock('@/tracking/trackers', async (orig) => {
     createTracker: async (b: string) => make(b),
     startTracker: async (b: string) => {
       mode.starts++;
+      const h = mode.hold;
+      if (h) {
+        mode.hold = null;
+        return new Promise((_resolve, reject) => { h.reject = reject; h.entered(); });
+      }
       if (mode.startFails) throw new Error(`${b}: could not start`);
       return { tracker: make(b), failures: [] };
     },
@@ -49,7 +58,7 @@ import { useTracking } from '@/tracking/useTracking';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-async function compareThenRestart(restartFails: boolean, detectFails = true) {
+async function running(detectFails = true) {
   class FakeTrack extends EventTarget { stop() {} }
   const track = new FakeTrack();
   const stream = { getVideoTracks: () => [track], getTracks: () => [track] } as unknown as MediaStream;
@@ -65,6 +74,11 @@ async function compareThenRestart(restartFails: boolean, detectFails = true) {
   mode.detectFails = detectFails;
   await act(async () => { await api.current!.start(); });
   expect(api.current!.status).toBe('active');
+  return { api, root };
+}
+
+async function compareThenRestart(restartFails: boolean, detectFails = true) {
+  const { api, root } = await running(detectFails);
   const startsBefore = mode.starts;
   mode.startFails = restartFails;
   await act(async () => { await api.current!.compareTrackers(); });
@@ -78,7 +92,7 @@ async function compareThenRestart(restartFails: boolean, detectFails = true) {
   return out;
 }
 
-beforeEach(() => { mode.startFails = false; mode.detectFails = true; mode.starts = 0; });
+beforeEach(() => { mode.startFails = false; mode.detectFails = true; mode.starts = 0; mode.hold = null; });
 
 describe('measuring the trackers leaves none running', () => {
   it('every trial fails and the restart fails: the camera is lost and says why', async () => {
@@ -100,5 +114,20 @@ describe('measuring the trackers leaves none running', () => {
     const r = await compareThenRestart(true, false);
     expect(r.status).toBe('active');
     expect(r.lostAt).toBeNull();
+  });
+
+  it('the camera is stopped while the restart is pending: the restart failing then does not mark it lost', async () => {
+    const { api, root } = await running();
+    let entered!: () => void;
+    const restartBegun = new Promise<void>((r) => { entered = r; });
+    const hold = { entered: () => entered(), reject: (_e: Error) => {} };
+    mode.hold = hold;
+    let comparison: Promise<unknown> = Promise.resolve();
+    await act(async () => { comparison = api.current!.compareTrackers(); await restartBegun; });
+    act(() => { api.current!.stop(); });
+    await act(async () => { hold.reject(new Error('could not start')); await comparison; });
+    expect(api.current!.status).toBe('stopped');
+    expect(api.current!.cameraLostAt).toBeNull();
+    act(() => root.unmount());
   });
 });
