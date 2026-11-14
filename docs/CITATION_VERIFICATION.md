@@ -1586,6 +1586,50 @@ fetched 8 Oct 2026.**
 the reasoning that a flicker-safe exposure is a whole multiple of 10 ms) — general knowledge, no standard
 was read; and every specification of the Xiaomi Pad 6's camera.
 
+### 70. Android `ViewConfiguration.DOUBLE_TAP_TIMEOUT` — the double-tap window (cited in code, Round 86)
+**Status: NOT INDEXED IN PUBMED (software source code). Read through a mirror, 13 Nov 2026: the primary
+host, android.googlesource.com, was refused by this environment's proxy, so the file was read from the
+GitHub mirror `aosp-mirror/platform_frameworks_base`, branch `main`,
+`core/java/android/view/ViewConfiguration.java` (SHA-256 of the copy read:
+`676cd634314563ff76cedebb9e69fc5936d637b045071de61805c2dca83b8d92`).** The mirror was not compared with
+the primary host.
+
+- The constant's own comment: *"Defines the duration in milliseconds between the first tap's up event and
+  the second tap's down event for an interaction to be considered a double-tap."* It is
+  `private static final int DOUBLE_TAP_TIMEOUT = 300;`, and `getDoubleTapTimeout()` returns it.
+- developer.android.com's ViewConfiguration reference page lists `getDoubleTapTimeout()` (fetched the same
+  day); the page does not print the value.
+
+**What this licenses:** that the Android framework's default double-tap window is 300 ms, counted from the
+first tap's release to the second tap's touch-down, which is what lib/tapGuard.ts and ANALYSIS_PLAN.md §5
+cite it for. **It does not license** any claim about the study tablet: a manufacturer's Android build can
+change the value, and neither the tablet's value nor whether Chrome's own gesture handling uses this
+window was checked.
+
+### 71. Chromium `docs/history_manipulation_intervention.md` — Back skips history added without a touch (cited in code, Round 87)
+**Status: NOT INDEXED IN PUBMED (browser design document). Read in full through a mirror, 13 Nov 2026:
+the primary host, chromium.googlesource.com, was refused by this environment's proxy, so the file was read
+from the GitHub mirror `chromium/chromium`, branch `main` (9,852 bytes; SHA-256 of the copy read:
+`4ccf6ce5fd000ab5934bbaa11c4e45e9ed47442bfe6c02254209b5ed2bcb9a99`).** The mirror was not compared with
+the primary host.
+
+- *"The original history manipulation intervention makes the browser’s back button skip over pages that
+  added history entries or redirected the user without ever getting a user activation."*
+- *"Only back/forward navigations triggered by the back/forward buttons will ever skip history entries."*
+- *"Revisiting a skippable history entry does not change its skippable status, unless it receives a user
+  activation"* (crbug 1121293); and same-document back/forwards keep an earlier user activation, but *"the
+  intervention stops honoring such activations for creating new entries until a new activation is
+  received"* (crbug 1248529).
+- Under *UI Behavior*: when every entry is to be skipped, *"On Android, pressing the back button will close
+  the current tab"*.
+
+**What this licenses:** the three statements lib/systemBack.ts cites it for: Back skips an entry whose page
+added history without a touch; going back and forth between a page's own entries does not stand in for
+one; and on Android, with every earlier entry skipped, Back closes the tab. The document says "tab"; that
+an installed app's window closes the same way is the code comment's reading, not something the document
+states. **It does not license** any claim about the Chrome version on the study tablet, which was not
+checked (Round 87 recorded the Back behaviour as not measured on the tablet).
+
 ---
 
 ## UNRESOLVED — do not cite until checked
@@ -1609,14 +1653,9 @@ was read; and every specification of the Xiaomi Pad 6's camera.
 - Craig & Klein (2019), Lin, C. J. et al. (2008), Muhamad et al. (2023), Huang et al. (2025),
   Molloy et al. (2012), Jost et al. (2022), Walsh et al. (2022).
   (Buchner & Baumgartner 2007, Luzsa & Mayr 2025 and Sethi & Ziat 2023 are now CONFIRMED above.)
-- Android `ViewConfiguration.DOUBLE_TAP_TIMEOUT` (300 ms), cited in src/lib/tapGuard.ts and
-  ANALYSIS_PLAN.md §5 (Round 86) as Android's double-tap window, the basis of the 300 ms tap guard.
-  Not read at source for this register; the study tablet's Android was not checked. (Added in
-  Round 95.)
-- Chromium `docs/history_manipulation_intervention.md`, cited in src/lib/systemBack.ts (Round 87)
-  for Chrome skipping history entries added without a user activation; the comment says it was read
-  in summary only. Not read at source for this register; the tablet's Chrome was not checked. (Added
-  in Round 95.)
+  (Android's `ViewConfiguration.DOUBLE_TAP_TIMEOUT` and Chromium's
+  `docs/history_manipulation_intervention.md`, listed here when Round 95 added them, are now items 70
+  and 71 above: read through GitHub mirrors, the tablet's values not checked.)
 
 ## EXCLUDED
 

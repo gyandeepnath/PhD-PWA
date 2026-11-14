@@ -58,7 +58,8 @@ SESSION_INIT            researcher: participant ID, ambient lux, (optional) scre
                         the device's viewport, pixel ratio, scale and build shown
   → COLOR_VISION        digital colour-vision SCREEN, not the Ishihara test (runs AFTER night-shift is off);
                         when it does not pass, its notice records the formal-plate result (normal / deficient /
-                        not done; deficient at any sitting stands, not done never replaces a result; Round 90)
+                        not done; deficient at any sitting stands, not done never replaces a result; Round 90; the rule
+                        is the investigator's to confirm, AUDIT_FINDINGS Round 90 §9 item 4)
   → CAMERA_SETUP        the tablet's front camera: permission and preview (or Continue without camera, before
                         or after Enable camera → no eye tracking for the sitting; 01 camera_off_reason says
                         why, Round 91)

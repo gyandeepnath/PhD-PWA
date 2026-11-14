@@ -243,8 +243,8 @@ Incomplete blinks per minute rose from a median of 6 at 1 min to 15 at 60 min of
 Reaction times increased after **30 min** of time-on-task, with a further attentional cost appearing
 only after **60 min**.
 
-- **Bears on the RT analysis directly.** A sitting runs ~93 minutes, so later conditions are measured
-  past both thresholds. Position is counterbalanced, so this is inflated error variance rather than
+- **Bears on the RT analysis directly.** A sitting runs about 102 minutes (the timing model's median;
+  PROTOCOL.md, *Timing and the feasibility gate*), so later conditions are measured past both thresholds. Position is counterbalanced, so this is inflated error variance rather than
   bias — but it means `position_c` is **not optional** in any RT model, and a
   `polarity_c × position_c` interaction is worth testing explicitly: an effect that appears only late
   in the sitting is a fatigue interaction, not a display effect.
@@ -572,7 +572,10 @@ These are not optional and they come first.
    check — there are no levels to separate — and a sitting outside 250–350 is a protocol deviation.
    `lux_logged_all_in_range` flags those, and `lux_complete` says whether all three checkpoints were
    taken. (This line named the column lux_all_in_range until Round 89 — a name no export file has,
-   and the one that once stopped the R template; see §5b.)
+   and the one that once stopped the R template; see §5b.) From Round 89 a sitting whose thank-you
+   screen was lost can have its end reading logged afterwards from the Session Manager;
+   `lux_end_min_after_end` (01) gives how many minutes after the sitting's end it was logged, and a
+   reading logged long after the end may not describe the room as it was.
 2. **Was the primary outcome measurable? The frame-rate gate `fps-g2`** (Round 79; pre-registered
    here before the first participant). A slower camera misses the deepest moment of more blinks, so
    more of them read as incomplete: a directional bias, not symmetric noise.
@@ -842,9 +845,9 @@ drawn under it: trial 1 of the reaction task scored as a false start or an antic
 tap on Start, a word of the search passage counted as a false alarm after a double tap on Begin search
 (audit 86 M1, M2; also a colour-vision plate answered unseen and the consent screen's camera option
 ticked, outside the analysis). From Round 86 a touch that *starts* within 300 ms of a screen change is
-dropped whole before the app sees it (lib/tapGuard.ts; 300 ms is the double-tap window the guard assumes,
-Android's ViewConfiguration.DOUBLE_TAP_TIMEOUT, not yet read at source: docs/CITATION_VERIFICATION.md,
-UNRESOLVED), and
+dropped whole before the app sees it (lib/tapGuard.ts; 300 ms is Android's double-tap window, ViewConfiguration.DOUBLE_TAP_TIMEOUT, read
+in the Android source through a mirror: docs/CITATION_VERIFICATION.md #70; the study tablet's value was
+not checked), and
 `tap_guard_version` (02_conditions.csv) says which rule a condition's touches were taken under: `tg-v2`
 with the guard, `tg-v1` before it. Inside a task the guard is armed by the instruction card handing over
 to the task, by each new comprehension question and by a dialog such as the Pause box opening or closing,
@@ -853,7 +856,7 @@ never by a stimulus: the reaction task's first dot comes at least 700 ms after S
 What it does take is a touch in the first 300 ms of trial 1's fixation cross, which a `tg-v1` row scored
 as a false start; inside the double-tap window that touch cannot be told from the second tap of Start.
 Response and onset timestamps are unchanged: the guard drops events or passes them untouched, and the
-reaction time is still the touch's own timestamp minus the onset taken at paint. **`tg-v1` rows cannot be
+reaction time is still the touch's own timestamp minus the dot's onset (`rt_timing_version`, below). **`tg-v1` rows cannot be
 corrected** — the touches were not stored — and the templates do not drop them: in the audit's
 reproductions a carried tap changed trial 1 of a reaction block or added one search false alarm, and only
 in a sitting where the participant double-tapped (a geometry probe over every other screen found the

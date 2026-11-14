@@ -31,7 +31,7 @@ Individual gates:
 
 ```bash
 npm test                 # unit + property tests (Vitest)
-npm run test:e2e         # end-to-end (Playwright, no-camera path)
+npm run test:e2e         # end-to-end (Playwright; the full sitting on the no-camera path, the camera specs on Chromium's fake camera, several with a drawn face)
 npm run stress           # adversarial / pipeline / state-machine / metamorphic / recovery sweeps
 npm run verify:corpus    # reading-passage length, difficulty match, item completeness
 npm run verify:codebook  # every exported column documented, and vice versa

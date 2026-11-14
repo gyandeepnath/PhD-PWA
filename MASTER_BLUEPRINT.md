@@ -331,13 +331,17 @@ was seen — tier A ≥ 20, B 15–20, C < 15 — and within 2 fps of the partic
   - **incomplete blink** (lid does *not* fully close): `0.60 ≤ ratio < 0.75` — **a primary CVS
     marker** (Portello & Rosenfield, 2013);
   - very short complete closures (`< ~40–80 ms`) are tagged **micro** (diagnostic only).
-- **`incomplete_blink_ratio` = incomplete / all blinks** — now genuinely reachable (a prior bug made
-  this branch unreachable so it was always 0; fixed and regression-tested).
+- **`incomplete_blink_ratio` = incomplete / classified blinks (complete + micro + incomplete).** Under
+  rule `blink-r2` (Round 91) a blink whose start or end the reading window did not see is counted in the
+  blink rate and in `blink_count_cut`, and on neither side of the ratio (ANALYSIS_PLAN §2, §5). The
+  incomplete branch is genuinely reachable (a prior bug made it unreachable so the ratio was always 0;
+  fixed and regression-tested).
 
 ### 5.2 CVS / ocular-fatigue markers (primary; frame-rate-robust)
 - **Blink rate** (per minute) and **first/second-half bins** (within-task dynamics).
 - **Incomplete-blink ratio** (above).
-- **Inter-blink interval** (mean + CV) — lengthens / becomes erratic with reduced blinking.
+- **Inter-blink interval** (mean + CV) — lengthens / becomes erratic with reduced blinking (rule
+  `ibi-r2` from Round 88: an interval with a sampling gap between its two onsets is left out).
 - These are **proportion/count** measures → robust to webcam frame rate.
 
 ### 5.3 Drowsiness covariates (Dinges & Grace, 1998; frame-rate-robust)
@@ -554,7 +558,8 @@ fatigue + CVS-Q are re-measured each sitting (fatigue resets — documented, not
 4. **Contrast confound**: contrast is not balanced across polarity (C4/C6/C7 below AA, unevenly
    split) — model contrast as a covariate or reframe as polarity × contrast.
 5. **Per-condition d′ is small-N** (~20 go trials of 32; SE never below ~0.46) — modelled on the trials, not read block by block (ANALYSIS_PLAN §4c).
-6. **Session length (~60–90 min)** accumulates fatigue and boredom; `session_position` + engagement
+6. **Session length (median about 102 min, p95 about 126 min in the timing model; PROTOCOL.md,
+   *Timing and the feasibility gate*)** accumulates fatigue and boredom; `session_position` + engagement
    flags address this but cannot fully remove it.
 7. **Ishihara digital screening** is an aid, not a diagnosis; depends on uncalibrated display colour.
 8. **Gaze** is meaningful only when calibration is valid.

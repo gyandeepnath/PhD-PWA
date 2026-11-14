@@ -33,10 +33,11 @@
  * reload the app.
  *
  * WHAT IT CANNOT DO. Chrome does not let a page keep the Back button forever. Its "history manipulation
- * intervention" (Chromium docs/history_manipulation_intervention.md, read in summary only) makes Back
- * skip an entry whose page added history without a user activation — a touch — and, since a later fix,
- * does not let going back and forth between a page's own entries stand in for one; on Android, with
- * every earlier entry skipped, Back closes the app. Every screen of the study is answered by touch, so
+ * intervention" (Chromium docs/history_manipulation_intervention.md, read in full through a mirror:
+ * docs/CITATION_VERIFICATION.md #71) makes Back skip an entry whose page added history without a user
+ * activation — a touch — and, since a later fix, does not let going back and forth between a page's own
+ * entries stand in for one; on Android, with every earlier entry skipped, Back closes the tab (the
+ * document's word), which for the installed app is its window. Every screen of the study is answered by touch, so
  * after a tap the app's entry is there for the next Back; but two Back gestures with no touch between
  * them may still reach past it and close the app on the tablet, as before — the sitting is then
  * resumable, and the display restarted, exactly as after a crash. Not measured on the tablet (Round 87):

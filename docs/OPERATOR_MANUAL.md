@@ -396,7 +396,8 @@ and cannot be reopened, so this is where the result goes (audit 86 UI-7: the not
 to the profile form, which nothing reopens, and a deficiency found there could not be entered). The
 answer replaces the profile's in this sitting and is recorded by the same rule: *Deficient* excludes
 the participant from the confirmatory analysis; *Not done* never replaces a real result; a
-*Deficient* from an earlier sitting stands. That is the only moment the question can be settled: the
+*Deficient* from an earlier sitting stands (the rule the investigator is to confirm: AUDIT_FINDINGS
+Round 90 §9 item 4). That is the only moment the question can be settled: the
 app's screen cannot settle it, and after the session there is no participant to screen. If you
 genuinely cannot run the plates, record *not done* — it is not a pass, and the analysis will treat
 it as unresolved. Do not
