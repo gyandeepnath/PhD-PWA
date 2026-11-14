@@ -10027,9 +10027,25 @@ AUDIT_FINDINGS.md):
 - No code path changed, so no end-to-end spec was re-run and no build was made; the changed strings in
   src/ are codebook text, one comment and the version list, which the unit and codebook gates read.
 
+On 46a5c6e (the second pass): `npm run verify` passed (exit 0): 1,952 tests, 553 codebook entries over
+19 files, 903/903, the analysis gate with R and Python.
+
+On 4b8b4f8 (the third pass; the last commit of this round that touches src/, all of it codebook text
+and comments), because the round changed strings the app writes into its export and shows on its
+version screen:
+- `npm run verify` passed (exit 0): lint, types, 145 test files with 1,952 tests, the corpus gate, the
+  codebook gate (553 entries over 19 files), the export gate (903/903), the analysis gate with R and
+  Python.
+- The full end-to-end suite, `npx playwright test --retries=0`: 120 passed (20.7 min).
+- `npm run build`: 42 assets, all precached, 58 precache entries (45,025 KiB), 44.0 MB in all
+  (scripts/verifyBundle.mjs); then `npm run test:e2e:prod -- --retries=0`: 9 passed.
+
+The fourth pass's commit changes only PROTOCOL.md, LITERATURE_VALIDATION.md, CITATION_VERIFICATION.md
+and this file; `npm run verify` was run again on the round's last commit before it was pushed.
+
 ### Versions in the data
 
 | Rule or format | Before | Now | Where it is recorded |
 |---|---|---|---|
 | Every rule | unchanged | unchanged | as before |
-| Codebook text | Round 94's | corrected entries (A-01 to A-06, A-16, app_version) | 00_CODEBOOK.csv, analysis_codebook.csv |
+| Codebook text | Round 94's | corrected entries (A-01 to A-06, A-16, app_version; C-01, C-02, C-04, C-05; D-01, D-03, D-06, D-08) | 00_CODEBOOK.csv, analysis_codebook.csv |
