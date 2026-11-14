@@ -1216,6 +1216,17 @@ export function useTracking(): TrackingApi {
           installTracker(tracker);
         } catch (err) {
           info.tracker_failures.push({ backend: next, error: errorSummary(err) });
+          /*
+           * NO TRACKER LEFT AFTER THE COMPARISON (Round 96; the camera-setup half of audit 86 CAM-7). If
+           * the last trial's tracker started, it is still installed and keeps measuring. If the last
+           * trial failed, none is running: noTrackerLeft does not act while a comparison runs, and
+           * holdWatchdog has disarmed the stall watchdog, so the camera stayed 'active' measuring
+           * nothing. It is lost, as at the end of the fallback chain, and startError says why.
+           */
+          if (!trackerRef.current && pipelineRef.current === info) {
+            setStartError(`No face tracker could run on this device: ${next} could not start after the trackers were measured (${errorSummary(err)})`);
+            markLost();
+          }
         }
       }
       /*
@@ -1237,7 +1248,7 @@ export function useTracking(): TrackingApi {
     };
     comparingRef.current = run().finally(() => { comparingRef.current = null; });
     return comparingRef.current;
-  }, [installTracker]);
+  }, [installTracker, markLost]);
 
   /**
    * The exposure step of camera setup (tracking/cameraExposure.ts). Frame rate and brightness are
