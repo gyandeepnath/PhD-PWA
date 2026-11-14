@@ -10118,8 +10118,8 @@ camera-lost row (§6) name the case and what to do.
 ### Not done, and why
 
 - **The camera set-up screen does not react to a camera lost under it.** The picture stops updating,
-  *Measure trackers again* does nothing, and a no-face message from an earlier measurement can still
-  tell the operator to press it; the next set-up screen raises the notice (audit 86 F7). This holds for
+  *Measure trackers again* does nothing, and the no-face message from that same measurement (when the
+  trials that ran saw no face) can still tell the operator to press it; the next set-up screen raises the notice (audit 86 F7). This holds for
   every way a camera can be lost on that screen, not only this one. The manual now says what to do.
   The fix would move the screen to its failure panel (*Retry*, which starts the camera afresh and clears
   the lost state, or *Continue without camera*). It was not made here because the second choice records
@@ -10129,8 +10129,10 @@ camera-lost row (§6) name the case and what to do.
   slips in. It is for the next round, with the investigator's agreement on the value.
 - **The reason does not reach the data in this path.** The sitting's pipeline record (01 `tracker_*`,
   the comparison and the trackers passed over) is taken from the running camera when set-up is
-  completed, and after a loss there is none, so those columns are blank; `startError` is shown only on
-  the failure panel. Same for every loss at set-up; the fix above would carry it.
+  completed, and after a loss there is none, so those columns are blank, unless the sitting is resumed
+  and the camera set up again (the route the manual gives), which fills them from the new set-up.
+  Either way the loss and its reason are not recorded, and `startError` is shown only on the failure
+  panel. Same for every loss at set-up; the fix above would carry it.
 - The camera-lost notice still names only the camera causes (Round 95, Not done).
 
 ### Checks run
