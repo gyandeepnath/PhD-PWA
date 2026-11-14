@@ -10049,3 +10049,59 @@ and this file; `npm run verify` was run again on the round's last commit before 
 |---|---|---|---|
 | Every rule | unchanged | unchanged | as before |
 | Codebook text | Round 94's | corrected entries (A-01 to A-06, A-16, app_version; C-01, C-02, C-04, C-05; D-01, D-03, D-06, D-08) | 00_CODEBOOK.csv, analysis_codebook.csv |
+
+## Round 96 — measuring the trackers that ends with none running loses the camera
+
+Found while checking Round 95's documentation (its fourth pass), and not a documentation finding: a code
+path that Round 91 (audit 86 CAM-7) fixed in one place and not in the other.
+
+### The gap
+
+*Measure trackers* at camera set-up (tracking/useTracking.ts `compareTrackers`) runs each face tracker
+alone for a few seconds, so it closes the tracker before each trial. When the last trial fails, none is
+running. The comparison then starts the winner, or, when no trial measured a face, the tracker that ran
+before. If that start also failed, its `catch` only recorded the failure. `noTrackerLeft` does not act
+while a comparison runs, and `holdWatchdog` had disarmed the stall watchdog, so the camera stayed
+'active' measuring nothing: the state CAM-7 removed from the fallback chain. Every row of the sitting
+would have been written `camera_active` TRUE with no samples and no reason. It needs every trial to fail
+on its first frame and the restart to fail as well, on a tablet whose camera had started a tracker
+moments before, so it is rare. It was not met in any run, and it is not measured on the tablet.
+
+### The fix (f29e7bc)
+
+In that `catch`, when no tracker is installed and the camera is the same one, the camera is lost
+(`markLost`), with `startError` "No face tracker could run on this device: … could not start after the
+trackers were measured (…)". When the last trial's tracker started, it is still installed and keeps
+measuring, as before. A camera lost on the camera set-up screen raises *The camera has stopped* on the
+next set-up screen (audit 86 F7, unchanged), and the rows are written `camera_inactive_reason` 'lost'
+with no `tracker_backend`, as in Round 91's case. The codebooks' 'lost' entry already covers it ("the
+one in charge and every later one in its fallback chain failed on their first frames or could not
+start"). The operator manual's tracker paragraph (§4) and its camera-lost row (§6) now name it.
+
+### Verified
+
+- tests/compareTrackersNoneLeft.test.tsx drives the real hook with fake trackers that construct and then
+  fail on their first frame. Every trial fails and the restart fails: the camera is 'failed', with a
+  lost time and the start error. Without the fix that test fails, the camera reading 'active'. Two
+  controls pass with and without it: every trial fails and the restart works, so the camera stays on;
+  and the trials run and the restart fails, so the last trial's tracker keeps running and the camera
+  stays on.
+- tests/compareTrackers.test.tsx, tests/trackerFallbackLost.test.tsx and
+  tests/cameraSetupStartError.test.tsx pass unchanged.
+
+### Not done
+
+- The camera set-up screen itself does not show the failure when the camera is lost under it; the next
+  set-up screen does (audit 86 F7). That holds for every way a camera can be lost on that screen, and
+  was left as it is.
+- The camera-lost notice still names only the camera causes (Round 95, Not done).
+
+### Checks run
+
+(Filled in when the checks below have run on this round's last commit.)
+
+### Versions in the data
+
+| Rule or format | Before | Now | Where it is recorded |
+|---|---|---|---|
+| Every rule and column | unchanged | unchanged | as before; a sitting that met the gap now reads `camera_inactive_reason` 'lost' instead of an active camera with no samples |
