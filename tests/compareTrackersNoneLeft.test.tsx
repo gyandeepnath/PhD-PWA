@@ -4,8 +4,8 @@
  * with fake face trackers and no frame pump.
  *
  * Each trial closes the tracker before it so that the one measured runs alone. When the last trial fails
- * there is none running, and the comparison then starts the winner, or the one that ran before when no
- * trial measured a face. If that start fails too, the catch only recorded the failure: noTrackerLeft
+ * there is none running, and the comparison then starts the winner, or, when no trial measured a face,
+ * the tracker asked for when the camera started (with its fallback chain). If that start fails too, the catch only recorded the failure: noTrackerLeft
  * does not act while a comparison runs, and holdWatchdog had disarmed the stall watchdog, so the camera
  * stayed 'active' and every row would have been written camera_active TRUE with no samples.
  */

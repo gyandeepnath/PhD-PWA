@@ -10137,7 +10137,17 @@ camera-lost row (§6) name the case and what to do.
 
 ### Checks run
 
-(Recorded when they have run on this round's last commit.)
+On 0988ae3 (the last commit of this round that touches src/):
+- `npm run verify` passed (exit 0): lint, types, 146 test files with 1,956 tests (the four of
+  tests/compareTrackersNoneLeft.test.tsx among them), the corpus gate, the codebook gate (553 entries
+  over 19 files), the export gate (903/903), the analysis gate with R and Python.
+- The full end-to-end suite, `npx playwright test --retries=0`: 120 passed (20.7 min).
+- `npm run build`: 42 assets, all precached, 58 precache entries, 44.0 MB in all; then
+  `npm run test:e2e:prod -- --retries=0`: 9 passed.
+
+The commits after it change only this write-up and the new test's header comment (a recheck of
+0988ae3 found the comment still said the restart is of "the one that ran before", and two sentences of
+*Not done* inexact); `npm run verify` was run again on the round's last commit before it was pushed.
 
 ### Versions in the data
 
