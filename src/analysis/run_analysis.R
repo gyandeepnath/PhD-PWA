@@ -355,10 +355,13 @@ if (!is.null(R_)) {
   # T05-T08 primary
   if (!is.null(P)) {
     cf <- P$coefficients
-    z <- qnorm(0.975)
+    # The multiplier is named apart from the z column: inside tibble() a later column sees an earlier one
+    # of the same name, and `z` here was the z VALUE, which made every interval [0, 2 x estimate]
+    # (found by the review of Round 97).
+    z975 <- qnorm(0.975)
     coefs <- tibble(term = cf$term, estimate_log_odds = cf[["Estimate"]], se = cf[["Std. Error"]], z = cf[["z value"]],
-                    p = cf[["Pr(>|z|)"]], wald_ci_low = cf[["Estimate"]] - z * cf[["Std. Error"]],
-                    wald_ci_high = cf[["Estimate"]] + z * cf[["Std. Error"]])
+                    p = cf[["Pr(>|z|)"]], wald_ci_low = cf[["Estimate"]] - z975 * cf[["Std. Error"]],
+                    wald_ci_high = cf[["Estimate"]] + z975 * cf[["Std. Error"]])
     write_table("T05", "Primary model coefficients", coefs,
                 paste0("The primary model's fixed effects as fitted: ", P$formula, ". Polarity is coded +0.5 positive and -0.5 negative, so polarity1 is ",
                        "positive minus negative; colour is sum-coded, so each colour term is a deviation from the mean of the five colours. ",

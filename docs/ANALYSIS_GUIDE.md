@@ -90,6 +90,29 @@ came to about 100 MB in desktop Chromium, Round 97; not measured on the tablet).
 what fills a tablet. If the tablet really is full, take **Download everything** first, copy it off, check
 that it opens on the computer, and only then delete and purge (`docs/OPERATOR_MANUAL.md` §6).
 
+### Keeping the data safe
+
+The files hold de-identified measurements, but also age, gender, vision and sleep details, symptom
+scores and the times of each sitting; photographs and video show a face. Keep them as the approved
+protocol and your institution require. In practice:
+
+- Keep a screen lock on the tablet, and keep the tablet with you or locked away between sittings.
+- Once a sitting's file is copied off and checked, delete it from the tablet's Downloads folder (the
+  sitting itself stays in the app until the study ends). Do the same with media files.
+- Keep the study folder on encrypted or institution-managed storage, not on a personal cloud account or
+  a phone gallery, and send files only by the routes your institution allows.
+- The participant code must carry no identifying information: no name, initials or roll number (the
+  `participant_id` entry of the codebook). The link between codes and people is kept separately, never in
+  the study folder.
+
+### If a participant withdraws and asks for their data to be deleted
+
+`docs/OPERATOR_MANUAL.md` §6 (the *Participant withdraws* row) says what to do in the app. The data are
+also in every copy made since: that sitting's `.zip` (on the tablet's Downloads folder, in `sittings/`
+and in the second copy), and inside every **Download everything** and pooled archive taken while the
+sitting was on the tablet. After the purge, take **Download everything** again, check it, and delete the
+earlier ones in `everything/` and in the second copy.
+
 ### Photographs and video
 
 They are not in the data file. If a participant consented to them, a second button on the Export tab,

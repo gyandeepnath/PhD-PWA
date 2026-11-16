@@ -10278,6 +10278,42 @@ On bcc6a91 (the two test fixes; no app code changed since dfe415c):
   including the archive and kit checks above.
 - `e2e/cameraDiagnostics.spec.ts` and `e2e/exportConfirm.spec.ts`, each test three times: 15 passed.
 
+### After the push: the two audit parts that had not run (1e181f3)
+
+The repository, security and privacy review (auditor D) and an adversarial review of the kit and the guide
+(auditor K) were run read-only after 1e181f3 was pushed. Both were stopped by the usage limit again, part way;
+what they had written down was checked and acted on here.
+
+- **K1, a wrong number in the kit (major).** T05's Wald interval used a column named `z` (the z value) as its
+  multiplier, because inside `tibble()` a later column sees an earlier one of the same name: every interval was
+  [0, 2 × estimate]. T06's H1a interval, the one section 2 decides on, was not affected. Fixed (`z975`), and the
+  gate now checks every T05 row's interval against estimate ± 1.96 × SE and polarity's against the H1a interval
+  the template prints; with the bug that check fails.
+- **D1, withdrawal with deletion (major).** The manual's *Participant withdraws* row named only media files and
+  `backup_*.json` as copies to delete by hand. Since this round the sitting is also in its own `.zip` and inside
+  every **Download everything** and pooled archive taken while it was on the tablet. The row and
+  `docs/ANALYSIS_GUIDE.md` now name them, and say to take **Download everything** again after the purge and delete
+  the earlier ones.
+- **D2, keeping the data safe (minor).** No document said how to hold or move the exports. `docs/ANALYSIS_GUIDE.md`
+  Part 1 now has a short section: screen lock, clearing the tablet's Downloads folder once a copy is checked,
+  encrypted or institution-managed storage, and the participant code carrying no identifying information.
+- **D3, deployment gating (minor; reported, not changed).** `.github/workflows/deploy.yml` deploys the default
+  branch to GitHub Pages after `npm run verify` alone, on a runner with no R or Python, so the analysis gate prints
+  SKIPPED there; the end-to-end suites run only in `verify.yml`. `.github/` is outside what this work changes; the
+  investigator may want deploy to wait for `verify.yml` on the same commit.
+- **Dependencies.** `npm audit --omit=dev`: one moderate advisory, in `uuid` (a missing bounds check in v3, v5 and
+  v6 when a buffer is passed); the app calls only `v4()` without a buffer (`src/experiment/Experiment.tsx`), so it
+  does not apply. The full audit lists 29 advisories in development tools (eslint, the Vite dev server's esbuild,
+  and others), none of which is shipped to the tablet.
+- **What the kit review ran and found sound** (before it stopped): the kit on a 26-participant cohort written as
+  the app's archives, from a folder whose path has spaces with no arguments (data and results beside the
+  `analysis/` folder), from a folder of archives, from one archive with no output folder given (results beside it),
+  on a cohort with every camera off (13 items marked not produced, no crash), and a second run into the same
+  output folder; and the template's output with and without the save step, identical.
+- **Still not done:** the rest of auditor D's scope (the build and offline behaviour, test hooks in production,
+  repository hygiene and links) and of auditor K's (every pre-specified analysis against the kit's tables, every
+  statement of the guide and the readiness list, the Python instructions as written).
+
 ### Versions in the data
 
 | Rule or format | Before | Now | Where it is recorded |

@@ -1342,6 +1342,16 @@ for (const { root, options } of jobs) {
     ok('Kit: ... the primary\'s polarity estimate in its table is the coefficient the template printed',
       coef != null && Number.isFinite(printed) && Math.abs(Number(coef.estimate_log_odds) - printed) < 1e-4,
       `table ${coef?.estimate_log_odds}, printed ${printed}`);
+    // Every row's Wald interval is the estimate +/- 1.959964 x SE (a column named z once stood in for the
+    // multiplier, and every interval came out [0, 2 x estimate]); and polarity's interval is H1a's, which
+    // the template prints from emmeans: for this model the two are the same Wald interval.
+    const coefRows = csv('tables/T05_primary_model_coefficients.csv');
+    const wald = (r) => [Number(r.estimate_log_odds) - 1.959964 * Number(r.se), Number(r.estimate_log_odds) + 1.959964 * Number(r.se)];
+    const h1ci = /\[H1\] primary: polarity \(positive minus negative\) log-odds -?[\d.]+ \(95% CI (-?[\d.]+) to (-?[\d.]+)\)/.exec(plain.stdout);
+    ok('Kit: ... every coefficient\'s 95% interval is its estimate +/- 1.96 SE, and polarity\'s is the H1a interval the template printed',
+      coefRows.length > 0 && coefRows.every((r) => { const [lo, hi] = wald(r); return Math.abs(Number(r.wald_ci_low) - lo) < 1e-5 && Math.abs(Number(r.wald_ci_high) - hi) < 1e-5; })
+        && coef != null && h1ci != null && Math.abs(Number(coef.wald_ci_low) - Number(h1ci[1])) < 5e-4 && Math.abs(Number(coef.wald_ci_high) - Number(h1ci[2])) < 5e-4,
+      `polarity1 ${coef?.wald_ci_low} to ${coef?.wald_ci_high}; H1a printed ${h1ci?.[1]} to ${h1ci?.[2]}`);
     const flow = csv('tables/T01_participant_flow.csv');
     const conf = flow.find((r) => r.step.startsWith('CONFIRMATORY SET'));
     ok('Kit: ... its participant flow gives the confirmatory set the dashboard counts',
