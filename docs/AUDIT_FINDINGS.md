@@ -10259,7 +10259,24 @@ analysis-to-thesis part was built instead of audited (below).
 
 ### Checks run
 
-(Recorded when they have run on this round's last commit.)
+On dfe415c (all of this round's app code; a new machine, with R 4.3 and the CI's R packages installed from
+the Ubuntu archive, and Python's pandas, numpy, statsmodels and scipy):
+- `npm run build`: 43 assets, all precached, 59 precache entries, 44.3 MB in all; then
+  `npm run test:e2e:prod -- --retries=0`: 9 passed.
+- The full end-to-end suite, `npx playwright test --retries=0`: 121 of 122 passed. The one failure was
+  `e2e/cameraDiagnostics.spec.ts` "the researcher card shows the live picture…", which read the card's video
+  state once, right after the card opened. In isolated runs on this machine it failed 1 of 9 times on this
+  round's code and 0 of 9 on 3197c73, the commit before it; the round touches no camera or card code. It is
+  now polled for up to 10 s, the same assertion (bcc6a91).
+- `npm run verify` stopped at the unit tests: `tests/exportConfirm.test.ts` read the export dialog from its
+  title, and the sentence saying what was sent now comes before the title. The test follows the new wording,
+  with the same checks (bcc6a91).
+
+On bcc6a91 (the two test fixes; no app code changed since dfe415c):
+- `npm run verify` passed (exit 0): lint, types, 148 test files with 1,968 tests, the corpus gate, the codebook
+  gate (553 entries over 19 files), the export gate (903/903), and the analysis gate with R and Python,
+  including the archive and kit checks above.
+- `e2e/cameraDiagnostics.spec.ts` and `e2e/exportConfirm.spec.ts`, each test three times: 15 passed.
 
 ### Versions in the data
 
