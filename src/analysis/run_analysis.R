@@ -98,7 +98,7 @@ dir.create(file.path(OUT, "tables"), recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(OUT, "figures"), recursive = TRUE, showWarnings = FALSE)
 # A previous run's numbered outputs are replaced, never mixed with this run's. Only files this
 # script writes are removed.
-unlink(list.files(file.path(OUT, "tables"), pattern = "^T[0-9]{2}_.*\\.csv$", full.names = TRUE))
+unlink(list.files(file.path(OUT, "tables"), pattern = "^T[0-9]{2}_.*\\.(csv|txt)$", full.names = TRUE))
 unlink(list.files(file.path(OUT, "figures"), pattern = "^F[0-9]{2}_.*\\.png$", full.names = TRUE))
 unlink(file.path(OUT, c("00_START_HERE.html", "thesis_map.csv", "analysis_log.txt", "tables.docx")))
 
@@ -161,7 +161,7 @@ html_table <- function(d, max_rows = 200) {
 
 ITEMS <- list()
 SKIPPED <- character(0)
-RULES <- "see T17"
+RULES <- "see T17 (provenance)"
 register <- function(id, kind, file, title, what, addresses, plan, place, n_part, n_rows, status, caption, df = NULL) {
   ITEMS[[length(ITEMS) + 1]] <<- list(id = id, kind = kind, file = file, title = title, what = what,
                                      addresses = addresses, plan = plan, place = place,
@@ -186,6 +186,19 @@ write_table <- function(id, title, df, what, addresses, plan, place, n_part = NU
   rownames(df) <- NULL
   write_csv(df, file.path(OUT, file), na = "")
   register(id, "table", file, title, what, addresses, plan, place, n_part, n_rows, "written", caption, df)
+}
+
+write_text <- function(id, title, lines, what, addresses, plan, place, n_part = NULL, n_rows = NULL, why_not = NULL,
+                       caption = "") {
+  file <- file.path("tables", sprintf("%s_%s.txt", id, slug(title)))
+  if (is.null(lines) || !length(lines)) {
+    reason <- if (is.null(why_not)) "the template printed no such block in this run" else why_not
+    register(id, "text", NA_character_, title, what, addresses, plan, place, n_part, n_rows, paste("not produced:", reason), caption)
+    return(invisible(NULL))
+  }
+  writeLines(lines, file.path(OUT, file), useBytes = TRUE)
+  register(id, "text", file, title, what, addresses, plan, place, n_part, n_rows, "written", caption)
+  ITEMS[[length(ITEMS)]]$text <<- lines
 }
 
 write_figure <- function(id, title, plot, what, addresses, plan, place, n_part = NULL, n_rows = NULL, why_not = NULL,
@@ -471,11 +484,14 @@ if (!is.null(R_)) {
               caption = "chisq with df degrees of freedom; participants is the sample size of a between-participant moderator.")
 
   # T16 questionnaires
-  cv <- R_$cvsq_change
+  # One value per participant, AS THE TEMPLATE TAKES IT (its per_p and tlx_p): for a split sitting the
+  # CVS-Q runs from the first sitting's baseline to the last sitting's close, and the NASA-TLX ratings
+  # are averaged. The interval is the template's t interval over participants (t.test).
+  cv <- R_$cvsq_per_participant
+  tlx_one <- R_$tlx_per_participant
   qs <- bind_rows(
     if (!is.null(cv) && nrow(cv)) {
-      one <- cv %>% group_by(participant_id) %>% summarise(baseline = mean(baseline), session_end = mean(session_end),
-                                                           change = mean(change), .groups = "drop")
+      one <- cv
       bind_rows(lapply(c("baseline", "session_end", "change"), function(v) {
         s <- mean_ci(one[[v]])
         tibble(measure = paste("CVS-Q total,", v), n_participants = s[["n"]], mean = s[["mean"]], ci_low = s[["lcl"]], ci_high = s[["ucl"]],
@@ -484,8 +500,8 @@ if (!is.null(R_)) {
                note = if (v == "change") "close minus baseline; the two use different recall frames (see LITERATURE_VALIDATION.md)" else "")
       }))
     },
-    if (!is.null(R_$tlx) && nrow(R_$tlx) && "raw_tlx" %in% names(R_$tlx)) {
-      one <- R_$tlx %>% group_by(participant_id) %>% summarise(raw_tlx = mean(as.numeric(raw_tlx), na.rm = TRUE), .groups = "drop")
+    if (!is.null(tlx_one) && nrow(tlx_one)) {
+      one <- tlx_one
       s <- mean_ci(one$raw_tlx)
       tibble(measure = "NASA-TLX raw score (0-100)", n_participants = s[["n"]], mean = s[["mean"]], ci_low = s[["lcl"]],
              ci_high = s[["ucl"]], sd = sd(one$raw_tlx, na.rm = TRUE), median = median(one$raw_tlx, na.rm = TRUE),
@@ -493,10 +509,11 @@ if (!is.null(R_)) {
              note = "one rating per sitting, at its close: it cannot be attributed to a display condition")
     })
   write_table("T16", "Questionnaires", qs,
-              "The CVS-Q total at baseline and at the close and its change, and the NASA-TLX raw score, one value per participant of the confirmatory set (a split sitting's two values averaged).",
+              "The CVS-Q total at baseline and at the close and its change, and the NASA-TLX raw score, one value per participant of the confirmatory set, taken as the template takes them (a split sitting: CVS-Q from the first baseline to the last close; NASA-TLX ratings averaged).",
               paste(OBJ1, "(subjective outcomes); Objective 4 (subjective and objective indices)"), "ANALYSIS_PLAN.md §4",
               "Chapter 4, 4.3 Objective 1: secondary outcomes", n_conf_p, NULL,
-              caption = "Descriptive; 95% interval of the mean across participants (t distribution).")
+              why_not = "the template did not summarise the questionnaires per participant in this run (more than one illumination level, or a stage missing): see analysis_log.txt",
+              caption = "The template's own per-participant values; 95% interval of the mean across participants (t distribution), as the template prints it.")
 
   # T17 provenance
   pkg_ver <- function(p) tryCatch(as.character(utils::packageVersion(p)), error = function(e) "not installed")
@@ -515,6 +532,51 @@ if (!is.null(R_)) {
               "Which software produced these numbers: R and package versions, the checksums of the two analysis scripts, the rule versions, and the app builds that collected the data.",
               "housekeeping", "ANALYSIS_PLAN.md §7", "Appendix (software and versions); the methods chapter cites it",
               n_conf_p, NULL, caption = "Keep with every number reported from this run.")
+
+  # T18 every secondary model, as fitted
+  mods <- R_$models
+  all_coefs <- if (length(mods)) bind_rows(lapply(names(mods), function(label) {
+    m <- mods[[label]]
+    co <- m$coefficients
+    stat_col <- intersect(c("t value", "z value"), names(co))[1]
+    p_col <- grep("^Pr\\(", names(co), value = TRUE)[1]
+    tibble(model = label, term = co$term, estimate = co[["Estimate"]], se = co[["Std. Error"]],
+           df = if ("df" %in% names(co)) co[["df"]] else NA_real_,
+           statistic = if (is.na(stat_col)) NA_real_ else co[[stat_col]],
+           statistic_type = if (is.na(stat_col)) NA_character_ else sub(" value", "", stat_col),
+           p = if (is.na(p_col)) NA_real_ else co[[p_col]],
+           n_rows = m$n_rows, n_participants = m$n_participants, formula = m$formula)
+  })) else NULL
+  write_table("T18", "Secondary models all coefficients", all_coefs,
+              "Every secondary model the template fitted, in full: each term's estimate, standard error, test statistic and p, with the model's formula and N. This is where the contrast (log_contrast) and serial-position (session_position) terms of the reaction-time, fatigue and comprehension models are. Estimates are in each model's own scale (ms, points, log-odds, log units); T13 gives the polarity effect of each in reporting units.",
+              paste(OBJ1, "(secondary outcomes); Objective 2 (the contrast terms)"), "ANALYSIS_PLAN.md §4 and §4c",
+              "Appendix (full model tables); Chapter 4, 4.3 and 4.4 cite single terms", n_conf_p, NULL,
+              caption = "One row per model term. Polarity is coded +0.5 positive, -0.5 negative; colour terms, where present, are deviations from the mean of the five colours.")
+
+  # T19 the template's own quality-check block, verbatim
+  qc_at <- grep("^QUALITY CHECKS \\(ANALYSIS_PLAN.md", stdout_lines, useBytes = TRUE)[1]
+  banners <- grep("^={20,}$", stdout_lines, useBytes = TRUE)
+  qc_end <- if (is.na(qc_at)) NA_integer_ else banners[banners > qc_at + 1][1]
+  write_text("T19", "Quality checks of plan section 5", if (is.na(qc_at) || is.na(qc_end)) NULL else stdout_lines[(qc_at - 1):qc_end],
+             "The manipulation and quality checks the plan asks for before any inference, exactly as the template printed them: illumination constancy (5.1), the frame-rate gate and its polarity check (5.2), participant present (5.3), exposure completeness (5.4), careless responding (5.5) and completeness of sittings.",
+             "housekeeping; Objective 4 (feasibility of the camera measures)", "ANALYSIS_PLAN.md §5",
+             "Chapter 4, 4.1 Participants and data quality; 4.6 Objective 4", n_conf_p, nrow(conf),
+             caption = "Copied from analysis_log.txt without change.")
+
+  # T20 an index of everything the template printed
+  # Section headings: "=== ... ===" lines, and the title line between two banner lines. ASCII patterns,
+  # matched bytewise, so the index does not depend on the locale R runs in.
+  n_out <- length(stdout_lines)
+  is_banner <- grepl("^={20,}$", stdout_lines, useBytes = TRUE)
+  titled <- which(c(FALSE, is_banner[-n_out]) & c(is_banner[-1], FALSE) & !is_banner & nzchar(stdout_lines))
+  heads <- sort(unique(c(grep("^=== .* ===$", stdout_lines, useBytes = TRUE), titled)))
+  section_names <- gsub("^=== +| +===$|^ +| +$", "", stdout_lines[heads], useBytes = TRUE)
+  Encoding(section_names) <- "UTF-8"   # bytewise matching returns unmarked strings; the log is UTF-8
+  log_index <- if (length(heads)) tibble(line = heads, section = section_names) else NULL
+  write_table("T20", "Index of the analysis log", log_index,
+              "Every section the template printed, with its line number in analysis_log.txt. An analysis that has no table of its own above (for example the trial-level reaction-time model's ring terms, the visual-search censoring test, the cumulative-link sensitivity or the PERCLOS check) is found here.",
+              "housekeeping", "ANALYSIS_PLAN.md §7", "not for the thesis: a finding aid", NULL, NULL,
+              caption = "Line numbers refer to analysis_log.txt.")
 
   # --- Figures -------------------------------------------------------------------------------
   if (!is.null(P) && !is.null(P$cells) && nrow(P$cells)) {
@@ -588,7 +650,7 @@ if (!is.null(R_)) {
                caption = "Observed means across condition-runs at each position and 95% intervals.", height_mm = 200)
 
   f5 <- if (!is.null(cv) && nrow(cv)) {
-    one <- cv %>% group_by(participant_id) %>% summarise(baseline = mean(baseline), session_end = mean(session_end), .groups = "drop") %>%
+    one <- cv %>% select(participant_id, baseline, session_end) %>%
       pivot_longer(c(baseline, session_end), names_to = "when", values_to = "score") %>%
       mutate(when = factor(ifelse(when == "baseline", "Baseline", "Close of the sitting"), levels = c("Baseline", "Close of the sitting")))
     ggplot(one, aes(when, score, group = participant_id)) + geom_line(colour = "grey60") + geom_point(size = 1.4) +
@@ -646,6 +708,7 @@ cat(docx_note, "\n")
 section <- function(i) {
   body <- if (i$kind == "table" && !is.null(i$df)) html_table(i$df)
           else if (i$kind == "figure" && identical(i$status, "written")) sprintf("<img src='%s' alt='%s'>", esc(i$file), esc(i$title))
+          else if (i$kind == "text" && !is.null(i$text)) paste0("<pre>", paste(esc(i$text), collapse = "\n"), "</pre>")
           else ""
   sprintf(paste0("<section id='%s'><h2>%s %s</h2>",
                  "<p class='meta'><b>Addresses:</b> %s &middot; <b>Plan:</b> %s &middot; <b>Suggested place:</b> %s</p>",
@@ -681,6 +744,7 @@ html <- paste0(
   ".stop{border:2px solid #a00;background:#fff3f3;padding:6px 16px}.skip{color:#a00;font:13px Arial,sans-serif}",
   ".skiplist{border:1px solid #c80;background:#fffaf0;padding:4px 16px;font:13px Arial,sans-serif}",
   ".none{color:#666;font:13px Arial,sans-serif}.where{color:#666;font:12px Arial,sans-serif}img{max-width:100%;border:1px solid #ddd}",
+  "pre{font:12px/1.35 Consolas,Menlo,monospace;background:#f6f6f6;border:1px solid #ddd;padding:8px;overflow-x:auto}",
   "@media print{.scroll{overflow:visible}section{page-break-inside:avoid}}</style></head><body>",
   "<h1>VisuLab analysis results</h1>",
   "<p>Written by run_analysis.R from the output of analysis_template.R. Every estimate, interval and p-value is the template's own; ",

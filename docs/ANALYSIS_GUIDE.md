@@ -189,8 +189,11 @@ what the numbers are, and its file name. The same list is in `results/thesis_map
 | T13 | Secondary outcomes with multiplicity adjustment | Each secondary outcome's polarity effect in its own units, 95% interval, p, Holm within its family, the interaction p, and its N. |
 | T14 | Sensitivity refits of the primary | The polarity estimate refitted on other rows or with one change, beside the confirmatory estimate in the first row. |
 | T15 | Moderation | Polarity × moderator tests (screen time, lighting, device familiarity), with Holm across moderators. Exploratory. |
-| T16 | Questionnaires | CVS-Q at baseline and close and the change; NASA-TLX. One value per participant. |
+| T16 | Questionnaires | CVS-Q at baseline and close and the change; NASA-TLX. One value per participant, as the template takes it, with the template's 95% interval. |
 | T17 | Provenance | R and package versions, the scripts' checksums, the rules, the builds that collected the data. |
+| T18 | Secondary models, all coefficients | Every secondary model in full: each term's estimate, SE, test statistic and p, with the model's formula and N. The contrast (`log_contrast`) and serial-position (`session_position`) terms are here. |
+| T19 | Quality checks of plan section 5 | The template's own printed block, unchanged: illumination constancy, the frame-rate gate and its polarity check, participant present, exposure completeness, careless responding, completeness of sittings. A text file. |
+| T20 | Index of the analysis log | Every section the template printed, with its line number in `analysis_log.txt`: where to find an analysis that has no table of its own. |
 | F01 | Primary outcome by condition | T07 as a figure. |
 | F02 | Secondary outcomes by condition | Reaction time, fatigue and comprehension: mean across participants and 95% interval (descriptive). |
 | F03 | Reaction-time distribution | Runs' mean reaction times by polarity. |
@@ -208,7 +211,7 @@ and observations it rests on, in the units of the table (log-odds or odds ratio 
 milliseconds, words per minute or scale points for the others). State the rule versions in force (T17)
 in the methods. For the primary outcome, `docs/ANALYSIS_PLAN.md` §2 decides H1 on the unadjusted 95%
 interval of the polarity effect. Report descriptive and model-estimated numbers as what they are: T04
-and F02–F05 are observed; T05–T15 and F01, F06 come from the models.
+and F02–F05 are observed; T05–T15, T18 and F01, F06 come from the models.
 
 **The log.** `results/analysis_log.txt` is everything the template printed, followed by what R printed
 to its error stream (messages such as *boundary (singular) fit*, and warnings). Its first block,
@@ -233,17 +236,17 @@ to 4 and hypotheses H₁ₐ, H₁ᵦ, H₁ᵪ, H₁ᵨ; `synopsis/SYNOPSIS_AdtU.
 
 **Results, in the order of the objectives** (the `suggested_thesis_place` column of `thesis_map.csv`):
 
-1. Participants and data quality: T01, T02, T03.
+1. Participants and data quality: T01, T02, T03, T19.
 2. Objective 1, primary outcome (H₁ₐ, H₁ᵦ): T04 (its primary rows), T06, T07, F01, T08, T12; T05 in full
    in an appendix.
-3. Objective 1, secondary outcomes: T13, T04, T16, F02–F05.
-4. Objective 2, contrast and colour (H₁ᵪ): T09, T10, T11.
+3. Objective 1, secondary outcomes: T13, T04, T16, F02–F05; single terms from T18.
+4. Objective 2, contrast and colour (H₁ᵪ): T09, T10, T11; the contrast terms of the secondary models in T18.
 5. Objective 3, moderation (H₁ᵨ): T15.
 6. Objective 4, feasibility of the camera measures: T03; agreement with manual annotation is not
    computed by the kit (Part 3).
 7. Sensitivity analyses: T14, F06.
 
-**Appendices:** the full coefficient tables (T05, T10), the codebook, T17 and the analysis log's
+**Appendices:** the full coefficient tables (T05, T10, T18), the codebook, T17 and the analysis log's
 PROVENANCE block, the integrity and exclusion counts (T01, T03), the list of protocol deviations, and
 the decisions of Part 5 with the date each was made.
 

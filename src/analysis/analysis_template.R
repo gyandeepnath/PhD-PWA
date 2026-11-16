@@ -2938,6 +2938,32 @@ if (nzchar(RESULTS_RDS)) {
         n_rows = as.integer(nobs(a)), n_participants = dplyr::n_distinct(model.frame(a)$participant_id))
     }),
     wide = wide,
+    # The questionnaire summaries as computed above: one value per participant (a split sitting's CVS-Q
+    # from the first baseline to the last close; its NASA-TLX ratings averaged).
+    cvsq_per_participant = get0("per_p"), tlx_per_participant = get0("tlx_p"),
+    # Every secondary model that was fitted, as fitted: its coefficient table, formula and N.
+    models = local({
+      fitted <- c("RT" = "m_rt", "RT variability (log SD of hit latencies)" = "m_rtsd", "lapse rate" = "m_lapse",
+                  "fatigue" = "m_fat", "comprehension" = "m_comp", "reading speed" = "m_wpm",
+                  "signal detection, trial level (d-prime and criterion)" = "m_sdt",
+                  "log RT of valid hits, trial level" = "m_rt_trial",
+                  "visual search: completed within the window" = "m_vs_done", "visual search: rate" = "m_vs_rate",
+                  "visual search: d-prime" = "m_vs_dp", "blink rate" = "m_blink",
+                  "inter-blink interval (log)" = "m_ibi", "PERCLOS covariate check" = "m_perclos")
+      out <- list()
+      for (label in names(fitted)) {
+        m <- get0(fitted[[label]])
+        if (is.null(m)) next
+        co <- quietly(as.data.frame(coef(summary(m))))
+        if (is.null(co)) next
+        out[[label]] <- list(
+          coefficients = data.frame(term = rownames(co), co, check.names = FALSE, row.names = NULL),
+          formula = paste(deparse(formula(m), width.cutoff = 500L), collapse = " "),
+          n_rows = tryCatch(as.integer(nobs(m)), error = function(err) NA_integer_),
+          n_participants = tryCatch(dplyr::n_distinct(model.frame(m)$participant_id), error = function(err) NA_integer_))
+      }
+      out
+    }),
     primary_failed = primary_failed,
     families = family_tables, sensitivity = sens_rows, moderators = mod_reg)
   saveRDS(results, RESULTS_RDS)

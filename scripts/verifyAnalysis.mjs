@@ -1327,10 +1327,11 @@ for (const { root, options } of jobs) {
     const written = map.filter((r) => r.status === 'written');
     const tables = written.filter((r) => r.kind === 'table');
     const figures = written.filter((r) => r.kind === 'figure');
-    ok('Kit: ... writes the report, the thesis map, the log, 17 tables and 6 figures, none empty',
-      ['00_START_HERE.html', 'thesis_map.csv', 'analysis_log.txt'].every(exists) && tables.length === 17 && figures.length === 6
+    const texts = written.filter((r) => r.kind === 'text');
+    ok('Kit: ... writes the report, the thesis map, the log, 19 tables, the quality-check block and 6 figures, none empty',
+      ['00_START_HERE.html', 'thesis_map.csv', 'analysis_log.txt'].every(exists) && tables.length === 19 && texts.length === 1 && figures.length === 6
         && written.every((r) => exists(r.file)),
-      `${tables.length} tables, ${figures.length} figures written; missing: ${written.filter((r) => !exists(r.file)).map((r) => r.file).join(', ') || 'none'}`);
+      `${tables.length} tables, ${texts.length} text, ${figures.length} figures written; missing: ${written.filter((r) => !exists(r.file)).map((r) => r.file).join(', ') || 'none'}`);
     const log = (() => { try { return readFileSync(file('analysis_log.txt'), 'utf8'); } catch { return ''; } })();
     const templatePart = log.split('\n==== Printed by R to its error stream')[0];
     const plain = await RUNS['R:cohort-archives'];
@@ -1369,9 +1370,37 @@ for (const { root, options } of jobs) {
       fam.length > 0 && fam.filter((r) => r.estimate !== '').every((r) => Number(r.n_rows) > 0 && Number(r.n_participants) > 0)
         && famRt != null && rtPrinted != null && Math.abs(Number(famRt.estimate) - Number(rtPrinted[1])) < 5e-4,
       `RT table ${famRt?.estimate}, printed ${rtPrinted?.[1]}; rows without N: ${fam.filter((r) => r.estimate !== '' && !(Number(r.n_rows) > 0)).map((r) => r.outcome).join(', ') || 'none'}`);
-    const inferential = ['T05', 'T06', 'T07', 'T08', 'T13', 'T14'];
+    // The questionnaires are the template's own per-participant values (a split sitting's CVS-Q runs from
+    // its first baseline to its last close), and its t interval.
+    const cvChange = csv('tables/T16_questionnaires.csv').find((r) => r.measure === 'CVS-Q total, change');
+    const cvPrinted = /\[cvsq\] mean change, close minus baseline: (-?[\d.]+) points \(95% CI (-?[\d.]+) to (-?[\d.]+)\), n = (\d+)/.exec(plain.stdout);
+    ok('Kit: ... the CVS-Q change, its interval and its n are the ones the template printed',
+      cvChange != null && cvPrinted != null && Math.abs(Number(cvChange.mean) - Number(cvPrinted[1])) < 0.006
+        && Math.abs(Number(cvChange.ci_low) - Number(cvPrinted[2])) < 0.006 && Math.abs(Number(cvChange.ci_high) - Number(cvPrinted[3])) < 0.006
+        && Number(cvChange.n_participants) === Number(cvPrinted[4]),
+      `table ${cvChange?.mean} (${cvChange?.ci_low} to ${cvChange?.ci_high}), n ${cvChange?.n_participants}; printed ${cvPrinted?.slice(1).join(' ')}`);
+    // Every secondary model in full: the RT model's polarity coefficient is the one in its printed summary.
+    const allCoefs = csv('tables/T18_secondary_models_all_coefficients.csv');
+    const rtPol = allCoefs.find((r) => r.model === 'RT' && r.term === 'polarity1');
+    const rtPolPrinted = coefAfter(plain.stdout, '=== RT mixed model ===', 'polarity1');
+    ok('Kit: ... every secondary model is tabled in full, with its N; the RT model\'s polarity term is the one printed',
+      allCoefs.length > 0 && allCoefs.every((r) => Number(r.n_rows) > 0 && r.formula !== '')
+        && ['RT', 'fatigue', 'comprehension', 'blink rate'].every((m) => allCoefs.some((r) => r.model === m && r.term === 'session_position'))
+        && rtPol != null && Number.isFinite(rtPolPrinted) && Math.abs(Number(rtPol.estimate) - rtPolPrinted) < 5e-3,
+      `RT polarity1 table ${rtPol?.estimate}, printed ${rtPolPrinted}; ${new Set(allCoefs.map((r) => r.model)).size} models`);
+    // The plan's quality checks are the template's own block, copied without change.
+    const qcText = (() => { try { return readFileSync(file('tables/T19_quality_checks_of_plan_section_5.txt'), 'utf8').trim(); } catch { return ''; } })();
+    ok('Kit: ... the plan\'s section 5 quality checks are the template\'s own printed block, unchanged',
+      qcText.length > 200 && plain.stdout.includes(qcText) && /5\.1 illumination constancy/.test(qcText) && /5\.2 frame-rate gate/.test(qcText),
+      `${qcText.length} characters`);
+    const logIndex = csv('tables/T20_index_of_the_analysis_log.csv');
+    const logLines = templatePart.split('\n');
+    ok('Kit: ... the log index points at the lines it names',
+      logIndex.length >= 20 && logIndex.every((r) => (logLines[Number(r.line) - 1] ?? '').includes(r.section)),
+      `${logIndex.length} sections; first mismatch: ${JSON.stringify(logIndex.find((r) => !(logLines[Number(r.line) - 1] ?? '').includes(r.section)) ?? null)}`);
+    const inferential = ['T05', 'T06', 'T07', 'T08', 'T13', 'T14', 'T18'];
     ok('Kit: ... the thesis map names every table and figure, and no inferential table lacks its N',
-      map.length >= 24 && inferential.every((id) => { const r = map.find((x) => x.id === id); return r != null && r.status === 'written' && Number(r.n_participants) > 0; }),
+      map.length >= 27 && inferential.every((id) => { const r = map.find((x) => x.id === id); return r != null && r.status === 'written' && Number(r.n_participants) > 0; }),
       inferential.map((id) => `${id} ${map.find((x) => x.id === id)?.n_participants ?? 'absent'}`).join(', '));
     const html = (() => { try { return readFileSync(file('00_START_HERE.html'), 'utf8'); } catch { return ''; } })();
     ok('Kit: ... the report opens with the sets read and lists what was not produced',

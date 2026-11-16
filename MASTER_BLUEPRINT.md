@@ -16,7 +16,7 @@ log. Read it with the source tree.
   docs/ANALYSIS_PLAN.md, docs/OPERATOR_MANUAL.md and the export's codebook are current, and
   docs/AUDIT_FINDINGS.md records every change.
 - **Version:** package `visulab@2.4.0` (2.1.0 to Round 73, 2.2.0 from Round 74, 2.3.0 from Round 75,
-  2.3.1 from Round 76, 2.4.0 from Round 85; the audit-86 fixes, Rounds 86-94, still say 2.4.0, and
+  2.3.1 from Round 76, 2.4.0 from Round 85; the audit-86 fixes and the rounds after, Rounds 86-97, still say 2.4.0, and
   whether to call them 2.5.0 is the investigator's decision; src/lib/versionHistory.ts); IndexedDB
   schema v11 (`DB_VERSION`, src/storage/schemaEnums.ts).
 - **Commit at packaging:** branch `claude/build-review-refinement-3z0nrm` (see `CHANGELOG` section §16).
@@ -485,8 +485,10 @@ src/
   dashboard/    Dashboard, aggregate (per-condition summaries + QC + engagement), charts
   sim/          rng, effects (ground truth), participant (synthetic data via the REAL scoring code),
                 analysis (recovery + power), fuzz (adversarial soak), runSimulation/runFuzz/runStress
-  analysis/     analysis_template.{R,py} (mixed models a researcher runs on the export)
-  added in Rounds 86-94:
+  analysis/     analysis_template.{R,py} (mixed models a researcher runs on the export);
+                run_analysis.R (Round 97: runs the R template unchanged and writes tables, figures, a
+                thesis map and a report), kitFiles.ts (the scripts as "Download everything" carries them)
+  added in Rounds 86-97:
   lib/          tapGuard (touch guard at a screen change), systemBack (Back gesture = top-left chip),
                 rtOnset, rtResponse, rtSummary (reaction onset, window, summary), localClock (times on
                 the sitting's stored UTC offset), swUpdate, offlineReasons (updates and the offline

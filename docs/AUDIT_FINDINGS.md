@@ -10310,9 +10310,37 @@ what they had written down was checked and acted on here.
   `analysis/` folder), from a folder of archives, from one archive with no output folder given (results beside it),
   on a cohort with every camera off (13 items marked not produced, no crash), and a second run into the same
   output folder; and the template's output with and without the save step, identical.
-- **Still not done:** the rest of auditor D's scope (the build and offline behaviour, test hooks in production,
-  repository hygiene and links) and of auditor K's (every pre-specified analysis against the kit's tables, every
-  statement of the guide and the readiness list, the Python instructions as written).
+- **Then done by hand (after 05fd812), the mechanical remainder of both scopes:**
+  - *Paths and links.* Every repository path and link named in README, the operator manual, DEPLOYMENT, DEPLOY,
+    the analysis guide, READINESS, PROTOCOL, the field documents and the blueprint exists (the only names
+    that do not are outputs: `results/...`, `dist/404.html`, and `reference/BUILD-INFO.txt`, which
+    scripts/package.mjs writes into the package).
+  - *Test and debug modes.* One: `?e2e` in the address, which shortens every protocol duration, and which a
+    production build honours. It is not silent: the app shows a TEST MODE banner, the sitting is stamped
+    `e2e_timing`, its integrity report says so, and the pooled verdict keeps it out of the analysis. No other
+    URL parameter, stored flag or global switches a mode. `console.log` appears only in the command-line
+    simulations (`src/sim/run*.ts`); no `debugger`, TODO or FIXME in `src/`.
+  - *Build and offline.* The analysis scripts are a separate, lazily loaded chunk (`kitFiles`, about 0.38 MB),
+    precached with the rest, so **Download everything** works offline; the update flow is unchanged (prompt,
+    no skipWaiting).
+  - *Version wording.* The version history (the codebook's `app_version` entry), the manual and the blueprint
+    said the changes still labelled 2.4.0 were "Rounds 86-94"; they are Rounds 86-97, and the two changes since
+    without a column (Round 96's camera loss, Round 97's archive) are now named.
+  - *Every analysis the template computes, against the kit's tables.* The kit tabled the primary in full and
+    each secondary outcome's polarity effect, and nothing else of the secondary models; the plan's section 5
+    quality checks were printed and not tabled; and T16 averaged a split sitting's two CVS-Q changes where the
+    template takes the first baseline to the last close. Now: **T16** is built from the template's own
+    per-participant values; **T18** holds every secondary model in full (each term, with formula and N: the
+    contrast and serial-position terms are there); **T19** is the template's quality-check block, copied
+    unchanged; **T20** indexes every section of the log by line, so an analysis without a table of its own
+    (the ring terms, the search censoring test, the cumulative-link sensitivity, the PERCLOS check) can be
+    found. The gate checks each against what the template printed. The kit's index and text handling no longer
+    depend on the locale R runs in (it failed in the C locale on a non-ASCII pattern; outputs are now identical
+    in the C locale and a UTF-8 one).
+  - *The Python instructions as written* (`VISULAB_DATA_DIR=<data> python analysis_template.py`): run on a
+    12-participant cohort, exit 0.
+- **Still not done:** an independent check of every statement in `docs/ANALYSIS_GUIDE.md` and
+  `docs/READINESS.md` (in progress as this is written), and repository hygiene beyond the above.
 
 ### Versions in the data
 

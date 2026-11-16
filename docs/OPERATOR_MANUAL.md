@@ -118,7 +118,7 @@ tested: it brings the 100 mm rating lines, the grey-field calibration with the t
 the camera check that counts only blinks after a flash, the fixed exposure kept on Android, the
 reorganised dashboard and the per-blink files. Builds deployed while these were being made still
 said 2.3.1, so on a sitting labelled 2.3.1 the `git_hash` says which build it really was. The fixes of audit 86
-and of the two reviews after it (AUDIT_FINDINGS Rounds 86-94) still say 2.4.0, although they change what
+and of the rounds after it (AUDIT_FINDINGS Rounds 86-97) still say 2.4.0, although they change what
 a participant sees and what the export means; whether the next deployment is called 2.5.0 is the
 investigator's decision (AUDIT_FINDINGS Round 92 §9 item 6). Until then `git_hash` names the build, and
 each measurement rule they changed is named per row in the export (`tap_guard_version`,

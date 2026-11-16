@@ -37,11 +37,12 @@ export const VERSION_HISTORY: readonly VersionEntry[] = [
     what: 'the 100 mm rating lines (slider_version), the grey-field calibration with the three-dot gaze check (calibration_rule_version, gaze_rule_version), '
       + 'the camera check that counts only blinks after a flash (selftest_rule), the fixed exposure kept on Android (camera_exposure_rule) and the per-blink '
       + 'files (07b, 07c). Builds deployed while these were being made still said 2.3.1, so on a sitting labelled 2.3.1 git_hash says which build it was. '
-      + 'The fixes of audit 86 and of the two reviews after it (Rounds 86-94) are still 2.4.0, although they change what a participant sees and what the '
+      + 'The fixes of audit 86, of the two reviews after it and of Rounds 96-97 (Rounds 86-97) are still 2.4.0, although they change what a participant sees and what the '
       + 'export means; whether to call them 2.5.0 is the investigator\'s decision. Where they changed a measurement rule, each row names the version it '
       + 'was recorded under (tap_guard_version, attempt_rule_version, scale_freeze_version, rt_window_version, rt_timing_version, ibi_rule_version, '
       + 'blink_rule_version, camera_exposure_rule, gaze_rule_version); the changes without such a column (new columns, the participant code kept in '
-      + 'capitals, the enrolment number taken at consent, the typed-number ranges, the Back gesture) are told apart by git_hash, which names the build',
+      + 'capitals, the enrolment number taken at consent, the typed-number ranges, the Back gesture, a camera reported lost when measuring the trackers '
+      + 'leaves none running, and from Round 97 the export delivered as one archive per sitting holding the same files) are told apart by git_hash, which names the build',
   },
 ];
 
