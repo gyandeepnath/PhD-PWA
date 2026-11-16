@@ -66,15 +66,26 @@ file**. A 30-day recycle bin holds soft-deleted sessions.
   **Every citation in it is unverified and must be resolved before use.**
 - **[`spec/CONSTANTS.md`](spec/CONSTANTS.md)** — values extracted from the original bundle, the
   IndexedDB schema, and every refinement made.
-- Analysis templates: `src/analysis/analysis_template.R` and `.py` (mixed models; random intercept
-  per participant; contrast as a covariate).
+- **[`docs/ANALYSIS_GUIDE.md`](docs/ANALYSIS_GUIDE.md)** — from the tablet to the thesis: what to do
+  after every sitting, how to run the analysis, how to read its tables and figures, and where each
+  belongs in the thesis (Round 97).
+- **[`docs/READINESS.md`](docs/READINESS.md)** — whether this build is ready for a bench test, a pilot
+  and confirmatory collection, and what stands between each (Round 97).
+- Analysis: `src/analysis/run_analysis.R` runs the authoritative template unchanged and writes the
+  tables, figures, a thesis map and a report (`results/00_START_HERE.html`); the templates are
+  `src/analysis/analysis_template.R` and `.py` (mixed models; random intercept per participant;
+  contrast as a covariate).
 
 ---
 
 ## What an export contains
 
-23 files: **20 CSVs**, an analysis JSON, a complete backup, and a provenance manifest
-(`tests/readmeFigures.test.ts` holds these two numbers to what the export writes).
+One file per sitting, `visulab_<participant>_<session>.zip` (Round 97), holding in a folder of the same
+name 23 files: **20 CSVs**, an analysis JSON, a complete backup, and a provenance manifest
+(`tests/readmeFigures.test.ts` holds these two numbers to what the export writes). The files inside are
+the bytes the export has always written; the archive only gives each sitting a name and a folder of its
+own. *Download everything* writes every sitting on the tablet, the pooled analysis dataset and the
+analysis scripts as one archive; the analysis templates read the archives as they are.
 
 `00_CODEBOOK.csv` documents **every** column in every file — type, unit, role and what it means —
 and `npm run verify:codebook` fails the build if a column is added without a description or a

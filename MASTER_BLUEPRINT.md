@@ -429,7 +429,7 @@ in-progress condition, flagged `completed_at:null` and restarted). Soft-delete =
 **Provenance:** every session/export is stamped with app version, git hash, condition-definition
 hash, schema version; the export manifest carries **per-file FNV-1a checksums**.
 
-### 8.1 Export bundle (`src/storage/export.ts`) — 23 files: 20 CSVs, the analysis JSON, the backup and the manifest
+### 8.1 Export bundle (`src/storage/export.ts`) — 23 files: 20 CSVs, the analysis JSON, the backup and the manifest; one `.zip` per sitting from Round 97 (`src/storage/exportArchive.ts`)
 `00_CODEBOOK` (every column), `00_condition_reference` (condition key), `01_session_info`,
 `02_conditions` (+ reading wpm), `03_fatigue_scores`, `04_comprehension`, `05_visual_search`,
 `06_display_perception`, `07_eye_metrics`, `07b_blink_events` and `07c_ear_trace` (per blink and per
@@ -661,8 +661,9 @@ npm run sim        # Monte-Carlo + power analysis
 npm run fuzz       # adversarial soak
 npm run stress     # harsh multi-regime stress run
 ```
-Analysis: run `src/analysis/analysis_template.{R,py}` on the per-sitting CSV bundles PLUS the pooled
-export, whose `analysis_join_report.csv` decides the confirmatory set (random-intercept mixed models;
+Analysis: run `src/analysis/run_analysis.R` (Round 97; it runs the R template unchanged and writes the
+tables, figures and report, docs/ANALYSIS_GUIDE.md), or `src/analysis/analysis_template.{R,py}` directly,
+on the per-sitting bundles PLUS the pooled export (or the one *Download everything* archive), whose `analysis_join_report.csv` decides the confirmatory set (random-intercept mixed models;
 passage in every model; contrast as covariate; d′ aggregated; engagement as a sensitivity on the
 primary only; effect sizes with 95% CIs and Holm within the outcome families of ANALYSIS_PLAN §4b;
 an observation-level overdispersion refit on every primary; PERCLOS a covariate, never an outcome;

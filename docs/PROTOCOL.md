@@ -230,12 +230,15 @@ tiers, validated CVS-Q, contrast-as-covariate, provenance stamping. See `spec/CO
 3. Run **colour-vision screening**, allow the **camera**, complete **calibration**, then the
    baseline questionnaires. The participant then completes the 10 conditions of the assigned
    illumination block (median ~102 min, p95 ~126 min), closing with the end CVS-Q and NASA-TLX.
-4. At the end, open the session from the manager → **Export** the CSV + JSON bundle.
+4. At the end, open the session from the manager → **Export** → **Download data bundle**: one file per
+   sitting, `visulab_<code>_<session>.zip`, holding the CSV + JSON bundle (Round 97).
 5. Analyse with the **mixed-model templates** in `src/analysis/analysis_template.{R,py}` (random
-   intercept per participant; contrast as a covariate; d′ aggregated across conditions). Point them
-   at a folder holding every per-sitting export AND the pooled export (Dashboard → **Download
-   analysis dataset**): its `analysis_join_report.csv` decides who is analysed, and both templates
-   stop with `[NO VERDICT]` without it. The R template reports effect sizes with 95% CIs and
+   intercept per participant; contrast as a covariate; d′ aggregated across conditions), through
+   `src/analysis/run_analysis.R`, which runs the R template unchanged and writes its tables, figures
+   and report (`docs/ANALYSIS_GUIDE.md`). Point them at the archive *Download everything* writes, or at
+   a folder holding every per-sitting export AND the pooled export (Dashboard → **Download analysis
+   dataset**): its `analysis_join_report.csv` decides who is analysed, and both templates stop with
+   `[NO VERDICT]` without it. The R template reports effect sizes with 95% CIs and
    Holm-adjusted p-values within the outcome families of `docs/ANALYSIS_PLAN.md` §4b (the Python
    cross-check, the primary's); both open with their provenance.
 

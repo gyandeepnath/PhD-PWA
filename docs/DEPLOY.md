@@ -46,6 +46,7 @@ from the deployed HTTPS address (Option A), or use a certificate the tablet trus
 ## Data
 
 Everything is stored **on the device** in IndexedDB (`VisualErgonomicsDB`). Export per session from
-the dashboard (23 files: 20 CSVs with the codebook, an analysis JSON, a backup and a provenance
-manifest). Back up exports off-device; the
+the dashboard: one `.zip` per sitting (Round 97) holding 23 files: 20 CSVs with the codebook, an
+analysis JSON, a backup and a provenance manifest. *Download everything* writes every sitting, the
+pooled dataset and the analysis scripts as one archive (docs/ANALYSIS_GUIDE.md). Back up exports off-device; the
 container/browser storage is the only copy until exported.

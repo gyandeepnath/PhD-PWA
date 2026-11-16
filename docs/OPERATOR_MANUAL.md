@@ -780,9 +780,12 @@ them to check they are really there, then in the Session Manager Delete those se
 them from the recycle bin: Delete alone frees no space, Purge does (the panel's own message says so). Re-run the pre-flight check before starting anyone else; it reports free space and will block
 you if there is not enough.
 
-Prevent it rather than meet it: export and clear the tablet regularly instead of letting sessions
-accumulate. Video consent is what fills a tablet — a three-minute clip is larger than everything
-else a sitting produces put together.
+Prevent it rather than meet it, but not by clearing the tablet as you go: the analysis's pooled
+dataset is built from the sittings the tablet still holds (§7, step 5), and a sitting is about 0.7 MB
+(measured in desktop Chromium, not on the tablet). Video consent is what fills a tablet — a
+three-minute clip is larger than everything else a sitting produces put together. If it does fill,
+take **Download everything** first, copy it off and check that it opens on the computer, and only
+then Delete and Purge as above.
 
 ---
 
@@ -821,45 +824,80 @@ else a sitting produces put together.
    thank-you screen closed early does not lose it. A resumed sitting keeps its first start
    photograph; the camera check of a resume takes no second one. Log the end illuminance on the
    thank-you screen (or, if that screen was lost, from the Session Manager, above).
-3. **Export.** Dashboard → Export. This writes 20 CSVs (one of them the codebook, `00_CODEBOOK.csv`;
-   two of them, 07b and 07c, are per-blink validation files the main analysis does not need), an
-   analysis JSON, a provenance manifest and a `backup_*.json`: 23 files. A full camera sitting comes to about 6 MB, most of it `07c`; the
-   backup alone is about 2 MB. If the session was consented for photographs or video, a second
+3. **Export.** Dashboard → Export → **Download data bundle**. This writes **one file** into the
+   tablet's Downloads folder, named for the participant and the sitting:
+   `visulab_<code>_<session>.zip` (Round 97). This writes 20 CSVs (one of them the codebook,
+   `00_CODEBOOK.csv`; two of them, 07b and 07c, are per-blink validation files the main analysis does
+   not need), an analysis JSON, a provenance manifest and a `backup_*.json`: the sitting's 23 files,
+   inside that one archive, in a folder of the same name. Keep the file exactly as it is: do not unzip it into
+   the folder you keep, rename it or edit it. The analysis scripts read the archive directly, and
+   its name is what tells one sitting from another. A full camera sitting comes to about 0.6 MB
+   as an archive (about 5.5 MB of files inside, most of it `07c`; measured on a simulated sitting,
+   not on the tablet).
+
+   *as separate files instead*, beside the button, writes the same 23 files loose. It is there for
+   opening a single table on the tablet. Do not use it for the copy you keep: every sitting's loose
+   files have the same names (`01_session_info.csv` …), a second sitting's are renamed by the
+   browser (`01_session_info (1).csv`), and the analysis cannot tell such files apart. That was the
+   only export before Round 97.
+
+   The Export tab and the question that follows also show the sitting's **integrity check** in one
+   line, read from `16_integrity_report.csv` inside the file: *all checks passed*, or the number of
+   errors and warnings. If the session was consented for photographs or video, a second
    button, **Download media files**, writes the picture and video files themselves; they are not in
    the data bundle. Each is named in `15_media_inventory.csv`, so a file can always be traced back
    to the condition and the consent it was taken under. Those files show the participant's face:
    keep them under the terms of the grant that was given, not with the CSVs.
 
-   When the files have been written the app asks **Did every file arrive?** At that moment they are
+   When the file has been written the app asks **Did the file arrive?** At that moment it is
    in the tablet's own Downloads folder and nowhere else, so the answer is **Not yet**: the session
-   stays protected from automatic deletion. Press **Copied off and checked** only once the files are
-   copied off the tablet (step 5) and you have checked there that every one arrived. That answer is
+   stays protected from automatic deletion. Press **Copied off and checked** only once the file is
+   copied off the tablet (step 5) and you have checked there that it opens. That answer is
    what lets a session you later delete be purged from the recycle bin 30 days after the deletion;
    without it the bin keeps the session until you purge it yourself. To give it later, export the
    session again after copying — every export asks (Round 90).
 
    A session that did **not** finish can be exported too — Session Manager → **In progress** →
    **Export**. It carries `session_complete=false` and only the conditions that actually ran.
-4. **Check the export before the participant leaves the building.** Open:
-   - `16_integrity_report.csv` — should read `all_checks_passed`. Anything else, read it.
+4. **Check the export before the participant leaves the building.** Read the integrity line on the
+   Export tab first: it should say *all checks passed*. For the rest, open the archive in the
+   tablet's Files app (or use *as separate files instead*) and look at:
+   - `16_integrity_report.csv` — if the integrity line reported errors or warnings, read them here.
    - `12_quality_flags.csv` — look at `engagement_flag` and `reasons`.
    - `01_session_info.csv` — confirm `lux_complete` and that the three readings are what you took.
    - `07_eye_metrics.csv` — confirm `camera_active` is true and `face_presence_ratio` is high.
    - On the tablet, Dashboard → **Data Quality / QC** — how many conditions are **✕ Not usable**,
      and the reason under each (see *Reading the dashboard*, below).
 5. **Copy the export off the tablet the same day.** Not at the end of the week. Everything lives in
-   the tablet's browser storage until you do, and a wiped or failed device destroys it.
+   the tablet's browser storage until you do, and a wiped or failed device destroys it. Connect the
+   tablet to the computer by its cable, open the tablet's *Download* folder from the computer, and
+   copy the sitting's `.zip` into one study folder that is itself backed up (for example
+   `VisuLab data/sittings/`). The Session Manager shows, on every sitting's row, whether it is *not
+   exported yet*, *exported, copy not yet checked* or *exported, copy checked* (Round 97).
 
-   **For the analysis, the per-sitting folders are not enough on their own.** The analysis templates
-   decide who may be analysed from the pooled export's verdict: Dashboard → **Download analysis
-   dataset ↓** writes `analysis_long.csv`, `analysis_join_report.csv` and their companions. Take it from
-   the tablet after the last sitting has been collected and put its folder beside the per-sitting
-   folders. Without it, both templates stop and say so (`[NO VERDICT]`); with two of them, they stop
-   too (`[TWO VERDICTS]`) — keep only the latest. A sitting exported into two folders also stops the
-   run (`[DUPLICATED EXPORT]`), naming both. Keep a template's whole printed output with any result
-   taken from it: it opens with a `PROVENANCE` block — the R or Python version, the package versions,
-   the template's own checksum and the builds that collected the data — which is the only record of
-   how those numbers were produced.
+   **Do not delete sittings from the tablet while the study is running.** The analysis needs the
+   pooled dataset, which the tablet builds from the sittings it still holds; a sitting purged before
+   that is taken is left out of the analysis. Storage is not a reason to delete: a sitting occupies
+   about 0.7 MB on the device (140 simulated sittings came to about 100 MB in desktop Chromium; not
+   measured on the tablet).
+
+   **For the analysis: Dashboard → Export → Download everything ↓** (Round 97). It writes one file,
+   `visulab_everything_<n>sittings_<checksum>.zip`: every sitting on the tablet, the pooled analysis
+   dataset over exactly those sittings (the verdict on who may be analysed), and the analysis scripts
+   with their guide. That one file is what the analysis is run on (`docs/ANALYSIS_GUIDE.md`). Take it
+   after the last sitting; taking it every week as well costs nothing and is a second safety copy.
+   **Download analysis dataset ↓** writes the pooled dataset alone (`visulab_pooled_….zip`).
+
+   The analysis scripts read these archives as they are, together or apart. A sitting that is there
+   twice with the same data (its own archive and the whole-tablet one) is read once. They stop, and
+   say what to do, when there is no pooled verdict (`[NO VERDICT]`), two different ones (`[TWO
+   VERDICTS]`: keep the latest), two different exports of one sitting (`[DUPLICATED EXPORT]`: keep
+   the latest), loose files of several sittings in one folder (`[SEVERAL SITTINGS IN ONE FOLDER]`) or
+   an archive that cannot be opened (`[DAMAGED ARCHIVE]`). Keep the whole printed output with any
+   result taken from it: it opens with a `PROVENANCE` block — the R or Python version, the package
+   versions, the template's own checksum and the builds that collected the data — which is the only
+   record of how those numbers were produced. `run_analysis.R` saves it for you as
+   `results/analysis_log.txt`.
 6. There is no second session to book. If the sitting had to be **split** for scheduling, book the
    remaining half as soon as the participant can manage — the ten conditions belong to one
    protocol, and a long gap between halves adds a period effect the design does not model.

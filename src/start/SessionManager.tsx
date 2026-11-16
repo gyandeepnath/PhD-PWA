@@ -572,6 +572,14 @@ function Row({ s, children, note }: { s: SessionRecord; children: React.ReactNod
         <div className="font-lab" style={{ fontSize: 17 }}>{sessionLabel(s)}</div>
         <div className="font-sans" style={{ fontSize: 14, color: UI_TEXT.muted, marginTop: 2 }}>
           {sittingStartText(s)}{note && <span data-testid="row-note">{` · ${note}`}</span>}
+          {/* Whether this sitting's file has left the tablet (Round 97). The two stamps were recorded
+              and never shown: over a study of months nothing on this list said which sittings existed
+              only on the tablet. */}
+          <span data-testid="row-export" style={{ color: s.export_confirmed_at != null ? UI_TEXT.muted : UI_TEXT.amber }}>
+            {s.export_confirmed_at != null
+              ? ' · exported, copy checked'
+              : s.exported_at != null ? ' · exported, copy not yet checked' : ' · not exported yet'}
+          </span>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{children}</div>

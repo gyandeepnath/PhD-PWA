@@ -12,7 +12,8 @@ import { buildConditionSummaries, baselineFatigueMean, cohortSummary, type Condi
 import { MEASURE } from '@/tracking/measurementSchedule';
 import { FPS_GATE } from '@/tracking/frameRateGate';
 import { RELIABILITY_RULE_VERSION } from '@/tracking/ocularReliability';
-import { backupExportFile, buildExportFiles, DamagedParticipantCodeError, downloadExport, downloadSessionMedia } from '@/storage/export';
+import { backupExportFile, buildExportFiles, DamagedParticipantCodeError, downloadExport, downloadParts, downloadSessionMedia, integrityLine } from '@/storage/export';
+import { ARCHIVE_MIME, buildEverythingArchive, buildPooledArchive, buildSittingArchive, type EverythingProgress } from '@/storage/exportArchive';
 import { buildAnalysisDataset } from '@/storage/analysisExport';
 import { BarPanel, LinePanel, type Datum } from './charts';
 import type { SessionRecord } from '@/storage/types';
@@ -65,9 +66,12 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
    * "Building…" while the bundle's "Did every file arrive?" question was open and nothing was being
    * built (audit 86 UI-11). Any export still holds all three buttons; each says only what it is doing.
    */
-  const [busy, setBusy] = useState<null | 'bundle' | 'analysis' | 'media'>(null);
+  const [busy, setBusy] = useState<null | 'bundle' | 'analysis' | 'media' | 'everything'>(null);
   const exporting = busy != null;
   const [analysisSummary, setAnalysisSummary] = useState<string | null>(null);
+  const [exportIntegrity, setExportIntegrity] = useState<string | null>(null);
+  const [everythingProgress, setEverythingProgress] = useState<EverythingProgress | null>(null);
+  const [everythingSummary, setEverythingSummary] = useState<string | null>(null);
   const [cohort, setCohort] = useState<CohortSummary | null>(null);
   const [cohortBusy, setCohortBusy] = useState(false);
   const dialog = useDialog();
@@ -144,7 +148,15 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   const baseline = bundle ? baselineFatigueMean(bundle) : null;
   const mediaCount = (bundle?.media ?? []).length;
 
-  const onExport = async () => {
+  /*
+   * ONE SITTING, ONE FILE (Round 97). The sitting's files go out as one archive named for the
+   * participant and the sitting. They used to be 23 separate downloads with the same names for every
+   * sitting: the second sitting's files landed beside the first's under names the browser changed
+   * ("01_session_info (1).csv"), and nothing turned a Downloads folder of them into the one folder per
+   * sitting the analysis reads. `loose` keeps the separate files for whoever wants to open one on the
+   * tablet; they are the same bytes.
+   */
+  const onExport = async (loose = false) => {
     if (!bundle) return;
     setBusy('bundle');
     try {
@@ -156,7 +168,17 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
         await offerBackupOnly(e);
         return;
       }
-      await downloadExport(files);
+      const integrity = integrityLine(files);
+      setExportIntegrity(integrity);
+      let sent: string;
+      if (loose) {
+        await downloadExport(files);
+        sent = `${files.length} files were sent to this tablet's Downloads folder.`;
+      } else {
+        const archive = await buildSittingArchive(bundle, files);
+        downloadParts(archive.filename, archive.parts, ARCHIVE_MIME);
+        sent = `One file was sent to this tablet's Downloads folder:\n${archive.filename}\nIt holds this sitting's ${files.length} files.`;
+      }
 
       /*
        * Two different facts, recorded separately.
@@ -188,9 +210,11 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
        * a yes releases.
        */
       const confirmed = await dialog.confirm({
-        title: 'Did every file arrive?',
-        body: `${files.length} files were sent to this tablet's Downloads folder.\n\n`
-          + 'Press "Copied off and checked" only once they are copied off this tablet and you have checked there that all of them arrived.\n\n'
+        title: loose ? 'Did every file arrive?' : 'Did the file arrive?',
+        body: `${sent}\n\n${integrity}\n\n`
+          + (loose
+            ? 'Press "Copied off and checked" only once they are copied off this tablet and you have checked there that all of them arrived.\n\n'
+            : 'Press "Copied off and checked" only once it is copied off this tablet and you have checked there that it opens.\n\n')
           + `Until then this session is protected: a session you delete is purged ${BIN_RETENTION_DAYS} days later only if its export was confirmed here. `
           + 'To confirm later, export it again after copying.',
         confirmLabel: 'Copied off and checked',
@@ -263,8 +287,32 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
         + `${dataset.integrity.total_participants} participants analysable`
         + (dataset.integrity.clean ? '' : ` · ${dataset.integrity.issues.filter((i) => i.severity === 'blocking').length} blocking issue(s) — see analysis_join_issues.csv`),
       );
-      await downloadExport(dataset.files);
+      const archive = await buildPooledArchive(dataset, bundles.length);
+      downloadParts(archive.filename, archive.parts, ARCHIVE_MIME);
     } finally { setBusy(null); }
+  };
+
+  /*
+   * EVERYTHING ON THE TABLET, IN ONE FILE (Round 97): every sitting as its own archive holds it, the
+   * pooled dataset over exactly those sittings, and the analysis scripts of this build. It is the file
+   * the analysis is run on, and a safety copy at any time. It does not stand in for the per-sitting
+   * question above: no sitting is marked exported or confirmed by it.
+   */
+  const onExportEverything = async () => {
+    setBusy('everything');
+    setEverythingSummary(null);
+    try {
+      const sessions = await listSessions();
+      const lean = (await Promise.all(sessions.map((x) => gatherSession(x.session_id, { blinkRecords: false }))))
+        .filter((b): b is SessionBundle => b != null);
+      const { ANALYSIS_KIT } = await import('@/analysis/kitFiles');
+      const archive = await buildEverythingArchive(lean, (id) => gatherSession(id), ANALYSIS_KIT, setEverythingProgress);
+      downloadParts(archive.filename, archive.parts, ARCHIVE_MIME);
+      setEverythingSummary(
+        `${archive.filename} · ${archive.sittings} sitting${archive.sittings === 1 ? '' : 's'} · ${(archive.bytes / 1e6).toFixed(1)} MB`
+        + (archive.backupOnly.length ? ` · ${archive.backupOnly.length} sitting(s) as a backup file only (see START_HERE.txt inside)` : ''),
+      );
+    } finally { setBusy(null); setEverythingProgress(null); }
   };
 
   const onExportMedia = async () => {
@@ -607,22 +655,30 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       {bundle && tab === 'export' && (
         <div style={{ background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 20, maxWidth: 720 }}>
           <p className="font-sans text-base leading-relaxed" style={{ color: UI_TEXT.muted }}>
-            Downloads this sitting: its data tables, a codebook of every column, and a backup. Keep the{' '}
-            <code>backup_*.json</code>: it restores this session if the tablet is lost.
+            Downloads this sitting as <strong>one file</strong> named for the participant: its data tables,
+            a codebook of every column, and a backup that restores this session if the tablet is lost.
           </p>
           <More>
             <p className="font-sans text-[15px] leading-relaxed" style={{ color: UI_TEXT.muted }}>
-              Exports 20 CSVs, an analysis JSON, a complete session backup, a master codebook
-              documenting every column, and a provenance manifest (app version, git hash,
-              condition-definition hash, per-file checksums). Analyse with the R / Python mixed-model
-              templates in <code>src/analysis/</code>.
+              Exports 20 CSVs, an analysis JSON, a complete session backup (<code>backup_*.json</code>),
+              a master codebook documenting every column, and a provenance manifest (app version, git
+              hash, condition-definition hash, per-file checksums), all inside one .zip archive. Keep it
+              as it is: the analysis scripts read the archive directly.
             </p>
           </More>
-          <button onClick={onExport} disabled={exporting}
+          <button onClick={() => void onExport()} disabled={exporting}
             className="mt-4 rounded-xl px-8 py-3 font-sans text-base font-medium text-white transition active:scale-95"
             style={{ background: UI_TEXT.ink, cursor: exporting ? 'wait' : 'pointer' }}>
             {busy === 'bundle' ? 'Exporting…' : 'Download data bundle ↓'}
           </button>
+          <button onClick={() => void onExport(true)} disabled={exporting} data-testid="export-loose"
+            className="ml-3 rounded-xl px-4 py-3 font-sans text-[15px] underline"
+            style={{ background: 'transparent', color: UI_TEXT.muted, cursor: exporting ? 'wait' : 'pointer' }}>
+            as separate files instead
+          </button>
+          {exportIntegrity && (
+            <p className="font-sans text-[15px]" data-testid="export-integrity" style={{ marginTop: 10, color: UI_TEXT.muted }}>{exportIntegrity}</p>
+          )}
 
           {/* The analysis dataset pools every session on the device, so it is offered separately
               from the single-session bundle above and says plainly what it covers. */}
@@ -639,6 +695,25 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
             </button>
             {analysisSummary && (
               <p className="font-sans text-[15px]" style={{ marginTop: 10, color: UI_TEXT.muted }}>{analysisSummary}</p>
+            )}
+          </div>
+
+          {/* Everything on the tablet in one file: what the analysis is run on (Round 97). */}
+          <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid #e5e2dc' }}>
+            <p className="font-sans text-base leading-relaxed" style={{ color: UI_TEXT.muted }}>
+              <strong>Everything on this tablet in one file</strong>: every sitting, the analysis dataset
+              over exactly those sittings, and the analysis scripts with their guide. This is the file
+              the analysis is run on. It is also a safety copy at any time.
+            </p>
+            <button onClick={() => void onExportEverything()} disabled={exporting} data-testid="export-everything"
+              className="mt-3 rounded-xl px-8 py-3 font-sans text-base font-medium transition active:scale-95"
+              style={{ background: '#fff', color: UI_TEXT.ink, border: `1px solid ${UI_TEXT.ink}`, cursor: exporting ? 'wait' : 'pointer' }}>
+              {busy === 'everything'
+                ? (everythingProgress ? `Building… sitting ${Math.min(everythingProgress.done + 1, everythingProgress.total)} of ${everythingProgress.total}` : 'Building…')
+                : 'Download everything ↓'}
+            </button>
+            {everythingSummary && (
+              <p className="font-sans text-[15px]" data-testid="export-everything-summary" style={{ marginTop: 10, color: UI_TEXT.muted }}>{everythingSummary}</p>
             )}
           </div>
           {mediaCount > 0 && (
@@ -711,8 +786,10 @@ const HOW_TO_READ: Record<Tab, string[]> = {
     '“Before the readings” is the calibration and the camera check, each as its own screen judged it.',
   ],
   export: [
-    'Download data bundle: this sitting. Download analysis dataset: every sitting on this tablet, pooled.',
-    'After a bundle download the app asks whether every file arrived. Answer Not yet until the files are copied off this tablet and checked there.',
+    'Download data bundle: this sitting, as one file named for the participant. Do it after every sitting and copy the file off the tablet the same day.',
+    'After a bundle download the app asks whether the file arrived. Answer Not yet until it is copied off this tablet and checked there.',
+    'Download everything: every sitting on this tablet, the pooled analysis dataset and the analysis scripts, in one file. The analysis is run on that file.',
+    'Download analysis dataset: the pooled dataset alone.',
   ],
 };
 

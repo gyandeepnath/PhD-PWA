@@ -15,12 +15,15 @@
 # hit "Package `see` required for model diagnostic plots" part-way through the run,
 # after the primary model had been fitted and before the sections below it.
 #
-# Point DATA_DIR at a folder that CONTAINS one exported folder per sitting (the
-# per-session "Export" bundles) AND the pooled analysis export (Dashboard -> "Download
-# analysis dataset": analysis_long.csv, analysis_join_report.csv, ...), in any
-# sub-folder. The per-sitting folders carry the data; analysis_join_report.csv carries
-# the exporter's verdict on which participants may be analysed, and this file applies
-# that verdict rather than re-deriving a second one. See "WHICH ROWS ARE MODELLED".
+# Point DATA_DIR at a folder that CONTAINS the exports: the .zip the app writes for each
+# sitting (or one exported folder per sitting) AND the pooled analysis export (Dashboard ->
+# "Download analysis dataset": analysis_long.csv, analysis_join_report.csv, ...), in any
+# sub-folder; or the one archive "Download everything" writes, which holds both. Archives are
+# read as they are (see "WHERE THE EXPORT FILES ARE"). The per-sitting files carry the data;
+# analysis_join_report.csv carries the exporter's verdict on which participants may be
+# analysed, and this file applies that verdict rather than re-deriving a second one. See
+# "WHICH ROWS ARE MODELLED". run_analysis.R beside this file runs it and writes the tables,
+# figures and report; this file on its own only prints.
 # ---------------------------------------------------------------------------
 
 # The packages' start-up banners are suppressed so that the first thing the output says is what
@@ -69,6 +72,109 @@ if (length(template_file) == 1 && file.exists(template_file)) {
 DATA_DIR <- Sys.getenv("VISULAB_DATA_DIR", unset = ".")
 
 # ---------------------------------------------------------------------------
+# WHERE THE EXPORT FILES ARE (Round 97)
+#
+# The app writes ONE ARCHIVE per sitting (visulab_<code>_<session>.zip), one for the pooled dataset
+# and one for everything on a tablet. DATA_DIR may hold any mix of those archives and of loose
+# folders (an archive unzipped, or an export from before Round 97), or be a single archive. Archives
+# are unpacked into R's temporary folder for this run; nothing is written under DATA_DIR.
+#
+# TWO COPIES OF ONE SITTING. The same sitting is often there twice for an innocent reason: its own
+# archive AND the whole-tablet archive that also holds it. Copies whose data tables are identical are
+# read once and counted on a line of their own. Copies that DIFFER are left in and stop the run
+# further down ([DUPLICATED EXPORT]): which of two different exports is the right one is not this
+# file's to guess. The pooled verdict is treated the same way: identical copies are one, different
+# ones stop ([TWO VERDICTS]).
+#
+# SEVERAL SITTINGS SAVED INTO ONE FOLDER. Before Round 97 an export was 23 loose files with the same
+# names for every sitting, and a browser saving a second sitting beside the first renames its files
+# "01_session_info (1).csv". This file reads exact names, so it read ONE sitting of however many
+# were there and stopped at [TOO FEW PARTICIPANTS], with nothing naming the cause (measured on a
+# simulated cohort of 130, Round 97). Files renamed that way cannot be put back together by name, so
+# they stop the run, by name, before anything is read.
+# ---------------------------------------------------------------------------
+resolve_export_files <- function(data_dir) {
+  is_zip <- function(x) grepl("\\.zip$", x, ignore.case = TRUE)
+  if (!dir.exists(data_dir) && file.exists(data_dir) && is_zip(data_dir)) {
+    zips <- data_dir
+    roots <- character(0)
+  } else {
+    zips <- sort(list.files(data_dir, pattern = "\\.zip$", full.names = TRUE, recursive = TRUE, ignore.case = TRUE))
+    roots <- data_dir
+  }
+  if (length(zips) > 0) {
+    base <- file.path(tempdir(), "visulab_archives")
+    unlink(base, recursive = TRUE)
+    dir.create(base, recursive = TRUE, showWarnings = FALSE)
+    for (i in seq_along(zips)) {
+      out <- file.path(base, sprintf("%04d_%s", i, sub("\\.zip$", "", basename(zips[i]), ignore.case = TRUE)))
+      opened <- tryCatch({ utils::unzip(zips[i], exdir = out); TRUE },
+                         warning = function(w) FALSE, error = function(e) FALSE)
+      if (!opened) {
+        stop(sprintf(paste0("[DAMAGED ARCHIVE] %s could not be opened: it is incomplete or damaged. Copy it from the ",
+                            "tablet again, or export that sitting again, and run again."), zips[i]), call. = FALSE)
+      }
+      roots <- c(roots, out)
+    }
+  }
+  files <- sort(unlist(lapply(roots, function(r) list.files(r, full.names = TRUE, recursive = TRUE))))
+  files <- files[!is_zip(files)]
+
+  renamed <- files[grepl("^[0-9]{2}[a-z]?_[A-Za-z0-9_]+ \\([0-9]+\\)\\.csv$", basename(files))]
+  if (length(renamed) > 0) {
+    stop(sprintf(paste0("[SEVERAL SITTINGS IN ONE FOLDER] %d file(s) under DATA_DIR are named like \"%s\" (in %s). ",
+                        "A browser gives such names when several sittings' files are saved into one folder; they ",
+                        "cannot be told apart by name, and this file would read one sitting and ignore the rest. ",
+                        "On the tablet, export each sitting again with the current build (it writes ONE .zip per ",
+                        "sitting), or use Dashboard -> Export -> 'Download everything', and put those .zip files ",
+                        "in DATA_DIR instead."),
+                 length(renamed), basename(renamed[1]), dirname(renamed[1])), call. = FALSE)
+  }
+
+  md5 <- function(paths) unname(tools::md5sum(paths))
+  identical_copies <- 0L
+  sitting_dirs <- unique(dirname(files[basename(files) == "02_conditions.csv"]))
+  if (length(sitting_dirs) > 1) {
+    key <- md5(file.path(sitting_dirs, "02_conditions.csv"))
+    drop <- character(0)
+    for (k in unique(key[duplicated(key)])) {
+      group <- sitting_dirs[key == k]
+      # The data tables decide; the manifest carries the time of each export and the backup the
+      # export stamps, so two exports of unchanged data differ there and nowhere else.
+      signature <- vapply(group, function(d) {
+        f <- sort(list.files(d, pattern = "^[0-9]{2}[a-z]?_.*\\.csv$", full.names = TRUE))
+        paste(basename(f), md5(f), collapse = "|")
+      }, character(1))
+      drop <- c(drop, group[duplicated(signature)])
+    }
+    identical_copies <- length(drop)
+    files <- files[!(dirname(files) %in% drop)]
+  }
+  verdicts <- files[basename(files) == "analysis_join_report.csv"]
+  identical_verdicts <- 0L
+  if (length(verdicts) > 1) {
+    drop <- dirname(verdicts[duplicated(md5(verdicts))])
+    identical_verdicts <- length(drop)
+    files <- files[!(dirname(files) %in% drop)]
+  }
+  if (length(zips) > 0 || identical_copies > 0 || identical_verdicts > 0) {
+    cat(sprintf("\nexport files: %d archive(s) unpacked; %d sitting(s) found", length(zips),
+                length(unique(dirname(files[basename(files) == "02_conditions.csv"])))), "\n", sep = "")
+    if (identical_copies > 0) {
+      cat(sprintf("  [IDENTICAL COPIES] %d sitting(s) were there more than once with identical data tables; one copy of each is read.\n",
+                  identical_copies))
+    }
+    if (identical_verdicts > 0) {
+      cat(sprintf("  [IDENTICAL COPIES] the pooled verdict was there %d time(s) over, identical; one copy is read.\n",
+                  identical_verdicts))
+    }
+  }
+  files
+}
+EXPORT_FILES <- resolve_export_files(DATA_DIR)
+export_paths <- function(name) EXPORT_FILES[basename(EXPORT_FILES) == name]
+
+# ---------------------------------------------------------------------------
 # Load one numbered export file, pooled across every participant folder found.
 #
 # The app exports ONE FOLDER PER SITTING. 130 participants is 130 folders, and this
@@ -100,10 +206,10 @@ DATA_DIR <- Sys.getenv("VISULAB_DATA_DIR", unset = ".")
 # which the analysis codebook warns is not unique within a participant. It is added only where it is
 # used, so it does not ride into every join and come back suffixed .x/.y.
 read_export <- function(name, with_folder = FALSE) {
-  paths <- list.files(DATA_DIR, pattern = paste0("^", name, "$"),
-                      full.names = TRUE, recursive = TRUE)
+  paths <- export_paths(name)
   if (length(paths) == 0) {
-    stop(sprintf("no %s found under DATA_DIR (%s). Point DATA_DIR at an exported folder, or at a folder of them.",
+    stop(sprintf(paste0("no %s found under DATA_DIR (%s). Point DATA_DIR at the folder that holds the exported ",
+                        ".zip files (or exported folders), or at one of them."),
                  name, normalizePath(DATA_DIR, mustWork = FALSE)))
   }
   parts <- lapply(paths, function(p) {
@@ -206,7 +312,9 @@ if (length(dup_cid) > 0) {
   where <- unique(conditions$sitting_folder[conditions$condition_id %in% dup_cid[1]])
   stop(sprintf(paste0("[DUPLICATED EXPORT] %d condition_id value(s) occur more than once under DATA_DIR ",
                       "(e.g. %s, in: %s). The same sitting has been exported into more than one folder, ",
-                      "so every row of it would be counted twice. Remove the duplicate folder and run again."),
+                      "so every row of it would be counted twice. Remove the duplicate folder and run again. ",
+                      "(Copies with identical data tables are read once; these two differ, so one of them is ",
+                      "an older export: keep only the most recent export of that sitting.)"),
                length(dup_cid), dup_cid[1], paste(where, collapse = " AND ")), call. = FALSE)
 }
 folder_sessions <- conditions %>% distinct(sitting_folder, session_id)
@@ -248,18 +356,20 @@ if (anyDuplicated(folder_sessions$sitting_folder)) {
 COMPLETENESS_CODES <- c("condition_incomplete", "condition_coverage", "incomplete_split_sitting",
                         "incomplete_crossover", "sitting_not_in_data_dir")
 
-verdict_paths <- list.files(DATA_DIR, pattern = "^analysis_join_report\\.csv$", full.names = TRUE, recursive = TRUE)
+verdict_paths <- export_paths("analysis_join_report.csv")
 if (length(verdict_paths) == 0) {
   stop(paste0("[NO VERDICT] analysis_join_report.csv was not found under DATA_DIR (",
               normalizePath(DATA_DIR, mustWork = FALSE), "). Which participants may be analysed is decided ",
               "by the exporter's join check, not by this file. Take the pooled export (Dashboard -> ",
               "'Download analysis dataset') from the same tablet and put its folder inside DATA_DIR beside ",
-              "the per-sitting folders."), call. = FALSE)
+              "the per-sitting folders. (From Round 97 that export is one file, visulab_pooled_....zip, and ",
+              "'Download everything' holds it too; put either in DATA_DIR as it is.)"), call. = FALSE)
 }
 if (length(verdict_paths) > 1) {
   stop("[TWO VERDICTS] more than one analysis_join_report.csv under DATA_DIR (",
        paste(verdict_paths, collapse = " AND "), "). Keep only the pooled export taken after the last ",
-       "sitting was collected.", call. = FALSE)
+       "sitting was collected. (They differ, so they were taken at different times; a pooled archive's ",
+       "name carries how many sittings it covers.)", call. = FALSE)
 }
 as_flag <- function(x) !is.na(x) & toupper(trimws(as.character(x))) %in% c("TRUE", "1")
 verdict <- read_csv(verdict_paths, col_types = cols(.default = col_character()), progress = FALSE) %>%
@@ -716,6 +826,10 @@ OUTCOME_FAMILIES <- list(
                   "d-prime", "criterion", "search completion", "search rate", "search d-prime")
 )
 family_rows <- list()
+# Read by run_analysis.R (Round 97), with the results registered below: the sensitivity refits of the
+# primary, the moderator tests and the multiplicity tables, as this file computes them. Nothing here
+# prints, so the output is the same whether or not run_analysis.R is the caller.
+sens_rows <- list(); mod_reg <- list(); family_tables <- list()
 # Registered where each model is fitted; read once, at the end, by the multiplicity table.
 # `effect` is a precomputed list(estimate, lcl, ucl, p, p_int) for a model whose polarity effect is not
 # the emmeans main effect — the trial-level signal-detection model, where it is a slope or minus an
@@ -723,7 +837,10 @@ family_rows <- list()
 add_to_family <- function(outcome, m, units, odds_ratio = FALSE, note = NULL, converged = TRUE, effect = NULL) {
   if (!converged) units <- paste(units, "[NOT CONVERGED]")
   row <- list(outcome = outcome, units = units, estimate = NA_real_, lcl = NA_real_, ucl = NA_real_,
-              p = NA_real_, p_int = NA_real_, note = note)
+              p = NA_real_, p_int = NA_real_, note = note,
+              n_rows = if (is.null(m)) NA_integer_ else tryCatch(as.integer(nobs(m)), error = function(err) NA_integer_),
+              n_participants = if (is.null(m)) NA_integer_ else
+                tryCatch(dplyr::n_distinct(model.frame(m)$participant_id), error = function(err) NA_integer_))
   if (!is.null(effect)) {
     row[c("estimate", "lcl", "ucl", "p", "p_int")] <- effect[c("estimate", "lcl", "ucl", "p", "p_int")]
   } else if (!is.null(m)) {
@@ -2238,7 +2355,12 @@ if (nrow(eye) == 0) {
     # ===========================================================================================
     pol_row <- function(m) summary(m)$coefficients["polarity1", ]
     sens_line <- function(label, m) {
-      if (is.null(m)) { cat(sprintf("  %-42s did not fit\n", label)); return(invisible(NULL)) }
+      if (is.null(m)) {
+        sens_rows[[length(sens_rows) + 1]] <<- list(label = label, estimate = NA_real_, se = NA_real_, n_rows = NA_integer_)
+        cat(sprintf("  %-42s did not fit\n", label)); return(invisible(NULL))
+      }
+      sens_rows[[length(sens_rows) + 1]] <<- list(label = label, estimate = unname(pol_row(m)[1]),
+                                                  se = unname(pol_row(m)[2]), n_rows = as.integer(nobs(m)))
       cat(sprintf("  %-42s polarity %.4f (SE %.4f), n %d\n", label, pol_row(m)[1], pol_row(m)[2], nobs(m)))
     }
     # THE SAME MODEL ON OTHER ROWS, and never update(m, data = rows). lme4's update.merMod evaluates
@@ -2423,6 +2545,8 @@ if (nrow(eye) == 0) {
       if (is.null(m_mod)) { cat(sprintf("  [moderator] %-20s the model did not fit\n", mn)); next }
       lr <- anova(m_mbase, m_mod)
       mod_p[mn] <- lr[2, "Pr(>Chisq)"]
+      mod_reg[[mn]] <- list(df = as.integer(lr$Df[2]), chisq = lr$Chisq[2], p = mod_p[[mn]],
+                            participants = n_distinct(mod_rows$participant_id))
       cat(sprintf("  [moderator] %-20s polarity x moderator: chi2(%d) %.2f, p %s, %d participants\n", mn,
                   as.integer(lr$Df[2]), lr$Chisq[2], format.pval(mod_p[mn], digits = 2), n_distinct(mod_rows$participant_id)))
     }
@@ -2706,6 +2830,21 @@ for (fam in names(OUTCOME_FAMILIES)) {
   holm_pol <- p.adjust(p_pol, method = "holm")
   holm_int <- p.adjust(p_int, method = "holm")
   absent <- setdiff(members, names(rows))
+  num <- function(field) vapply(rows, function(r) { v <- r[[field]]; if (is.null(v)) NA_real_ else as.numeric(v) }, numeric(1))
+  family_tables[[fam]] <- rbind(
+    data.frame(family = rep(fam, length(rows)), outcome = names(rows), units = vapply(rows, function(r) r$units, ""),
+               estimate = num("estimate"), lcl = num("lcl"), ucl = num("ucl"),
+               p = unname(p_pol), p_holm = unname(holm_pol), p_interaction = unname(p_int), p_interaction_holm = unname(holm_int),
+               n_rows = num("n_rows"), n_participants = num("n_participants"),
+               note = vapply(rows, function(r) if (is.null(r$note)) "" else r$note, ""), stringsAsFactors = FALSE),
+    if (length(absent) == 0) NULL else {
+      na <- rep(NA_real_, length(absent))
+      data.frame(family = fam, outcome = absent, units = "", estimate = na, lcl = na, ucl = na, p = na, p_holm = na,
+                 p_interaction = na, p_interaction_holm = na, n_rows = na, n_participants = na,
+                 note = "not modelled in this run (no data, or the model did not fit; see its section)",
+                 stringsAsFactors = FALSE)
+    })
+  rownames(family_tables[[fam]]) <- NULL
   cat(sprintf("\n[family] %s: %d of %d outcome(s) tested for polarity; Holm across those %d\n",
               fam, sum(!is.na(p_pol)), length(members), sum(!is.na(p_pol))))
   cat(sprintf("  %-20s %-34s %-32s %-9s %-9s | %-12s %s\n",
@@ -2733,6 +2872,75 @@ if (requireNamespace("see", quietly = TRUE)) {
   print(check_model(m_rt))
 } else {
   cat("\n[diagnostics] install.packages(\"see\") for check_model() plots — skipped, not run.\n")
+}
+
+# ===========================================================================================
+# FOR run_analysis.R (Round 97). When VISULAB_RESULTS_RDS names a file, the results computed above
+# are saved there, for the tables, figures and report run_analysis.R writes. Nothing is refitted, no
+# rule changes, and nothing is printed: the output above is the same with or without it. The model-
+# estimated cell means of the primary (emmeans on m_primary, as printed under Objective 2's crossover
+# test) are the one thing computed here, so that the figure carries the same numbers as the output.
+# ===========================================================================================
+RESULTS_RDS <- Sys.getenv("VISULAB_RESULTS_RDS", unset = "")
+if (nzchar(RESULTS_RDS)) {
+  quietly <- function(expr) {
+    out <- NULL
+    utils::capture.output(out <- suppressWarnings(suppressMessages(tryCatch(expr, error = function(err) NULL))))
+    out
+  }
+  m_p <- get0("m_primary")
+  m_add <- get0("m_additive")
+  results <- list(
+    data_dir = normalizePath(DATA_DIR, mustWork = FALSE),
+    rules = list(blink = BLINK_RULE_VERSION, fps_gate = FPS_GATE_VERSION, fps_adequate = FPS_GATE_ADEQUATE,
+                 fps_reduced = FPS_GATE_REDUCED, fps_band = FPS_GATE_BAND, rt_timing = RT_TIMING_VERSION,
+                 slider = SLIDER_VERSION, n_blink_old = n_blink_old, n_tier_c = n_tier_c,
+                 n_rt_t1_camera = if (exists("rt_t1_cam")) sum(rt_t1_cam) else NA_integer_),
+    sittings = session_info_all, conf_builds = conf_builds,
+    verdict = verdict, withdrawn = wd_pids,
+    runs = data.frame(participant_id = runs$participant_id, condition_id = runs$condition_id,
+                      confirmatory = runs$confirmatory, sensitivity = runs$sensitivity,
+                      reasons = vapply(runs$reasons, function(r) paste(r, collapse = ";"), ""), stringsAsFactors = FALSE),
+    reason_long = reason_long,
+    participant = participant, cond = cond, eye = eye, eye_metrics_all = eye_metrics_all,
+    rt = rt, fat = fat, fat_response = fat_response, comp = comp,
+    cvsq_change = cvsq_change, tlx = get0("tlx"),
+    primary = if (is.null(m_p)) NULL else list(
+      coefficients = data.frame(term = rownames(coef(summary(m_p))), coef(summary(m_p)), check.names = FALSE, row.names = NULL),
+      formula = paste(deparse(formula(m_p), width.cutoff = 500L), collapse = " "),
+      n_rows = as.integer(nobs(m_p)), n_participants = dplyr::n_distinct(model.frame(m_p)$participant_id),
+      structure = get0("primary_structure"), rung = get0("rung"), ladder = get0("ladder_log"),
+      dispersion = get0("dispersion_note"), h1 = get0("h1_primary"),
+      omnibus = if (is.null(m_add)) NULL else quietly(as.data.frame(anova(m_add, m_p))),
+      p_family = get0("p_fam"), p_family_holm = get0("p_fam_holm"),
+      cells = quietly(as.data.frame(summary(emmeans(m_p, ~ colour | polarity, type = "response")))),
+      within_colour = quietly(as.data.frame(summary(pairs(emmeans(m_p, ~ polarity | colour), type = "response"),
+                                                    by = NULL, adjust = "holm", infer = c(TRUE, TRUE))))),
+    objective2 = local({
+      o <- get0("obj2")
+      if (is.null(o)) NULL else list(
+        comparison = quietly({
+          a <- as.data.frame(anova(o$contrast, o$both, o$colour_cat))
+          labels <- c(contrast = "contrast alone (polarity + log contrast)",
+                      both = "contrast + colour (residual hue)",
+                      colour_cat = "polarity x colour (the primary's fixed effects)")
+          data.frame(model = unname(labels[sub("^o\\$", "", rownames(a))]), a, check.names = FALSE, row.names = NULL)
+        }),
+        residual_hue = quietly(data.frame(term = rownames(summary(o$both)$coefficients), summary(o$both)$coefficients,
+                                          check.names = FALSE, row.names = NULL)),
+        vif = quietly(as.data.frame(performance::check_collinearity(o$both))[, c("Term", "VIF")]),
+        n_rows = as.integer(nobs(o$colour_cat)))
+    }),
+    anchor = local({
+      a <- get0("m_anchor")
+      if (is.null(a)) NULL else list(
+        coefficients = data.frame(term = rownames(coef(summary(a))), coef(summary(a)), check.names = FALSE, row.names = NULL),
+        n_rows = as.integer(nobs(a)), n_participants = dplyr::n_distinct(model.frame(a)$participant_id))
+    }),
+    wide = wide,
+    primary_failed = primary_failed,
+    families = family_tables, sensitivity = sens_rows, moderators = mod_reg)
+  saveRDS(results, RESULTS_RDS)
 }
 
 # A primary model that could not be fitted on data that HAS camera-on runs is a failed confirmatory

@@ -1931,6 +1931,37 @@ export async function downloadSessionMedia(
   return { written, missing, refused };
 }
 
+/**
+ * The sitting's integrity verdict in one line, for the operator at the moment of export (Round 97).
+ *
+ * The manual asks the operator to open 16_integrity_report.csv before the participant leaves; with
+ * the export now one archive that is a file inside a file on a tablet. Read from the report the
+ * export has just built, so the screen and the file cannot disagree.
+ */
+export function integrityLine(files: ExportFile[]): string {
+  const report = files.find((f) => f.filename === '16_integrity_report.csv');
+  if (!report) return 'Integrity check of this sitting: no report was written.';
+  const count = (severity: string) => (report.content.match(new RegExp(`^[^,\\n]*,[^,\\n]*,${severity},`, 'gm')) ?? []).length;
+  const errors = count('error');
+  const warnings = count('warning');
+  if (errors === 0 && warnings === 0) return 'Integrity check of this sitting: all checks passed.';
+  return `Integrity check of this sitting: ${errors} error${errors === 1 ? '' : 's'}, ${warnings} warning${warnings === 1 ? '' : 's'}. `
+    + 'Read 16_integrity_report.csv (inside the file) before the participant leaves.';
+}
+
+/** Browser-only: one file to the device's Downloads folder (an archive; exportArchive.ts). */
+export function downloadParts(filename: string, parts: Uint8Array[], mime: string): void {
+  const url = URL.createObjectURL(new Blob(parts as BlobPart[], { type: mime }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoked after a pause, not at once: a large archive is still being read by the download.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 /** Browser-only: stream the files to the device (staggered to avoid the download-blocker). */
 export async function downloadExport(files: ExportFile[]): Promise<void> {
   for (const f of files) {

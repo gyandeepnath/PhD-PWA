@@ -112,6 +112,10 @@ const launchPy = (dataDir) => launch(py, ['-c',
   + `import analysis_template as t\nt.DATA_DIR = ${JSON.stringify(dataDir)}\nt.main()\n`,
 ]);
 const launchR = (dataDir) => launch('Rscript', [join(process.cwd(), 'src/analysis/analysis_template.R')], { VISULAB_DATA_DIR: dataDir });
+// The analysis kit (Round 97): run_analysis.R runs the template above as its own process and writes
+// the tables, figures, thesis map and report. Data and output folders as arguments, as an analyst runs it.
+const launchKit = (dataDir, outDir) => launch('Rscript', [join(process.cwd(), 'src/analysis/run_analysis.R'), dataDir, outDir],
+  { VISULAB_DATA_DIR: '', VISULAB_OUT_DIR: '' });
 
 const dir = mkdtempSync(join(tmpdir(), 'visulab-analysis-'));
 try {
@@ -182,11 +186,17 @@ import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { buildExportFiles } from ${JSON.stringify(join(process.cwd(), 'src/storage/export.ts'))};
 import { buildAnalysisDataset } from ${JSON.stringify(join(process.cwd(), 'src/storage/analysisExport.ts'))};
 import { simulateCohort } from ${JSON.stringify(join(process.cwd(), 'src/sim/analysisCohort.ts'))};
+import { buildSittingArchive, buildEverythingArchive, archiveBytes } from ${JSON.stringify(join(process.cwd(), 'src/storage/exportArchive.ts'))};
 import { cohortSummary } from ${JSON.stringify(join(process.cwd(), 'src/dashboard/aggregate.ts'))};
 import { N_CONDITIONS } from ${JSON.stringify(join(process.cwd(), 'src/experiment/conditions.ts'))};
 const jobs: { root: string; options: unknown }[] = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+// The main cohort again as the app's ARCHIVES (Round 97): one .zip per sitting AND the whole-tablet
+// .zip that holds every sitting and the pooled dataset, in one folder. Written after the loop (the
+// archive writer is asynchronous), from a copy taken before anything below edits the bundles.
+const archived: { root: string; bundles: ReturnType<typeof simulateCohort> }[] = [];
 for (const { root, options } of jobs) {
   const bundles = simulateCohort(options as Parameters<typeof simulateCohort>[0]);
+  if (root.endsWith('/cohort')) archived.push({ root: root + '-archives', bundles: structuredClone(bundles) });
   for (const b of bundles) {
     // One folder per sitting: a split participant's second sitting beside its first.
     const out = root + '/' + b.session.participant_id + (b.session.session_index > 1 ? '_S' + b.session.session_index : '');
@@ -215,6 +225,18 @@ for (const { root, options } of jobs) {
     writeFileSync(root + '.rshort.json', JSON.stringify(cohortSummary(short.files, short.integrity, N_CONDITIONS).qcChecks));
   }
 }
+(async () => {
+  for (const { root, bundles } of archived) {
+    mkdirSync(root, { recursive: true });
+    for (const b of bundles) {
+      const a = await buildSittingArchive(b);
+      writeFileSync(root + '/' + a.filename, archiveBytes(a));
+    }
+    const all = await buildEverythingArchive(bundles, async (id) => bundles.find((b) => b.session.session_id === id) ?? null,
+      [{ path: 'READ_ME_FIRST.txt', content: 'the analysis scripts go here' }]);
+    writeFileSync(root + '/' + all.filename, archiveBytes(all));
+  }
+})().catch((e) => { console.error(e); process.exit(1); });
 `);
   const at = (name) => join(dir, name);
   const jobsFile = join(dir, 'cohorts.json');
@@ -284,8 +306,21 @@ for (const { root, options } of jobs) {
   const shortMarked = editColumn(join(at('r-short'), 'P001', '07_eye_metrics.csv'), 'observed_duration_ms',
     (v) => String(Math.round(Number(v) / 2)));
   for (const pid of sittings(at('r-short'))) editColumn(join(at('r-short'), pid, '08_reaction_trials.csv'), 'stim_ring', () => '');
-  //  - twice: one sitting exported into two folders;
+  //  - twice-identical: one sitting exported into two folders, the same data in both (Round 97): read once;
+  cpSync(at('twice'), at('twice-identical'), { recursive: true });
+  cpSync(join(at('twice-identical'), 'P001'), join(at('twice-identical'), 'P001_exported_again'), { recursive: true });
+  //  - twice: one sitting exported into two folders whose data DIFFER (the second export was taken after
+  //    the participant's withdrawal was recorded): which is right is not the templates' to guess;
   cpSync(join(at('twice'), 'P001'), join(at('twice'), 'P001_exported_again'), { recursive: true });
+  const twiceDiffers = editColumn(join(at('twice'), 'P001_exported_again', '01_session_info.csv'), 'withdrawn', () => 'true');
+  //  - flat: what a tablet's Downloads folder held before Round 97: two sittings' loose files in ONE
+  //    folder, the second sitting's renamed by the browser ("01_session_info (1).csv"), and the pooled files;
+  mkdirSync(at('flat'), { recursive: true });
+  for (const f of readdirSync(join(at('twice-identical'), 'P001'))) cpSync(join(at('twice-identical'), 'P001', f), join(at('flat'), f));
+  for (const f of readdirSync(join(at('twice-identical'), 'P002'))) {
+    cpSync(join(at('twice-identical'), 'P002', f), join(at('flat'), f.replace(/(\.[a-z]+)$/, ' (1)$1')));
+  }
+  for (const f of readdirSync(join(at('twice-identical'), '_pooled'))) cpSync(join(at('twice-identical'), '_pooled', f), join(at('flat'), f));
   //  - no-verdict: the per-sitting folders without the pooled export;
   rmSync(join(at('no-verdict'), '_pooled'), { recursive: true, force: true });
   //  - one-polarity-edited: every run relabelled positive in the per-sitting condition tables only.
@@ -300,6 +335,8 @@ for (const { root, options } of jobs) {
       'R:cameras-off': launchR(at('cameras-off')), 'R:one': launchR(at('one')), 'R:twice': launchR(at('twice')),
       'R:no-verdict': launchR(at('no-verdict')), 'R:one-polarity': launchR(at('one-polarity')),
       'R:one-polarity-edited': launchR(at('one-polarity-edited')),
+      'R:cohort-archives': launchR(at('cohort-archives')), 'R:flat': launchR(at('flat')),
+      'Kit:cohort-archives': launchKit(at('cohort-archives'), at('kit-out')), 'Kit:one': launchKit(at('one'), at('kit-one')),
     } : {}),
     'Python:cohort': launchPy(cohortDir), 'Python:split': launchPy(at('split')), 'Python:flagged': launchPy(at('flagged')),
     ...(rReady ? { 'R:flagged': launchR(at('flagged')) } : {}),
@@ -307,6 +344,8 @@ for (const { root, options } of jobs) {
     'Python:one': launchPy(at('one')), 'Python:twice': launchPy(at('twice')), 'Python:no-verdict': launchPy(at('no-verdict')),
     'Python:few': launchPy(at('few')), 'Python:ten': launchPy(at('ten')), 'Python:one-polarity': launchPy(at('one-polarity')),
     'Python:one-polarity-edited': launchPy(at('one-polarity-edited')),
+    'Python:cohort-archives': launchPy(at('cohort-archives')), 'Python:flat': launchPy(at('flat')),
+    'Python:twice-identical': launchPy(at('twice-identical')),
   };
   console.log(`         (cohort: ${SIM.n} participants; dashboard confirmatory set ${expected.confirmatory.rows} runs / `
     + `${expected.confirmatory.participants} participants, sensitivity set ${expected.sensitivity.rows} / ${expected.sensitivity.participants};`
@@ -1069,8 +1108,42 @@ for (const { root, options } of jobs) {
       `exit ${res.status}`);
   }
   for (const [who, res] of await both('twice')) {
-    ok(`${who}: a sitting exported into two folders stops, naming them`,
-      res.status !== 0 && said(res, /\[DUPLICATED EXPORT\][^\n]*P001_exported_again/), `exit ${res.status}`);
+    ok(`${who}: a sitting exported into two folders whose data differ stops, naming them`,
+      twiceDiffers && res.status !== 0 && said(res, /\[DUPLICATED EXPORT\][^\n]*P001_exported_again/)
+        && said(res, /keep only the most recent export/), `exit ${res.status}`);
+  }
+  /*
+   * THE EXPORT AS THE APP WRITES IT (Round 97): one archive per sitting, and one for the whole tablet.
+   * Before, an export was 23 loose files with the same names for every sitting, and a Downloads folder
+   * holding several sittings was read as ONE sitting: both templates stopped at [TOO FEW PARTICIPANTS]
+   * with nothing naming the cause. The archives must give the folders' output line for line; a sitting
+   * that is there twice with the same data (its own archive and the whole-tablet one) is read once;
+   * and files a browser renamed "name (1).csv" stop the run by name.
+   */
+  const unstamped = (text) => text.split('\n')
+    .filter((l) => l.trim() !== '' && !/^export files:|\[IDENTICAL COPIES\]/.test(l))
+    .map((l) => l.replace(/(Date|Time):\s+\S.*$/, '$1:'))
+    .join('\n');
+  for (const [who, res] of await both('cohort-archives')) {
+    const plain = await RUNS[`${who}:cohort`];
+    ok(`${who}: the archives the app writes give the same output as the folders, line for line`,
+      res.status === 0 && unstamped(res.stdout) === unstamped(plain.stdout),
+      `exit ${res.status}; ${unstamped(res.stdout).split('\n').length} lines against ${unstamped(plain.stdout).split('\n').length}`);
+    ok(`${who}: ... each sitting, there twice with the same data (its own archive and the whole-tablet one), is read once`,
+      new RegExp(`\\[IDENTICAL COPIES\\] ${SIM.n} sitting\\(s\\)`).test(res.stdout)
+        && new RegExp(`export files: ${SIM.n + 1} archive\\(s\\) unpacked; ${SIM.n} sitting\\(s\\) found`).test(res.stdout),
+      (/export files:[^\n]*/.exec(res.stdout) ?? ['no "export files" line'])[0]);
+  }
+  {
+    const res = await RUNS['Python:twice-identical'];
+    ok('Python: a sitting in two folders with the same data is read once, and the run goes on',
+      res.status === 0 && /\[IDENTICAL COPIES\] 1 sitting\(s\)/.test(res.stdout) && /CONFIRMATORY SET: \d+ condition-runs from 4 participants/.test(res.stdout),
+      `exit ${res.status}`);
+  }
+  for (const [who, res] of await both('flat')) {
+    ok(`${who}: several sittings' loose files in one folder stop by name, and say what to export instead`,
+      res.status !== 0 && said(res, /\[SEVERAL SITTINGS IN ONE FOLDER\][^\n]* \(1\)\.csv/) && said(res, /Download everything/)
+        && !said(res, /\[TOO FEW PARTICIPANTS\]/), `exit ${res.status}`);
   }
   for (const [who, res] of await both('no-verdict')) {
     ok(`${who}: without the pooled export's verdict it stops and says what to export`,
@@ -1217,6 +1290,88 @@ for (const { root, options } of jobs) {
     ok(`${who}: ... on every participant's runs, camera or not (${behav.join(', ')})`,
       behav.every((label) => rowsUsed(res, label) === someExpected),
       behav.map((label) => `${label} ${rowsUsed(res, label)}`).join(', ') + ` of ${someExpected}`);
+  }
+  // =========================================================================
+  // THE ANALYSIS KIT (Round 97). run_analysis.R is what the investigator runs: it must run the template
+  // UNCHANGED (its saved log is the template's own output, line for line), and every number it writes
+  // must be the template's — checked here against what the template printed on the same data.
+  // =========================================================================
+  console.log('\n' + '='.repeat(104));
+  console.log('THE ANALYSIS KIT — run_analysis.R writes the tables, figures, thesis map and report from the template\'s own results');
+  console.log('='.repeat(104));
+  if (!rReady) {
+    console.log(`[verify-analysis] the analysis kit needs R: ${rSkipReason.split('\n')[0]} The kit was SKIPPED (not passed).`);
+  } else {
+    const kit = await RUNS['Kit:cohort-archives'];
+    const out = at('kit-out');
+    const file = (name) => join(out, name);
+    const exists = (name) => { try { return readFileSync(file(name)).length > 0; } catch { return false; } };
+    const parseCsv = (text) => {
+      // RFC 4180, as readr writes it: quoted fields may hold commas and doubled quotes.
+      const rows = []; let row = []; let cell = ''; let q = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (q) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; }
+        else if (ch === '"') q = true;
+        else if (ch === ',') { row.push(cell); cell = ''; }
+        else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+        else if (ch !== '\r') cell += ch;
+      }
+      if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+      const [head, ...body] = rows;
+      return body.map((r) => Object.fromEntries(head.map((h, i) => [h, r[i] ?? ''])));
+    };
+    const csv = (name) => { try { return parseCsv(readFileSync(file(name), 'utf8')); } catch { return []; } };
+    ok('Kit: run_analysis.R runs on the app\'s archives and ends cleanly', kit.status === 0, `exit ${kit.status}; ${kit.stderr.slice(-300)}`);
+    const map = csv('thesis_map.csv');
+    const written = map.filter((r) => r.status === 'written');
+    const tables = written.filter((r) => r.kind === 'table');
+    const figures = written.filter((r) => r.kind === 'figure');
+    ok('Kit: ... writes the report, the thesis map, the log, 17 tables and 6 figures, none empty',
+      ['00_START_HERE.html', 'thesis_map.csv', 'analysis_log.txt'].every(exists) && tables.length === 17 && figures.length === 6
+        && written.every((r) => exists(r.file)),
+      `${tables.length} tables, ${figures.length} figures written; missing: ${written.filter((r) => !exists(r.file)).map((r) => r.file).join(', ') || 'none'}`);
+    const log = (() => { try { return readFileSync(file('analysis_log.txt'), 'utf8'); } catch { return ''; } })();
+    const templatePart = log.split('\n==== Printed by R to its error stream')[0];
+    const plain = await RUNS['R:cohort-archives'];
+    ok('Kit: ... its log is the template\'s own output, line for line: the template runs unchanged',
+      unstamped(templatePart) === unstamped(plain.stdout),
+      `${unstamped(templatePart).split('\n').length} lines against ${unstamped(plain.stdout).split('\n').length}`);
+    const coef = csv('tables/T05_primary_model_coefficients.csv').find((r) => r.term === 'polarity1');
+    const printed = coefAfter(plain.stdout, '=== PRIMARY: incomplete-blink ratio', 'polarity1');
+    ok('Kit: ... the primary\'s polarity estimate in its table is the coefficient the template printed',
+      coef != null && Number.isFinite(printed) && Math.abs(Number(coef.estimate_log_odds) - printed) < 1e-4,
+      `table ${coef?.estimate_log_odds}, printed ${printed}`);
+    const flow = csv('tables/T01_participant_flow.csv');
+    const conf = flow.find((r) => r.step.startsWith('CONFIRMATORY SET'));
+    ok('Kit: ... its participant flow gives the confirmatory set the dashboard counts',
+      conf != null && Number(conf.condition_runs) === expected.confirmatory.rows && Number(conf.participants) === expected.confirmatory.participants,
+      `kit ${conf?.condition_runs} runs / ${conf?.participants}, dashboard ${expected.confirmatory.rows} / ${expected.confirmatory.participants}`);
+    const h1 = csv('tables/T06_primary_hypothesis_tests.csv').find((r) => r.quantity === 'positive minus negative, log-odds');
+    const h1Printed = /\[H1\] primary: polarity \(positive minus negative\) log-odds (-?[\d.]+) \(95% CI (-?[\d.]+) to (-?[\d.]+)\)/.exec(plain.stdout);
+    ok('Kit: ... H1a\'s estimate and 95% interval are the ones the template printed',
+      h1 != null && h1Printed != null && [h1.estimate, h1.ci_low, h1.ci_high].every((v, i) => Math.abs(Number(v) - Number(h1Printed[i + 1])) < 5e-4),
+      `table ${h1?.estimate} (${h1?.ci_low} to ${h1?.ci_high}); printed ${h1Printed?.slice(1).join(' ')}`);
+    const fam = csv('tables/T13_secondary_outcomes_with_multiplicity_adjustment.csv');
+    const famRt = fam.find((r) => r.outcome === 'RT');
+    const rtPrinted = /^ {2}RT {19}(-?[\d.]+) \(/m.exec(plain.stdout);
+    ok('Kit: ... every modelled secondary outcome carries its N, and RT\'s effect is the one the template printed',
+      fam.length > 0 && fam.filter((r) => r.estimate !== '').every((r) => Number(r.n_rows) > 0 && Number(r.n_participants) > 0)
+        && famRt != null && rtPrinted != null && Math.abs(Number(famRt.estimate) - Number(rtPrinted[1])) < 5e-4,
+      `RT table ${famRt?.estimate}, printed ${rtPrinted?.[1]}; rows without N: ${fam.filter((r) => r.estimate !== '' && !(Number(r.n_rows) > 0)).map((r) => r.outcome).join(', ') || 'none'}`);
+    const inferential = ['T05', 'T06', 'T07', 'T08', 'T13', 'T14'];
+    ok('Kit: ... the thesis map names every table and figure, and no inferential table lacks its N',
+      map.length >= 24 && inferential.every((id) => { const r = map.find((x) => x.id === id); return r != null && r.status === 'written' && Number(r.n_participants) > 0; }),
+      inferential.map((id) => `${id} ${map.find((x) => x.id === id)?.n_participants ?? 'absent'}`).join(', '));
+    const html = (() => { try { return readFileSync(file('00_START_HERE.html'), 'utf8'); } catch { return ''; } })();
+    ok('Kit: ... the report opens with the sets read and lists what was not produced',
+      /Confirmatory set: <b>\d+<\/b> condition-runs/.test(html) && /Not produced in this run/.test(html) && html.includes('T17 Provenance'),
+      `${html.length} bytes`);
+    const one = await RUNS['Kit:one'];
+    const oneHtml = (() => { try { return readFileSync(join(at('kit-one'), '00_START_HERE.html'), 'utf8'); } catch { return ''; } })();
+    ok('Kit: when the template stops, the kit stops too, and its report carries the template\'s message',
+      one.status !== 0 && oneHtml.includes('The analysis stopped') && oneHtml.includes('[TOO FEW PARTICIPANTS]'),
+      `exit ${one.status}`);
   }
 } finally {
   rmSync(dir, { recursive: true, force: true });

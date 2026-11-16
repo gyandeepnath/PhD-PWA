@@ -37,7 +37,6 @@ import sys
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
-import glob
 import statsmodels.formula.api as smf
 from statsmodels.stats.multitest import multipletests
 
@@ -45,6 +44,111 @@ from statsmodels.stats.multitest import multipletests
 # VISULAB_DATA_DIR overrides it from the environment, so scripts/verifyAnalysis.mjs can run this
 # file against a fixture WITHOUT editing it — the gate then checks the bytes the analyst is given.
 DATA_DIR = os.environ.get("VISULAB_DATA_DIR", ".")
+
+_EXPORT_FILES = None
+_UNPACKED = None  # the temporary folder archives are unpacked into; kept alive for the run
+
+
+def export_files():
+    """Every export file under DATA_DIR: loose folders and the app's .zip archives alike (Round 97).
+
+    The same rules as the R template, in the same order (see "WHERE THE EXPORT FILES ARE" there):
+    archives are unpacked into a temporary folder and nothing is written under DATA_DIR; files a
+    browser renamed "01_session_info (1).csv" (several sittings saved into one folder) stop the run
+    by name, because this file would otherwise read one sitting and ignore the rest; a sitting or a
+    pooled verdict present twice with IDENTICAL data tables is read once and said so; copies that
+    differ are left in, and stop further down ([DUPLICATED EXPORT], [TWO VERDICTS]).
+    """
+    global _EXPORT_FILES, _UNPACKED
+    if _EXPORT_FILES is not None:
+        return _EXPORT_FILES
+    import hashlib
+    import re
+    import tempfile
+    import zipfile
+
+    def md5(path):
+        h = hashlib.md5()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
+    def walk(root):
+        return [os.path.join(d, f) for d, _, fs in os.walk(root) for f in fs]
+
+    is_zip = lambda x: x.lower().endswith(".zip")
+    if os.path.isfile(DATA_DIR) and is_zip(DATA_DIR):
+        zips, roots = [DATA_DIR], []
+    else:
+        zips, roots = sorted(f for f in walk(DATA_DIR) if is_zip(f)), [DATA_DIR]
+    if zips:
+        _UNPACKED = tempfile.TemporaryDirectory(prefix="visulab_archives_")
+        for i, z in enumerate(zips, 1):
+            out = os.path.join(_UNPACKED.name, f"{i:04d}_{os.path.splitext(os.path.basename(z))[0]}")
+            try:
+                with zipfile.ZipFile(z) as zf:
+                    if zf.testzip() is not None:
+                        raise zipfile.BadZipFile("an entry does not match its checksum")
+                    zf.extractall(out)
+            except (zipfile.BadZipFile, OSError, EOFError):
+                sys.exit(f"[DAMAGED ARCHIVE] {z} could not be opened: it is incomplete or damaged. Copy it "
+                         "from the tablet again, or export that sitting again, and run again.")
+            roots.append(out)
+    files = sorted(f for r in roots for f in walk(r) if not is_zip(f))
+
+    renamed = [f for f in files if re.match(r"^[0-9]{2}[a-z]?_[A-Za-z0-9_]+ \([0-9]+\)\.csv$", os.path.basename(f))]
+    if renamed:
+        sys.exit(f"[SEVERAL SITTINGS IN ONE FOLDER] {len(renamed)} file(s) under DATA_DIR are named like "
+                 f"\"{os.path.basename(renamed[0])}\" (in {os.path.dirname(renamed[0])}). A browser gives such "
+                 "names when several sittings' files are saved into one folder; they cannot be told apart by "
+                 "name, and this file would read one sitting and ignore the rest. On the tablet, export each "
+                 "sitting again with the current build (it writes ONE .zip per sitting), or use Dashboard -> "
+                 "Export -> 'Download everything', and put those .zip files in DATA_DIR instead.")
+
+    def without(dirs):
+        return [f for f in files if os.path.dirname(f) not in dirs]
+
+    sitting_dirs = sorted({os.path.dirname(f) for f in files if os.path.basename(f) == "02_conditions.csv"})
+    by_key = {}
+    for d in sitting_dirs:
+        by_key.setdefault(md5(os.path.join(d, "02_conditions.csv")), []).append(d)
+    drop = set()
+    for group in by_key.values():
+        if len(group) < 2:
+            continue
+        seen = set()
+        for d in group:
+            # The data tables decide: the manifest carries each export's time, the backup its stamps.
+            tables = sorted(f for f in os.listdir(d) if re.match(r"^[0-9]{2}[a-z]?_.*\.csv$", f))
+            signature = "|".join(f"{f} {md5(os.path.join(d, f))}" for f in tables)
+            if signature in seen:
+                drop.add(d)
+            seen.add(signature)
+    files = without(drop)
+    verdicts = [f for f in files if os.path.basename(f) == "analysis_join_report.csv"]
+    seen, drop_v = set(), set()
+    for v in verdicts:
+        k = md5(v)
+        if k in seen:
+            drop_v.add(os.path.dirname(v))
+        seen.add(k)
+    files = without(drop_v)
+    if zips or drop or drop_v:
+        n_sittings = len({os.path.dirname(f) for f in files if os.path.basename(f) == "02_conditions.csv"})
+        print(f"\nexport files: {len(zips)} archive(s) unpacked; {n_sittings} sitting(s) found")
+        if drop:
+            print(f"  [IDENTICAL COPIES] {len(drop)} sitting(s) were there more than once with identical data "
+                  "tables; one copy of each is read.")
+        if drop_v:
+            print(f"  [IDENTICAL COPIES] the pooled verdict was there {len(drop_v)} time(s) over, identical; "
+                  "one copy is read.")
+    _EXPORT_FILES = files
+    return files
+
+
+def export_paths(name: str):
+    return [f for f in export_files() if os.path.basename(f) == name]
 
 
 def load(name: str, with_folder: bool = False) -> pd.DataFrame:
@@ -64,11 +168,12 @@ def load(name: str, with_folder: bool = False) -> pd.DataFrame:
 
     A single exported folder still yields exactly one match, so that case behaves as before.
     """
-    matches = sorted(glob.glob(os.path.join(DATA_DIR, "**", name), recursive=True))
+    matches = export_paths(name)
     if not matches:
         raise FileNotFoundError(
             f"no {name} found under DATA_DIR ({os.path.abspath(DATA_DIR)}). "
-            "Point DATA_DIR at an exported folder, or at a folder of them."
+            "Point DATA_DIR at the folder that holds the exported .zip files (or exported folders), "
+            "or at one of them."
         )
     # Each file is typed by pandas on its own and then concatenated; NOTHING re-infers the types
     # over the pooled frame (an earlier version of this comment said it did). A column that is empty
@@ -181,17 +286,20 @@ def exporter_verdict(session_info: pd.DataFrame, conditions: pd.DataFrame) -> pd
     drop withdrawn participants and unfinished runs only, and modelled a test-harness session,
     integrity-blocked sittings and participants without a complete condition set.
     """
-    paths = sorted(glob.glob(os.path.join(DATA_DIR, "**", "analysis_join_report.csv"), recursive=True))
+    paths = export_paths("analysis_join_report.csv")
     if not paths:
         sys.exit(
             f"[NO VERDICT] analysis_join_report.csv was not found under DATA_DIR "
             f"({os.path.abspath(DATA_DIR)}). Which participants may be analysed is decided by the "
             "exporter's join check, not by this file. Take the pooled export (Dashboard -> 'Download "
             "analysis dataset') from the same tablet and put its folder inside DATA_DIR beside the "
-            "per-sitting folders.")
+            "per-sitting folders. (From Round 97 that export is one file, visulab_pooled_....zip, and "
+            "'Download everything' holds it too; put either in DATA_DIR as it is.)")
     if len(paths) > 1:
         sys.exit(f"[TWO VERDICTS] more than one analysis_join_report.csv under DATA_DIR "
-                 f"({' AND '.join(paths)}). Keep only the pooled export taken after the last sitting.")
+                 f"({' AND '.join(paths)}). Keep only the pooled export taken after the last sitting. "
+                 "(They differ, so they were taken at different times; a pooled archive's name carries how "
+                 "many sittings it covers.)")
     v = pd.read_csv(paths[0], dtype=str, keep_default_na=False)
     verdict = pd.DataFrame({
         "participant_key": v["participant_id"],
@@ -324,7 +432,8 @@ def main() -> None:
         sys.exit(f"[DUPLICATED EXPORT] {len(dup)} condition_id value(s) occur more than once under DATA_DIR "
                  f"(e.g. {dup[0]}, in: {' AND '.join(where)}). The same sitting has been exported into more "
                  "than one folder, so every row of it would be counted twice. Remove the duplicate folder "
-                 "and run again.")
+                 "and run again. (Copies with identical data tables are read once; these two differ, so one "
+                 "of them is an older export: keep only the most recent export of that sitting.)")
 
     # WHICH ROWS ARE MODELLED: the exporter's verdict, applied once, here, to every table before any
     # join. See exporter_verdict(). The untrimmed tables are kept for the one sensitivity refit.

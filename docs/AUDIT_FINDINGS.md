@@ -10154,3 +10154,116 @@ The commits after it change only this write-up and the new test's header comment
 | Rule or format | Before | Now | Where it is recorded |
 |---|---|---|---|
 | Every rule and column | unchanged | unchanged | as before; a sitting that met the gap now reads `camera_inactive_reason` 'lost' instead of an active camera with no samples |
+
+## Round 97 — one file per sitting, an analysis kit that writes the thesis's tables and figures, and a guide from the tablet to the thesis
+
+The investigator asked for everything to be checked at once and for the path from collection to analysis
+and thesis to be made easy, having "zero idea" how to analyse, extract or report. A four-part audit of the
+whole repository (run-day readiness, the extraction path, analysis to thesis, repository and security) was
+started twice; both times every auditor was stopped by the usage limit, and the machine was replaced between
+attempts. **That audit did not complete.** Two auditors left measurements before they stopped, and those
+drove this round: the extraction path (auditor B) and the long-run storage (auditor A). The other two parts
+(analysis to thesis as an audit, and the repository, security and privacy review) were not done; the
+analysis-to-thesis part was built instead of audited (below).
+
+### What was found
+
+1. **The export could not be analysed as it reached the computer** (auditor B, measured on 130 simulated
+   sittings). An export was 23 separate downloads with the same names for every sitting
+   (`01_session_info.csv`, ...), all into the tablet's one Downloads folder, where Chrome renames a second
+   sitting's files `01_session_info (1).csv` (Chrome's behaviour; not observed on the tablet). Only two of
+   the 23 names carry the participant code. The templates read one folder per sitting by exact name, and
+   no document or screen said how to get from the one to the other. Pointed at such a folder of 130
+   sittings, both templates read **one** sitting, printed "no condition-run is excluded", and stopped at
+   `[TOO FEW PARTICIPANTS]`, with nothing naming the cause.
+2. **The manual contradicted itself on clearing the tablet.** §6 advised "export and clear the tablet
+   regularly", while the pooled dataset the analysis needs is built from the sittings the tablet still
+   holds; a purged sitting has no verdict and is excluded. A camera-on sitting occupies about 0.72 MB of
+   browser storage (140 simulated sittings, about 100 MB, desktop Chromium; auditor A), so storage is not
+   a reason to clear it; video is.
+3. **Nothing showed which sittings had left the tablet.** `exported_at` and `export_confirmed_at` were
+   recorded and never displayed (auditor A).
+4. **No result reached a file.** The R template printed about 1,200 lines (12 participants) to 1,400 (130)
+   and wrote nothing: no table, no figure, nothing saying where a result belongs in a thesis.
+
+### What changed
+
+- **One file per sitting** (`src/lib/zipArchive.ts`, `src/storage/exportArchive.ts`, the Export tab).
+  **Download data bundle** writes `visulab_<code>_<session>.zip`: the same 23 files, byte for byte, in a
+  folder named for the sitting. A ZIP writer and reader with no dependency: CRC-32 on every entry, fixed
+  entry times, entries deflated by the browser's own CompressionStream where there is one, refusal of
+  damaged archives and of paths that could leave their folder. *as separate files instead* keeps the loose
+  export. The question after the export says what was written and asks whether **the file** arrived.
+- **Download everything**: one archive of every sitting on the tablet (each as its own archive holds it),
+  the pooled dataset over exactly those sittings, the analysis scripts of the build that wrote it
+  (`src/analysis/kitFiles.ts`) and `START_HERE.txt`. Built one sitting at a time. It marks nothing exported.
+  **Download analysis dataset** writes the pooled dataset as one archive, its name carrying the number of
+  sittings and a checksum of `analysis_long.csv`.
+- **The templates read archives** (R: `resolve_export_files`; Python: `export_files`, the same rules in
+  the same order): any mix of archives and loose folders, or one archive. A sitting there twice with
+  identical data tables, as its own archive and inside the whole-tablet one, is read once
+  (`[IDENTICAL COPIES]`); copies that differ still stop (`[DUPLICATED EXPORT]`, which now says to keep the
+  latest); loose files a browser renamed stop by name (`[SEVERAL SITTINGS IN ONE FOLDER]`), and an archive
+  that cannot be opened stops (`[DAMAGED ARCHIVE]`).
+- **The integrity verdict at export**: one line on the Export tab and in the export question, read from the
+  sitting's own `16_integrity_report.csv` (`integrityLine`, `src/storage/export.ts`).
+- **The Session Manager's rows** say *not exported yet*, *exported, copy not yet checked* or *exported, copy
+  checked*.
+- **The analysis kit**, `src/analysis/run_analysis.R`. It runs `analysis_template.R` unchanged, as its own
+  Rscript process, saves what it prints as `results/analysis_log.txt`, and writes 17 tables (CSV), 6
+  figures (PNG, 300 dpi), `thesis_map.csv` (every item, what it addresses, the plan section, a suggested
+  thesis place, its N and the rule versions) and `00_START_HERE.html`. It fits nothing: the template gained
+  a **silent** results registry (the sensitivity refits, the moderator tests, the multiplicity tables with
+  each row's N) and, when `VISULAB_RESULTS_RDS` names a file, saves the results it has computed; the kit
+  reads that file. Descriptive tables are computed from the rows each model was fitted on and say so. It
+  writes no interpretation. When the template stops, the kit's report shows the message and the kit exits
+  non-zero.
+- **Documents**: `docs/ANALYSIS_GUIDE.md` (from the tablet to the thesis: after every sitting, after the last,
+  running the kit, reading each table and figure, what goes where in the thesis, the investigator's
+  decisions, every stop message, a glossary); `docs/READINESS.md` (bench test, pilot and confirmatory gates);
+  the operator manual's export, copy-off and full-tablet advice; README, PROTOCOL, DEPLOY and the blueprint
+  aligned.
+
+### What was verified
+
+- `tests/zipArchive.test.ts` (round trip deflated and stored, the CRC-32 check value, same bytes for the same
+  files, a truncated or damaged archive refused, unsafe paths refused) and `tests/exportArchive.test.ts` (an
+  archive holds exactly the loose export's files; every sitting's name differs; the whole-tablet archive
+  holds every sitting, the pooled dataset and the scripts; the integrity line).
+- The archives open in R (`utils::unzip`), Python (`zipfile`, `testzip`) and `unzip -t`.
+- `scripts/verifyAnalysis.mjs`: both templates on the main cohort as the app's archives (one per sitting
+  AND the whole-tablet archive, so every sitting is there twice) give the folders' output **line for
+  line**, reading each sitting once; a sitting in two folders with the same data is read once; two
+  different exports of one sitting stop; a flat folder of renamed loose files stops by name. The kit
+  (Rscript, data and output as arguments): ends cleanly and writes every file; its log is the template's
+  output line for line (the template runs unchanged); the primary's polarity coefficient, H1a's estimate and
+  interval, RT's secondary effect and the confirmatory counts are the ones the template printed and the
+  dashboard counts; every inferential item carries its N; on one participant it stops with the template's
+  message in its report.
+- The template's printed output is unchanged by the registry: run before and after on the same 12-participant
+  cohort, with and without the save step, stdout differs only in the template's own checksum line.
+- `e2e/exportConfirm.spec.ts` downloads the sitting's archive and opens it (23 files, in the sitting's folder),
+  downloads **Download everything** and checks its paths, and checks that the loose export still writes 23
+  files.
+
+### Not done, and why
+
+- **The whole-repository audit did not complete** (above). Its repository, security and privacy part and an
+  independent audit of the analysis against the plan are still to be done.
+- `run_analysis.R` was not run in RStudio's Source button or on Windows; it was run under Rscript on Linux.
+  The folder chooser and the Windows path handling are written for those cases and not exercised.
+- The kit does not compute Objective 4's agreement with manual annotation; the thesis map lists it as not
+  computed.
+- Nothing was measured on the tablet: the archive download in its Chrome, the copy over a cable, and the time
+  the whole-tablet archive takes there.
+
+### Checks run
+
+(Recorded when they have run on this round's last commit.)
+
+### Versions in the data
+
+| Rule or format | Before | Now | Where it is recorded |
+|---|---|---|---|
+| Every rule and column | unchanged | unchanged | as before |
+| The export's delivery | 23 loose files | one `.zip` per sitting holding the same files; loose files on request | the archive's name and folder |
