@@ -20,14 +20,20 @@ const flat = (f: string) => read(f).replace(/\s+/g, ' ');
 /** The dashboard's source, comments removed (a comment may quote the old wording), whitespace flattened. */
 const dashboard = read('src/dashboard/Dashboard.tsx').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s+/g, ' ');
 const manual = flat('docs/OPERATOR_MANUAL.md');
-const dialog = dashboard.slice(dashboard.indexOf("title: 'Did every file arrive?'"), dashboard.indexOf("testId: 'export-confirm-dialog'"));
+/**
+ * From where the sentence about what was sent is built to the dialog's end (Round 97: the export is one
+ * archive, and the loose files are on request; the dialog says which was sent and is titled for it).
+ */
+const dialog = dashboard.slice(dashboard.indexOf('let sent: string;'), dashboard.indexOf("testId: 'export-confirm-dialog'"));
 
 describe('"Did every file arrive?"', () => {
   it('asks about the files copied off the tablet, not a receiving computer', () => {
     expect(dialog.length).toBeGreaterThan(50);
     expect(dashboard).not.toMatch(/receiving computer/i);
-    expect(dialog).toMatch(/this tablet's Downloads folder/);
+    expect(dialog).toMatch(/One file was sent to this tablet's Downloads folder/);
+    expect(dialog).toMatch(/files were sent to this tablet's Downloads folder/);
     expect(dialog).toMatch(/copied off (the|this) tablet/);
+    expect(dialog).toMatch(/title: loose \? 'Did every file arrive\?' : 'Did the file arrive\?'/);
   });
 
   it('says what a yes releases: the purge of a deleted session after the bin\'s own retention', () => {
@@ -40,7 +46,8 @@ describe('"Did every file arrive?"', () => {
   it('the manual names the dialog and its two answers as the screen says them', () => {
     const confirm = /confirmLabel: '([^']+)'/.exec(dialog)![1];
     const cancel = /cancelLabel: '([^']+)'/.exec(dialog)![1];
-    expect(manual).toContain('**Did every file arrive?**');
+    // The manual describes the archive export, the default; the loose files' title is the same question.
+    expect(manual).toContain('**Did the file arrive?**');
     expect(manual).toContain(`**${confirm}**`);
     expect(manual).toContain(`**${cancel}**`);
   });

@@ -179,12 +179,14 @@ test('the researcher card shows the live picture on set-up screens and never on 
   await expect(page.getByTestId('researcher-feed')).toBeVisible();
   await expect(page.getByTestId('ear-trace')).toBeVisible();
   await expect(page.getByTestId('diag-camera')).toHaveText(/\d+(\.\d+)? fps · \d+×\d+/, { timeout: 10_000 });
-  const feed = await page.evaluate(() => {
+  // Polled, not read once (Round 97): the card's video is given the stream when the card opens, and
+  // reaches a playable frame a moment later. A single read right after opening failed about one run in
+  // five under a loaded machine, on builds before and after the change it was found on.
+  await expect.poll(() => page.evaluate(() => {
     const v = document.querySelector('[data-testid="researcher-feed-video"]') as HTMLVideoElement;
     const hidden = document.querySelector('video[aria-hidden="true"]') as HTMLVideoElement;
     return { playing: v.readyState >= 2 && v.videoWidth > 0, same: (v.srcObject as MediaStream).id === (hidden.srcObject as MediaStream).id };
-  });
-  expect(feed).toEqual({ playing: true, same: true });
+  }), { timeout: 10_000 }).toEqual({ playing: true, same: true });
 
   // Into the first condition: no picture of the participant, whatever the card's state was.
   // driveUntil reads the stage ONCE per step. This loop read it twice — once to test, once to hand to
