@@ -32,9 +32,10 @@ measured on the study tablet.
 1. **Export.** Dashboard → Export → **Download data bundle ↓**. This writes one file,
    `visulab_<code>_<session>.zip`, into the tablet's Downloads folder (`<code>` is the participant code,
    `<session>` the first eight characters of the sitting's id). Inside, in a folder of the same name, are
-   the sitting's 23 files: the data tables, the codebook `00_CODEBOOK.csv` that explains every column,
-   a provenance manifest and `backup_*.json`, the complete backup of the sitting. Section 7 of
-   `docs/OPERATOR_MANUAL.md` describes each file.
+   the sitting's 23 files: 20 data tables (one of them the codebook `00_CODEBOOK.csv`, which explains
+   every column of the others), an analysis JSON (`session_*.json`), a provenance manifest and
+   `backup_*.json`, the complete backup of the sitting. Section 7 of `docs/OPERATOR_MANUAL.md` says which
+   of them to look at after a sitting.
 2. **Read the integrity line.** The Export tab, and the question that follows the download, show one
    line read from `16_integrity_report.csv` inside the file: *Integrity check of this sitting: all checks
    passed*, or the number of errors and warnings. If it reports any, open the archive in the tablet's
@@ -51,7 +52,8 @@ measured on the study tablet.
      sittings/      one visulab_<code>_<session>.zip per sitting, as they arrive
      everything/    the weekly visulab_everything_....zip files
      media/         photographs and video, if any were consented (see below)
-     results/       what the analysis writes
+     results/       a copy of each analysis run's results folder (the analysis writes it beside
+                    data/ in the unzipped folder; copy it here afterwards)
    ```
 
    Keep a second copy of this folder on another drive or on your institution's storage. Never rename,
@@ -83,12 +85,14 @@ It does not mark any sitting as exported or checked: only the per-sitting questi
 
 ### Do not delete sittings while the study runs
 
-The analysis needs the pooled dataset, which the tablet builds from the sittings it still holds; a sitting
-deleted and purged before the last "Download everything" is not in it. Storage is rarely a reason to
+The analysis needs the pooled dataset, which the tablet builds from the sittings it still holds. A sitting
+that has been deleted is not in **Download everything** or the pooled dataset, even while it is still in the
+recycle bin: restore it from the bin first if it belongs in the analysis. Storage is rarely a reason to
 delete: a camera-on sitting occupies about 0.7 MB of the tablet's browser storage (140 simulated sittings
 came to about 100 MB in desktop Chromium, Round 97; not measured on the tablet). Video, if consented, is
 what fills a tablet. If the tablet really is full, take **Download everything** first, copy it off, check
-that it opens on the computer, and only then delete and purge (`docs/OPERATOR_MANUAL.md` §6).
+that it opens on the computer, and only then delete and purge (`docs/OPERATOR_MANUAL.md`, end of §5: *If the
+red panel at the foot of the screen says the device has run out of storage*).
 
 ### Keeping the data safe
 
@@ -115,8 +119,9 @@ earlier ones in `everything/` and in the second copy.
 
 ### Photographs and video
 
-They are not in the data file. If a participant consented to them, a second button on the Export tab,
-**Download media files**, writes them. They show a face: keep them in `media/`, apart from the data,
+They are not in the data file. If a participant consented to them, a further button at the foot of the
+Export tab, **Download media files ↓** (shown only for a sitting that holds photographs or video), writes
+them. They show a face: keep them in `media/`, apart from the data,
 under the terms of the consent given, and never put them in a thesis or share them unless that consent
 covers it. Each file is listed in `15_media_inventory.csv`, so it can be traced to its consent.
 
@@ -143,8 +148,9 @@ are not in the backup.
      ```
 4. In RStudio: File → Open File → `analysis/run_analysis.R`, then press **Source** (top right of the
    script). It finds `data/` beside `analysis/` by itself; if it cannot, it asks for the folder.
-5. Wait. Nothing is shown until the analysis template has finished. The template took about five
-   minutes on 130 simulated sittings on a desktop computer (Round 97); a laptop may take longer.
+5. Wait. It prints where the data and the results are, then nothing more until the analysis template has
+   finished. On 130 simulated sittings the template took about five minutes on a desktop computer
+   (`docs/AUDIT_FINDINGS.md` Round 97); a laptop may take longer, and the time of each run is written in T17.
 6. When it ends it prints where the results are: a folder `results/` beside `data/`. Open
    `results/00_START_HERE.html` in a browser.
 
@@ -155,7 +161,8 @@ and changes no rule: every estimate, interval and p-value is the template's. The
 
 **The Python cross-check.** `analysis/analysis_template.py` fits the same models in a second toolchain;
 `docs/ANALYSIS_PLAN.md` §5b asks for the two to agree in sign and in significance. To run it you need
-Python with `pip install pandas numpy statsmodels scipy`; then, in the unzipped folder,
+Python with `pip install pandas numpy statsmodels scipy` (if `python` or `pip` is not found, type `python3`
+and `pip3` instead); then, in the unzipped folder,
 `VISULAB_DATA_DIR=data python analysis/analysis_template.py` (macOS or Linux) or, in Windows PowerShell,
 `$env:VISULAB_DATA_DIR="data"; python analysis\analysis_template.py`. It prints only; compare its polarity
 estimates with R's. If you cannot run it, say so in the thesis rather than claim the cross-check.
@@ -179,7 +186,7 @@ what the numbers are, and its file name. The same list is in `results/thesis_map
 | T03 | Data quality | How much the camera measured, frame-rate tiers, runs left out of the ocular models and why, reliability verdicts, engagement flags. |
 | T04 | Descriptive statistics by condition | Each outcome in each of the ten conditions: runs, participants, mean, SD, median, quartiles, range. Observed values, not model estimates. |
 | T05 | Primary model coefficients | The fixed effects of the primary model on the log-odds scale, with SE, z, p and a Wald 95% interval. `polarity1` is positive minus negative; colour terms are deviations from the mean of the five colours. The model formula, random structure, convergence and dispersion are in the item's description. |
-| T06 | Primary hypothesis tests | H1a: the polarity effect as log-odds, odds ratio and predicted proportions, with 95% intervals and p. H1b: the likelihood-ratio test of polarity × colour. The Holm column adjusts across H1a and H1b. |
+| T06 | Primary hypothesis tests | H1a: the polarity effect as log-odds and odds ratio (95% interval, p), the predicted proportion of incomplete blinks under each polarity, and their difference with its 95% interval. H1b: the likelihood-ratio test of polarity × colour. The Holm column adjusts across H1a and H1b. |
 | T07 | Primary model's estimated proportions | The model-estimated proportion of incomplete blinks in each condition, with 95% intervals. |
 | T08 | Polarity effect within each colour | Odds ratios inside each colour, Holm-adjusted across the five. Read only beside H1b in T06. |
 | T09 | Objective 2: nested model comparison | Contrast alone, contrast + colour, and the full model, compared by likelihood ratio and AIC/BIC. |
@@ -197,7 +204,7 @@ what the numbers are, and its file name. The same list is in `results/thesis_map
 | F01 | Primary outcome by condition | T07 as a figure. |
 | F02 | Secondary outcomes by condition | Reaction time, fatigue and comprehension: mean across participants and 95% interval (descriptive). |
 | F03 | Reaction-time distribution | Runs' mean reaction times by polarity. |
-| F04 | Outcomes over the sitting | Each outcome by serial position (1 = first condition). |
+| F04 | Outcomes over the sitting | The incomplete-blink ratio, reaction time and fatigue by serial position (1 = first condition). |
 | F05 | CVS-Q baseline and close | One line per participant. |
 | F06 | Sensitivity of the primary estimate | T14 as a figure. |
 
@@ -220,8 +227,10 @@ PROVENANCE, is the record of how the numbers were produced. Keep the whole log w
 ## Part 4. What goes where in the thesis
 
 The kit gives numbers, labels and formats, and a suggested place for each item; the wording of the
-thesis is yours. The suggested places follow the synopsis's own structure (chapters 1 to 4, Objectives 1
-to 4 and hypotheses H₁ₐ, H₁ᵦ, H₁ᵪ, H₁ᵨ; `synopsis/SYNOPSIS_AdtU.md`).
+thesis is yours. The suggested places follow the synopsis's Objectives 1 to 4 and hypotheses H₁ₐ, H₁ᵦ,
+H₁ᵪ, H₁ᵨ (`synopsis/SYNOPSIS_AdtU.md` §1.7–1.8), in a results chapter the kit calls Chapter 4 with sections
+4.1 to 4.7. That numbering is the kit's suggestion, not the synopsis's: the synopsis's own Chapter 4 is its
+Conclusion.
 
 **Materials and Methods needs**, with where each fact is written down:
 
@@ -242,8 +251,8 @@ to 4 and hypotheses H₁ₐ, H₁ᵦ, H₁ᵪ, H₁ᵨ; `synopsis/SYNOPSIS_AdtU.
 3. Objective 1, secondary outcomes: T13, T04, T16, F02–F05; single terms from T18.
 4. Objective 2, contrast and colour (H₁ᵪ): T09, T10, T11; the contrast terms of the secondary models in T18.
 5. Objective 3, moderation (H₁ᵨ): T15.
-6. Objective 4, feasibility of the camera measures: T03; agreement with manual annotation is not
-   computed by the kit (Part 3).
+6. Objective 4, feasibility of the camera measures: T03, T19 (T16 gives the subjective scores the objective
+   indices are compared with); agreement with manual annotation is not computed by the kit (Part 3).
 7. Sensitivity analyses: T14, F06.
 
 **Appendices:** the full coefficient tables (T05, T10, T18), the codebook, T17 and the analysis log's
@@ -253,9 +262,9 @@ the decisions of Part 5 with the date each was made.
 ## Part 5. Decisions that are yours, to make and write down before the confirmatory data are looked at
 
 The software has a default for each; the default is not a decision. Record each choice, with its date, in
-the place named, before opening the confirmatory results. Each is described in `docs/AUDIT_FINDINGS.md`
-(sections "For the investigator" and "Not done" of Rounds 90 to 96) and, where named, in
-`docs/ANALYSIS_PLAN.md`.
+the place named, before opening the confirmatory results. Each is described in the place named in the
+second column: mostly `docs/AUDIT_FINDINGS.md` (the sections "For the investigator" and "Not done" of
+Rounds 88 to 96) and `docs/ANALYSIS_PLAN.md`.
 
 | Decision | Where it is described | What the software does now |
 |---|---|---|
@@ -265,7 +274,7 @@ the place named, before opening the confirmatory results. Each is described in `
 | Comprehension threshold for the engagement penalty | ANALYSIS_PLAN §5 item 5; PROTOCOL | as in the plan; marked open |
 | The formal colour-vision plate rule | AUDIT_FINDINGS Round 90 §9 item 4 and Round 95, Not done | a deficient result at any sitting stands; not done never replaces a result |
 | The sitting term in the models | ANALYSIS_PLAN §2; PROTOCOL | not in the models; a sensitivity refit adds it |
-| Participants recorded by more than one build | DEPLOYMENT §5; OPERATOR_MANUAL §8 | blocks a new sitting on a build change; the template counts builds |
+| Participants recorded by more than one build | DEPLOYMENT §5; OPERATOR_MANUAL §8; AUDIT_FINDINGS Round 88 §8 item 4 | warns on the New Session form (the sitting can still be run); the export's join check leaves such a participant out of the models (`mixed_build_within_participant`); the template counts builds |
 | Sensitivity choices for rows under earlier rules (`tg-v1`, `rt-t1`, `rw-v1`, `sf-v1`, `at-v1`, `blink-r1`) | ANALYSIS_PLAN §5 | kept or refitted as the plan states; marked open |
 | Whether blink rate follows the inter-blink interval for earlier-rule rows | ANALYSIS_PLAN §5 | blink rate keeps the current-rule rows only |
 | Frame-rate floor of 20 against 22 face-solved frames a second | `docs/FPS_GATE_SIMULATION.md` | 20 (pre-registered gate `fps-g2`) |
@@ -279,9 +288,15 @@ the place named, before opening the confirmatory results. Each is described in `
 
 ## Part 6. When the analysis stops, or warns
 
-The analysis stops on purpose when the data cannot give a sound result, and says why in one line that
-begins with a code in square brackets. `00_START_HERE.html` then shows the message at the top, and the
-whole output is in `analysis_log.txt`.
+The analysis stops on purpose when the data cannot give a sound result, and says why in one line that,
+for the stops below, begins with a code in square brackets. `00_START_HERE.html` then shows the message at
+the top, and the whole output is in `analysis_log.txt`.
+
+A few messages carry no code. `run_analysis.R`'s own (*These R packages are not installed*, *The data
+folder does not exist*, *The results folder … must not be inside the data folder*) stop it before anything
+is written: follow the sentence, and for the first repeat the install line of Part 2. The template's
+*no … found under DATA_DIR* means a file every export has is missing: point the analysis at the folder that
+holds the exports.
 
 **Messages that stop the analysis**
 
@@ -293,7 +308,7 @@ whole output is in `analysis_log.txt`.
 | `[SEVERAL SITTINGS IN ONE FOLDER]` | Loose files of several sittings were saved into one folder (names like `01_session_info (1).csv`). | Export each sitting again with the current build (one `.zip` each), or use "Download everything". |
 | `[DAMAGED ARCHIVE]` | A `.zip` cannot be opened. | Copy it from the tablet again, or export that sitting again. |
 | `[MIXED FOLDER]` | One folder holds rows of more than one sitting. | Keep each sitting's files in their own folder (the archives do this). |
-| `[TOO FEW PARTICIPANTS]` | Fewer than two participants in the confirmatory set. | A mixed model needs several; read T01's counts in the log for who was excluded and why. |
+| `[TOO FEW PARTICIPANTS]` | Fewer than two participants in the confirmatory set. | A mixed model needs several. No table is written when it stops here: in `analysis_log.txt`, the lines headed *exclusion reasons* above the message say who was left out and why. |
 | `[ONE POLARITY]` | Every confirmatory run has the same polarity. | The data cannot test polarity; check the exports and the counterbalancing. |
 | `[PRIMARY NOT FITTED]` | The primary model could not be fitted at any step of its reduction ladder. | Read the fit notes above it in the log; the other results are still written. |
 
@@ -306,7 +321,8 @@ whole output is in `analysis_log.txt`.
 | `[MIXED BUILDS]` | The confirmatory set was collected by more than one build; the plan says how to report it. |
 | `[PRIMARY NOT ESTIMABLE]` | No camera-on run with a blink: the ocular models cannot be fitted; the behavioural ones are. |
 | `[NOT CONVERGED]` | A secondary model's fit did not converge; its row in T13 says so. |
-| `[SEPARATION]`, `[SE CAUTION]`, `[OLRE]`, `[PROTOCOL NOTE]`, `[NASA-TLX]` | Notes on a particular model or measure; the line says what was done. |
+| `[SEPARATION]`, `[OLRE]`, `[PROTOCOL NOTE]`, `[NASA-TLX]` | Notes on a particular model or measure; the line says what was done. |
+| `[SE CAUTION]` | Printed only by the Python cross-check: too few participants for that model's standard errors; it says what it withholds. |
 
 ## Part 7. Words used here
 
@@ -329,5 +345,6 @@ whole output is in `analysis_log.txt`.
   probability that the hypothesis is true.
 - **Multiplicity adjustment (Holm)**: an adjustment of p-values when several tests are made in one family,
   so that the chance of at least one false positive in the family stays at 5%.
-- **Codebook**: `00_CODEBOOK.csv`, the description of every column in every export file.
+- **Codebook**: `00_CODEBOOK.csv`, the description of every column of every data table in a sitting's
+  export. The pooled analysis files have their own, `analysis_codebook.csv`.
 - **Provenance**: the record of which software, versions, rules and builds produced a result.

@@ -10184,7 +10184,9 @@ analysis-to-thesis part was built instead of audited (below).
 3. **Nothing showed which sittings had left the tablet.** `exported_at` and `export_confirmed_at` were
    recorded and never displayed (auditor A).
 4. **No result reached a file.** The R template printed about 1,200 lines (12 participants) to 1,400 (130)
-   and wrote nothing: no table, no figure, nothing saying where a result belongs in a thesis.
+   and wrote nothing: no table, no figure, nothing saying where a result belongs in a thesis. On the 130
+   simulated sittings, in the one-folder-per-sitting layout, it ran in 303 s on the audit machine (a cloud
+   desktop; auditor B); the Python template in 12 s.
 
 ### What changed
 
@@ -10339,8 +10341,25 @@ what they had written down was checked and acted on here.
     in the C locale and a UTF-8 one).
   - *The Python instructions as written* (`VISULAB_DATA_DIR=<data> python analysis_template.py`): run on a
     12-participant cohort, exit 0.
-- **Still not done:** an independent check of every statement in `docs/ANALYSIS_GUIDE.md` and
-  `docs/READINESS.md` (in progress as this is written), and repository hygiene beyond the above.
+- **The guide and the readiness list, statement by statement** (two independent read-only checkers, about 236
+  statements against the code and the cited documents). Twenty-two corrections, all applied:
+  - *False about the app:* a participant whose sittings span two builds is **warned** on the New Session form,
+    not blocked; the export's join check keeps them out of the models.
+  - *False about the record:* only Rounds 86 to 94 have a section "Not measured on the Xiaomi Pad 6".
+  - *Unsupported:* the template's run time on 130 sittings (now recorded above, 303 s); the timing model's 95th
+    percentile cited to the wrong document (it is in PROTOCOL).
+  - *Where a literal reader would be stuck or misled:* `[TOO FEW PARTICIPANTS]` writes no table, so "read T01"
+    could not be followed; a deleted sitting is left out of **Download everything** even while it is in the
+    recycle bin; the results land beside `data/`, not in the study folder; two bench sittings must be of two
+    different codes; `python3` where `python` is not found; the messages that carry no code; `[SE CAUTION]` is
+    printed only by the Python cross-check.
+  - *Labels and references:* the camera set-up buttons and the media button quoted as the screen shows them;
+    the full-tablet steps are at the end of the manual's §5, not §6; the thesis-chapter numbering is the kit's
+    suggestion (the synopsis's Chapter 4 is its Conclusion); T06, F04, the codebook and the 23 files described
+    exactly.
+  No sentence interpreting results as for a thesis was found.
+- **Still not done:** repository hygiene beyond the above (for example, whether `reference/` and the synopsis's
+  large binary files belong in the repository); nothing in it affects a sitting or the analysis.
 
 ### Versions in the data
 

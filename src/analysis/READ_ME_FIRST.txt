@@ -17,13 +17,14 @@ HOW TO RUN IT
   2. In RStudio: File > Open File > analysis/run_analysis.R
   3. Press the "Source" button (top right of the script).
      If it asks for the data folder, choose the folder called "data" beside "analysis".
-  4. Wait. Nothing is shown until it has finished: on 130 simulated sittings the analysis took about
-     five minutes on a desktop computer; a laptop may take longer. It then prints where the results are.
+  4. Wait. It prints where the data and the results are, then nothing more until it has finished: on
+     130 simulated sittings the analysis took about five minutes on a desktop computer; a laptop may take
+     longer. It then prints where the results are.
 
 WHAT YOU GET
   results/00_START_HERE.html   open this first: every table and figure, with what each one is for
                                and where it belongs in the thesis
-  results/tables/              each table as a .csv file (opens in Excel or Word)
+  results/tables/              each table as a .csv file (opens in Excel); T19 is a .txt file
   results/figures/             each figure as a .png file at print quality
   results/analysis_log.txt     the complete printed output; keep it with any number you report
 

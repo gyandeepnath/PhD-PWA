@@ -20,26 +20,27 @@ sitting's flow, what is recorded, what is exported, that the analysis templates 
 recover simulated effects, and that the analysis kit's numbers are the template's.
 
 They are **not** evidence about the tablet: its camera, its frame rates, its face tracker's speed, its
-Chrome, its gestures, its screen and its storage. Each round of `docs/AUDIT_FINDINGS.md` ends with a
-section "Not measured on the Xiaomi Pad 6"; the bench test below is where those are measured.
+Chrome, its gestures, its screen and its storage. Rounds 86 to 94 of `docs/AUDIT_FINDINGS.md` each have a
+section "Not measured on the Xiaomi Pad 6" (later rounds say it in "Not done"); the bench test below is
+where those are measured.
 
 ## Gate 1. Bench test: the tablet, the build and the operator, without participants
 
-Use test participant codes only (for example `BENCH01`), and delete those sittings afterwards: they must
-never reach the analysis.
+Use test participant codes only (for example `BENCH01`, `BENCH02`), and delete those sittings afterwards:
+they must never reach the analysis.
 
 | Must be true | How to check | Where it is described |
 |---|---|---|
 | The build is served from the study's deployed **HTTPS** address and installed, and the landing page reads **Offline copy: ready** | Open the address once on the tablet with the network on; wait for the line | `docs/DEPLOYMENT.md` §4; `field/README.md` (the laptop field server's self-signed certificate gives **no** offline copy) |
 | The pre-flight storage check reads ok and storage is persisted | Pre-flight; the export's `storage_verdict` and `storage_persisted` | `docs/DEPLOYMENT.md` §7; `docs/OPERATOR_MANUAL.md` §2 |
 | The device settings hold for a whole sitting: brightness fixed, auto-brightness and blue-light filter off, screen timeout off, landscape, launched from the home-screen icon | The bench checklist, *Before* | `docs/OPERATOR_MANUAL.md` §9 |
-| The camera works at a usable rate: camera, tracker and eye sampling rates; which face tracker the tablet measures fastest | Camera set-up's readout and **Measure trackers**; the export's `tracker_*`, `selftest_*` and 07 `sampling_fps_observed` | `docs/OPERATOR_MANUAL.md` §4; `docs/FPS_GATE_SIMULATION.md` (tier A from 20 face-solved frames a second) |
-| The exposure lock works on this camera | Camera set-up's **Bench check** (white, grey, black); 01 `camera_exposure_policy` and `camera_bench` | `docs/OPERATOR_MANUAL.md` §4; AUDIT_FINDINGS Rounds 79–82 and 91 |
+| The camera works at a usable rate: camera, tracker and eye sampling rates; which face tracker the tablet measures fastest | Camera set-up's readout and **Measure trackers again**; the export's `tracker_*`, `selftest_*` and 07 `sampling_fps_observed` | `docs/OPERATOR_MANUAL.md` §4; `docs/FPS_GATE_SIMULATION.md` (tier A from 20 face-solved frames a second) |
+| The exposure lock works on this camera | Camera set-up's box *Bench check (researcher, before the pilot)*: press **Run: white, grey, black (2 min)**; 01 `camera_exposure_policy` and `camera_bench` | `docs/OPERATOR_MANUAL.md` §4; AUDIT_FINDINGS Rounds 79–82 and 91 |
 | The reaction-time onset behaves on the tablet as in desktop Chromium | A full bench sitting with the camera on; 08 `onset_paint_overrun_ms` and `onset_moved_ms` | `docs/ANALYSIS_PLAN.md` §5; AUDIT_FINDINGS Rounds 92–94 (the open confirmation of `rt-t3`) |
-| A full sitting runs start to finish within the times the timing model predicts | A stopwatch over a whole bench sitting | `field/TIMING-SHEET.md`; `docs/TIMING_MODEL.md` (median about 102 minutes, 95th percentile about 126) |
+| A full sitting runs start to finish within the times the timing model predicts | A stopwatch over a whole bench sitting | `field/TIMING-SHEET.md`; `docs/PROTOCOL.md`, *Timing and the feasibility gate* (median about 102 minutes, 95th percentile about 126); `docs/TIMING_MODEL.md` |
 | The gestures behave: the Back edge swipe opens the Pause box; a double tap on a button is taken as one; the tablet stays in landscape | Try each on the tablet | AUDIT_FINDINGS Rounds 86–87 |
 | Every screen fits the tablet's screen and the text is legible at the viewing distance | Walk every screen; the ruler step in pre-flight (about 103 mm on the study tablet) | `docs/OPERATOR_MANUAL.md` §2 and §9 |
-| The data path works: one `.zip` per sitting lands in Downloads and copies to the computer by cable; **Download everything** works; `run_analysis.R` runs on the copy | Two or more bench sittings (the analysis needs at least two participants); follow `docs/ANALYSIS_GUIDE.md` Parts 1 and 2 | `docs/ANALYSIS_GUIDE.md`; `docs/OPERATOR_MANUAL.md` §7 |
+| The data path works: one `.zip` per sitting lands in Downloads and copies to the computer by cable; **Download everything** works; `run_analysis.R` runs on the copy | Complete bench sittings under two or more different test codes (the analysis needs at least two participants, not two sittings of one); follow `docs/ANALYSIS_GUIDE.md` Parts 1 and 2 | `docs/ANALYSIS_GUIDE.md`; `docs/OPERATOR_MANUAL.md` §7 |
 
 Write down what each check showed, with the date and the build line from the landing page.
 
@@ -49,7 +50,7 @@ Write down what each check showed, with the date and the build line from the lan
 |---|---|---|
 | Gate 1 passed, and anything it found is fixed or recorded | Your bench notes | above |
 | The consent text is the approved one, and its stated duration and camera wording are settled with the ethics committee | Compare the consent screen with the approved form | AUDIT_FINDINGS Round 90 §9 item 1 and Round 92 §9 item 4 |
-| The decisions about what participants see are made: which display follows a break (P8), the comprehension threshold | Write each down, dated | `docs/ANALYSIS_GUIDE.md` Part 5 |
+| The decisions that change the app before collection are made: which display follows a break (P8, what the participant sees) and the comprehension threshold of the engagement flag (what is recorded) | Write each down, dated | `docs/ANALYSIS_GUIDE.md` Part 5 |
 | Each pilot sitting is exported, copied off the same day and confirmed (*exported, copy checked*) | The Session Manager's row statuses | `docs/ANALYSIS_GUIDE.md` Part 1 |
 | The dashboard's Data Quality tab shows usable blink data for most conditions | Dashboard → Data Quality / QC after each sitting | `docs/OPERATOR_MANUAL.md` §7 (Reading the dashboard) |
 | The pilot export goes through the analysis kit and its report is read | **Download everything**, then `run_analysis.R`; open `00_START_HERE.html` | `docs/ANALYSIS_GUIDE.md` Parts 2 and 3 |
