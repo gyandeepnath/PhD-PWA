@@ -10430,3 +10430,13 @@ the thesis that descriptive results were visible during collection.
   every sitting, as it already did for the counts).
 - The averages are not the analysis: they model neither passages, serial position nor trials, and can differ
   from `run_analysis.R`'s results.
+
+### Checks run
+
+On 3605b6b (all of this round's code):
+- `npm run verify`: lint, type check, 149 test files with 1,976 tests passed; the export gate 903/903; the
+  analysis gate passed, the kit's checks included (182 s).
+- The full end-to-end suite, `npx playwright test --retries=0`: 123 of 123 passed (22.1 min), the new
+  `e2e/cohortOutcomes.spec.ts` among them.
+- `npm run build`: 43 assets, all precached, 59 precache entries, 44.4 MB in all; then
+  `npm run test:e2e:prod -- --retries=0`: 9 passed.
