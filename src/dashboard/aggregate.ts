@@ -1229,3 +1229,166 @@ export function pageLockArithmetic(): { pages: number[]; guaranteedS: number[]; 
     skimFloorS: PASSAGES.map((p) => (p.wordCount / ENGAGEMENT.SKIM_WPM_CEILING) * 60),
   };
 }
+
+// =============================================================================================
+// THE ALL PARTICIPANTS TAB'S OUTCOMES (Round 98): averages by condition across participants, the
+// positive-minus-negative difference, and how that difference has moved as participants completed.
+//
+// The investigator asked for these to be visible throughout collection, and chose that over a lock
+// (Round 98). They are DESCRIPTIVE: one value per participant and condition, then the mean across
+// participants with a t interval. No test, no p-value, no model: the result to report is the
+// analysis on the computer (src/analysis/run_analysis.R), which models the trials and the passages.
+// The rows are the confirmatory set, as the analysis reads it (inConfirmatorySet), and for the eye
+// outcomes only rows whose blink data the Data Quality tab does not call "not usable", which the
+// analysis leaves out of the eye-data models.
+// =============================================================================================
+
+export interface CohortOutcome {
+  key: string;
+  label: string;
+  unit: string;
+  /** Decimals to show. */
+  digits: number;
+  /** An eye outcome: only rows whose blink data is usable. */
+  ocular: boolean;
+  value: (r: Record<string, string>) => number | null;
+}
+
+const num = (v: string | undefined): number | null => {
+  if (v == null || v.trim() === '') return null;
+  const x = Number(v);
+  return Number.isFinite(x) ? x : null;
+};
+
+export const COHORT_OUTCOMES: CohortOutcome[] = [
+  { key: 'incomplete_blink_ratio', label: 'Incomplete-blink ratio (primary)', unit: 'proportion', digits: 3, ocular: true, value: (r) => num(r.incomplete_blink_ratio) },
+  { key: 'blink_rate_per_min', label: 'Blink rate', unit: 'per min', digits: 1, ocular: true, value: (r) => num(r.blink_rate_per_min) },
+  { key: 'rt_mean_hits_ms', label: 'Reaction time, mean of hits', unit: 'ms', digits: 0, ocular: false, value: (r) => num(r.rt_mean_hits_ms) },
+  { key: 'd_prime', label: 'Reaction task d′', unit: '', digits: 2, ocular: false, value: (r) => num(r.d_prime) },
+  { key: 'fatigue_delta', label: 'Fatigue, change from baseline', unit: 'points', digits: 2, ocular: false, value: (r) => num(r.fatigue_delta) },
+  {
+    key: 'comprehension', label: 'Comprehension, proportion correct', unit: 'proportion', digits: 2, ocular: false,
+    value: (r) => {
+      const c = num(r.comprehension_correct);
+      const n = num(r.comprehension_items);
+      return c != null && n != null && n > 0 ? c / n : null;
+    },
+  },
+  { key: 'reading_speed_wpm', label: 'Reading speed', unit: 'words/min', digits: 0, ocular: false, value: (r) => num(r.reading_speed_wpm) },
+];
+
+/** t(0.975, df), from R's qt (4 decimals); between tabled points, linear in 1/df. */
+const T975: [number, number][] = [
+  [1, 12.7062], [2, 4.3027], [3, 3.1824], [4, 2.7764], [5, 2.5706], [6, 2.4469], [7, 2.3646], [8, 2.306],
+  [9, 2.2622], [10, 2.2281], [11, 2.201], [12, 2.1788], [13, 2.1604], [14, 2.1448], [15, 2.1314], [16, 2.1199],
+  [17, 2.1098], [18, 2.1009], [19, 2.093], [20, 2.086], [21, 2.0796], [22, 2.0739], [23, 2.0687], [24, 2.0639],
+  [25, 2.0595], [26, 2.0555], [27, 2.0518], [28, 2.0484], [29, 2.0452], [30, 2.0423], [40, 2.0211], [60, 2.0003],
+  [80, 1.9901], [100, 1.984], [120, 1.9799],
+];
+export function tQuantile975(df: number): number {
+  if (!(df >= 1)) return NaN;
+  if (df > 120) return 1.95996 + (1.9799 - 1.95996) * (120 / df);
+  for (let i = 0; i < T975.length; i++) {
+    const [d, t] = T975[i];
+    if (df === d) return t;
+    if (df < d) {
+      const [d0, t0] = T975[i - 1];
+      const w = (1 / df - 1 / d) / (1 / d0 - 1 / d);
+      return t + w * (t0 - t);
+    }
+  }
+  return 1.9799;
+}
+
+export interface MeanCI { n: number; mean: number | null; lcl: number | null; ucl: number | null }
+
+/** Mean and 95% t interval of independent values (here, one per participant). */
+export function meanCI(xs: number[]): MeanCI {
+  const v = xs.filter((x) => Number.isFinite(x));
+  const n = v.length;
+  if (n === 0) return { n, mean: null, lcl: null, ucl: null };
+  const mean = v.reduce((a, b) => a + b, 0) / n;
+  if (n < 2) return { n, mean, lcl: null, ucl: null };
+  const sd = Math.sqrt(v.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1));
+  const h = tQuantile975(n - 1) * sd / Math.sqrt(n);
+  return { n, mean, lcl: mean - h, ucl: mean + h };
+}
+
+export interface CohortOutcomesView {
+  /** Participants of the confirmatory set, in the order they completed. */
+  participants: string[];
+  outcomes: CohortOutcome[];
+  byCondition: { condition_label: string; polarity: string; text_colour: string; cells: Record<string, MeanCI> }[];
+  polarity: Record<string, { positive: MeanCI; negative: MeanCI; difference: MeanCI }>;
+  /** After each participant who has both polarities for the outcome: the running difference. */
+  trend: Record<string, { k: number; participant: string; mean: number | null; lcl: number | null; ucl: number | null }[]>;
+}
+
+/**
+ * `completedAt` maps a participant to when they completed (their last sitting's end); a participant
+ * without one is placed after those with one, in code order.
+ */
+export function cohortOutcomes(
+  analysisFiles: { filename: string; content: string }[],
+  completedAt: Map<string, number>,
+): CohortOutcomesView {
+  const long = analysisFiles.find((f) => f.filename === 'analysis_long.csv');
+  const rows = (long ? readCsv(long.content) : []).filter((r) => inConfirmatorySet(r)
+    && !(r.condition_complete === 'false' || r.condition_complete === 'FALSE'));
+  const participants = [...new Set(rows.map((r) => r.participant_id))].sort((a, b) => {
+    const ta = completedAt.get(a) ?? Infinity;
+    const tb = completedAt.get(b) ?? Infinity;
+    return ta !== tb ? ta - tb : a.localeCompare(b);
+  });
+
+  // participant -> condition -> outcome -> values (normally one run per participant and condition)
+  const cellValues = new Map<string, Map<string, Map<string, number[]>>>();
+  const conditionInfo = new Map<string, { polarity: string; text_colour: string }>();
+  for (const r of rows) {
+    const label = r.condition_label || '(unlabelled)';
+    if (!conditionInfo.has(label)) conditionInfo.set(label, { polarity: r.polarity ?? '', text_colour: r.text_colour ?? '' });
+    for (const o of COHORT_OUTCOMES) {
+      if (o.ocular && (r.ocular_reliability === 'not_usable' || !isTrue(r.camera_active))) continue;
+      const v = o.value(r);
+      if (v == null) continue;
+      const byCond = cellValues.get(r.participant_id) ?? new Map<string, Map<string, number[]>>();
+      cellValues.set(r.participant_id, byCond);
+      const byOutcome = byCond.get(label) ?? new Map<string, number[]>();
+      byCond.set(label, byOutcome);
+      byOutcome.set(o.key, [...(byOutcome.get(o.key) ?? []), v]);
+    }
+  }
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const cell = (p: string, label: string, key: string): number | null => {
+    const xs = cellValues.get(p)?.get(label)?.get(key);
+    return xs && xs.length ? avg(xs) : null;
+  };
+  const labels = [...conditionInfo.keys()].sort((a, b) => a.localeCompare(b));
+  const byCondition = labels.map((label) => ({
+    condition_label: label,
+    ...conditionInfo.get(label)!,
+    cells: Object.fromEntries(COHORT_OUTCOMES.map((o) => [o.key,
+      meanCI(participants.map((p) => cell(p, label, o.key)).filter((x): x is number => x != null))])),
+  }));
+
+  const polarity: CohortOutcomesView['polarity'] = {};
+  const trend: CohortOutcomesView['trend'] = {};
+  for (const o of COHORT_OUTCOMES) {
+    const side = (p: string, pol: string): number | null => {
+      const xs = labels.filter((l) => conditionInfo.get(l)!.polarity === pol)
+        .map((l) => cell(p, l, o.key)).filter((x): x is number => x != null);
+      return xs.length ? avg(xs) : null;
+    };
+    const pos: number[] = []; const neg: number[] = []; const diffs: { p: string; d: number }[] = [];
+    for (const p of participants) {
+      const a = side(p, 'positive');
+      const b = side(p, 'negative');
+      if (a != null) pos.push(a);
+      if (b != null) neg.push(b);
+      if (a != null && b != null) diffs.push({ p, d: a - b });
+    }
+    polarity[o.key] = { positive: meanCI(pos), negative: meanCI(neg), difference: meanCI(diffs.map((x) => x.d)) };
+    trend[o.key] = diffs.map((x, i) => ({ k: i + 1, participant: x.p, ...meanCI(diffs.slice(0, i + 1).map((y) => y.d)) }));
+  }
+  return { participants, outcomes: COHORT_OUTCOMES, byCondition, polarity, trend };
+}

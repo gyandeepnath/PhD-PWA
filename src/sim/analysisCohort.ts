@@ -386,9 +386,31 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
       const last = b.conditions.reduce((a, c) => (c.session_position > a.session_position ? c : a));
       last.completed_at = null;
     }
+    distinctRecordIds(b);
     bundles.push(...(opts.split?.includes(i) ? splitIntoTwoSittings(b) : [b]));
   }
   return bundles;
+}
+
+/**
+ * Every record of a simulated participant gets an id of its own (Round 98). The simulated sittings
+ * are built from one fixture, whose baseline-fatigue, perception, CVS-Q, NASA-TLX, calibration and
+ * reaction-trial ids ('fat-base', 'rt-0-0', 'cal-1', ...) were therefore the same for every
+ * participant. That made no difference where each sitting is exported on its own, as the analysis
+ * gate does; but restored into one tablet's database, as a real study's sittings sit, each overwrote
+ * the last one's records, and every sitting but one failed its integrity checks. The app's own ids are
+ * random and unique; these are prefixed with the participant code, references included.
+ */
+function distinctRecordIds(b: SessionBundle): void {
+  const p = `${b.session.participant_id}-`;
+  const own = (id: string | null | undefined) => (id == null || id.startsWith(p) ? id : p + id);
+  for (const r of b.fatigue) r.fatigue_id = own(r.fatigue_id)!;
+  for (const r of b.cvsq) r.cvsq_id = own(r.cvsq_id)!;
+  for (const r of b.tlx) r.tlx_id = own(r.tlx_id)!;
+  for (const r of b.perception) r.perception_id = own(r.perception_id)!;
+  for (const r of b.reactionTrials) r.trial_id = own(r.trial_id)!;
+  for (const r of b.calibration) r.calibration_id = own(r.calibration_id)!;
+  for (const r of b.eyeMetrics) r.calibration_id = own(r.calibration_id) ?? null;
 }
 
 /** The days between the two halves of a simulated split. */

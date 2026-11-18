@@ -10367,3 +10367,66 @@ what they had written down was checked and acted on here.
 |---|---|---|---|
 | Every rule and column | unchanged | unchanged | as before |
 | The export's delivery | 23 loose files | one `.zip` per sitting holding the same files; loose files on request | the archive's name and folder |
+
+## Round 98 — the study as it grows: averages across participants, polarity, and their trend on the All Participants tab
+
+The investigator asked for a single participant's analysis and the average over every participant to be
+viewable on the dashboard, with the direction the data are heading, updated each time a participant
+completes.
+
+### What was there
+
+The tabs *Overview*, *Reaction Time*, *Fatigue*, *Search & Perception* and *Data Quality / QC* already showed
+one sitting, chosen at the top. **All Participants** pooled every sitting, and recomputed whenever a sitting
+was saved, but showed counts, data quality and only the primary outcome by condition; no other outcome was
+averaged across participants, and nothing showed how a result was moving as participants were added.
+
+### The decision taken first
+
+The analysis plan leaves several choices to the investigator "before unblinding" (§2: `eff_fps_c`; §4b: whether
+H1a and H1b share a Holm family; §5 and others). Condition averages watched during collection are an interim
+look at the results. The investigator was asked, with the plan's wording, whether they should be visible
+throughout, kept behind a lock opened deliberately (and recorded), or kept off the tablet; the investigator
+chose **always visible**. The guide (Part 1, *Watching the study as it grows*; Part 5) now says what follows:
+fix the before-unblinding decisions early and date them, treat the trend as no stopping rule, and state in
+the thesis that descriptive results were visible during collection.
+
+### What changed
+
+- `cohortOutcomes` (`src/dashboard/aggregate.ts`): from the pooled `analysis_long.csv`, the confirmatory set as
+  the analysis reads it (`inConfirmatorySet`, finished runs), and for the eye outcomes only runs whose blink
+  data are not "not usable" (the rows the analysis leaves out of the eye-data models). For seven outcomes
+  (incomplete-blink ratio, blink rate, reaction time of hits, d′, fatigue change, comprehension proportion,
+  reading speed): one value per participant and condition, then the mean across participants with a 95% t
+  interval (t quantiles tabled from R's `qt`); each participant's positive-polarity mean minus their negative
+  one, averaged the same way; and that difference recomputed after each participant, in the order they
+  completed (the end of their last sitting).
+- The **All Participants** tab shows them in three sections, from the second participant of the analysis set:
+  averages by condition, positive against negative polarity, and one trend chart per outcome (the running
+  mean with its interval dashed, zero as reference; the axis scaled from the third participant on, so the
+  very wide first interval does not flatten the rest). Labelled descriptive, with no test or p-value.
+- **The simulated cohort's record ids** (`src/sim/analysisCohort.ts`): every simulated participant shared the
+  fixture's baseline-fatigue, perception, CVS-Q, NASA-TLX, calibration and reaction-trial ids. Exported one
+  sitting at a time, as the analysis gate does, that was harmless; restored into one tablet's database, as a
+  real study's sittings sit, each overwrote the previous participant's records and every sitting but one
+  failed its integrity audit. Each id is now prefixed with the participant code (references included); the
+  app's own ids are random and were never affected.
+
+### What was verified
+
+- `tests/cohortOutcomes.test.ts`: the t quantiles against R; the withdrawn participant and the paused run are
+  out; participants in completion order; each condition's average, the eye outcomes' row selection and the
+  polarity difference against the pooled file read independently; the trend grows one participant at a time
+  and ends at the overall difference.
+- `e2e/cohortOutcomes.spec.ts`: six simulated participants restored through **Restore session from backup
+  file**, the path a lost tablet's data come back by; the tab shows ten condition rows, seven outcomes, the
+  differences with their intervals on six participants, and the trend charts; a seventh is restored and the
+  tab counts seven.
+- The tab was looked at with seven participants at the tablet's width (1152 px).
+
+### Not done
+
+- Nothing was measured on the tablet: how long the tab takes to recompute with 130 sittings there (it gathers
+  every sitting, as it already did for the counts).
+- The averages are not the analysis: they model neither passages, serial position nor trials, and can differ
+  from `run_analysis.R`'s results.

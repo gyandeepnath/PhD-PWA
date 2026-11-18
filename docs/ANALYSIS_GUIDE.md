@@ -83,6 +83,24 @@ every sitting on the tablet, the pooled analysis dataset over exactly those sitt
 scripts with this guide. Copy it into `everything/`. It costs nothing and is a second copy of everything.
 It does not mark any sitting as exported or checked: only the per-sitting question does that.
 
+### Watching the study as it grows
+
+Dashboard → **All Participants** pools every sitting on the tablet and updates each time a sitting is saved.
+From the second participant it shows each outcome's average in every condition, positive against negative
+polarity, and how that difference has moved as each participant completed (one chart per outcome). The
+other tabs show one sitting at a time (choose it at the top). `docs/OPERATOR_MANUAL.md` §7, *Reading the
+dashboard*, says how to read it.
+
+These numbers are descriptive (the mean across participants with a 95% interval, no test), and you chose
+to see them during collection (Round 98). Two things follow, and are worth writing down in your decision
+record:
+
+- The decisions of Part 5 that the plan says to fix "before unblinding" are best fixed now, before the
+  averages have been watched for long, and dated.
+- The trend is not a stopping rule. Early points rest on very few people and move a lot; the sample size is
+  the one the protocol sets, and the result is the analysis, run once, after the last sitting. State in the
+  thesis that descriptive results were visible to the investigator during collection.
+
 ### Do not delete sittings while the study runs
 
 The analysis needs the pooled dataset, which the tablet builds from the sittings it still holds. A sitting
@@ -268,6 +286,7 @@ Rounds 88 to 96) and `docs/ANALYSIS_PLAN.md`.
 
 | Decision | Where it is described | What the software does now |
 |---|---|---|
+| Interim descriptive results on the tablet during collection | AUDIT_FINDINGS Round 98 | shown on **All Participants** from the second participant, by the investigator's choice (Round 98); record the date the Part 5 decisions were fixed |
 | Confirm the reaction-time onset rule `rt-t3` | AUDIT_FINDINGS Round 94, For the investigator; ANALYSIS_PLAN §5 | uses `rt-t3` and records how far each onset moved |
 | Keep the frame-rate covariate `eff_fps_c` in the primary or not | ANALYSIS_PLAN §2 | fits both; H1 is printed for both |
 | Whether H1a and H1b share a family-wise error rate | ANALYSIS_PLAN §4b | decides H1 on the unadjusted interval, prints Holm beside it |

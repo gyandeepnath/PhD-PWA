@@ -906,6 +906,18 @@ then Delete and Purge as above.
 page*. Long explanations are folded: a line or two is shown, and **More ▾** opens the rest. Nothing
 was removed; it is one tap away.
 
+**One sitting or everyone (Round 98).** The tabs *Overview*, *Reaction Time*, *Fatigue*, *Search &
+Perception* and *Data Quality / QC* show the sitting chosen at the top: one participant's sitting. **All
+Participants** pools every sitting on the tablet and recomputes each time a sitting is saved. From the
+second participant of the analysis set it shows, for the incomplete-blink ratio, blink rate, reaction time,
+d′, fatigue change, comprehension and reading speed: the average in each of the ten conditions; positive
+against negative polarity and their difference; and *How the difference has moved as participants
+completed*, one chart per outcome, with a point added each time a participant completes. Each value is the
+mean across participants with its 95% interval and the number of participants it rests on. These are
+descriptive: they do not model the passages, the serial position or the trials, carry no test, and are not
+the result to report (that is the analysis, `docs/ANALYSIS_GUIDE.md`). The investigator chose to have them
+visible during collection; they are not a reason to stop early or to run a sitting differently.
+
 On **Data Quality / QC**, *Is the blink data reliable?* gives each reading condition one row and one
 verdict. The verdict follows the analysis's own checks (rule `rel-r1`), so it says what the analysis
 will do with that condition:

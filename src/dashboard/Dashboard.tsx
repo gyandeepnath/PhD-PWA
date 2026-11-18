@@ -8,14 +8,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { get, put } from '@/storage/db';
 import { BIN_RETENTION_MS, gatherSession, listSessions, type SessionBundle } from '@/storage/gather';
-import { buildConditionSummaries, baselineFatigueMean, cohortSummary, type ConditionSummary, type CohortSummary } from './aggregate';
+import { buildConditionSummaries, baselineFatigueMean, cohortSummary, cohortOutcomes, type ConditionSummary, type CohortSummary, type CohortOutcomesView, type MeanCI } from './aggregate';
 import { MEASURE } from '@/tracking/measurementSchedule';
 import { FPS_GATE } from '@/tracking/frameRateGate';
 import { RELIABILITY_RULE_VERSION } from '@/tracking/ocularReliability';
 import { backupExportFile, buildExportFiles, DamagedParticipantCodeError, downloadExport, downloadParts, downloadSessionMedia, integrityLine } from '@/storage/export';
 import { ARCHIVE_MIME, buildEverythingArchive, buildPooledArchive, buildSittingArchive, type EverythingProgress } from '@/storage/exportArchive';
 import { buildAnalysisDataset } from '@/storage/analysisExport';
-import { BarPanel, LinePanel, type Datum } from './charts';
+import { BarPanel, LinePanel, TrendPanel, type Datum } from './charts';
 import type { SessionRecord } from '@/storage/types';
 import { N_CONDITIONS } from '@/experiment/conditions';
 import { UI_TEXT } from '@/lib/uiPalette';
@@ -73,6 +73,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   const [everythingProgress, setEverythingProgress] = useState<EverythingProgress | null>(null);
   const [everythingSummary, setEverythingSummary] = useState<string | null>(null);
   const [cohort, setCohort] = useState<CohortSummary | null>(null);
+  const [outcomes, setOutcomes] = useState<CohortOutcomesView | null>(null);
   const [cohortBusy, setCohortBusy] = useState(false);
   const dialog = useDialog();
 
@@ -109,11 +110,18 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
    * mount of every tab: `sessions` changing is the signal, and the work is skipped while it is empty.
    */
   useEffect(() => {
-    if (sessions.length === 0) { setCohort(null); return; }
+    if (sessions.length === 0) { setCohort(null); setOutcomes(null); return; }
     let cancelled = false;
     setCohortBusy(true);
     (async () => {
       const bundles = [];
+      // When each participant completed: their last sitting's end (its start if it has none), so the
+      // trend below adds participants in the order they finished.
+      const completedAt = new Map<string, number>();
+      for (const s of sessions) {
+        const t = s.session_end_time ?? s.session_start_time;
+        if (t != null) completedAt.set(s.participant_id, Math.max(completedAt.get(s.participant_id) ?? -Infinity, t));
+      }
       for (const s of sessions) {
         // Without the blink records (Round 81), except the reading windows an earlier-rule row is
         // recomputed from, so the view gives the values 07 gives (Round 94, review B93-1).
@@ -124,6 +132,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       const ds = buildAnalysisDataset(bundles);
       if (cancelled) return;
       setCohort(cohortSummary(ds.files, ds.integrity, N_CONDITIONS));
+      setOutcomes(cohortOutcomes(ds.files, completedAt));
       setCohortBusy(false);
     })().catch(() => { if (!cancelled) setCohortBusy(false); });
     return () => { cancelled = true; };
@@ -430,6 +439,8 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                   short={`One condition is behind the others by more than one participant (${cohort.minConditionN} against ${cohort.maxConditionN}).`}
                   more="With a counterbalanced design every condition should accrue at the same rate, so a gap usually means that condition is failing or being abandoned rather than simply lagging." />
               )}
+
+              {outcomes != null && <CohortOutcomesSection view={outcomes} />}
 
               <div>
                 <SectionTitle>Primary outcome by condition</SectionTitle>
@@ -762,8 +773,9 @@ const HOW_TO_READ: Record<Tab, string[]> = {
     'A dash (—) means not measured. It is never a zero.',
   ],
   cohort: [
-    'Every participant on this tablet, read from analysis_long.csv: the rows and numbers the analysis will use.',
-    'The other tabs answer “did this sitting work?”; this one answers “is the study working?”.',
+    'Every participant on this tablet, read from analysis_long.csv: the rows and numbers the analysis will use. It updates each time a sitting is saved.',
+    'The other tabs answer “did this sitting work?” for one sitting (pick it at the top); this one answers “is the study working?” across all of them.',
+    'Averages are descriptive: one value per participant, then the mean across participants with a 95% interval. They are not the analysis; the result to report is the analysis on the computer.',
     'Look for a condition with fewer rows than the others, or many rows without blinks.',
   ],
   reaction: [
@@ -792,6 +804,93 @@ const HOW_TO_READ: Record<Tab, string[]> = {
     'Download analysis dataset: the pooled dataset alone.',
   ],
 };
+
+/** "0.213 [0.180, 0.246] (n 9)", or a dash. */
+function ciText(m: MeanCI, digits: number): string {
+  if (m.mean == null) return '—';
+  const f = (x: number) => x.toFixed(digits);
+  return m.lcl == null || m.ucl == null ? `${f(m.mean)} (n ${m.n})` : `${f(m.mean)} [${f(m.lcl)}, ${f(m.ucl)}] (n ${m.n})`;
+}
+
+/*
+ * THE STUDY SO FAR, ACROSS PARTICIPANTS (Round 98). Averages by condition, the positive-minus-negative
+ * difference, and how that difference has moved as participants completed. The investigator chose to
+ * see these throughout collection (Round 98; docs/ANALYSIS_GUIDE.md). Descriptive only: no test, no
+ * p-value. Shown from the second participant of the confirmatory set.
+ */
+function CohortOutcomesSection({ view }: { view: CohortOutcomesView }) {
+  const n = view.participants.length;
+  if (n < 2) {
+    return (
+      <div data-testid="cohort-outcomes">
+        <SectionTitle>All participants: averages and trends</SectionTitle>
+        <p className="font-sans text-base leading-relaxed" style={{ color: UI_TEXT.muted }}>
+          These appear when two participants of the analysis set have completed ({n} so far).
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div data-testid="cohort-outcomes" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 14 }}>
+      <SectionTitle>All participants: averages by condition</SectionTitle>
+      <Caveat
+        short={`${n} participants of the analysis set. Each cell: the mean across participants, its 95% interval, and how many participants it rests on. Descriptive, not the analysis.`}
+        more="Each participant gives one value per condition (normally one run), and the mean is taken across participants with a t interval. The eye outcomes leave out runs whose blink data the Data Quality tab calls not usable, as the analysis does. These numbers do not model the passages, the serial position or the trials, so they can differ from the analysis on the computer (run_analysis.R), which is the result to report. Watching them during collection was the investigator's choice (Round 98): they are not a reason to stop early or to change how sittings are run." />
+      <div style={{ overflowX: 'auto' }}>
+        <table className="font-lab" style={{ fontSize: 13, borderCollapse: 'collapse', width: '100%' }} data-testid="cohort-by-condition">
+          <thead>
+            <tr style={{ textAlign: 'left', color: UI_TEXT.muted }}>
+              <th style={cohortHead}>Condition</th>
+              {view.outcomes.map((o) => <th key={o.key} style={cohortHead}>{o.label}{o.unit ? ` (${o.unit})` : ''}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {view.byCondition.map((c) => (
+              <tr key={c.condition_label} style={{ borderTop: '1px solid #e8e4dc' }}>
+                <td style={cohortCell}>{c.condition_label}</td>
+                {view.outcomes.map((o) => <td key={o.key} style={cohortCell}>{ciText(c.cells[o.key], o.digits)}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <SectionTitle>Positive minus negative polarity, across participants</SectionTitle>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="font-lab" style={{ fontSize: 13, borderCollapse: 'collapse', width: '100%' }} data-testid="cohort-polarity">
+          <thead>
+            <tr style={{ textAlign: 'left', color: UI_TEXT.muted }}>
+              <th style={cohortHead}>Outcome</th>
+              <th style={cohortHead}>Positive polarity</th>
+              <th style={cohortHead}>Negative polarity</th>
+              <th style={cohortHead}>Difference, positive minus negative</th>
+            </tr>
+          </thead>
+          <tbody>
+            {view.outcomes.map((o) => (
+              <tr key={o.key} style={{ borderTop: '1px solid #e8e4dc' }}>
+                <td style={cohortCell}>{o.label}{o.unit ? ` (${o.unit})` : ''}</td>
+                <td style={cohortCell}>{ciText(view.polarity[o.key].positive, o.digits)}</td>
+                <td style={cohortCell}>{ciText(view.polarity[o.key].negative, o.digits)}</td>
+                <td style={cohortCell}>{ciText(view.polarity[o.key].difference, o.digits)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <SectionTitle>How the difference has moved as participants completed</SectionTitle>
+      <Caveat
+        short="Each point: the positive-minus-negative difference averaged over the participants completed so far, with its 95% interval (dashed). It wanders while there are few participants and settles as more complete."
+        more="Participants are added in the order they completed (the end of their last sitting). Early points rest on very few people: an interval that excludes zero after a handful of participants is expected to happen by chance now and then, and the pre-registered analysis does not look at it." />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+        {view.outcomes.filter((o) => view.trend[o.key].length >= 2).map((o) => (
+          <TrendPanel key={o.key} title={o.label} unit={o.unit} points={view.trend[o.key]} digits={o.digits} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function SummaryTable({ headers, rows }: { headers: string[]; rows: (string | number)[][] }) {
   return (
