@@ -108,11 +108,27 @@ export function countTicks(of: number): number[] {
   return ticks;
 }
 
+export interface TrendAxisPoint { n: number; mean: number | null; lcl: number | null; ucl: number | null }
+
+/**
+ * The trend's y axis. The interval over two participants is very wide, and scaling the axis to it
+ * flattens everything after. Once points rest on three or more participants, the axis is scaled to
+ * those (and zero) and the earlier intervals may run off it (`clipped`), which the section's caption
+ * says and the tooltip gives in full. Before that, every point is on the axis. With two points the axis
+ * used to be left to the chart library, which dropped zero, and the reference line with it (review of
+ * Round 98). Exported for its tests.
+ */
+export function trendAxis(points: TrendAxisPoint[]): { scale: { domain: [number, number]; ticks: number[] }; clipped: boolean } {
+  const settled = points.filter((p) => p.n >= 3);
+  const basis = (settled.length ? settled : points).flatMap((p) => [p.mean, p.lcl, p.ucl]).filter((x): x is number => x != null);
+  return { scale: niceScale(basis), clipped: settled.length > 0 && settled.length < points.length };
+}
+
 /**
  * A running estimate as participants complete (Round 98, All Participants tab): after each one, the
  * mean over everyone so far with its 95% interval as two dashed lines, and zero as the reference.
  * Descriptive. The x axis is the number of participants completed, the same on every chart; a
- * participant without this outcome (no usable eye data in one polarity) adds no point (Round 99).
+ * participant with no colour measured in both polarities for this outcome adds no point (Round 99).
  */
 export function TrendPanel({
   title, unit = '', points, digits = 2, of,
@@ -123,15 +139,7 @@ export function TrendPanel({
   points: { k: number; n: number; mean: number | null; lcl: number | null; ucl: number | null }[];
 }) {
   const data = points.map((p) => ({ k: p.k, mean: p.mean, lcl: p.lcl, ucl: p.ucl }));
-  // The interval over two participants is very wide, and scaling the axis to it flattens everything
-  // after. Once points rest on three or more participants, the axis is scaled to those (and zero) and
-  // the earlier intervals may run off it, which the section's caption says and the tooltip gives in
-  // full. Before that, every point is on the axis. With two points the axis used to be left to the
-  // chart library, which dropped zero, and the reference line with it (review of Round 98).
-  const settled = points.filter((p) => p.n >= 3);
-  const basis = (settled.length ? settled : points).flatMap((p) => [p.mean, p.lcl, p.ucl]).filter((x): x is number => x != null);
-  const scale = niceScale(basis);
-  const clipped = settled.length > 0 && settled.length < points.length;
+  const { scale, clipped } = trendAxis(points);
   const shown = (x: number) => `${fixedNoNegZero(x, digits)}${unit ? ` ${unit}` : ''}`;
   const byK = new Map(points.map((p) => [p.k, p]));
   return (

@@ -10377,8 +10377,8 @@ completes.
 ### What was there
 
 The tabs *Overview*, *Reaction Time*, *Fatigue*, *Search & Perception* and *Data Quality / QC* already showed
-one sitting, chosen at the top. **All Participants** pooled every sitting, and recomputed whenever a sitting
-was saved, but showed counts, data quality and only the primary outcome by condition; no other outcome was
+one sitting, chosen at the top. **All Participants** pooled every sitting, and recomputed each time the
+dashboard was opened (*corrected in Round 100*: this said "whenever a sitting was saved"), but showed counts, data quality and only the primary outcome by condition; no other outcome was
 averaged across participants, and nothing showed how a result was moving as participants were added.
 
 ### The decision taken first
@@ -10425,7 +10425,8 @@ the thesis that descriptive results were visible during collection.
 - `e2e/cohortOutcomes.spec.ts`: six simulated participants restored through **Restore session from backup
   file**, the path a lost tablet's data come back by; the tab shows ten condition rows, seven outcome rows,
   at least one "mean [low, high] (n 6)" in the polarity table and at least five trend charts; a seventh is
-  restored and the tab counts seven.
+  restored and the tab counts seven. (*Corrected in Round 99*: this said "the differences with their
+  intervals on six participants, and the trend charts".)
 - The tab was looked at with seven simulated participants in a desktop browser at 1152×720, the assumed
   design canvas (*corrected in Round 99*: this said "the tablet's width"; the tablet's viewport has not been
   measured, Round 74).
@@ -10452,9 +10453,11 @@ On 3605b6b (all of this round's code):
 
 Round 98's code and documents were reviewed independently: four reviewers (the statistics; the rows chosen,
 against `analysis_template.R`; the display; the documents), each with read-only access and a scratch folder
-to compute in, and each reviewer's findings handed to a second agent told to refute them. The refuting
-agents for the display and the documents were stopped by a usage limit before they ran; those findings
-were checked here against the code and the record, one by one, before anything was changed. Nothing in this
+to compute in, and each reviewer's findings handed to a second agent told to refute them. The documents'
+refuter was stopped by a usage limit before it ran; the display's recorded verdicts on three of its seven
+findings (none refuted; the trend axis kept at medium) before the same limit stopped it (*corrected in
+Round 100*: this said neither ran). The findings without a verdict were checked here against the code and
+the record, one by one, before anything was changed. Nothing in this
 round was measured on the Xiaomi Pad 6.
 
 ### Confirmed and fixed
@@ -10463,16 +10466,20 @@ round was measured on the Xiaomi Pad 6.
    *Positive* averaged everyone with a positive value, *Negative* everyone with a negative one, *Difference*
    only those with both, so positive minus negative did not equal the difference on the same row. The refuter
    showed the sign can reverse: positive 0.340 (n 3) above negative 0.290 (n 2) beside a difference of
-   −0.080 (n 2). It happens in the study: Williams rows 2 and 7 (one enrolment in five) run one polarity per
-   half, so a split sitting whose second half ran camera-off leaves that participant's eye data in one
+   −0.080 (n 2). It happens in the study: Williams rows 2 and 7, counted from 0 (enrolments 3, 8, 13, ...;
+   one in five; *corrected in Round 100*, which added the numbering), run one polarity per half, so a split sitting whose second half ran camera-off leaves that participant's eye data in one
    polarity, and the participant stays in the confirmatory set (`inConfirmatorySet` does not read eye data).
-   The three columns are now over the same participants.
+   The three columns are now over the same participants. (*Added in Round 100*: with the colour pairing of
+   item 2, a participant with no colour measured in both polarities is out of the row; for the eye outcomes
+   that is every split participant with a camera-off half, in any row, since each half of the order holds
+   each colour once.)
 2. **A missing run put the colour effect into the difference** (low; the refuter put it at about the last
    digit shown at realistic sizes). Each side was the mean of whatever conditions the participant had, so
    with a run missing the two sides covered different colours. Each participant's difference is now taken
    over the colours they have in both polarities (P1 with N1, ..., P5 with N5), as the analysis's
    sum-coded polarity-by-colour model compares them; with all ten runs it is the same number as before.
-3. **The trend's axis said "participants completed" and counted participants with the outcome** (low). A
+3. **The trend's axis said "participants completed" and counted participants with the outcome** (medium for
+   the display reviewer and its refuter; *corrected in Round 100* from "low"). A
    participant without the outcome in both polarities shifted every later point of that chart by one, so the
    same x meant a different participant on different charts. A point is now placed at the participant's
    place in the completion order, so every chart shares one axis and such a participant leaves a step out.
@@ -10482,7 +10489,8 @@ round was measured on the Xiaomi Pad 6.
    out runs in frame-rate tier C, as both templates do before every confirmatory ocular model (fps-g2); the
    existing *Primary outcome by condition* table averaged them, under a caption saying it covered "the rows
    both analysis templates model". One definition now serves both, `inEyeModels` (`aggregate.ts`): camera on,
-   at least one blink counted, tier not C. The caption says that *With outcome* below n includes tier C.
+   at least one blink counted, tier not C. The caption says that *With outcome* below n includes tier C
+   (*Round 100*: it is now held against the camera-on analysable rows, not n).
 5. **No test exercised the eye-row filter** (low; confirmed). The unit test's cohort had no run the filter
    removes, and its paused participant was out at participant level without an assertion naming them.
 6. **Two trend points left the axis to the chart library** (low), which dropped zero, and the reference line
@@ -10494,7 +10502,8 @@ round was measured on the Xiaomi Pad 6.
 8. **A difference that rounds to zero printed as "-0" or "-0.000"** (low): `fixedNoNegZero`.
 9. **Picking a sitting at the top restarted the All Participants pool** (low). The session list is read
    again when the chosen sitting changes, and a new array of the same sittings started the gather of every
-   sitting on the tablet. The list in state is now replaced only when it differs.
+   sitting on the tablet. The list in state is now replaced only when it differs (*added in Round 100*: an
+   export stamps its sitting, so the next pick after an export pools again, once).
 10. **Labels with two parentheses** (low): "Incomplete-blink ratio (primary) (proportion)" is now
     "Incomplete-blink ratio, primary (proportion)", and "Comprehension, proportion correct (proportion)" is
     "Comprehension (proportion correct)". Found here while looking at the tab: the trend's x ticks were
@@ -10519,7 +10528,9 @@ round was measured on the Xiaomi Pad 6.
 - **Older-rule rows.** R leaves blink-r1 rows out of the eye models and keeps one fatigue rating format;
   the tab checks neither. Both facts are true, and neither can reach confirmatory data: blink-r1 rows come
   only from sittings before schema 10, and sl-v1 fatigue rows only from builds before Round 84, while
-  confirmatory collection runs on one frozen current build (`docs/READINESS.md`). `inEyeModels` says so.
+  confirmatory collection is to run on one frozen build (`docs/READINESS.md`; not yet the case, since the
+  build is not yet ready for a pilot). `inEyeModels` says so for blink-r1, and a comment at the fatigue
+  outcome for sl-v1 (*corrected in Round 100*: this said "runs on" and "`inEyeModels` says so").
 - The t quantiles (largest error 7.9e-5 against R's `qt` for df 1 to 200 and beyond) and `meanCI` (equal to
   R's `t.test` interval) were checked by the statistics reviewer and needed nothing.
 
@@ -10544,3 +10555,62 @@ round was measured on the Xiaomi Pad 6.
 
 - Nothing was measured on the tablet, including how long the tab takes to recompute with a full study's
   sittings.
+
+## Round 100 — review of Round 99: who is in the polarity row, said as the code decides it; "With outcome" against the camera-on rows; tests that fail when a fix is undone
+
+Round 99's changes were reviewed independently by two agents, one on the code and one on the documents
+against the code. They read only and ran nothing, because the full test suite was running at the time. No
+number the tab shows was found wrong. Nothing in this round was measured on the Xiaomi Pad 6.
+
+### Confirmed and fixed
+
+1. **The rule for leaving a participant out of the polarity row and the trend was described wrongly**
+   (medium). The documents and captions said "a participant without the outcome in both polarities"; Round
+   99's colour pairing leaves out a participant with no colour measured in both polarities. Each half of
+   every row of the Williams square holds each of the five colours once (checked on `williamsSquare(10)` with
+   the condition table: five colours in each half of all ten rows), so a participant whose sitting was split
+   and one half ran without the camera is out of the eye rows in every row, not only rows 2 and 7. The
+   manual, the captions, the comments and Round 99's record now give the rule as the code applies it. The
+   rule is kept: comparing a colour with the same colour is what keeps the colour effect out of the
+   difference, and each cell's n shows who is left out. The analysis's model does use such a participant's
+   runs, because it estimates the colour effects from everyone; this descriptive table does not.
+2. **"With outcome" turned red against n** (low; there before Round 99, which rewrote the caption and kept
+   the comparison). n counts every pooled row, so a participant between sittings, a withdrawn participant or
+   a test session turned the cell red under a caption calling the condition broken. It is now held against
+   the analysable rows recorded with the camera on (`n_camera_on`), so red means rows with no blink counted
+   or in tier C, which is what the caption says.
+3. **Three of Round 99's fixes had tests that would still pass with the fix undone** (low). The trend test's
+   split participant completed last, where both definitions of the trend's place agree; only `niceScale` was
+   tested, not the two-point axis that uses it; and no participant had a sitting outside the analysis set.
+   The split participant now completes third, between the ends of their two sittings, and the eye trends must
+   skip that place; `trendAxis` (`charts.tsx`, taken out of `TrendPanel` for this) is tested with two points
+   whose interval excludes zero; a hand-built later sitting outside the analysis set must not move its
+   participant.
+4. **Wording** (low). Tier C judges the eye sampling rate, face frames solved a second, not the camera's
+   frame rate; the captions and the manual now say so, with the threshold taken from `FPS_GATE`.
+   "Positive minus negative is the difference" holds up to rounding in the last digit, which they now say.
+   "One chart per outcome" holds once two participants have a point on it. The How-to-read line said the
+   tab "updates each time a sitting is saved"; it reads every sitting each time the dashboard is opened.
+   `docs/ANALYSIS_PLAN.md` asks for several decisions "before unblinding", which cannot be met as written
+   while the tab is visible; the guide's Part 5 row says so and leaves any amendment of the plan to the
+   investigator. The corrections to Rounds 98 and 99's records are marked where they are made.
+
+### Checked and found correct
+
+The code reviewer, reading only, found: the colour pairing matches the condition table (one positive and
+one negative condition per colour, spelled the same); positive minus negative equals the difference before
+rounding, and the last trend point equals the difference; the session ids of the pooled file are those of
+the sitting records the completion times come from; `inEyeModels` is the converse of rule rel-r1's "not
+usable" and matches R's eye frame; every sum of the primary-outcome table sits in one branch; `niceScale`
+and `countTicks` hold at their edges; the y axis's clip never hides the mean line, because the points over
+one and two participants lie inside the interval over three; and comparing the session list as JSON loses
+no change that matters to the tab.
+
+### What was verified
+
+- `tests/cohortOutcomes.test.ts`, 17 tests: the three in item 3, and the camera-on count of the
+  primary-outcome table (one row each: analysed with eye data, no camera, withdrawn, tier C).
+
+### Not done
+
+- Nothing was measured on the tablet.

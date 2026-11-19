@@ -906,25 +906,29 @@ then Delete and Purge as above.
 page*. Long explanations are folded: a line or two is shown, and **More ▾** opens the rest. Nothing
 was removed; it is one tap away.
 
-**One sitting or everyone (Rounds 98 and 99).** The tabs *Overview*, *Reaction Time*, *Fatigue*, *Search &
+**One sitting or everyone (Rounds 98 to 100).** The tabs *Overview*, *Reaction Time*, *Fatigue*, *Search &
 Perception* and *Data Quality / QC* show the sitting chosen at the top: one participant's sitting. **All
 Participants** reads every sitting on the tablet each time it is opened, so a sitting counts as soon as it
 is saved. From the second participant of the analysis set it shows seven outcomes (the incomplete-blink
 ratio, blink rate, reaction time, d′, fatigue change, comprehension and reading speed):
 
 - the average in each of the ten conditions;
-- positive against negative polarity and their difference. Each participant compares the colours they have
+- positive against negative polarity and their difference. Each participant compares the colours measured
   in both polarities (P1 with N1, and so on), and the three columns rest on the same participants, so
-  positive minus negative is the difference;
-- *How the difference has moved as participants completed*, one chart per outcome: after each participant
-  completes, the difference over everyone so far. The axis counts participants completed and is the same on
-  every chart. A participant without the outcome in both polarities (for the eye outcomes, a half sitting
-  with the camera off can do this) adds no point to that chart.
+  positive minus negative is the difference, up to rounding in the last digit. A participant with no colour
+  measured in both polarities is left out of that row; for the eye outcomes that is every participant whose
+  sitting was split and one half ran without the camera, because each half of the condition order holds
+  each colour once;
+- *How the difference has moved as participants completed*, one chart per outcome once two participants
+  have a point on it: after each participant completes, the difference over everyone so far. The axis
+  counts participants completed and is the same on every chart. A participant left out of the outcome's
+  polarity row adds no point to its chart.
 
 Each value is the mean across participants with its 95% interval and the number of participants it rests
-on. The eye outcomes use the runs the eye-data analysis uses: camera on, at least one blink counted, and a
-frame rate not in tier C (under 15 a second); the table *Primary outcome by condition* below them uses the
-same runs. These numbers are descriptive: they do not model the passages, the serial position or the
+on. The eye outcomes use the runs the eye-data analysis uses: camera on, at least one blink counted, and an
+eye sampling rate not in tier C (at least 15 face frames solved a second); the table *Primary outcome by
+condition* below them uses the same runs, and its *With outcome* turns red when it falls below the
+analysable rows recorded with the camera on. These numbers are descriptive: they do not model the passages, the serial position or the
 trials, they count every run once where the primary model weights each run by its blinks, they carry no
 test, and they are not the result to report (that is the analysis, `docs/ANALYSIS_GUIDE.md`). The
 investigator chose to have them visible during collection; they are not a reason to stop early or to run a

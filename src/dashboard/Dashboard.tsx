@@ -109,10 +109,11 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   }, [sessionId]);
 
   /*
-   * The cohort is recomputed whenever the session LIST changes — which is what happens when a
-   * sitting finishes — so the view tracks the study as it is collected rather than being a snapshot
-   * somebody has to remember to refresh. It gathers every session, so it is deliberately not run on
-   * mount of every tab: `sessions` changing is the signal, and the work is skipped while it is empty.
+   * The cohort is recomputed whenever the session LIST changes: when the dashboard is opened (it is
+   * mounted afresh on every visit, so a sitting saved since counts), and when a later read of the list
+   * differs (an export stamps its sitting). The view tracks the study as it is collected rather than
+   * being a snapshot somebody has to remember to refresh. It gathers every session, so it is not run per
+   * tab: `sessions` changing is the signal, and the work is skipped while it is empty.
    */
   useEffect(() => {
     if (sessions.length === 0) { setCohort(null); setOutcomes(null); return; }
@@ -475,7 +476,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                           <td style={cohortCell}>{c.text_colour}</td>
                           <td style={cohortCell}>{c.n}</td>
                           <td style={cohortCell}>{c.n_analysable}</td>
-                          <td style={{ ...cohortCell, color: c.n_with_outcome < c.n ? UI_TEXT.red : undefined }}>{c.n_with_outcome}</td>
+                          <td style={{ ...cohortCell, color: c.n_with_outcome < c.n_camera_on ? UI_TEXT.red : undefined }}>{c.n_with_outcome}</td>
                           <td style={cohortCell}>{c.pooled_ibr == null ? '—' : c.pooled_ibr.toFixed(3)}</td>
                           <td style={cohortCell}>{c.mean_ibr == null ? '—' : c.mean_ibr.toFixed(3)}</td>
                           <td style={cohortCell}>{c.blinks_total}</td>
@@ -494,7 +495,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                 </div>
                 <Notice
                   short="Blinks is what the ratio rests on: ten rows of four blinks is not ten measurements. Eye data counts the verdicts of the Data Quality tab: good, usable, not usable."
-                  more={'“Pooled” is incomplete blinks over all blinks in those rows, the quantity the binomial model weights by; “mean of runs” counts every run once however few blinks it had, so the two differ when blink counts vary. “With outcome” below n means rows the eye-data analysis does not use: no blink counted at all, or a frame rate under ' + FPS_GATE.REDUCED + ' a second (tier C); a condition where that is common is broken, not merely noisy. “Analysable”, the outcome columns and Eye data cover the confirmatory set only: analysable by the join check, not withdrawn, not a test session, first protocol pass — the rows both analysis templates model. '
+                  more={'“Pooled” is incomplete blinks over all blinks in those rows, the quantity the binomial model weights by; “mean of runs” counts every run once however few blinks it had, so the two differ when blink counts vary. “With outcome” is the analysable rows the eye-data analysis uses. It is red when it falls below the analysable rows recorded with the camera on, which means rows with no blink counted at all or an eye sampling rate under ' + FPS_GATE.REDUCED + ' face frames a second (tier C); a condition where that is common is broken, not merely noisy. Rows without the camera, and rows outside the analysis set (a participant between sittings, withdrawn, a test session), do not turn it red. “Analysable”, the outcome columns and Eye data cover the confirmatory set only: analysable by the join check, not withdrawn, not a test session, first protocol pass — the rows both analysis templates model. '
                     + `Of its camera-on rows, ${cohort.qcChecks.flagged} of ${cohort.qcChecks.of} are flagged by a §5.3–5.4 check (face in view, head turned away, reading seen); the R template prints the same count.`} />
               </div>
 
@@ -778,7 +779,7 @@ const HOW_TO_READ: Record<Tab, string[]> = {
     'A dash (—) means not measured. It is never a zero.',
   ],
   cohort: [
-    'Every participant on this tablet, read from analysis_long.csv: the rows and numbers the analysis will use. It updates each time a sitting is saved.',
+    'Every participant on this tablet, read from analysis_long.csv: the rows and numbers the analysis will use. It reads every sitting each time the dashboard is opened, so a sitting counts as soon as it is saved.',
     'The other tabs answer “did this sitting work?” for one sitting (pick it at the top); this one answers “is the study working?” across all of them.',
     'Averages are descriptive: one value per participant, then the mean across participants with a 95% interval. They are not the analysis; the result to report is the analysis on the computer.',
     'Look for a condition with fewer rows than the others, or many rows without blinks.',
@@ -840,7 +841,7 @@ function CohortOutcomesSection({ view }: { view: CohortOutcomesView }) {
       <SectionTitle>All participants: averages by condition</SectionTitle>
       <Caveat
         short={`${n} participants of the analysis set. Each cell: the mean across participants, its 95% interval, and how many participants it rests on. Descriptive, not the analysis.`}
-        more="Each participant gives one value per condition (normally one run), and the mean is taken across participants with a t interval. The eye outcomes use the runs the eye-data analysis uses: camera on, at least one blink counted, frame rate not under 15 a second (the runs the Data Quality tab does not call not usable). These numbers do not model the passages, the serial position or the trials, and they count every run once where the primary model weights each run by its blinks (the pooled ratio in the table further down), so they can differ from the analysis on the computer (run_analysis.R), which is the result to report. Watching them during collection was the investigator's choice (Round 98): they are not a reason to stop early or to change how sittings are run." />
+        more={`Each participant gives one value per condition (normally one run), and the mean is taken across participants with a t interval. The eye outcomes use the runs the eye-data analysis uses: camera on, at least one blink counted, an eye sampling rate of at least ${FPS_GATE.REDUCED} face frames a second (the runs the Data Quality tab does not call not usable). These numbers do not model the passages, the serial position or the trials, and they count every run once where the primary model weights each run by its blinks (the pooled ratio in the table further down), so they can differ from the analysis on the computer (run_analysis.R), which is the result to report. Watching them during collection was the investigator's choice (Round 98): they are not a reason to stop early or to change how sittings are run.`} />
       <div style={{ overflowX: 'auto' }}>
         <table className="font-lab" style={{ fontSize: 13, borderCollapse: 'collapse', width: '100%' }} data-testid="cohort-by-condition">
           <thead>
@@ -862,8 +863,8 @@ function CohortOutcomesSection({ view }: { view: CohortOutcomesView }) {
 
       <SectionTitle>Positive minus negative polarity, across participants</SectionTitle>
       <Caveat
-        short="Each participant compares the colours they have in both polarities (P1 with N1, and so on); the three columns are over the same participants, so positive minus negative is the difference."
-        more="A participant with no colour in both polarities for an outcome (for the eye outcomes, a half sitting with the camera off can do this) is left out of that row, and its n says so." />
+        short="Each participant compares the colours measured in both polarities (P1 with N1, and so on); the three columns are over the same participants, so positive minus negative is the difference, up to rounding in the last digit."
+        more="A participant with no colour measured in both polarities for an outcome is left out of that row, and its n says so. For the eye outcomes that is every participant whose sitting was split and one half ran without the camera: each half of the condition order holds each colour once." />
       <div style={{ overflowX: 'auto' }}>
         <table className="font-lab" style={{ fontSize: 13, borderCollapse: 'collapse', width: '100%' }} data-testid="cohort-polarity">
           <thead>
@@ -890,7 +891,7 @@ function CohortOutcomesSection({ view }: { view: CohortOutcomesView }) {
       <SectionTitle>How the difference has moved as participants completed</SectionTitle>
       <Caveat
         short="Each point: the positive-minus-negative difference averaged over the participants completed so far, with its 95% interval (dashed). It wanders while there are few participants and settles as more complete."
-        more="Participants are added in the order they completed (the end of the last sitting the analysis reads). A participant without the outcome in both polarities adds no point to that chart. The interval over the first two participants is too wide to show once there are more and runs off the chart; tap a point for its numbers. Early points rest on very few people: an interval that excludes zero after a handful of participants is expected to happen by chance now and then, and the planned analysis (docs/ANALYSIS_PLAN.md) does not look at it." />
+        more="Participants are added in the order they completed (the end of the last sitting the analysis reads). A participant with no colour measured in both polarities adds no point to that chart (for the eye outcomes, a split sitting with one half run without the camera), and a chart appears once two participants have a point on it. The interval over the first two participants is too wide to show once there are more and runs off the chart; tap a point for its numbers. Early points rest on very few people: an interval that excludes zero after a handful of participants is expected to happen by chance now and then, and the planned analysis (docs/ANALYSIS_PLAN.md) does not look at it." />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
         {view.outcomes.filter((o) => view.trend[o.key].length >= 2).map((o) => (
           <TrendPanel key={o.key} title={o.label} unit={o.unit} points={view.trend[o.key]} digits={o.digits} of={n} />

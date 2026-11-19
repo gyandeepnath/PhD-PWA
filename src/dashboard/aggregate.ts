@@ -964,10 +964,16 @@ export interface CohortConditionRow {
    */
   n_analysable: number;
   /**
-   * Confirmatory rows the eye-data models read (inEyeModels): camera on, at least one blink, frame
-   * rate not in tier C. The outcome columns below are over these rows.
+   * Confirmatory rows the eye-data models read (inEyeModels): camera on, at least one blink, eye
+   * sampling rate not in tier C. The outcome columns below are over these rows.
    */
   n_with_outcome: number;
+  /**
+   * Confirmatory rows recorded with the camera on: what n_with_outcome is held against (Round 100).
+   * It was held against n, which counts every pooled row, so a participant between sittings or a
+   * withdrawn one turned the cell red under a caption calling the condition broken.
+   */
+  n_camera_on: number;
   /**
    * MEAN OF PER-RUN RATIOS over rows that have one; null when none do. Every run counts once,
    * whether its ratio rests on 8 blinks or 60 — which is NOT the quantity the primary model
@@ -1114,7 +1120,7 @@ export function cohortSummary(
     if (!c) {
       c = {
         condition_label: label, polarity: r.polarity ?? '', text_colour: r.text_colour ?? '',
-        n: 0, n_unfinished: 0, n_withdrawn: 0, n_analysable: 0, n_with_outcome: 0, mean_ibr: null, pooled_ibr: null,
+        n: 0, n_unfinished: 0, n_withdrawn: 0, n_analysable: 0, n_with_outcome: 0, n_camera_on: 0, mean_ibr: null, pooled_ibr: null,
         blinks_total: 0, incomplete_total: 0, n_fps_inadequate: 0, n_fps_inconsistent: 0,
         n_good: 0, n_usable: 0, n_not_usable: 0,
       };
@@ -1160,6 +1166,7 @@ export function cohortSummary(
     else if (r.ocular_reliability === 'usable') c.n_usable++;
     else if (r.ocular_reliability === 'not_usable') c.n_not_usable++;
     if (isTrue(r.camera_active)) {
+      c.n_camera_on++;
       qcOf++;
       if (QC_CHECK_CODES.some((k) => (r.ocular_reliability_checks ?? '').split(';').includes(k))) qcFlagged++;
     }
@@ -1256,8 +1263,9 @@ export function pageLockArithmetic(): { pages: number[]; guaranteedS: number[]; 
  * outcome by condition averaged tier-C runs that the averages above it left out (review of Round 98).
  *
  * A blank camera_active (a hand-built row) is not read as off. Not checked: blink_rule_version. R also
- * leaves out blink-r1 rows, which only a sitting recorded before schema 10 can carry; the build that
- * collects the confirmatory data writes blink-r2 only (src/tracking/blink.ts).
+ * leaves out blink-r1 rows, which only a sitting recorded before schema 10 can carry; the current build
+ * writes blink-r2 only (src/tracking/blink.ts), and the confirmatory data are to be collected on one
+ * frozen build (docs/READINESS.md).
  */
 export function inEyeModels(r: Record<string, string>): boolean {
   if (r.camera_active === 'false' || r.camera_active === 'FALSE') return false;
@@ -1286,6 +1294,9 @@ export const COHORT_OUTCOMES: CohortOutcome[] = [
   { key: 'blink_rate_per_min', label: 'Blink rate', unit: 'per min', digits: 1, ocular: true, value: (r) => num(r.blink_rate_per_min) },
   { key: 'rt_mean_hits_ms', label: 'Reaction time, mean of hits', unit: 'ms', digits: 0, ocular: false, value: (r) => num(r.rt_mean_hits_ms) },
   { key: 'd_prime', label: 'Reaction task d′', unit: '', digits: 2, ocular: false, value: (r) => num(r.d_prime) },
+  // Every rating format pooled: R models one (vas-v2 when any row has it) and leaves an older one out.
+  // Only builds before Round 84 wrote sl-v1, and the confirmatory data are to come from one frozen
+  // build (docs/READINESS.md), so in those data there is one format and the rows are the same.
   { key: 'fatigue_delta', label: 'Fatigue, change from baseline', unit: 'points', digits: 2, ocular: false, value: (r) => num(r.fatigue_delta) },
   {
     key: 'comprehension', label: 'Comprehension', unit: 'proportion correct', digits: 2, ocular: false,
@@ -1338,7 +1349,7 @@ export function meanCI(xs: number[]): MeanCI {
 export interface TrendPoint {
   /** How many participants of the analysis set had completed when this point was added. */
   k: number;
-  /** How many of them the running mean rests on: those with this outcome in both polarities. */
+  /** How many of them the running mean rests on: those with a colour measured in both polarities. */
   n: number;
   /** The participant whose completion added the point. */
   participant: string;
@@ -1361,8 +1372,9 @@ export interface CohortOutcomesView {
   byCondition: { condition_label: string; polarity: string; text_colour: string; cells: Record<string, MeanCI> }[];
   polarity: Record<string, PolarityRow>;
   /**
-   * A point at each completion of a participant who has the outcome in both polarities: the running
-   * difference over everyone with it so far. `k` is the completion count, shared by every outcome.
+   * A point at each completion of a participant with a colour measured in both polarities for the
+   * outcome: the running difference over everyone with one so far. `k` is the completion count, shared
+   * by every outcome.
    */
   trend: Record<string, TrendPoint[]>;
 }
@@ -1429,7 +1441,10 @@ export function cohortOutcomes(
    * colour effect into the difference. The Positive and Negative columns are over the same
    * participants as the difference, so positive minus negative is the difference on every row: they
    * were each over everyone with that side, and a participant whose eye data covered one polarity
-   * only (a split sitting's camera-off half, Williams rows 2 and 7) could reverse the row's reading.
+   * only (a split sitting's camera-off half in Williams rows 2 and 7, counted from 0) could reverse the
+   * row's reading. A participant with no colour measured in both polarities is left out of the row and
+   * the trend. For the eye outcomes that is every participant whose sitting was split and one half ran
+   * camera-off, in any row: each half of the order holds each colour once (src/experiment/counterbalance.ts).
    */
   const colours = [...new Set([...conditionInfo.values()].map((c) => c.text_colour))].sort();
   const polarity: CohortOutcomesView['polarity'] = {};

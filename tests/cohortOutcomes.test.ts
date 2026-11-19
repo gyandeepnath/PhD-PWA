@@ -15,7 +15,7 @@ import { disabledEyeMetrics } from '@/tracking/aggregator';
 import {
   cohortOutcomes, cohortSummary, inConfirmatorySet, inEyeModels, meanCI, tQuantile975, fixedNoNegZero, COHORT_OUTCOMES,
 } from '@/dashboard/aggregate';
-import { niceScale, countTicks } from '@/dashboard/charts';
+import { niceScale, countTicks, trendAxis } from '@/dashboard/charts';
 
 const WITHDRAWN = 2;
 const PAUSED = 5;
@@ -35,9 +35,12 @@ const slow = bundles.find((b) => b.session.participant_id === pid(TIER_C))!;
 for (const e of slow.eyeMetrics.slice(0, 2)) e.ear_sample_count = Math.round((10 * e.observed_duration_ms!) / 1000) + 1;
 
 const ds = buildAnalysisDataset(bundles);
-// Completion order deliberately not code order: P010 first, then P009, ...; the split participant's
-// second sitting ends after everyone, so they completed last.
-const sittingEnd = new Map(bundles.map((b, i) => [b.session.session_id, b === second ? 2_000_000 : 1_000_000 - i * 1000]));
+// Completion order deliberately not code order: P010 first, then P009, ... The split participant's
+// first sitting ends before everyone's and their second in the middle, so they completed third: by the
+// last of their sittings, and in a place the eye trend must skip (Round 100).
+const first = bundles.find((b) => b.session.participant_id === pid(SPLIT) && b.session.session_index !== 2)!;
+const sittingEnd = new Map(bundles.map((b, i) => [b.session.session_id,
+  b === second ? 993_500 : b === first ? 900_000 : 1_000_000 - i * 1000]));
 const view = cohortOutcomes(ds.files, sittingEnd);
 
 function readLong(): Record<string, string>[] {
@@ -117,6 +120,23 @@ describe('the rows the eye-data models read', () => {
     expect(new Set(off.map((r) => r.polarity))).toEqual(new Set(['positive']));
   });
 
+  it('the existing table holds "with outcome" against the camera-on analysable rows, not every pooled row', () => {
+    const head = 'participant_id,condition_label,polarity,text_colour,analysable,withdrawn,e2e_timing,protocol_pass,condition_complete,camera_active,fps_tier,n_incomplete,n_blinks_total,incomplete_blink_ratio,session_position';
+    const csv = [head,
+      'A,P1,positive,achromatic,true,false,false,0,true,true,A,4,20,0.2,0',
+      // No camera: analysable, not an eye row, not camera-on.
+      'B,P1,positive,achromatic,true,false,false,0,true,false,,,,,1',
+      // Withdrawn and not analysable: in n only.
+      'C,P1,positive,achromatic,false,true,false,0,true,true,A,4,20,0.2,2',
+      // Camera on, tier C: camera-on, not an eye row.
+      'D,P1,positive,achromatic,true,false,false,0,true,true,C,4,20,0.2,3',
+    ].join('\n');
+    const s = cohortSummary([{ filename: 'analysis_long.csv', content: csv }],
+      { total_participants: 4, analysable_participants: 3, issues: [] }, 10);
+    const c = s.conditions[0];
+    expect([c.n, c.n_analysable, c.n_camera_on, c.n_with_outcome]).toEqual([4, 3, 2, 1]);
+  });
+
   it('the existing primary-outcome table reads the same rows (tier C out of its mean and pooled ratio)', () => {
     const csv = [
       'participant_id,condition_label,polarity,text_colour,analysable,withdrawn,e2e_timing,protocol_pass,condition_complete,camera_active,fps_tier,n_incomplete,n_blinks_total,incomplete_blink_ratio,session_position',
@@ -144,7 +164,23 @@ describe('cohort outcomes', () => {
     const lastEnd = new Map<string, number>();
     for (const r of rows) lastEnd.set(r.participant_id, Math.max(lastEnd.get(r.participant_id) ?? -Infinity, sittingEnd.get(r.session_id)!));
     expect(view.participants).toEqual([...lastEnd.keys()].sort((a, b) => lastEnd.get(a)! - lastEnd.get(b)!));
-    expect(view.participants[view.participants.length - 1]).toBe(pid(SPLIT));
+    // Third, by their second sitting; by their first they would be first.
+    expect(view.participants.indexOf(pid(SPLIT))).toBe(2);
+  });
+
+  it('a sitting outside the analysis set does not move a participant', () => {
+    // A's analysed sitting ended at 100; a later sitting of A (not analysable) at 500; B's at 300.
+    const head = 'participant_id,session_id,condition_label,polarity,text_colour,analysable,withdrawn,e2e_timing,protocol_pass,condition_complete,camera_active,fps_tier,n_blinks_total,rt_mean_hits_ms';
+    const lines = [head,
+      'A,sA1,P1,positive,achromatic,true,false,false,0,true,true,A,20,400',
+      'A,sA1,N1,negative,achromatic,true,false,false,0,true,true,A,20,410',
+      'A,sA2,P1,positive,achromatic,false,false,false,0,true,true,A,20,390',
+      'B,sB,P1,positive,achromatic,true,false,false,0,true,true,A,20,420',
+      'B,sB,N1,negative,achromatic,true,false,false,0,true,true,A,20,430',
+    ];
+    const v = cohortOutcomes([{ filename: 'analysis_long.csv', content: lines.join('\n') }],
+      new Map([['sA1', 100], ['sA2', 500], ['sB', 300]]));
+    expect(v.participants).toEqual(['A', 'B']);
   });
 
   it('each condition: one value per participant, averaged across participants, for all seven outcomes', () => {
@@ -227,9 +263,11 @@ describe('cohort outcomes', () => {
       expect(t[t.length - 1].mean!).toBeCloseTo(view.polarity[o.key].difference.mean!, 9);
       expect(t[0].lcl).toBeNull();
     }
-    // The split participant completed last and has no eye difference: the eye charts stop at 7 of 8.
+    // The split participant completed third and has no colour measured in both polarities in the eye
+    // data: the eye charts skip the third place, and every later point keeps its own place.
     expect(view.trend.rt_mean_hits_ms.map((x) => x.k)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(view.trend.incomplete_blink_ratio.map((x) => x.k)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(view.trend.incomplete_blink_ratio.map((x) => x.k)).toEqual([1, 2, 4, 5, 6, 7, 8]);
+    expect(view.trend.incomplete_blink_ratio.map((x) => x.n)).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 });
 
@@ -240,6 +278,18 @@ describe('what the tab prints', () => {
     expect(fixedNoNegZero(-0.6, 0)).toBe('-1');
     expect(fixedNoNegZero(-12.34, 1)).toBe('-12.3');
     expect(fixedNoNegZero(0.25, 2)).toBe('0.25');
+  });
+
+  it('the trend axis: zero on it with two points, and the first intervals clipped only once later points rest on three', () => {
+    // Two participants whose differences are 0.50 and 0.52: the interval excludes zero.
+    const two = [{ n: 1, mean: 0.5, lcl: null, ucl: null }, { n: 2, mean: 0.51, lcl: 0.383, ucl: 0.637 }];
+    expect(trendAxis(two).scale.ticks).toContain(0);
+    expect(trendAxis(two).scale.domain[1]).toBeGreaterThanOrEqual(0.637);
+    expect(trendAxis(two).clipped).toBe(false);
+    const four = [...two, { n: 3, mean: 0.5, lcl: 0.47, ucl: 0.53 }, { n: 4, mean: 0.5, lcl: 0.48, ucl: 0.52 }];
+    expect(trendAxis(four).clipped).toBe(true);
+    expect(trendAxis(four).scale.ticks).toContain(0);
+    expect(trendAxis(four).scale.domain[1]).toBeLessThan(0.637);
   });
 
   it('the trend axis always holds zero, has a width, and steps evenly', () => {
