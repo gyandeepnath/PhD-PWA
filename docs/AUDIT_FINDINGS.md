@@ -10556,6 +10556,15 @@ round was measured on the Xiaomi Pad 6.
 - Nothing was measured on the tablet, including how long the tab takes to recompute with a full study's
   sittings.
 
+### Checks run
+
+On 874a08b (all of this round's code):
+- `npm run verify`: lint, type check, 149 test files with 1,982 tests passed; the export gate 903/903; the
+  analysis gate passed (245 s).
+- The full end-to-end suite, `npx playwright test --retries=0`: 123 of 123 passed (22.4 min).
+- `npm run build`: 43 assets, all precached, 59 precache entries, 44.4 MB in all; then
+  `npm run test:e2e:prod -- --retries=0`: 9 passed.
+
 ## Round 100 — review of Round 99: who is in the polarity row, said as the code decides it; "With outcome" against the camera-on rows; tests that fail when a fix is undone
 
 Round 99's changes were reviewed independently by two agents, one on the code and one on the documents
