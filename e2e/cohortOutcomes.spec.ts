@@ -61,9 +61,12 @@ test('All Participants: averages by condition, the polarity difference and its t
     await expect(page.getByTestId('cohort-by-condition').locator('tbody tr')).toHaveCount(10);
     await expect(page.getByTestId('cohort-polarity').locator('tbody tr')).toHaveCount(7);
     await expect(section).toContainText('6 participants of the analysis set');
-    // Every cell reads "mean [low, high] (n k)" or a dash; the primary's difference rests on six.
-    await expect(page.getByTestId('cohort-polarity')).toContainText(/\[-?[\d.]+, -?[\d.]+\] \(n 6\)/);
-    expect(await page.getByTestId('cohort-trend').count()).toBeGreaterThanOrEqual(5);
+    // The primary's row: positive, negative and the difference, each "mean [low, high] (n 6)".
+    const primary = page.getByTestId('cohort-polarity').locator('tbody tr').first().locator('td');
+    await expect(primary.nth(0)).toContainText('Incomplete-blink ratio, primary');
+    for (const col of [1, 2, 3]) await expect(primary.nth(col)).toHaveText(/^-?[\d.]+ \[-?[\d.]+, -?[\d.]+\] \(n 6\)$/);
+    // One trend chart per outcome: every outcome has both polarities for all six.
+    await expect(page.getByTestId('cohort-trend')).toHaveCount(7);
     await page.screenshot({ path: test.info().outputPath('cohort-6.png'), fullPage: false });
 
     // A seventh participant: back to the manager, restore, and the tab counts seven.
@@ -73,6 +76,7 @@ test('All Participants: averages by condition, the polarity difference and its t
     await openCohort();
     await expect(page.getByTestId('cohort-outcomes')).toContainText('7 participants of the analysis set', { timeout: 60_000 });
     await expect(page.getByTestId('cohort-polarity')).toContainText(/\(n 7\)/);
+    await expect(page.getByTestId('cohort-trend')).toHaveCount(7);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

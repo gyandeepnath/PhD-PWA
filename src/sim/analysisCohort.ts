@@ -394,12 +394,13 @@ export function simulateCohort(opts: CohortOptions): SessionBundle[] {
 
 /**
  * Every record of a simulated participant gets an id of its own (Round 98). The simulated sittings
- * are built from one fixture, whose baseline-fatigue, perception, CVS-Q, NASA-TLX, calibration and
- * reaction-trial ids ('fat-base', 'rt-0-0', 'cal-1', ...) were therefore the same for every
- * participant. That made no difference where each sitting is exported on its own, as the analysis
- * gate does; but restored into one tablet's database, as a real study's sittings sit, each overwrote
- * the last one's records, and every sitting but one failed its integrity checks. The app's own ids are
- * random and unique; these are prefixed with the participant code, references included.
+ * are built from one fixture, whose fatigue (baseline and after each condition), perception, CVS-Q,
+ * NASA-TLX, calibration and reaction-trial ids ('fat-base', 'fat-0', 'rt-0-0', 'cal-1', ...) were the
+ * same for every participant. That made no difference where each sitting is exported on its own, as
+ * the analysis gate does; but restored into one tablet's database, as a real study's sittings sit,
+ * each overwrote the last one's records, and every sitting but one failed its integrity checks. The
+ * app's own ids are random and unique (uuidv4); these are prefixed with the participant code,
+ * references included.
  */
 function distinctRecordIds(b: SessionBundle): void {
   const p = `${b.session.participant_id}-`;

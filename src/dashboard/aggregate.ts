@@ -963,7 +963,10 @@ export interface CohortConditionRow {
    * not a test-harness sitting, the first protocol pass. The rows both analysis templates model.
    */
   n_analysable: number;
-  /** Rows with a usable primary outcome — a denominator of at least one blink. */
+  /**
+   * Confirmatory rows the eye-data models read (inEyeModels): camera on, at least one blink, frame
+   * rate not in tier C. The outcome columns below are over these rows.
+   */
   n_with_outcome: number;
   /**
    * MEAN OF PER-RUN RATIOS over rows that have one; null when none do. Every run counts once,
@@ -1164,7 +1167,9 @@ export function cohortSummary(
     const denom = Number(r.n_blinks_total);
     const ratio = Number(r.incomplete_blink_ratio);
     const incomplete = Number(r.n_incomplete);
-    if (Number.isFinite(denom) && denom > 0 && Number.isFinite(ratio)) {
+    // The rows the eye-data models read (inEyeModels): a run in frame-rate tier C was averaged here
+    // although both templates leave it out of every confirmatory ocular model (fps-g2; Round 99).
+    if (inEyeModels(r) && Number.isFinite(ratio)) {
       // Accumulated as a running sum in mean_ibr, divided out below. The blink total is carried
       // because it, not the row count, is what the ratio's precision actually rests on.
       c.mean_ibr = (c.mean_ibr ?? 0) + ratio;
@@ -1239,9 +1244,25 @@ export function pageLockArithmetic(): { pages: number[]; guaranteedS: number[]; 
 // participants with a t interval. No test, no p-value, no model: the result to report is the
 // analysis on the computer (src/analysis/run_analysis.R), which models the trials and the passages.
 // The rows are the confirmatory set, as the analysis reads it (inConfirmatorySet), and for the eye
-// outcomes only rows whose blink data the Data Quality tab does not call "not usable", which the
-// analysis leaves out of the eye-data models.
+// outcomes the rows the eye-data models read (inEyeModels).
 // =============================================================================================
+
+/**
+ * THE ROWS THE EYE-DATA MODELS READ (Round 99): the camera was on, at least one blink was classified
+ * (n_blinks_total, the binomial denominator, is above zero) and the frame rate is not in tier C, which
+ * both analysis templates leave out of every confirmatory ocular model (the gate fps-g2,
+ * ANALYSIS_PLAN.md §5 item 2; analysis_template.R §5, "THE FRAME-RATE GATE"). They are the runs the
+ * Data Quality tab does not call "not usable". One definition for the tab's two tables: the primary
+ * outcome by condition averaged tier-C runs that the averages above it left out (review of Round 98).
+ *
+ * A blank camera_active (a hand-built row) is not read as off. Not checked: blink_rule_version. R also
+ * leaves out blink-r1 rows, which only a sitting recorded before schema 10 can carry; the build that
+ * collects the confirmatory data writes blink-r2 only (src/tracking/blink.ts).
+ */
+export function inEyeModels(r: Record<string, string>): boolean {
+  if (r.camera_active === 'false' || r.camera_active === 'FALSE') return false;
+  return Number(r.n_blinks_total) > 0 && r.fps_tier !== 'C';
+}
 
 export interface CohortOutcome {
   key: string;
@@ -1249,7 +1270,7 @@ export interface CohortOutcome {
   unit: string;
   /** Decimals to show. */
   digits: number;
-  /** An eye outcome: only rows whose blink data is usable. */
+  /** An eye outcome: only the rows the eye-data models read (inEyeModels). */
   ocular: boolean;
   value: (r: Record<string, string>) => number | null;
 }
@@ -1261,13 +1282,13 @@ const num = (v: string | undefined): number | null => {
 };
 
 export const COHORT_OUTCOMES: CohortOutcome[] = [
-  { key: 'incomplete_blink_ratio', label: 'Incomplete-blink ratio (primary)', unit: 'proportion', digits: 3, ocular: true, value: (r) => num(r.incomplete_blink_ratio) },
+  { key: 'incomplete_blink_ratio', label: 'Incomplete-blink ratio, primary', unit: 'proportion', digits: 3, ocular: true, value: (r) => num(r.incomplete_blink_ratio) },
   { key: 'blink_rate_per_min', label: 'Blink rate', unit: 'per min', digits: 1, ocular: true, value: (r) => num(r.blink_rate_per_min) },
   { key: 'rt_mean_hits_ms', label: 'Reaction time, mean of hits', unit: 'ms', digits: 0, ocular: false, value: (r) => num(r.rt_mean_hits_ms) },
   { key: 'd_prime', label: 'Reaction task d′', unit: '', digits: 2, ocular: false, value: (r) => num(r.d_prime) },
   { key: 'fatigue_delta', label: 'Fatigue, change from baseline', unit: 'points', digits: 2, ocular: false, value: (r) => num(r.fatigue_delta) },
   {
-    key: 'comprehension', label: 'Comprehension, proportion correct', unit: 'proportion', digits: 2, ocular: false,
+    key: 'comprehension', label: 'Comprehension', unit: 'proportion correct', digits: 2, ocular: false,
     value: (r) => {
       const c = num(r.comprehension_correct);
       const n = num(r.comprehension_items);
@@ -1314,27 +1335,55 @@ export function meanCI(xs: number[]): MeanCI {
   return { n, mean, lcl: mean - h, ucl: mean + h };
 }
 
+export interface TrendPoint {
+  /** How many participants of the analysis set had completed when this point was added. */
+  k: number;
+  /** How many of them the running mean rests on: those with this outcome in both polarities. */
+  n: number;
+  /** The participant whose completion added the point. */
+  participant: string;
+  mean: number | null;
+  lcl: number | null;
+  ucl: number | null;
+}
+
+export interface PolarityRow {
+  /** The three over the SAME participants (those with a colour in both polarities), so positive minus negative is the difference. */
+  positive: MeanCI;
+  negative: MeanCI;
+  difference: MeanCI;
+}
+
 export interface CohortOutcomesView {
   /** Participants of the confirmatory set, in the order they completed. */
   participants: string[];
   outcomes: CohortOutcome[];
   byCondition: { condition_label: string; polarity: string; text_colour: string; cells: Record<string, MeanCI> }[];
-  polarity: Record<string, { positive: MeanCI; negative: MeanCI; difference: MeanCI }>;
-  /** After each participant who has both polarities for the outcome: the running difference. */
-  trend: Record<string, { k: number; participant: string; mean: number | null; lcl: number | null; ucl: number | null }[]>;
+  polarity: Record<string, PolarityRow>;
+  /**
+   * A point at each completion of a participant who has the outcome in both polarities: the running
+   * difference over everyone with it so far. `k` is the completion count, shared by every outcome.
+   */
+  trend: Record<string, TrendPoint[]>;
 }
 
 /**
- * `completedAt` maps a participant to when they completed (their last sitting's end); a participant
- * without one is placed after those with one, in code order.
+ * `sittingEnd` maps a sitting (session_id) to when it ended (its start if it has none). A participant
+ * completed when the last of their ANALYSED sittings ended, the sittings whose rows are in the
+ * confirmatory set; one without a time is placed after those with one, in code order.
  */
 export function cohortOutcomes(
   analysisFiles: { filename: string; content: string }[],
-  completedAt: Map<string, number>,
+  sittingEnd: Map<string, number>,
 ): CohortOutcomesView {
   const long = analysisFiles.find((f) => f.filename === 'analysis_long.csv');
-  const rows = (long ? readCsv(long.content) : []).filter((r) => inConfirmatorySet(r)
-    && !(r.condition_complete === 'false' || r.condition_complete === 'FALSE'));
+  // `analysable` carries the run's completion (analysisExport.ts), so a paused run is out here too.
+  const rows = (long ? readCsv(long.content) : []).filter(inConfirmatorySet);
+  const completedAt = new Map<string, number>();
+  for (const r of rows) {
+    const t = sittingEnd.get(r.session_id);
+    if (t != null) completedAt.set(r.participant_id, Math.max(completedAt.get(r.participant_id) ?? -Infinity, t));
+  }
   const participants = [...new Set(rows.map((r) => r.participant_id))].sort((a, b) => {
     const ta = completedAt.get(a) ?? Infinity;
     const tb = completedAt.get(b) ?? Infinity;
@@ -1348,7 +1397,7 @@ export function cohortOutcomes(
     const label = r.condition_label || '(unlabelled)';
     if (!conditionInfo.has(label)) conditionInfo.set(label, { polarity: r.polarity ?? '', text_colour: r.text_colour ?? '' });
     for (const o of COHORT_OUTCOMES) {
-      if (o.ocular && (r.ocular_reliability === 'not_usable' || !isTrue(r.camera_active))) continue;
+      if (o.ocular && !inEyeModels(r)) continue;
       const v = o.value(r);
       if (v == null) continue;
       const byCond = cellValues.get(r.participant_id) ?? new Map<string, Map<string, number[]>>();
@@ -1371,24 +1420,53 @@ export function cohortOutcomes(
       meanCI(participants.map((p) => cell(p, label, o.key)).filter((x): x is number => x != null))])),
   }));
 
+  /*
+   * POSITIVE AGAINST NEGATIVE, COLOUR BY COLOUR (Round 99, review of Round 98). Each participant's
+   * difference is taken over the colours they have in BOTH polarities (P1 with N1, ..., P5 with N5):
+   * the mean of their positive cells minus the mean of their negative cells over those colours, which
+   * is the mean of the colour-paired differences, as the analysis's sum-coded polarity-by-colour
+   * model compares them. Taking each side over whatever conditions it had let a missing run put the
+   * colour effect into the difference. The Positive and Negative columns are over the same
+   * participants as the difference, so positive minus negative is the difference on every row: they
+   * were each over everyone with that side, and a participant whose eye data covered one polarity
+   * only (a split sitting's camera-off half, Williams rows 2 and 7) could reverse the row's reading.
+   */
+  const colours = [...new Set([...conditionInfo.values()].map((c) => c.text_colour))].sort();
   const polarity: CohortOutcomesView['polarity'] = {};
   const trend: CohortOutcomesView['trend'] = {};
   for (const o of COHORT_OUTCOMES) {
-    const side = (p: string, pol: string): number | null => {
-      const xs = labels.filter((l) => conditionInfo.get(l)!.polarity === pol)
+    const at = (p: string, pol: string, colour: string): number | null => {
+      const xs = labels.filter((l) => conditionInfo.get(l)!.polarity === pol && conditionInfo.get(l)!.text_colour === colour)
         .map((l) => cell(p, l, o.key)).filter((x): x is number => x != null);
       return xs.length ? avg(xs) : null;
     };
-    const pos: number[] = []; const neg: number[] = []; const diffs: { p: string; d: number }[] = [];
+    const pos: number[] = []; const neg: number[] = [];
+    const diffs = new Map<string, number>();
     for (const p of participants) {
-      const a = side(p, 'positive');
-      const b = side(p, 'negative');
-      if (a != null) pos.push(a);
-      if (b != null) neg.push(b);
-      if (a != null && b != null) diffs.push({ p, d: a - b });
+      const pairs = colours.map((c) => [at(p, 'positive', c), at(p, 'negative', c)] as const)
+        .filter((x): x is readonly [number, number] => x[0] != null && x[1] != null);
+      if (pairs.length === 0) continue;
+      const a = avg(pairs.map((x) => x[0]));
+      const b = avg(pairs.map((x) => x[1]));
+      pos.push(a); neg.push(b); diffs.set(p, a - b);
     }
-    polarity[o.key] = { positive: meanCI(pos), negative: meanCI(neg), difference: meanCI(diffs.map((x) => x.d)) };
-    trend[o.key] = diffs.map((x, i) => ({ k: i + 1, participant: x.p, ...meanCI(diffs.slice(0, i + 1).map((y) => y.d)) }));
+    polarity[o.key] = { positive: meanCI(pos), negative: meanCI(neg), difference: meanCI([...diffs.values()]) };
+    // A point where a participant with the outcome completed, at their place in the completion order,
+    // so every chart shares one axis and a participant without eye data leaves a step out, not a shift.
+    const sofar: number[] = [];
+    trend[o.key] = [];
+    participants.forEach((p, i) => {
+      const d = diffs.get(p);
+      if (d == null) return;
+      sofar.push(d);
+      trend[o.key].push({ k: i + 1, participant: p, ...meanCI(sofar) }); // meanCI's n: everyone so far with it
+    });
   }
   return { participants, outcomes: COHORT_OUTCOMES, byCondition, polarity, trend };
+}
+
+/** `x` to `digits` decimals, without the minus sign of a value that rounds to zero ("-0.000"). */
+export function fixedNoNegZero(x: number, digits: number): string {
+  const s = x.toFixed(digits);
+  return /^-0(\.0+)?$/.test(s) ? s.slice(1) : s;
 }

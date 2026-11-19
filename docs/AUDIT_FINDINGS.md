@@ -10406,7 +10406,9 @@ the thesis that descriptive results were visible during collection.
   mean with its interval dashed, zero as reference; the axis scaled from the third participant on, so the
   very wide first interval does not flatten the rest). Labelled descriptive, with no test or p-value.
 - **The simulated cohort's record ids** (`src/sim/analysisCohort.ts`): every simulated participant shared the
-  fixture's baseline-fatigue, perception, CVS-Q, NASA-TLX, calibration and reaction-trial ids. Exported one
+  fixture's fatigue (baseline and after each condition), perception, CVS-Q, NASA-TLX, calibration and
+  reaction-trial ids (*corrected in Round 99*: the after-condition fatigue ids were missing from this list;
+  the fix covered them). Exported one
   sitting at a time, as the analysis gate does, that was harmless; restored into one tablet's database, as a
   real study's sittings sit, each overwrote the previous participant's records and every sitting but one
   failed its integrity audit. Each id is now prefixed with the participant code (references included); the
@@ -10414,20 +10416,25 @@ the thesis that descriptive results were visible during collection.
 
 ### What was verified
 
-- `tests/cohortOutcomes.test.ts`: the t quantiles against R; the withdrawn participant and the paused run are
-  out; participants in completion order; each condition's average, the eye outcomes' row selection and the
-  polarity difference against the pooled file read independently; the trend grows one participant at a time
-  and ends at the overall difference.
+- `tests/cohortOutcomes.test.ts`: the t quantiles against R; the withdrawn participant is out; participants
+  in completion order; one outcome's condition averages (reaction time) and one outcome's polarity
+  difference (the incomplete-blink ratio) against the pooled file read independently; the trend ends at the
+  overall difference. (*Corrected in Round 99*: this said the paused run and the eye outcomes' row selection
+  were checked. The cohort had no run the eye filter removes, and the paused participant was out at
+  participant level without an assertion naming them. Round 99's test covers both.)
 - `e2e/cohortOutcomes.spec.ts`: six simulated participants restored through **Restore session from backup
-  file**, the path a lost tablet's data come back by; the tab shows ten condition rows, seven outcomes, the
-  differences with their intervals on six participants, and the trend charts; a seventh is restored and the
-  tab counts seven.
-- The tab was looked at with seven participants at the tablet's width (1152 px).
+  file**, the path a lost tablet's data come back by; the tab shows ten condition rows, seven outcome rows,
+  at least one "mean [low, high] (n 6)" in the polarity table and at least five trend charts; a seventh is
+  restored and the tab counts seven.
+- The tab was looked at with seven simulated participants in a desktop browser at 1152×720, the assumed
+  design canvas (*corrected in Round 99*: this said "the tablet's width"; the tablet's viewport has not been
+  measured, Round 74).
 
 ### Not done
 
-- Nothing was measured on the tablet: how long the tab takes to recompute with 130 sittings there (it gathers
-  every sitting, as it already did for the counts).
+- Nothing was measured on the tablet: how long the tab takes to recompute with the 145 or more sittings a
+  full study leaves there (145 enrolled for 130 analysed, `docs/TIMING_MODEL.md`, and a split adds a
+  sitting; *corrected in Round 99* from "130"). It gathers every sitting, as it already did for the counts.
 - The averages are not the analysis: they model neither passages, serial position nor trials, and can differ
   from `run_analysis.R`'s results.
 
@@ -10440,3 +10447,100 @@ On 3605b6b (all of this round's code):
   `e2e/cohortOutcomes.spec.ts` among them.
 - `npm run build`: 43 assets, all precached, 59 precache entries, 44.4 MB in all; then
   `npm run test:e2e:prod -- --retries=0`: 9 passed.
+
+## Round 99 — review of Round 98: the polarity table over one set of participants, colour by colour; one rule for the eye rows; one axis for every trend
+
+Round 98's code and documents were reviewed independently: four reviewers (the statistics; the rows chosen,
+against `analysis_template.R`; the display; the documents), each with read-only access and a scratch folder
+to compute in, and each reviewer's findings handed to a second agent told to refute them. The refuting
+agents for the display and the documents were stopped by a usage limit before they ran; those findings
+were checked here against the code and the record, one by one, before anything was changed. Nothing in this
+round was measured on the Xiaomi Pad 6.
+
+### Confirmed and fixed
+
+1. **The polarity table's columns rested on different participants** (medium; confirmed by its refuter).
+   *Positive* averaged everyone with a positive value, *Negative* everyone with a negative one, *Difference*
+   only those with both, so positive minus negative did not equal the difference on the same row. The refuter
+   showed the sign can reverse: positive 0.340 (n 3) above negative 0.290 (n 2) beside a difference of
+   −0.080 (n 2). It happens in the study: Williams rows 2 and 7 (one enrolment in five) run one polarity per
+   half, so a split sitting whose second half ran camera-off leaves that participant's eye data in one
+   polarity, and the participant stays in the confirmatory set (`inConfirmatorySet` does not read eye data).
+   The three columns are now over the same participants.
+2. **A missing run put the colour effect into the difference** (low; the refuter put it at about the last
+   digit shown at realistic sizes). Each side was the mean of whatever conditions the participant had, so
+   with a run missing the two sides covered different colours. Each participant's difference is now taken
+   over the colours they have in both polarities (P1 with N1, ..., P5 with N5), as the analysis's
+   sum-coded polarity-by-colour model compares them; with all ten runs it is the same number as before.
+3. **The trend's axis said "participants completed" and counted participants with the outcome** (low). A
+   participant without the outcome in both polarities shifted every later point of that chart by one, so the
+   same x meant a different participant on different charts. A point is now placed at the participant's
+   place in the completion order, so every chart shares one axis and such a participant leaves a step out.
+   The tooltip gives both counts when they differ (for example "after 6 participants completed; 5 with
+   this outcome").
+4. **The tab's two tables of the incomplete-blink ratio used different runs** (low). The new averages left
+   out runs in frame-rate tier C, as both templates do before every confirmatory ocular model (fps-g2); the
+   existing *Primary outcome by condition* table averaged them, under a caption saying it covered "the rows
+   both analysis templates model". One definition now serves both, `inEyeModels` (`aggregate.ts`): camera on,
+   at least one blink counted, tier not C. The caption says that *With outcome* below n includes tier C.
+5. **No test exercised the eye-row filter** (low; confirmed). The unit test's cohort had no run the filter
+   removes, and its paused participant was out at participant level without an assertion naming them.
+6. **Two trend points left the axis to the chart library** (low), which dropped zero, and the reference line
+   with it, whenever the first interval excluded zero: the day the section first appears. Zero is now always
+   on the axis (`niceScale`, `charts.tsx`), and an axis of identical values has a width.
+7. **The tooltip named its series "ucl", "lcl" and "mean"**, with no unit and one decimal more than the
+   tables (low). They are now "upper 95%", "lower 95%" and "mean difference", with the unit and the tables'
+   decimals. The caption now says that the first interval runs off the chart once there are more points.
+8. **A difference that rounds to zero printed as "-0" or "-0.000"** (low): `fixedNoNegZero`.
+9. **Picking a sitting at the top restarted the All Participants pool** (low). The session list is read
+   again when the chosen sitting changes, and a new array of the same sittings started the gather of every
+   sitting on the tablet. The list in state is now replaced only when it differs.
+10. **Labels with two parentheses** (low): "Incomplete-blink ratio (primary) (proportion)" is now
+    "Incomplete-blink ratio, primary (proportion)", and "Comprehension, proportion correct (proportion)" is
+    "Comprehension (proportion correct)". Found here while looking at the tab: the trend's x ticks were
+    uneven (1, 3, 5, 8); they are now every whole number up to ten, then 1 and a round step (`countTicks`).
+11. **Documents** (low). On screen, "the pre-registered analysis does not look at it": nothing in the
+    repository records a registration of the plan (individual rules such as fps-g2 are called
+    pre-registered), so it now reads "the planned analysis (docs/ANALYSIS_PLAN.md)". The averages' caption
+    did not name the main reason the primary's average differs from the model, the model's weighting of each
+    run by its blinks; it does now. `docs/ANALYSIS_GUIDE.md` said the tab shows "each outcome's average"; it
+    names the seven. Its Part 5 said the decisions are made "before the confirmatory data are looked at",
+    which the tab now contradicts; it says "before the confirmatory analysis is run" and asks that each
+    decision note whether the averages had been seen. Round 98's own record was corrected in place, each
+    correction marked: the list of shared simulated ids, what its tests verified, the 1152 px "tablet's
+    width" (a desktop browser at the assumed design canvas), and 130 sittings (145 or more).
+12. **The completion order** is now taken from the sittings whose rows are in the confirmatory set, not from
+    every sitting under the participant's code. The reviewer's case for it, a later repeat pass moving a
+    participant to the end of the trend, was refuted: every sitting it named removes the whole participant
+    from the set. It is done because it makes that true by construction.
+
+### Refuted, and left as they are
+
+- **Older-rule rows.** R leaves blink-r1 rows out of the eye models and keeps one fatigue rating format;
+  the tab checks neither. Both facts are true, and neither can reach confirmatory data: blink-r1 rows come
+  only from sittings before schema 10, and sl-v1 fatigue rows only from builds before Round 84, while
+  confirmatory collection runs on one frozen current build (`docs/READINESS.md`). `inEyeModels` says so.
+- The t quantiles (largest error 7.9e-5 against R's `qt` for df 1 to 200 and beyond) and `meanCI` (equal to
+  R's `t.test` interval) were checked by the statistics reviewer and needed nothing.
+
+### What was verified
+
+- `tests/cohortOutcomes.test.ts` (14 tests). The simulated cohort, written through the app's own export,
+  now holds a withdrawn participant, a paused participant (both asserted out), two camera-on runs with
+  values in tier C, and a split participant (Williams row 7) whose second sitting ran camera-off. Against
+  the pooled file read independently: all seven outcomes' condition averages and intervals; the eye
+  outcomes losing exactly the seven runs and the other outcomes keeping them; for every outcome, the three
+  polarity columns on the same participants, positive minus negative equal to the difference, the split
+  participant out of the eye rows and in the others; a hand-built cohort in which polarity changes nothing
+  and one participant lost four runs, whose difference is zero; the trend's points at completion places,
+  one axis for every chart. Also: `inEyeModels`; tier C out of the existing table; the interval against
+  R's `t.test`; the printed zero; the axis's scale and ticks.
+- `e2e/cohortOutcomes.spec.ts`: the primary's row has each of its three columns as "mean [low, high]
+  (n 6)", and there are seven trend charts at six participants and at seven.
+- The tab was looked at with eight simulated participants, one split with its second sitting camera-off,
+  in a desktop browser at 1152×720 (the assumed design canvas, not the tablet).
+
+### Not done
+
+- Nothing was measured on the tablet, including how long the tab takes to recompute with a full study's
+  sittings.

@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { get, put } from '@/storage/db';
 import { BIN_RETENTION_MS, gatherSession, listSessions, type SessionBundle } from '@/storage/gather';
-import { buildConditionSummaries, baselineFatigueMean, cohortSummary, cohortOutcomes, type ConditionSummary, type CohortSummary, type CohortOutcomesView, type MeanCI } from './aggregate';
+import { buildConditionSummaries, baselineFatigueMean, cohortSummary, cohortOutcomes, fixedNoNegZero, type ConditionSummary, type CohortSummary, type CohortOutcomesView, type MeanCI } from './aggregate';
 import { MEASURE } from '@/tracking/measurementSchedule';
 import { FPS_GATE } from '@/tracking/frameRateGate';
 import { RELIABILITY_RULE_VERSION } from '@/tracking/ocularReliability';
@@ -77,9 +77,14 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
   const [cohortBusy, setCohortBusy] = useState(false);
   const dialog = useDialog();
 
+  /*
+   * The list is read again when the chosen sitting changes. It is put in state only when it differs:
+   * a new array of the same sittings used to start the All Participants pool again, gathering every
+   * sitting on the tablet each time the operator picked one at the top (review of Round 98).
+   */
   useEffect(() => {
     listSessions().then((s) => {
-      setSessions(s);
+      setSessions((prev) => (JSON.stringify(prev) === JSON.stringify(s) ? prev : s));
       if (!sessionId && s[0]) setSessionId(s[0].session_id);
     });
   }, [sessionId]);
@@ -115,12 +120,12 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
     setCohortBusy(true);
     (async () => {
       const bundles = [];
-      // When each participant completed: their last sitting's end (its start if it has none), so the
-      // trend below adds participants in the order they finished.
-      const completedAt = new Map<string, number>();
+      // When each sitting ended (its start if it has none): the trend adds participants in the order
+      // they finished, by the last of their sittings the analysis reads (cohortOutcomes).
+      const sittingEnd = new Map<string, number>();
       for (const s of sessions) {
         const t = s.session_end_time ?? s.session_start_time;
-        if (t != null) completedAt.set(s.participant_id, Math.max(completedAt.get(s.participant_id) ?? -Infinity, t));
+        if (t != null) sittingEnd.set(s.session_id, t);
       }
       for (const s of sessions) {
         // Without the blink records (Round 81), except the reading windows an earlier-rule row is
@@ -132,7 +137,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
       const ds = buildAnalysisDataset(bundles);
       if (cancelled) return;
       setCohort(cohortSummary(ds.files, ds.integrity, N_CONDITIONS));
-      setOutcomes(cohortOutcomes(ds.files, completedAt));
+      setOutcomes(cohortOutcomes(ds.files, sittingEnd));
       setCohortBusy(false);
     })().catch(() => { if (!cancelled) setCohortBusy(false); });
     return () => { cancelled = true; };
@@ -489,7 +494,7 @@ export function Dashboard({ initialSessionId }: { initialSessionId?: string }) {
                 </div>
                 <Notice
                   short="Blinks is what the ratio rests on: ten rows of four blinks is not ten measurements. Eye data counts the verdicts of the Data Quality tab: good, usable, not usable."
-                  more={'“Pooled” is incomplete blinks over all blinks in those rows, the quantity the binomial model weights by; “mean of runs” counts every run once however few blinks it had, so the two differ when blink counts vary. “With outcome” below n means rows where no blink was counted at all; a condition where that is common is broken, not merely noisy. “Analysable”, the outcome columns and Eye data cover the confirmatory set only: analysable by the join check, not withdrawn, not a test session, first protocol pass — the rows both analysis templates model. '
+                  more={'“Pooled” is incomplete blinks over all blinks in those rows, the quantity the binomial model weights by; “mean of runs” counts every run once however few blinks it had, so the two differ when blink counts vary. “With outcome” below n means rows the eye-data analysis does not use: no blink counted at all, or a frame rate under ' + FPS_GATE.REDUCED + ' a second (tier C); a condition where that is common is broken, not merely noisy. “Analysable”, the outcome columns and Eye data cover the confirmatory set only: analysable by the join check, not withdrawn, not a test session, first protocol pass — the rows both analysis templates model. '
                     + `Of its camera-on rows, ${cohort.qcChecks.flagged} of ${cohort.qcChecks.of} are flagged by a §5.3–5.4 check (face in view, head turned away, reading seen); the R template prints the same count.`} />
               </div>
 
@@ -808,7 +813,7 @@ const HOW_TO_READ: Record<Tab, string[]> = {
 /** "0.213 [0.180, 0.246] (n 9)", or a dash. */
 function ciText(m: MeanCI, digits: number): string {
   if (m.mean == null) return '—';
-  const f = (x: number) => x.toFixed(digits);
+  const f = (x: number) => fixedNoNegZero(x, digits);
   return m.lcl == null || m.ucl == null ? `${f(m.mean)} (n ${m.n})` : `${f(m.mean)} [${f(m.lcl)}, ${f(m.ucl)}] (n ${m.n})`;
 }
 
@@ -835,7 +840,7 @@ function CohortOutcomesSection({ view }: { view: CohortOutcomesView }) {
       <SectionTitle>All participants: averages by condition</SectionTitle>
       <Caveat
         short={`${n} participants of the analysis set. Each cell: the mean across participants, its 95% interval, and how many participants it rests on. Descriptive, not the analysis.`}
-        more="Each participant gives one value per condition (normally one run), and the mean is taken across participants with a t interval. The eye outcomes leave out runs whose blink data the Data Quality tab calls not usable, as the analysis does. These numbers do not model the passages, the serial position or the trials, so they can differ from the analysis on the computer (run_analysis.R), which is the result to report. Watching them during collection was the investigator's choice (Round 98): they are not a reason to stop early or to change how sittings are run." />
+        more="Each participant gives one value per condition (normally one run), and the mean is taken across participants with a t interval. The eye outcomes use the runs the eye-data analysis uses: camera on, at least one blink counted, frame rate not under 15 a second (the runs the Data Quality tab does not call not usable). These numbers do not model the passages, the serial position or the trials, and they count every run once where the primary model weights each run by its blinks (the pooled ratio in the table further down), so they can differ from the analysis on the computer (run_analysis.R), which is the result to report. Watching them during collection was the investigator's choice (Round 98): they are not a reason to stop early or to change how sittings are run." />
       <div style={{ overflowX: 'auto' }}>
         <table className="font-lab" style={{ fontSize: 13, borderCollapse: 'collapse', width: '100%' }} data-testid="cohort-by-condition">
           <thead>
@@ -856,6 +861,9 @@ function CohortOutcomesSection({ view }: { view: CohortOutcomesView }) {
       </div>
 
       <SectionTitle>Positive minus negative polarity, across participants</SectionTitle>
+      <Caveat
+        short="Each participant compares the colours they have in both polarities (P1 with N1, and so on); the three columns are over the same participants, so positive minus negative is the difference."
+        more="A participant with no colour in both polarities for an outcome (for the eye outcomes, a half sitting with the camera off can do this) is left out of that row, and its n says so." />
       <div style={{ overflowX: 'auto' }}>
         <table className="font-lab" style={{ fontSize: 13, borderCollapse: 'collapse', width: '100%' }} data-testid="cohort-polarity">
           <thead>
@@ -882,10 +890,10 @@ function CohortOutcomesSection({ view }: { view: CohortOutcomesView }) {
       <SectionTitle>How the difference has moved as participants completed</SectionTitle>
       <Caveat
         short="Each point: the positive-minus-negative difference averaged over the participants completed so far, with its 95% interval (dashed). It wanders while there are few participants and settles as more complete."
-        more="Participants are added in the order they completed (the end of their last sitting). Early points rest on very few people: an interval that excludes zero after a handful of participants is expected to happen by chance now and then, and the pre-registered analysis does not look at it." />
+        more="Participants are added in the order they completed (the end of the last sitting the analysis reads). A participant without the outcome in both polarities adds no point to that chart. The interval over the first two participants is too wide to show once there are more and runs off the chart; tap a point for its numbers. Early points rest on very few people: an interval that excludes zero after a handful of participants is expected to happen by chance now and then, and the planned analysis (docs/ANALYSIS_PLAN.md) does not look at it." />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
         {view.outcomes.filter((o) => view.trend[o.key].length >= 2).map((o) => (
-          <TrendPanel key={o.key} title={o.label} unit={o.unit} points={view.trend[o.key]} digits={o.digits} />
+          <TrendPanel key={o.key} title={o.label} unit={o.unit} points={view.trend[o.key]} digits={o.digits} of={n} />
         ))}
       </div>
     </div>

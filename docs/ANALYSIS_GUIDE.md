@@ -85,11 +85,12 @@ It does not mark any sitting as exported or checked: only the per-sitting questi
 
 ### Watching the study as it grows
 
-Dashboard → **All Participants** pools every sitting on the tablet and updates each time a sitting is saved.
-From the second participant it shows each outcome's average in every condition, positive against negative
-polarity, and how that difference has moved as each participant completed (one chart per outcome). The
-other tabs show one sitting at a time (choose it at the top). `docs/OPERATOR_MANUAL.md` §7, *Reading the
-dashboard*, says how to read it.
+Dashboard → **All Participants** reads every sitting on the tablet each time it is opened, so a sitting
+counts as soon as it is saved. From the second participant it shows seven outcomes (the incomplete-blink
+ratio, blink rate, reaction time, d′, fatigue change, comprehension and reading speed): their average in
+every condition, positive against negative polarity, and how that difference has moved as each participant
+completed (one chart per outcome). The other tabs show one sitting at a time (choose it at the top).
+`docs/OPERATOR_MANUAL.md` §7, *Reading the dashboard*, says how to read it.
 
 These numbers are descriptive (the mean across participants with a 95% interval, no test), and you chose
 to see them during collection (Round 98). Two things follow, and are worth writing down in your decision
@@ -277,10 +278,13 @@ Conclusion.
 PROVENANCE block, the integrity and exclusion counts (T01, T03), the list of protocol deviations, and
 the decisions of Part 5 with the date each was made.
 
-## Part 5. Decisions that are yours, to make and write down before the confirmatory data are looked at
+## Part 5. Decisions that are yours, to make and write down before the confirmatory analysis is run
 
 The software has a default for each; the default is not a decision. Record each choice, with its date, in
-the place named, before opening the confirmatory results. Each is described in the place named in the
+the place named, before running the confirmatory analysis. The **All Participants** tab shows descriptive
+averages of the confirmatory set from the second participant (Round 98, by your choice), so these data are
+seen, descriptively, while they are collected: with each decision, note whether those averages had been
+seen when you made it. Each is described in the place named in the
 second column: mostly `docs/AUDIT_FINDINGS.md` (the sections "For the investigator" and "Not done" of
 Rounds 88 to 96) and `docs/ANALYSIS_PLAN.md`.
 
