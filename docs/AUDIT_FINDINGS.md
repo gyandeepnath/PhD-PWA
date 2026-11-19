@@ -10623,3 +10623,12 @@ no change that matters to the tab.
 ### Not done
 
 - Nothing was measured on the tablet.
+
+### Checks run
+
+On 3847b2e (all of this round's code, and the record of Round 99's checks):
+- `npm run verify`: lint, type check, 149 test files with 1,985 tests passed; the export gate 903/903; the
+  analysis gate passed (207 s).
+- The full end-to-end suite, `npx playwright test --retries=0`: 123 of 123 passed (21.8 min).
+- `npm run build`: 43 assets, all precached, 59 precache entries, 44.4 MB in all; then
+  `npm run test:e2e:prod -- --retries=0`: 9 passed.
