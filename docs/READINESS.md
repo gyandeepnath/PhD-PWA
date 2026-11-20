@@ -73,8 +73,5 @@ analysis unless the plan says so before you look at them.
 
 - Agreement of the automated blink classification with manual annotation of video (Objective 4) is not
   computed by the analysis templates; it needs the annotated video and its own analysis.
-- When the camera is lost while the camera set-up screen is showing, that screen does not show it; the
-  next screen does. A reason value for that case in the export is an open decision (AUDIT_FINDINGS
-  Round 96, Not done).
 - The synopsis (`synopsis/`) still quotes some figures the app has since changed; they are listed in
   AUDIT_FINDINGS Round 95, *For the investigator*.

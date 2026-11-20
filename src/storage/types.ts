@@ -53,11 +53,12 @@ export type CameraStatus = 'active' | 'denied' | 'failed' | 'unavailable' | 'sto
 /**
  * Why the camera was not used from a camera set-up (audit 86 CAM-3): the participant declined camera
  * measurement at consent, or the operator went on without it — before starting it, after it had started,
- * or after it could not start (permission refused, the camera or tracker failed, no camera API).
+ * after it could not start (permission refused, the camera or tracker failed, no camera API), or after it
+ * had started and was then lost while set-up was open (Round 101, the investigator's choice of value).
  */
 export type CameraOffReason =
   | 'consent_declined' | 'skipped_before_start' | 'skipped_after_start'
-  | 'permission_denied' | 'start_failed' | 'unavailable';
+  | 'permission_denied' | 'start_failed' | 'unavailable' | 'lost_at_setup';
 
 /** Build/version provenance stamped into sessions and exports. */
 export interface Provenance {

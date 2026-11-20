@@ -108,6 +108,42 @@ test('the camera stopping during the calibration is called lost, and Continue sa
   await expect(page.getByTestId('calibration-fallback-text')).not.toContainText('Camera not active');
 });
 
+/*
+ * The camera lost on the CAMERA SET-UP screen itself (Round 101; audit 86 F7, Round 96). The screen did
+ * not react: the picture froze and only the next screen said so. It now offers Retry or going on without
+ * the camera, and going on records why (01 camera_off_reason lost_at_setup, the investigator's choice of
+ * value); having chosen there, the operator is not asked again on the next screen.
+ */
+test('the camera stopping on the camera set-up screen is answered there: Retry, or go on recording lost_at_setup', async ({ page }) => {
+  test.setTimeout(240_000);
+  await startNewExperiment(page);
+  await driveUntil(page, 'CAMERA_SETUP');
+  await page.getByRole('button', { name: /Enable camera/ }).click();
+  await expect(page.getByRole('button', { name: /My face is centred/ })).toBeEnabled({ timeout: 60_000 });
+  expect(await endCameraTrack(page)).toBeGreaterThan(0);
+  const panel = page.getByTestId('camera-start-error');
+  await expect(panel).toContainText('The camera stopped while it was being set up');
+  // Retry brings it back.
+  await page.getByRole('button', { name: 'Retry' }).click();
+  await page.getByRole('button', { name: /Enable camera/ }).click();
+  await expect(page.getByRole('button', { name: /My face is centred/ })).toBeEnabled({ timeout: 60_000 });
+  await expect(panel).toHaveCount(0);
+  // Lost again; this time go on without it.
+  expect(await endCameraTrack(page)).toBeGreaterThan(0);
+  await expect(panel).toContainText('The camera stopped while it was being set up');
+  await page.getByTestId('camera-skip').click();
+  await page.waitForFunction(() => document.querySelector('[data-stage]')?.getAttribute('data-stage') === 'CALIBRATION', null, { timeout: 30_000 });
+  await page.waitForTimeout(500);
+  await expect(page.getByTestId('camera-lost')).toHaveCount(0);
+  await expect(page.getByTestId('calibration-fallback-text')).toContainText('The camera has stopped');
+  const reasons = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((res, rej) => { const r = indexedDB.open('VisualErgonomicsDB'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    const rows = await new Promise<{ camera_off?: { reason: string } | null }[]>((res) => { const q = db.transaction('sessions').objectStore('sessions').getAll(); q.onsuccess = () => res(q.result); });
+    return rows.map((r) => r.camera_off?.reason ?? null);
+  });
+  expect(reasons).toEqual(['lost_at_setup']);
+});
+
 test('the camera stopping on the baseline questionnaire stops the sitting there, and Exit is the way back', async ({ page }) => {
   test.setTimeout(240_000);
   await startNewExperiment(page);

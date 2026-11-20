@@ -1803,6 +1803,9 @@ export default function Experiment({ resume, onExit }: ExperimentProps) {
           })}
           onSkip={latched('camera-skip', async (reason: CameraOffReason, error: string | null) => {
             await recordCameraOff(reason, error);
+            // Lost on the set-up screen and the operator chose to go on without it there: the camera-lost
+            // notice must not stop the next screen to ask again (Round 101).
+            if (reason === 'lost_at_setup') setCameraLossAccepted(true);
             advanceOrResume();
           })}
           retains={{

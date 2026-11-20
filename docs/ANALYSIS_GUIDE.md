@@ -307,7 +307,7 @@ Rounds 88 to 96) and `docs/ANALYSIS_PLAN.md`.
 | Consent wording for the camera grant | AUDIT_FINDINGS Round 90 §9 item 1 | the app's current text; check it against the approved consent |
 | Version number 2.4.0 or 2.5.0 for the build used | OPERATOR_MANUAL §2 | 2.4.0 |
 | Re-exporting sittings exported before Round 89–94 changes | AUDIT_FINDINGS Rounds 89–94 | old exports keep their old text and columns |
-| A reason value for a camera lost on the camera set-up screen | AUDIT_FINDINGS Round 96, Not done | not implemented; the operator manual says what to do |
+| A reason value for a camera lost on the camera set-up screen | AUDIT_FINDINGS Rounds 96 and 101 | decided (Round 101): `lost_at_setup` in 01 `camera_off_reason`, and the set-up screen offers Retry or going on without the camera |
 | The analyst defaults in the template (QC thresholds, `SMALL_N_WARN`, `DROP_DISENGAGED`) | the lines marked `ANALYST DEFAULT` in `analysis_template.R` | as written there |
 
 ## Part 6. When the analysis stops, or warns

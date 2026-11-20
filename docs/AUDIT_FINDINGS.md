@@ -10632,3 +10632,63 @@ On 3847b2e (all of this round's code, and the record of Round 99's checks):
 - The full end-to-end suite, `npx playwright test --retries=0`: 123 of 123 passed (21.8 min).
 - `npm run build`: 43 assets, all precached, 59 precache entries, 44.4 MB in all; then
   `npm run test:e2e:prod -- --retries=0`: 9 passed.
+
+## Round 101 — a camera lost on the camera set-up screen is answered there, and recorded (`lost_at_setup`); the notice names the tracker
+
+Two decisions Rounds 95 and 96 left to the investigator were put to them, each with a recommendation, and
+taken: a new value in an exported column for a camera lost on the set-up screen, and the face tracker
+named among the causes on *The camera has stopped*. Nothing in this round was measured on the Xiaomi Pad 6.
+
+### What was there
+
+When the camera was lost while the camera set-up screen was open (its track ended, its frames stopped, or
+no face tracker was left to run, as Round 96 found after measuring the trackers), the screen did not react:
+the picture froze, *Measure trackers again* did nothing, and only the next screen raised *The camera has
+stopped*. If the loss came during the exposure step, set-up went on to calibration. Going on without the
+camera from there recorded nothing in 01 `camera_off_reason`, because none of its six values described a
+camera that started and was then lost at set-up (Round 96, Not done).
+
+*The camera has stopped* named a call, another app, sleep and the background as its causes. Since Round 91
+it also stops a sitting when no face tracker is left to run while the camera still delivers frames, and
+then sent the operator looking for an app that was not there (Round 95, Not done).
+
+### What changed
+
+- **The set-up screen** (`CameraSetup`, `src/start/setupStages.tsx`) watches the camera's status. When a
+  camera that was running there fails (the tracking hook's `markLost` sets status 'failed'), any measuring
+  under way is stopped and the screen goes to its failure panel: *The camera stopped while it was being set
+  up*, with the causes, **Retry** (starts the camera afresh) and **Continue without camera**. A loss during
+  the exposure step no longer goes on to calibration. A start that fails is still the start's to report.
+- **`lost_at_setup`**, the investigator's choice of value (`CameraOffReason`, `src/storage/types.ts`):
+  **Continue without camera** after such a loss writes it to the sitting, and 01 `camera_off_reason` carries
+  it (codebook: `factor(7)`). The reading rows that follow say 07 `camera_inactive_reason` *lost*, as they
+  already did; both codebook entries say so. Having chosen on the set-up screen, the operator is not
+  stopped by the camera-lost notice on the next screen to choose again (`Experiment.tsx`).
+- **The notice** (`CameraLostNotice.tsx`) adds "or when the face tracker stops working on this tablet".
+- **Documents**: the operator manual's camera set-up section and its troubleshooting row; the readiness
+  list (the open decision is gone); the guide's Part 5 row (decided); `versionHistory.ts` (the change is
+  still 2.4.0, told apart by `git_hash`).
+
+### What was verified
+
+- `tests/cameraOffReason.test.tsx` (10 tests), on the real screen in jsdom with the camera reduced to the
+  interface it reads: a loss on the running preview brings up the failure panel with the causes, and
+  **Continue without camera** records `lost_at_setup`; **Retry** starts the camera again and going on from
+  its preview is the ordinary `skipped_after_start`; a loss during the exposure step keeps the panel and
+  does not go on to calibration; the codebook entry lists all seven values. The first and third fail on
+  the code before this round.
+- `e2e/cameraLost.spec.ts`, a new test in Chromium with its fake camera: the camera's track is ended on the
+  set-up screen, the panel appears, **Retry** brings the camera back, a second loss and **Continue without
+  camera** reach calibration with no camera-lost notice, the calibration says the camera has stopped, and
+  the sitting records `lost_at_setup`. The spec's five tests passed.
+
+### Versions in the data
+
+| Rule or format | Before | Now | Where it is recorded |
+|---|---|---|---|
+| 01 `camera_off_reason` | six values; blank for a camera lost at set-up | adds `lost_at_setup` | the codebook; told apart by `git_hash` |
+| Every other rule and column | unchanged | unchanged | as before |
+
+### Not done
+
+- Nothing was measured on the tablet: how its Chrome reports a camera taken by another app on this screen.

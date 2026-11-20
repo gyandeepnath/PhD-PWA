@@ -83,6 +83,82 @@ describe('camera set-up: going on without the camera records why (audit 86 CAM-3
   });
 });
 
+/**
+ * Camera set-up with a camera that starts, and can then be LOST (Round 101): `lose()` does what
+ * useTracking's markLost does to the interface the screen sees, status 'failed'. The exposure step's
+ * promise is held until `finishExposure()`, so a loss can land while it runs.
+ */
+async function renderLosable() {
+  const { CameraSetup } = await import('@/start/setupStages');
+  const skips: Array<[CameraOffReason, string | null]> = [];
+  const continued: number[] = [];
+  const control: { lose: () => void; finishExposure: () => void } = { lose: () => {}, finishExposure: () => {} };
+  function Harness() {
+    const [status, setStatus] = useState<CameraStatus>('unavailable');
+    control.lose = () => setStatus('failed');
+    const start = useCallback(async () => { setStatus('active'); return 'active' as const; }, []);
+    const camera: CameraSetupTracking = {
+      status, start, stop: () => setStatus('stopped'), startError: null,
+      subscribeLive: () => () => {}, stream: () => null, pipelineInfo: () => null,
+      compareTrackers: async () => null,
+      setExposure: () => new Promise((resolve) => { control.finishExposure = () => resolve(null); }),
+      runBench: async () => null,
+    };
+    return createElement(CameraSetup, {
+      camera, onContinue: () => { continued.push(1); },
+      onSkip: (r: CameraOffReason, e: string | null) => { skips.push([r, e]); },
+    });
+  }
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  mounted.push({ root, host });
+  await act(async () => { root.render(createElement(Harness)); });
+  const button = (re: RegExp) => [...host.querySelectorAll('button')].find((b) => re.test(b.textContent ?? ''));
+  const error = () => host.querySelector('[data-testid="camera-start-error"]')?.textContent ?? null;
+  return { host, skips, continued, control, button, error };
+}
+
+describe('camera set-up: a camera lost while the screen is open (Round 101)', () => {
+  it('goes to the failure panel at once, and Continue without camera records lost_at_setup', async () => {
+    const r = await renderLosable();
+    await act(async () => { r.button(/Enable camera/)!.click(); });
+    expect(r.host.querySelector('[data-testid="camera-diagnostics"]')).not.toBeNull();
+    expect(r.error()).toBeNull();
+    await act(async () => { r.control.lose(); });
+    expect(r.error()).toMatch(/The camera stopped while it was being set up/);
+    expect(r.error()).toMatch(/face tracker/);
+    expect(r.host.querySelector('[data-testid="camera-diagnostics"]')).toBeNull();
+    await act(async () => { r.button(/Continue without camera/)!.click(); });
+    expect(r.skips).toEqual([['lost_at_setup', null]]);
+  });
+
+  it('Retry starts the camera again, and a later failed start is not reported as a loss', async () => {
+    const r = await renderLosable();
+    await act(async () => { r.button(/Enable camera/)!.click(); });
+    await act(async () => { r.control.lose(); });
+    await act(async () => { r.button(/^Retry$/)!.click(); });
+    await act(async () => { r.button(/Enable camera/)!.click(); });
+    expect(r.host.querySelector('[data-testid="camera-diagnostics"]')).not.toBeNull();
+    expect(r.error()).toBeNull();
+    // Running again, and going on without it from the preview is the ordinary skip.
+    await act(async () => { r.button(/Continue without camera/)!.click(); });
+    expect(r.skips).toEqual([['skipped_after_start', null]]);
+  });
+
+  it('lost during the exposure step: the panel stays, and set-up does not go on to calibration', async () => {
+    const r = await renderLosable();
+    await act(async () => { r.button(/Enable camera/)!.click(); });
+    await act(async () => { r.button(/My face is centred/)!.click(); });
+    await act(async () => { r.control.lose(); });
+    await act(async () => { r.control.finishExposure(); });
+    expect(r.continued).toEqual([]);
+    expect(r.error()).toMatch(/The camera stopped while it was being set up/);
+    await act(async () => { r.button(/Continue without camera/)!.click(); });
+    expect(r.skips).toEqual([['lost_at_setup', null]]);
+  });
+});
+
 describe('01_session_info.csv camera_off_reason', () => {
   const s01 = (b: ReturnType<typeof buildFixtureBundle>) => {
     const lines = buildExportFiles(b).find((f) => f.filename === '01_session_info.csv')!.content.trim().split('\n');
@@ -104,7 +180,7 @@ describe('01_session_info.csv camera_off_reason', () => {
   it('is in the codebook with every level the record can hold', () => {
     const entry = CODEBOOK.find((c) => c.file === '01_session_info.csv' && c.column === 'camera_off_reason');
     expect(entry).toBeTruthy();
-    const levels: CameraOffReason[] = ['consent_declined', 'skipped_before_start', 'skipped_after_start', 'permission_denied', 'start_failed', 'unavailable'];
+    const levels: CameraOffReason[] = ['consent_declined', 'skipped_before_start', 'skipped_after_start', 'permission_denied', 'start_failed', 'unavailable', 'lost_at_setup'];
     for (const l of levels) expect(entry!.description).toContain(l);
     expect(entry!.type).toBe(`factor(${levels.length})`);
   });

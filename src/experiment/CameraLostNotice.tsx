@@ -9,7 +9,9 @@
  * job is that choice. Now: sentences and buttons in Roboto, nothing under 15 px, and the cost sits
  * directly under the two buttons, named after the button it belongs to. tests/contrast.test.ts holds the
  * file to the operator colours and the 14 px floor; tests/operatorType.test.ts to the face. The words
- * are the notice's own, unchanged but for that sentence's opening.
+ * are the notice's own, unchanged but for that sentence's opening, and, from Round 101, the face tracker
+ * named among the causes (the notice also stops a sitting when no tracker is left to run, Round 91, and
+ * the operator was sent looking for an app that was not there; the investigator's choice).
  */
 import { UI_TEXT } from '@/lib/uiPalette';
 
@@ -56,7 +58,8 @@ export function CameraLostNotice({ blocked, onSetup, pauseAfterFinished, rtSavin
       ) : (
         <p style={{ ...p, fontSize: 17, color: c.body }}>
           Eye measurements are not being recorded. This happens when a call or another app takes the
-          camera, or when the tablet sleeps or is put in the background.
+          camera, when the tablet sleeps or is put in the background, or when the face tracker stops
+          working on this tablet.
         </p>
       )}
       {exitFromSetup ? (

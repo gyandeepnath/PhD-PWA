@@ -857,7 +857,8 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack, onRun
   /**
    * Continue without the camera, saying why it is off (SessionRecord.camera_off; audit 86 CAM-3): from
    * the notice before it was started, from the running preview (the camera is stopped first, and is then
-   * 'stopped', not 'active'), or after it could not start — with the library's reason when it failed.
+   * 'stopped', not 'active'), after it could not start — with the library's reason when it failed — or
+   * after it was lost while this screen was open ('lost_at_setup', Round 101).
    */
   onSkip: (reason: CameraOffReason, error: string | null) => void;
   /** The photo/video grants actually in force, so the privacy notice can tell the truth. */
@@ -897,6 +898,16 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack, onRun
   const [showDetails, setShowDetails] = useState(false);
   /** How the last start ended when it did not run, for the record a skip from that screen writes. */
   const [startFailure, setStartFailure] = useState<CameraStatus | null>(null);
+  /**
+   * The camera was LOST while this screen was open (Round 101; audit 86 F7, Round 96): it had started,
+   * and then its track ended, its frames stopped, or no face tracker was left to run (useTracking
+   * markLost, which sets status 'failed'). The screen did not react: the picture froze, "Measure trackers
+   * again" did nothing, and only the next screen said so. It now goes to the failure panel, where Retry
+   * starts the camera afresh and Continue without camera records 'lost_at_setup'. A ref as well as
+   * state, because the exposure step's await reads it after the screen has moved on.
+   */
+  const lostRef = useRef(false);
+  const [lost, setLost] = useState(false);
   const [live, setLive] = useState<LiveTrackingStats | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [comparing, setComparing] = useState<{ backend: TrackerBackend; index: number; total: number } | null>(null);
@@ -974,9 +985,25 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack, onRun
     } catch { /* recorded by the step where it can be; set-up goes on */ } finally {
       running.current = null;
     }
+    // Lost during the step: the failure panel is already up; going on would leave it for calibration.
+    if (lostRef.current) return;
     if (signal.aborted) { setStep('preview'); return; }
     onContinue();
   };
+
+  useEffect(() => {
+    // Only a camera that was running here: a start that fails is the 'starting' step's to report.
+    if (camera.status !== 'failed' || lostRef.current || (step !== 'preview' && step !== 'exposure')) return;
+    lostRef.current = true;
+    running.current?.stop.abort();
+    setLost(true);
+    setErrMsg('The camera stopped while it was being set up. A call or another app may have taken it, the '
+      + 'tablet may have slept or gone to the background, or the face tracker may have stopped working on this '
+      + 'tablet. Retry starts the camera again. Continue without camera goes on with no eye measurements in '
+      + 'this sitting, and the export records why.');
+    setShowDetails(false);
+    setStep('denied');
+  }, [camera.status, step]);
 
   /*
    * First camera setup on this device, tracker not frozen: measure straight away, once. The choice is
@@ -1223,9 +1250,12 @@ export function CameraSetup({ camera, onContinue, onSkip, retains, onBack, onRun
             </div>
             <div className="mt-6" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {onBack && <button type="button" className={btnBack} data-testid="back-to-consent" onClick={onBack}>← Back to consent</button>}
-              <button className={btn} style={{ background: '#1a1a2e' }} onClick={() => { setErrMsg(''); setShowDetails(false); setStep('notice'); }}>Retry</button>
+              <button className={btn} style={{ background: '#1a1a2e' }}
+                onClick={() => { setErrMsg(''); setShowDetails(false); lostRef.current = false; setLost(false); setStep('notice'); }}>Retry</button>
               <button className="rounded-xl border border-[#bdb8ae] bg-white px-8 py-3 font-sans text-base text-[#3a3a4a]" data-testid="camera-skip"
-                onClick={() => onSkip(startFailure === 'denied' ? 'permission_denied' : startFailure === 'unavailable' ? 'unavailable' : 'start_failed', camera.startError)}>
+                onClick={() => (lost
+                  ? onSkip('lost_at_setup', null)
+                  : onSkip(startFailure === 'denied' ? 'permission_denied' : startFailure === 'unavailable' ? 'unavailable' : 'start_failed', camera.startError))}>
                 Continue without camera
               </button>
             </div>
