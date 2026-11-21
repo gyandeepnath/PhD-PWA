@@ -2118,13 +2118,13 @@ cat(sprintf("\n[%s] %d camera-on condition-run(s) carry blink counts under an ea
             BLINK_RULE_VERSION, n_blink_old,
             if (n_blink_old > 0) paste(sort(unique(blink_rule[blink_rule != BLINK_RULE_VERSION])), collapse = ", ") else "none",
             n_blink_recomputed))
-eye_all_rules <- eye
 # A row under an earlier rule that is also in tier C is in neither the earlier-rule refit (tier C out) nor
 # the every-tier refit (earlier rule out): counted here, and put back in a refit of its own (Round 103).
 n_old_and_c <- sum(blink_rule != BLINK_RULE_VERSION & eye$fps_tier %in% "C")
 eye_any_rule_tier <- eye %>% mutate(eff_fps_c = as.numeric(scale(effective_fps, scale = FALSE)))
 if (n_old_and_c > 0) cat(sprintf("[%s + fps-g2] %d of them are also in tier C: in neither the earlier-rule nor the every-tier refit; the every-rule, every-tier refit puts them back.\n",
                                  BLINK_RULE_VERSION, n_old_and_c))
+eye_all_rules <- eye
 eye <- eye[blink_rule == BLINK_RULE_VERSION, , drop = FALSE]
 eye_all_rules <- eye_all_rules %>% filter(!(fps_tier %in% "C")) %>% mutate(eff_fps_c = as.numeric(scale(effective_fps, scale = FALSE)))
 # THE FRAME-RATE GATE fps-g2 (ANALYSIS_PLAN.md §5 item 2, pre-registered): tier C — under 15 face-solved
