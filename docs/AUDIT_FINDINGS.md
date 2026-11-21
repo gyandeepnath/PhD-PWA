@@ -10693,6 +10693,16 @@ then sent the operator looking for an app that was not there (Round 95, Not done
 
 - Nothing was measured on the tablet: how its Chrome reports a camera taken by another app on this screen.
 
+### Checks run
+
+On a1071d3 (all of this round's code):
+- `npm run verify`: lint, type check, 149 test files with 1,988 tests passed; the export gate 903/903; the
+  analysis gate passed (174 s).
+- The full end-to-end suite, `npx playwright test --retries=0`: 124 of 124 passed (21.6 min), the new
+  camera-lost-at-set-up test among them.
+- `npm run build`: 43 assets, all precached, 59 precache entries, 44.4 MB in all; then
+  `npm run test:e2e:prod -- --retries=0`: 9 passed.
+
 ## Round 102 — the analysis against its plan: T06 for every model the plan reports, the plan's own random structure, and twenty smaller corrections
 
 The open item of Round 97, an independent audit of the analysis against `docs/ANALYSIS_PLAN.md`, was run
@@ -10866,3 +10876,18 @@ one partly refuted. Nothing in this round was measured on the Xiaomi Pad 6.
 - `npm run verify:analysis` on both rounds' changes: passed (194 s). Its kit checks now also require the
   carryover base row, the test on the carryover row, a not-refitted row, the §3 model in T18 and seven
   figures.
+
+### Checks run (Rounds 102 and 103)
+
+On 06a4e21: the full end-to-end suite 124 of 124 (22.2 min), the build (43 assets, all precached, 59
+precache entries, 44.4 MB) and `npm run test:e2e:prod` 9 passed; `npm run verify` failed one unit test,
+`tests/interBlinkInterval.test.ts`, which holds three consecutive template lines together, and this round
+had put the earlier-rule-and-tier-C count between them (only the analysis gate had been run on the
+changes before the commit, not the unit tests). The count moved above them, unchanged (5d5d5fb).
+
+On 5d5d5fb:
+- `npm run verify`: lint, type check, 149 test files with 1,988 tests passed; the export gate 903/903; the
+  analysis gate passed (209 s).
+- The full end-to-end suite, `npx playwright test --retries=0`: 124 of 124 passed (22.0 min).
+- `npm run build`: 43 assets, all precached, 59 precache entries, 44.4 MB in all; then
+  `npm run test:e2e:prod -- --retries=0`: 9 passed.
