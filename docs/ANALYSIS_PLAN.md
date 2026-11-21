@@ -45,7 +45,8 @@ it.** Illumination used to be a session-level (whole-plot) factor estimated on t
 participant while polarity and colour had twenty, which meant the illumination effect had to be
 tested against a different error stratum or its standard error would be understated. That
 asymmetry is gone. Both surviving factors vary within participant at the same grain, and the model
-below has one random intercept instead of two nested ones.
+below has one participant stratum (a random intercept with a polarity slope, §2) instead of two
+nested ones.
 
 A mixed model with a participant random intercept handles this correctly without any special
 casing, which is the main reason to use one rather than a repeated-measures ANOVA on cell means.
@@ -69,7 +70,11 @@ sittings, integrity-blocked sittings and incomplete participants were modelled.
   participants excluded *only* for an incomplete condition set (`condition_incomplete`,
   `condition_coverage`, `incomplete_split_sitting`, `incomplete_crossover`; the list is
   `COMPLETENESS_EXCLUSIONS` in `src/storage/joinIntegrity.ts`). Nobody excluded for an integrity
-  fault, missing consent, a test session or a repeat pass enters it.
+  fault, missing consent, a test session or a repeat pass enters it. The templates add one code of
+  their own, `sitting_not_in_data_dir`: a sitting the verdict lists whose folder is not under
+  `DATA_DIR` moves its participant from the confirmatory set to this one. The dashboard reads the
+  pooled file and cannot see that case, so its counts and the templates' differ when a folder is
+  missing (Round 102).
 
 Each template prints the count of condition-runs and participants per exclusion reason, and the size
 of both sets; the dashboard's cohort tab counts the same two sets from `analysis_long.csv`, and
@@ -96,10 +101,21 @@ library(lme4)
 m_primary <- glmer(
   cbind(n_incomplete, n_blinks_total - n_incomplete) ~
     polarity_c * text_colour +
-    position_c + (1 | participant_id) + (1 | passage_id),
+    position_c + (1 + polarity_c | participant_id) + (1 | passage_id),
   family = binomial, data = subset(d, analysable & camera_active)
 )
 ```
+
+**The random structure, and the order it is reduced in** (synopsis §3.9: "a random intercept for
+participant with a random slope for polarity where supported ... A non-converging random structure is
+reduced in a pre-specified order and the reduction reported"). The block above showed participant
+intercepts only until Round 102, while the bullets below called the polarity slope pre-specified and
+both templates fitted it; it now shows the structure fitted. If the maximal structure is singular or
+does not converge, it is reduced in this order, and the structure actually fitted is printed: (1) on
+archived two-level data only, drop the sitting intercept, keeping the slope; (2) drop the polarity
+slope; (3) drop the passage intercept, only if no structure that keeps it fits — its variance then
+loads onto the residual, which the output says. The R template implements this ladder
+(`analysis_template.R`, PRIMARY MODEL CONVERGENCE); the Python GEE has no random effects (§5b).
 
 Notes on each term:
 
@@ -171,7 +187,8 @@ Notes on each term:
   copes with some sources of binomial overdispersion and not others, and that comparing it with the
   beta-binomial estimate shows when it is failing — which is why both are printed when both can be.
   Which fit the thesis reports if they disagree with the binomial one is a decision for the
-  investigator, to be made before unblinding.
+  investigator, to be made before unblinding. From Round 102 the beta-binomial estimate is in the
+  table of refits (the kit's T14) when it is fitted, and the row says so when it is not.
 - **Convergence** (synopsis §3.9: "a non-converging random structure is reduced in a pre-specified
   order and the reduction reported"). The ladder used to step down on a singular or failed fit only
   and kept a fit lme4 had flagged as not converged. Now, when lme4 warns, `allFit()` refits the rung
@@ -192,7 +209,12 @@ Notes on each term:
   the data are unblinded; until it is, report both.
 
 **Falsification.** H1 (polarity affects incomplete blinking) is not supported if the `polarity_c`
-coefficient's 95% CI includes zero in the model above. Report the coefficient on the log-odds scale
+coefficient's 95% CI includes zero in the model above. This rule names no direction, and the
+synopsis's H₁ₐ does ("Positive polarity ... associated with a lower incomplete-blink ratio"). Whether
+the test is two-sided at α = .05, and what an interval wholly on the other side of zero means for H1,
+is for the investigator to fix before unblinding (`docs/ANALYSIS_GUIDE.md` Part 5). From Round 102
+both templates print the side beside the verdict ("positive polarity LOWER" or "HIGHER") and judge
+nothing. Report the coefficient on the log-odds scale
 *and* as a predicted difference in proportion at the mean, because a log-odds of 0.2 is not
 interpretable to an optometry readership.
 
@@ -200,7 +222,8 @@ Neither template reported either quantity until Round 70. Both now print, under 
 log-odds difference (positive minus negative) with its 95% CI and whether that CI includes zero, the
 odds ratio with its CI, and the predicted proportions and their difference with a delta-method CI —
 for the model with `eff_fps_c` and for the formula above, until the investigator decides which is
-confirmatory. "At the mean" means: each colour weighted equally, serial position and frame rate at
+confirmatory; R also for frame rate as each person's mean plus the within-person deviation (§5 item
+2), and the analysis kit tables all three in T06 (Round 102: it tabled the first only). "At the mean" means: each colour weighted equally, serial position and frame rate at
 their means, and, in R, random effects at zero, so the proportions are those of a typical participant;
 the Python GEE's are population-averaged, so the two agree in sign and not to the decimal.
 
@@ -208,9 +231,11 @@ the Python GEE's are population-averaged, so the two agree in sign and not to th
 
 ## 3. What the verified literature does and does not license
 
-Four of the seven verified records bear directly on interpretation.
+Four of the verified records (`CITATION_VERIFICATION.md` items 1, 2, 4 and 5) bear directly on
+interpretation. (This sentence said "of the seven verified records", a count the header paragraph
+already called out of date; Round 102.)
 
-**Portello, Rosenfield & Chu (2013)** — [10.1097/OPX.0b013e31828f09a7](https://doi.org/10.1097/OPX.0b013e31828f09a7),
+**Portello, Rosenfield & Chu (2013)**, item 2 — [10.1097/OPX.0b013e31828f09a7](https://doi.org/10.1097/OPX.0b013e31828f09a7),
 verified via PubMed. A 15-minute reading task, N = 21, gave a **mean incomplete-blink proportion of
 16.1% (SD 15.7, range 0.9–56.5%)**, and the proportion correlated with symptom score (p = 0.002).
 
@@ -219,7 +244,7 @@ verified via PubMed. A 15-minute reading task, N = 21, gave a **mean incomplete-
 - **Does not license:** any claim about polarity or colour. The manipulation was not display
   appearance.
 
-**Argilés et al. (2015)** — [10.1167/iovs.15-16967](https://doi.org/10.1167/iovs.15-16967).
+**Argilés et al. (2015)**, item 1 — [10.1167/iovs.15-16967](https://doi.org/10.1167/iovs.15-16967).
 Six 6-minute reading conditions, N = 50: blink rate fell in all six (p < 0.001) and incomplete-blink
 percentage rose on electronic platforms specifically.
 
@@ -231,15 +256,16 @@ percentage rose on electronic platforms specifically.
 - **Does not license:** a colour or polarity claim. The manipulation was reading platform, and the
   sample was 18–74, not students.
 
-**Golebiowski et al. (2020)** — [10.1080/02713683.2019.1663542](https://doi.org/10.1080/02713683.2019.1663542).
+**Golebiowski et al. (2020)**, item 4 — [10.1080/02713683.2019.1663542](https://doi.org/10.1080/02713683.2019.1663542).
 Incomplete blinks per minute rose from a median of 6 at 1 min to 15 at 60 min of smartphone reading
 (p = .0049), N = 12 pilot.
 
 - **Licenses:** the expectation that the outcome **drifts upward with time on task**, which is
-  precisely why `position_c` and `global_position` belong in the model. An analysis omitting
+  precisely why `position_c` belongs in the model (`global_position` is identical to it under the
+  single-block protocol and must not be entered beside it; analysis codebook). An analysis omitting
   position risks attributing a fatigue trend to whichever condition happened to run late.
 
-**Pattyn et al. (2008)** — [10.1016/j.physbeh.2007.09.016](https://doi.org/10.1016/j.physbeh.2007.09.016).
+**Pattyn et al. (2008)**, item 5 — [10.1016/j.physbeh.2007.09.016](https://doi.org/10.1016/j.physbeh.2007.09.016).
 Reaction times increased after **30 min** of time-on-task, with a further attentional cost appearing
 only after **60 min**.
 
@@ -255,8 +281,8 @@ only after **60 min**.
 
 | Outcome | Column(s) | Model | Why |
 |---|---|---|---|
-| Subjective fatigue | `fatigue_delta` | LMM, Gaussian | Change from the participant's own baseline removes between-person scale use. Use `fatigue_mean` only if baselines are missing. One rating format at a time (`slider_version`, §4c, Round 84). |
-| Comprehension | `comprehension_correct` / `comprehension_items` | Binomial GLMM | Same argument as the primary: 2/3 is a coarse measurement and should be weighted as such. |
+| Subjective fatigue | `fatigue_delta` | LMM, Gaussian; log contrast + polarity (below the table) | Change from the participant's own baseline removes between-person scale use. Use `fatigue_mean` only if baselines are missing. One rating format at a time (`slider_version`, §4c, Round 84). |
+| Comprehension | `comprehension_correct` / `comprehension_items` | Binomial GLMM; log contrast + polarity (below the table) | Same argument as the primary: 2/3 is a coarse measurement and should be weighted as such. |
 | Reading speed | `reading_speed_wpm` | LMM | Check against `observed_duration_ms` first — a truncated exposure produces a normal-looking speed. |
 | Visual search | `targets_found` over `search_time_ms`; `search_d_prime`; completion (`search_termination`) | **Poisson rate GLMM, search d′ LMM, completion GLMM; censoring tested** (Round 71, §4c) | Round 71: the uncensored time LMM is printed as a description only. Before: The column is `search_termination` in `analysis_long.csv` (the file this plan is written against) and `termination_mode` in `05_visual_search.csv`; it says whether the block ended by completion or by the 60 s cap. An earlier revision of this line claimed `search_termination` did not exist — that was wrong, and came from checking only the numbered bundle's codebook and not `analysisCodebook.ts`. Capped rows are a lower bound; treating them as measurements biases the mean downward. Either model them as censored or report the completion rate alongside. |
 | Sensitivity | the trials in `08_reaction_trials.csv` (`d_prime` per block as a cross-check) | **Probit GLMM on the trials** (Round 71), with the condition-run's own criterion and d′ (Round 73) | With 20 go and 12 no-go trials, one block's d′ is imprecise. This row used to say "consider weighting" by `d_prime_se`; the template did, and that was biased, because the SE rises with d′ itself (correlation 0.95 on the Round 62 audit's N = 40 cohort), so inverse-variance weights down-weight high-sensitivity blocks. See §4c. |
@@ -264,8 +290,21 @@ only after **60 min**.
 | Comfort, clarity | `display_comfort_score`, `text_clarity_score` (06) | LMM (Round 71) | 0-100 ratings: sliders before Round 84, 100 mm visual analogue lines from it, one format at a time (§4c). Untouched sliders (`comfort_touched` / `clarity_touched` FALSE, old format only) are excluded. Not a cumulative-link model: see §4c. |
 | RT variability | `rt_sd_ms` | LMM on log (Round 71) | Effect is a ratio of SDs. |
 | Lapses | `lapse_count` of `hits` | Binomial GLMM with an observation-level (run) term (Rounds 71, 73) | Weighted by the block's hits, as the primary is by its blinks. The run term carries the extra-binomial variation between runs; see §4c. |
+| RT mean | `mean_rt_hits_ms` (09) | LMM; log contrast + polarity (below the table) | Row added in Round 102: a performance-family member with no row here. The block's mean latency of valid hits; the trial-level model of §4a is beside it. |
+| Blink rate | `blink_rate` (07) | LMM, polarity × colour as the primary, on the primary's camera-on rows (Round 102: row added; it had none) | Blinks per minute of observed time; in the ocular family with the inter-blink interval. |
 | Inter-blink interval | `mean_inter_blink_interval_ms` | LMM on log (Round 71), on `ibi_rule_version` `ibi-r2` rows (Round 88, §5) | Near the reciprocal of blink rate; both are in the ocular family. Over the intervals observed end to end only, as the rate is over observed time (§5). |
 | PERCLOS | `perclos_p80` | **A covariate, not an outcome** (Round 70) | See below the table. |
+
+**RT mean, fatigue and comprehension are fitted on log contrast and polarity** (stated here in Round
+102; the template has fitted them so throughout): log contrast + polarity + serial position (and the
+question kind for comprehension), with no colour factor and so no polarity × colour term. It reads
+the synopsis's H₁ₐ ("Positive polarity and higher luminance contrast are each associated with ...
+lower subjective visual fatigue and better task performance") as each effect with the other held
+fixed. Their polarity effect is therefore polarity at a fixed log contrast, not the colour-averaged
+main effect §4b defines for the other members (log contrast differs between the polarities within a
+colour, §2), and with no interaction term the subjective family's interaction Holm runs over two
+members and the performance family's over eight. Whether to keep this or fit polarity × colour as for
+the other members is the investigator's decision (`docs/ANALYSIS_GUIDE.md` Part 5).
 
 **PERCLOS is a sleepiness covariate, not an outcome** (Round 70). This row used to list it as a
 secondary outcome ("LMM on logit"), the analysis codebook called it `secondary`, and both templates
@@ -304,14 +343,17 @@ that location is now a **recorded, balanced factor** in `08_reaction_trials.csv`
 `stim_ring`, `stim_angle_deg`, `stim_dx_px`, `stim_dy_px`, `stim_ecc_px`, `stim_ecc_deg_55cm`).
 
 - **Ring enters the trial-level models, and so does ring × colour.** Response time rises with target
-  eccentricity, and red–green cone opponency declines with eccentricity faster than blue–yellow,
-  which declines about as achromatic sensitivity does (Mullen & Kingdom 2002). The go/no-go decision
+  eccentricity (`CITATION_VERIFICATION.md` items 53 and 54: the direction, from conjunction search
+  and from perimetry, not its size here), and red–green cone opponency declines with eccentricity
+  faster than blue–yellow, which declines about as achromatic sensitivity does (Mullen & Kingdom
+  2002, item 55). The go/no-go decision
   here is a colour decision, so the colour conditions are not expected to lose discriminability
   equally at 8°; with balanced rings that interaction is estimable instead of being noise. The two
   trial-level models are the probit GLMM for sensitivity and criterion (signal-detection terms on
   `is_signal`, with `stim_ring` and its interaction with the colour factor added) and an LMM on log
   RT of valid hits (`stim_ring`, ring × colour, `position_c`, and participant and passage random
-  effects). This note fixed what they must contain before anyone looked at the data; the R template
+  effects; the template centred serial position here only from Round 102, so before it the polarity
+  term it printed was the effect at the first position). This note fixed what they must contain before anyone looked at the data; the R template
   fits the probit GLMM with these terms from Round 71 (§4c). From Round 73 both also carry the
   **condition-run** as a random effect, because polarity, colour and position vary only between runs
   and a run's trials are not independent evidence about them (§4c).
@@ -323,8 +365,10 @@ that location is now a **recorded, balanced factor** in `08_reaction_trials.csv`
 - **Rows recorded before Round 66 have no location columns** (all blank): the dot then landed at a
   uniformly random point in the central part of the screen, which was not recorded. Those rows enter
   the condition-level analysis as before and must be left out of any model with a location term —
-  never imputed. They are also a different stimulus layout, so a dataset pooling both should carry the
-  build (`git_hash`) as a factor.
+  never imputed. They are also a different stimulus layout, so an analyst pooling both should consider
+  the build (`git_hash`) as a factor. The template does not add it; it prints this advice when builds
+  are mixed (`[MIXED BUILDS]`), and the confirmatory data are to come from one build
+  (`docs/READINESS.md`).
 
 ### 4b. Effect sizes and multiplicity: the outcome families (Round 70)
 
@@ -334,9 +378,13 @@ Until Round 70 neither template printed a single confidence interval or adjusted
 
 **Effect sizes.** Every polarity effect is read through `emmeans` as positive minus negative,
 averaged over colour wherever colour is in the model (which, colour being sum-coded, is the main
-effect), at the mean of every covariate, with an unadjusted 95% CI. Effects stay in each outcome's own
-units — odds ratios for the binomial models; ms, words/min, scale points or z units for the Gaussian
-ones — rather than being standardised: a mixed model has no single standard deviation to divide by,
+effect), at the mean of every covariate, with an unadjusted 95% CI (for RT mean, fatigue and
+comprehension, polarity at a fixed log contrast: §4, below the table). Effects stay in each outcome's
+own units — odds ratios for the logit models (comprehension, lapses, search completion), probit units
+for d′ and criterion, a rate ratio for search rate, ratios for the outcomes modelled on the log scale
+(RT variability, inter-blink interval), and ms, words/min or scale points for the Gaussian ones (this
+sentence said "odds ratios for the binomial models; ... z units"; Round 102) — rather than being
+standardised: a mixed model has no single standard deviation to divide by,
 and a unit a reader can picture is the more useful number. lmer intervals use Satterthwaite degrees of
 freedom, as lmerTest's tables do.
 
@@ -439,7 +487,11 @@ and joins the performance family; "visual-search time" leaves it, and the uncens
 as a description. **Completion** stays: when a polarity × colour cell completed every block or none, the
 ten-cell logistic model is separated (its estimates run off to infinity), so the additive model is
 fitted and labelled `[additive]`, with no interaction test; when a whole polarity or colour level is
-degenerate, no completion model is fitted. A censored-time model (a Cox or censored-normal mixed model)
+degenerate, no completion model is fitted. And, an analyst default not in the protocol
+(`COMPLETION_INFORMATIVE`, stated here in Round 102): when the overall completion rate is outside 5–95%
+no completion model is fitted, the member is listed as near-constant, and the performance family's Holm
+then runs over nine members; the investigator confirms or removes it (`docs/ANALYSIS_GUIDE.md` Part
+5). A censored-time model (a Cox or censored-normal mixed model)
 is not fitted: it needs a package (`survival`) that is not in the install line or CI.
 
 **The remaining members and analyses (Round 71).**
@@ -623,7 +675,9 @@ These are not optional and they come first.
      was never verified, and a 30-fps tablet camera essentially never cleared it.
    - **Still open (investigator's decision, before unblinding):** whether frame rate enters the
      primary as `eff_fps_c` (as now) or as each person's mean plus the within-person deviation.
-     Report both until decided, as §2 says for `eff_fps_c`.
+     Report both until decided, as §2 says for `eff_fps_c`. (No template fitted the second until
+     Round 102; R now does, prints its H1 and lists it among the refits, and the kit tables it in T06
+     and T14. The person's mean is over their modelled rows, centred across participants.)
    - **Do not drop rows silently.** Frame rate covaries with how the face is lit, and display polarity
      changes that; the tier-C exclusion is a pre-registered rule, its count is printed by polarity,
      and the every-tier refit shows what it changed.
@@ -673,7 +727,9 @@ These are not optional and they come first.
    (Round 75) — so a participant measured on
    two is flagged (`mixed_tracker_backends` in the join report; `tracker_consistent` per sitting).
    The tracker is to be frozen before the pilot (`CONFIG.TRACKER_BACKEND`); if a flag appears anyway,
-   report the primary model with and without the flagged participants. From 2.3.0 EAR is computed in
+   report the primary model with and without the flagged participants. (Nothing did until Round 102:
+   R now counts the participants whose modelled rows name more than one tracker, under `[tracker]`,
+   and refits without them; the refit is in the kit's T14.) From 2.3.0 EAR is computed in
    image-plane proportions, so absolute `ear_baseline`, `open_ear_measured`, the two thresholds and
    `calibration_ear_baseline` are not comparable with sittings recorded by earlier builds, pilot
    sittings included (ratios to the baseline, and every blink classification, are unaffected; check

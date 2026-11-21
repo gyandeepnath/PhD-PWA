@@ -799,9 +799,13 @@ h1_effects <- function(m) {
 }
 print_h1 <- function(label, h) {
   if (is.null(h)) { cat(sprintf("[H1] %s: not fitted\n", label)); return(invisible(NULL)) }
-  cat(sprintf("[H1] %s: polarity (positive minus negative) log-odds %.3f (95%% CI %.3f to %.3f), p %s — the CI %s zero\n",
+  # The direction beside the verdict (Round 102): the synopsis's H1a names one (positive polarity, the
+  # lower ratio) and §2's rule names none; whether a CI wholly on the other side supports H1 is the
+  # investigator's decision (docs/ANALYSIS_GUIDE.md Part 5), so the side is printed, not judged.
+  cat(sprintf("[H1] %s: polarity (positive minus negative) log-odds %.3f (95%% CI %.3f to %.3f), p %s — the CI %s zero%s\n",
               label, h$estimate, h$lcl, h$ucl, format.pval(h$p, digits = 2),
-              if (h$lcl > 0 || h$ucl < 0) "EXCLUDES" else "INCLUDES"))
+              if (h$lcl > 0 || h$ucl < 0) "EXCLUDES" else "INCLUDES",
+              if (h$ucl < 0) " (positive polarity LOWER)" else if (h$lcl > 0) " (positive polarity HIGHER)" else ""))
   cat(sprintf("[H1] %s: odds ratio %.3f (95%% CI %.3f to %.3f)\n", label, exp(h$estimate), exp(h$lcl), exp(h$ucl)))
   cat(sprintf("[H1] %s: predicted proportion incomplete, positive %.3f vs negative %.3f; difference %.4f (95%% CI %.4f to %.4f)\n",
               label, h$p_pos, h$p_neg, h$diff, h$diff_lcl, h$diff_ucl))
@@ -925,9 +929,12 @@ ALLFIT_LOGLIK_TOL    <- 0.01    # ANALYST DEFAULT — not in the protocol. An op
 # CENSOR_SPREAD_WARN_PP (10 percentage points of spread in the search censoring rate across conditions)
 # is gone as well: a range over ten small cells is not a test, and under the null it fired in most
 # simulated datasets. Censoring is now tested by a likelihood ratio (see Visual search).
-COMPLETION_INFORMATIVE <- c(0.05, 0.95)  # ANALYST DEFAULT — not in the protocol. Outside this band
-                                # the completion outcome is near-constant and carries little
-                                # information, so the time model is the better instrument.
+COMPLETION_INFORMATIVE <- c(0.05, 0.95)  # ANALYST DEFAULT — not in the protocol; ANALYSIS_PLAN.md §4c
+                                # states it and docs/ANALYSIS_GUIDE.md Part 5 lists it as the investigator's
+                                # to confirm (Round 102). Outside this band completion is near-constant and
+                                # is not modelled; the member is listed with that note, and the performance
+                                # family's Holm then runs over one member fewer. (This comment called the
+                                # time model "the better instrument"; it is a description in no family.)
 # PERCLOS_LOGIT_SQUEEZE (5e-4) is gone too. It moved exact zeros to logit(5e-4) = -7.6, the same
 # high-leverage pattern the primary rejects, while a comment described a data-driven squeeze the code
 # never ran. PERCLOS is compressed into (0, 1) by a rule that depends on the sample size alone and has
@@ -1092,14 +1099,18 @@ rt <- rt_summary %>%
 # --- Reaction time: contrast, polarity, fatigue accumulation -------------------------------
 # Random intercept per participant absorbs individual differences; the passage intercept is there
 # for the reason given at re_passage.
-m_rt <- lmer(
+# A member that fails is listed with its reason, not the end of the run (ANALYSIS_PLAN.md §4b; Round 102:
+# RT, fatigue and comprehension were the three fits not guarded, and they run before the primary).
+rt_fail <- NULL
+m_rt <- tryCatch(lmer(
   as.formula(paste0("mean_rt_hits_ms ~ log_contrast + polarity + session_position", si_term,
                     " + (1 | participant_id)", re_passage)),
   data = rt
-)
-cat("\n=== RT mixed model ===\n"); print(summary(m_rt)); report_n(m_rt, rt, "RT")
-add_to_family("RT", m_rt, "ms")
-cat("\nMarginal means by polarity:\n"); print(emmeans(m_rt, ~ polarity))
+), error = function(err) { rt_fail <<- conditionMessage(err); NULL })
+cat("\n=== RT mixed model ===\n")
+if (is.null(m_rt)) cat("the RT model did not fit:", rt_fail, "\n") else { print(summary(m_rt)); report_n(m_rt, rt, "RT") }
+add_to_family("RT", m_rt, "ms", note = if (is.null(m_rt)) paste("did not fit:", rt_fail))
+if (!is.null(m_rt)) { cat("\nMarginal means by polarity:\n"); print(emmeans(m_rt, ~ polarity)) }
 
 # ONE ONSET RULE (rt-t3, Round 93; rt-t2, Round 92, audit 86 P1). Under rt-t1 the dot's onset was the
 # clock read in the stamping frame's callback, AFTER any face-tracker work the browser ran earlier in that
@@ -1124,7 +1135,7 @@ cat(sprintf("\n[%s] %d of %d RT condition-run(s) were timed under rule rt-t1 wit
             RT_TIMING_VERSION, sum(rt_t1_cam), nrow(rt)))
 cat(sprintf("[%s] %d of %d RT condition-run(s) were timed under rule rt-t2 (a trial whose paint frame overran could be long by up to about a frame, unmarked); they are in the RT model and in its refit.\n",
             RT_TIMING_VERSION, sum(rt_timing == "rt-t2"), nrow(rt)))
-if (sum(rt_t1_cam) > 0) {
+if (sum(rt_t1_cam) > 0 && !is.null(m_rt)) {
   # The same formula fitted afresh on the rows that are left, never update(m, data =): see refit() below.
   m_rt_no_t1 <- tryCatch(lmer(formula(m_rt), data = rt[!rt_t1_cam, , drop = FALSE]), error = function(err) NULL)
   if (is.null(m_rt_no_t1)) cat(sprintf("[%s sensitivity] the refit without them did not fit.\n", RT_TIMING_VERSION)) else {
@@ -1241,13 +1252,15 @@ fat_response <- if ("fatigue_delta" %in% names(fat) && any(!is.na(fat$fatigue_de
   "fatigue_mean"
 }
 cat("\n[fatigue] response:", fat_response, "\n")
-m_fat <- lmer(
+fat_fail <- NULL
+m_fat <- tryCatch(lmer(
   as.formula(paste0(fat_response, " ~ log_contrast + polarity + session_position", si_term,
                     " + (1 | participant_id)", re_passage)),
   data = fat
-)
-cat("\n=== Fatigue mixed model ===\n"); print(summary(m_fat)); report_n(m_fat, fat, "fatigue")
-add_to_family("fatigue", m_fat, paste0(fat_response, ", 0-10 pts"))
+), error = function(err) { fat_fail <<- conditionMessage(err); NULL })
+cat("\n=== Fatigue mixed model ===\n")
+if (is.null(m_fat)) cat("the fatigue model did not fit:", fat_fail, "\n") else { print(summary(m_fat)); report_n(m_fat, fat, "fatigue") }
+add_to_family("fatigue", m_fat, paste0(fat_response, ", 0-10 pts"), note = if (is.null(m_fat)) paste("did not fit:", fat_fail))
 
 # --- The fatigue ITEMS as ordinal ratings (synopsis §3.9: "Ordinal cumulative-link models serve rating
 # outcomes") — a SENSITIVITY for the fatigue member, fitted only where `ordinal` is installed ---------
@@ -1326,8 +1339,10 @@ fit_perception <- function(outcome, score, touched) {
 }
 fp <- fit_perception("comfort", "display_comfort_score", "comfort_touched")
 add_to_family("comfort", fp$model, "points, 0-100", note = fp$note)
+m_comfort <- fp$model  # kept by name, so the saved results carry it (Round 102: it lived only in fp)
 fp <- fit_perception("clarity", "text_clarity_score", "clarity_touched")
 add_to_family("clarity", fp$model, "points, 0-100", note = fp$note)
+m_clarity <- fp$model
 
 # --- Comprehension accuracy (logistic mixed model) -----------------------------------------
 # passage_id is taken from the condition frame: 04_comprehension.csv carries its own copy, and the two
@@ -1350,15 +1365,22 @@ comp <- comprehension %>% select(-any_of("passage_id")) %>%
 # passage difficulty and (1 | item) the question within it; without them an easy passage read more
 # often under one polarity is a polarity effect.
 re_item <- if (nzchar(re_passage)) paste0(re_passage, " + (1 | item)") else " + (1 | item)"
-m_comp <- glmer(
+comp_fail <- NULL
+m_comp <- tryCatch(glmer(
   as.formula(paste0("is_correct ~ log_contrast + polarity", ilx_term, " + question_kind + session_position",
                     si_term, " + (1 | participant_id/condition_id)", re_item)),
   data = comp, family = binomial
-)
-cat("\n=== Comprehension logistic mixed model ===\n"); print(summary(m_comp)); report_n(m_comp, comp, "comprehension")
-conv_comp <- convergence_verdict(m_comp)
-cat("[convergence] comprehension:", conv_comp$text, "\n")
-add_to_family("comprehension", m_comp, "odds ratio, correct", odds_ratio = TRUE, converged = conv_comp$ok)
+), error = function(err) { comp_fail <<- conditionMessage(err); NULL })
+cat("\n=== Comprehension logistic mixed model ===\n")
+if (is.null(m_comp)) {
+  cat("the comprehension model did not fit:", comp_fail, "\n")
+  add_to_family("comprehension", NULL, "odds ratio, correct", note = paste("did not fit:", comp_fail))
+} else {
+  print(summary(m_comp)); report_n(m_comp, comp, "comprehension")
+  conv_comp <- convergence_verdict(m_comp)
+  cat("[convergence] comprehension:", conv_comp$text, "\n")
+  add_to_family("comprehension", m_comp, "odds ratio, correct", odds_ratio = TRUE, converged = conv_comp$ok)
+}
 
 # ===========================================================================================
 # SECONDARY OUTCOMES from ANALYSIS_PLAN.md §4 that this file did not model at all.
@@ -1589,9 +1611,16 @@ if (!is.null(m_sdt)) {
                 dp_ring$sig.trend[dp_ring$ring == "inner"], dp_ring$sig.trend[dp_ring$ring == "outer"],
                 format.pval(w_ring["p"], digits = 2), as.integer(w_ringcol["df"]), w_ringcol["chisq"], format.pval(w_ringcol["p"], digits = 2)))
   }
-  add_to_family("d-prime", m_sdt, "d' (probit units)", converged = conv_sdt$ok,
+  # What the family table's n_rows counts for this model (cells of identical covariates, not trials), and
+  # a dropped run term, which §4c says makes these tests anti-conservative (Round 102: both were in the
+  # log only).
+  sdt_note <- paste0("n_rows counts cells of identical covariates; ", sum(sdt_cells$n_trials), " trials in ",
+                     n_distinct(sdt_cells$run_id), " condition-runs",
+                     if (length(run_failed)) paste0("; run term(s) dropped (", paste(run_failed, collapse = ", "),
+                                                    "): the tests on them are anti-conservative") else "")
+  add_to_family("d-prime", m_sdt, "d' (probit units)", converged = conv_sdt$ok, note = sdt_note,
                 effect = c(e_dp, list(p_int = unname(w_dp_int["p"]))))
-  add_to_family("criterion", m_sdt, "criterion c (probit units)", converged = conv_sdt$ok,
+  add_to_family("criterion", m_sdt, "criterion c (probit units)", converged = conv_sdt$ok, note = sdt_note,
                 effect = c(e_c, list(p_int = unname(w_c_int["p"]))))
 }
 
@@ -1615,8 +1644,12 @@ if (!is.null(trials) && nrow(trials) > 0) {
     rt_trials <- rt_trials %>% filter(!is.na(ring))
     contrasts(rt_trials$ring) <- contr.sum(2) / 2
   }
+  # Serial position CENTRED here (Round 102): with an uncentred position and a polarity x position term,
+  # polarity1 was the polarity effect at the first position, printed as the polarity effect; §2 and §4a
+  # use position_c, so polarity1 is now the effect at the mean position of these trials.
+  rt_trials$position_c <- rt_trials$session_position - mean(rt_trials$session_position, na.rm = TRUE)
   fit_rt_trial <- function(re_run) tryCatch(
-    lmer(as.formula(paste0("log(response_time_ms) ~ polarity * colour", ilx_term, " + session_position + polarity:session_position",
+    lmer(as.formula(paste0("log(response_time_ms) ~ polarity * colour", ilx_term, " + position_c + polarity:position_c",
                            if (use_ring_rt) " + ring + ring:colour" else "", " + (1 | participant_id)", re_passage, re_run)),
          data = rt_trials),
     error = function(err) NULL
@@ -1636,11 +1669,11 @@ if (!is.null(trials) && nrow(trials) > 0) {
                   run_sds(m_rt_trial)[[1]], n_distinct(rt_trials$run_id)))
     }
     cf <- summary(m_rt_trial)$coefficients
-    for (term in intersect(c("polarity1", "polarity1:session_position", "ring1"), rownames(cf))) {
+    for (term in intersect(c("polarity1", "polarity1:position_c", "ring1"), rownames(cf))) {
       ci <- cf[term, "Estimate"] + c(-1, 1) * qt(0.975, cf[term, "df"]) * cf[term, "Std. Error"]
       cat(sprintf("[RT trials] %-28s x%.4f (95%% CI %.4f to %.4f), p %s  (ratio of RTs%s)\n", term,
                   exp(cf[term, "Estimate"]), exp(ci[1]), exp(ci[2]), format.pval(cf[term, "Pr(>|t|)"], digits = 2),
-                  switch(term, polarity1 = ", positive / negative", `polarity1:session_position` = ", change in that ratio per position",
+                  switch(term, polarity1 = ", positive / negative, at the mean position", `polarity1:position_c` = ", change in that ratio per position",
                          ring1 = ", inner / outer")))
     }
     if (use_ring_rt) {
@@ -2232,7 +2265,8 @@ if (nrow(eye) == 0) {
     }
     h1_primary <- h1_effects(m_primary)
     print_h1("primary", h1_primary)
-    print_h1("without eff_fps_c (§2 formula)", tryCatch(h1_effects(m_no_fps), error = function(err) NULL))
+    h1_no_fps <- tryCatch(h1_effects(m_no_fps), error = function(err) NULL)
+    print_h1("without eff_fps_c (§2 formula)", h1_no_fps)
 
     # -----------------------------------------------------------------------------------------
     # OVERDISPERSION SENSITIVITY — STANDING, NOT TRIGGERED (M9; ANALYSIS_PLAN.md §2).
@@ -2278,6 +2312,11 @@ if (nrow(eye) == 0) {
       } else {
         b <- glmmTMB::fixef(m_bb)$cond[["polarity1"]]
         se_bb <- sqrt(diag(vcov(m_bb)$cond))[["polarity1"]]
+        # Kept for the table of refits (Round 102): it was printed here and nowhere else, so the kit's
+        # table of refits carried the observation-level refit and not the comparison §2 asks for.
+        bb_row <- list(label = if (isTRUE(m_bb$sdr$pdHess)) "beta-binomial (§2)" else "beta-binomial (§2; Hessian not positive definite: do not read)",
+                       estimate = b, se = se_bb, n_rows = as.integer(nobs(m_bb)),
+                       n_participants = dplyr::n_distinct(eye$participant_id))
         cat(sprintf("[beta-binomial] polarity log-odds %.3f (95%% CI %.3f to %.3f), odds ratio %.3f; SE %.4f vs binomial %.4f (x%.2f); precision phi %.1f (larger = nearer binomial)%s\n",
                     b, b - qnorm(0.975) * se_bb, b + qnorm(0.975) * se_bb, exp(b), se_bb, se_binom, se_bb / se_binom,
                     sigma(m_bb), if (isTRUE(m_bb$sdr$pdHess)) "" else " — Hessian NOT positive definite: do not read this fit"))
@@ -2354,13 +2393,18 @@ if (nrow(eye) == 0) {
     # intercept, no slope), which made them incomparable with the primary they were meant to test.
     # ===========================================================================================
     pol_row <- function(m) summary(m)$coefficients["polarity1", ]
+    # Each refit's own participants as well as its rows (Round 102): the sensitivity set rests on more
+    # participants than the primary, and the table of refits gave every row the primary's count.
+    n_pid <- function(m) tryCatch(dplyr::n_distinct(model.frame(m)$participant_id), error = function(err) NA_integer_)
     sens_line <- function(label, m) {
       if (is.null(m)) {
-        sens_rows[[length(sens_rows) + 1]] <<- list(label = label, estimate = NA_real_, se = NA_real_, n_rows = NA_integer_)
+        sens_rows[[length(sens_rows) + 1]] <<- list(label = label, estimate = NA_real_, se = NA_real_, n_rows = NA_integer_,
+                                                    n_participants = NA_integer_)
         cat(sprintf("  %-42s did not fit\n", label)); return(invisible(NULL))
       }
       sens_rows[[length(sens_rows) + 1]] <<- list(label = label, estimate = unname(pol_row(m)[1]),
-                                                  se = unname(pol_row(m)[2]), n_rows = as.integer(nobs(m)))
+                                                  se = unname(pol_row(m)[2]), n_rows = as.integer(nobs(m)),
+                                                  n_participants = as.integer(n_pid(m)))
       cat(sprintf("  %-42s polarity %.4f (SE %.4f), n %d\n", label, pol_row(m)[1], pol_row(m)[2], nobs(m)))
     }
     # THE SAME MODEL ON OTHER ROWS, and never update(m, data = rows). lme4's update.merMod evaluates
@@ -2458,6 +2502,43 @@ if (nrow(eye) == 0) {
       cat("  every participant ran in one sitting: no sitting refit to run.\n")
     }
     sens_line("observation-level random effect (§2)", m_olre)
+    if (!is.null(get0("bb_row"))) {
+      sens_rows[[length(sens_rows) + 1]] <- bb_row
+      cat(sprintf("  %-42s polarity %.4f (SE %.4f), n %d\n", bb_row$label, bb_row$estimate, bb_row$se, bb_row$n_rows))
+    } else {
+      sens_rows[[length(sens_rows) + 1]] <- list(label = "beta-binomial (§2): not fitted (glmmTMB not installed, or the fit failed)",
+                                                 estimate = NA_real_, se = NA_real_, n_rows = NA_integer_, n_participants = NA_integer_)
+      cat(sprintf("  %-42s not fitted (see [beta-binomial] above)\n", "beta-binomial (§2)"))
+    }
+
+    # §5 item 2, STILL OPEN: frame rate as each participant's MEAN plus the WITHIN-participant deviation,
+    # beside eff_fps_c and its absence. The plan says to report it until the investigator decides; no
+    # template fitted it (review of Round 97, Round 102). The mean is over the participant's modelled
+    # rows, centred across participants; the deviation is each row's distance from it.
+    eye_bw <- eye %>% group_by(participant_id) %>% mutate(fps_person = mean(effective_fps, na.rm = TRUE)) %>% ungroup() %>%
+      mutate(fps_within = effective_fps - fps_person, fps_between_c = fps_person - mean(fps_person, na.rm = TRUE))
+    m_fps_bw <- tryCatch(suppressWarnings(refit(m_primary, eye_bw, ~ . - eff_fps_c + fps_between_c + fps_within)),
+                         error = function(err) NULL)
+    h1_fps_bw <- tryCatch(h1_effects(m_fps_bw), error = function(err) NULL)
+    print_h1("frame rate as person mean + within-person deviation (§5 item 2)", h1_fps_bw)
+    sens_line("frame rate as person mean + within deviation", m_fps_bw)
+
+    # §5 item 2b: ONE INSTRUMENT PER PARTICIPANT. The face trackers are not interchangeable instruments;
+    # "if a flag appears anyway, report the primary model with and without the flagged participants".
+    # Nothing read 07 tracker_backend here, so a participant measured on two trackers was neither counted
+    # nor refitted without (review of Round 97, Round 102).
+    if ("tracker_backend" %in% names(eye)) {
+      tb <- eye %>% filter(!is.na(tracker_backend), as.character(tracker_backend) != "") %>%
+        group_by(participant_id) %>% summarise(n_trackers = n_distinct(tracker_backend), .groups = "drop")
+      two_trackers <- tb$participant_id[tb$n_trackers > 1]
+      cat(sprintf("\n[tracker] %d participant(s) measured on more than one face tracker in the modelled rows (§5 item 2b)%s\n",
+                  length(two_trackers), if (length(two_trackers)) paste0(": ", paste(two_trackers, collapse = ", ")) else ""))
+      if (length(two_trackers)) {
+        sens_line("without participants measured on two trackers", refit_on(eye %>% filter(!participant_id %in% two_trackers)))
+      }
+    } else {
+      cat("\n[tracker] 07 carries no tracker_backend column (an export before Round 75): the one-instrument check (§5 item 2b) is not run.\n")
+    }
 
     # §5 QC-clean. The QC panel said this refit ran; it did not, until now.
     if (any(!eye$qc_clean)) {
@@ -2571,12 +2652,18 @@ if (nrow(eye) == 0) {
                               wide_all, quality_all,
                               participant_all[participant_all$sitting_folder %in% sens_folders, , drop = FALSE],
                               session_info_all[session_info_all$sitting_folder %in% sens_folders, , drop = FALSE])
-      # The same frame-rate gate as the confirmatory frame (tier C out): the two sets differ in rows only.
+      # The same blink rule and frame-rate gate as the confirmatory frame (blink-r2 only, tier C out): the
+      # two sets differ in rows only. The blink rule was missing here, so an earlier-rule row of a
+      # confirmatory participant was in this refit and out of the primary, and R's sensitivity set
+      # differed from Python's, which applies it (review of Round 97, Round 102).
       eye_sens <- eye_metrics_all %>% filter(condition_id %in% sens_ids) %>%
         left_join(cond_sens, by = c("participant_id", "condition_id")) %>%
         filter(camera_active == 1) %>%
         mutate(blink_total = blink_count_incomplete + blink_count_full + blink_count_micro) %>%
-        filter(!is.na(blink_total), blink_total > 0, !(fps_tier %in% "C")) %>%
+        filter(!is.na(blink_total), blink_total > 0, !(fps_tier %in% "C"))
+      sens_rule <- if ("blink_rule_version" %in% names(eye_sens)) as.character(eye_sens$blink_rule_version) else rep(NA_character_, nrow(eye_sens))
+      sens_rule <- ifelse(is.na(sens_rule) | sens_rule == "", "blink-r1", sens_rule)
+      eye_sens <- eye_sens[sens_rule == BLINK_RULE_VERSION, , drop = FALSE] %>%
         mutate(eff_fps_c = as.numeric(scale(effective_fps, scale = FALSE)))
       if (DROP_DISENGAGED) eye_sens <- eye_sens %>% filter(!(engagement_flag %in% "bad"))
       m_sens <- refit_on(eye_sens)
@@ -2868,7 +2955,7 @@ cat("\n=== RT model assumption checks ===\n")
 # An unavailable plotting package must not end a run that has already produced the
 # pre-registered inference. `see` is a hard requirement of check_model() and is not
 # part of this template's install line, so the common case is that it is absent.
-if (requireNamespace("see", quietly = TRUE)) {
+if (requireNamespace("see", quietly = TRUE) && !is.null(m_rt)) {
   print(check_model(m_rt))
 } else {
   cat("\n[diagnostics] install.packages(\"see\") for check_model() plots — skipped, not run.\n")
@@ -2911,6 +2998,11 @@ if (nzchar(RESULTS_RDS)) {
       n_rows = as.integer(nobs(m_p)), n_participants = dplyr::n_distinct(model.frame(m_p)$participant_id),
       structure = get0("primary_structure"), rung = get0("rung"), ladder = get0("ladder_log"),
       dispersion = get0("dispersion_note"), h1 = get0("h1_primary"),
+      # H1 for the formula without eff_fps_c and for frame rate as person mean + deviation, reported
+      # beside the default until the investigator decides (§2, §5 item 2; Round 102).
+      h1_no_fps = get0("h1_no_fps"), h1_fps_bw = get0("h1_fps_bw"),
+      # What colour1..colour4 stand for (sum coding: the last level is minus the sum of the others).
+      colour_levels = levels(model.frame(m_p)$colour),
       omnibus = if (is.null(m_add)) NULL else quietly(as.data.frame(anova(m_add, m_p))),
       p_family = get0("p_fam"), p_family_holm = get0("p_fam_holm"),
       cells = quietly(as.data.frame(summary(emmeans(m_p, ~ colour | polarity, type = "response")))),
@@ -2949,7 +3041,8 @@ if (nzchar(RESULTS_RDS)) {
                   "log RT of valid hits, trial level" = "m_rt_trial",
                   "visual search: completed within the window" = "m_vs_done", "visual search: rate" = "m_vs_rate",
                   "visual search: d-prime" = "m_vs_dp", "blink rate" = "m_blink",
-                  "inter-blink interval (log)" = "m_ibi", "PERCLOS covariate check" = "m_perclos")
+                  "inter-blink interval (log)" = "m_ibi", "PERCLOS covariate check" = "m_perclos",
+                  "comfort" = "m_comfort", "clarity" = "m_clarity")
       out <- list()
       for (label in names(fitted)) {
         m <- get0(fitted[[label]])

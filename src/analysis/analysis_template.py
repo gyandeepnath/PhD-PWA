@@ -997,8 +997,11 @@ def main() -> None:
                   f"{h['p_neg']:.3f} — intervals and p-values WITHHELD: [SE CAUTION] above")
             return
         verdict = "EXCLUDES" if (h["lcl"] > 0 or h["ucl"] < 0) else "INCLUDES"
+        # The side beside the verdict, as R prints it (Round 102): which side supports H1 is the
+        # investigator's decision (docs/ANALYSIS_GUIDE.md Part 5), so it is printed, not judged.
+        side = " (positive polarity LOWER)" if h["ucl"] < 0 else " (positive polarity HIGHER)" if h["lcl"] > 0 else ""
         print(f"[H1] {label}: polarity_c (positive minus negative) log-odds {h['estimate']:.3f} "
-              f"(95% CI {h['lcl']:.3f} to {h['ucl']:.3f}), p {h['p']:.2g} — the CI {verdict} zero")
+              f"(95% CI {h['lcl']:.3f} to {h['ucl']:.3f}), p {h['p']:.2g} — the CI {verdict} zero{side}")
         print(f"[H1] {label}: odds ratio {np.exp(h['estimate']):.3f} (95% CI {np.exp(h['lcl']):.3f} to {np.exp(h['ucl']):.3f})")
         print(f"[H1] {label}: predicted proportion incomplete, positive {h['p_pos']:.3f} vs negative {h['p_neg']:.3f}; "
               f"difference {h['diff']:.4f} (95% CI {h['diff_lcl']:.4f} to {h['diff_ucl']:.4f})")

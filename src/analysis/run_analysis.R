@@ -45,6 +45,19 @@ suppressPackageStartupMessages({
   library(ggplot2)
 })
 
+# --- Text encoding (Round 102) ---------------------------------------------------------------
+# This file's own words carry UTF-8 characters (the section sign, the multiplication sign, dashes).
+# Read under a locale that is not UTF-8 (a Linux shell with LANG unset is "POSIX"), R took their bytes
+# as the locale's own and wrote the section sign as "<c2><a7>" in the thesis map and the report, 27
+# times each (found by the review of Round 97). So the kit's character type is set to UTF-8 where it is
+# not already. The template runs as its own process and is not affected.
+if (!isTRUE(l10n_info()[["UTF-8"]])) {
+  for (loc in c("C.UTF-8", "en_US.UTF-8", "en_GB.UTF-8", "UTF-8")) {
+    if (nzchar(suppressWarnings(Sys.setlocale("LC_CTYPE", loc)))) break
+  }
+  if (!isTRUE(l10n_info()[["UTF-8"]])) message("[encoding] no UTF-8 locale on this computer: section signs may be written as <c2><a7>.")
+}
+
 # --- Where things are ------------------------------------------------------------------------
 norm <- function(p) normalizePath(p, winslash = "/", mustWork = FALSE)
 script_dir <- (function() {
@@ -375,32 +388,48 @@ if (!is.null(R_)) {
     coefs <- tibble(term = cf$term, estimate_log_odds = cf[["Estimate"]], se = cf[["Std. Error"]], z = cf[["z value"]],
                     p = cf[["Pr(>|z|)"]], wald_ci_low = cf[["Estimate"]] - z975 * cf[["Std. Error"]],
                     wald_ci_high = cf[["Estimate"]] + z975 * cf[["Std. Error"]])
+    lv <- P$colour_levels
+    colour_key <- if (length(lv) >= 2) paste0(" colour1 to colour", length(lv) - 1, " are ", paste(lv[-length(lv)], collapse = ", "),
+                                              "; ", lv[length(lv)], " is minus their sum.") else ""
     write_table("T05", "Primary model coefficients", coefs,
                 paste0("The primary model's fixed effects as fitted: ", P$formula, ". Polarity is coded +0.5 positive and -0.5 negative, so polarity1 is ",
-                       "positive minus negative; colour is sum-coded, so each colour term is a deviation from the mean of the five colours. ",
+                       "positive minus negative; colour is sum-coded, so each colour term is a deviation from the mean of the five colours.", colour_key, " ",
                        "Random structure: ", P$structure, ". Convergence: ", paste(P$ladder, collapse = " | "), ". Dispersion: ", P$dispersion, "."),
                 paste(OBJ1, "H1a"), "ANALYSIS_PLAN.md §2", "Chapter 4, 4.2 (the effect to report is in T06); the full table in an appendix",
                 P$n_participants, P$n_rows,
                 caption = "Log-odds scale, binomial mixed model; Wald 95% interval = estimate +/- 1.96 x SE.")
-    h <- P$h1
-    tests <- bind_rows(
-      if (!is.null(h)) tibble(test = c("H1a polarity", "H1a polarity", "H1a polarity", "H1a polarity", "H1a polarity"),
-                              quantity = c("positive minus negative, log-odds", "odds ratio, positive / negative",
-                                           "predicted proportion incomplete, positive", "predicted proportion incomplete, negative",
-                                           "difference in predicted proportion, positive minus negative"),
-                              estimate = c(h$estimate, exp(h$estimate), h$p_pos, h$p_neg, h$diff),
-                              ci_low = c(h$lcl, exp(h$lcl), NA, NA, h$diff_lcl), ci_high = c(h$ucl, exp(h$ucl), NA, NA, h$diff_ucl),
-                              statistic = NA_real_, df = NA_real_, p = c(h$p, h$p, NA, NA, NA)),
-      if (!is.null(P$omnibus) && nrow(P$omnibus) >= 2)
-        tibble(test = "H1b polarity x colour", quantity = "likelihood-ratio test of the interaction as a whole",
-               estimate = NA_real_, ci_low = NA_real_, ci_high = NA_real_, statistic = P$omnibus$Chisq[2],
-               df = P$omnibus$Df[2], p = P$omnibus[["Pr(>Chisq)"]][2]))
-    if (nrow(tests) && !is.null(P$p_family_holm)) {
-      tests$p_holm_across_H1a_H1b <- ifelse(tests$test == "H1a polarity" & !is.na(tests$p), P$p_family_holm[["H1a"]],
-                                            ifelse(tests$test == "H1b polarity x colour", P$p_family_holm[["H1b"]], NA_real_))
+    # H1a for each model the plan reports until the investigator decides which is confirmatory (§2, §5
+    # item 2; Round 102): T06 carried only the default, so a decision for another left the thesis
+    # tables showing the default as if it had been decided.
+    MODEL_DEFAULT <- "with eff_fps_c (the template's default)"
+    h1_rows <- function(h, model) {
+      if (is.null(h)) return(NULL)
+      tibble(model = model, test = "H1a polarity",
+             quantity = c("positive minus negative, log-odds", "odds ratio, positive / negative",
+                          "predicted proportion incomplete, positive", "predicted proportion incomplete, negative",
+                          "difference in predicted proportion, positive minus negative"),
+             estimate = c(h$estimate, exp(h$estimate), h$p_pos, h$p_neg, h$diff),
+             ci_low = c(h$lcl, exp(h$lcl), NA, NA, h$diff_lcl), ci_high = c(h$ucl, exp(h$ucl), NA, NA, h$diff_ucl),
+             statistic = NA_real_, df = NA_real_, p = c(h$p, h$p, NA, NA, NA))
     }
+    tests <- bind_rows(
+      h1_rows(P$h1, MODEL_DEFAULT),
+      if (!is.null(P$omnibus) && nrow(P$omnibus) >= 2)
+        tibble(model = MODEL_DEFAULT, test = "H1b polarity x colour", quantity = "likelihood-ratio test of the interaction as a whole",
+               estimate = NA_real_, ci_low = NA_real_, ci_high = NA_real_, statistic = P$omnibus$Chisq[2],
+               df = P$omnibus$Df[2], p = P$omnibus[["Pr(>Chisq)"]][2]),
+      h1_rows(P$h1_no_fps, "without eff_fps_c (the section 2 formula)"),
+      h1_rows(P$h1_fps_bw, "frame rate as person mean + within-person deviation (section 5 item 2)"))
+    if (nrow(tests) && !is.null(P$p_family_holm)) {
+      on_default <- tests$model == MODEL_DEFAULT
+      tests$p_holm_across_H1a_H1b <- ifelse(on_default & tests$test == "H1a polarity" & !is.na(tests$p), P$p_family_holm[["H1a"]],
+                                            ifelse(on_default & tests$test == "H1b polarity x colour", P$p_family_holm[["H1b"]], NA_real_))
+    }
+    caution <- if (isTRUE(grepl("NOT CONVERGED", P$rung))) " CAUTION: no rung of the reduction ladder converged; these estimates come from a fit the optimizers do not agree on (analysis_log.txt, PRIMARY MODEL CONVERGENCE)." else ""
     write_table("T06", "Primary hypothesis tests", tests,
-                "H1a: the polarity effect on the incomplete-blink ratio (log-odds, odds ratio and predicted proportions, with 95% intervals); H1b: whether that effect depends on colour (likelihood-ratio test). Section 2's rule decides H1 on the unadjusted 95% interval; the Holm column is the alternative section 4b leaves open.",
+                paste0("H1a: the polarity effect on the incomplete-blink ratio (log-odds, odds ratio and predicted proportions, with 95% intervals); H1b: whether that effect depends on colour (likelihood-ratio test). Section 2's rule decides H1 on the unadjusted 95% interval; the Holm column is the alternative section 4b leaves open. ",
+                       "H1a is given for each model the plan reports until the investigator decides which is confirmatory (the model column): with eff_fps_c, without it, and with frame rate as each person's mean plus the within-person deviation; T05, T07, T08 and F01 are from the first. ",
+                       "Random structure fitted: ", P$structure, ".", caution),
                 paste(OBJ1, "H1a and H1b"), "ANALYSIS_PLAN.md §2 and §4b", "Chapter 4, 4.2 Objective 1: primary outcome",
                 P$n_participants, P$n_rows,
                 caption = "Proportions are for a typical participant and passage (random effects at zero), covariates at their means, averaged over the five colours.")
@@ -419,9 +448,9 @@ if (!is.null(R_)) {
                    se = wc$SE, ci_low = wc$asymp.LCL, ci_high = wc$asymp.UCL, z = wc$z.ratio, p_holm_across_colours = wc$p.value)
     }
     write_table("T08", "Polarity effect within each colour", wc,
-                "The polarity effect as an odds ratio inside each colour, Holm-adjusted across the five colours. It describes the shape of an interaction and is read only beside the H1b test in T06.",
+                "The polarity effect as an odds ratio inside each colour, its p-value Holm-adjusted across the five colours. It describes the shape of an interaction and is read only beside the H1b test in T06.",
                 paste(OBJ1, "H1b"), "ANALYSIS_PLAN.md §2", "Chapter 4, 4.2", P$n_participants, P$n_rows,
-                caption = "Odds ratio, positive / negative; intervals and p-values Holm-adjusted across the colours.")
+                caption = "Odds ratio, positive / negative; p-values Holm-adjusted across the five colours, intervals Bonferroni-adjusted (emmeans adjusts intervals by Bonferroni).")
   } else {
     why <- if (isTRUE(R_$primary_failed)) "the primary model could not be fitted (see analysis_log.txt, PRIMARY NOT FITTED)" else "no camera-on rows for the primary model in this data"
     for (t in list(c("T05", "Primary model coefficients"), c("T06", "Primary hypothesis tests"),
@@ -457,7 +486,7 @@ if (!is.null(R_)) {
   # T13 secondary outcomes
   fam <- if (length(R_$families)) bind_rows(R_$families) else NULL
   write_table("T13", "Secondary outcomes with multiplicity adjustment", fam,
-              "Every secondary outcome's polarity effect (positive minus negative, or a ratio for odds ratios) with its 95% interval, p and the Holm adjustment within its family; the polarity x colour p where the model has that term. Each row carries the rows and participants its model rests on.",
+              "Every secondary outcome's polarity effect (positive minus negative, or a ratio for odds ratios) with its 95% interval, p and the Holm adjustment within its family; the polarity x colour p where the model has that term. Each row carries the rows and participants its model rests on (the counts this map gives are the confirmatory set's; the comprehension rows are items, and the signal-detection rows cells of identical covariates, as the row's note says).",
               paste(OBJ1, "(secondary outcomes)"), "ANALYSIS_PLAN.md §4 and §4b", "Chapter 4, 4.3 Objective 1: secondary outcomes",
               n_conf_p, nrow(conf), caption = "Units are in the units column; intervals unadjusted; Holm within each family, separately for polarity and for the interaction.")
 
@@ -465,10 +494,10 @@ if (!is.null(R_)) {
   sr <- if (length(R_$sensitivity)) bind_rows(lapply(R_$sensitivity, as_tibble)) else NULL
   if (!is.null(sr)) sr <- sr %>% mutate(wald_ci_low = estimate - qnorm(0.975) * se, wald_ci_high = estimate + qnorm(0.975) * se)
   write_table("T14", "Sensitivity refits of the primary", sr,
-              "The primary model's polarity estimate refitted on other rows or with one change at a time (frame-rate tiers, earlier blink rule, without the frame-rate covariate, with an observation-level random effect, without disengaged, restarted or interrupted runs, the sensitivity set, adjusted for PERCLOS, and so on), beside the confirmatory estimate in the first row.",
+              "The primary model's polarity estimate refitted on other rows or with one change at a time (frame-rate tiers, earlier blink rule, without the frame-rate covariate, frame rate as person mean plus within-person deviation, with an observation-level random effect, the beta-binomial, without participants measured on two trackers, without disengaged, restarted or interrupted runs, the sensitivity set, adjusted for PERCLOS, and so on), beside the confirmatory estimate in the first row. Each row gives the rows and participants it used (the counts this map gives are the confirmatory set's).",
               "Objective 1, H1a (robustness)", "ANALYSIS_PLAN.md §2 and §5", "Chapter 4, 4.7 Sensitivity analyses",
               n_conf_p, if (is.null(P)) NULL else P$n_rows,
-              caption = "Polarity, positive minus negative, log-odds; n_rows is the rows each refit used; interval = estimate +/- 1.96 x SE.")
+              caption = "Polarity, positive minus negative, log-odds; n_rows and n_participants are what each refit used; interval = estimate +/- 1.96 x SE.")
 
   # T15 moderation
   md <- if (length(R_$moderators)) {

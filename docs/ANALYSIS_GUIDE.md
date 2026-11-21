@@ -166,6 +166,9 @@ are not in the backup.
      ```r
      install.packages(c("tidyverse","lme4","lmerTest","emmeans","performance"))
      ```
+     Optionally also `install.packages("glmmTMB")`: without it the analysis skips the beta-binomial
+     refit of the primary, which `docs/ANALYSIS_PLAN.md` §2 compares with the observation-level one to
+     show when that refit is failing, and T14 lists it as not fitted.
 4. In RStudio: File → Open File → `analysis/run_analysis.R`, then press **Source** (top right of the
    script). It finds `data/` beside `analysis/` by itself; if it cannot, it asks for the folder.
 5. Wait. It prints where the data and the results are, then nothing more until the analysis template has
@@ -206,15 +209,15 @@ what the numbers are, and its file name. The same list is in `results/thesis_map
 | T03 | Data quality | How much the camera measured, frame-rate tiers, runs left out of the ocular models and why, reliability verdicts, engagement flags. |
 | T04 | Descriptive statistics by condition | Each outcome in each of the ten conditions: runs, participants, mean, SD, median, quartiles, range. Observed values, not model estimates. |
 | T05 | Primary model coefficients | The fixed effects of the primary model on the log-odds scale, with SE, z, p and a Wald 95% interval. `polarity1` is positive minus negative; colour terms are deviations from the mean of the five colours. The model formula, random structure, convergence and dispersion are in the item's description. |
-| T06 | Primary hypothesis tests | H1a: the polarity effect as log-odds and odds ratio (95% interval, p), the predicted proportion of incomplete blinks under each polarity, and their difference with its 95% interval. H1b: the likelihood-ratio test of polarity × colour. The Holm column adjusts across H1a and H1b. |
+| T06 | Primary hypothesis tests | H1a: the polarity effect as log-odds and odds ratio (95% interval, p), the predicted proportion of incomplete blinks under each polarity, and their difference with its 95% interval. H1b: the likelihood-ratio test of polarity × colour. The Holm column adjusts across H1a and H1b. H1a is given for each model the plan reports until you decide which is confirmatory (the `model` column; Part 5): with the frame-rate covariate, without it, and with frame rate as each person's mean plus the within-person deviation. |
 | T07 | Primary model's estimated proportions | The model-estimated proportion of incomplete blinks in each condition, with 95% intervals. |
-| T08 | Polarity effect within each colour | Odds ratios inside each colour, Holm-adjusted across the five. Read only beside H1b in T06. |
+| T08 | Polarity effect within each colour | Odds ratios inside each colour; the p-values Holm-adjusted across the five, the intervals Bonferroni-adjusted. Read only beside H1b in T06. |
 | T09 | Objective 2: nested model comparison | Contrast alone, contrast + colour, and the full model, compared by likelihood ratio and AIC/BIC. |
 | T10 | Objective 2: residual hue coefficients | What colour adds beyond luminance contrast. |
 | T11 | Objective 2: collinearity | How far contrast and colour can be told apart (VIF). |
 | T12 | Achromatic anchor | Black-on-white against white-on-black at the same 21:1 contrast. |
 | T13 | Secondary outcomes with multiplicity adjustment | Each secondary outcome's polarity effect in its own units, 95% interval, p, Holm within its family, the interaction p, and its N. |
-| T14 | Sensitivity refits of the primary | The polarity estimate refitted on other rows or with one change, beside the confirmatory estimate in the first row. |
+| T14 | Sensitivity refits of the primary | The polarity estimate refitted on other rows or with one change, beside the confirmatory estimate in the first row; each row gives the rows and participants it used. |
 | T15 | Moderation | Polarity × moderator tests (screen time, lighting, device familiarity), with Holm across moderators. Exploratory. |
 | T16 | Questionnaires | CVS-Q at baseline and close and the change; NASA-TLX. One value per participant, as the template takes it, with the template's 95% interval. |
 | T17 | Provenance | R and package versions, the scripts' checksums, the rules, the builds that collected the data. |
@@ -293,7 +296,10 @@ Rounds 88 to 96) and `docs/ANALYSIS_PLAN.md`.
 |---|---|---|
 | Interim descriptive results on the tablet during collection | AUDIT_FINDINGS Round 98 | shown on **All Participants** from the second participant, by the investigator's choice (Round 98). `docs/ANALYSIS_PLAN.md` asks for several decisions "before unblinding"; with the tab visible that cannot be met as written. Record in your decision record, dated, that descriptive results were visible from the second participant and when each decision was fixed; whether to amend the plan's wording is yours to decide |
 | Confirm the reaction-time onset rule `rt-t3` | AUDIT_FINDINGS Round 94, For the investigator; ANALYSIS_PLAN §5 | uses `rt-t3` and records how far each onset moved |
-| Keep the frame-rate covariate `eff_fps_c` in the primary or not | ANALYSIS_PLAN §2 | fits both; H1 is printed for both |
+| Keep the frame-rate covariate `eff_fps_c` in the primary or not, or enter frame rate as each person's mean plus the within-person deviation | ANALYSIS_PLAN §2 and §5 item 2 | fits all three; H1 for each is printed and tabled (T06) |
+| Whether H1a is tested two-sided at α = .05, and what an interval wholly on the other side of zero (positive polarity raising incomplete blinking) means for H1 | ANALYSIS_PLAN §2, *Falsification* (the synopsis's H₁ₐ names a direction; §2's rule does not) | prints whether the interval excludes zero and on which side; judges nothing |
+| RT mean, fatigue and comprehension: keep their log contrast + polarity models (polarity at a fixed contrast, no interaction test) or fit polarity × colour as for the other members | ANALYSIS_PLAN §4, below the table | log contrast + polarity, as the template has always fitted them |
+| The completion rule `COMPLETION_INFORMATIVE`: no visual-search completion model when the overall completion rate is outside 5–95% | ANALYSIS_PLAN §4c | applies it; the member is listed as near-constant |
 | Whether H1a and H1b share a family-wise error rate | ANALYSIS_PLAN §4b | decides H1 on the unadjusted interval, prints Holm beside it |
 | Comprehension threshold for the engagement penalty | ANALYSIS_PLAN §5 item 5; PROTOCOL | as in the plan; marked open |
 | The formal colour-vision plate rule | AUDIT_FINDINGS Round 90 §9 item 4 and Round 95, Not done | a deficient result at any sitting stands; not done never replaces a result |

@@ -28,6 +28,7 @@ const NOT_A_COLUMN: Record<string, string> = {
   exported_at: 'a key of export_manifest.json and analysis_manifest.json (§7 says the manifests carry it)',
   checksum_fnv1a: 'a key of each file entry in the two manifests (§7)',
   checksum_basis: 'a key of both manifests (§7)',
+  sitting_not_in_data_dir: 'a completeness code the two templates create themselves, not the exporter (COMPLETENESS_CODES in both; §1, Round 102)',
 };
 
 function columns(): Set<string> {

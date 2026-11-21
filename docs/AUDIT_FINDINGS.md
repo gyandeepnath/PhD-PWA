@@ -10692,3 +10692,94 @@ then sent the operator looking for an app that was not there (Round 95, Not done
 ### Not done
 
 - Nothing was measured on the tablet: how its Chrome reports a camera taken by another app on this screen.
+
+## Round 102 — the analysis against its plan: T06 for every model the plan reports, the plan's own random structure, and twenty smaller corrections
+
+The open item of Round 97, an independent audit of the analysis against `docs/ANALYSIS_PLAN.md`, was run
+section by section: five auditors, one per part of the plan, each checking the R template, the Python
+template where the plan names it, and the analysis kit's tables against what the plan requires, with a
+second agent to refute each auditor's findings. A usage limit stopped three of the auditors and both
+refuters that had started; the auditors of §1–§3 and §4–§4b finished, and one of the stopped auditors had
+written two findings down. Every finding below was checked here against the code and the plan before
+anything was changed, and the three stopped parts were started again (their results are a later
+round's). Nothing in this round was measured on the Xiaomi Pad 6.
+
+### Confirmed and fixed
+
+1. **T06 tabled H1a for one model** (high). The plan reports H1a both with and without the frame-rate
+   covariate until the investigator decides which is confirmatory (§2), and with frame rate as each
+   person's mean plus the within-person deviation (§5 item 2). The kit's T06, the table the guide names
+   for H1, carried only the model with `eff_fps_c`; the other existed in the log alone, so a decision for
+   it would have left the thesis tables showing the default as if decided. The template now keeps H1 for
+   each model in its results, and T06 has a `model` column with all three blocks. The gate checks each
+   block against the line the template printed.
+2. **The plan's primary formula omitted the random slope it called pre-specified** (medium). Its code
+   block had participant intercepts only; synopsis §3.9 specifies "a random slope for polarity where
+   supported", §2's own bullets call it pre-specified, and both the R ladder and every refit fit it. On
+   the gate cohort the formula as printed gives a 16% smaller standard error for H1a than the model fitted.
+   The plan's block now shows `(1 + polarity_c | participant_id)`, and the reduction order is written out
+   in §2 as the template applies it.
+3. **Frame rate as person mean plus within-person deviation was not fitted** (medium; §5 item 2 says to
+   report it until decided). R now fits it, prints its H1, lists it among the refits and saves it for T06.
+4. **The one-instrument check was not run** (medium; §5 item 2b says to report the primary with and
+   without participants measured on two trackers). Nothing read 07 `tracker_backend`. R now counts such
+   participants under `[tracker]` and refits without them; checked on a copy of the gate cohort with one
+   participant's rows split between two trackers (one named, the refit on 210 rows).
+5. **R's sensitivity-set refit skipped the blink-rule filter** (medium) that its confirmatory frame and
+   Python's sensitivity frame apply, so an earlier-rule row of a confirmatory participant was in that refit
+   only. It applies the filter now.
+6. **The beta-binomial refit reached no table** (medium). It was printed and not recorded, so the kit's
+   T14 had the observation-level refit and not the comparison §2 asks for; the guide never mentioned
+   `glmmTMB`. Its row is now in T14, fitted or marked not fitted, and the guide names the optional install.
+7. **The trial-level log-RT model printed the polarity effect at the first serial position** (medium). It
+   used serial position uncentred beside a polarity × position term, so `polarity1` was the effect at
+   position 0 (on the gate cohort ×0.995; at the mean position ×1.011, the other side of 1). Position is
+   centred in that model now, as §4a's `position_c` says.
+8. **T18 left out the comfort and clarity models** (medium). Both were held only in a reused variable,
+   so the saved results had no entry for them; they are kept by name now, and the gate requires them.
+9. **RT mean, fatigue and comprehension were fitted outside `tryCatch`** (medium). §4b says a member that
+   fails is listed with its reason; these three, which run before the primary, would instead have ended
+   the run. Each fit is guarded now and a failure is listed in its family. (The auditor's demonstration
+   removed every post-condition fatigue record, which the app always writes; the guard is on the fits.)
+10. **Lower** (low): T08's caption said its intervals were Holm-adjusted (emmeans adjusts intervals by
+    Bonferroni; only the p-values are Holm); T05 now says which colour each `colour1`–`colour4` term is;
+    T06 now carries the random structure fitted and the NOT CONVERGED caution where it applies; T14 gives
+    each refit's own participants (the sensitivity set's 23 showed as 22); T13's and T14's map rows say
+    their counts are the confirmatory set's and each row gives its own; the signal-detection rows of T13
+    say that their `n_rows` counts cells, give the trials and runs, and carry the anti-conservative note
+    when the run term was dropped; the kit wrote the section sign as `<c2><a7>` under a non-UTF-8 locale
+    (27 times in each of the map and the report) and now sets its own character type to UTF-8, which the
+    gate checks under this container's POSIX locale; both templates print beside the H1 verdict which side
+    of zero the interval lies on.
+11. **The plan** (low, each corrected where it stands): `sitting_not_in_data_dir`, a completeness code
+    the templates add, is named in §1; §3's citations carry their `CITATION_VERIFICATION.md` item numbers
+    (1, 2, 4, 5) and no longer count "seven verified records"; §3 no longer puts `global_position`, which
+    is identical to `position_c`, in the model; §4 has rows for RT mean and blink rate; §4a's eccentricity
+    claim names items 53 and 54 and Mullen & Kingdom item 55 (all three confirmed there, against the
+    abstracts); §4a's `git_hash` sentence is advice, as the template treats it; §4b's units sentence names
+    the scales the families use.
+
+### Stated in the plan and left to the investigator
+
+Each is now written in the plan as the template does it, and listed in `docs/ANALYSIS_GUIDE.md` Part 5:
+
+- **H1's direction.** §2's rule names none; the synopsis's H₁ₐ does. Whether the test is two-sided and
+  what an interval wholly on the other side means is the investigator's to fix before unblinding.
+- **RT mean, fatigue and comprehension on log contrast and polarity.** Their polarity effect is polarity
+  at a fixed log contrast, not the colour-averaged effect §4b defines for the other members, and they have
+  no interaction test, so two family-wise interaction corrections run over fewer members. It follows the
+  synopsis's H₁ₐ ("each associated"); the alternative is polarity × colour as for the others.
+- **`COMPLETION_INFORMATIVE`**, an analyst default not in the protocol: no completion model when the
+  overall completion rate is outside 5–95%, which takes the member out of the performance family's Holm.
+
+### What was verified
+
+- The kit, run on the auditor's 24-participant cohort under this container's POSIX locale: T06 has the
+  three blocks (H1a −0.313, −0.313 and −0.316 log-odds), T14 gives each refit's participants (the
+  sensitivity set 229 rows, 23 participants) and the beta-binomial row, T18 has comfort and clarity, and
+  neither the map nor the report has a `<c2>` escape.
+- The template on a copy of that cohort with one participant measured on two trackers: `[tracker]` names
+  them and the refit without them runs.
+- `tests/analysisPlanColumns.test.ts`, which holds every name the plan backticks to a column, a check
+  code or a template variable, allows `sitting_not_in_data_dir` with its reason; the gate's kit checks
+  are extended (above).

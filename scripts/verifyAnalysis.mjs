@@ -1358,11 +1358,22 @@ for (const { root, options } of jobs) {
     ok('Kit: ... its participant flow gives the confirmatory set the dashboard counts',
       conf != null && Number(conf.condition_runs) === expected.confirmatory.rows && Number(conf.participants) === expected.confirmatory.participants,
       `kit ${conf?.condition_runs} runs / ${conf?.participants}, dashboard ${expected.confirmatory.rows} / ${expected.confirmatory.participants}`);
-    const h1 = csv('tables/T06_primary_hypothesis_tests.csv').find((r) => r.quantity === 'positive minus negative, log-odds');
-    const h1Printed = /\[H1\] primary: polarity \(positive minus negative\) log-odds (-?[\d.]+) \(95% CI (-?[\d.]+) to (-?[\d.]+)\)/.exec(plain.stdout);
-    ok('Kit: ... H1a\'s estimate and 95% interval are the ones the template printed',
-      h1 != null && h1Printed != null && [h1.estimate, h1.ci_low, h1.ci_high].every((v, i) => Math.abs(Number(v) - Number(h1Printed[i + 1])) < 5e-4),
-      `table ${h1?.estimate} (${h1?.ci_low} to ${h1?.ci_high}); printed ${h1Printed?.slice(1).join(' ')}`);
+    // H1a for each model the plan reports until the investigator decides (Round 102): each block of T06
+    // is the one the template printed for that model.
+    const t06 = csv('tables/T06_primary_hypothesis_tests.csv');
+    const h1Of = (model) => t06.find((r) => r.model.startsWith(model) && r.quantity === 'positive minus negative, log-odds');
+    const printedH1 = (label) => new RegExp(`\\[H1\\] ${label}: polarity \\(positive minus negative\\) log-odds (-?[\\d.]+) \\(95% CI (-?[\\d.]+) to (-?[\\d.]+)\\)`).exec(plain.stdout);
+    const sameH1 = (row, printedLine) => row != null && printedLine != null
+      && [row.estimate, row.ci_low, row.ci_high].every((v, i) => Math.abs(Number(v) - Number(printedLine[i + 1])) < 5e-4);
+    const h1 = h1Of('with eff_fps_c');
+    const h1Printed = printedH1('primary');
+    const h1NoFps = h1Of('without eff_fps_c');
+    const h1NoFpsPrinted = printedH1('without eff_fps_c \\(§2 formula\\)');
+    const h1Bw = h1Of('frame rate as person mean');
+    const h1BwPrinted = printedH1('frame rate as person mean \\+ within-person deviation \\(§5 item 2\\)');
+    ok('Kit: ... H1a\'s estimate and 95% interval are the ones the template printed, for each model the plan reports',
+      sameH1(h1, h1Printed) && sameH1(h1NoFps, h1NoFpsPrinted) && sameH1(h1Bw, h1BwPrinted),
+      `default ${h1?.estimate} vs ${h1Printed?.[1]}; without eff_fps_c ${h1NoFps?.estimate} vs ${h1NoFpsPrinted?.[1]}; person mean + deviation ${h1Bw?.estimate} vs ${h1BwPrinted?.[1]}`);
     const fam = csv('tables/T13_secondary_outcomes_with_multiplicity_adjustment.csv');
     const famRt = fam.find((r) => r.outcome === 'RT');
     const rtPrinted = /^ {2}RT {19}(-?[\d.]+) \(/m.exec(plain.stdout);
@@ -1383,9 +1394,9 @@ for (const { root, options } of jobs) {
     const allCoefs = csv('tables/T18_secondary_models_all_coefficients.csv');
     const rtPol = allCoefs.find((r) => r.model === 'RT' && r.term === 'polarity1');
     const rtPolPrinted = coefAfter(plain.stdout, '=== RT mixed model ===', 'polarity1');
-    ok('Kit: ... every secondary model is tabled in full, with its N; the RT model\'s polarity term is the one printed',
+    ok('Kit: ... every secondary model is tabled in full, with its N (comfort and clarity among them); the RT model\'s polarity term is the one printed',
       allCoefs.length > 0 && allCoefs.every((r) => Number(r.n_rows) > 0 && r.formula !== '')
-        && ['RT', 'fatigue', 'comprehension', 'blink rate'].every((m) => allCoefs.some((r) => r.model === m && r.term === 'session_position'))
+        && ['RT', 'fatigue', 'comprehension', 'blink rate', 'comfort', 'clarity'].every((m) => allCoefs.some((r) => r.model === m && r.term === 'session_position'))
         && rtPol != null && Number.isFinite(rtPolPrinted) && Math.abs(Number(rtPol.estimate) - rtPolPrinted) < 5e-3,
       `RT polarity1 table ${rtPol?.estimate}, printed ${rtPolPrinted}; ${new Set(allCoefs.map((r) => r.model)).size} models`);
     // The plan's quality checks are the template's own block, copied without change.
@@ -1398,6 +1409,17 @@ for (const { root, options } of jobs) {
     ok('Kit: ... the log index points at the lines it names',
       logIndex.length >= 20 && logIndex.every((r) => (logLines[Number(r.line) - 1] ?? '').includes(r.section)),
       `${logIndex.length} sections; first mismatch: ${JSON.stringify(logIndex.find((r) => !(logLines[Number(r.line) - 1] ?? '').includes(r.section)) ?? null)}`);
+    // Each refit its own N, and the section 2 comparison present: the beta-binomial fitted, or said not to be.
+    const refits = csv('tables/T14_sensitivity_refits_of_the_primary.csv');
+    ok('Kit: ... every sensitivity refit gives its own rows and participants, and the beta-binomial row is there',
+      refits.length > 3 && refits.filter((r) => r.estimate !== '' && r.estimate !== 'NA').every((r) => Number(r.n_rows) > 0 && Number(r.n_participants) > 0)
+        && refits.some((r) => r.label.startsWith('beta-binomial')) && refits.some((r) => r.label.startsWith('frame rate as person mean')),
+      `${refits.length} refits; without N: ${refits.filter((r) => r.estimate !== '' && r.estimate !== 'NA' && !(Number(r.n_participants) > 0)).map((r) => r.label).join(', ') || 'none'}`);
+    // The kit's own words in UTF-8 whatever the locale it runs under (this gate runs under the container's).
+    const mapText = (() => { try { return readFileSync(file('thesis_map.csv'), 'utf8'); } catch { return ''; } })();
+    ok('Kit: ... its own words are written in UTF-8 (the section sign, not <c2><a7>), whatever the locale',
+      mapText.includes('ANALYSIS_PLAN.md §2') && !mapText.includes('<c2>'),
+      `<c2> escapes: ${(mapText.match(/<c2>/g) ?? []).length}`);
     const inferential = ['T05', 'T06', 'T07', 'T08', 'T13', 'T14', 'T18'];
     ok('Kit: ... the thesis map names every table and figure, and no inferential table lacks its N',
       map.length >= 27 && inferential.every((id) => { const r = map.find((x) => x.id === id); return r != null && r.status === 'written' && Number(r.n_participants) > 0; }),
