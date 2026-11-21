@@ -59,6 +59,12 @@ cat(sprintf("  %-12s %s\n", "glmmTMB", if (requireNamespace("glmmTMB", quietly =
   as.character(packageVersion("glmmTMB")) else "not installed (the beta-binomial sensitivity is skipped)"))
 cat(sprintf("  %-12s %s\n", "ordinal", if (requireNamespace("ordinal", quietly = TRUE))
   as.character(packageVersion("ordinal")) else "not installed (the cumulative-link sensitivity is skipped)"))
+# allFit's optional optimizers (Round 103): lme4 leaves out the ones whose package is missing, and the
+# convergence verdict that decides the primary's random structure compares the optimizers that ran.
+for (pkg in c("dfoptim", "optimx")) {
+  cat(sprintf("  %-12s %s\n", pkg, if (requireNamespace(pkg, quietly = TRUE)) as.character(packageVersion(pkg))
+              else "not installed (allFit runs without its optimizers)"))
+}
 # Which template produced this output: the script's own checksum, when it was run as a file.
 template_file <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))
 if (length(template_file) == 1 && file.exists(template_file)) {
@@ -979,6 +985,14 @@ cat("    a LOGGED reading out of band:  ",
     " (the app's own verdict; says nothing about readings NEVER TAKEN)\n")
 cat("    lux_complete FALSE:            ", qc_pct(sum(!sess_qc$lux_complete, na.rm = TRUE), nrow(sess_qc)),
     " (read the two together: a sitting can be in band on the readings it took and still be missing two)\n")
+# How late an end reading logged afterwards from the Session Manager was (§5 item 1, Round 89): a reading
+# taken long after the sitting may not describe the room as it was. No threshold is set; the count and
+# the spread are printed (Round 103: nothing read the column).
+if ("lux_end_min_after_end" %in% names(sess_qc)) {
+  late <- suppressWarnings(as.numeric(sess_qc$lux_end_min_after_end))
+  cat("    end reading logged after the sitting's end:", qc_pct(sum(is.finite(late) & late > 0), sum(is.finite(late))),
+      if (any(is.finite(late) & late > 0)) paste0("; minutes after: ", qc_rng(late[is.finite(late) & late > 0])) else "", "\n")
+}
 
 # --- §5.2 Was the primary outcome measurable? The frame-rate gate fps-g2 -------------------------
 # The tiers and the consistency flag were computed when 07 was read (fps_gate, above). Reported here,
@@ -1010,7 +1024,10 @@ if (nrow(eye) > 0) {
   }
   d_fps <- pol_diff("sampling_fps_observed")
   d_luma <- pol_diff("mean_face_luma")
-  cat(sprintf("    polarity check, negative minus positive, mean of each participant's own difference:\n"))
+  # On every camera-on confirmatory run with a rate (§5 item 2 names the rows from Round 103; the Python
+  # template took the primary's rows with tier C put back, and the two could print different values).
+  cat(sprintf("    polarity check, negative minus positive, mean of each participant's own difference (every camera-on run with a rate: %d runs, %d participants):\n",
+              sum(is.finite(eye$sampling_fps_observed)), n_distinct(eye$participant_id[is.finite(eye$sampling_fps_observed)])))
   cat(sprintf("      sampling_fps_observed %+.2f fps (pre-registered limit %d)%s\n", d_fps, FPS_GATE_BAND,
               if (is.finite(d_fps) && abs(d_fps) > FPS_GATE_BAND) "  [FPS POLARITY CHECK EXCEEDED: read the consistent-only and fitted-minimum refits beside the primary]" else ""))
   cat(sprintf("      mean_face_luma        %+.1f (0-255; descriptive: a brighter face under one polarity is how the rate could follow it)\n", d_luma))
@@ -1019,7 +1036,7 @@ if (nrow(eye) > 0) {
 }
 
 if (nrow(eye) == 0) {
-  cat("\n5.3-5.5 not computable: no camera-on condition-run in the confirmatory set.\n")
+  cat("\n5.3-5.4 not computable: no camera-on condition-run in the confirmatory set.\n")
   eye$qc_clean <- logical(0)
 } else {
   # --- §5.3 Was the participant present? -----------------------------------------------
@@ -1030,6 +1047,16 @@ if (nrow(eye) == 0) {
   cat("    below", QC_FACE_PRESENCE_MIN, "(pilot gate, per row):", qc_pct(sum(low_presence), nrow(eye)), "\n")
   cat("    off_axis_ratio:                ", qc_rng(eye$off_axis_ratio), "\n")
   cat("    above", QC_OFF_AXIS_MAX, "(ANALYST DEFAULT):  ", qc_pct(sum(high_offaxis), nrow(eye)), "\n")
+  # The gaze check, descriptive only (§5 item 7, gaze-r2: "reported descriptively, by condition and
+  # polarity"; no threshold, not a covariate, not an exclusion). Nothing reported it (Round 103).
+  if ("on_screen_ratio" %in% names(eye) && any(is.finite(eye$on_screen_ratio))) {
+    osr <- eye %>% filter(is.finite(on_screen_ratio))
+    by_p <- osr %>% group_by(polarity) %>% summarise(m = median(on_screen_ratio), n = n(), .groups = "drop")
+    by_c <- osr %>% group_by(condition = paste(polarity, colour)) %>% summarise(m = median(on_screen_ratio), .groups = "drop")
+    cat("    on_screen_ratio (gaze check, descriptive), median by polarity:",
+        paste(sprintf("%s %.2f (n %d)", by_p$polarity, by_p$m, by_p$n), collapse = ", "), "\n")
+    cat("      by condition:", paste(sprintf("%s %.2f", by_c$condition, by_c$m), collapse = "; "), "\n")
+  }
 
   # --- §5.4 Was the exposure complete? -------------------------------------------------
   # The dangerous one: when the camera stops part-way, every RATE in the row still looks entirely
@@ -1042,31 +1069,33 @@ if (nrow(eye) == 0) {
   cat("    below", QC_EXPOSURE_MIN_FRAC, "(ANALYST DEFAULT):  ", qc_pct(sum(short_exposure), nrow(eye)), "\n")
   cat("    not computable (a duration missing):", qc_pct(sum(is.na(eye$observed_frac)), nrow(eye)), "\n")
 
-  # --- §5.5 Careless responding --------------------------------------------------------
-  # Now joined per condition rather than counted study-wide, because the export carries condition_id
-  # in 12_quality_flags.csv. The distinction matters: a study-wide rate says how often careless
-  # responding happened, and a per-row flag says WHICH rows it happened in — which is the only form
-  # that can enter a sensitivity analysis or be crossed with the design factors.
-  cat("\n5.5 careless responding (joined per condition on condition_id)\n")
-  careless_flags <- c("careless_straight_lined", "careless_rushed_fatigue", "careless_rushed_perception")
-  present_flags <- careless_flags[careless_flags %in% names(eye)]
-  for (flag in present_flags) {
-    cat("   ", format(flag, width = 30), qc_pct(sum(eye[[flag]] %in% c(TRUE, "true"), na.rm = TRUE), nrow(eye)), "\n")
-  }
-  if (length(present_flags) == 0) {
-    cat("    none of the careless-responding columns reached the modelling frame — check the join.\n")
-  }
-  # Crossed with the design, because careless responding that clusters in one condition is a
-  # property of that condition rather than of those participants.
-  if (length(present_flags) > 0) {
-    eye$any_careless <- Reduce(`|`, lapply(present_flags, function(f) eye[[f]] %in% c(TRUE, "true")))
-    by_pol <- eye %>% group_by(polarity) %>%
-      summarise(pct = round(100 * mean(any_careless, na.rm = TRUE), 1), .groups = "drop")
-    cat("    any careless flag, by polarity:",
-        paste(by_pol$polarity, paste0(by_pol$pct, "%"), sep = "=", collapse = ", "), "\n")
-  }
   # --- the combined flag ---------------------------------------------------------------
   eye$qc_clean <- !(low_presence | high_offaxis | short_exposure)
+}
+
+# --- §5.5 Careless responding --------------------------------------------------------
+# Joined per condition rather than counted study-wide, because the export carries condition_id in
+# 12_quality_flags.csv: a study-wide rate says how often careless responding happened, and a per-row flag
+# says WHICH rows it happened in — the only form that can enter a sensitivity analysis or be crossed
+# with the design factors. Over EVERY confirmatory condition-run (Round 103): the ratings are made
+# whether or not the camera runs, and this check read the camera-on frame, so a participant who declined
+# the camera dropped out of it (as §5.1 once did), and with no camera-on run it was not reported at all.
+cat("\n5.5 careless responding (every confirmatory condition-run, joined per condition on condition_id)\n")
+careless_flags <- c("careless_straight_lined", "careless_rushed_fatigue", "careless_rushed_perception")
+present_flags <- careless_flags[careless_flags %in% names(cond)]
+for (flag in present_flags) {
+  cat("   ", format(flag, width = 30), qc_pct(sum(cond[[flag]] %in% c(TRUE, "true"), na.rm = TRUE), nrow(cond)), "\n")
+}
+if (length(present_flags) == 0) {
+  cat("    none of the careless-responding columns reached the condition frame — check the join.\n")
+} else {
+  # Crossed with the design, because careless responding that clusters in one condition is a
+  # property of that condition rather than of those participants.
+  any_careless <- Reduce(`|`, lapply(present_flags, function(f) cond[[f]] %in% c(TRUE, "true")))
+  by_pol <- tibble(polarity = cond$polarity, any = any_careless) %>% group_by(polarity) %>%
+    summarise(pct = round(100 * mean(any, na.rm = TRUE), 1), .groups = "drop")
+  cat("    any careless flag, by polarity:",
+      paste(by_pol$polarity, paste0(by_pol$pct, "%"), sep = "=", collapse = ", "), "\n")
 }
 
 # --- §1 complete case ------------------------------------------------------------------
@@ -1077,7 +1106,9 @@ if ("session_status" %in% names(sess_qc)) {
   cat("    session_status:                ", paste(names(st), as.integer(st), sep = "=", collapse = ", "), "\n")
 }
 
-cat("\nrows failing at least one §5 check:", qc_pct(sum(!eye$qc_clean), nrow(eye)),
+# §5.3-5.4 only, at the thresholds marked ANALYST DEFAULT (§5 item 9); this line and the refit said
+# "every §5 check" (Round 103).
+cat("\nrows failing a §5.3-5.4 check:", qc_pct(sum(!eye$qc_clean), nrow(eye)),
     "- RETAINED. The primary is refitted without them as a sensitivity (QC-clean refit below).\n")
 cat("==========================================================================\n")
 
@@ -1223,6 +1254,7 @@ if (nrow(rt_lapse) == 0 || sum(rt_lapse$lapse_count) == 0) {
 # counted and left out, here, in print. An export from before the column existed is all "sl-v1".
 SLIDER_VERSION    <- "vas-v2"
 SLIDER_VERSION_V1 <- "sl-v1"
+rating_formats_used <- list()
 rating_format <- function(d, what) {
   v <- if ("slider_version" %in% names(d)) as.character(d$slider_version) else rep(NA_character_, nrow(d))
   v[is.na(v) | v == ""] <- SLIDER_VERSION_V1
@@ -1230,6 +1262,7 @@ rating_format <- function(d, what) {
   present <- sort(unique(v))
   use <- if (SLIDER_VERSION %in% present || !length(present)) SLIDER_VERSION else present[1]
   other <- setdiff(present, use)
+  rating_formats_used[[what]] <<- use  # what was modelled, for the provenance (Round 103)
   cat(sprintf("[format] %s: modelled on %s, %d row(s)%s\n", what, use, sum(v == use),
               if (length(other)) sprintf("; %d row(s) on %s left out, not pooled", sum(v != use), paste(other, collapse = ", ")) else ""))
   d[v == use, , drop = FALSE]
@@ -1299,7 +1332,11 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
                 format.pval(cc["polarity1", "Pr(>|z|)"], digits = 2), nrow(fat_items), nlevels(fat_items$rating)))
     cat(sprintf("[clmm] condition-run intercept: SD between runs %.3f (latent logit scale), %d runs\n",
                 attr(ordinal::VarCorr(m_fat_clmm)$run_id, "stddev")[[1]], n_distinct(fat_items$run_id)))
-    cat("       Read beside the fatigue LMM: a disagreement in sign is a reason to look at how the items are used.\n")
+    # Not the same estimand as the fatigue member (Round 103): this model has the colour factor and the
+    # member has log contrast instead (ANALYSIS_PLAN.md §4), so a difference can come from that alone.
+    cat("       Read beside the fatigue LMM, which is fitted on log contrast + polarity (polarity at a fixed contrast) while\n")
+    cat("       this model averages polarity over the colours: a disagreement in sign can come from that difference alone,\n")
+    cat("       or from how the items are used.\n")
   }
 } else {
   cat("\n[clmm] [SKIPPED: ordinal not installed] install.packages(\"ordinal\") for the cumulative-link sensitivity on the\n")
@@ -1641,6 +1678,9 @@ if (!is.null(trials) && nrow(trials) > 0) {
   rt_trials$run_id <- run_key(rt_trials)
   use_ring_rt <- n_distinct(na.omit(rt_trials$ring)) == 2
   if (use_ring_rt) {
+    # The count left out, as the probit model prints its own (Round 103).
+    if (any(is.na(rt_trials$ring))) cat(sprintf("[location] %d valid hit(s) without a target location (before Round 66) are left out of the trial-level RT model.\n",
+                                                sum(is.na(rt_trials$ring))))
     rt_trials <- rt_trials %>% filter(!is.na(ring))
     contrasts(rt_trials$ring) <- contr.sum(2) / 2
   }
@@ -1791,10 +1831,14 @@ if (!is.null(search) && "search_time_ms" %in% names(search)) {
       m_c1 <- suppressWarnings(update(m_c0, as.formula(paste0(". ~ . + polarity * colour", ilx_term))))
       anova(m_c0, m_c1)
     }, error = function(err) conditionMessage(err))
-    if (is.character(cens_lrt)) {
-      cat("[censoring] the test could not be run:", cens_lrt, "\n")
-    } else if (sum(vs$censored) == 0) {
+    # Every block censored or none: the model cannot be fitted ("Response is constant"), so this is
+    # said first (Round 103: the "nothing to test" line could never print).
+    if (sum(vs$censored) == 0) {
       cat("[censoring] no block was censored: nothing to test, and the time model below is not biased by censoring.\n")
+    } else if (all(vs$censored == 1)) {
+      cat("[censoring] every block was censored: nothing to test; read the completion rate and the search-rate model.\n")
+    } else if (is.character(cens_lrt)) {
+      cat("[censoring] the test could not be run:", cens_lrt, "\n")
     } else {
       cat(sprintf("[censoring] LRT of the condition terms: chi2(%d) %.2f, p %s\n",
                   as.integer(cens_lrt$Df[2]), cens_lrt$Chisq[2], format.pval(cens_lrt[["Pr(>Chisq)"]][2], digits = 2)))
@@ -2075,6 +2119,12 @@ cat(sprintf("\n[%s] %d camera-on condition-run(s) carry blink counts under an ea
             if (n_blink_old > 0) paste(sort(unique(blink_rule[blink_rule != BLINK_RULE_VERSION])), collapse = ", ") else "none",
             n_blink_recomputed))
 eye_all_rules <- eye
+# A row under an earlier rule that is also in tier C is in neither the earlier-rule refit (tier C out) nor
+# the every-tier refit (earlier rule out): counted here, and put back in a refit of its own (Round 103).
+n_old_and_c <- sum(blink_rule != BLINK_RULE_VERSION & eye$fps_tier %in% "C")
+eye_any_rule_tier <- eye %>% mutate(eff_fps_c = as.numeric(scale(effective_fps, scale = FALSE)))
+if (n_old_and_c > 0) cat(sprintf("[%s + fps-g2] %d of them are also in tier C: in neither the earlier-rule nor the every-tier refit; the every-rule, every-tier refit puts them back.\n",
+                                 BLINK_RULE_VERSION, n_old_and_c))
 eye <- eye[blink_rule == BLINK_RULE_VERSION, , drop = FALSE]
 eye_all_rules <- eye_all_rules %>% filter(!(fps_tier %in% "C")) %>% mutate(eff_fps_c = as.numeric(scale(effective_fps, scale = FALSE)))
 # THE FRAME-RATE GATE fps-g2 (ANALYSIS_PLAN.md §5 item 2, pre-registered): tier C — under 15 face-solved
@@ -2267,6 +2317,12 @@ if (nrow(eye) == 0) {
     print_h1("primary", h1_primary)
     h1_no_fps <- tryCatch(h1_effects(m_no_fps), error = function(err) NULL)
     print_h1("without eff_fps_c (§2 formula)", h1_no_fps)
+    # §5 item 2: "If the frame-rate difference exceeds 2 fps, say so beside the primary" (Round 103: it was
+    # said in the quality block only).
+    if (is.finite(get0("d_fps", ifnotfound = NA_real_)) && abs(d_fps) > FPS_GATE_BAND) {
+      cat(sprintf("[H1] CAUTION: the frame rate differs between the polarities by %+.2f fps (negative minus positive), over the pre-registered %d: read the consistent-only and fitted-minimum refits below with H1.\n",
+                  d_fps, FPS_GATE_BAND))
+    }
 
     # -----------------------------------------------------------------------------------------
     # OVERDISPERSION SENSITIVITY — STANDING, NOT TRIGGERED (M9; ANALYSIS_PLAN.md §2).
@@ -2396,16 +2452,23 @@ if (nrow(eye) == 0) {
     # Each refit's own participants as well as its rows (Round 102): the sensitivity set rests on more
     # participants than the primary, and the table of refits gave every row the primary's count.
     n_pid <- function(m) tryCatch(dplyr::n_distinct(model.frame(m)$participant_id), error = function(err) NA_integer_)
-    sens_line <- function(label, m) {
+    sens_line <- function(label, m, note = NA_character_) {
       if (is.null(m)) {
         sens_rows[[length(sens_rows) + 1]] <<- list(label = label, estimate = NA_real_, se = NA_real_, n_rows = NA_integer_,
-                                                    n_participants = NA_integer_)
+                                                    n_participants = NA_integer_, note = "did not fit")
         cat(sprintf("  %-42s did not fit\n", label)); return(invisible(NULL))
       }
       sens_rows[[length(sens_rows) + 1]] <<- list(label = label, estimate = unname(pol_row(m)[1]),
                                                   se = unname(pol_row(m)[2]), n_rows = as.integer(nobs(m)),
-                                                  n_participants = as.integer(n_pid(m)))
+                                                  n_participants = as.integer(n_pid(m)), note = note)
       cat(sprintf("  %-42s polarity %.4f (SE %.4f), n %d\n", label, pol_row(m)[1], pol_row(m)[2], nobs(m)))
+    }
+    # A pre-specified refit whose rows would be the primary's own is not refitted, and is LISTED so (Round
+    # 103): the table of refits used to lack the row, so "the same as the primary" could not be told from
+    # "not run".
+    sens_same <- function(label, why) {
+      sens_rows[[length(sens_rows) + 1]] <<- list(label = label, estimate = NA_real_, se = NA_real_, n_rows = NA_integer_,
+                                                  n_participants = NA_integer_, note = paste0("not refitted: ", why, ", so its rows are the primary's own"))
     }
     # THE SAME MODEL ON OTHER ROWS, and never update(m, data = rows). lme4's update.merMod evaluates
     # the new call FIRST in environment(formula(m)) — the GLOBAL environment for the primary, whose
@@ -2439,22 +2502,35 @@ if (nrow(eye) == 0) {
       sens_line("fps-g2 tier A only (reduced rows out)", refit_on(eye %>% filter(fps_tier %in% "A")))
     } else {
       cat("  no tier-B row: the tier-A-only refit is the primary itself.\n")
+      sens_same("fps-g2 tier A only (reduced rows out)", "no tier-B row")
     }
     if (n_tier_c > 0) {
       sens_line("fps-g2 every tier (tier C put back)", refit_on(eye_all_tiers))
     } else {
-      cat("  no tier-C row: the every-tier refit is the primary itself.\n")
+      cat("  no tier-C row under the current blink rule: the every-tier refit is the primary itself.\n")
+      sens_same("fps-g2 every tier (tier C put back)", "no tier-C row under the current blink rule")
     }
     # The blink rule (Round 91): rows left under blink-r1 put back, if there are any.
-    if (n_blink_old > 0) {
-      sens_line(sprintf("blink-r1 rows put back (%d)", n_blink_old), refit_on(eye_all_rules))
-    } else {
+    # Labelled with the rows it ADDS (Round 103): an earlier-rule row that is also in tier C is in neither
+    # this refit nor the every-tier one, and the label counted it; the every-rule, every-tier refit below
+    # puts such rows back.
+    if (n_blink_old - n_old_and_c > 0) {
+      sens_line(sprintf("blink-r1 rows put back (%d)", n_blink_old - n_old_and_c), refit_on(eye_all_rules))
+    } else if (n_blink_old == 0) {
       cat(sprintf("  every row is under %s: the earlier-rule refit is the primary itself.\n", BLINK_RULE_VERSION))
+      sens_same("blink-r1 rows put back", sprintf("every row is under %s", BLINK_RULE_VERSION))
+    } else {
+      cat(sprintf("  every earlier-rule row is also in tier C: the earlier-rule refit adds nothing (see the every-rule, every-tier refit).\n"))
+      sens_same("blink-r1 rows put back", "every earlier-rule row is also in tier C")
+    }
+    if (n_old_and_c > 0) {
+      sens_line(sprintf("every blink rule and every tier (%d run(s) both)", n_old_and_c), refit_on(eye_any_rule_tier))
     }
     if (any(eye$fps_consistent %in% FALSE)) {
       sens_line("fps-g2 consistent rows only (within 2 fps)", refit_on(eye %>% filter(fps_consistent %in% TRUE)))
     } else {
       cat("  every row is within", FPS_GATE_BAND, "fps of its participant's median: the consistent-only refit is the primary itself.\n")
+      sens_same("fps-g2 consistent rows only (within 2 fps)", "every row is within 2 fps of its participant's median")
     }
     # Gate g1, superseded by fps-g2 and kept so an analysis run on it reproduces. isTRUE(any(..., na.rm =
     # TRUE)): the bare any() errored when no value was TRUE and some were missing.
@@ -2540,11 +2616,30 @@ if (nrow(eye) == 0) {
       cat("\n[tracker] 07 carries no tracker_backend column (an export before Round 75): the one-instrument check (§5 item 2b) is not run.\n")
     }
 
+    # §5 item 7, PRE-SPECIFIED: "if any cal-r1 sitting is ever pooled with study data, report the primary
+    # with and without those sittings". Nothing read calibration_rule_version (Round 103).
+    cal_rule <- if ("calibration_rule_version" %in% names(session_info)) as.character(session_info$calibration_rule_version) else rep(NA_character_, nrow(session_info))
+    cal_r1 <- session_info$sitting_folder[cal_rule %in% "cal-r1"]
+    cat(sprintf("\n[calibration] %d sitting(s) of the confirmatory set calibrated under cal-r1 (§5 item 7)\n", length(cal_r1)))
+    if (length(cal_r1) && "sitting_folder" %in% names(eye)) {
+      sens_line("without cal-r1 sittings", refit_on(eye %>% filter(!sitting_folder %in% cal_r1)))
+    }
+
+    # §5 item 2: rows recorded under the old gate are "reported apart as well as together". All rows
+    # collected for the study are fps-g2; old-gate rows come only from pooled sittings before Round 79.
+    gate_v <- if ("fps_gate_version" %in% names(eye)) as.character(eye$fps_gate_version) else character(0)
+    if (length(unique(na.omit(gate_v[gate_v != ""]))) > 1) {
+      cat("\n[fps gate] rows recorded under more than one gate; the tiers by the gate in force when recorded:\n")
+      print(table(gate = ifelse(is.na(gate_v) | gate_v == "", "(none)", gate_v), tier = ifelse(is.na(eye$fps_tier), "no rate", eye$fps_tier)))
+      sens_line("rows recorded under fps-g2 only", refit_on(eye[gate_v %in% "fps-g2", , drop = FALSE]))
+    }
+
     # §5 QC-clean. The QC panel said this refit ran; it did not, until now.
     if (any(!eye$qc_clean)) {
-      sens_line("rows passing every §5 check", refit_on(eye %>% filter(qc_clean)))
+      sens_line("rows passing the §5.3-5.4 checks", refit_on(eye %>% filter(qc_clean)))
     } else {
-      cat("  no row fails a §5 check: the QC-clean refit is the primary itself.\n")
+      cat("  no row fails a §5.3-5.4 check: the QC-clean refit is the primary itself.\n")
+      sens_same("rows passing the §5.3-5.4 checks", "no row fails one")
     }
 
     # Engagement 'bad' runs out — the sensitivity synopsis §3.9 asks for, on the PRIMARY only (see
@@ -2555,6 +2650,7 @@ if (nrow(eye) == 0) {
       sens_line("without engagement 'bad' runs", refit_on(eye %>% filter(!(engagement_flag %in% "bad"))))
     } else {
       cat("  no run is flagged 'bad': the without-'bad' refit is the primary itself.\n")
+      sens_same("without engagement 'bad' runs", "no run is flagged 'bad'")
     }
 
     # Restarted and interrupted runs (M11). attempt_number above 1 means the condition was restarted
@@ -2562,11 +2658,15 @@ if (nrow(eye) == 0) {
     # was backgrounded, held in portrait or covered by a blocking notice for more than 2 s. Both are
     # finished, confirmatory runs; these refits show whether the conclusion leans on them.
     restarted <- !is.na(eye$attempt_number) & eye$attempt_number > 1
-    if (any(restarted)) sens_line("without restarted runs (attempt_number > 1)", refit_on(eye[!restarted, , drop = FALSE])) else
+    if (any(restarted)) sens_line("without restarted runs (attempt_number > 1)", refit_on(eye[!restarted, , drop = FALSE])) else {
       cat("  no run was restarted (attempt_number > 1): that refit is the primary itself.\n")
+      sens_same("without restarted runs (attempt_number > 1)", "no run was restarted")
+    }
     interrupted <- as_flag(eye$condition_interrupted)
-    if (any(interrupted)) sens_line("without interrupted runs (condition_interrupted)", refit_on(eye[!interrupted, , drop = FALSE])) else
+    if (any(interrupted)) sens_line("without interrupted runs (condition_interrupted)", refit_on(eye[!interrupted, , drop = FALSE])) else {
       cat("  no run was interrupted (condition_interrupted): that refit is the primary itself.\n")
+      sens_same("without interrupted runs (condition_interrupted)", "no run was interrupted")
+    }
 
     # SERIAL POSITION AND CARRYOVER (m11). Position entered only as a straight line, and carryover —
     # the reason synopsis §3.8 gives for the Williams design — was never looked at. (1) Position as a
@@ -2584,12 +2684,23 @@ if (nrow(eye) == 0) {
       m_co <- if (is.null(m_co_base)) NULL else tryCatch(suppressWarnings(refit(m_co_base, eye_co,
         . ~ . + polarity_switched)),
         error = function(err) NULL)
-      sens_line("with first-order carryover (polarity_switched)", m_co)
+      # The comparison §4c names: the carryover refit against the primary refitted on the SAME runs, both in
+      # the table of refits, with the test (Round 103: the carryover row stood beside the confirmatory row,
+      # on 22 fewer runs, so the first runs leaving read as a carryover effect).
+      sens_line("primary on the runs with a predecessor (the carryover refit's base)", m_co_base)
+      co_note <- NA_character_
       if (!is.null(m_co_base) && !is.null(m_co)) {
         cf <- summary(m_co)$coefficients["polarity_switchedTRUE", ]
+        p_co <- anova(m_co_base, m_co)[2, "Pr(>Chisq)"]
+        co_note <- sprintf("against the row above: after a polarity switch, log-odds %.3f (95%% CI %.3f to %.3f); likelihood-ratio p %s",
+                           cf[["Estimate"]], cf[["Estimate"]] - qnorm(0.975) * cf[["Std. Error"]],
+                           cf[["Estimate"]] + qnorm(0.975) * cf[["Std. Error"]], format.pval(p_co, digits = 2))
+      }
+      sens_line("with first-order carryover (polarity_switched)", m_co, note = co_note)
+      if (!is.null(m_co_base) && !is.null(m_co)) {
         cat(sprintf("  [carryover] after a polarity switch: log-odds %.3f (95%% CI %.3f to %.3f), LRT p %s, on %d runs with a predecessor\n",
                     cf[["Estimate"]], cf[["Estimate"]] - qnorm(0.975) * cf[["Std. Error"]], cf[["Estimate"]] + qnorm(0.975) * cf[["Std. Error"]],
-                    format.pval(anova(m_co_base, m_co)[2, "Pr(>Chisq)"], digits = 2), nobs(m_co)))
+                    format.pval(p_co, digits = 2), nobs(m_co)))
       }
     } else {
       cat("  [carryover] polarity_switched does not vary on the runs with a predecessor: not estimable.\n")
@@ -2982,7 +3093,27 @@ if (nzchar(RESULTS_RDS)) {
     rules = list(blink = BLINK_RULE_VERSION, fps_gate = FPS_GATE_VERSION, fps_adequate = FPS_GATE_ADEQUATE,
                  fps_reduced = FPS_GATE_REDUCED, fps_band = FPS_GATE_BAND, rt_timing = RT_TIMING_VERSION,
                  slider = SLIDER_VERSION, n_blink_old = n_blink_old, n_tier_c = n_tier_c,
-                 n_rt_t1_camera = if (exists("rt_t1_cam")) sum(rt_t1_cam) else NA_integer_),
+                 n_rt_t1_camera = if (exists("rt_t1_cam")) sum(rt_t1_cam) else NA_integer_,
+                 # Round 103: what was actually modelled and counted, not only the current rule's name.
+                 slider_used = unlist(rating_formats_used),
+                 rt_timing_present = if (exists("rt_timing")) sort(unique(rt_timing)) else NULL,
+                 n_rt_t2 = if (exists("rt_timing")) sum(rt_timing == "rt-t2") else NA_integer_,
+                 ibi = get0("IBI_RULE_VERSION"), n_ibi_old = get0("n_ibi_old"), n_rate_old = get0("n_rate_old"),
+                 n_old_and_c = n_old_and_c, n_cal_r1 = length(get0("cal_r1", ifnotfound = character(0))),
+                 d_fps = get0("d_fps", ifnotfound = NA_real_)),
+    # The illumination readings of the confirmatory sittings, for the plot §5 item 1 asks for (Round 103).
+    lux = session_info[, intersect(c("participant_id", "sitting_folder", "lux_start", "lux_middle", "lux_end",
+                                     "lux_logged_all_in_range", "lux_complete", "lux_end_min_after_end"), names(session_info)), drop = FALSE],
+    # The pooled export's verdict per confirmatory run (Round 103): 10_wide_summary.csv judges the frame
+    # rate's consistency against each SITTING's median, analysis_long.csv against the participant's, as
+    # this template does, so with split sittings the two counts differ.
+    verdict_long = local({
+      lp <- export_paths("analysis_long.csv")
+      if (length(lp) != 1) NULL else tryCatch({
+        al <- readr::read_csv(lp, show_col_types = FALSE, col_types = readr::cols(.default = "c"))
+        al[al$condition_id %in% keep_ids, intersect(c("participant_id", "condition_id", "ocular_reliability"), names(al)), drop = FALSE]
+      }, error = function(err) NULL)
+    }),
     sittings = session_info_all, conf_builds = conf_builds,
     verdict = verdict, withdrawn = wd_pids,
     runs = data.frame(participant_id = runs$participant_id, condition_id = runs$condition_id,
@@ -3042,18 +3173,25 @@ if (nzchar(RESULTS_RDS)) {
                   "visual search: completed within the window" = "m_vs_done", "visual search: rate" = "m_vs_rate",
                   "visual search: d-prime" = "m_vs_dp", "blink rate" = "m_blink",
                   "inter-blink interval (log)" = "m_ibi", "PERCLOS covariate check" = "m_perclos",
-                  "comfort" = "m_comfort", "clarity" = "m_clarity")
+                  "comfort" = "m_comfort", "clarity" = "m_clarity",
+                  # Round 103: the §3 test, the description, the ordinal and the earlier-rule refits too.
+                  "RT with polarity x serial position (§3)" = "m_rt_pos",
+                  "visual search: time, uncensored (description, in no family)" = "m_vs",
+                  "fatigue items, cumulative-link (sensitivity)" = "m_fat_clmm",
+                  "RT without the rt-t1 camera-on blocks (sensitivity)" = "m_rt_no_t1",
+                  "inter-blink interval with the earlier-rule rows put back (sensitivity)" = "m_ibi_all")
       out <- list()
       for (label in names(fitted)) {
         m <- get0(fitted[[label]])
-        if (is.null(m)) next
-        co <- quietly(as.data.frame(coef(summary(m))))
-        if (is.null(co)) next
-        out[[label]] <- list(
-          coefficients = data.frame(term = rownames(co), co, check.names = FALSE, row.names = NULL),
-          formula = paste(deparse(formula(m), width.cutoff = 500L), collapse = " "),
-          n_rows = tryCatch(as.integer(nobs(m)), error = function(err) NA_integer_),
-          n_participants = tryCatch(dplyr::n_distinct(model.frame(m)$participant_id), error = function(err) NA_integer_))
+        if (is.null(m) || is.character(m)) next
+        entry <- tryCatch({
+          co <- as.data.frame(coef(summary(m)))
+          list(coefficients = data.frame(term = rownames(co), co, check.names = FALSE, row.names = NULL),
+               formula = paste(deparse(formula(m), width.cutoff = 500L), collapse = " "),
+               n_rows = tryCatch(as.integer(nobs(m)), error = function(err) NA_integer_),
+               n_participants = tryCatch(dplyr::n_distinct(model.frame(m)$participant_id), error = function(err) NA_integer_))
+        }, error = function(err) NULL)
+        if (!is.null(entry)) out[[label]] <- entry
       }
       out
     }),

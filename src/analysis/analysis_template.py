@@ -1114,16 +1114,26 @@ def main() -> None:
         print("  gate in force when recorded: " + ", ".join(f"{k}={v}" for k, v in gv.items())
               + " (every row is tiered under fps-g2 whatever it says)")
 
+        # The polarity check on EVERY camera-on confirmatory run with a rate, as R takes it (§5 item 2 names
+        # the rows from Round 103). It was taken on the primary's rows with tier C put back, so an
+        # earlier-rule or zero-blink run was in R's check and out of this one, and the two printed
+        # different differences on the same data.
+        cam_rows = eye[truthy(eye["camera_active"])].merge(cond, on=["participant_id", "condition_id"])
+        if DROP_DISENGAGED:
+            cam_rows = cam_rows[cam_rows["engagement_flag"].ne("bad")]
+
         def pol_diff(col: str) -> float:
-            if col not in prim_all.columns:
+            if col not in cam_rows.columns:
                 return float("nan")
-            w = (prim_all[prim_all[col].notna() & prim_all["polarity"].isin(["negative", "positive"])]
+            w = (cam_rows[cam_rows[col].notna() & cam_rows["polarity"].isin(["negative", "positive"])]
                  .groupby(["participant_id", "polarity"])[col].mean().unstack())
             if not {"negative", "positive"} <= set(w.columns):
                 return float("nan")
             return float((w["negative"] - w["positive"]).mean())
         d_fps, d_luma = pol_diff("sampling_fps_observed"), pol_diff("mean_face_luma")
-        print(f"  polarity check, negative minus positive, mean of each participant's own difference: "
+        n_rate = int(cam_rows["sampling_fps_observed"].notna().sum()) if "sampling_fps_observed" in cam_rows.columns else 0
+        print(f"  polarity check, negative minus positive, mean of each participant's own difference "
+              f"(every camera-on run with a rate: {n_rate} runs): "
               f"sampling_fps_observed {d_fps:+.2f} fps (pre-registered limit {FPS_GATE_BAND}), mean_face_luma {d_luma:+.1f}")
         if np.isfinite(d_fps) and abs(d_fps) > FPS_GATE_BAND:
             print("  [FPS POLARITY CHECK EXCEEDED] read the consistent-only and fitted-minimum refits beside the primary.")

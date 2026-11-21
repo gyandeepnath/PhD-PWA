@@ -221,7 +221,7 @@ what the numbers are, and its file name. The same list is in `results/thesis_map
 | T15 | Moderation | Polarity × moderator tests (screen time, lighting, device familiarity), with Holm across moderators. Exploratory. |
 | T16 | Questionnaires | CVS-Q at baseline and close and the change; NASA-TLX. One value per participant, as the template takes it, with the template's 95% interval. |
 | T17 | Provenance | R and package versions, the scripts' checksums, the rules, the builds that collected the data. |
-| T18 | Secondary models, all coefficients | Every secondary model in full: each term's estimate, SE, test statistic and p, with the model's formula and N. The contrast (`log_contrast`) and serial-position (`session_position`) terms are here. |
+| T18 | Secondary models, all coefficients | Every secondary model in full, with its sensitivity and descriptive refits: each term's estimate, SE, test statistic and p, with the model's formula and N. In the signal-detection model the terms without `sig` are effects on minus the criterion; take the criterion effect, with its sign, from T13. The contrast (`log_contrast`) and serial-position (`session_position`) terms are here. |
 | T19 | Quality checks of plan section 5 | The template's own printed block, unchanged: illumination constancy, the frame-rate gate and its polarity check, participant present, exposure completeness, careless responding, completeness of sittings. A text file. |
 | T20 | Index of the analysis log | Every section the template printed, with its line number in `analysis_log.txt`: where to find an analysis that has no table of its own. |
 | F01 | Primary outcome by condition | T07 as a figure. |
@@ -229,7 +229,8 @@ what the numbers are, and its file name. The same list is in `results/thesis_map
 | F03 | Reaction-time distribution | Runs' mean reaction times by polarity. |
 | F04 | Outcomes over the sitting | The incomplete-blink ratio, reaction time and fatigue by serial position (1 = first condition). |
 | F05 | CVS-Q baseline and close | One line per participant. |
-| F06 | Sensitivity of the primary estimate | T14 as a figure. |
+| F06 | Sensitivity of the primary estimate | T14 as a figure (the refits that ran). |
+| F07 | Illumination across sittings | Each sitting's start, middle and end lux readings, coloured by the app's in-band verdict: the plan's check that the light was held constant. |
 
 **Not computed by the kit:** Objective 4's agreement of the automated blink classification with manual
 annotation needs the annotated video, which the template does not read. The thesis map lists it as not
@@ -241,7 +242,7 @@ and observations it rests on, in the units of the table (log-odds or odds ratio 
 milliseconds, words per minute or scale points for the others). State the rule versions in force (T17)
 in the methods. For the primary outcome, `docs/ANALYSIS_PLAN.md` §2 decides H1 on the unadjusted 95%
 interval of the polarity effect. Report descriptive and model-estimated numbers as what they are: T04
-and F02–F05 are observed; T05–T15, T18 and F01, F06 come from the models.
+and F02–F05 and F07 are observed; T05–T15, T18 and F01, F06 come from the models.
 
 **The log.** `results/analysis_log.txt` is everything the template printed, followed by what R printed
 to its error stream (messages such as *boundary (singular) fit*, and warnings). Its first block,
@@ -268,7 +269,7 @@ Conclusion.
 
 **Results, in the order of the objectives** (the `suggested_thesis_place` column of `thesis_map.csv`):
 
-1. Participants and data quality: T01, T02, T03, T19.
+1. Participants and data quality: T01, T02, T03, T19, F07.
 2. Objective 1, primary outcome (H₁ₐ, H₁ᵦ): T04 (its primary rows), T06, T07, F01, T08, T12; T05 in full
    in an appendix.
 3. Objective 1, secondary outcomes: T13, T04, T16, F02–F05; single terms from T18.
@@ -305,7 +306,7 @@ Rounds 88 to 96) and `docs/ANALYSIS_PLAN.md`.
 | The formal colour-vision plate rule | AUDIT_FINDINGS Round 90 §9 item 4 and Round 95, Not done | a deficient result at any sitting stands; not done never replaces a result |
 | The sitting term in the models | ANALYSIS_PLAN §2; PROTOCOL | not in the models; a sensitivity refit adds it |
 | Participants recorded by more than one build | DEPLOYMENT §5; OPERATOR_MANUAL §8; AUDIT_FINDINGS Round 88 §8 item 4 | warns on the New Session form (the sitting can still be run); the export's join check leaves such a participant out of the models (`mixed_build_within_participant`); the template counts builds |
-| Sensitivity choices for rows under earlier rules (`tg-v1`, `rt-t1`, `rw-v1`, `sf-v1`, `at-v1`, `blink-r1`) | ANALYSIS_PLAN §5 | kept or refitted as the plan states; marked open |
+| Sensitivity choices for rows under earlier rules (`tg-v1`, `rt-t1`, `rw-v1`, `sf-v1`, `at-v1`, `blink-r1`, `cal-r1`) | ANALYSIS_PLAN §5 | kept or refitted as the plan states (`cal-r1` sittings: the primary with and without them, from Round 103); marked open |
 | Whether blink rate follows the inter-blink interval for earlier-rule rows | ANALYSIS_PLAN §5 | blink rate keeps the current-rule rows only |
 | Frame-rate floor of 20 against 22 face-solved frames a second | `docs/FPS_GATE_SIMULATION.md` | 20 (pre-registered gate `fps-g2`) |
 | Which display follows a break (P8) | AUDIT_FINDINGS Round 92 | as the protocol table; marked open |

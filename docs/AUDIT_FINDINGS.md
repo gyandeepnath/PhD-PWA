@@ -10783,3 +10783,86 @@ Each is now written in the plan as the template does it, and listed in `docs/ANA
 - `tests/analysisPlanColumns.test.ts`, which holds every name the plan backticks to a column, a check
   code or a template variable, allows `sitting_not_in_data_dir` with its reason; the gate's kit checks
   are extended (above).
+
+## Round 103 — the rest of the analysis audit: §4c's models and §5's checks and rules, against the plan
+
+The three parts of Round 102's audit that a usage limit had stopped were run again (§4c; §5 items 1–5
+with §5b, §6 and §7; §5 items 6 onward), each with a refuter. The refuters of §4c and §5 items 1–5 ran;
+the refuter of the rules part was stopped by the same limit, and its eight findings were checked here
+against the code before anything was changed. Of 29 findings none was refuted; one was downgraded and
+one partly refuted. Nothing in this round was measured on the Xiaomi Pad 6.
+
+### Confirmed and fixed (medium)
+
+1. **The carryover refit was read against the wrong baseline.** §4c tests carryover against the primary
+   refitted on the runs that have a predecessor. The template fitted that base and the test, but only the
+   carryover model reached the table of refits, beside the confirmatory row on 22 more runs: on the gate
+   cohort −0.254 against −0.313, which reads as carryover, while the base on the same runs is −0.256 (the
+   refuter's own refit gave the same). T14 now has the base as its own row, and the carryover row carries
+   the switch coefficient and the likelihood-ratio p against it.
+2. **Careless responding was counted on camera-on runs only** (§5 item 5). The ratings are made whatever
+   the camera; a participant who declined it dropped out of the count, and with no camera-on run the check
+   was not reported. It is counted over every confirmatory condition-run now.
+3. **The pre-specified `cal-r1` refit did not exist** (§5 item 7: "if any `cal-r1` sitting is ever pooled
+   with study data, report the primary with and without those sittings"). No template read
+   `calibration_rule_version`. R now counts such sittings under `[calibration]` and refits without them.
+4. **T03 counted the reliability verdict from the per-sitting file.** `10_wide_summary.csv` judges the
+   frame rate's consistency against each sitting's median; `analysis_long.csv` and the template against
+   the participant's. On a split-sitting cohort T03 said good 129 / usable 91 while the pooled file said
+   123 / 97. The template now saves the pooled verdict when the data include it, and T03 counts from it
+   (from the per-sitting file only when there is no pooled export, and says so).
+5. **A run both under an earlier blink rule and in tier C was in neither refit that puts such rows back**,
+   and the earlier-rule refit's label counted it (archived data only: the current build writes blink-r2).
+   It is counted, the label gives the rows the refit adds, and a refit with every rule and every tier puts
+   such runs back.
+
+### Confirmed and fixed (low)
+
+- The kit's table of refits lacked every refit whose rows would be the primary's own (no tier-B row, no
+  restarted run, and so on), so "the same as the primary" read as "not run". They are listed, not refitted,
+  with the reason.
+- The frame-rate polarity check (§5 item 2) ran on different rows in the two templates (R every camera-on
+  run with a rate, Python the primary's rows with tier C back; equal on app-written data, apart with
+  earlier-rule or zero-blink runs; downgraded by its refuter). Python now takes R's rows, both print the
+  count, and the plan names the rows. An exceedance is now said under `[H1]` and in T06's description,
+  as §5 item 2 asks ("beside the primary").
+- The QC-clean refit and its count were labelled "every §5 check"; they are §5.3–5.4 (the plan's own §5
+  item 9 says so). Relabelled in the template, the gate and the dashboard's comment.
+- §5 item 1: `lux_end_min_after_end` was read by nothing (now printed: how many end readings were logged
+  after the end and how late), and nothing plotted the light (now the kit's F07, each sitting's readings
+  coloured by the app's own in-band verdict, the axis from zero; the band is not copied).
+- §5 item 2: old-gate rows are now reported apart (tiers by gate, and a refit on `fps-g2` rows) when
+  present; §5 item 7: `on_screen_ratio` is now reported by polarity and condition in §5.3.
+- Provenance: allFit's optional optimizers (`dfoptim`, `optimx`), which decide what the convergence verdict
+  compares, are printed; T17 gives those and `Matrix`, `glmmTMB` and `ordinal`, the condition-table and
+  schema versions, builds changed mid-sitting and participants collected by more than one build. The
+  rules line names the rating format actually modelled (it named vas-v2 on data with none), the onset
+  rules present and the inter-blink-interval rule.
+- T18 now carries the §3 polarity × position test, the uncensored search-time description, the ordinal
+  fatigue model and the two earlier-rule refits (`rt-t1`, `ibi-r1`) when they run; its caption says that
+  the probit model's terms without `sig` are effects on minus the criterion, and what it leaves out. T03
+  counts `rt-t2` blocks, earlier-rule intervals and `cal-r1` sittings. T02's plan section, T14's plan
+  sections and T19's denominators are corrected.
+- The censoring test's "no block was censored" line could never print (the model on a constant response
+  fails first); it is tested first. The trial-level RT model now prints how many unlocated hits it drops,
+  as the probit model does. The ordinal fatigue model's reading no longer treats a sign difference from
+  the fatigue member as a sign of item use alone: the two have different fixed effects.
+- The plan: the censoring simulation's figures (79% belongs to 10% censoring at N = 40); "the Python
+  cross-check mirrors none of this"; the rt-t3 measurements (two sources merged and overrun ranges recorded
+  nowhere; now as Round 94 recorded them); what `rel-r1` judges (the eye record only, not the blink rule
+  or the analysis set) and that the two export files can differ on it; the gate's halved-exposure check
+  (R's count only, not the export's); and the notes on each item above.
+
+### Not changed
+
+- `rel-r1` was not extended to the blink rule; that would be a new rule version for rows only sittings
+  before schema 10 can carry. The plan now says what it judges.
+
+### What was verified
+
+- The kit on the auditor's 24-participant cohort under this container's POSIX locale: T14 has the carryover
+  base (−0.2559, 22 participants) and the carryover row with its test (p 0.0011), and the not-refitted
+  rows; T03, T17, T18 and the §5.5, §5.3 and §5.1 lines as described; F07 written.
+- `npm run verify:analysis` on both rounds' changes: passed (194 s). Its kit checks now also require the
+  carryover base row, the test on the carryover row, a not-refitted row, the §3 model in T18 and seven
+  figures.

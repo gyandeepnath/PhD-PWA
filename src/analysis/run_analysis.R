@@ -268,9 +268,15 @@ as_utf8 <- function(x) {
 if (!is.null(R_)) R_ <- as_utf8(R_)
 if (!is.null(R_)) {
   rl <- R_$rules
+  # What was modelled, not only the current rule's name (Round 103): the rating format said vas-v2 on data
+  # with no vas-v2 row, where the template modelled sl-v1.
+  fmt_used <- if (length(rl$slider_used)) paste(sprintf("%s %s", names(rl$slider_used), rl$slider_used), collapse = ", ") else rl$slider
   RULES <- sprintf(paste0("blink rule %s; frame-rate gate %s (tier A from %s, tier B from %s face-solved frames/s, ",
-                          "consistent within %s); reaction-time onset %s; rating format %s"),
-                   rl$blink, rl$fps_gate, rl$fps_adequate, rl$fps_reduced, rl$fps_band, rl$rt_timing, rl$slider)
+                          "consistent within %s); reaction-time onset %s (rules present in the RT rows: %s); inter-blink interval %s; ",
+                          "rating format modelled: %s"),
+                   rl$blink, rl$fps_gate, rl$fps_adequate, rl$fps_reduced, rl$fps_band, rl$rt_timing,
+                   if (length(rl$rt_timing_present)) paste(rl$rt_timing_present, collapse = ", ") else "unknown",
+                   if (is.null(rl$ibi)) "unknown" else rl$ibi, fmt_used)
   runs <- R_$runs
   conf <- runs[runs$confirmatory, , drop = FALSE]
   sens <- runs[runs$sensitivity, , drop = FALSE]
@@ -327,7 +333,7 @@ if (!is.null(R_)) {
   }))
   write_table("T02", "Participant characteristics", chars,
               "The confirmatory set's participants: age, gender and the vision and habit covariates recorded at profiling (11_participant.csv).",
-              "housekeeping", "ANALYSIS_PLAN.md §7", "Chapter 4, 4.1 Participants and data quality",
+              "housekeeping", "descriptive (no plan section; ANALYSIS_PLAN.md §1 defines the set)", "Chapter 4, 4.1 Participants and data quality",
               nrow(pp), nrow(pp), caption = "One row per participant of the confirmatory set; numbers are counts, percentages of participants, or summaries of a numeric characteristic.")
 
   # T03 data quality
@@ -345,11 +351,27 @@ if (!is.null(R_)) {
     tibble(check = paste("Camera-on runs left out of the ocular models: blink counts under a rule before", rl$blink),
            value = rl$n_blink_old, out_of = NA_integer_, note = "put back in one sensitivity refit (T14)"),
     tibble(check = "Camera-on reaction-time blocks timed under rt-t1", value = rl$n_rt_t1_camera, out_of = NA_integer_,
-           note = "kept in the RT model; the template refits it without them"),
-    if (!is.null(R_$wide) && "ocular_reliability" %in% names(R_$wide))
+           note = "kept in the RT model; refitted without them (T18, when there are any)"),
+    if (!is.null(rl$n_rt_t2)) tibble(check = "Reaction-time blocks timed under rt-t2", value = rl$n_rt_t2, out_of = NA_integer_,
+                                     note = "kept in the RT model and its refit"),
+    if (!is.null(rl$n_ibi_old)) tibble(check = paste("Camera-on runs with an inter-blink interval under a rule before", rl$ibi), value = rl$n_ibi_old,
+                                       out_of = NA_integer_, note = "out of the interval model; put back in a refit (T18, when there are any)"),
+    if (!is.null(rl$n_old_and_c) && rl$n_old_and_c > 0)
+      tibble(check = "... of the earlier-blink-rule runs, also in tier C", value = rl$n_old_and_c, out_of = NA_integer_,
+             note = "in neither the earlier-rule nor the every-tier refit; a refit of their own (T14)"),
+    if (!is.null(rl$n_cal_r1)) tibble(check = "Sittings calibrated under cal-r1", value = rl$n_cal_r1, out_of = NA_integer_,
+                                      note = "the primary is refitted without them when there are any (T14)"),
+    # The verdict per run as the POOLED export gives it, when the data include it (Round 103): the
+    # per-sitting 10_wide_summary.csv judges the frame rate's consistency against each sitting's median,
+    # so with split sittings its counts differ from the template's own frame-rate count.
+    if (!is.null(R_$verdict_long) && nrow(R_$verdict_long) && "ocular_reliability" %in% names(R_$verdict_long))
+      R_$verdict_long %>% mutate(v = ifelse(is.na(ocular_reliability) | ocular_reliability == "", "(none)", ocular_reliability)) %>%
+        count(v) %>% transmute(check = paste("Reliability verdict:", v), value = n, out_of = nrow(R_$verdict_long),
+                               note = "ocular_reliability in analysis_long.csv (the pooled export), confirmatory runs")
+    else if (!is.null(R_$wide) && "ocular_reliability" %in% names(R_$wide))
       R_$wide %>% mutate(v = ifelse(is.na(ocular_reliability) | ocular_reliability == "", "(none)", ocular_reliability)) %>%
         count(v) %>% transmute(check = paste("Reliability verdict:", v), value = n, out_of = nrow(R_$wide),
-                               note = "ocular_reliability, rule as in reliability_rule_version"),
+                               note = "ocular_reliability in 10_wide_summary.csv (no pooled export in the data): per sitting, so with split sittings the frame-rate consistency is judged against each sitting's median"),
     if ("engagement_flag" %in% names(R_$cond))
       R_$cond %>% mutate(v = ifelse(is.na(engagement_flag) | engagement_flag == "", "(none)", engagement_flag)) %>%
         count(v) %>% transmute(check = paste("Engagement flag:", v), value = n, out_of = nrow(R_$cond),
@@ -426,6 +448,10 @@ if (!is.null(R_)) {
                                             ifelse(on_default & tests$test == "H1b polarity x colour", P$p_family_holm[["H1b"]], NA_real_))
     }
     caution <- if (isTRUE(grepl("NOT CONVERGED", P$rung))) " CAUTION: no rung of the reduction ladder converged; these estimates come from a fit the optimizers do not agree on (analysis_log.txt, PRIMARY MODEL CONVERGENCE)." else ""
+    # §5 item 2: a frame rate that differs between the polarities is said beside the primary (Round 103).
+    d_fps_v <- if (is.null(rl$d_fps)) NA_real_ else as.numeric(rl$d_fps)
+    if (is.finite(d_fps_v) && abs(d_fps_v) > as.numeric(rl$fps_band))
+      caution <- paste0(caution, sprintf(" CAUTION: the frame rate differs between the polarities by %+.2f fps, over the pre-registered %s: read the consistent-only and fitted-minimum refits in T14 with H1.", d_fps_v, rl$fps_band))
     write_table("T06", "Primary hypothesis tests", tests,
                 paste0("H1a: the polarity effect on the incomplete-blink ratio (log-odds, odds ratio and predicted proportions, with 95% intervals); H1b: whether that effect depends on colour (likelihood-ratio test). Section 2's rule decides H1 on the unadjusted 95% interval; the Holm column is the alternative section 4b leaves open. ",
                        "H1a is given for each model the plan reports until the investigator decides which is confirmatory (the model column): with eff_fps_c, without it, and with frame rate as each person's mean plus the within-person deviation; T05, T07, T08 and F01 are from the first. ",
@@ -495,9 +521,9 @@ if (!is.null(R_)) {
   if (!is.null(sr)) sr <- sr %>% mutate(wald_ci_low = estimate - qnorm(0.975) * se, wald_ci_high = estimate + qnorm(0.975) * se)
   write_table("T14", "Sensitivity refits of the primary", sr,
               "The primary model's polarity estimate refitted on other rows or with one change at a time (frame-rate tiers, earlier blink rule, without the frame-rate covariate, frame rate as person mean plus within-person deviation, with an observation-level random effect, the beta-binomial, without participants measured on two trackers, without disengaged, restarted or interrupted runs, the sensitivity set, adjusted for PERCLOS, and so on), beside the confirmatory estimate in the first row. Each row gives the rows and participants it used (the counts this map gives are the confirmatory set's).",
-              "Objective 1, H1a (robustness)", "ANALYSIS_PLAN.md §2 and §5", "Chapter 4, 4.7 Sensitivity analyses",
+              "Objective 1, H1a (robustness)", "ANALYSIS_PLAN.md §1, §2, §4, §4c and §5", "Chapter 4, 4.7 Sensitivity analyses",
               n_conf_p, if (is.null(P)) NULL else P$n_rows,
-              caption = "Polarity, positive minus negative, log-odds; n_rows and n_participants are what each refit used; interval = estimate +/- 1.96 x SE.")
+              caption = "Polarity, positive minus negative, log-odds; n_rows and n_participants are what each refit used; interval = estimate +/- 1.96 x SE. A row with no estimate was not refitted (its note says why: its rows would be the primary's own) or did not fit. The carryover refit is read against the row above it, on the same runs.")
 
   # T15 moderation
   md <- if (length(R_$moderators)) {
@@ -550,11 +576,21 @@ if (!is.null(R_)) {
   prov <- bind_rows(
     tibble(item = "R", value = R.version.string),
     tibble(item = paste("package", needed), value = vapply(needed, pkg_ver, "")),
+    # Round 103: the optional packages whose absence changes what runs (the beta-binomial, the ordinal
+    # sensitivity, and the optimizers allFit compares when it judges the primary's convergence).
+    tibble(item = paste("package", c("Matrix", "glmmTMB", "ordinal", "dfoptim", "optimx")),
+           value = vapply(c("Matrix", "glmmTMB", "ordinal", "dfoptim", "optimx"), pkg_ver, "")),
     tibble(item = "analysis_template.R md5", value = unname(tools::md5sum(TEMPLATE))),
     tibble(item = "run_analysis.R md5", value = if (file.exists(file.path(script_dir, "run_analysis.R"))) unname(tools::md5sum(file.path(script_dir, "run_analysis.R"))) else ""),
     tibble(item = "rules", value = RULES),
     tibble(item = "builds that collected the confirmatory set (git_hash)", value = paste(R_$conf_builds, collapse = ", ")),
     if ("app_version" %in% names(si)) si %>% count(app_version) %>% transmute(item = paste("sittings collected by app version", app_version), value = as.character(n)),
+    if ("condition_def_hash" %in% names(si)) si %>% count(condition_def_hash) %>% transmute(item = paste("sittings with condition table", condition_def_hash), value = as.character(n)),
+    if ("schema_version" %in% names(si)) si %>% count(schema_version) %>% transmute(item = paste("sittings with schema version", schema_version), value = as.character(n)),
+    if ("build_changed_mid_sitting" %in% names(si)) tibble(item = "sittings whose build changed mid-sitting",
+                                                           value = as.character(sum(as.character(si$build_changed_mid_sitting) %in% c("TRUE", "true", "1")))),
+    if ("git_hash" %in% names(si) && "participant_id" %in% names(si))
+      tibble(item = "participants collected by more than one build", value = as.character(sum(tapply(si$git_hash, si$participant_id, function(x) length(unique(x))) > 1))),
     tibble(item = "sittings read", value = as.character(nrow(si))),
     tibble(item = "template run time (minutes)", value = sprintf("%.1f", elapsed)))
   write_table("T17", "Provenance", prov,
@@ -577,8 +613,8 @@ if (!is.null(R_)) {
            n_rows = m$n_rows, n_participants = m$n_participants, formula = m$formula)
   })) else NULL
   write_table("T18", "Secondary models all coefficients", all_coefs,
-              "Every secondary model the template fitted, in full: each term's estimate, standard error, test statistic and p, with the model's formula and N. This is where the contrast (log_contrast) and serial-position (session_position) terms of the reaction-time, fatigue and comprehension models are. Estimates are in each model's own scale (ms, points, log-odds, log units); T13 gives the polarity effect of each in reporting units.",
-              paste(OBJ1, "(secondary outcomes); Objective 2 (the contrast terms)"), "ANALYSIS_PLAN.md §4 and §4c",
+              "Every model of a secondary outcome the template fitted, in full, with its sensitivity and descriptive refits (the polarity x serial-position test of section 3, the uncensored search time, the ordinal fatigue model, the earlier-rule refits): each term's estimate, standard error, test statistic and p, with the model's formula and N. Not here: the per-block d' and criterion cross-checks and the censoring test, which are in analysis_log.txt. This is where the contrast (log_contrast) and serial-position terms are. Estimates are in each model's own scale (ms, points, log-odds, probit units, log units). In the signal-detection model the terms that do not multiply sig are effects on MINUS the criterion; T13 gives the criterion effect with its sign, and the polarity effect of every outcome in reporting units.",
+              paste(OBJ1, "(secondary outcomes); Objective 2 (the contrast terms)"), "ANALYSIS_PLAN.md §3, §4 and §4c",
               "Appendix (full model tables); Chapter 4, 4.3 and 4.4 cite single terms", n_conf_p, NULL,
               caption = "One row per model term. Polarity is coded +0.5 positive, -0.5 negative; colour terms, where present, are deviations from the mean of the five colours.")
 
@@ -587,7 +623,7 @@ if (!is.null(R_)) {
   banners <- grep("^={20,}$", stdout_lines, useBytes = TRUE)
   qc_end <- if (is.na(qc_at)) NA_integer_ else banners[banners > qc_at + 1][1]
   write_text("T19", "Quality checks of plan section 5", if (is.na(qc_at) || is.na(qc_end)) NULL else stdout_lines[(qc_at - 1):qc_end],
-             "The manipulation and quality checks the plan asks for before any inference, exactly as the template printed them: illumination constancy (5.1), the frame-rate gate and its polarity check (5.2), participant present (5.3), exposure completeness (5.4), careless responding (5.5) and completeness of sittings.",
+             "The manipulation and quality checks the plan asks for before any inference, exactly as the template printed them: illumination constancy (5.1), the frame-rate gate and its polarity check (5.2), participant present and the descriptive gaze check (5.3), exposure completeness (5.4), careless responding (5.5) and completeness of sittings. Each line prints its own denominator: sittings for 5.1, camera-on runs for 5.2-5.4, every confirmatory run for 5.5 (the counts this map gives are the confirmatory set's).",
              "housekeeping; Objective 4 (feasibility of the camera measures)", "ANALYSIS_PLAN.md §5",
              "Chapter 4, 4.1 Participants and data quality; 4.6 Objective 4", n_conf_p, nrow(conf),
              caption = "Copied from analysis_log.txt without change.")
@@ -700,6 +736,31 @@ if (!is.null(R_)) {
                "The polarity estimate of every sensitivity refit (T14), beside the confirmatory estimate, with estimate +/- 1.96 x SE.",
                "Objective 1, H1a (robustness)", "ANALYSIS_PLAN.md §2 and §5", "Chapter 4, 4.7 Sensitivity analyses", n_conf_p, NULL,
                caption = "Points: estimate; bars: Wald 95% interval.", height_mm = 140)
+
+  # F07 the illumination control (§5 item 1: "Plot ambient_lux_measured across sittings: it should be a
+  # tight cluster at 300 lux"; Round 103). Each confirmatory sitting's readings, coloured by the app's own
+  # in-band verdict; the band itself is the app's (src/experiment/illumination.ts) and is not drawn here,
+  # so no constant is copied.
+  lx <- R_$lux
+  f7 <- if (!is.null(lx) && nrow(lx) && any(c("lux_start", "lux_middle", "lux_end") %in% names(lx))) {
+    long <- lx %>% mutate(sitting = factor(seq_len(n()))) %>%
+      tidyr::pivot_longer(any_of(c("lux_start", "lux_middle", "lux_end")), names_to = "reading", values_to = "lux") %>%
+      mutate(lux = suppressWarnings(as.numeric(lux)), reading = sub("^lux_", "", reading),
+             in_band = ifelse(as.character(lux_logged_all_in_range) %in% c("TRUE", "true", "1"), "every logged reading in band", "a logged reading out of band")) %>%
+      filter(is.finite(lux))
+    if (!nrow(long)) NULL else
+      # The axis starts at zero: a constancy check zoomed to its own spread makes 4 lux look like a range.
+      ggplot(long, aes(sitting, lux, shape = reading, colour = in_band)) + geom_point(size = 2) + expand_limits(y = 0) +
+        scale_colour_manual(values = c("every logged reading in band" = "grey25", "a logged reading out of band" = "#c0392b")) +
+        labs(x = "Sitting (confirmatory set, in the order read)", y = "Ambient illuminance (lux)", colour = NULL, shape = "Reading") +
+        theme_thesis + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+  } else NULL
+  write_figure("F07", "Illumination across sittings", f7,
+               "Each confirmatory sitting's ambient-light readings (start, middle, end), coloured by the app's own verdict on whether every logged reading was in band. It should be a tight cluster: illuminance was held constant, not manipulated.",
+               "housekeeping (the illumination control)", "ANALYSIS_PLAN.md §5 item 1", "Chapter 4, 4.1 Participants and data quality",
+               n_conf_p, if (is.null(lx)) NULL else nrow(lx),
+               why_not = "no lux readings in this data",
+               caption = "The accepted band is the app's (src/experiment/illumination.ts) and is not drawn; lux_complete and how late an end reading was logged are in T19 (5.1).")
 
   register("--", "not computed", NA_character_, "Agreement of automated blink classification with manual annotation",
            "Objective 4's criterion validity against manual annotation of video.", "Objective 4", "ANALYSIS_PLAN.md §5",

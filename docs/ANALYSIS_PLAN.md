@@ -474,8 +474,9 @@ every block this design can produce.
 
 **Visual search: censoring tested, speed as a rate, search d′.** The template used to warn when the
 ten conditions' censoring rates spanned more than 10 percentage points. That is not a test: in the
-Round 62 audit's null simulations it fired in 79% of datasets at N = 40 and 55% at N = 130 (20%
-censoring). It is replaced by a likelihood-ratio test of `censored ~ polarity × colour` against the same
+Round 62 audit's null simulations it fired in 79% (10% censoring) and 97% (20%) of datasets at N = 40,
+and in 14% and 55% at N = 130. (This sentence gave 79% "at N = 40 ... (20% censoring)", the N = 40 figure
+for 10%; Round 103, from the template's own record of the simulation, which is not in the repository.) It is replaced by a likelihood-ratio test of `censored ~ polarity × colour` against the same
 model without the condition terms (serial position and the participant and passage intercepts in both),
 and the outcome that carries search speed in the performance family is now a **Poisson GLMM of
 `targets_found` with `log(search_time_ms / 60000)` as an offset** — targets found per minute, the
@@ -507,7 +508,10 @@ is not fitted: it needs a package (`survival`) that is not in the install line o
   format below); where `ordinal` is installed the template
   fits a cumulative-link mixed model (`ordinal::clmm`) to the five post-condition items stacked, with the
   condition-run intercept (Round 73), as a sensitivity for the fatigue member, and otherwise says `[SKIPPED: ordinal not installed]`. `ordinal`,
-  like `glmmTMB`, is in neither the install line nor CI.
+  like `glmmTMB`, is in neither the install line nor CI. Its fixed effects are polarity × colour, item and
+  serial position, while the fatigue member's are log contrast and polarity (§4, below the table), so the
+  two polarity effects are not the same quantity and a difference in sign can come from that alone
+  (Round 103; the template says so beside the result).
 - **RT polarity × serial position** (§3): on the per-block mean RT model, and in a trial-level LMM on the
   log RT of valid hits that also carries §4a's ring and ring × colour terms and, from Round 73, the
   condition-run intercept (polarity × position is a between-run contrast too).
@@ -515,7 +519,9 @@ is not fitted: it needs a package (`survival`) that is not in the install line o
   Round 87 — see `attempt_rule_version`, §5); without interrupted runs
   (`condition_interrupted`); serial position as a factor rather than a line; and first-order carryover —
   `polarity_switched` (the run before, in the same sitting, had the other polarity) added, tested by
-  likelihood ratio against the primary refitted on the runs that have a predecessor. It is the previous
+  likelihood ratio against the primary refitted on the runs that have a predecessor (both refits and the
+  test are in the kit's T14 from Round 103; the carryover row used to stand beside the confirmatory one,
+  on fewer runs, so the first runs leaving read as carryover). It is the previous
   RUN's polarity, a carryover code, not the adaptation state the eye brought to the grey field: after a
   break (a light screen) the eye is light-adapted whatever the previous run was (audit 86 P8; §5).
 - **Moderation** (Objective 3; synopsis §3.9, "condition-by-moderator interactions"): each recorded
@@ -611,7 +617,9 @@ What it changes in the analysis, and what it does not:
 **Not done, and why.** A censored-time model of search (Cox or censored-normal): needs `survival`,
 not in the install line or CI (the search rate makes it unnecessary for the family). Moderation of
 the colour effect, and moderators beyond polarity: not pre-specified in a form small enough to test.
-The Python cross-check mirrors none of this — its role is the confirmatory sign check (§5b).
+The Python cross-check mirrors none of the models in this section — its role is the confirmatory sign
+check (§5b) — though it takes the questionnaires one value per participant and models one rating format,
+as R does (above). (This sentence said "none of this"; Round 103.)
 
 ---
 
@@ -619,7 +627,8 @@ The Python cross-check mirrors none of this — its role is the confirmatory sig
 
 These are not optional and they come first.
 
-1. **Did the illumination CONTROL hold?** Plot `ambient_lux_measured` across sittings: it should be
+1. **Did the illumination CONTROL hold?** Plot `ambient_lux_measured` across sittings (the kit's F07, from
+   Round 103, plots each confirmatory sitting's start, middle and end readings): it should be
    a tight cluster at 300 lux, not a spread. This is a constancy check rather than a separation
    check — there are no levels to separate — and a sitting outside 250–350 is a protocol deviation.
    `lux_logged_all_in_range` flags those, and `lux_complete` says whether all three checkpoints were
@@ -627,7 +636,9 @@ These are not optional and they come first.
    and the one that once stopped the R template; see §5b.) From Round 89 a sitting whose thank-you
    screen was lost can have its end reading logged afterwards from the Session Manager;
    `lux_end_min_after_end` (01) gives how many minutes after the sitting's end it was logged, and a
-   reading logged long after the end may not describe the room as it was.
+   reading logged long after the end may not describe the room as it was. No threshold is set; R's §5.1
+   prints how many end readings were logged after the end and how late (from Round 103: nothing read
+   the column).
 2. **Was the primary outcome measurable? The frame-rate gate `fps-g2`** (Round 79; pre-registered
    here before the first participant). A slower camera misses the deepest moment of more blinks, so
    more of them read as incomplete: a directional bias, not symmetric noise.
@@ -665,12 +676,15 @@ These are not optional and they come first.
      was not changed by the gate (`blink-r1` then; `blink-r2` from Round 91 changes which blinks are
      classified, not the cuts — below). Both templates do all of this (`[fps-g2]` lines, and §5.2 in R).
    - **Checked before inference.** The within-participant mean difference between polarities
-     (negative minus positive) in `sampling_fps_observed` and in `mean_face_luma`. If the frame-rate
-     difference exceeds 2 fps, say so beside the primary and read the consistent-only refit and the
-     fitted-minimum sensitivity (below) with it.
+     (negative minus positive) in `sampling_fps_observed` and in `mean_face_luma`, over every camera-on
+     confirmatory run with a rate (both templates from Round 103, with the count; Python took the
+     primary's rows with tier C put back, and the two could differ). If the frame-rate difference exceeds
+     2 fps, say so beside the primary and read the consistent-only refit and the fitted-minimum
+     sensitivity (below) with it. From Round 103 R says so under `[H1]` too, and the kit in T06.
    - **Rows recorded under the old gate.** `fps_gate_version` names the gate the app applied when the
      row was recorded (`fps-g2`, or `g1-25/30` before Round 79). Every row is tiered under `fps-g2`;
-     report the two kinds of row apart as well as together. The old flag `fps_adequate_for_ratio`
+     report the two kinds of row apart as well as together (from Round 103 R prints the tiers by gate and
+     refits the primary on the `fps-g2` rows alone when both kinds are present). The old flag `fps_adequate_for_ratio`
      (`effective_fps` ≥ 30) is still written and its refit still printed, marked superseded: the 30
      was never verified, and a 30-fps tablet camera essentially never cleared it.
    - **Still open (investigator's decision, before unblinding):** whether frame rate enters the
@@ -741,7 +755,8 @@ These are not optional and they come first.
    means every rate in that row describes only the fraction the camera saw, and the rates themselves
    look entirely normal.
 5. **Careless responding.** `12_quality_flags.csv` carries straight-lining and rushed-response
-   signals per condition. Straight-lining is judged by the rule `straight_line_rule` names, one per
+   signals per condition. R counts them over every confirmatory condition-run (from Round 103; it read
+   the camera-on runs only, so a participant who declined the camera dropped out of the count). Straight-lining is judged by the rule `straight_line_rule` names, one per
    rating format (§4c). The comprehension penalty, `comprehension_wrong`, fires at fewer than half of
    the three items correct (0 or 1 of 3). It is not a below-chance rule: chance with four options is
    0.75 of 3 (Round 89, audit 86 D7). It feeds `engagement_flag`, and through it the primary's refit
@@ -800,11 +815,13 @@ These are not optional and they come first.
      report). Because the ground changed, absolute `calibration_ear_baseline` and `ear_baseline` are
      not compared across the two rules; ratios to each participant's own baseline, and every blink
      classification, are unaffected in kind. **Pre-specified:** if any `cal-r1` sitting is ever
-     pooled with study data, report the primary with and without those sittings.
+     pooled with study data, report the primary with and without those sittings. (No template read
+     `calibration_rule_version` until Round 103; R now counts such sittings under `[calibration]` and
+     refits without them.)
    - **Gaze, rule `gaze-r2`** (07 and 01 `gaze_rule_version`; `gaze-r1` before). The nine-point
      mapping is replaced by a three-dot check, and the gaze columns by one quality index,
      `on_screen_ratio` (§ PROTOCOL 6). **No hypothesis and no analysis rule uses gaze.**
-     `on_screen_ratio` is reported descriptively (by condition and polarity) as a check that the
+     `on_screen_ratio` is reported descriptively (by condition and polarity; R's §5.3 from Round 103) as a check that the
      participant was looking at the tablet; it is not a covariate and not an exclusion rule, and no
      threshold for it is set here. The deprecated zone columns (`gaze_deviation_ratio`,
      `zone_center_ratio`, `zone_transition_count`) are blank on `gaze-r2` rows, and neither template
@@ -865,8 +882,16 @@ These are not optional and they come first.
    - **good** — in the confirmatory models, and no check flags it.
    - **Held to the templates.** `tests/ocularReliability.test.ts` reads the three thresholds out of
      `analysis_template.R` and fails if either side moves; the analysis gate (`npm run
-     verify:analysis`) checks that R's §5.3–5.4 count and the export's agree on the same rows,
-     including a copy with one participant's exposure halved.
+     verify:analysis`) checks that R's §5.3–5.4 count and the export's agree on the same rows, and that R
+     flags the ten rows of a copy with one participant's exposure halved. (This said the two agree on
+     that copy too; the copy's export verdict is not recomputed, so only R's count is checked there.
+     Round 103.)
+   - **What it judges.** The eye record only. It does not read the blink rule (a `blink-r1` row, which
+     only a sitting before schema 10 can carry, can read good while R leaves it out of the primary) or
+     the analysis set (an excluded participant's rows still get a word). `10_wide_summary.csv` judges
+     the frame rate's consistency against each SITTING's median and `analysis_long.csv` against the
+     participant's, as R does; with split sittings the two words can differ, and the kit counts them
+     from `analysis_long.csv` when the data include it (Round 103).
    - **Not in the verdict:** few blinks (under 20), the light, a camera covered for 5 s or more, an
      open eye narrower than 85% of the calibration baseline. No rule in this plan uses them — the
      binomial model already weights each run by its blinks — so they are shown beside the verdict as
@@ -987,9 +1012,11 @@ past the next frame — `rt-t2`'s onset — in whole frames. Where the paint ove
 overrun rounded up to whole frames, under the overrun plus one frame, with no bound of its own — and
 `rt-t2`'s was right, so `response_time_ms` is short by `onset_moved_ms`: enough to put a real hit under the
 150 ms anticipation cutoff, and a touch made between the two onsets counts as a false start. The review
-measured it in headless Chromium at 60 Hz, with the paint ending about 15 ms before the next frame: tasks of
-25, 45 and 120 ms queued ahead of the message moved the onset 1, 2 and 7 frames (overrun 9.5-9.7, 29.6-29.8
-and 105.0-105.1 ms). At the tablet's 144 Hz a frame is about 7 ms. Round 93's text said such an onset is "a
+measured it in headless Chromium at 60 Hz, with the paint ending about 15 ms before the next frame
+(`AUDIT_FINDINGS.md` Round 94): a 25 ms task queued ahead of the message moved the onset one frame (stored
+overrun 9.1-10.0 ms) and a 45 ms task two frames (29.3-29.8 ms), once three (41 ms); the reviewer saw seven
+frames for a 120 ms task. (This sentence merged the two sources, dropped the three-frame case and gave
+overrun ranges that are recorded nowhere; Round 103.) At the tablet's 144 Hz a frame is about 7 ms. Round 93's text said such an onset is "a
 frame later" and the reaction time "short by up to about a frame"; that held only for a task shorter than a
 frame. So `rt-t2` and `rt-t3` differ on every trial whose overrun is above 0, by `onset_moved_ms`, and on
 such a trial the reaction time lies between `response_time_ms` and `response_time_ms + onset_moved_ms`; a
@@ -1147,7 +1174,9 @@ re-export such data with the current build. **Default (the investigator's to cha
 fit every ocular model on `blink-r2` rows except the inter-blink-interval model, which is judged by
 `ibi_rule_version` alone (Round 93, review R1; §5 above); earlier-rule rows are counted (`[blink-r2] n
 camera-on condition-run(s) carry blink counts under an earlier rule ...`), kept out, and put back in a
-sensitivity refit of the primary printed with the others (`blink-r1 rows put back (n)`). The study has not
+sensitivity refit of the primary printed with the others (`blink-r1 rows put back (n)`, n the rows it adds:
+an earlier-rule row also in tier C is in neither that refit nor the every-tier one, and from Round 103 is
+counted and put back in a refit of its own, `every blink rule and every tier`). The study has not
 collected data, so on the study's own data the line should read 0; the refit exists for pilot or archived
 data.
 

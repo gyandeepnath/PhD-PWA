@@ -867,7 +867,7 @@ for (const { root, options } of jobs) {
       /\[RT x position\] polarity x serial position \(§3\): -?[\d.]+ ms per position \(95% CI/.test(rOut), 'no [RT x position] line');
     ok('R: the trial-level log-RT model carries ring, ring x colour and polarity x position (§4a)',
       /\[RT trials\] ring1\s+x[\d.]+/.test(rOut) && /\[RT trials\] ring x colour: Wald chi2\(4\)/.test(rOut)
-        && /\[RT trials\] polarity1:session_position/.test(rOut), 'the trial-level RT lines are missing');
+        && /\[RT trials\] polarity1:position_c/.test(rOut), 'the trial-level RT lines are missing');
     ok('R: the simulated slower outer ring is found in the trial RTs (inner / outer below 1)',
       +(/\[RT trials\] ring1\s+x([\d.]+)/.exec(rOut)?.[1] ?? NaN) < 1, 'ring1 ratio not below 1');
     ok('R: untouched sliders are counted and left out of comfort and clarity',
@@ -1024,7 +1024,7 @@ for (const { root, options } of jobs) {
     // The modelling frame must be one row per participant x condition. The fixture's condition ids
     // were shared across clones, so every join on condition_id matched twelve rows and the frame
     // came out twelve times too large — models fitting happily on data that repeated itself.
-    const frameRows = /rows failing at least one §5 check:\s*\d+\/(\d+)/.exec(rOut);
+    const frameRows = /rows failing a §5.3-5.4 check:\s*\d+\/(\d+)/.exec(rOut);
     // Every participant's camera ran, so the ocular frame is the confirmatory set: complete cases
     // only. It used to be 109 = 120 less the withdrawn participant's ten and the one paused run —
     // the paused participant's nine finished runs were modelled, against ANALYSIS_PLAN.md §1's
@@ -1034,7 +1034,7 @@ for (const { root, options } of jobs) {
       `expected ${expected.confirmatory.rows} rows, got ${frameRows ? frameRows[1] : 'no match'}`);
     // Round 83: the dashboard's reliability verdict (rule rel-r1) reads the §5.3-5.4 checks off
     // analysis_long.csv; R applies them to its own frame. The same rows must be flagged.
-    const rQc = /rows failing at least one §5 check:\s*(\d+)\/(\d+)/.exec(rOut);
+    const rQc = /rows failing a §5.3-5.4 check:\s*(\d+)\/(\d+)/.exec(rOut);
     ok('R: its §5 checks flag the rows the dashboard\'s reliability verdict flags',
       rQc != null && Number(rQc[1]) === expectedAll.qcChecks.flagged && Number(rQc[2]) === expectedAll.qcChecks.of,
       `R ${rQc ? `${rQc[1]}/${rQc[2]}` : 'no match'}, dashboard ${expectedAll.qcChecks.flagged}/${expectedAll.qcChecks.of}`);
@@ -1076,11 +1076,11 @@ for (const { root, options } of jobs) {
         /\[location\] NO target location/.test(shortOut) && /\[sdt\] polarity effect on d'/.test(shortOut) && !/\[sdt\] ring/.test(shortOut),
         'no [location] message, or the ring line printed anyway');
       ok('R: the flagged rows are counted as failing a §5 check',
-        /rows failing at least one §5 check:\s*10\//.test(shortOut),
+        /rows failing a §5.3-5.4 check:\s*10\//.test(shortOut),
         'the combined qc_clean flag did not pick them up');
       // ... and the dashboard's reliability verdict, given the same truncation, flags the same rows.
       const dashShort = JSON.parse(readFileSync(`${cohortDir}.rshort.json`, 'utf8'));
-      const rShortQc = /rows failing at least one §5 check:\s*(\d+)\/(\d+)/.exec(shortOut);
+      const rShortQc = /rows failing a §5.3-5.4 check:\s*(\d+)\/(\d+)/.exec(shortOut);
       ok('R and the dashboard\'s reliability verdict flag the same truncated rows',
         rShortQc != null && Number(rShortQc[1]) === dashShort.flagged && Number(rShortQc[2]) === dashShort.of,
         `R ${rShortQc ? `${rShortQc[1]}/${rShortQc[2]}` : 'no match'}, dashboard ${dashShort.flagged}/${dashShort.of}`);
@@ -1328,8 +1328,8 @@ for (const { root, options } of jobs) {
     const tables = written.filter((r) => r.kind === 'table');
     const figures = written.filter((r) => r.kind === 'figure');
     const texts = written.filter((r) => r.kind === 'text');
-    ok('Kit: ... writes the report, the thesis map, the log, 19 tables, the quality-check block and 6 figures, none empty',
-      ['00_START_HERE.html', 'thesis_map.csv', 'analysis_log.txt'].every(exists) && tables.length === 19 && texts.length === 1 && figures.length === 6
+    ok('Kit: ... writes the report, the thesis map, the log, 19 tables, the quality-check block and 7 figures, none empty',
+      ['00_START_HERE.html', 'thesis_map.csv', 'analysis_log.txt'].every(exists) && tables.length === 19 && texts.length === 1 && figures.length === 7
         && written.every((r) => exists(r.file)),
       `${tables.length} tables, ${texts.length} text, ${figures.length} figures written; missing: ${written.filter((r) => !exists(r.file)).map((r) => r.file).join(', ') || 'none'}`);
     const log = (() => { try { return readFileSync(file('analysis_log.txt'), 'utf8'); } catch { return ''; } })();
@@ -1397,6 +1397,7 @@ for (const { root, options } of jobs) {
     ok('Kit: ... every secondary model is tabled in full, with its N (comfort and clarity among them); the RT model\'s polarity term is the one printed',
       allCoefs.length > 0 && allCoefs.every((r) => Number(r.n_rows) > 0 && r.formula !== '')
         && ['RT', 'fatigue', 'comprehension', 'blink rate', 'comfort', 'clarity'].every((m) => allCoefs.some((r) => r.model === m && r.term === 'session_position'))
+        && allCoefs.some((r) => r.model === 'RT with polarity x serial position (§3)' && r.term === 'polarity1:session_position')
         && rtPol != null && Number.isFinite(rtPolPrinted) && Math.abs(Number(rtPol.estimate) - rtPolPrinted) < 5e-3,
       `RT polarity1 table ${rtPol?.estimate}, printed ${rtPolPrinted}; ${new Set(allCoefs.map((r) => r.model)).size} models`);
     // The plan's quality checks are the template's own block, copied without change.
@@ -1413,7 +1414,12 @@ for (const { root, options } of jobs) {
     const refits = csv('tables/T14_sensitivity_refits_of_the_primary.csv');
     ok('Kit: ... every sensitivity refit gives its own rows and participants, and the beta-binomial row is there',
       refits.length > 3 && refits.filter((r) => r.estimate !== '' && r.estimate !== 'NA').every((r) => Number(r.n_rows) > 0 && Number(r.n_participants) > 0)
-        && refits.some((r) => r.label.startsWith('beta-binomial')) && refits.some((r) => r.label.startsWith('frame rate as person mean')),
+        && refits.some((r) => r.label.startsWith('beta-binomial')) && refits.some((r) => r.label.startsWith('frame rate as person mean'))
+        // Round 103: the carryover refit's base on the same runs is a row of its own, and a refit whose rows
+        // would be the primary's is listed as not refitted rather than missing.
+        && refits.some((r) => r.label.startsWith('primary on the runs with a predecessor'))
+        && refits.some((r) => r.label.startsWith('with first-order carryover') && /likelihood-ratio p/.test(r.note))
+        && refits.some((r) => /^not refitted: /.test(r.note)),
       `${refits.length} refits; without N: ${refits.filter((r) => r.estimate !== '' && r.estimate !== 'NA' && !(Number(r.n_participants) > 0)).map((r) => r.label).join(', ') || 'none'}`);
     // The kit's own words in UTF-8 whatever the locale it runs under (this gate runs under the container's).
     const mapText = (() => { try { return readFileSync(file('thesis_map.csv'), 'utf8'); } catch { return ''; } })();

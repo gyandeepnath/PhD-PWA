@@ -1028,8 +1028,8 @@ export interface CohortSummary {
   maxConditionN: number;
   /**
    * Camera-on confirmatory rows, and how many of them a §5.3–5.4 check flags (face in view, head turned
-   * away, the reading seen). The R template prints the same count ("rows failing at least one §5
-   * check"), and the analysis gate holds the two equal on the same cohort.
+   * away, the reading seen). The R template prints the same count ("rows failing a §5.3-5.4 check"),
+   * and the analysis gate holds the two equal on the same cohort.
    */
   qcChecks: { flagged: number; of: number };
 }
